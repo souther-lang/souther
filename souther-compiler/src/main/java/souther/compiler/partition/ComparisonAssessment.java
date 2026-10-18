@@ -809,8 +809,8 @@ sealed interface ComparisonAssessment {
                     "a rule watched at no place is not one to ask what arrives at: " + read);
         }
         if (cutting != null) {
-            Arrived arrived = whatArrives(cutting, way, arrivals, true, drawnByAnInvariant,
-                    read instanceof AcrossPositions, UnaryOperator.identity());
+            Arrived arrived = whatArrives(cutting, way, arrivals, drawnByAnInvariant,
+                    read instanceof AcrossPositions);
             if (arrived == Arrived.NOTHING_AT_THE_LINE) {
                 return new NothingArrivesAtItsLine(cutting);
             }
@@ -879,21 +879,17 @@ sealed interface ComparisonAssessment {
      * <p>A region is narrowed to a place and read once for both questions, and none is read once
      * both are answered.
      *
-     * @param reaching whether to ask if a row holds a value at the line; where not, the answer is
-     *                 {@link Arrived#ACROSS_THE_LINE} or nothing
-     * @param crossing whether to ask if rows stand on both sides of it
-     * @param keptTo   what a region's values come to for the rows the crossing is asked of
-     *                 ({@link Cutting#keptTo})
+     * @param crossing whether to ask if rows stand on both sides of it, which a line of a relation
+     *                 is asked as well
      */
     private static Arrived whatArrives(Cutting cutting, Reachability way,
                                        List<ComparisonArrival> arrivals,
-                                       boolean reaching, boolean drawnByAnInvariant,
-                                       boolean crossing, UnaryOperator<Border.Values> keptTo) {
+                                       boolean drawnByAnInvariant, boolean crossing) {
         if (!(way instanceof Reachability.Reaching taken)) {
             return Arrived.NOTHING_AT_THE_LINE;
         }
         List<SearchRegion> past = taken.holdingEveryRow();
-        boolean reached = !reaching;
+        boolean reached = false;
         boolean crossed = false;
         for (ComparisonArrival arrival : arrivals) {
             if (arrival instanceof ComparisonArrival.NothingArrives) {
@@ -901,34 +897,50 @@ sealed interface ComparisonAssessment {
             }
             Cutting.Sides sides = new Cutting.Sides(cutting);
             for (SearchRegion region : past) {
-                Border.Values values = cutting.valuesIn(switch (arrival) {
-                    case ComparisonArrival.Values arriving -> cutting.narrowedBy(arriving, region);
-                    case ComparisonArrival.NoProjection _, ComparisonArrival.NothingArrives _ ->
-                            region;
-                });
+                Border.Values values = valuesAt(cutting, region, arrival);
                 reached = reached || cutting.reachedBy(values, drawnByAnInvariant);
-                crossed = crossed || (crossing && sides.add(keptTo.apply(values)));
+                crossed = crossed || (crossing && sides.add(values));
                 if (reached && (crossed || !crossing)) {
-                    break;
+                    return crossed ? Arrived.ACROSS_THE_LINE : Arrived.AT_THE_LINE;
                 }
             }
-            if (reached && (crossed || !crossing)) {
-                break;
-            }
         }
-        return crossed && reached ? Arrived.ACROSS_THE_LINE
-                : reached && reaching ? Arrived.AT_THE_LINE : Arrived.NOTHING_AT_THE_LINE;
+        return reached ? Arrived.AT_THE_LINE : Arrived.NOTHING_AT_THE_LINE;
     }
 
     /**
      * Whether the rows arriving at some place the rule is watched at, in the case {@code keptTo}
-     * keeps a region's values to, stand on both sides of the line ({@link #whatArrives}).
+     * keeps a region's values to ({@link Cutting#keptTo}), stand on both sides of the line —
+     * asked of the regions {@link #whatArrives} asks, a region at a time.
      */
     private static boolean crossedAtSomePlace(Cutting cutting, Reachability way,
                                               List<ComparisonArrival> arrivals,
                                               UnaryOperator<Border.Values> keptTo) {
-        return whatArrives(cutting, way, arrivals, false, false, true, keptTo)
-                == Arrived.ACROSS_THE_LINE;
+        if (!(way instanceof Reachability.Reaching taken)) {
+            return false;
+        }
+        List<SearchRegion> past = taken.holdingEveryRow();
+        for (ComparisonArrival arrival : arrivals) {
+            if (arrival instanceof ComparisonArrival.NothingArrives) {
+                continue;
+            }
+            Cutting.Sides sides = new Cutting.Sides(cutting);
+            for (SearchRegion region : past) {
+                if (sides.add(keptTo.apply(valuesAt(cutting, region, arrival)))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** What {@code region} leaves the line's quantity for the rows arriving at a place. */
+    private static Border.Values valuesAt(Cutting cutting, SearchRegion region,
+                                          ComparisonArrival arrival) {
+        return cutting.valuesIn(switch (arrival) {
+            case ComparisonArrival.Values arriving -> cutting.narrowedBy(arriving, region);
+            case ComparisonArrival.NoProjection _, ComparisonArrival.NothingArrives _ -> region;
+        });
     }
 
     /**

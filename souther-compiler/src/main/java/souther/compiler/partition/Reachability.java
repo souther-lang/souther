@@ -264,9 +264,10 @@ public sealed interface Reachability {
          * split into, where it is split into every way a row may take, and its own region
          * otherwise.
          *
-         * <p>What a proof that nothing arrives somewhere is asked of. The region alone spans every
-         * way, so a choice between runs of one number leaves the values between the runs in it,
-         * and a line drawn there looks reached when no way a row takes gets to it. Past a figure
+         * <p>What a question about the rows that arrive somewhere is asked of. The region alone
+         * spans every way, so a choice between runs of one number leaves the values between the
+         * runs in it: a line drawn there looks reached when no way a row takes gets to it, and a
+         * value there stands beside a line as if a row held it. Past a figure
          * the ways looked along are not every way, so only the region whole is a statement about
          * every row.
          */
