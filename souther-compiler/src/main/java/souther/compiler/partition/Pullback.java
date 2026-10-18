@@ -4804,7 +4804,26 @@ final class Pullback {
                 && total.args().size() == 1)) {
             return null;
         }
-        Denotation container = at.standing(total.args().getFirst(), read.rules().symbols(),
+        return unlessUnread(() -> sumOfWrittenOut(total.args().getFirst(), at));
+    }
+
+    /**
+     * {@code reading}, which reads numbers one element at a time, with what it met of the
+     * container's elements kept only where it concluded a form: a reading that stopped halfway has
+     * named elements no reading taken names, and a later number would be refused beside them.
+     */
+    private LinearForm<Quantity> unlessUnread(Supplier<LinearForm<Quantity>> reading) {
+        ElementsMet metBefore = elementsMet.copied();
+        LinearForm<Quantity> form = reading.get();
+        if (form == null) {
+            elementsMet = metBefore;
+        }
+        return form;
+    }
+
+    /** What {@code added}, a container the body wrote out, adds up to ({@link #totalOfWrittenOut}). */
+    private LinearForm<Quantity> sumOfWrittenOut(Core added, InputReads at) {
+        Denotation container = at.standing(added, read.rules().symbols(),
                 read.rules().newtypes());
         if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
                 instanceof WrittenOutElements.Walked.Each each)) {
@@ -4832,18 +4851,17 @@ final class Pullback {
     /**
      * What a walk from a seed ends with, where {@code node} is one over a container the body wrote
      * out and every element is there on every row — or null where it is anything else.
+     * Read from {@link #seedPlusWhatEachElementAdds}, which has already stood the node, and has
+     * asked the walk over a position first.
      *
      * <p>The walk hands every element to its step once, in order, so what it ends with is the step
      * read once per element with what it carried standing for what the elements before came to.
      * Whatever the step does with it, it is read as it is written: a step that does not compose
      * into a form of the input is no form.
+     *
+     * @param call {@code node} as it stands, which the walk is read from
      */
-    private LinearForm<Quantity> foldOfWrittenOut(Core node, InputReads at) {
-        Core stands = Core.withoutStanding(node);
-        if (!(stands instanceof Core.PreservedCall) && !(stands instanceof Core.Read)) {
-            return null;
-        }
-        Denotation call = at.standing(node, read.rules().symbols(), read.rules().newtypes());
+    private LinearForm<Quantity> foldOfWrittenOut(Denotation call) {
         SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
         if (walk == null) {
             return null;
@@ -4899,7 +4917,7 @@ final class Pullback {
         InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(walk.value(), read.domain(),
                 walk.at(), read.rules(), blocksAt(walk));
         if (added == null) {
-            return null;
+            return unlessUnread(() -> foldOfWrittenOut(walk));
         }
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         added.added().coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
@@ -5031,12 +5049,8 @@ final class Pullback {
                     return sizeOf(measured.args().getFirst(), at)
                             instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
                 }
-                // What a container the body wrote out adds up to, or a walk over it ends with,
-                // element by element.
+                // What a container the body wrote out adds up to, element by element.
                 LinearForm<Quantity> total = totalOfWrittenOut(node, at);
-                if (total == null) {
-                    total = foldOfWrittenOut(node, at);
-                }
                 if (total != null) {
                     return total;
                 }
