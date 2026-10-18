@@ -566,7 +566,7 @@ final class Terms {
      * for as long as this is, for the same reason. A walk asks the form of each operator it passes,
      * and every one of them over a chain of names folds the names under it.
      */
-    private final FoldedValue.Kept<Denotations> affineFolds = new FoldedValue.Kept<>();
+    private final FoldedValue.Kept affineFolds = new FoldedValue.Kept();
 
     /**
      * The same, saying where the reading stopped where it did, and naming only the atoms

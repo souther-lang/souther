@@ -66,7 +66,7 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      * by each of them is folded once rather than once for each.
      */
     public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
-            Core e, E at, N names, Symbols symbols, Kept<E> kept) {
+            Core e, E at, N names, Symbols symbols, Kept kept) {
         return new FoldedValue<>(names, symbols, kept.folded).eval(e, at);
     }
 
@@ -74,7 +74,7 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      * What each name came to, held for as long as whoever holds it folds with one reading of the
      * names, and handed to no other: what a name comes to is that reading's answer.
      */
-    public static final class Kept<E> {
+    public static final class Kept {
         private final Map<Object, Map<BindingId, Optional<Object>>> folded =
                 new IdentityHashMap<>();
     }

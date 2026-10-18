@@ -212,7 +212,7 @@ public final class AffineForms {
      */
     static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading,
                                    BindingWalk.Answers<Outcome<A, E>> answered,
-                                   FoldedValue.Kept<E> folds) {
+                                   FoldedValue.Kept folds) {
         return of(raw, at, reading, new Walk<>(answered, folds))
                 instanceof Outcome.Composed<A, E> composed ? composed.form() : null;
     }
@@ -222,13 +222,13 @@ public final class AffineForms {
 
         /** What each name the folds met came to, kept by the caller beside what each name the walk
          *  read came to — or null where nobody keeps it, and each fold is its own. */
-        private final FoldedValue.Kept<E> folds;
+        private final FoldedValue.Kept folds;
 
         Walk() {
             this.folds = null;
         }
 
-        Walk(BindingWalk.Answers<Outcome<A, E>> answered, FoldedValue.Kept<E> folds) {
+        Walk(BindingWalk.Answers<Outcome<A, E>> answered, FoldedValue.Kept folds) {
             super(answered);
             this.folds = folds;
         }
