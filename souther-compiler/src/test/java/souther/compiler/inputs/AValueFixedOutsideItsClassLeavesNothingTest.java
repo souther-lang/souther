@@ -7,7 +7,6 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeCardinality;
-import souther.compiler.carrier.Membership;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Dates;
@@ -91,6 +90,7 @@ class AValueFixedOutsideItsClassLeavesNothingTest {
         RuleReadingContext reading =
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
         return new Read(InputDomain.of(sigs.get("read"), reading,
-                TypeCardinality.Counts.workedOutIn(reading), Membership.none()), rules);
+                TypeCardinality.Counts.workedOutIn(reading),
+                souther.compiler.carrier.Membership.none()), rules);
     }
 }

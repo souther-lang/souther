@@ -26,6 +26,8 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -2273,8 +2275,10 @@ public final class FieldDomains {
         if (held instanceof HeldClass.OfResidues
                 && admits(path).approximation() instanceof ValueSet.Finite named
                 && named.values().stream().noneMatch(each -> each instanceof Value.Number number
-                        && number.value().stripTrailingZeros().scale() <= 0
-                        && held.holds(number.value().toBigIntegerExact()))) {
+                        && Count.of(number.value()).exactly() instanceof ExactRatio at
+                        && at.isWhole()
+                        && at.floor() instanceof ExactAnswer.Held<BigInteger> whole
+                        && held.holds(whole.value()))) {
             return HeldClass.NO_VALUE;
         }
         return held;

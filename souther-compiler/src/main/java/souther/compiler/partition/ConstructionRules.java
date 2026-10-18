@@ -6,6 +6,7 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
@@ -165,17 +166,17 @@ final class ConstructionRules {
         // reading's. The rules are then read on the name the value is written under where it wraps
         // that record, whose reading reaches the record's own rules and names its fields as the
         // record does, and on the record where it is written bare.
-        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
-                source.sums());
-        if (view.shape() instanceof Shape.Product(TypeSymbol.AtModule declared,
-                Map<String, Type> _)) {
+        if (TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums())
+                instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)) {
             return FieldDomains.of(Partitions.rulesOver(type, declared, source), reading);
         }
         // And a name wrapped round a value with no fields, whose rules are about the value itself:
         // which class they hold it to is what a builder choosing it has to know, as it is for a
         // field, and is read on the outermost name as every other rule the value wears is.
-        return view.outermostName() instanceof TypeSymbol.AtModule worn
-                ? FieldDomains.of(worn, reading) : FieldDomains.NONE;
+        return TypeOps.outermost(type, source.inners()) instanceof TypeOps.Unwrapped worn
+                && worn.layer().named() instanceof TypeSymbol.AtModule name
+                ? FieldDomains.of(name, reading) : FieldDomains.NONE;
     }
 
     private List<RuleRoots.Naming> namingOf(TermPath path) {
