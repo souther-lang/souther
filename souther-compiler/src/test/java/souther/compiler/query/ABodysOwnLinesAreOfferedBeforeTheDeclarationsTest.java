@@ -77,15 +77,16 @@ class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
     }
 
     /**
-     * And the row composed for a body's own point is the one that survives.
+     * And a body's own point is left with a row that settles it.
      *
      * <p>What the order is for. A row standing at the bottom of the declaration's range also stands
      * in the run beside the guard's line, so it settles that point as well — and a reduction that
      * kept it and dropped the row composed for the point would offer the point's own row to
-     * nobody.
+     * nobody. Which of the rows that settle it is kept is the reduction's to say
+     * ({@link OfTwoRowsSettlingOneItemTheEarlierIsKeptTest}); that a row is kept is held here.
      */
     @Test
-    void theRowComposedForTheBodysPointIsTheOneKept() {
+    void aBodysPointIsStillOfferedARowThatSettlesIt() {
         Compilation compilation = compiled();
         Composition composition = Composition.composed(
                 OfferingRequest.overTheModule("example.dense"),
@@ -104,8 +105,8 @@ class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
                 .filter(row -> table.at(row, inTheRun).settles()).count();
         assertTrue(settling > 1,
                 "more than one row stands in the run, so which is kept is an order and not a fact");
-        assertTrue(table.keeping().contains(composedThere),
-                () -> "and the one composed for it is kept: " + table.keeping());
+        assertTrue(table.keeping().stream().anyMatch(row -> table.at(row, inTheRun).settles()),
+                () -> "and a row that settles it is kept: " + table.keeping());
     }
 
     private static List<String> written(Generator.GeneratedRow row) {
