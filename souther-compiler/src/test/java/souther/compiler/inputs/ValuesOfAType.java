@@ -116,19 +116,27 @@ final class ValuesOfAType {
      * <p>By the values of each component and not by the values made: the two put a value beside
      * different values of the others, and what the nearest ones are held to is that each value is
      * in some value made, not that it is beside the same ones.
+     *
+     * <p>Every record made, a generic one among them: what is a record is the type's question and
+     * not how it was asked for, and a record over type arguments is made as that type, with the
+     * values its arguments have.
      */
     static List<String> valuesLeftOut(ValuesOfAType nearest, ValuesOfAType every) {
         List<String> out = new ArrayList<>();
-        for (Type type : every.made.keySet()) {
-            if (!(type instanceof Class<?> record) || !record.isRecord()) {
+        for (Type type : List.copyOf(every.made.keySet())) {
+            Class<?> record = switch (type) {
+                case Class<?> c -> c;
+                case ParameterizedType p when p.getRawType() instanceof Class<?> c -> c;
+                default -> null;
+            };
+            if (record == null || !record.isRecord()) {
                 continue;
             }
-            RecordComponent[] components = record.getRecordComponents();
-            for (RecordComponent component : components) {
-                Set<Optional<Object>> taken = valuesAt(every.of(record), component);
-                taken.removeAll(valuesAt(nearest.of(record), component));
+            for (RecordComponent component : record.getRecordComponents()) {
+                Set<Optional<Object>> taken = valuesAt(every.of(type), component);
+                taken.removeAll(valuesAt(nearest.of(type), component));
                 if (!taken.isEmpty()) {
-                    out.add(record.getName() + "." + component.getName() + ": " + taken);
+                    out.add(type.getTypeName() + "." + component.getName() + ": " + taken);
                 }
             }
         }

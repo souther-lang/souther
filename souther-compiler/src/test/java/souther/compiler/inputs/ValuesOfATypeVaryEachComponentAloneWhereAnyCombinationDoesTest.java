@@ -99,4 +99,32 @@ class ValuesOfATypeVaryEachComponentAloneWhereAnyCombinationDoesTest {
         assertEquals(List.of(TiedToThree.class.getName() + ".code: [Optional[-1]]"),
                 ValuesOfAType.valuesLeftOut(nearest, every));
     }
+
+    /** The same tie, in a record over a type argument. */
+    record GenericTiedToThree<T>(T code, boolean b, boolean c, boolean d) {
+
+        GenericTiedToThree {
+            if (Integer.valueOf(-1).equals(code) && (!b || !c || !d)) {
+                throw new IllegalArgumentException("minus one is a code only with every flag");
+            }
+        }
+    }
+
+    /** What holds one, which is where it is made as the type it is over its argument. */
+    record HoldingOne(GenericTiedToThree<Integer> held) {}
+
+    /** And a generic record reached through another is held as the type it is made as. */
+    @Test
+    void aGenericRecordIsHeldAgainstEveryCombinationAsTheTypeItIsMadeAs() {
+        ValuesOfAType nearest = new ValuesOfAType();
+        ValuesOfAType every = ValuesOfAType.everyCombination();
+        nearest.of(HoldingOne.class);
+        every.of(HoldingOne.class);
+
+        assertEquals(List.of(GenericTiedToThree.class.getName() + "<java.lang.Integer>.code:"
+                        + " [Optional[-1]]"),
+                ValuesOfAType.valuesLeftOut(nearest, every).stream()
+                        .filter(each -> each.startsWith(GenericTiedToThree.class.getName()))
+                        .toList());
+    }
 }
