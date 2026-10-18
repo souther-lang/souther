@@ -7,10 +7,12 @@ import souther.compiler.core.Core;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Where in an element the value a walk answered stands: the steps from the element to it.
@@ -28,11 +30,95 @@ import java.util.Map;
  * <p>Steps of a path and no other kind. A closure answering something built rather than something
  * read has no projection and is not one of these — which is what keeps a rule about what a branch
  * chose from being read as a rule about a field.
+ *
+ * <p>Fields, and the narrowings an arm of a {@code match} on the element takes, and nothing that
+ * goes into a container: the way stays inside one element. A narrowing is a step for the reason it
+ * is one of {@link TermPath}: {@code @A.amount} and {@code @B.amount} are two places, each with
+ * the type and the rules its case declares, and written as the name {@code amount} alone they would
+ * be one.
  */
-public record ElementProjection(List<String> steps) {
+public record ElementProjection(List<TermPath.Step> steps) {
 
     public ElementProjection {
         steps = List.copyOf(steps);
+        for (TermPath.Step step : steps) {
+            if (!staysInside(step)) {
+                throw new IllegalArgumentException("a way inside one element goes into no"
+                        + " container, and " + step + " does");
+            }
+        }
+    }
+
+    /**
+     * Whether {@code step} stays inside one element: a field, or a narrowing.
+     *
+     * <p>Exhaustive over {@link TermPath.Step}, with no {@code default}, so a step added later is
+     * put on one side of this here and not on whichever side each reader's test left it.
+     */
+    private static boolean staysInside(TermPath.Step step) {
+        return switch (step) {
+            case TermPath.Step.Field _, TermPath.Step.Refine _ -> true;
+            case TermPath.Step.Element _, TermPath.Step.Key _ -> false;
+        };
+    }
+
+    /** The way through {@code fields}, one after another. */
+    public static ElementProjection ofFields(List<String> fields) {
+        return new ElementProjection(
+                fields.stream().map(each -> (TermPath.Step) new TermPath.Step.Field(each)).toList());
+    }
+
+    /**
+     * The way from the element at {@code element} to {@code place}, or null where {@code place} is
+     * not reached from it by fields and narrowings alone.
+     */
+    public static ElementProjection below(TermPath element, TermPath place) {
+        if (!place.isAtOrUnder(element)) {
+            return null;
+        }
+        List<TermPath.Step> steps = place.steps().subList(element.steps().size(),
+                place.steps().size());
+        return steps.stream().allMatch(ElementProjection::staysInside)
+                ? new ElementProjection(steps) : null;
+    }
+
+    /** The names of the fields this goes through, where it goes through fields alone, or null where
+     *  a narrowing is on the way. */
+    public List<String> fields() {
+        List<String> names = new ArrayList<>();
+        for (TermPath.Step step : steps) {
+            if (!(step instanceof TermPath.Step.Field field)) {
+                return null;
+            }
+            names.add(field.name());
+        }
+        return List.copyOf(names);
+    }
+
+    /** The same way, one field further in. */
+    public ElementProjection then(String field) {
+        List<TermPath.Step> longer = new ArrayList<>(steps);
+        longer.add(new TermPath.Step.Field(field));
+        return new ElementProjection(longer);
+    }
+
+    /** The same place, narrowed to the values {@code cases} leaves. */
+    public ElementProjection narrowedTo(CasesLeft cases) {
+        List<TermPath.Step> longer = new ArrayList<>(steps);
+        longer.add(new TermPath.Step.Refine(cases));
+        return new ElementProjection(longer);
+    }
+
+    /** The place this narrows, where its last step is a narrowing, or null where it is not. */
+    public ElementProjection narrowedFrom() {
+        return steps.isEmpty() || !(steps.getLast() instanceof TermPath.Step.Refine) ? null
+                : new ElementProjection(steps.subList(0, steps.size() - 1));
+    }
+
+    /** What the last step leaves the value, where it is a narrowing, or null where it is not. */
+    public CasesLeft narrowing() {
+        return !steps.isEmpty() && steps.getLast() instanceof TermPath.Step.Refine(CasesLeft cases)
+                ? cases : null;
     }
 
     /**
@@ -62,7 +148,20 @@ public record ElementProjection(List<String> steps) {
     public static ElementProjection read(Core answer, BindingId element,
                                          Map<BindingId, Core> held,
                                          DeclarationNewtypes newtypes) {
-        Found found = new Reading(held, newtypes, Licence.PLACE).from(answer, element);
+        return read(answer, element, Map.of(), held, newtypes);
+    }
+
+    /**
+     * The same, inside arms of a {@code match} on the element: each name an arm bound stands for
+     * the value it matched, read as the case the arm took, which is a place of the element.
+     *
+     * @param standing where in the element each name an arm on the way bound stands
+     */
+    public static ElementProjection read(Core answer, BindingId element,
+                                         Map<BindingId, ElementProjection> standing,
+                                         Map<BindingId, Core> held,
+                                         DeclarationNewtypes newtypes) {
+        Found found = new Reading(standing, held, newtypes, Licence.PLACE).from(answer, element);
         return found == null ? null : new ElementProjection(found.steps());
     }
 
@@ -74,7 +173,8 @@ public record ElementProjection(List<String> steps) {
     static OnePerElement.Answered readAsAKey(Core answer, BindingId element,
                                             Map<BindingId, Core> held,
                                             DeclarationNewtypes newtypes) {
-        Found found = new Reading(held, newtypes, Licence.EQUAL_KEY).from(answer, element);
+        Found found = new Reading(Map.of(), held, newtypes, Licence.EQUAL_KEY)
+                .from(answer, element);
         return found == null ? null
                 : new OnePerElement.Answered(new ElementProjection(found.steps()), found.wrapped());
     }
@@ -83,7 +183,8 @@ public record ElementProjection(List<String> steps) {
      *  ({@link Licence#IDENTICAL_VALUE}). */
     static boolean isTheElementItself(Core answer, BindingId element, Map<BindingId, Core> held,
                                       DeclarationNewtypes newtypes) {
-        Found found = new Reading(held, newtypes, Licence.IDENTICAL_VALUE).from(answer, element);
+        Found found = new Reading(Map.of(), held, newtypes, Licence.IDENTICAL_VALUE)
+                .from(answer, element);
         return found != null && found.steps().isEmpty() && !found.wrapped();
     }
 
@@ -117,7 +218,7 @@ public record ElementProjection(List<String> steps) {
     }
 
     /** The way a reading found, and whether a newtype was read through on it. */
-    private record Found(List<String> steps, boolean wrapped) {
+    private record Found(List<TermPath.Step> steps, boolean wrapped) {
 
         private static final Found THE_ELEMENT = new Found(List.of(), false);
 
@@ -138,8 +239,8 @@ public record ElementProjection(List<String> steps) {
      * answering ({@link BindingTrail}), which is the same law the reading of an input position
      * stops by — the one thing the two readings share.
      */
-    private record Reading(Map<BindingId, Core> held, DeclarationNewtypes newtypes,
-                           Licence licence) {
+    private record Reading(Map<BindingId, ElementProjection> standing, Map<BindingId, Core> held,
+                           DeclarationNewtypes newtypes, Licence licence) {
 
         private Reading {
             if (newtypes == null) {
@@ -156,8 +257,8 @@ public record ElementProjection(List<String> steps) {
             return switch (e) {
                 // Where an element stands does not turn on the type it stands as; what is equal
                 // and what is the same value do.
-                case Core.Widen standing -> licence == Licence.PLACE
-                        ? steps(standing.value(), element, trail) : null;
+                case Core.Widen wider -> licence == Licence.PLACE
+                        ? steps(wider.value(), element, trail) : null;
                 // What a `let` comes to is what its body comes to, and the name it bound is answered
                 // where it is read. Ordinary binding semantics, and what a helper applied to the
                 // element leaves behind once it is spliced in: `amountOf(line).value` is a field of
@@ -167,6 +268,11 @@ public record ElementProjection(List<String> steps) {
                 case Core.Read read -> {
                     if (element.equals(read.binding())) {
                         yield Found.THE_ELEMENT;
+                    }
+                    // A name an arm bound is the value it matched, at the case the arm took.
+                    ElementProjection matched = standing.get(read.binding());
+                    if (matched != null) {
+                        yield new Found(matched.steps(), false);
                     }
                     Core through = held.get(read.binding());
                     yield through == null ? null
@@ -195,10 +301,10 @@ public record ElementProjection(List<String> steps) {
                     if (licence == Licence.IDENTICAL_VALUE) {
                         yield null;
                     }
-                    List<String> longer = new ArrayList<>(base.steps());
+                    List<TermPath.Step> longer = new ArrayList<>(base.steps());
                     for (Core.FieldProjection.Step step : along.subList(next, along.size())) {
                         if (Location.isStep(from, step.field(), newtypes)) {
-                            longer.add(step.field());
+                            longer.add(new TermPath.Step.Field(step.field()));
                         }
                         from = step.type();
                     }
@@ -217,8 +323,8 @@ public record ElementProjection(List<String> steps) {
                     if (!Location.isStep(fa.target().type(), fa.field(), newtypes)) {
                         yield base;
                     }
-                    List<String> longer = new ArrayList<>(base.steps());
-                    longer.add(fa.field());
+                    List<TermPath.Step> longer = new ArrayList<>(base.steps());
+                    longer.add(new TermPath.Step.Field(fa.field()));
                     yield new Found(longer, base.wrapped());
                 }
                 // A newtype of one value is a name the value wears: equal where the value is, and
@@ -239,8 +345,8 @@ public record ElementProjection(List<String> steps) {
          */
         private Core givenTo(Core e, String field, BindingTrail trail) {
             return switch (e) {
-                case Core.Widen standing -> licence == Licence.PLACE
-                        ? givenTo(standing.value(), field, trail) : null;
+                case Core.Widen wider -> licence == Licence.PLACE
+                        ? givenTo(wider.value(), field, trail) : null;
                 case Core.Construct made -> ConstructionProjection.given(made, field);
                 case Core.LetIn let -> givenTo(let.body(), field, trail);
                 case Core.Read read -> {
@@ -274,7 +380,7 @@ public record ElementProjection(List<String> steps) {
      * answer stands at this way and then that one in the first walk's element.
      */
     public ElementProjection then(ElementProjection after) {
-        List<String> longer = new ArrayList<>(steps);
+        List<TermPath.Step> longer = new ArrayList<>(steps);
         longer.addAll(after.steps);
         return new ElementProjection(longer);
     }
@@ -282,8 +388,14 @@ public record ElementProjection(List<String> steps) {
     /** The position this reaches from {@code element}. */
     public TermPath from(TermPath element) {
         TermPath at = element;
-        for (String step : steps) {
-            at = at.then(step);
+        for (TermPath.Step step : steps) {
+            at = switch (step) {
+                case TermPath.Step.Field field -> at.then(field.name());
+                case TermPath.Step.Refine refine -> at.refine(refine.cases());
+                case TermPath.Step.Element _, TermPath.Step.Key _ ->
+                        throw new IllegalStateException("a way inside one element goes into no"
+                                + " container");
+            };
         }
         return at;
     }
@@ -298,33 +410,73 @@ public record ElementProjection(List<String> steps) {
      * row where the row said nothing; handed the value that stopped, it says what stopped as it
      * does for a value at the field itself.
      *
-     * <p>A newtype is no step of a path, so a name wrapped round a record is walked through to the
-     * record it wraps when a step is not one of its own fields.
+     * <p>A newtype is no step of a path, so a value on the way may be written inside the names it
+     * wears. Before each step the names the declaration puts at the place reached so far come off
+     * ({@link ObservedValue#inside}), by name: which names a place wears is the declaration's to
+     * say, and a value's shape does not say it — a record may have a field of its own called
+     * {@code value}.
+     *
+     * <p>A narrowing goes nowhere and is passed where the value is a case it leaves. A value of
+     * another case holds nothing below it, which is the element's own answer and not one cut short.
+     *
+     * @param wornAt the names the declaration puts at each place on the way, from the element itself
+     *               to the one before the last step
      */
-    public ObservedValue in(ObservedValue element) {
+    public ObservedValue in(ObservedValue element,
+                            Function<ElementProjection, List<TypeSymbol>> wornAt) {
         ObservedValue at = element;
-        for (String step : steps) {
-            ObservedValue held = at;
-            while (held.cause() == null && held instanceof ObservedValue.Constructed wrapper
-                    && wrapper.field(step) == null && wrapper.field("value") != null) {
-                held = wrapper.field("value");
+        for (int i = 0; i < steps.size(); i++) {
+            at = ObservedValue.inside(wornAt.apply(new ElementProjection(steps.subList(0, i))), at);
+            if (at.cause() != null) {
+                return at;
             }
-            if (held.cause() != null) {
-                return held;
-            }
-            if (!(held instanceof ObservedValue.Constructed holder)) {
-                return null;
-            }
-            at = holder.field(step);
-            if (at == null) {
-                return null;
+            switch (steps.get(i)) {
+                case TermPath.Step.Refine(CasesLeft cases) -> {
+                    if (!cases.leaves(at)) {
+                        return null;
+                    }
+                }
+                case TermPath.Step.Field(String field) -> {
+                    if (!(at instanceof ObservedValue.Constructed holder)) {
+                        return null;
+                    }
+                    at = holder.field(field);
+                    if (at == null) {
+                        return null;
+                    }
+                }
+                case TermPath.Step.Element _, TermPath.Step.Key _ ->
+                        throw new IllegalStateException("a way inside one element goes into no"
+                                + " container");
             }
         }
         return at;
     }
 
+    /** Every place on the way to this from the element, the element itself first and this last. */
+    public List<ElementProjection> onTheWay() {
+        List<ElementProjection> out = new ArrayList<>();
+        for (int i = 0; i <= steps.size(); i++) {
+            out.add(new ElementProjection(steps.subList(0, i)));
+        }
+        return out;
+    }
+
     @Override
     public String toString() {
-        return steps.isEmpty() ? "the element itself" : String.join(".", steps);
+        return steps.isEmpty() ? "the element itself" : spelled();
+    }
+
+    /** The way as a path below an element writes it, {@code kind@A.amount}, and nothing for the
+     *  element itself. */
+    public String spelled() {
+        StringBuilder out = new StringBuilder();
+        for (TermPath.Step step : steps) {
+            if (step instanceof TermPath.Step.Field && !out.isEmpty()) {
+                out.append('.');
+            }
+            out.append(step);
+        }
+        return out.toString();
     }
 }

@@ -2074,6 +2074,12 @@ public final class InputReads {
         return names.heldByTheBody();
     }
 
+    /** What the declarations put at each position of the input this reads, which is what an arm
+     *  of a {@code match} on a place of it asks whether it narrows ({@link #insideArmOn}). */
+    DeclaredInput declared() {
+        return declared;
+    }
+
     /**
      * What {@code read}'s name stands for here ({@link ReadMeaning}).
      *

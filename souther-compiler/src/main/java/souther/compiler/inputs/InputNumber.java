@@ -281,7 +281,8 @@ public final class InputNumber {
             if (counted != null && at.containersHoldingIt().size() == 1) {
                 return howManyStandAt(counted.from(at).element(), inputs, source);
             }
-            computed = computedOf(measured, where, element, source);
+            computed = computedOf(measured, where, element, source,
+                    new ElementValue.ElementsAt(at, where.declared()));
             if (computed == null) {
                 return null;
             }
@@ -362,11 +363,13 @@ public final class InputNumber {
         }
         BindingId element = walk.element().binding();
         Map<BindingId, Core> held = reads.heldByTheBody();
+        ElementValue.ElementsAt elements =
+                new ElementValue.ElementsAt(at, container.at().declared());
         ElementValue.Added step = ElementValue.addedTo(
                 new ElementAnswer(element, walk.step().body()), walk.accumulator().binding(), held,
-                source);
+                source, elements);
         ElementValue.Affine seed = affine(ElementValue.read(
-                new ElementAnswer(element, walk.seed()), held, source));
+                new ElementAnswer(element, walk.seed()), held, source, elements));
         if (step == null || seed == null || !seed.form().coefs().isEmpty()) {
             return null;
         }
@@ -381,11 +384,11 @@ public final class InputNumber {
             }
             added.put(howMany, counted.getValue());
         }
-        ElementValue.Affine adds = step.ofTheElement();
-        if (adds.form().coefs().isEmpty()) {
+        ElementValue adds = step.ofTheElement();
+        if (adds instanceof ElementValue.Affine alike && alike.form().coefs().isEmpty()) {
             // What every element adds alike is that many for each of them, so a step adding
             // nothing else of the element counts them.
-            ExactRatio each = adds.form().constant();
+            ExactRatio each = alike.form().constant();
             if (each.signum() != 0) {
                 NumericTerm howMany = howManyStandAt(at, inputs, source);
                 if (howMany == null) {
@@ -485,8 +488,9 @@ public final class InputNumber {
      * The number {@code measured} takes over what a walk computed of each of its elements, or null
      * where the walk answered no such computation this reads.
      *
-     * <p>For a closure whose answer is not a place of its element — arithmetic over its fields, or
-     * a choice between two of those by a flag it holds. The licence is the one a place answer has:
+     * <p>For a closure whose answer is not a place of its element — arithmetic over its fields, a
+     * choice between two of those by a flag it holds, or a choice among them by the case a value of
+     * it is. The licence is the one a place answer has:
      * the walk answers one value per element of what it was given, proved before the tree was
      * rewritten, so what is asked here is only what the closure came to.
      */
@@ -526,14 +530,15 @@ public final class InputNumber {
      * that.
      */
     private static ElementValue computedOf(NumericMeasures.Measured measured, InputReads where,
-                                           BindingId element, RuleReadingSource source) {
+                                           BindingId element, RuleReadingSource source,
+                                           ElementValue.ElementsAt elements) {
         if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
                 instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         ElementAnswer closure = where.answerAt(element);
         return closure == null ? null
-                : ElementValue.read(closure, where.heldByTheBody(), source);
+                : ElementValue.read(closure, where.heldByTheBody(), source, elements);
     }
 
 }

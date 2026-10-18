@@ -2,9 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.TypeSymbol;
-
-import java.util.List;
 
 /**
  * Whether a value an {@code example} row was given belongs to one equivalence class.
@@ -28,53 +25,4 @@ import java.util.List;
 public interface Classifier {
 
     Membership membershipOf(ObservedValue value);
-
-    /**
-     * The value under {@code worn}: a newtype is observed as its construction, whose one field is
-     * {@code value} (spec §data).
-     *
-     * <p>The one place an observation has names taken off it. What a row wrote is what arrives, and
-     * every reader that walks into one — a class asking which case it is, a walk on its way to a
-     * field under it — takes them off the same way and by name, so that a record whose own field is
-     * called {@code value} is never mistaken for a name worn over one.
-     */
-    static ObservedValue inside(List<TypeSymbol> worn, ObservedValue value) {
-        ObservedValue at = value;
-        for (TypeSymbol name : worn) {
-            if (!(at instanceof ObservedValue.Constructed constructed)
-                    || !name.equals(constructed.type())) {
-                return at;
-            }
-            ObservedValue held = constructed.field("value");
-            if (held == null) {
-                // The construction is there and what it holds is not, which is what an observation
-                // stopped one layer down leaves. Handed on as it stands: why there is no value is
-                // the observation's to say and not something to be read off the outside of it.
-                return at;
-            }
-            at = held;
-        }
-        return at;
-    }
-
-    /**
-     * The value under {@code worn} where it wears every one of them, or null where it does not.
-     *
-     * <p>The same names taken off the same way, for a reader that needs the value to be one of the
-     * position's. {@link #inside} stops where a name is not there and hands back what it has,
-     * which is right for a class asking what it can of a value; a reader writing the value back
-     * under the position's names would put a name on that the value never wore.
-     */
-    static ObservedValue wearing(List<TypeSymbol> worn, ObservedValue value) {
-        ObservedValue at = value;
-        for (TypeSymbol name : worn) {
-            if (!(at instanceof ObservedValue.Constructed constructed)
-                    || !name.equals(constructed.type())
-                    || constructed.field("value") == null) {
-                return null;
-            }
-            at = constructed.field("value");
-        }
-        return at;
-    }
 }

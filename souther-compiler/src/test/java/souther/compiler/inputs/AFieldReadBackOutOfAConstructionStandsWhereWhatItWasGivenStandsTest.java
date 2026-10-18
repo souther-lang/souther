@@ -57,7 +57,7 @@ class AFieldReadBackOutOfAConstructionStandsWhereWhatItWasGivenStandsTest {
         return ElementProjection.read(answer, ELEMENT, held, DeclarationNewtypes.NONE);
     }
 
-    private static final ElementProjection THE_LABEL = new ElementProjection(List.of("label"));
+    private static final ElementProjection THE_LABEL = ElementProjection.ofFields(List.of("label"));
 
     @Test
     void aFieldOfAConstructionIsWhereItWasGiven() {

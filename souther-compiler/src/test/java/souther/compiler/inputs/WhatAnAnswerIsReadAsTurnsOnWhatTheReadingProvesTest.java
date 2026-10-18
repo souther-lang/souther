@@ -87,7 +87,7 @@ class WhatAnAnswerIsReadAsTurnsOnWhatTheReadingProvesTest {
     private static final Function<Written, ElementProjection> A_PLACE = written ->
             ElementProjection.read(written.answer(), ELEMENT, written.held(), NEWTYPES);
 
-    private static final ElementProjection THE_LABEL = new ElementProjection(List.of("label"));
+    private static final ElementProjection THE_LABEL = ElementProjection.ofFields(List.of("label"));
 
     @Test
     void aNewtypeWearingAPlaceIsThatKeyWrappedHoweverItIsWritten() {

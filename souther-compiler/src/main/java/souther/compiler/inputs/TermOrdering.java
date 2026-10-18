@@ -5,9 +5,12 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,17 +36,22 @@ final class TermOrdering {
      */
     static TermOrders of(NumericTerm term, Type positionType, Symbols symbols,
                          DeclarationAccess declarations) {
-        return of(term, positionType, Map.of(), symbols, declarations);
+        return of(term, positionType, Map.of(), Map.of(), symbols, declarations);
     }
 
     /**
-     * The same, for a term over what a walk computed of each element, whose value is read on the
-     * type the computation stands as and whose fields are read on their own.
+     * The same, for a term read off the places of an element: one over what a walk computed of
+     * each element, whose value is read on the type the computation stands as and whose fields are
+     * read on their own, and one read among an element's neighbours.
      *
-     * @param fieldTypes what stands at each field the computation reads
+     * @param fieldTypes what stands at each field whose number is read
+     * @param onTheWay   what stands at each place on the way to every place read of an element,
+     *                   the element itself among them, which says the names a value there is
+     *                   written inside
      */
     static TermOrders of(NumericTerm term, Type positionType,
-                         Map<ElementProjection, Type> fieldTypes, Symbols symbols,
+                         Map<ElementProjection, Type> fieldTypes,
+                         Map<ElementProjection, Type> onTheWay, Symbols symbols,
                          DeclarationAccess declarations) {
         Carrier observed = observedOn(positionType, declarations);
         // One construction and not one per arm. A term that is a location's own content answers on
@@ -64,7 +72,23 @@ final class TermOrdering {
                 fields.put(field, on);
             }
         });
-        return new TermOrders(term, observed, answered, fields);
+        Map<ElementProjection, List<TypeSymbol>> worn = new LinkedHashMap<>();
+        for (Map.Entry<ElementProjection, Type> each : onTheWay.entrySet()) {
+            List<TypeSymbol> names = namesWorn(each.getValue(), declarations.inners());
+            if (!names.isEmpty()) {
+                worn.put(each.getKey(), names);
+            }
+        }
+        return new TermOrders(term, observed, answered, fields, worn);
+    }
+
+    /**
+     * Every name a value of {@code type} is written inside, outermost first: what a reader of an
+     * observed element takes off, by name, before each step it takes into it.
+     */
+    private static List<TypeSymbol> namesWorn(Type type, NewtypeInners inners) {
+        return TypeOps.newtypeSpine(type, inners).layers().stream()
+                .map(TypeOps.Layer::named).toList();
     }
 
     /**
