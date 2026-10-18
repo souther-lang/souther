@@ -153,6 +153,82 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
     }
 
     /**
+     * Two choices each of which leaves a way, and that leave none together, are a path nothing
+     * goes along, found where the second is taken in: nothing after it is read, the construction
+     * whose invariant holds of any value included.
+     */
+    @Test
+    void twoChoicesThatLeaveNoWayTogetherEndThePathWhereTheSecondIsTakenIn() {
+        String body = """
+                module demo
+                data NonNeg = Int
+                    invariant value >= 0
+                behavior f : (x: Int) -> NonNeg
+                    constructs NonNeg
+                let f (x) = {
+                    guard x == 0 || x == 2 else NonNeg(0)
+                    guard x == 1 || x == 3 else NonNeg(0)
+                    let first = NonNeg(0)
+                    %s
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("first")),
+                derivedWhileCompiling(body.formatted("NonNeg(x - 10)")));
+    }
+
+    /**
+     * How often the parts of the choices a path holds are read: once at each condition taken in,
+     * whatever was held before it and however many constructions stand after.
+     *
+     * <p>A condition is asked of one way known to get through what is held, and not of every way
+     * of choosing a part of each; and a construction asks nothing of the choices unless its
+     * invariant is taken apart. So each more choice on the path costs what the one before it did,
+     * and each more construction whose invariant holds costs nothing.
+     */
+    @Test
+    void thePartsReadGrowWithTheChoicesOnThePathAndNotWithWhatStandsAfterThem() {
+        long four = partsReadOver(4, 1);
+        long eight = partsReadOver(8, 1);
+        long twelve = partsReadOver(12, 1);
+        assertEquals(eight - four, twelve - eight,
+                "each further choice is read as often as the one before it: " + List.of(four,
+                        eight, twelve));
+        assertEquals(eight, partsReadOver(8, 20),
+                "constructions after the choices read none of their parts");
+    }
+
+    /** The parts read compiling a body of {@code choices} choices the path gets through, then
+     *  {@code constructions} constructions whose invariant holds. */
+    private static long partsReadOver(int choices, int constructions) {
+        StringBuilder body = new StringBuilder();
+        for (int i = 0; i < choices; i++) {
+            body.append("guard x >= %d || x <= 0 - %d else NonNeg(0)\n    "
+                    .formatted(i, 1000 + i));
+        }
+        for (int i = 0; i < constructions; i++) {
+            body.append("let c%d = NonNeg(%d)\n    ".formatted(i, i));
+        }
+        body.append("c0");
+        long[] counted = new long[1];
+        Predicates.COUNTING_PARTS_READ = counted;
+        try {
+            Compiler.compileWithWarnings("""
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior f : (x: Int) -> NonNeg
+                        constructs NonNeg
+                    let f (x) = {
+                        %s
+                    }
+                    """.formatted(body));
+        } finally {
+            Predicates.COUNTING_PARTS_READ = null;
+        }
+        return counted[0];
+    }
+
+    /**
      * A choice one part of which cannot hold where it is taken in is the other part, and is read
      * as that part written alone: the construction under it is read once, as it is under the part,
      * and not once and then again under each way the choice comes apart in.

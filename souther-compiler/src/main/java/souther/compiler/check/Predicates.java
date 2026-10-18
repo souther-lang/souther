@@ -993,7 +993,120 @@ final class Predicates {
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
-        return new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+        Assumed read = new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+        Known after = read.known();
+        if (after.reachesNothing() || !after.holdsAChoice()) {
+            return read;
+        }
+        Known past = wayPast(rawCond, positive, at, k, after);
+        Through through = past != null ? new WayFound(past) : aWayThrough(after);
+        return switch (through) {
+            case WayFound(Known way) -> new Assumed(after.throughWay(way), read.taken(),
+                    read.shapeRead(), read.notTaken());
+            // Read to the end: what the conditions come to is that nothing gets past them.
+            case NoWay _ -> new Assumed(after.reachingNothing(), true, true, read.notTaken());
+            case PastTheBound _ -> new Assumed(after.throughWay(null), read.taken(),
+                    read.shapeRead(), read.notTaken());
+        };
+    }
+
+    /**
+     * A way past {@code cond}, which taking it in over {@code k} came to {@code after}: the way
+     * {@code k} had through what it held, with {@code cond} taken in as well and a part taken of
+     * each condition that came to be held by taking it — or null where {@code k} had no way, or
+     * that way leaves nothing.
+     *
+     * <p>Where a path gets through its choices is a question about every way of choosing a part of
+     * each, and asked afresh at each condition taken in it is that many questions each time. Asked
+     * of the one way known to get through, it is one: the condition read once more, over that way.
+     * Where {@code k} held no choice the way is {@code after} itself, and nothing is read again.
+     */
+    private Known wayPast(Core cond, boolean positive, Denotations at, Known k, Known after) {
+        Known way;
+        int takenOf;
+        if (!k.holdsAChoice()) {
+            way = after;
+            takenOf = 0;
+        } else if (k.wayIn() == null) {
+            return null;
+        } else {
+            takenOf = k.wayIn().heldCount();
+            way = new Assuming(this).read(cond, positive, at, terms::inside).from(k.wayIn())
+                    .known();
+        }
+        for (Known.OneOf condition : way.heldSince(takenOf)) {
+            if (way.reachesNothing()) {
+                break;
+            }
+            Known through = null;
+            for (ClauseExpr part : partsOf(condition)) {
+                Known taken = takingPart(condition, part, way).known();
+                if (!taken.reachesNothing()) {
+                    through = taken;
+                    break;
+                }
+            }
+            if (through == null) {
+                return null;
+            }
+            way = through;
+        }
+        return way.reachesNothing() ? null : way;
+    }
+
+    /** What looking for a way through the conditions a state holds came to. */
+    private sealed interface Through permits WayFound, NoWay, PastTheBound {}
+
+    /** A state with one part of each condition taken in that reaches something. */
+    private record WayFound(Known way) implements Through {}
+
+    /** Every way of choosing a part of each condition was looked at, and none reaches anything. */
+    private record NoWay() implements Through {}
+
+    /** The ways looked at reach nothing, and the copies ran out before the rest were. */
+    private record PastTheBound() implements Through {}
+
+    /**
+     * A way through every condition {@code k} holds as one of its parts, looked for one condition
+     * at a time in the order they are held and one part at a time in the order it was written.
+     *
+     * <p>The first found is the answer, so a path every first part gets through costs one reading
+     * of a part per condition. Each part a search goes down is a copy of what was known
+     * ({@link ContextMultiplicity}), counted for this search alone: this reader starts at one, and
+     * a search that would compound past the bound stops, and says it stopped rather than that it
+     * found nothing.
+     */
+    private Through aWayThrough(Known k) {
+        return aWayThrough(k, k.heldAsOneOfTheirParts(), 0, ContextMultiplicity.ofOneReading());
+    }
+
+    private Through aWayThrough(Known k, List<Known.OneOf> held, int next,
+                                ContextMultiplicity copies) {
+        if (next == held.size()) {
+            return new WayFound(k);
+        }
+        List<Known> entered = new ArrayList<>();
+        for (Assumed part : takingEachPartOf(held.get(next), k)) {
+            if (!part.known().reachesNothing()) {
+                entered.add(part.known());
+            }
+        }
+        if (entered.isEmpty()) {
+            return new NoWay();
+        }
+        ContextMultiplicity opened = copies.opening(entered.size());
+        if (opened == null) {
+            return new PastTheBound();
+        }
+        boolean cut = false;
+        for (Known way : entered) {
+            Through further = aWayThrough(way, held, next + 1, opened);
+            if (further instanceof WayFound) {
+                return further;
+            }
+            cut |= further instanceof PastTheBound;
+        }
+        return cut ? new PastTheBound() : new NoWay();
     }
 
     /**
@@ -1051,36 +1164,37 @@ final class Predicates {
         return ways;
     }
 
-    /**
-     * Whether a condition {@code k} holds as one of its parts has no part that can hold beside
-     * what else {@code k} knows, so no run stands where {@code k} does.
-     *
-     * <p>Each condition alone, which is what a path holds them as: one is held only where both its
-     * parts could hold when it was taken in ({@link #takingOneOf}), and what was taken in after it
-     * may have ruled both out. That a combination of parts of several of them can hold nowhere is
-     * a different question, with one answer per way of choosing a part from each, and it is asked
-     * where they are taken apart together.
-     */
-    boolean leavesNoWay(Known k) {
-        for (Known.OneOf condition : k.heldAsOneOfTheirParts()) {
-            if (eachWayOf(condition, k).stream().allMatch(Known::reachesNothing)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** What taking each part of {@code condition} in alone over {@code k} came to, the state and
      *  what the reading made of the part ({@link #eachWayOf}). */
     private List<Assumed> takingEachPartOf(Known.OneOf condition, Known k) {
         List<Assumed> ways = new ArrayList<>();
-        for (ClauseExpr part : List.of(condition.of().left(), condition.of().right())) {
-            Assumed taken = new Assuming(this).read(part, condition.at(), terms::inside, null)
-                    .from(k);
-            ways.add(new Assumed(taken.known().speakingAs(k), taken.taken(), taken.shapeRead(),
-                    taken.notTaken()));
+        for (ClauseExpr part : partsOf(condition)) {
+            ways.add(takingPart(condition, part, k));
         }
         return ways;
+    }
+
+    private static List<ClauseExpr> partsOf(Known.OneOf condition) {
+        return List.of(condition.of().left(), condition.of().right());
+    }
+
+    /**
+     * Where a test in this package counts the parts of held conditions read, and null everywhere
+     * else. Reading a part is the unit everything that takes a choice apart spends, so it is where
+     * how often that happens is counted.
+     */
+    static long[] COUNTING_PARTS_READ;
+
+    /** What taking {@code part} of {@code condition} in alone over {@code k} came to, speaking of
+     *  what {@code k} speaks of ({@link #eachWayOf}). */
+    private Assumed takingPart(Known.OneOf condition, ClauseExpr part, Known k) {
+        long[] counting = COUNTING_PARTS_READ;
+        if (counting != null) {
+            counting[0]++;
+        }
+        Assumed taken = new Assuming(this).read(part, condition.at(), terms::inside, null).from(k);
+        return new Assumed(taken.known().speakingAs(k), taken.taken(), taken.shapeRead(),
+                taken.notTaken());
     }
 
     /**

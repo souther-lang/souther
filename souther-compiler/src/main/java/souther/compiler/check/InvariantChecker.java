@@ -4649,17 +4649,14 @@ public final class InvariantChecker {
      * built and the construction is not an attempt, or where no way the conditions on the path come
      * apart in reaches it — which is no value built, and nothing is said of it.
      *
-     * <p>Whether a way reaches it is asked first, of every construction, and apart from what its
-     * invariant comes to. It is a question about the path and has an answer whatever the value is
-     * and whether or not anything is owed of it: asked only where the verdict left something to
-     * take apart, a construction whose invariant holds would be one the walk went on past although
-     * no run arrives at it.
+     * <p>Whether the conditions on the path leave a way at all is not asked here. It is kept where
+     * they are taken in ({@link Predicates#assumeCond}), so a path they leave no way along reaches
+     * nothing before any construction on it is walked, whatever that construction's invariant
+     * comes to. What can still be found here is a way nothing enters under what was learned of the
+     * values after the conditions were taken in, and only where the invariant is taken apart.
      */
     private Completion judge(Core.Construct made, Known k, Denotations at, boolean attempted,
                              ContextMultiplicity copies) {
-        if (predicates.leavesNoWay(k)) {
-            return new Completion.CannotComplete(new Completion.NoCompletionProof.NoWayIn(made));
-        }
         // Which form the name was declared in, asked of what was settled when its module was
         // indexed. Only a product carries an invariant to judge a construction against; reading the
         // declaration to find that out is what had this check re-run for a declaration of another
@@ -4718,9 +4715,9 @@ public final class InvariantChecker {
      * taken apart, since each way knows more than this; so is a clause that could not be read,
      * since which clauses are read turns on the values the path has named, and no way names one
      * the whole did not ({@link Predicates#eachWayOf}). A clause refuted without them is refuted in
-     * each way as well. Whether each condition alone leaves a way at all was asked before this
-     * ({@link Predicates#leavesNoWay}); what taking them apart together can still find is a
-     * combination of their parts none of which is entered.
+     * each way as well. Whether the conditions leave a way at all was kept where they were taken
+     * in ({@link Predicates#assumeCond}); what taking them apart here can still find is a way that
+     * what was learned of the values since leaves nothing.
      *
      * <p>One condition at a time, in the order they are held, and every one of them taken apart
      * while the copies allow. Nothing passes a condition over for looking as though it could not

@@ -39,16 +39,44 @@ import java.util.Map;
  * ({@link #oneOf}). Kept as they were written and taken apart only by a reader that has a question
  * the parts answer and the whole does not: a domain holding each part of each of them would be one
  * state per way of choosing a part, multiplied at every such condition the path passes, whether or
- * not anything below was ever asked of them. Told on as the spoken terms are, for the same reason:
- * a path holds one more of them at each such condition it passes.
+ * not anything below was ever asked of them.
  */
 record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
                      AppendOnly<FactSubject, Boolean> spoken, Unguarded unguarded,
-                     Map<FactSubject, CasesLeft> cases, AppendOnly<OneOf, Boolean> oneOf) {
+                     Map<FactSubject, CasesLeft> cases, Choices oneOf) {
 
     Known {
         cases = Map.copyOf(cases);
     }
+
+    /**
+     * The conditions held here as one of their parts, and one way through all of them.
+     *
+     * <p>Held as a line each one is put on top of, for the reason the spoken terms are told on: a
+     * path holds one more of them at each such condition it passes, and copying what it held at
+     * each would cost the square of the path. On top, so that what came to be held since a count
+     * was taken is read off the top without walking what was held before it.
+     *
+     * <p>The way is a state with one part of each condition held taken in, which nothing had shown
+     * to reach nothing when it was made; or null where none stands for them. It is what lets a
+     * condition taken in later be asked of one state, rather than of every way of choosing a part
+     * of each: a way that takes the new condition in and still reaches something is a run that
+     * gets past it. It answers only that. That the conditions leave no way at all is answered by
+     * looking for one over what is known ({@link Predicates#assumeCond}), never by this one failing
+     * — what is known may by then hold more than the way does, and a way that knew less is a way
+     * that admits more, which is the safe side for a "yes" and no ground for a "no".
+     */
+    record Choices(ChoiceLine held, Known wayIn) {
+
+        static final Choices NONE = new Choices(null, null);
+
+        int count() {
+            return held == null ? 0 : held.count();
+        }
+    }
+
+    /** One condition held, on top of the ones held before it, and how many that is in all. */
+    record ChoiceLine(OneOf last, ChoiceLine before, int count) {}
 
     /**
      * A condition that holds here as one of its parts, and the bindings it was read under.
@@ -153,7 +181,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         return new Known(ConstraintState.top(FactSubject.inOneOrder(), closures), List.of(),
                 AppendOnly.empty(),
                 new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)), Map.of(),
-                AppendOnly.empty());
+                Choices.NONE);
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
@@ -308,12 +336,47 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      */
     Known holdingOneOf(OneOf condition) {
         return new Known(constraints, quantified, spoken, unguarded, cases,
-                oneOf.with(condition, true));
+                new Choices(new ChoiceLine(condition, oneOf.held(), oneOf.count() + 1),
+                        oneOf.wayIn()));
     }
 
     /** The conditions held here as one of their parts, in the order they were taken in. */
     List<OneOf> heldAsOneOfTheirParts() {
-        return List.copyOf(oneOf.keys());
+        return heldSince(0);
+    }
+
+    /** How many conditions are held here as one of their parts. */
+    int heldCount() {
+        return oneOf.count();
+    }
+
+    /** The conditions held here past the first {@code count}, in the order they were taken in. */
+    List<OneOf> heldSince(int count) {
+        List<OneOf> out = new ArrayList<>();
+        for (ChoiceLine at = oneOf.held(); at != null && at.count() > count; at = at.before()) {
+            out.add(at.last());
+        }
+        return out.reversed();
+    }
+
+    /** Whether any condition is held here as one of its parts. */
+    boolean holdsAChoice() {
+        return oneOf.held() != null;
+    }
+
+    /**
+     * A state with one part of each condition held here taken in, which nothing had shown to reach
+     * nothing when it was made — this state itself where none is held — or null where none is
+     * known ({@link Choices}).
+     */
+    Known wayIn() {
+        return holdsAChoice() ? oneOf.wayIn() : this;
+    }
+
+    /** This, with {@code way} as the way through the conditions it holds ({@link Choices}). */
+    Known throughWay(Known way) {
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                new Choices(oneOf.held(), way));
     }
 
     /**
