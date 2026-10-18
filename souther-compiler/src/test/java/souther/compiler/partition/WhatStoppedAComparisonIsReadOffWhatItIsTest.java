@@ -425,6 +425,29 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
                 whyAt(guard("a: Int, b: Int", "let p = a * b", "Int.max(0, p) <= 3"), "a"));
     }
 
+    /**
+     * A value an operation defined by cases is given is read in how the value stands for a case to
+     * be reached as it is in what the case answers, and as it is where a choice between values is
+     * made. {@code Int.abs} answers the value or its negation as the value stands against nought,
+     * and {@code Int.max} one of its values as they stand against each other; under either, how
+     * many elements meet something less how many there are is a form a run reads, every relation
+     * is read to the end, and the lines are held together. Read with less in how the value stands
+     * for a case, the value was a stop there alone, and the rule was named for it.
+     */
+    @Test
+    void aValueIsReadInTheCaseAnOperationIsReachedUnderAsInWhatItAnswers() {
+        String parameters = "a: Int, xs: List<Int>";
+        String bound = "let p = List.length(List.filter(x -> x > a, xs)) - List.length(xs)";
+        PartitionEvidence chosen = guard(parameters, bound, "Int.max(0, p) <= 3");
+        PartitionEvidence byCases = guard(parameters, bound, "Int.abs(p) <= 3");
+
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+                UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE), whyAt(byCases, "a"));
+        for (String position : List.of("a", "xs", "xs[*]")) {
+            assertEquals(whyAt(chosen, position), whyAt(byCases, position), position);
+        }
+    }
+
     private static PartitionEvidence guard(String parameters, String condition) {
         return guard(parameters, "", condition);
     }
