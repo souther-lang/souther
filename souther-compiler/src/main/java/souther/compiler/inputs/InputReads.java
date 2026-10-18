@@ -682,6 +682,16 @@ public final class InputReads {
                 && held.part() == HeldIn.Part.ELEMENT ? held.container() : null;
     }
 
+    /**
+     * The same, for a rule a declaration states, which is the tree the analysis of that declaration
+     * reads and keeps the language's operations standing as calls, whichever tree the value it is
+     * handed is read in.
+     */
+    public InputReads forADeclaredRule() {
+        return new InputReads(names.overStandingCalls(), alternatives, declared, dependencies,
+                applied);
+    }
+
     /** The same, as one of {@code readings} readings of one condition. */
     private InputReads readAs(long readings) {
         return new InputReads(names, alternatives, declared, dependencies,

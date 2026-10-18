@@ -1372,7 +1372,7 @@ final class Pullback {
         for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
             holds.add(switch (clause) {
                 case ClausesInOrder.OneClause.Stated stated ->
-                        observe(stated.states(), AnswerAspect.TRUTH, reads);
+                        observe(stated.states(), AnswerAspect.TRUTH, reads.forADeclaredRule());
                 case ClausesInOrder.OneClause.Unread unread -> new Derivation.Stopped(
                         new WhyUnread.AClauseOfAnInvariant(unread.clause(), unread.why()), false);
             });
