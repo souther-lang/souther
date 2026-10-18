@@ -240,6 +240,9 @@ final class ContainersAddingUp {
                             CompositionShortfall.of(ways.cutBy()));
         }
         WhatWasLeft left = new WhatWasLeft();
+        if (solved != null && solved.ofOneCase()) {
+            left.notAllOf(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR);
+        }
         // What the planning gave up at, which is a way that was there to try and was not. A way down
         // that was never planned is a value never composed, and a reader told only that nothing was
         // composed would look for the rule that refuses it.
@@ -498,26 +501,59 @@ final class ContainersAddingUp {
      * nothing here chooses, and solving for the first would be solving against a guess at the
      * second.
      *
-     * @param field    where each element's field stands
-     * @param carrier  the order the field's values are written on
-     * @param weight   what the field is multiplied by, never nought
-     * @param constant what each element's number has beside it
+     * <p>A choice by case is solved for through one arm: the first whose answer is a form of one
+     * field of the case it took. The field stands under the case, so every element written to hold
+     * it is of that case and is taken by that arm, and its number is that arm's form. Those are some
+     * of the containers the total is over and not all of them — one mixing the cases is never
+     * written — which is said beside whatever is written.
+     *
+     * @param field     where each element's field stands
+     * @param carrier   the order the field's values are written on
+     * @param weight    what the field is multiplied by, never nought
+     * @param constant  what each element's number has beside it
+     * @param ofOneCase whether the elements written are all of one case of several the computation
+     *                  chooses among
      */
     private record FieldSolved(TermPath field, Carrier carrier, ExactRatio weight,
-                               ExactRatio constant) {
+                               ExactRatio constant, boolean ofOneCase) {
 
         /** The field a computation is solved for, or null where it is not a form of one. */
         static FieldSolved of(RunSource.ComputedOccurrences run, TermOrders orders) {
-            if (!(run.computation() instanceof ElementValue.Affine affine)
-                    || affine.form().coefs().size() != 1) {
+            return switch (run.computation()) {
+                case ElementValue.Affine affine -> ofAForm(affine, null, run, orders);
+                case ElementValue.OfItsCase choice -> {
+                    for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
+                        if (arm.value() instanceof ElementValue.Affine affine) {
+                            FieldSolved solved = ofAForm(affine, arm.taken(), run, orders);
+                            if (solved != null) {
+                                yield solved;
+                            }
+                        }
+                    }
+                    yield null;
+                }
+                case ElementValue.Choose _ -> null;
+            };
+        }
+
+        /** The field {@code affine} is solved for, where it is a form of one field and, under an
+         *  arm, a field of the case the arm {@code taken} — or null. */
+        private static FieldSolved ofAForm(ElementValue.Affine affine, ElementProjection taken,
+                                           RunSource.ComputedOccurrences run, TermOrders orders) {
+            if (affine.form().coefs().size() != 1) {
                 return null;
             }
             Map.Entry<ElementProjection, ExactRatio> only =
                     affine.form().coefs().entrySet().iterator().next();
+            List<TermPath.Step> steps = only.getKey().steps();
+            if (taken != null && (steps.size() < taken.steps().size()
+                    || !steps.subList(0, taken.steps().size()).equals(taken.steps()))) {
+                return null;
+            }
             Carrier carrier = orders.fieldCarrier(only.getKey());
             return carrier == null ? null
                     : new FieldSolved(only.getKey().from(run.elements()), carrier, only.getValue(),
-                            affine.form().constant());
+                            affine.form().constant(), taken != null);
         }
 
         /**

@@ -100,8 +100,10 @@ public enum CompositionRepertoire {
      * <p>A total of what a walk computed of each element is written by choosing one field of every
      * element and solving for it, where the computation is a form of that one field alone. A form of
      * several fields, or a choice between two by a flag, has more than one value to choose in an
-     * element, and nothing here chooses the others so that the first can be solved for. Raising
-     * anything reaches none of them; what would is a way of choosing the rest of an element.
+     * element, and nothing here chooses the others so that the first can be solved for. A choice by
+     * the element's case is solved for through one arm, so what is written is the containers whose
+     * elements are all of that case and none that mixes them. Raising anything reaches none of the
+     * rest; what would is a way of choosing the rest of an element.
      *
      * <p>So a total of such a number is not a total no row comes to. Read as a figure, an author is
      * told to raise a number that changes nothing; read as an answer about the model, they are told

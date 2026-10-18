@@ -464,7 +464,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                         if (narrowed == null) {
                             return false;
                         }
-                        if (standsAs == null && stands(each, here)) {
+                        if (standsAs == null && each.leaves(here)) {
                             standsAs = narrowed;
                         }
                     }
@@ -474,19 +474,6 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 }
             }
             return true;
-        }
-
-        /** Whether the value written here is one {@code refinement} leaves standing. */
-        private static boolean stands(Refinement refinement, ObservedValue here) {
-            return switch (refinement) {
-                case Refinement.SumCase one -> switch (here) {
-                    case ObservedValue.Unit unit -> one.leaf().equals(unit.type());
-                    case ObservedValue.Constructed made -> one.leaf().equals(made.type());
-                    default -> false;
-                };
-                case Refinement.Presence presence ->
-                        presence.present() != (here instanceof ObservedValue.Absent);
-            };
         }
 
         /**

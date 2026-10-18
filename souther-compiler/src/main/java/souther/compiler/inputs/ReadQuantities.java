@@ -1990,7 +1990,7 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.CodePointValueSum _ -> NumberAt.codePointSumOf(at.named());
             case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
             case NumericTerm.ExtremeOfItsKey extreme ->
-                    NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().steps());
+                    NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().fields());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenAsItStands(at.named(), over.operation());
         };

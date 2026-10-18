@@ -23,14 +23,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * What a closure computed from one element of a walk, for a closure whose answer is not a place of
  * the element.
  *
  * <p>The number a walk answers per element when that number is made from the element's fields: an
- * affine form of them, or the choice between two such numbers by a flag the element holds. Relative
+ * affine form of them, the choice between two such numbers by a flag the element holds, or the
+ * choice among them by which case a value of the element is. Relative
  * to the element, so it can be joined to whichever position the run is over, as an
  * {@link ElementProjection} is — and the atoms of a form are those projections, so a field of the
  * element is named the one way wherever it is read.
@@ -38,15 +38,17 @@ import java.util.function.Function;
  * <p><b>The arithmetic is {@link AffineForms}'s.</b> The grammar of what composes a form is the
  * language's, written once; this supplies only what an atom of an element is called. What this
  * adds is the choice, which no form holds: a branch on a flag is one form where the flag is set and
- * another where it is not, and a single form over the element's fields would have to say which.
+ * another where it is not, an arm of a {@code match} is one form where the value is the case the
+ * arm takes, and a single form over the element's fields would have to say which.
  *
  * <p>Not a place. {@link ElementProjection} is where in an element a value stands, and a computed
  * number stands nowhere in it. Held apart so a rule about what a walk computed is never read as a
  * rule about a field.
  *
  * <p>Only what is read exactly. A product of two fields, a call the library does not say the form
- * of, a branch on anything but a flag the element holds: none is read, and the walk is a run this
- * compiler did not read rather than one it read wrongly.
+ * of, a branch on anything but a flag the element holds, a {@code match} on anything but a place of
+ * the element: none is read, and the walk is a run this compiler did not read rather than one it
+ * read wrongly.
  */
 public sealed interface ElementValue {
 
@@ -54,19 +56,34 @@ public sealed interface ElementValue {
     Set<ElementProjection> reads();
 
     /**
-     * What this comes to for one element, given the number each field of it holds and which flags
-     * are set; or null where a field it needs is one the element has no number or flag at.
+     * What this comes to for one element, given the number each field of it holds, which flags
+     * are set and which case each value it matches on is; or null where a place it needs is one the
+     * element has no number, flag or case at.
      *
-     * <p>Asks for a field only where the answer needs it. A choice asks for its flag and then for
-     * the fields of the branch the flag picked, so a field only the other branch reads is never
+     * <p>Asks for a place only where the answer needs it. A choice asks for its flag and then for
+     * the fields of the branch the flag picked, and a choice by case asks which case the value is
+     * and then for the fields of the arm that took it, so a field only another branch reads is never
      * asked for and whatever the row holds there says nothing about this element. The answers are
      * the caller's to give lazily for that reason.
      *
      * <p>A number the exact arithmetic could not hold is said as that and not as a field that was
      * not there: the first is about this compiler's room and the second about the row.
      */
-    ExactAnswer<ExactRatio> at(Function<ElementProjection, ExactRatio> numberAt,
-                               Function<ElementProjection, Boolean> flagAt);
+    ExactAnswer<ExactRatio> at(OneElement element);
+
+    /** What one element holds at the places a computation asks it about. */
+    interface OneElement {
+
+        /** The number at {@code field}, or null where the element holds none there. */
+        ExactRatio number(ElementProjection field);
+
+        /** Whether the flag at {@code field} is set, or null where the element holds none there. */
+        Boolean flag(ElementProjection field);
+
+        /** Whether the value at {@code subject} is one of {@code cases}, or null where the element
+         *  holds nothing there whose case can be told. */
+        Boolean isOf(ElementProjection subject, CasesLeft cases);
+    }
 
     /**
      * The field this is, where it is that field and nothing made of it, or null.
@@ -104,11 +121,10 @@ public sealed interface ElementValue {
         }
 
         @Override
-        public ExactAnswer<ExactRatio> at(Function<ElementProjection, ExactRatio> numberAt,
-                                          Function<ElementProjection, Boolean> flagAt) {
+        public ExactAnswer<ExactRatio> at(OneElement element) {
             ExactAnswer<ExactRatio> total = ExactAnswer.held(form.constant());
             for (Map.Entry<ElementProjection, ExactRatio> each : form.coefs().entrySet()) {
-                ExactRatio held = numberAt.apply(each.getKey());
+                ExactRatio held = element.number(each.getKey());
                 if (held == null) {
                     return null;
                 }
@@ -161,11 +177,9 @@ public sealed interface ElementValue {
         }
 
         @Override
-        public ExactAnswer<ExactRatio> at(Function<ElementProjection, ExactRatio> numberAt,
-                                          Function<ElementProjection, Boolean> flagAt) {
-            Boolean set = flagAt.apply(flag);
-            return set == null ? null
-                    : (set ? whenSet : otherwise).at(numberAt, flagAt);
+        public ExactAnswer<ExactRatio> at(OneElement element) {
+            Boolean set = element.flag(flag);
+            return set == null ? null : (set ? whenSet : otherwise).at(element);
         }
 
         /** A choice is made of the element and is not a field of it. */
@@ -181,31 +195,185 @@ public sealed interface ElementValue {
     }
 
     /**
+     * The value of the first arm that takes the case the value at a place of the element is, the
+     * arms tried in the order the {@code match} wrote them; and {@code rest} where none of them
+     * takes it.
+     *
+     * <p>Chosen for each element on its own. Which arm an element is taken by is a fact about that
+     * element, and a total over the run is the total of what each one's arm made of it — so one
+     * container stays one run, and no arm is a run of its own.
+     *
+     * <p>Each arm is held as the place its name stands at: the matched value, narrowed to what the
+     * arm took. What a body under the arm reads of that value is a field of the case, and two cases
+     * declaring a field of one name are two places.
+     *
+     * @param rest what an element no arm took comes to, or null where the arms take every value the
+     *             declaration leaves the place
+     */
+    record OfItsCase(List<Arm> arms, ElementValue rest) implements ElementValue {
+
+        /** An arm: where the value stands once the arm has taken it, and what it comes to there. */
+        public record Arm(ElementProjection taken, ElementValue value) {
+
+            public Arm {
+                if (taken == null || taken.narrowing() == null || value == null) {
+                    throw new IllegalArgumentException("an arm narrows the value it matched and"
+                            + " answers something of it");
+                }
+            }
+        }
+
+        public OfItsCase {
+            if (arms == null || arms.isEmpty()) {
+                throw new IllegalArgumentException("a choice by case has an arm to choose");
+            }
+            arms = List.copyOf(arms);
+            ElementProjection subject = arms.getFirst().taken().narrowedFrom();
+            for (Arm arm : arms) {
+                if (!arm.taken().narrowedFrom().equals(subject)) {
+                    throw new IllegalArgumentException("the arms of one match narrow one value, and"
+                            + " these narrow " + subject + " and " + arm.taken().narrowedFrom());
+                }
+            }
+        }
+
+        /** The place whose case chooses. */
+        public ElementProjection subject() {
+            return arms.getFirst().taken().narrowedFrom();
+        }
+
+        @Override
+        public Set<ElementProjection> reads() {
+            Set<ElementProjection> all = new LinkedHashSet<>();
+            all.add(subject());
+            for (Arm arm : arms) {
+                all.addAll(arm.value().reads());
+            }
+            if (rest != null) {
+                all.addAll(rest.reads());
+            }
+            return Set.copyOf(all);
+        }
+
+        @Override
+        public ExactAnswer<ExactRatio> at(OneElement element) {
+            for (Arm arm : arms) {
+                Boolean taken = element.isOf(subject(), arm.taken().narrowing());
+                if (taken == null) {
+                    return null;
+                }
+                if (taken) {
+                    return arm.value().at(element);
+                }
+            }
+            return rest == null ? null : rest.at(element);
+        }
+
+        /** A choice is made of the element and is not a field of it. */
+        @Override
+        public ElementProjection asAPlace() {
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            List<String> arms = new ArrayList<>();
+            for (Arm arm : this.arms) {
+                arms.add("when " + arm.taken() + " then " + arm.value());
+            }
+            if (rest != null) {
+                arms.add("otherwise " + rest);
+            }
+            return String.join(" ", arms);
+        }
+    }
+
+    /**
+     * The choice by case of {@code arms} and {@code rest}, with a choice whose every answer is one
+     * answer being that answer.
+     *
+     * <p>A {@code match} is exhaustive, so an element is taken by some arm, and where every arm
+     * comes to the same thing the case does not change what the element comes to.
+     */
+    static ElementValue choosingByCase(List<OfItsCase.Arm> arms, ElementValue rest) {
+        if (arms.isEmpty()) {
+            return rest;
+        }
+        ElementValue first = arms.getFirst().value();
+        boolean one = rest == null || rest.equals(first);
+        for (OfItsCase.Arm arm : arms) {
+            one &= arm.value().equals(first);
+        }
+        return one ? first : new OfItsCase(arms, rest);
+    }
+
+    /**
      * What a licensed closure computed of its element, or null where that is not read.
      *
      * <p>Asked after {@link ElementProjection#read} has answered null: an answer that is a place of
      * the element is a place and is not made into a one-field form. Wherever the closure's answer is
-     * arithmetic over fields, a name bound to either, or a branch on a flag between two of them, this
-     * says which.
+     * arithmetic over fields, a name bound to either, a branch on a flag between two of them, or a
+     * {@code match} on a place of the element whose arms are each of these, this says which.
      *
      * @param held what each binding of the body holds, so that a name on the way is read through
+     * @param elements where the elements the closure is handed stand, which is what says whether
+     *                 an arm of a {@code match} on one narrows it
      */
     static ElementValue read(ElementAnswer answer, Map<BindingId, Core> held,
-                             RuleReadingSource source) {
-        return new Reader(answer.parameter(), held, source).value(answer.body(), new HashSet<>());
+                             RuleReadingSource source, ElementsAt elements) {
+        return new Reader(answer.parameter(), Map.of(), held, source, elements)
+                .value(answer.body(), new HashSet<>());
+    }
+
+    /**
+     * Where the elements of a walk stand, and what the declarations put there.
+     *
+     * <p>What an arm of a {@code match} on an element takes is the declaration's to say at that
+     * position ({@link DeclaredInput#taking}): it narrows the value, finds it already the case, or
+     * finds no value there of it. Asked of the closure alone, an arm would narrow a position to a
+     * case it already is, and the place it named would be one the reading of the input spells
+     * another way.
+     */
+    record ElementsAt(TermPath at, DeclaredInput declared) {
+
+        public ElementsAt {
+            if (at == null || declared == null) {
+                throw new IllegalArgumentException("the elements stand somewhere declared");
+            }
+        }
     }
 
     /** One reading of one closure's answer. */
     final class Reader {
 
         private final BindingId element;
+        /** Where in the element each name an arm on the way bound stands. */
+        private final Map<BindingId, ElementProjection> standing;
         private final Map<BindingId, Core> held;
         private final RuleReadingSource source;
+        private final ElementsAt elements;
 
-        private Reader(BindingId element, Map<BindingId, Core> held, RuleReadingSource source) {
+        private Reader(BindingId element, Map<BindingId, ElementProjection> standing,
+                       Map<BindingId, Core> held, RuleReadingSource source, ElementsAt elements) {
             this.element = element;
+            this.standing = standing;
             this.held = held;
             this.source = source;
+            this.elements = elements;
+        }
+
+        /** The same reading, inside an arm whose name {@code bound} stands at {@code at}. */
+        private Reader binding(Core.Binder bound, ElementProjection at) {
+            if (bound == null || bound.binding() == null) {
+                return this;
+            }
+            Map<BindingId, ElementProjection> wider = new LinkedHashMap<>(standing);
+            wider.put(bound.binding(), at);
+            return new Reader(element, Map.copyOf(wider), held, source, elements);
+        }
+
+        private ElementProjection placeOf(Core e, Map<BindingId, Core> at) {
+            return ElementProjection.read(e, element, standing, at, source.newtypes());
         }
 
         /**
@@ -219,11 +387,12 @@ public sealed interface ElementValue {
             if (e instanceof Core.LetIn let) {
                 return value(let.body(), expanding);
             }
-            // A name given a branch is the branch, and a name given arithmetic is read by the
-            // arithmetic's own walk below.
+            // A name given a branch or a match is that choice, and a name given arithmetic is read
+            // by the arithmetic's own walk below.
             if (e instanceof Core.Read read && !element.equals(read.binding())
                     && held.get(read.binding()) != null
-                    && Core.withoutStanding(held.get(read.binding())) instanceof Core.If) {
+                    && Core.withoutStanding(held.get(read.binding())) instanceof Core fork
+                    && (fork instanceof Core.If || fork instanceof Core.Match)) {
                 if (!expanding.add(read.binding())) {
                     return null;
                 }
@@ -234,14 +403,65 @@ public sealed interface ElementValue {
                 }
             }
             if (e instanceof Core.If branch) {
-                ElementProjection flag =
-                        ElementProjection.read(branch.cond(), element, held, source.newtypes());
+                ElementProjection flag = placeOf(branch.cond(), held);
                 ElementValue yes = flag == null ? null : value(branch.then(), expanding);
                 ElementValue no = yes == null ? null : value(branch.els(), expanding);
                 return no == null ? null : ElementValue.choosing(flag, yes, no);
             }
+            if (e instanceof Core.Match match) {
+                return byCase(match, expanding);
+            }
             LinearForm<ElementProjection> form = AffineForms.of(e, held, atoms());
             return form == null ? null : new Affine(form);
+        }
+
+        /**
+         * What a {@code match} on a place of the element comes to: each arm read with its name
+         * standing at the place the arm narrowed, or null where any arm is not read.
+         *
+         * <p>Which of the arms a value can reach is the declaration's to say at the place the
+         * elements stand. An arm no value there is of is no arm any element takes, and is left out;
+         * one every value left there is of takes all of them, and the arms after it are not reached.
+         * An arm selecting nothing — the one written to take whatever is left — does the same.
+         */
+        private ElementValue byCase(Core.Match match, Set<BindingId> expanding) {
+            ElementProjection subject = placeOf(match.scrutinee(), held);
+            if (subject == null) {
+                return null;
+            }
+            TermPath at = subject.from(elements.at());
+            List<OfItsCase.Arm> arms = new ArrayList<>();
+            for (Core.Case arm : match.cases()) {
+                CasesLeft covered = arm.pattern() == null ? null
+                        : CasesLeft.selectedBy(arm.pattern());
+                if (arm.pattern() != null && covered == null) {
+                    return null;
+                }
+                DeclaredInput.Taking taking = covered == null ? new DeclaredInput.Taking.Implied()
+                        : elements.declared().taking(at, match.scrutinee().type(), covered);
+                switch (taking) {
+                    case DeclaredInput.Taking.Excluded _ -> { }
+                    case DeclaredInput.Taking.Implied _ -> {
+                        ElementValue rest = binding(arm.binder(), subject)
+                                .value(arm.body(), expanding);
+                        return rest == null ? null : ElementValue.choosingByCase(arms, rest);
+                    }
+                    case DeclaredInput.Taking.Narrows(TermPath to) -> {
+                        // Every arm narrows the one place, so each is the same place narrowed.
+                        ElementProjection taken = ElementProjection.below(elements.at(), to);
+                        boolean ofOnePlace = taken != null && taken.narrowing() != null
+                                && (arms.isEmpty() || arms.getFirst().taken().narrowedFrom()
+                                        .equals(taken.narrowedFrom()));
+                        ElementValue value = !ofOnePlace ? null
+                                : binding(arm.binder(), taken).value(arm.body(), expanding);
+                        if (value == null) {
+                            return null;
+                        }
+                        arms.add(new OfItsCase.Arm(taken, value));
+                    }
+                }
+            }
+            return arms.isEmpty() ? null : ElementValue.choosingByCase(arms, null);
         }
 
         /** What an atom of an element is called: the way to it from the element, and what a name on
@@ -251,8 +471,7 @@ public sealed interface ElementValue {
 
                 @Override
                 public LinearForm<ElementProjection> leafOf(Core e, Map<BindingId, Core> at) {
-                    ElementProjection place =
-                            ElementProjection.read(e, element, at, source.newtypes());
+                    ElementProjection place = placeOf(e, at);
                     return place == null ? null : LinearForm.atom(place);
                 }
             };
@@ -286,8 +505,7 @@ public sealed interface ElementValue {
                     if (counted != null) {
                         return LinearForm.atom(new TheStep.HowManyAt(counted));
                     }
-                    ElementProjection place =
-                            ElementProjection.read(e, element, at, source.newtypes());
+                    ElementProjection place = placeOf(e, at);
                     return place == null ? null : LinearForm.atom(new TheStep.OfTheElement(place));
                 }
             });
@@ -383,8 +601,9 @@ public sealed interface ElementValue {
      * @param accumulator the parameter the answer so far arrives on
      */
     static Added addedTo(ElementAnswer step, BindingId accumulator, Map<BindingId, Core> held,
-                         RuleReadingSource source) {
-        return new Reader(step.parameter(), held, source).addedTo(step.body(), accumulator);
+                         RuleReadingSource source, ElementsAt elements) {
+        return new Reader(step.parameter(), Map.of(), held, source, elements)
+                .addedTo(step.body(), accumulator);
     }
 
     /**

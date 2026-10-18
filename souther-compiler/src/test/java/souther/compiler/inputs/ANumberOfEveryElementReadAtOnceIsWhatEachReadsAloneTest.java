@@ -148,8 +148,8 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
     @Test
     void aFieldOfAnElementNotReadWholeIsWhatStoppedIt() {
         ObservedValue cut = new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure());
-        assertEquals(cut, new ElementProjection(List.of("days")).in(cut));
-        assertNull(new ElementProjection(List.of("hours")).in(touch("a", 1)),
+        assertEquals(cut, ElementProjection.ofFields(List.of("days")).in(cut));
+        assertNull(ElementProjection.ofFields(List.of("hours")).in(touch("a", 1)),
                 "a field a value read whole does not hold is none");
     }
 

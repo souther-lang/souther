@@ -5,9 +5,12 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
@@ -17,9 +20,13 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +35,9 @@ import java.util.function.Function;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A total of what a walk computed of each element is read one element at a time, with the fields of
@@ -42,9 +51,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
 
     private static final TermPath ELEMENTS = TermPath.of("xs").element();
-    private static final ElementProjection Q = new ElementProjection(List.of("q"));
-    private static final ElementProjection P = new ElementProjection(List.of("p"));
-    private static final ElementProjection DEBIT = new ElementProjection(List.of("debit"));
+    private static final ElementProjection Q = ElementProjection.ofFields(List.of("q"));
+    private static final ElementProjection P = ElementProjection.ofFields(List.of("p"));
+    private static final ElementProjection DEBIT = ElementProjection.ofFields(List.of("debit"));
 
     private static ElementValue form(ExactRatio constant, Map<ElementProjection, ExactRatio> weights) {
         return new ElementValue.Affine(new LinearForm<>(constant, weights));
@@ -161,6 +170,91 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
                 orders.readOverElements(List.of(other::get)),
                 "while with the flag clear it is the field that was never written that is needed");
+    }
+
+    private static final TypeSymbol A = TypeSymbols.declared(new TypeKey("probe", "A"));
+    private static final TypeSymbol B = TypeSymbols.declared(new TypeKey("probe", "B"));
+    private static final TypeSymbol C = TypeSymbols.declared(new TypeKey("probe", "C"));
+    private static final ElementProjection THE_ELEMENT = new ElementProjection(List.of());
+    private static final ElementProjection AT_A = narrowedTo(A);
+    private static final ElementProjection AT_B = narrowedTo(B);
+    private static final ElementProjection A_AMOUNT = AT_A.then("amount");
+    private static final ElementProjection B_AMOUNT = AT_B.then("amount");
+
+    private static ElementProjection narrowedTo(TypeSymbol leaf) {
+        return new ElementProjection(List.of(new TermPath.Step.Refine(
+                CasesLeft.of(Refinement.of(new Case.SumCase(leaf, true))))));
+    }
+
+    /** {@code match d with | A { amount } -> amount | B { amount } -> amount * 10}. */
+    private static final ElementValue BY_CASE = new ElementValue.OfItsCase(List.of(
+            new ElementValue.OfItsCase.Arm(AT_A,
+                    form(ExactRatio.ZERO, Map.of(A_AMOUNT, ExactRatio.ONE))),
+            new ElementValue.OfItsCase.Arm(AT_B,
+                    form(ExactRatio.ZERO, Map.of(B_AMOUNT, ExactRatio.of(10))))), null);
+
+    private static ObservedValue ofCase(TypeSymbol leaf, long amount) {
+        return new ObservedValue.Constructed(leaf, Map.of("amount", new ObservedValue.Integer(amount)));
+    }
+
+    /**
+     * A choice by case is made for each element on its own, and each element's field is read under
+     * its own case: two cases' fields of one name are two places.
+     */
+    @Test
+    void aChoiceByCaseIsMadeForEachElement() {
+        assertNotEquals(A_AMOUNT, B_AMOUNT);
+        TermOrders orders = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (ObservedValue element : List.of(ofCase(A, 4), ofCase(B, 7), ofCase(A, 1))) {
+            each.add(field -> field.in(element));
+        }
+        assertEquals(Count.of(4 + 70 + 1), number(orders.readOverElements(each)));
+    }
+
+    /**
+     * The case is asked of the value it is the case of, and then only the fields of the arm that
+     * took it.
+     *
+     * <p>Asked at a field of another case, an element holds nothing there, and a reading that
+     * asked would take the element for one with nothing written where the computation looked.
+     */
+    @Test
+    void theCaseIsAskedOfTheValueAndOnlyTheTakenArmsFieldsAfterIt() {
+        TermOrders orders = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
+        ObservedValue element = ofCase(B, 7);
+        Function<ElementProjection, ObservedValue> asked = field -> {
+            assertTrue(field.equals(THE_ELEMENT) || field.equals(B_AMOUNT),
+                    () -> "a B is asked its case and its own amount, and not " + field);
+            return field.in(element);
+        };
+        assertEquals(Count.of(70), number(orders.readOverElements(List.of(asked))));
+    }
+
+    /** A field of one case is nothing in a value of another, though the other has a field of that
+     *  name. */
+    @Test
+    void aFieldOfOneCaseIsNothingInAValueOfAnother() {
+        assertEquals(new ObservedValue.Integer(7), B_AMOUNT.in(ofCase(B, 7)));
+        assertNull(A_AMOUNT.in(ofCase(B, 7)));
+    }
+
+    /** An element whose case was not read is no element any arm is guessed for. */
+    @Test
+    void anElementWhoseCaseWasNotReadTakesNoArm() {
+        TermOrders orders = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
+        ObservedValue unread = new ObservedValue.Unknown("not decoded");
+        assertInstanceOf(NumericTerm.Reading.Missing.class,
+                orders.readOverElements(List.of(field -> field.in(unread))));
+    }
+
+    /** An element of a case no arm takes is an element of another shape than the walk's. */
+    @Test
+    void anElementOfACaseNoArmTakesIsNoNumber() {
+        TermOrders orders = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
+        ObservedValue other = ofCase(C, 3);
+        assertInstanceOf(NumericTerm.Reading.NotNumber.class,
+                orders.readOverElements(List.of(field -> field.in(other))));
     }
 
     /** A number the exact arithmetic could not hold is said as that, and not as a value missing. */

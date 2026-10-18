@@ -16,6 +16,7 @@ import souther.compiler.semantics.Accumulation;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -172,7 +173,9 @@ final class RunReach {
      *
      * <p>What each field of the element guarantees of itself, put through the computation: a form
      * is read off the same domain every other arithmetic of this compiler is, with each field
-     * assumed at what it guarantees, and a choice is as wide as the two answers it chooses between.
+     * assumed at what it guarantees, and a choice is as wide as the answers it chooses between —
+     * the two a flag picks from, or every arm a case picks from, each arm's fields at what that
+     * case's own declaration guarantees.
      * No relation between fields of one element is assumed, so the range is the widest one the
      * fields allow and never a narrower one a relation among them would give.
      *
@@ -207,6 +210,23 @@ final class RunReach {
                 NumericDomain.Bounds no =
                         ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
                 return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
+            }
+            case ElementValue.OfItsCase choice -> {
+                List<ElementValue> answers = new ArrayList<>();
+                choice.arms().forEach(arm -> answers.add(arm.value()));
+                if (choice.rest() != null) {
+                    answers.add(choice.rest());
+                }
+                NumericDomain.Bounds every = null;
+                for (ElementValue answer : answers) {
+                    NumericDomain.Bounds one =
+                            ofWhatWasComputed(answer, elements, orders, typeAt, reading);
+                    if (one == null) {
+                        return null;
+                    }
+                    every = every == null ? one : NumericDomain.Bounds.spanning(every, one);
+                }
+                return every;
             }
         }
     }

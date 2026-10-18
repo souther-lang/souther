@@ -279,7 +279,8 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     void aFormOfSeveralFieldsIsReadAndNoRowIsWrittenForIt() {
         String model = model("a.q + a.p", 3);
         String report = report(model);
-        assertTrue(report.contains("made of several fields or chosen by a flag"), report);
+        assertTrue(report.contains("made of several fields, chosen by a flag or chosen by their"
+                + " case"), report);
         String rows = rowsOf(model);
         assertTrue(rows.contains("no row for"), rows);
     }
