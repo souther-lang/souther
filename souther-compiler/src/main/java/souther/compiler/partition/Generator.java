@@ -796,6 +796,10 @@ public final class Generator {
                              // It stops what a path takes in of a condition, and what it stopped
                              // is carried as a condition the path did not take in, naming it.
                              ALTERNATIVES_A_PATH_TRIES,
+                             // It stops the discharge walk looking for a way through a path's
+                             // choices, which leaves the path not shown to reach nothing and
+                             // composes nothing.
+                             PARTS_A_PATH_LOOKS_THROUGH_FOR_A_WAY,
                              // They stop the working out of where a line decides, and what they
                              // stopped is carried as a line nobody worked out, naming them.
                              STEPS_A_STATEMENT_IS_READ_IN, CASES_A_LINE_IS_TAKEN_APART_INTO,

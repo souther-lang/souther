@@ -550,6 +550,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.check.MeaningAssumptions$Tries#<init>()V",
                     "how many parts of a disjunction one reading of a condition takes alone,"
                             + " past which the disjunction is declined for that figure"),
+            // What the discharge walk spends looking for a way through the choices a path holds,
+            // across every look along the path. Past it the path is not looked along again, and
+            // is one nothing has shown to reach nothing: that is the answer the walk gives without
+            // the looking, so no reader is owed a word for it.
+            Map.entry("souther.compiler.check.Known$Choices#<clinit>()V",
+                    "how many parts the looking for a way through a path's choices takes alone"
+                            + " along the path, past which the path is not looked along again"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
                             + "Ljava/util/List;"

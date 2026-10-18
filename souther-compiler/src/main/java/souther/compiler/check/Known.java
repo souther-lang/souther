@@ -8,6 +8,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
@@ -57,18 +58,24 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * each would cost the square of the path. On top, so that what came to be held since a count
      * was taken is read off the top without walking what was held before it.
      *
-     * <p>The way is a state with one part of each condition held taken in, which nothing had shown
-     * to reach nothing when it was made; or null where none stands for them. It is what lets a
-     * condition taken in later be asked of one state, rather than of every way of choosing a part
-     * of each: a way that takes the new condition in and still reaches something is a run that
-     * gets past it. It answers only that. That the conditions leave no way at all is answered by
-     * looking for one over what is known ({@link Predicates#assumeCond}), never by this one failing
-     * — what is known may by then hold more than the way does, and a way that knew less is a way
-     * that admits more, which is the safe side for a "yes" and no ground for a "no".
+     * <p>The way is a state with one part taken in of every condition it holds — the ones held
+     * here, and the ones taking a part of them came to hold — which nothing had shown to reach
+     * nothing when it was made. It is what lets a condition taken in later be asked of one state,
+     * rather than of every way of choosing a part of each: a way that takes the new condition in
+     * and still reaches something is a run that gets past it. It answers only that. That the
+     * conditions leave no way at all is answered by looking for one over what is known
+     * ({@link Predicates#assumeCond}), never by this one failing — what is known may by then hold
+     * more than the way does, and a way that knew less is a way that admits more, which is the safe
+     * side for a "yes" and no ground for a "no". Null where the looking was given up: the path is
+     * then one nothing has shown to reach nothing, and is not looked along again.
+     *
+     * <p>{@code tries} is how many more parts the looking may take in alone along this path, across
+     * every time it looks ({@link CompositionBudget#PARTS_A_PATH_LOOKS_THROUGH_FOR_A_WAY}).
      */
-    record Choices(ChoiceLine held, Known wayIn) {
+    record Choices(ChoiceLine held, Known wayIn, int tries) {
 
-        static final Choices NONE = new Choices(null, null);
+        static final Choices NONE = new Choices(null, null,
+                CompositionBudget.PARTS_A_PATH_LOOKS_THROUGH_FOR_A_WAY.maximum());
 
         int count() {
             return held == null ? 0 : held.count();
@@ -337,7 +344,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     Known holdingOneOf(OneOf condition) {
         return new Known(constraints, quantified, spoken, unguarded, cases,
                 new Choices(new ChoiceLine(condition, oneOf.held(), oneOf.count() + 1),
-                        oneOf.wayIn()));
+                        oneOf.wayIn(), oneOf.tries()));
     }
 
     /** The conditions held here as one of their parts, in the order they were taken in. */
@@ -365,18 +372,24 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     }
 
     /**
-     * A state with one part of each condition held here taken in, which nothing had shown to reach
-     * nothing when it was made — this state itself where none is held — or null where none is
-     * known ({@link Choices}).
+     * A state with one part taken in of every condition it holds, which nothing had shown to reach
+     * nothing when it was made — this state itself where none is held — or null where the looking
+     * for one was given up ({@link Choices}).
      */
     Known wayIn() {
         return holdsAChoice() ? oneOf.wayIn() : this;
     }
 
-    /** This, with {@code way} as the way through the conditions it holds ({@link Choices}). */
-    Known throughWay(Known way) {
+    /** How many more parts looking for a way may take in alone along this path ({@link Choices}). */
+    int triesLeft() {
+        return oneOf.tries();
+    }
+
+    /** This, with {@code way} as the way through the conditions it holds — null where the looking
+     *  was given up — and {@code tries} left to look with ({@link Choices}). */
+    Known throughWay(Known way, int tries) {
         return new Known(constraints, quantified, spoken, unguarded, cases,
-                new Choices(oneOf.held(), way));
+                new Choices(oneOf.held(), way, tries));
     }
 
     /**

@@ -995,17 +995,24 @@ final class Predicates {
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         Assumed read = new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
         Known after = read.known();
-        if (after.reachesNothing() || !after.holdsAChoice()) {
+        // A path that holds no choice, or one the looking was given up along, has nothing more to
+        // be asked here.
+        if (after.reachesNothing() || !after.holdsAChoice()
+                || (k.holdsAChoice() && k.wayIn() == null)) {
             return read;
         }
         Known past = wayPast(rawCond, positive, at, k, after);
-        Through through = past != null ? new WayFound(past) : aWayThrough(after);
-        return switch (through) {
-            case WayFound(Known way) -> new Assumed(after.throughWay(way), read.taken(),
+        if (past != null) {
+            return new Assumed(after.throughWay(past, after.triesLeft()), read.taken(),
+                    read.shapeRead(), read.notTaken());
+        }
+        int[] tries = {after.triesLeft()};
+        return switch (aWayThrough(after, after.heldAsOneOfTheirParts(), 0, tries)) {
+            case WayFound(Known way) -> new Assumed(after.throughWay(way, tries[0]), read.taken(),
                     read.shapeRead(), read.notTaken());
             // Read to the end: what the conditions come to is that nothing gets past them.
             case NoWay _ -> new Assumed(after.reachingNothing(), true, true, read.notTaken());
-            case PastTheBound _ -> new Assumed(after.throughWay(null), read.taken(),
+            case PastTheBound _ -> new Assumed(after.throughWay(null, 0), read.taken(),
                     read.shapeRead(), read.notTaken());
         };
     }
@@ -1013,8 +1020,7 @@ final class Predicates {
     /**
      * A way past {@code cond}, which taking it in over {@code k} came to {@code after}: the way
      * {@code k} had through what it held, with {@code cond} taken in as well and a part taken of
-     * each condition that came to be held by taking it — or null where {@code k} had no way, or
-     * that way leaves nothing.
+     * each condition that came to be held since — or null where that leaves nothing.
      *
      * <p>Where a path gets through its choices is a question about every way of choosing a part of
      * each, and asked afresh at each condition taken in it is that many questions each time. Asked
@@ -1022,85 +1028,99 @@ final class Predicates {
      * Where {@code k} held no choice the way is {@code after} itself, and nothing is read again.
      */
     private Known wayPast(Core cond, boolean positive, Denotations at, Known k, Known after) {
-        Known way;
-        int takenOf;
         if (!k.holdsAChoice()) {
-            way = after;
-            takenOf = 0;
-        } else if (k.wayIn() == null) {
-            return null;
-        } else {
-            takenOf = k.wayIn().heldCount();
-            way = new Assuming(this).read(cond, positive, at, terms::inside).from(k.wayIn())
-                    .known();
+            return aPartOfEachSince(after, 0);
         }
-        for (Known.OneOf condition : way.heldSince(takenOf)) {
-            if (way.reachesNothing()) {
-                break;
-            }
-            Known through = null;
-            for (ClauseExpr part : partsOf(condition)) {
-                Known taken = takingPart(condition, part, way).known();
-                if (!taken.reachesNothing()) {
-                    through = taken;
-                    break;
+        Known before = k.wayIn();
+        return aPartOfEachSince(new Assuming(this).read(cond, positive, at, terms::inside)
+                .from(before).known(), before.heldCount());
+    }
+
+    /**
+     * {@code way} with a part taken in of every condition it holds past the first {@code taken} —
+     * the first of each that leaves something — or null where one of them leaves nothing.
+     *
+     * <p>Every condition, those a part taken in came to hold among them: a part may itself be a
+     * choice, and a way that took the choice it is part of and not the one inside it holds a
+     * condition none of whose parts it has taken, which a condition taken in later is not asked
+     * against. So the conditions are taken until none is left that was not, and not over the ones
+     * there were when this began.
+     */
+    private Known aPartOfEachSince(Known way, int taken) {
+        Known out = way;
+        int done = taken;
+        while (!out.reachesNothing() && out.heldCount() > done) {
+            int upTo = out.heldCount();
+            for (Known.OneOf condition : out.heldSince(done)) {
+                Known through = null;
+                for (ClauseExpr part : partsOf(condition)) {
+                    Known taking = takingPart(condition, part, out).known();
+                    if (!taking.reachesNothing()) {
+                        through = taking;
+                        break;
+                    }
                 }
+                if (through == null) {
+                    return null;
+                }
+                out = through;
             }
-            if (through == null) {
-                return null;
-            }
-            way = through;
+            done = upTo;
         }
-        return way.reachesNothing() ? null : way;
+        return out.reachesNothing() ? null : out;
     }
 
     /** What looking for a way through the conditions a state holds came to. */
     private sealed interface Through permits WayFound, NoWay, PastTheBound {}
 
-    /** A state with one part of each condition taken in that reaches something. */
+    /** A state with one part taken in of every condition it holds, which reaches something. */
     private record WayFound(Known way) implements Through {}
 
     /** Every way of choosing a part of each condition was looked at, and none reaches anything. */
     private record NoWay() implements Through {}
 
-    /** The ways looked at reach nothing, and the copies ran out before the rest were. */
+    /** The ways looked at reach nothing, and the tries ran out before the rest were. */
     private record PastTheBound() implements Through {}
 
     /**
-     * A way through every condition {@code k} holds as one of its parts, looked for one condition
-     * at a time in the order they are held and one part at a time in the order it was written.
+     * A way through the conditions in {@code pending} from {@code next} on, over {@code k}: one
+     * condition at a time in the order they are held, one part at a time in the order it was
+     * written, and the conditions a part came to hold taken after the ones before them.
      *
-     * <p>The first found is the answer, so a path every first part gets through costs one reading
-     * of a part per condition. Each part a search goes down is a copy of what was known
-     * ({@link ContextMultiplicity}), counted for this search alone: this reader starts at one, and
-     * a search that would compound past the bound stops, and says it stopped rather than that it
-     * found nothing.
+     * <p>The first found is the answer. Each part read spends one of {@code tries}, the count this
+     * path has left across every look along it ({@link Known.Choices}); where it runs out the look
+     * stops, and says it stopped rather than that it found nothing.
      */
-    private Through aWayThrough(Known k) {
-        return aWayThrough(k, k.heldAsOneOfTheirParts(), 0, ContextMultiplicity.ofOneReading());
-    }
-
-    private Through aWayThrough(Known k, List<Known.OneOf> held, int next,
-                                ContextMultiplicity copies) {
-        if (next == held.size()) {
+    private Through aWayThrough(Known k, List<Known.OneOf> pending, int next, int[] tries) {
+        if (next == pending.size()) {
             return new WayFound(k);
         }
+        Known.OneOf condition = pending.get(next);
         List<Known> entered = new ArrayList<>();
-        for (Assumed part : takingEachPartOf(held.get(next), k)) {
-            if (!part.known().reachesNothing()) {
-                entered.add(part.known());
+        for (ClauseExpr part : partsOf(condition)) {
+            if (tries[0] == 0) {
+                return new PastTheBound();
+            }
+            tries[0]--;
+            Known taking = takingPart(condition, part, k).known();
+            if (!taking.reachesNothing()) {
+                entered.add(taking);
             }
         }
         if (entered.isEmpty()) {
             return new NoWay();
         }
-        ContextMultiplicity opened = copies.opening(entered.size());
-        if (opened == null) {
-            return new PastTheBound();
-        }
         boolean cut = false;
         for (Known way : entered) {
-            Through further = aWayThrough(way, held, next + 1, opened);
+            List<Known.OneOf> inside = way.heldSince(k.heldCount());
+            Through further;
+            if (inside.isEmpty()) {
+                further = aWayThrough(way, pending, next + 1, tries);
+            } else {
+                List<Known.OneOf> rest = new ArrayList<>(pending.subList(next + 1, pending.size()));
+                rest.addAll(inside);
+                further = aWayThrough(way, rest, 0, tries);
+            }
             if (further instanceof WayFound) {
                 return further;
             }
