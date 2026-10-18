@@ -151,6 +151,25 @@ class WhatARecursiveHelperAnswersIsReadByInductionTest {
                             List.any(c -> c.v > w || c.v == 0 || reaches(c, w), node.below)
                         """, "reaches(i.t, i.w)"));
         assertTrue(reached.holds());
+        assertEquals(T, reached.at());
+        assertEquals(List.of("below"), reached.through());
+        // What a node is asked is about the nodes directly below it, never the node itself.
+        Proposition.Some below = assertInstanceOf(Proposition.Some.class, reached.atANode());
+        assertEquals(new DecisionSubject.AnInput(T.then("below")), below.container());
+        assertEquals(below, reached.surely(true));
+    }
+
+    @Test
+    void aSearchWhoseNodeConditionHasTenAlternativesIsStillRead() {
+        Proposition.SomeReachable reached = assertInstanceOf(Proposition.SomeReachable.class,
+                stated("""
+                        let reaches (node: Node, w: Int): Bool =
+                            List.any(c -> c.v == 1 || c.v == 2 || c.v == 3 || c.v == 4
+                                    || c.v == 5 || c.v == 6 || c.v == 7 || c.v == 8
+                                    || c.v == 9 || c.v == 10, node.below)
+                                || List.any(c -> reaches(c, w), node.below)
+                        """, "reaches(i.t, i.w)"));
+        assertTrue(reached.holds());
     }
 
     @Test

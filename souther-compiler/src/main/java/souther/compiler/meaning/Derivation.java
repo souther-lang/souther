@@ -1934,8 +1934,12 @@ public sealed interface Derivation {
                 case EITHER -> Proposition.any(parts);
                 case BOTH -> Proposition.all(parts);
             };
-            Proposition actual = distributed(unfolded);
-            Proposition required = distributed(expected);
+            return sameWhateverItsPartsAre(unfolded, expected)
+                    || sameWhateverItsPartsAre(distributed(unfolded), distributed(expected));
+        }
+
+        /** Whether {@code actual} and {@code required} come out alike whichever way their parts do. */
+        private static boolean sameWhateverItsPartsAre(Proposition actual, Proposition required) {
             return TruthTable.holdsWhateverItsPartsAre(Proposition.any(List.of(
                     Proposition.all(List.of(actual, required)),
                     Proposition.all(List.of(actual.denied(), required.denied())))));
@@ -1946,7 +1950,10 @@ public sealed interface Derivation {
          * meeting the one or some element meeting the other, and no element meeting either as no
          * element meeting the one and none the other, under the joins it is made of. A truth table
          * takes each quantified part for a part of its own, so without this it cannot see that one
-         * node-wide quantifier over a join is the join of the quantifiers. The inside of a search
+         * node-wide quantifier over a join is the join of the quantifiers. It is tried only after
+         * the comparison as stated fails, since each join it splits adds a part for the table to
+         * work through, and a table past {@link TruthTable#PARTS_TRIED} parts answers no. The
+         * inside of a search
          * ({@link Proposition.SomeReachable}) is left as it is: its parts are of the node it was
          * written at.
          */
