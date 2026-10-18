@@ -1206,7 +1206,7 @@
       ]
     },
     "elementComputation": {
-      "description": "What one element's number is made of: a sum of its fields each weighed by a number, the choice between two such by a flag the element holds, the choice among them by which case a value of the element is, or several such choices added up. A field is named by its steps from the element, joined by dots, with a narrowing to a case written `@` and the case, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
+      "description": "What one element's number is made of: a sum of its fields each weighed by a number, the choice between two such by a flag the element holds, the choice among them by which case a value of the element is, the choice between two by where the element stands, or several such choices added up. A field is named by its steps from the element, joined by dots, with a narrowing to a case written `@` and the case, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
       "oneOf": [
         {
           "type": "object",
@@ -1263,6 +1263,48 @@
               "type": "string"
             },
             "whenSet": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "otherwise": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The choice between two by where the element stands in the container it was walked from, counted from nought in the order the row writes them: `whenHolds` where the position, or what is left of it divided by `divisor` with the quotient floored, stands to `against` as `relation` says, and `otherwise` elsewhere. `divisor` is absent where the position is compared as it is. Which answer an element takes is fixed by the row and not by any value it holds.",
+          "required": [
+            "kind",
+            "relation",
+            "against",
+            "whenHolds",
+            "otherwise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "position"
+            },
+            "divisor": {
+              "type": "integer",
+              "not": {
+                "const": 0
+              }
+            },
+            "relation": {
+              "enum": [
+                "==",
+                "/=",
+                "<",
+                "<=",
+                ">",
+                ">="
+              ]
+            },
+            "against": {
+              "type": "integer"
+            },
+            "whenHolds": {
               "$ref": "#/$defs/elementComputation"
             },
             "otherwise": {

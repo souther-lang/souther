@@ -167,7 +167,8 @@ final class Reasons {
                         "the elements chosen for how many of them meet a statement";
                 case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
                         "the elements whose computed number is made of several fields, chosen"
-                                + " by a flag or chosen by their case";
+                                + " by a flag, chosen by their case or chosen by where they"
+                                + " stand";
                 case MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER ->
                         "the containers mixing the cases a computed number is chosen by";
                 case TREES_WRITTEN_FOR_A_COUNT ->

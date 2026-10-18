@@ -1,6 +1,8 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ValueStanding;
@@ -12,17 +14,23 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -32,8 +40,9 @@ import java.util.function.Predicate;
  * the element.
  *
  * <p>The number a walk answers per element when that number is made from the element's fields: an
- * affine form of them, the choice between two such numbers by a flag the element holds, or the
- * choice among them by which case a value of the element is. Relative
+ * affine form of them, the choice between two such numbers by a flag the element holds, the choice
+ * among them by which case a value of the element is, or the choice between two by where the
+ * element stands in the container it was walked from. Relative
  * to the element, so it can be joined to whichever position the run is over, as an
  * {@link ElementProjection} is — and the atoms of a form are those projections, so a field of the
  * element is named the one way wherever it is read.
@@ -49,14 +58,34 @@ import java.util.function.Predicate;
  * rule about a field.
  *
  * <p>Only what is read exactly. A product of two fields, a call the library does not say the form
- * of, a branch on anything but a flag the element holds, a {@code match} on anything but a place of
- * the element: none is read, and the walk is a run this compiler did not read rather than one it
- * read wrongly.
+ * of, a branch on anything but a flag the element holds or a test of its position, a {@code match}
+ * on anything but a place of the element: none is read, and the walk is a run this compiler did
+ * not read rather than one it read wrongly.
  */
 public sealed interface ElementValue {
 
     /** The fields of the element this reads, in no order a reader may rely on. */
     Set<ElementProjection> reads();
+
+    /**
+     * Whether what an element comes to turns on where it stands in the container it was walked
+     * from, anywhere in this.
+     *
+     * <p>A total of such numbers is a total of these elements in the order they stand and not of
+     * them in any order, so a run over them claims the order as well ({@link RunSource}).
+     */
+    default boolean readsThePosition() {
+        return switch (this) {
+            case Affine _ -> false;
+            case ByPosition _ -> true;
+            case Choose choice -> choice.whenSet().readsThePosition()
+                    || choice.otherwise().readsThePosition();
+            case OfItsCase choice -> (choice.rest() != null && choice.rest().readsThePosition())
+                    || choice.arms().stream().anyMatch(arm -> arm.value().readsThePosition());
+            case SumOfChoices sum -> sum.chosen().keySet().stream()
+                    .anyMatch(ElementValue::readsThePosition);
+        };
+    }
 
     /**
      * What this comes to for one element, given the number each field of it holds, which flags
@@ -91,6 +120,10 @@ public sealed interface ElementValue {
          * arms reads its subject once per element and not once per arm.
          */
         Predicate<CasesLeft> caseAt(ElementProjection subject);
+
+        /** Where the element stands in the container it was walked from, counted from nought in
+         *  the order the container holds its elements. */
+        long position();
     }
 
     /**
@@ -127,6 +160,11 @@ public sealed interface ElementValue {
                 ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
                 yield no == null ? null : choosing(choice.flag(), yes, no);
             }
+            case ByPosition choice -> {
+                ElementValue yes = plus(choice.whenHolds(), other);
+                ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
+                yield no == null ? null : choosingByPosition(choice.test(), yes, no);
+            }
             case OfItsCase choice -> {
                 List<OfItsCase.Arm> arms = new ArrayList<>();
                 for (OfItsCase.Arm arm : choice.arms()) {
@@ -156,6 +194,11 @@ public sealed interface ElementValue {
                 ElementValue yes = times(choice.whenSet(), weight);
                 ElementValue no = yes == null ? null : times(choice.otherwise(), weight);
                 yield no == null ? null : choosing(choice.flag(), yes, no);
+            }
+            case ByPosition choice -> {
+                ElementValue yes = times(choice.whenHolds(), weight);
+                ElementValue no = yes == null ? null : times(choice.otherwise(), weight);
+                yield no == null ? null : choosingByPosition(choice.test(), yes, no);
             }
             case OfItsCase choice -> {
                 List<OfItsCase.Arm> arms = new ArrayList<>();
@@ -196,8 +239,8 @@ public sealed interface ElementValue {
      *
      * <p>Each choice is made for the element on its own, so the sum is as large as its choices
      * together and not as the number of ways they can fall out together. Two or more, and each a
-     * choice ({@link Choose}, {@link OfItsCase}): one choice takes the form into its answers
-     * ({@link #plus}), and a form is no choice.
+     * choice ({@link Choose}, {@link OfItsCase}, {@link ByPosition}): one choice takes the form into
+     * its answers ({@link #plus}), and a form is no choice.
      *
      * <p>One value however its terms were written. The choices are a mapping, so two of these are
      * equal and hash alike by which choices they add at which weights and by nothing else; and the
@@ -216,8 +259,7 @@ public sealed interface ElementValue {
                         + " add to it");
             }
             for (Map.Entry<ElementValue, ExactRatio> each : chosen.entrySet()) {
-                if (!(each.getKey() instanceof Choose || each.getKey() instanceof OfItsCase)
-                        || each.getValue().isZero()) {
+                if (!isAChoice(each.getKey()) || each.getValue().isZero()) {
                     throw new IllegalArgumentException("what a sum of choices adds is choices,"
                             + " each weighed by something, and this is " + each);
                 }
@@ -276,10 +318,18 @@ public sealed interface ElementValue {
         }
     }
 
+    /** Whether {@code value} is a choice, which a form is not and a sum of choices is several of. */
+    private static boolean isAChoice(ElementValue value) {
+        return switch (value) {
+            case Choose _, OfItsCase _, ByPosition _ -> true;
+            case Affine _, SumOfChoices _ -> false;
+        };
+    }
+
     /**
      * {@code constant + Σ weight·place + Σ weight·choice}, each of {@code chosen} a choice
-     * ({@link Choose}, {@link OfItsCase}) met once; or null where the exact arithmetic cannot hold
-     * it.
+     * ({@link Choose}, {@link OfItsCase}, {@link ByPosition}) met once; or null where the exact
+     * arithmetic cannot hold it.
      *
      * <p>Without a choice it is a form; with one, that choice with the form in its answers; with
      * more, the choices held side by side ({@link SumOfChoices}).
@@ -399,6 +449,139 @@ public sealed interface ElementValue {
     }
 
     /**
+     * {@code whenHolds} for an element whose position {@code test} holds of, and {@code otherwise}
+     * for the rest.
+     *
+     * <p>The position is no field of the element. It is where the element stands among the others
+     * in the container the walk was handed, so which answer an element takes is fixed by the row
+     * and not by any value the element holds — and two elements holding the same values may take
+     * different answers.
+     */
+    record ByPosition(PositionTest test, ElementValue whenHolds, ElementValue otherwise)
+            implements ElementValue {
+
+        public ByPosition {
+            if (test == null || whenHolds == null || otherwise == null) {
+                throw new IllegalArgumentException("a choice by position is of a test of it and"
+                        + " both of its answers");
+            }
+        }
+
+        @Override
+        public Set<ElementProjection> reads() {
+            Set<ElementProjection> all = new LinkedHashSet<>(whenHolds.reads());
+            all.addAll(otherwise.reads());
+            return Set.copyOf(all);
+        }
+
+        @Override
+        public ExactAnswer<ExactRatio> at(OneElement element) {
+            return (test.holdsOf(element.position()) ? whenHolds : otherwise).at(element);
+        }
+
+        /** A choice is made of the element and is not a field of it. */
+        @Override
+        public ElementProjection asAPlace() {
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            return "if " + test + " then " + whenHolds + " else " + otherwise;
+        }
+    }
+
+    /**
+     * A comparison of an element's position, or of what is left of it divided by a whole number
+     * with the quotient floored, against a whole number.
+     *
+     * @param divisor  what the position is divided by before it is compared, or
+     *                 {@link #THE_POSITION_ITSELF} where it is compared as it is; never nought
+     * @param relation how what is compared stands to {@code against}
+     * @param against  what it is compared against
+     */
+    record PositionTest(long divisor, Rel relation, long against) {
+
+        /** The position is compared as it is and not what is left of it. */
+        public static final long THE_POSITION_ITSELF = 0;
+
+        public PositionTest {
+            Objects.requireNonNull(relation, "a position is compared some way");
+        }
+
+        /** Whether this holds of an element at {@code position}. */
+        public boolean holdsOf(long position) {
+            long compared = divisor == THE_POSITION_ITSELF ? position
+                    : Math.floorMod(position, divisor);
+            return relation.holds(Long.compare(compared, against));
+        }
+
+        @Override
+        public String toString() {
+            return (divisor == THE_POSITION_ITSELF ? "the position"
+                    : "the position mod " + divisor) + " " + relation.written() + " " + against;
+        }
+    }
+
+    /**
+     * The choice of {@code whenHolds} or {@code otherwise} by {@code test} of the position, with a
+     * choice between two answers that are one answer being that answer.
+     *
+     * <p>As {@link #choosing} is for a flag, and for more than tidiness: an answer that does not
+     * turn on the position claims nothing about the order of the elements, and a run of it is
+     * owed no more than any other run is.
+     */
+    static ElementValue choosingByPosition(PositionTest test, ElementValue whenHolds,
+                                           ElementValue otherwise) {
+        return whenHolds.equals(otherwise) ? whenHolds
+                : new ByPosition(test, whenHolds, otherwise);
+    }
+
+    /**
+     * What {@code weight} and the form {@code by} come to multiplied, for each element, where every
+     * answer the choice {@code weight} gives is a number of no field — or null where it is no such
+     * choice, or the exact arithmetic cannot hold an answer.
+     *
+     * <p>A choice of numbers times a form is that form weighed by whichever number the element
+     * chose, {@code (if p then 1 else 3) · v = if p then v else 3·v}, and an element takes the same
+     * branch either way. So a weight chosen per element, by a flag, a case or the position, is read
+     * as the choice it is, as wide as its branches and no wider.
+     *
+     * <p>A form and never a second choice, for the reason {@link #plus} takes one: two choices
+     * multiplied are every pair of their answers, and a product of several would double at each.
+     */
+    static ElementValue weighedBy(ElementValue weight, Affine by) {
+        return switch (weight) {
+            case Affine form -> form.form().coefs().isEmpty()
+                    ? times(by, form.form().constant()) : null;
+            case Choose choice -> {
+                ElementValue yes = weighedBy(choice.whenSet(), by);
+                ElementValue no = yes == null ? null : weighedBy(choice.otherwise(), by);
+                yield no == null ? null : choosing(choice.flag(), yes, no);
+            }
+            case ByPosition choice -> {
+                ElementValue yes = weighedBy(choice.whenHolds(), by);
+                ElementValue no = yes == null ? null : weighedBy(choice.otherwise(), by);
+                yield no == null ? null : choosingByPosition(choice.test(), yes, no);
+            }
+            case OfItsCase choice -> {
+                List<OfItsCase.Arm> arms = new ArrayList<>();
+                for (OfItsCase.Arm arm : choice.arms()) {
+                    ElementValue weighed = weighedBy(arm.value(), by);
+                    if (weighed == null) {
+                        yield null;
+                    }
+                    arms.add(new OfItsCase.Arm(arm.cases(), weighed));
+                }
+                ElementValue rest = choice.rest() == null ? null : weighedBy(choice.rest(), by);
+                yield choice.rest() != null && rest == null ? null
+                        : choosingByCase(choice.subject(), arms, rest);
+            }
+            case SumOfChoices _ -> null;
+        };
+    }
+
+    /**
      * The value of the first arm that takes the case the value at a place of the element is, the
      * arms tried in the order the {@code match} wrote them; and {@code rest} where none of them
      * takes it.
@@ -513,8 +696,13 @@ public sealed interface ElementValue {
      *
      * <p>Asked after {@link ElementProjection#read} has answered null: an answer that is a place of
      * the element is a place and is not made into a one-field form. Wherever the closure's answer is
-     * arithmetic over fields, a name bound to either, a branch on a flag between two of them, or a
+     * arithmetic over fields, a name bound to either, a branch on a flag or on a test of the
+     * element's position between two of them, a choice of numbers times a form of them, or a
      * {@code match} on a place of the element whose arms are each of these, this says which.
+     *
+     * <p>A test of the position is read only where the operation is shown to hand the closure the
+     * position ({@link ElementAnswer#position}). A whole number the closure was handed anywhere
+     * else is a number like any other, and a branch on it is no choice this reads.
      *
      * @param held what each binding of the body holds, so that a name on the way is read through
      * @param elements where the elements the closure is handed stand, which is what says whether
@@ -522,7 +710,7 @@ public sealed interface ElementValue {
      */
     static ElementValue read(ElementAnswer answer, Map<BindingId, Core> held,
                              RuleReadingSource source, ElementsAt elements) {
-        return new Reader(answer.parameter(), Map.of(), held, source, elements)
+        return new Reader(answer.parameter(), answer.position(), Map.of(), held, source, elements)
                 .value(answer.body());
     }
 
@@ -548,15 +736,19 @@ public sealed interface ElementValue {
     final class Reader {
 
         private final BindingId element;
+        /** The binding the element's position arrives on, or null where it arrives on none. */
+        private final BindingId position;
         /** Where in the element each name an arm on the way bound stands. */
         private final Map<BindingId, ElementProjection> standing;
         private final Map<BindingId, Core> held;
         private final RuleReadingSource source;
         private final ElementsAt elements;
 
-        private Reader(BindingId element, Map<BindingId, ElementProjection> standing,
-                       Map<BindingId, Core> held, RuleReadingSource source, ElementsAt elements) {
+        private Reader(BindingId element, BindingId position,
+                       Map<BindingId, ElementProjection> standing, Map<BindingId, Core> held,
+                       RuleReadingSource source, ElementsAt elements) {
             this.element = element;
+            this.position = position;
             this.standing = standing;
             this.held = held;
             this.source = source;
@@ -570,7 +762,7 @@ public sealed interface ElementValue {
             }
             Map<BindingId, ElementProjection> wider = new LinkedHashMap<>(standing);
             wider.put(bound.binding(), at);
-            return new Reader(element, Map.copyOf(wider), held, source, elements);
+            return new Reader(element, position, Map.copyOf(wider), held, source, elements);
         }
 
         private ElementProjection placeOf(Core e, Map<BindingId, Core> at) {
@@ -588,9 +780,12 @@ public sealed interface ElementValue {
          */
         private ElementValue value(Core answer) {
             LinearForm<Atom> form = AffineForms.of(answer, held, atoms());
-            if (form == null) {
-                return null;
-            }
+            return form == null ? null : valueOf(form);
+        }
+
+        /** {@code form} as what it comes to of the element, put together as {@link #summed} puts
+         *  it; or null where the exact arithmetic cannot hold it. */
+        private static ElementValue valueOf(LinearForm<Atom> form) {
             Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
             Map<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
             form.coefs().forEach((atom, weight) -> {
@@ -611,12 +806,119 @@ public sealed interface ElementValue {
             record Chosen(ElementValue choice) implements Atom {}
         }
 
-        /** What a branch on a flag of the element comes to, or null where it is not read. */
-        private ElementValue byFlag(Core.If branch) {
+        /** What a branch on a flag of the element or on a test of its position comes to, or null
+         *  where it is not read. */
+        private ElementValue byCondition(Core.If branch) {
             ElementProjection flag = placeOf(branch.cond(), held);
-            ElementValue yes = flag == null ? null : value(branch.then());
+            PositionTest test = flag == null ? positionTestOf(branch.cond()) : null;
+            if (flag == null && test == null) {
+                return null;
+            }
+            ElementValue yes = value(branch.then());
             ElementValue no = yes == null ? null : value(branch.els());
-            return no == null ? null : ElementValue.choosing(flag, yes, no);
+            if (no == null) {
+                return null;
+            }
+            return flag != null ? ElementValue.choosing(flag, yes, no)
+                    : ElementValue.choosingByPosition(test, yes, no);
+        }
+
+        /**
+         * The test of the element's position {@code condition} is, or null where it is none: the
+         * position, or what is left of it divided by a whole number with the quotient floored,
+         * compared against a whole number, either way round.
+         *
+         * <p>Which call leaves a floored remainder, and which of its arguments divides, is what the
+         * library says the call computes ({@link BoundOperationFacts#divisorOfAFloorRemainder}).
+         */
+        private PositionTest positionTestOf(Core condition) {
+            if (position == null || !(followed(condition) instanceof Core.Binary binary)) {
+                return null;
+            }
+            Comparison compared = Comparison.of(binary).orElse(null);
+            if (compared == null) {
+                return null;
+            }
+            Rel relation = compared.claim().statedRelation();
+            Long divisor = dividingThePosition(compared.left());
+            Long against = divisor == null ? null : wholeNumberOf(compared.right());
+            if (against != null) {
+                return new PositionTest(divisor, relation, against);
+            }
+            divisor = dividingThePosition(compared.right());
+            against = divisor == null ? null : wholeNumberOf(compared.left());
+            return against == null ? null : new PositionTest(divisor, relation.turned(), against);
+        }
+
+        /**
+         * What {@code e} divides the position by before it is compared — the position itself
+         * being {@link PositionTest#THE_POSITION_ITSELF} — or null where {@code e} is neither the
+         * position nor what a whole number other than nought leaves of it.
+         */
+        private Long dividingThePosition(Core e) {
+            Core at = followed(e);
+            if (isThePosition(at)) {
+                return PositionTest.THE_POSITION_ITSELF;
+            }
+            ValueName operation;
+            List<Core> args;
+            switch (at) {
+                case Core.PreservedCall call -> {
+                    operation = call.declared().operation();
+                    args = call.args();
+                }
+                case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                    operation = reached.denotes();
+                    args = call.args();
+                }
+                default -> {
+                    return null;
+                }
+            }
+            OptionalInt divides =
+                    DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation);
+            if (divides.isEmpty() || args.size() != 2) {
+                return null;
+            }
+            Long divisor = wholeNumberOf(args.get(divides.getAsInt()));
+            return divisor != null && divisor != 0
+                    && isThePosition(followed(args.get(1 - divides.getAsInt()))) ? divisor : null;
+        }
+
+        private boolean isThePosition(Core e) {
+            return Core.withoutStanding(e) instanceof Core.Read read
+                    && position.equals(read.binding());
+        }
+
+        /** {@code e} with the names on the way read as what the body bound them to, and the type it
+         *  stands as set aside. */
+        private Core followed(Core e) {
+            Core at = Core.withoutStanding(e);
+            Set<BindingId> met = new HashSet<>();
+            while (at instanceof Core.Read read && !read.binding().equals(position)
+                    && held.get(read.binding()) != null && met.add(read.binding())) {
+                at = Core.withoutStanding(held.get(read.binding()));
+            }
+            return at;
+        }
+
+        /** The whole number {@code e} comes to whatever the element is, or null where it is none
+         *  or one past a long. */
+        private Long wholeNumberOf(Core e) {
+            LinearForm<Atom> form = AffineForms.of(e, held, new Names<>() {
+
+                @Override
+                public LinearForm<Atom> leafOf(Core leaf, Map<BindingId, Core> at) {
+                    return null;
+                }
+            });
+            if (form == null || !form.coefs().isEmpty() || !form.constant().isWhole()
+                    || !(form.constant().floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger whole))
+                    || whole.bitLength() >= Long.SIZE) {
+                return null;
+            }
+            return whole.longValue();
         }
 
         /**
@@ -696,11 +998,32 @@ public sealed interface ElementValue {
                         return LinearForm.atom(new Atom.Place(place));
                     }
                     ElementValue choice = switch (Core.withoutStanding(e)) {
-                        case Core.If branch -> byFlag(branch);
+                        case Core.If branch -> byCondition(branch);
                         case Core.Match match -> byCase(match);
                         case null, default -> null;
                     };
                     return choice == null ? null : termsOf(choice);
+                }
+
+                /** A choice of numbers times a form, and only that: the choice weighs the form
+                 *  ({@link ElementValue#weighedBy}). */
+                @Override
+                public LinearForm<Atom> productOf(LinearForm<Atom> left, LinearForm<Atom> right) {
+                    ElementValue one = valueOf(left);
+                    ElementValue other = one == null ? null : valueOf(right);
+                    if (other == null) {
+                        return null;
+                    }
+                    ElementValue weighed = weighed(one, other);
+                    if (weighed == null) {
+                        weighed = weighed(other, one);
+                    }
+                    return weighed == null ? null : termsOf(weighed);
+                }
+
+                private ElementValue weighed(ElementValue weight, ElementValue by) {
+                    return by instanceof Affine form && isAChoice(weight)
+                            ? ElementValue.weighedBy(weight, form) : null;
                 }
             };
         }
@@ -729,7 +1052,7 @@ public sealed interface ElementValue {
                             all.put(new Atom.Chosen(choice), weight));
                     yield new LinearForm<>(besides.constant(), all);
                 }
-                case Choose _, OfItsCase _ -> LinearForm.atom(new Atom.Chosen(value));
+                case Choose _, OfItsCase _, ByPosition _ -> LinearForm.atom(new Atom.Chosen(value));
             };
         }
 
@@ -833,7 +1156,8 @@ public sealed interface ElementValue {
             @Override
             public ValueStanding.ReadThrough<Map<BindingId, Core>> readThrough(
                     Core.Read read, Map<BindingId, Core> at) {
-                Core value = element.equals(read.binding()) ? null : at.get(read.binding());
+                Core value = element.equals(read.binding()) || read.binding().equals(position)
+                        ? null : at.get(read.binding());
                 return value == null ? null : new ValueStanding.ReadThrough<>(value, at);
             }
 
@@ -874,7 +1198,7 @@ public sealed interface ElementValue {
      */
     static Added addedTo(ElementAnswer step, BindingId accumulator, Map<BindingId, Core> held,
                          RuleReadingSource source, ElementsAt elements) {
-        return new Reader(step.parameter(), Map.of(), held, source, elements)
+        return new Reader(step.parameter(), step.position(), Map.of(), held, source, elements)
                 .addedTo(step.body(), accumulator);
     }
 

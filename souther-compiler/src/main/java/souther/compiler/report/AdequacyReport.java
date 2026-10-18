@@ -6470,6 +6470,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 elementComputation(into.putObject("whenSet"), it.whenSet());
                 elementComputation(into.putObject("otherwise"), it.otherwise());
             }
+            case ElementValue.ByPosition it -> {
+                into.put("kind", "position");
+                if (it.test().divisor() != ElementValue.PositionTest.THE_POSITION_ITSELF) {
+                    into.put("divisor", it.test().divisor());
+                }
+                into.put("relation", it.test().relation().written());
+                into.put("against", it.test().against());
+                elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                elementComputation(into.putObject("otherwise"), it.otherwise());
+            }
             case ElementValue.OfItsCase it -> {
                 into.put("kind", "case");
                 into.put("subject", it.subject().spelled());
