@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -15,6 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * rather than passing over it. That refusal is a claim about the record, and is made only where
  * every combination of the others was asked: where the values nearest the first ones hold no such
  * pair, the asking goes on rather than stopping at the claim.
+ *
+ * <p>Each value of a component is put beside the nearest values of the others and no further, so a
+ * value the constructor takes only beside more of them moved is not made; what that leaves out is
+ * named by holding the nearest values against every combination, and the holding is asked here of a
+ * record that leaves one out.
  */
 class ValuesOfATypeVaryEachComponentAloneWhereAnyCombinationDoesTest {
 
@@ -46,5 +52,51 @@ class ValuesOfATypeVaryEachComponentAloneWhereAnyCombinationDoesTest {
         assertTrue(made.contains(new Flags(false, false, true))
                         && made.contains(new Flags(false, true, true)),
                 () -> "the second flag varied alone: " + made);
+    }
+
+    /** A code of minus one, which the constructor takes only beside both flags set. */
+    record Selective(int code, boolean b, boolean c) {
+
+        Selective {
+            if (code == -1 && (!b || !c)) {
+                throw new IllegalArgumentException("minus one is a code only with both flags");
+            }
+        }
+    }
+
+    /**
+     * A value a constructor ties to two other components is made, though the code is already
+     * varied alone by nought and one: what is asked of each value is not answered by the asking of
+     * each component.
+     */
+    @Test
+    void aValueTiedToTwoOtherComponentsIsMade() {
+        assertTrue(new ValuesOfAType().of(Selective.class).contains(new Selective(-1, true, true)));
+    }
+
+    /** A code of minus one, which the constructor takes only beside all three flags set. */
+    record TiedToThree(int code, boolean b, boolean c, boolean d) {
+
+        TiedToThree {
+            if (code == -1 && (!b || !c || !d)) {
+                throw new IllegalArgumentException("minus one is a code only with every flag");
+            }
+        }
+    }
+
+    /**
+     * A value taken only beside three others moved is made over every combination and not beside
+     * the nearest values, and holding the two against each other names it.
+     */
+    @Test
+    void aValueTakenOnlyFarFromTheFirstValuesIsNamedWhereTheNearestLeaveItOut() {
+        ValuesOfAType nearest = new ValuesOfAType();
+        ValuesOfAType every = ValuesOfAType.everyCombination();
+        nearest.of(TiedToThree.class);
+
+        assertTrue(every.of(TiedToThree.class).contains(new TiedToThree(-1, true, true, true)),
+                "every combination makes the code minus one");
+        assertEquals(List.of(TiedToThree.class.getName() + ".code: [Optional[-1]]"),
+                ValuesOfAType.valuesLeftOut(nearest, every));
     }
 }
