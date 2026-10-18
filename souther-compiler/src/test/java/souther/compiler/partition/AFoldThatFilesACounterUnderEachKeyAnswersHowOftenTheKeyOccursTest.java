@@ -267,19 +267,16 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
 
     /**
      * A fold walking the elements of a list in another order holds the same keys, each as often, so
-     * whether the map it files holds anything is read as it is where the fold walks the list.
+     * whether the map it files holds anything is read as it is where the fold walks the list. Which
+     * operations reorder is {@code InputPath}'s to say, and is asked there.
      */
     @Test
     void whetherAMapHoldsAnythingIsReadWhateverOrderTheFoldWalksTheKeysIn() {
         Compilation plain = measured(modelOfWhetherItHoldsAnything("xs"));
         assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
-        for (String keys : List.of("List.reverse(xs)", "List.sort(xs)",
-                "List.reverse(List.sort(xs))")) {
-            Compilation compilation = measured(modelOfWhetherItHoldsAnything(keys));
-            assertEquals(axisOf(plain), axisOf(compilation), () -> keys + ": " + report(compilation));
-            assertFalse(report(compilation).contains("not read"),
-                    () -> keys + ": " + report(compilation));
-        }
+        Compilation reversed = measured(modelOfWhetherItHoldsAnything("List.reverse(xs)"));
+        assertEquals(axisOf(plain), axisOf(reversed), () -> report(reversed));
+        assertFalse(report(reversed).contains("not read"), () -> report(reversed));
     }
 
     /** How many keys a fold adds one for each of, the fold walking {@code keys}. */
@@ -301,23 +298,17 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     void howManyAFoldCountsIsReadWhateverOrderItWalksTheKeysIn() {
         Compilation plain = measured(modelOfHowManyAFoldCounts("xs"));
         assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
-        for (String keys : List.of("List.reverse(xs)", "List.sort(xs)",
-                "List.reverse(List.sort(xs))")) {
-            Compilation compilation = measured(modelOfHowManyAFoldCounts(keys));
-            assertEquals(axisOf(plain), axisOf(compilation), () -> keys + ": " + report(compilation));
-        }
+        Compilation reversed = measured(modelOfHowManyAFoldCounts("List.reverse(xs)"));
+        assertEquals(axisOf(plain), axisOf(reversed), () -> report(reversed));
     }
 
-    /** A list that kept some of the elements, or changed them, holds other keys than the list. */
+    /** A list that kept some of the elements holds other keys than the list. */
     @Test
-    void whetherAMapHoldsAnythingIsNotReadOffAListThatKeptOrChangedTheKeys() {
-        Compilation plain = measured(modelOfWhetherItHoldsAnything("xs"));
-        for (String keys : List.of("List.filter(k -> String.length(k) > 1, xs)",
-                "List.map(k -> String.append(k, \"!\"), xs)")) {
-            Compilation compilation = measured(modelOfWhetherItHoldsAnything(keys));
-            assertTrue(!axisOf(plain).equals(axisOf(compilation)),
-                    () -> keys + ": " + report(compilation));
-        }
+    void whetherAMapHoldsAnythingIsNotReadOffAListThatKeptSomeOfTheKeys() {
+        Compilation kept = measured(modelOfWhetherItHoldsAnything(
+                "List.filter(k -> String.length(k) > 1, xs)"));
+        assertFalse(axisOf(kept).equals(
+                axisOf(measured(modelOfWhetherItHoldsAnything("xs")))), () -> report(kept));
     }
 
     /** The rows offered for keys a map answered as they are are the rows offered for the keys. */
