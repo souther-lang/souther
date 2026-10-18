@@ -347,7 +347,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;"
                             + "Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/values/ValueSet;"
-                            + "Lsouther/compiler/numeric/Congruences;"
+                            + "Lsouther/compiler/check/HeldClass;"
                             + "Lsouther/compiler/numeric/PlacesApart;"
                             + "Ljava/util/Set;)"
                             + "Lsouther/compiler/numeric/Place;",
@@ -356,7 +356,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.TermRealizations#membersOnTheOrder("
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/inputs/TermOrders;"
-                            + "Lsouther/compiler/numeric/Congruences;"
+                            + "Lsouther/compiler/check/HeldClass;"
                             + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
                             + "Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",

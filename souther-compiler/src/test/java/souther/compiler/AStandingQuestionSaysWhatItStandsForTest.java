@@ -271,17 +271,16 @@ class AStandingQuestionSaysWhatItStandsForTest {
     /**
      * An equality the arithmetic stopped on says where it stopped, as a bound stopped there does.
      *
-     * <p>A day of a date, a remainder, a total of the elements: each is a value an operation made
-     * of the position, and nothing here follows that operation back to the values the position may
-     * hold. That is what an author is owed — what would have to be read is the operation — and not
-     * that the rule is a form this compiler has no word for, which sends them to rewrite a clause
-     * every reading recognised.
+     * <p>A magnitude, a total of the elements: each is a value an operation made of the position,
+     * and nothing here follows that operation back to the values the position may hold. That is
+     * what an author is owed — what would have to be read is the operation — and not that the rule
+     * is a form this compiler has no word for, which sends them to rewrite a clause every reading
+     * recognised.
      */
     @Test
     void anEqualityOnAValueMadeFromThePositionSaysSo() {
         for (String[] each : List.of(
-                new String[] {"Date", "Date.day(value) == 1"},
-                new String[] {"Int", "Int.floorMod(value, 1000) == 0"},
+                new String[] {"Int", "Int.abs(value) == 3"},
                 new String[] {"List<Int>", "List.sum(value) == 0"})) {
             assertEquals(List.of("      · not accounted for: invariant V #1"
                             + " — which values may stand at h.v: " + MADE_FROM_IT),
@@ -334,9 +333,9 @@ class AStandingQuestionSaysWhatItStandsForTest {
     /**
      * A conjunct some reading took in is no part of what the question beside it stands on.
      *
-     * <p>{@code value >= 0} is taken in by the reading of ends and placed as a line; the remainder
+     * <p>{@code value >= 0} is taken in by the reading of ends and placed as a line; the magnitude
      * beside it is what nothing took in. The reading of values has no word for an ordering, and
-     * that is true and is no account of the remainder — said beside it, an author rewrites a bound
+     * that is true and is no account of the magnitude — said beside it, an author rewrites a bound
      * that was read in full.
      */
     @Test
@@ -344,7 +343,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
         assertEquals(List.of("      · not accounted for: invariant V #1"
                         + " — which values may stand at h.v: " + MADE_FROM_IT),
                 allAbout(reportOf(aValueRuledBy("Int",
-                                "value >= 0 && Int.floorMod(value, 1000) == 0")),
+                                "value >= 0 && Int.abs(value) == 3")),
                         "invariant V #1"));
     }
 
@@ -378,15 +377,19 @@ class AStandingQuestionSaysWhatItStandsForTest {
     /**
      * The control on the ones above: an equality something reads leaves no question standing.
      *
-     * <p>A value written out, a count, and a value an operation made that the arithmetic reads to
-     * the end. Each is taken in by some reading, and nothing above may have taken that away.
+     * <p>A value written out, a count, a value an operation made that the arithmetic reads to the
+     * end, and a part of a date and a remainder the values are read back out of. Each is taken in by
+     * some reading, and nothing above may have taken that away.
      */
     @Test
     void anEqualitySomethingReadsLeavesNothingStanding() {
         for (String[] each : List.of(
                 new String[] {"Int", "value == 7"},
                 new String[] {"String", "String.length(value) == 3"},
-                new String[] {"Int", "value * 2 == 4"})) {
+                new String[] {"Int", "value * 2 == 4"},
+                new String[] {"Date", "Date.day(value) == 1"},
+                new String[] {"Int", "Int.floorMod(value, 1000) == 0"},
+                new String[] {"Int", "value >= 0 && Int.floorMod(value, 1000) == 0"})) {
             assertEquals(List.of(),
                     allAbout(reportOf(aValueRuledBy(each[0], each[1])), "invariant V #1"),
                     each[1]);
@@ -438,7 +441,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 "and the order is the author's here too");
 
         assertEquals(List.of("rule_about_a_derived_value"),
-                stoppedInDocument(aValueRuledBy("Date", "Date.day(value) == 1")),
+                stoppedInDocument(aValueRuledBy("Int", "Int.abs(value) == 3")),
                 "and where the arithmetic stopped, its word");
         assertEquals(List.of("non_affine_product"),
                 stoppedInDocument(aValueRuledBy("Int", "value * value == 4")));

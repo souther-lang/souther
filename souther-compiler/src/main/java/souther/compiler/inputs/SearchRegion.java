@@ -1,6 +1,6 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Congruences;
+import souther.compiler.check.HeldClass;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -208,22 +208,22 @@ public interface SearchRegion {
     NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form);
 
     /**
-     * The class of whole numbers the remainders already fixed leave the value at {@code place} in
-     * together, or null where none is fixed or no number leaves them all.
+     * The class the value at {@code place} is held to besides where it runs: what its declarations
+     * hold it to, met with the remainders this region fixed beside it.
      *
      * <p>{@link #projectionOf} says where the value runs and not which numbers of the run it may be:
-     * a search that chooses it is held to this as well. A region that fixes no remainder says
-     * nothing of one, which is what the default is.
+     * a search that chooses it is held to this as well. A region that reads no declarations and
+     * fixes no remainder says nothing of one, which is what the default is.
      */
-    default Congruences valueClassAt(NumericTerm.ValueOf place) {
-        return null;
+    default HeldClass classAt(NumericTerm.ValueOf place) {
+        return HeldClass.NONE;
     }
 
     /**
      * The values the declarations of the position {@code term} is read of admit it, as far as they
      * were read.
      *
-     * <p>Beside {@link #valueClassAt} and for the same reason: a range says where a value runs and
+     * <p>Beside {@link #classAt} and for the same reason: a range says where a value runs and
      * not which values of the run the position may hold, and a position held to {@code "a"} or
      * {@code "b"} holds none of the strings between them. Read and not proved: what the rules that
      * were read admit, so a value outside it is refused and a value inside it is not shown to be one
@@ -284,7 +284,7 @@ public interface SearchRegion {
      *
      * <p>Not {@link #projectionOf}, which is where the values lie: a run can be known without being
      * filled, its ends can be rounded past the rules', and a value can be taken out of it
-     * ({@link #apartAt}) or the values held to a class of whole numbers ({@link #valueClassAt}).
+     * ({@link #apartAt}) or the values held to a class ({@link #classAt}).
      * This is shown of all of that at once and answered as the run itself, so a reader is never
      * left to put a range from one answer together with a proof from another.
      *

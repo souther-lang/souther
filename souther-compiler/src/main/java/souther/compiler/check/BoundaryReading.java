@@ -131,9 +131,14 @@ final class BoundaryReading {
              * satisfies, and whether the input is empty is the one prover's to say. That it was
              * read is said beside the question, by the finding that its line falls outside what
              * its number ever holds.
+             *
+             * <p>And only where what the range leaves the number is what the reading of the
+             * position's values holds of it ({@link DerivedNumber#carriesOut}). A range that reading
+             * holds more or less of is a rule this one read and nobody carried out on the values.
              */
             Set<FactSubject> readWholeAt() {
-                return Endpoint.someValueLiesBetween(range.low(), range.high()) ? takenOf : Set.of();
+                return Endpoint.someValueLiesBetween(range.low(), range.high())
+                        && number.carriesOut(range) ? takenOf : Set.of();
             }
         }
 

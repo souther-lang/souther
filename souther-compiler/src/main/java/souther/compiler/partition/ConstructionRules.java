@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
@@ -123,6 +125,7 @@ final class ConstructionRules {
         NumericDomain.Bounds values = null;
         FieldDomains.Held held = null;
         AdmissibleSet admits = FieldDomains.ConstructionLimits.NONE.admits();
+        HeldClass heldTo = FieldDomains.ConstructionLimits.NONE.heldTo();
         for (int i = 0; i < named.size(); i++) {
             RuleRoots.Naming each = named.get(i);
             FieldDomains.ConstructionLimits here = composedUnder(each, settling.fixed().get(i))
@@ -130,8 +133,9 @@ final class ConstructionRules {
             values = meet(values, here.values());
             held = meet(held, here.held());
             admits = admits.narrower(here.admits());
+            heldTo = heldTo.and(here.heldTo());
         }
-        return new FieldDomains.ConstructionLimits(values, held, admits);
+        return new FieldDomains.ConstructionLimits(values, held, admits, heldTo);
     }
 
     /**
@@ -162,12 +166,17 @@ final class ConstructionRules {
         // reading's. The rules are then read on the name the value is written under where it wraps
         // that record, whose reading reaches the record's own rules and names its fields as the
         // record does, and on the record where it is written bare.
-        if (!(TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
+        if (TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums())
-                instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _))) {
-            return FieldDomains.NONE;
+                instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)) {
+            return FieldDomains.of(Partitions.rulesOver(type, declared, source), reading);
         }
-        return FieldDomains.of(Partitions.rulesOver(type, declared, source), reading);
+        // And a name wrapped round a value with no fields, whose rules are about the value itself:
+        // which class they hold it to is what a builder choosing it has to know, as it is for a
+        // field, and is read on the outermost name as every other rule the value wears is.
+        return TypeOps.outermost(type, source.inners()) instanceof TypeOps.Unwrapped worn
+                && worn.layer().named() instanceof TypeSymbol.AtModule name
+                ? FieldDomains.of(name, reading) : FieldDomains.NONE;
     }
 
     private List<RuleRoots.Naming> namingOf(TermPath path) {
