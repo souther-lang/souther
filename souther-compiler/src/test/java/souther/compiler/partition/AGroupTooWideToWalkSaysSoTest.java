@@ -12,6 +12,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -284,35 +285,37 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void whatIsOwedIsAnsweredWhateverTheLimitDidToTheGroup() {
-        List<ArmDisposition> owed = armsFor(modelWithRows(13, false));
+        Adequacy.Filling oneRow = fillingFor(modelWithRows(13, false));
+        List<ArmDisposition> owed = armsIn(oneRow);
         assertFalse(owed.isEmpty(),
                 "one row leaves the other arm of each helper owed, and each is answered");
         assertTrue(owed.stream().allMatch(ArmDisposition.Built.class::isInstance),
                 () -> "with a row through it, from the way in the reading has for it: " + owed);
-        assertEquals(1, groupsNotOfferedFor(modelWithRows(13, false)).size(),
+        assertEquals(1, groupsNotOfferedIn(oneRow).size(),
                 "and the group the limit held back is named, its combinations not being looked in");
 
-        assertEquals(List.of(), armsFor(modelWithRows(13, true)),
+        Adequacy.Filling twoRows = fillingFor(modelWithRows(13, true));
+        assertEquals(List.of(), armsIn(twoRows),
                 "two rows take every arm, so nothing is owed at all");
-        assertEquals(List.of(), groupsNotOfferedFor(modelWithRows(13, true)),
+        assertEquals(List.of(), groupsNotOfferedIn(twoRows),
                 "and the group costs this run nothing, so it is not named");
     }
 
     /** What the compilation's own generation came to at each arm it was owed one at. */
-    private static List<ArmDisposition> armsFor(String source) {
-        return List.copyOf(
-                GenerationFixtures.arms(fillingFor(source).composed().discharge()).values());
+    private static List<ArmDisposition> armsIn(Adequacy.Filling filling) {
+        return List.copyOf(GenerationFixtures.arms(filling.composed().discharge()).values());
     }
 
-    private static List<GenerationReason.GroupsNotOffered> groupsNotOfferedFor(String source) {
-        return fillingFor(source).composed().reasons().stream()
+    private static List<GenerationReason.GroupsNotOffered> groupsNotOfferedIn(
+            Adequacy.Filling filling) {
+        return filling.composed().reasons().stream()
                 .filter(GenerationReason.GroupsNotOffered.class::isInstance)
                 .map(GenerationReason.GroupsNotOffered.class::cast).toList();
     }
 
-    private static souther.compiler.query.Adequacy.Filling fillingFor(String source) {
+    private static Adequacy.Filling fillingFor(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         // The rows have to have run for what is owed to be what the arms established. A model whose
         // examples failed is owed nothing for a reason of its own, and an empty answer from one of
@@ -321,10 +324,10 @@ class AGroupTooWideToWalkSaysSoTest {
                         .filter(found -> found.report().isError())
                         .map(found -> found.report().diagnostic().code().toString()).toList(),
                 "the model compiles and its rows run");
-        Map<String, souther.compiler.query.Adequacy.Filling> filling =
-                souther.compiler.query.Adequacy.generatedOf(compilation.db(), "example.wide");
+        Map<String, Adequacy.Filling> filling =
+                Adequacy.generatedOf(compilation.db(), "example.wide");
         assertNotNull(filling, "the module was asked for rows");
-        souther.compiler.query.Adequacy.Filling total = filling.get("total");
+        Adequacy.Filling total = filling.get("total");
         assertNotNull(total, "the behavior was asked for rows");
         return total;
     }
@@ -439,7 +442,7 @@ class AGroupTooWideToWalkSaysSoTest {
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals("total")).findFirst().orElseThrow();
             InputDomain inputs = compilation.db()
-                    .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("total");
+                    .ask(new Adequacy.Inputs(module)).value().get("total");
             assertNotNull(inputs, "the behavior's inputs were read");
             Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs.reading(rules),
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
