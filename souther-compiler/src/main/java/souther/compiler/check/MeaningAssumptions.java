@@ -46,6 +46,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -140,6 +141,10 @@ final class MeaningAssumptions {
      *  bound is found. */
     private final Denotations at;
     private Known known;
+    /** What was known when this reading began. */
+    private final Known entry;
+    /** What was known just after each choice this reading left undecided was kept. */
+    private final Map<Known.Declined, Known> declinedAt = new HashMap<>();
     private boolean taken;
     /** Whether the choice this was last asked to take in was left between several parts. */
     private boolean leftUndecided;
@@ -156,6 +161,7 @@ final class MeaningAssumptions {
         this.places = places;
         this.at = at;
         this.known = known;
+        this.entry = known;
         this.tries = tries;
     }
 
@@ -208,6 +214,8 @@ final class MeaningAssumptions {
      *
      * <p>A choice still between several parts stays as it was, and nothing it was read as is kept.
      * Every pass that goes on settles one choice, so the passes end.
+     *
+     * <p>A choice is read again only if what is known is not what it was read over.
      */
     private void settleWhatWasLeftUndecided() {
         boolean settled = true;
@@ -215,6 +223,10 @@ final class MeaningAssumptions {
             settled = false;
             List<Known.Declined> pending = known.declinedChoices();
             for (Known.Declined choice : pending) {
+                // Read again only once something has been taken in since it was last read.
+                if (declinedAt.getOrDefault(choice, entry) == known) {
+                    continue;
+                }
                 List<Known.Declined> others = new ArrayList<>(pending);
                 others.remove(choice);
                 MeaningAssumptions again = new MeaningAssumptions(terms, choice.places(),
@@ -709,8 +721,10 @@ final class MeaningAssumptions {
                 leftUndecided = true;
                 if (!cutShort) {
                     List<Known.Declined> kept = new ArrayList<>(known.declinedChoices());
-                    kept.add(new Known.Declined(any, at, places));
+                    Known.Declined declined = new Known.Declined(any, at, places);
+                    kept.add(declined);
                     known = known.leavingUndecided(kept);
+                    declinedAt.put(declined, known);
                 }
                 WhyNotTaken.declinedWhole(cutShort ? new WhyNotTaken.MoreAlternativesThanAreTried()
                         : new WhyNotTaken.OutsideDomain(
