@@ -71,6 +71,9 @@ final class BindingEnvironment {
      *  that entry and no other. By the name and not by the element it stands at, since two names
      *  for entries of one map are two entries at one element. */
     private final Map<BindingId, InputReads.EntryLookedUp> selected;
+    /** The lookup each name opens: the call that asked a map for a key, whose answer the arm
+     *  binding the name is under holds the value of. */
+    private final Map<BindingId, InputReads.LookupOpened> opened;
     private volatile Map<BindingId, Core> boundAsATable;
     /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what
      *  it is worked out from is every value bound, which a reader asking it of one environment
@@ -113,14 +116,16 @@ final class BindingEnvironment {
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                        ElementBindings elements, ValueDefinitions values, boolean callsStand) {
         this(Map.copyOf(roots), Map.of(), Map.copyOf(bound), null, elements, values,
-                new HeldHash(elements, values), callsStand, Map.of());
+                new HeldHash(elements, values), callsStand, Map.of(), Map.of());
     }
 
     private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> handed,
                                Map<BindingId, Core> table, Layer newest, ElementBindings elements,
                                ValueDefinitions values, HeldHash heldHash, boolean callsStand,
-                               Map<BindingId, InputReads.EntryLookedUp> selected) {
+                               Map<BindingId, InputReads.EntryLookedUp> selected,
+                               Map<BindingId, InputReads.LookupOpened> opened) {
         this.selected = selected;
+        this.opened = opened;
         this.roots = roots;
         this.handed = handed;
         this.table = table;
@@ -305,19 +310,19 @@ final class BindingEnvironment {
         Layer inner = new Layer(binder.binding(), Core.withoutStanding(value), newest, depth);
         if (depth <= KEPT_APART) {
             return new BindingEnvironment(roots, handed, table, inner, elements, values, heldHash,
-                    callsStand, selected);
+                    callsStand, selected, opened);
         }
         BindingEnvironment written = new BindingEnvironment(roots, handed, table, inner, elements,
-                values, heldHash, callsStand, selected);
+                values, heldHash, callsStand, selected, opened);
         return new BindingEnvironment(roots, handed, written.bound(), null, elements, values,
-                heldHash, callsStand, selected);
+                heldHash, callsStand, selected, opened);
     }
 
     /** The same, over a tree that keeps the language's operations standing as calls, which the
      *  body of what a call names is, as the call reads it. */
     BindingEnvironment overStandingCalls() {
         return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
-                true, selected);
+                true, selected, opened);
     }
 
     /** The same, with {@code binding} standing at {@code path}. */
@@ -325,7 +330,7 @@ final class BindingEnvironment {
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
         wider.put(binding, path);
         return new BindingEnvironment(Map.copyOf(wider), handed, table, newest, elements, values,
-                heldHash, callsStand, selected);
+                heldHash, callsStand, selected, opened);
     }
 
     /**
@@ -336,12 +341,25 @@ final class BindingEnvironment {
         Map<BindingId, InputReads.EntryLookedUp> wider = new LinkedHashMap<>(selected);
         wider.put(binding, entry);
         return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
-                callsStand, Map.copyOf(wider));
+                callsStand, Map.copyOf(wider), opened);
     }
 
     /** The entries names are the value of, by the name. */
     Map<BindingId, InputReads.EntryLookedUp> selected() {
         return selected;
+    }
+
+    /** The same, where {@code binding} is what the lookup {@code lookup} found under its key. */
+    BindingEnvironment opening(BindingId binding, InputReads.LookupOpened lookup) {
+        Map<BindingId, InputReads.LookupOpened> wider = new LinkedHashMap<>(opened);
+        wider.put(binding, lookup);
+        return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
+                callsStand, selected, Map.copyOf(wider));
+    }
+
+    /** What {@code binding} is the value of, or null where it is no such name. */
+    InputReads.LookupOpened openedBy(BindingId binding) {
+        return opened.get(binding);
     }
 
     /**
@@ -352,7 +370,7 @@ final class BindingEnvironment {
         Map<BindingId, Core> wider = new LinkedHashMap<>(handed);
         wider.put(binding, value);
         return new BindingEnvironment(roots, Map.copyOf(wider), table, newest, elements, values,
-                heldHash, callsStand, selected);
+                heldHash, callsStand, selected, opened);
     }
 
     /**
@@ -364,7 +382,7 @@ final class BindingEnvironment {
         ElementBindings joined = elements.and(called);
         ValueDefinitions defined = values.and(called);
         return new BindingEnvironment(roots, handed, table, newest, joined, defined,
-                new HeldHash(joined, defined), callsStand, selected);
+                new HeldHash(joined, defined), callsStand, selected, opened);
     }
 
     /** The parameters as positions, which is what a name in a tree stands for. */
@@ -383,6 +401,7 @@ final class BindingEnvironment {
                         && handed.equals(that.handed)
                         && bound().equals(that.bound())
                         && selected.equals(that.selected)
+                        && opened.equals(that.opened)
                         && elements.equals(that.elements)
                         && values.equals(that.values));
     }
@@ -404,7 +423,7 @@ final class BindingEnvironment {
             // is handed or picked out by is a tree, and equality reads it where a hash would walk
             // it for every environment made.
             h = Objects.hash(roots, handed.keySet(), bound().keySet(), heldHash.get(), callsStand,
-                    selected.keySet());
+                    selected.keySet(), opened.keySet());
             hash = h;
         }
         return h;
@@ -414,6 +433,6 @@ final class BindingEnvironment {
     public String toString() {
         return "BindingEnvironment[roots=" + roots + ", handed=" + handed + ", bound=" + bound()
                 + ", elements=" + elements + ", callsStand=" + callsStand
-                + ", selected=" + selected + "]";
+                + ", selected=" + selected + ", opened=" + opened.keySet() + "]";
     }
 }

@@ -187,6 +187,10 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == BindingId.class) {
             return new BindingId(new BindingOwner.OfValue("example", "f"), 0);
         }
+        if (type == Core.Case.class) {
+            return new Core.Case(null, new Core.ArmBinding.Unbound(), SOMETHING,
+                    new SourcePos(0, 0));
+        }
         if (type == InputReads.ContainerOf.class) {
             return new InputReads.ContainerOf.AtAPosition(TermPath.of("x"));
         }

@@ -317,6 +317,85 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         }
     }
 
+    private static String modelWith(String touchRule, String step) {
+        return modelOf(step, "").replace("data Touch = { account: String, days: Int }",
+                "data Touch = { account: String, days: Int }\n    invariant " + touchRule);
+    }
+
+    private static final String WITHIN_A_HUNDRED = "days >= 0 && days <= 100";
+
+    private static final String COMPARED_WITH_WHAT_WAS_FOUND = "Map.updateOrInsert(t.account,"
+            + " t.days, seen -> if t.days < seen then t.days else seen, acc)";
+
+    /**
+     * What the step finds under the key is the end of the values of the earlier elements of that
+     * key, so the comparison of the element's value against it is read: the value has that end on
+     * both sides of it among elements of one key, but at the end its range stops at.
+     */
+    @Test
+    void theComparisonAgainstWhatWasFoundUnderTheKeyIsRead() {
+        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED,
+                COMPARED_WITH_WHAT_WAS_FOUND));
+        assertFalse(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
+    /** A key worked out of the value is no place two elements share, and nothing is said of what
+     *  was found under it. */
+    @Test
+    void theComparisonAfterALookupOfTheKeyIsReadAsTheOneInsideTheClosure() {
+        String lookup = """
+                match Map.get(t.account, acc) with
+                        | None -> Map.insert(t.account, t.days, acc)
+                        | Some seen -> Map.insert(t.account,
+                              if t.days < seen then t.days else seen, acc)""";
+        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED, lookup));
+        assertFalse(report(compilation).contains("not read"), () -> report(compilation));
+        assertEquals(axisOf(measured(modelWith(WITHIN_A_HUNDRED, COMPARED_WITH_WHAT_WAS_FOUND))),
+                axisOf(compilation));
+    }
+
+    @Test
+    void aKeyWorkedOutOfTheValueLeavesTheComparisonUnread() {
+        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED,
+                "Map.updateOrInsert(String.fromInt(t.days + 1), t.days,"
+                        + " seen -> if t.days < seen then t.days else seen, acc)"));
+        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
+    /** A rule of the element relating the key to the value leaves the earlier values of one key
+     *  no wider than this one's, which the range over every element does not say. */
+    @Test
+    void aRuleRelatingTheKeyToTheValueLeavesTheComparisonUnread() {
+        Compilation compilation = measured(modelWith(
+                WITHIN_A_HUNDRED + " && (account /= \"a\" || days <= 10)",
+                COMPARED_WITH_WHAT_WAS_FOUND));
+        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
+    /** Elements the list's own rule keeps from sharing a key have no earlier element of their key
+     *  to be compared with, which the comparison is not read as having. */
+    @Test
+    void aRuleKeepingTheKeysApartLeavesTheComparisonUnread() {
+        Compilation compilation = measured("""
+                module example.stale
+
+                data Touch = { account: String, days: Int }
+                    invariant days >= 0 && days <= 100
+
+                data Quote = { touches: List<Touch> }
+                    invariant List.allDistinctBy(t -> t.account, touches)
+
+                let sinceOf (touches: List<Touch>): Map<String, Int> =
+                    List.fold((acc, t) -> %s, Map.empty, touches)
+
+                behavior stale : (quote: Quote, staleAfter: Int) -> Map<String, Int>
+
+                let stale (quote, staleAfter) =
+                    Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
+                """.formatted(COMPARED_WITH_WHAT_WAS_FOUND));
+        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
     /** What a fold files that keeps no end of one value of each element says nothing of it. */
     @Test
     void aFoldThatKeepsNoEndOfOneValueIsNotReadAsOne() {

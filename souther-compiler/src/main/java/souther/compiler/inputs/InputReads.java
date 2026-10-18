@@ -1204,6 +1204,44 @@ public final class InputReads {
      */
     private InputReads insideArmOn(Core scrutinee, Core.Case arm, Symbols symbols,
                                    DeclarationNewtypes newtypes) {
+        InputReads inside = narrowedInsideArmOn(scrutinee, arm, symbols, newtypes);
+        if (arm.binder() == null || arm.binder().binding() == null
+                || !(arm.binding() instanceof Core.ArmBinding.Payload)) {
+            return inside;
+        }
+        Core lookup = standing(scrutinee, symbols, newtypes).value();
+        return AnOperationApplied.of(lookup) instanceof AnOperationApplied looked
+                && GET.equals(looked.operation())
+                ? new InputReads(inside.names.opening(arm.binder().binding(),
+                        new LookupOpened(lookup, arm)),
+                        inside.alternatives, inside.declared, inside.dependencies, inside.applied)
+                : inside;
+    }
+
+    /**
+     * What a name under an arm is the value of: the lookup in a map that found it under its key,
+     * and the arm that is reached only where the lookup found one.
+     *
+     * @param lookup the call that asked the map for the key
+     * @param arm    the arm of the match on it that binds the name
+     */
+    public record LookupOpened(Core lookup, Core.Case arm) {
+
+        public LookupOpened {
+            Objects.requireNonNull(lookup, "a name is found by some lookup");
+            Objects.requireNonNull(arm, "under some arm of the match on it");
+        }
+    }
+
+    /** What the name {@code binding} is the value of, where an arm bound it to what a lookup in a
+     *  map found under its key — or null where it is no such name. */
+    public LookupOpened lookupOpenedBy(BindingId binding) {
+        return names.openedBy(binding);
+    }
+
+    /** {@link #insideArmOn}, without the lookup the name under the arm is found by. */
+    private InputReads narrowedInsideArmOn(Core scrutinee, Core.Case arm, Symbols symbols,
+                                           DeclarationNewtypes newtypes) {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }

@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
+import souther.compiler.core.Core;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
@@ -603,10 +604,16 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException("a seed is one value of the run, and no"
                         + " element of what is walked: " + at + " of " + container);
             }
+            if (seed instanceof Seed.OfTheKey(var key, var _)
+                    && !key.isAtOrUnder(container.element())) {
+                throw new IllegalArgumentException("a key is read off the elements: " + key
+                        + " of " + container);
+            }
         }
 
-        /** What a walk keeping an end starts from: a number written out, or one number of the
-         *  input, which is one value on a run whatever the elements are. */
+        /** What a walk keeping an end starts from: a number written out, one number of the
+         *  input, which is one value on a run whatever the elements are, or nothing — the first
+         *  element of a key files its own value. */
         public sealed interface Seed {
 
             /** A number written out. */
@@ -614,6 +621,24 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
             /** A number of the input outside what is walked. */
             record OfTheInput(NumericTerm.FromOnePosition number) implements Seed {}
+
+            /**
+             * Nothing: the walk files what each element holds under its key, so the end kept is of
+             * the elements before it that have the same key, and an element with a key no earlier
+             * element has is compared with nothing.
+             *
+             * @param key       where the key stands in an element
+             * @param reachedBy the arm of a match on a lookup of the key that is entered only where
+             *                  an earlier element has the key, where the walk looks the key up and
+             *                  does not hand a closure the value found
+             */
+            record OfTheKey(TermPath key, Optional<Core.Case> reachedBy) implements Seed {
+
+                public OfTheKey {
+                    Objects.requireNonNull(key, "a key stands somewhere in an element");
+                    Objects.requireNonNull(reachedBy, "an arm, or none");
+                }
+            }
         }
     }
 

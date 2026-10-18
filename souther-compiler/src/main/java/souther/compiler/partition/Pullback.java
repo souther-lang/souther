@@ -4852,6 +4852,74 @@ final class Pullback {
                 howMany));
     }
 
+    /**
+     * The end kept of the numbers of the earlier elements of one key, where {@code name} is what
+     * the step of a fold filing the least or the greatest of each key's numbers finds under the
+     * element's key ({@link KeyedAccumulation}): the value an operation filing under a key hands
+     * its closure, or the one an arm of a lookup of the key opens — or empty where it is anything
+     * else.
+     *
+     * <p>The fold is reached from the map the filing or the lookup reads, which is the answer so
+     * far of the step, and the name has to be the one that fold's reading of its step says it
+     * finds the value under. The key has to be a place of the element: a key worked out of it is
+     * no place two elements can share, and the fold is not read as keyed then.
+     */
+    private Optional<Quantity.KeptSoFar> keptUnderAKey(Core.Read name, InputReads at) {
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        InputReads.LookupOpened opened = at.lookupOpenedBy(name.binding());
+        Core asked;
+        if (opened != null) {
+            asked = opened.lookup();
+        } else {
+            ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
+            if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+                return Optional.empty();
+            }
+            asked = uses.applications().getFirst().call();
+        }
+        Core map = AnOperationApplied.of(asked) instanceof AnOperationApplied applied
+                ? KeyedAccumulation.mapOf(applied) : null;
+        if (map == null || !(Core.withoutStanding(at.standing(map, symbols, newtypes).value())
+                instanceof Core.Read answerSoFar)) {
+            return Optional.empty();
+        }
+        ClosureUses folds = at.usesOfTheClosureTaking(answerSoFar.binding());
+        if (folds == null || folds.usedElsewhere() || folds.applications().size() != 1) {
+            return Optional.empty();
+        }
+        Denotation whole = at.standing(folds.applications().getFirst().call(), symbols, newtypes);
+        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(), sides(),
+                blocksAt(whole));
+        if (filed == null || !(filed.filed() instanceof KeyedAccumulation.Filed.Kept kept)
+                || !name.binding().equals(kept.found())) {
+            return Optional.empty();
+        }
+        OnePerElement walked = whole.at().onePerElementOf(filed.walked(), symbols, newtypes);
+        if (walked == null || walked.wrapped()) {
+            return Optional.empty();
+        }
+        OnePerElement.Answered key = whole.at().answeredOf(filed.key(),
+                filed.element().binding(), newtypes);
+        OnePerElement.Answered value = whole.at().answeredOf(kept.value(),
+                filed.element().binding(), newtypes);
+        if (key == null || value == null || value.wrapped()) {
+            return Optional.empty();
+        }
+        NumericTerm.FromOnePosition each = new NumericTerm.ValueOf(walked.placeOf(value.at()));
+        if (!readOnAnOrder(each)) {
+            return Optional.empty();
+        }
+        NumericTerm.FromOnePosition howMany = sizeOf(filed.walked(), whole.at())
+                instanceof Sized.AsAForm(LinearForm<Quantity> size)
+                && soleQuantity(size) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition count) ? count : null;
+        return Optional.of(new Quantity.KeptSoFar(kept.extreme(),
+                new Quantity.KeptSoFar.Seed.OfTheKey(walked.placeOf(key.at()),
+                        Optional.ofNullable(opened).map(InputReads.LookupOpened::arm)),
+                walked.container(), each, howMany));
+    }
+
     /** What a walk starting from {@code seed} starts from: a number written out, or one number
      *  of the input — or null where it is anything else. */
     private Quantity.KeptSoFar.Seed seedOf(Core seed, InputReads at) {
@@ -4968,6 +5036,16 @@ final class Pullback {
                 }
                 if (!(under instanceof Core.Read name)) {
                     return null;
+                }
+                // What a fold filing an end of each key's numbers finds under the key is the end
+                // of the earlier elements of that key, however the name is given.
+                if (steps.isEmpty() && !at.turnsOnAnApplication(name, read.rules().symbols(),
+                        read.rules().newtypes())) {
+                    Optional<Quantity.KeptSoFar> underAKey = keptUnderAKey(name, at);
+                    if (underAKey.isPresent()) {
+                        return LinearForm.atom(new Quantity.OfABinding(name.binding(), steps,
+                                node.type(), Optional.empty(), underAKey));
+                    }
                 }
                 // A binding whose value turns on which application this is holds another value on
                 // the next, and its name would name them alike.
