@@ -372,6 +372,7 @@ public final class PublicationOrders {
                             CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
                             CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT,
                             CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
+                            CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
                             CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));

@@ -95,8 +95,8 @@ class ANumberOfAnElementStopsWhereReadingItAloneInTheOrderItAsksStopsTest {
 
     private static TermOrders.Neighbouring<String> together(TermOrders on, ObservedValue own,
                                                           List<ObservedValue> every) {
-        return on.together(TermOrdersFixtures.holding(every))
-                .numberOf(TermOrdersFixtures.holding(own));
+        return on.together(TermOrdersFixtures.holding(on, every))
+                .numberOf(TermOrdersFixtures.holding(on, own));
     }
 
     /**
@@ -105,7 +105,7 @@ class ANumberOfAnElementStopsWhereReadingItAloneInTheOrderItAsksStopsTest {
      */
     private static TermOrders.Neighbouring<String> alone(TermOrders on, ObservedValue own,
                                                        List<ObservedValue> every) {
-        Asked asked = new Asked();
+        Asked asked = new Asked(on);
         NumericTerm.Reading read = switch (on.amongItsNeighbours()) {
             case NumericTerm.Multiplicity often -> {
                 ObservedValue mine = asked.at(own, often.placeField());
@@ -213,13 +213,19 @@ class ANumberOfAnElementStopsWhereReadingItAloneInTheOrderItAsksStopsTest {
                 Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE));
     }
 
-    /** The fields asked of the elements, and why the first that held nothing held nothing. */
+    /** The fields asked of the elements, under the names {@code on} says are worn there, and why
+     *  the first that held nothing held nothing. */
     private static final class Asked {
 
+        private final TermOrders on;
         private String first;
 
+        Asked(TermOrders on) {
+            this.on = on;
+        }
+
         ObservedValue at(ObservedValue element, ElementProjection field) {
-            ObservedValue held = field.in(element);
+            ObservedValue held = on.in(field, element);
             if (held == null && first == null) {
                 first = "nothing at " + field;
             }

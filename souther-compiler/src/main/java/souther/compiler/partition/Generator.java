@@ -7970,7 +7970,7 @@ public final class Generator {
         List<Function<ElementProjection, TermOrders.Holding<AnOccurrence.OfAnotherShape>>> each =
                 new ArrayList<>(held.size());
         for (ObservedValue element : held) {
-            each.add(field -> field.in(element) instanceof ObservedValue value
+            each.add(field -> on.in(field, element) instanceof ObservedValue value
                     ? new TermOrders.Holding.Value<>(value)
                     : new TermOrders.Holding.Nothing<>(new AnOccurrence.OfAnotherShape()));
         }
@@ -7998,7 +7998,7 @@ public final class Generator {
         }
         List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
         for (ObservedValue element : values) {
-            each.add(field -> field.in(element));
+            each.add(field -> on.in(field, element));
         }
         return on.readOverElements(each);
     }

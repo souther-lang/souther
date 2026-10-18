@@ -102,6 +102,150 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertFalse(chosen.contains("not read"), chosen);
     }
 
+    /** Arithmetic over a choice by a flag is the choice of the arithmetic, in each branch. */
+    @Test
+    void arithmeticOverAChoiceIsTheChoiceOfTheArithmetic() {
+        String weighed = report(model("(if a.debit then a.q else 0 - a.q) * 2 + a.p", 3));
+        assertTrue(weighed.contains("List.sum({if debit then 1·p + 2·q + 0 else 1·p + -2·q + 0"
+                + " | xs[*]})"), weighed);
+        assertFalse(weighed.contains("not read"), weighed);
+    }
+
+    /**
+     * Choices added up are held side by side, each made for the element on its own, and are one
+     * number whichever is written first.
+     */
+    @Test
+    void twoChoicesInOneSumAreHeldSideBySideInEitherOrder() {
+        String first = "(if a.debit then a.q else 0)";
+        String second = "(if a.first then a.p else 0)";
+        String one = report(twoFlags(first + " + " + second + " + 1"));
+        String other = report(twoFlags("1 + " + second + " + " + first));
+        String read = "List.sum({1·(if debit then 1·q + 0 else 0) + 1·(if first then 1·p + 0"
+                + " else 0) + 1 | xs[*]})";
+        assertTrue(one.contains(read), one);
+        assertTrue(other.contains(read), other);
+    }
+
+    /**
+     * As many choices as are written, and no more: a sum of twenty of them, each on a flag of its
+     * own, is twenty choices and not the million ways they can fall out together.
+     */
+    @Test
+    void aSumOfManyChoicesIsAsLargeAsWhatWasWritten() {
+        int many = 20;
+        StringBuilder fields = new StringBuilder("q: Int");
+        List<String> terms = new ArrayList<>();
+        for (int i = 1; i <= many; i++) {
+            fields.append(", f").append(i).append(": Bool");
+            terms.add("(if a.f" + i + " then a.q else 0)");
+        }
+        String report = report("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { %s }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.sum(List.map(a -> %s, xs)) >= 3
+                    then Many else Few
+                """.formatted(fields, String.join(" + ", terms)));
+        int from = report.indexOf("List.sum({");
+        int to = report.indexOf(" | xs[*]})", from);
+        assertTrue(from >= 0 && to > from, report);
+        String computed = report.substring(from, to);
+        for (int i = 1; i <= many; i++) {
+            assertTrue(computed.contains("1·(if f" + i + " then 1·q + 0 else 0)"), computed);
+        }
+        assertEquals(many, computed.split("if f", -1).length - 1,
+                () -> "each choice once: " + computed);
+    }
+
+    /**
+     * What a sum of choices can come to is what each of them can, added: at or above nought where
+     * every part is, and open below where one part reaches there.
+     */
+    @Test
+    void aSumOfChoicesIsBoundedByWhatEachPartCanComeTo() {
+        String held = report(boundedChoices("Amount"));
+        assertTrue(held.contains("no OUT point is owed at List.sum({1·(if debit then 1·q + 0"
+                + " else 0) + 1·(if first then 1·p + 0 else 0) + 0 | xs[*]}) = 0"), held);
+
+        String open = report(boundedChoices("Credit"));
+        assertTrue(open.contains("List.sum({1·(if debit then 1·q + 0 else 0)"), open);
+        assertFalse(open.contains("no OUT point is owed at List.sum("), open);
+    }
+
+    /** {@code q} at or above nought, and {@code p} of {@code pType}. */
+    private static String boundedChoices(String pType) {
+        return """
+                module example.computed
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data Credit = Int
+                    invariant value >= -5
+
+                data Ok = { n: Int }
+                data Bad
+
+                data A = { q: Amount, p: %s, debit: Bool, first: Bool }
+
+                behavior settle : (xs: List<A>) -> Ok | Bad
+                    constructs Ok
+
+                let settle (xs) = {
+                    guard List.sum(List.map(a -> (if a.debit then a.q.value else 0)
+                        + (if a.first then a.p.value else 0), xs)) > 0 else Bad
+                    Ok { n = 1 }
+                }
+                """.formatted(pType);
+    }
+
+    private static String twoFlags(String closure) {
+        return """
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, p: Int, debit: Bool, first: Bool }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.sum(List.map(a -> %s, xs)) >= 3
+                    then Many else Few
+                """.formatted(closure);
+    }
+
+    /** A fold whose step adds a choice of the element is the total of that choice. */
+    @Test
+    void aFoldAddingAChoiceIsTheTotalOfTheChoice() {
+        String folded = report("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, p: Int, debit: Bool }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.fold((acc, a) -> acc + (if a.debit then a.q else 0 - a.q), 0, xs) >= 3
+                    then Many else Few
+                """);
+        assertTrue(folded.contains("List.sum({if debit then 1·q + 0 else -1·q + 0 | xs[*]})"),
+                folded);
+        assertFalse(folded.contains("not read"), folded);
+    }
+
     /**
      * A closure that is the field and nothing made of it is the place, whichever way it is spelled.
      *
@@ -279,7 +423,8 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     void aFormOfSeveralFieldsIsReadAndNoRowIsWrittenForIt() {
         String model = model("a.q + a.p", 3);
         String report = report(model);
-        assertTrue(report.contains("made of several fields or chosen by a flag"), report);
+        assertTrue(report.contains("made of several fields, chosen by a flag or chosen by their"
+                + " case"), report);
         String rows = rowsOf(model);
         assertTrue(rows.contains("no row for"), rows);
     }

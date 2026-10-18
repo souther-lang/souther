@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import souther.compiler.inputs.NumericTerm.Reading;
 import souther.compiler.inputs.TermOrders.ElementsTogether;
@@ -512,8 +513,7 @@ final class TermReading {
             // The fields are asked for as the computation needs them, so what a row holds at a
             // field the element's own choice does not reach is no part of this element's number.
             OneElement fields = new OneElement(on, element);
-            ExactAnswer<ExactRatio> made =
-                    computed.computation().at(fields::number, fields::flag);
+            ExactAnswer<ExactRatio> made = computed.computation().at(fields);
             if (made == null) {
                 return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
             }
@@ -548,7 +548,7 @@ final class TermReading {
      * computation, which gives up on that element; the reading is then what was recorded and not a
      * guess at what a field with no value would have meant.
      */
-    private static final class OneElement {
+    private static final class OneElement implements ElementValue.OneElement {
 
         private final TermOrders on;
         private final Function<ElementProjection, ObservedValue> element;
@@ -559,7 +559,8 @@ final class TermReading {
             this.element = element;
         }
 
-        ExactRatio number(ElementProjection field) {
+        @Override
+        public ExactRatio number(ElementProjection field) {
             ObservedValue at = held(field);
             Carrier carrier = at == null ? null : on.fieldCarrier(field);
             Place place = carrier == null ? null : carrier.placeOf(at);
@@ -569,12 +570,37 @@ final class TermReading {
             return place instanceof Count count ? count.exactly() : null;
         }
 
-        Boolean flag(ElementProjection field) {
+        @Override
+        public Boolean flag(ElementProjection field) {
             ObservedValue at = held(field);
             if (at != null && !(at instanceof ObservedValue.Bool)) {
                 stopped = new Reading.NotNumber();
             }
             return at instanceof ObservedValue.Bool set ? set.value() : null;
+        }
+
+        /**
+         * Asked of the value at the place the arms narrow and not at the narrowed place: a value of
+         * another case holds nothing at the second, which is an answer about the case and not an
+         * element with nothing written where the computation looked.
+         *
+         * <p>Of the value under the names the declaration puts at the place, as the row walk asks
+         * it ({@link ObservedValue#inside}); and only where that value was read whole, since a case
+         * told off a value cut short is a guess at which arm the program took.
+         */
+        @Override
+        public Predicate<CasesLeft> caseAt(ElementProjection subject) {
+            ObservedValue at = held(subject);
+            if (at == null) {
+                return null;
+            }
+            ObservedValue inner = ObservedValue.inside(on.wornAt(subject), at);
+            Membership.Incomplete unread = Membership.unread(inner);
+            if (unread != null) {
+                stopped = new Reading.Missing(unread.cause());
+                return null;
+            }
+            return cases -> cases.leaves(inner);
         }
 
         /** The value at the field, or null with the reason recorded where there is none to use. */

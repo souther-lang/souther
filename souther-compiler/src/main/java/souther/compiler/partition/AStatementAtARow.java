@@ -889,7 +889,7 @@ final class AStatementAtARow {
      *
      * <p>Asked of the walk and not of the value. What a row wrote at a position arrives wearing the
      * names the position is declared under, and the walk is what takes them off before it asks
-     * which case a value is ({@link Classifier#inside}): the value at a position declared
+     * which case a value is ({@link ObservedValue#inside}): the value at a position declared
      * {@code Open = Flag} is in the case it wraps, and a record whose own field is called
      * {@code value} is the case it is. Holding where a value is there and the narrowed walk reaches
      * it, failing where it does not or where the row put nothing there, and not read where the

@@ -67,15 +67,20 @@ public sealed interface NumericTerm
      *
      * <p>One kind and not two terms each asked about separately, because what follows from being one
      * is the same for both: the number is read among the elements of the one occurrence of
-     * {@link #container()} the element is in, the elements are looked at only at the fields its
-     * number reads, and nothing about it is read off one position. A reader asks it of this type
-     * rather than of the two, so a third number of the kind is one that reader already handles.
+     * {@link #container()} the element is in, the elements are looked at only at
+     * {@link #fieldsRead()}, and nothing about it is read off one position. A reader asks it of
+     * this type rather than of the two, so a third number of the kind is one that reader already
+     * handles.
      */
     sealed interface OfAnElementsNeighbours extends NumericTerm
             permits Multiplicity, ExtremeOfItsKey {
 
         /** The container among whose elements the number is read. */
         TermPath container();
+
+        /** The ways from an element of {@link #container()} to every value its number is read
+         *  from, each of which an element of the shape the walk says holds. */
+        List<ElementProjection> fieldsRead();
     }
 
     /**
@@ -548,6 +553,11 @@ public sealed interface NumericTerm
             return fieldsTo(container, place);
         }
 
+        @Override
+        public List<ElementProjection> fieldsRead() {
+            return List.of(placeField());
+        }
+
         /** Where the value compared stands, which is where a reader is sent and no place the
          *  number stands at. */
         @Override
@@ -634,7 +644,7 @@ public sealed interface NumericTerm
                 return null;
             }
             TermPath container = holding.getLast();
-            return of(container, new ElementProjection(key).from(container.element()), value,
+            return of(container, ElementProjection.ofFields(key).from(container.element()), value,
                     extreme);
         }
 
@@ -646,6 +656,11 @@ public sealed interface NumericTerm
         /** The way from an element of the container to {@link #value()}. */
         public ElementProjection valueField() {
             return fieldsTo(container, value);
+        }
+
+        @Override
+        public List<ElementProjection> fieldsRead() {
+            return List.of(keyField(), valueField());
         }
 
         /** The container whose elements are looked at. */
@@ -709,7 +724,7 @@ public sealed interface NumericTerm
 
         @Override
         public String toString() {
-            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().steps())
+            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().fields())
                     .spelledAt(value.toString());
         }
     }
@@ -739,10 +754,17 @@ public sealed interface NumericTerm
 
         private final ValueName.Stdlib operation;
         private final RunSource source;
+        /**
+         * The hash of the two, worked out once. A run computed of each element holds the whole
+         * computation, which a term keyed into a set or a map would otherwise walk again each time
+         * it is asked — and a term is asked many times over, by every reading that files it.
+         */
+        private final int hash;
 
         private TakenOver(ValueName.Stdlib operation, RunSource source) {
             this.operation = operation;
             this.source = source;
+            this.hash = Objects.hash(operation, source);
         }
 
         /**
@@ -830,7 +852,7 @@ public sealed interface NumericTerm
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, source);
+            return hash;
         }
 
         @Override
@@ -1010,12 +1032,7 @@ public sealed interface NumericTerm
     /** The way from an element of {@code container} to {@code place}, which
      *  {@link #fieldsBelowAnElement} has said is fields alone. */
     private static ElementProjection fieldsTo(TermPath container, TermPath place) {
-        List<String> names = new ArrayList<>();
-        List<TermPath.Step> steps = place.steps();
-        for (TermPath.Step step : steps.subList(container.element().steps().size(), steps.size())) {
-            names.add(((TermPath.Step.Field) step).name());
-        }
-        return new ElementProjection(names);
+        return ElementProjection.below(container.element(), place);
     }
 
     /**

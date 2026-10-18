@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.core.Core;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
@@ -138,6 +139,17 @@ public final class CasesLeft {
             }
         }
         return out;
+    }
+
+    /** Whether the value observed {@code here} is one of the cases this leaves
+     *  ({@link Refinement#leaves}). */
+    public boolean leaves(ObservedValue here) {
+        for (Refinement each : atoms) {
+            if (each.leaves(here)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether every value this leaves is one {@code wider} leaves as well. */

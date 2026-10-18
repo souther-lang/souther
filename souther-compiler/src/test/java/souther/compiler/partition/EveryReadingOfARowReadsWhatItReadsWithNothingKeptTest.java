@@ -124,7 +124,7 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
                 Map.of(least.keyField(), Carrier.TEXT)));
         on.put(tagged, TermOrdersFixtures.orders(tagged, Carrier.TEXT, WHOLE));
         on.put(total, TermOrdersFixtures.itself(total, WHOLE));
-        ElementProjection rank = new ElementProjection(List.of("rank"));
+        ElementProjection rank = ElementProjection.ofFields(List.of("rank"));
         NumericTerm.TakenOver computed = NumericTerm.TakenOver.of(
                 ValueName.Stdlib.operation("List", "sum"),
                 new RunSource.ComputedOccurrences(ORDERS.element(), new ElementValue.Affine(

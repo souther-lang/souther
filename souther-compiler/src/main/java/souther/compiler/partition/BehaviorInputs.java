@@ -108,8 +108,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      *
      * <p><b>On the way and not at the end.</b> What comes back is the value as the position wears
      * it, names and all. Which names the position itself is written under is what tells a class
-     * from another there ({@link Classifier#inside}), so a walk that went on peeling would answer a
-     * classifier with a value it no longer recognises — and the reading of what a position is would
+     * from another there ({@link ObservedValue#inside}), so a walk that went on peeling would answer
+     * a classifier with a value it no longer recognises — and the reading of what a position is would
      * have lost how it is written, one layer down from where this branch put it back.
      *
      * <p>An observation that stopped is handed on rather than walked into. It is not a record and
@@ -390,7 +390,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 return true;
             }
             TypeView view = viewOf.apply(type);
-            ObservedValue here = Classifier.inside(view.wrappers(), value);
+            ObservedValue here = ObservedValue.inside(view.wrappers(), value);
             if (here.unread() != null) {
                 out.add(new Standing(here, type, reached, at));
                 return true;
@@ -467,7 +467,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                         if (narrowed == null) {
                             return false;
                         }
-                        if (standsAs == null && stands(each, here)) {
+                        if (standsAs == null && each.leaves(here)) {
                             standsAs = narrowed;
                         }
                     }
@@ -477,19 +477,6 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 }
             }
             return true;
-        }
-
-        /** Whether the value written here is one {@code refinement} leaves standing. */
-        private static boolean stands(Refinement refinement, ObservedValue here) {
-            return switch (refinement) {
-                case Refinement.SumCase one -> switch (here) {
-                    case ObservedValue.Unit unit -> one.leaf().equals(unit.type());
-                    case ObservedValue.Constructed made -> one.leaf().equals(made.type());
-                    default -> false;
-                };
-                case Refinement.Presence presence ->
-                        presence.present() != (here instanceof ObservedValue.Absent);
-            };
         }
 
         /**

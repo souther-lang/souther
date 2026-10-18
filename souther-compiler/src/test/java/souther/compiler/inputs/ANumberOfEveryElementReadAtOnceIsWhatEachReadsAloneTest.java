@@ -126,8 +126,8 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
     @Test
     void aFieldOfAnElementNotReadWholeIsWhatStoppedIt() {
         ObservedValue cut = new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure());
-        assertEquals(cut, new ElementProjection(List.of("days")).in(cut));
-        assertNull(new ElementProjection(List.of("hours")).in(touch("a", 1)),
+        assertEquals(cut, ElementProjection.ofFields(List.of("days")).in(cut, _ -> List.of()));
+        assertNull(ElementProjection.ofFields(List.of("hours")).in(touch("a", 1), _ -> List.of()),
                 "a field a value read whole does not hold is none");
     }
 
@@ -189,7 +189,7 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
         for (int at = 0; at < every.size(); at++) {
             int element = at;
             Function<ElementProjection, TermOrders.Holding<String>> held =
-                    TermOrdersFixtures.holding(every.get(at));
+                    TermOrdersFixtures.holding(on, every.get(at));
             each.add(field -> {
                 if (field.equals(LEAST.valueField())) {
                     valuesRead[element]++;
@@ -215,7 +215,7 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
     private static List<TermOrders.Neighbouring<String>> eachReadsAtOnceWhatItReadsAlone(
             TermOrders on, List<ObservedValue> every) {
         List<Function<ElementProjection, TermOrders.Holding<String>>> each =
-                TermOrdersFixtures.holding(every);
+                TermOrdersFixtures.holding(on, every);
         List<TermOrders.Neighbouring<String>> alone = new ArrayList<>();
         for (Function<ElementProjection, TermOrders.Holding<String>> own : each) {
             alone.add(on.together(each).numberOf(own));
@@ -255,6 +255,27 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
             out.add(one);
         }
         return out;
+    }
+
+    /**
+     * Which names a value is written inside is the declaration's to say, and not the value's shape:
+     * {@code N} over a record whose own field is called {@code value} is observed as a
+     * construction holding a construction, each with a field {@code value}.
+     */
+    @Test
+    void aRecordsOwnFieldCalledValueIsNotANameWornOverIt() {
+        TypeSymbol n = TypeSymbols.declared(new TypeKey("probe", "N"));
+        TypeSymbol r = TypeSymbols.declared(new TypeKey("probe", "R"));
+        ObservedValue three = new ObservedValue.Integer(3);
+        ObservedValue held = new ObservedValue.Constructed(r, Map.of("value", three));
+        ObservedValue element = new ObservedValue.Constructed(n, Map.of("value", held));
+        ElementProjection itsValue = ElementProjection.ofFields(List.of("value"));
+
+        assertEquals(three, itsValue.in(element,
+                        place -> place.steps().isEmpty() ? List.of(n) : List.of()),
+                "declared `N = R`, the element is an `R` written inside the name `N`");
+        assertEquals(held, itsValue.in(element, _ -> List.of()),
+                "declared `N = { value: R }`, the same observation is a record holding an `R`");
     }
 
     /** Every list of one to three of {@code palette}, in every order and with repeats. */
