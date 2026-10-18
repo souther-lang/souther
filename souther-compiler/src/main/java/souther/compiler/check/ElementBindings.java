@@ -237,7 +237,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, List<HeldIn>> found = new LinkedHashMap<>();
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
-        Map<BindingId, Core> standing = new LinkedHashMap<>();
+        Map<BindingId, ElementAnswer> standing = new LinkedHashMap<>();
         walk(body, found, held, provenance, answered, standing);
         for (Core template : templates) {
             walk(template, found, held, provenance, answered, standing);
@@ -255,9 +255,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ElementProjection> projected =
                 projections(answered, found, held, provenance, newtypes, closures);
         standing.forEach((element, closure) -> {
-            closures.putIfAbsent(element, new ElementAnswer(element, closure));
+            closures.putIfAbsent(element, closure);
             ElementProjection was =
-                    ElementProjection.read(closure, element, held, newtypes);
+                    ElementProjection.read(closure.body(), element, held, newtypes);
             if (was != null) {
                 projected.putIfAbsent(element, was);
             }
@@ -312,7 +312,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                             provenance.projectedFrom(parameter), held)) {
                 return;
             }
-            closures.putIfAbsent(read.binding(), new ElementAnswer(parameter, body));
+            // What an expansion wrote says which element the closure was handed and nothing of
+            // where that element stood, so the closure is handed no position this knows of.
+            closures.putIfAbsent(read.binding(), new ElementAnswer(parameter, body, null));
             ElementProjection projected =
                     ElementProjection.read(body, parameter, held, newtypes);
             if (projected != null) {
@@ -365,7 +367,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static void walk(Core e, Map<BindingId, List<HeldIn>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
-                             Map<BindingId, Core> standing) {
+                             Map<BindingId, ElementAnswer> standing) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
             // What a name was given, as it was written. A build of a value is held as the build:
@@ -415,7 +417,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static void handed(ValueName operation,
                                List<Core> args,
                                Map<BindingId, List<HeldIn>> found,
-                               Map<BindingId, Core> standing, Map<BindingId, Core> held) {
+                               Map<BindingId, ElementAnswer> standing,
+                               Map<BindingId, Core> held) {
         Combinators.Handed handed = Combinators.handedTo(operation, args,
                 closure -> blockOf(closure, held));
         if (handed == null) {
@@ -437,7 +440,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         takes(found, element, new HeldIn(handed.container(), HeldIn.Part.ELEMENT,
                 handed.applied(), ofAnOption));
         if (standing != null && answersOnePerElementOf(operation, handed.container(), args)) {
-            standing.putIfAbsent(element, handed.step().body());
+            standing.putIfAbsent(element, new ElementAnswer(element, handed.step().body(),
+                    handed.position() == null ? null : handed.position().binding()));
         }
     }
 

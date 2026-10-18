@@ -402,6 +402,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.proof.AppliedClosures.Walking.stopping",
                     "asks which of the two joins a step answers, which is where a walk from a"
                             + " truth stops applying its closure"),
+            new Held("souther.compiler.proof.AppliedClosures.answersOneMore",
+                    "asks whether a step answers a part of what it carries with one added, which"
+                            + " is what makes that part count the elements walked"),
             new Held("souther.compiler.check.NumericMeaning.Operator.op",
                     "hands back the operator an arithmetic meaning is keyed by"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared.op",

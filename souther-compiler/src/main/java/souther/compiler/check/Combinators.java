@@ -72,11 +72,12 @@ final class Combinators {
     }
 
     /** What a call hands its closure: the argument that takes the function, the block that argument
-     * is, the parameter the element arrives on, the container it comes from, and the parameter the
-     * key it is filed under arrives on — null where the closure is handed no key — and how far the
-     * operation goes applying it. */
+     * is, the parameter the element arrives on, the container it comes from, the parameter the
+     * key it is filed under arrives on — null where the closure is handed no key — the parameter
+     * the element's position arrives on — null where it is shown to be handed none — and how far
+     * the operation goes applying it. */
     record Handed(Core closure, Core.Block step, Core.Binder element, Core container,
-                  Core.Binder key, HowAClosureIsApplied applied) {}
+                  Core.Binder key, Core.Binder position, HowAClosureIsApplied applied) {}
 
     /** The same, off the tree an author wrote, where a closure is the block as written. */
     record Written(Hir.Block step, Hir.Binder element, Hir.Expr container) {}
@@ -125,12 +126,15 @@ final class Combinators {
         Core closure = args.get(rule.closureArg());
         Core.Block step = blockOf.apply(closure);
         if (step == null || rule.elementParam() >= step.params().size()
-                || rule.keyParam() >= step.params().size()) {
+                || rule.keyParam() >= step.params().size()
+                || rule.positionParam() >= step.params().size()) {
             return null;
         }
         return new Handed(closure, step, step.params().get(rule.elementParam()),
                 args.get(rule.containerArg()),
-                rule.handsAKey() ? step.params().get(rule.keyParam()) : null, rule.applied());
+                rule.handsAKey() ? step.params().get(rule.keyParam()) : null,
+                rule.handsAPosition() ? step.params().get(rule.positionParam()) : null,
+                rule.applied());
     }
 
     /** Whether a call hands its closure the container's elements from the first. */
@@ -236,8 +240,8 @@ final class Combinators {
 
     /** A pure function of the library and what its kernels are declared to answer, so the holders
      *  above are the only things here that reach for the process's own. */
-    private static Map<ValueName.Stdlib.Operation, Combinator> read(Stdlib stdlib,
-                                                                    BoundOperationFacts facts) {
+    static Map<ValueName.Stdlib.Operation, Combinator> read(Stdlib stdlib,
+                                                            BoundOperationFacts facts) {
         return AppliedClosures.of(stdlib, kernelsIn(stdlib),
                 operation -> listing(stdlib, facts, operation), Combinators::positionsOf);
     }
@@ -257,7 +261,8 @@ final class Combinators {
                         + " its signature puts no closure beside a container");
             }
             kernels.put(operation, new Combinator(at.closureArg(), at.elementParam(),
-                    at.containerArg(), at.keyParam(), how, Combinator.FROM_THE_FIRST));
+                    at.containerArg(), at.keyParam(), Combinator.NO_POSITION, how,
+                    Combinator.FROM_THE_FIRST));
         });
         return kernels;
     }

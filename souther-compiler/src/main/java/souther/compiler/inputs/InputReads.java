@@ -2610,6 +2610,12 @@ public final class InputReads {
         return InputPath.everyElementAt(binding, names, newtypes, this::taken);
     }
 
+    /** The same, where the elements handed to {@code binding} are also handed in the order the
+     *  row writes them ({@link InputPath#inTheOrderWrittenAt}). */
+    public PathResolution inTheOrderWrittenAt(BindingId binding, DeclarationNewtypes newtypes) {
+        return InputPath.inTheOrderWrittenAt(binding, names, newtypes, this::taken);
+    }
+
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {

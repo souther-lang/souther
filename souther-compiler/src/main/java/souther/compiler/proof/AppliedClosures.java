@@ -13,6 +13,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,7 +42,10 @@ import java.util.stream.IntStream;
  *     carries or the application, the application is made until one holds, and from {@code true}
  *     with "and", until one fails;</li>
  *     <li>where the closure is applied to the value an option holds, and the option is what a kernel
- *     answers holding at most one element of a container, it is applied to at most that one.</li>
+ *     answers holding at most one element of a container, it is applied to at most that one;</li>
+ *     <li>where it is applied inside a walk's step beside the element to a part of what the walk
+ *     carries that starts at nought and that every step answers one more of, it is handed the
+ *     element's position there ({@link #counting}).</li>
  * </ul>
  * A container reached through a kernel counts as that kernel's argument where the kernel is
  * declared to list every element of it ({@link Listings}). Anything else applies its closure in no
@@ -114,7 +118,8 @@ public final class AppliedClosures {
         Map<ValueName.Stdlib.Operation, Combinator> known = new LinkedHashMap<>(kernels);
         TheWalk walk = library.walk();
         known.put(walk.operation(), new Combinator(walk.step(), walk.element(), walk.container(),
-                Combinator.NO_KEY, HowAClosureIsApplied.TO_EVERY_ELEMENT, walk.index()));
+                Combinator.NO_KEY, Combinator.NO_POSITION, HowAClosureIsApplied.TO_EVERY_ELEMENT,
+                walk.index()));
         Set<ValueName.Stdlib.Operation> waiting = new LinkedHashSet<>();
         library.helpers().keySet().forEach(operation -> {
             if (!known.containsKey(operation)) {
@@ -172,7 +177,7 @@ public final class AppliedClosures {
             startsFrom = Combinator.FROM_THE_FIRST;
         }
         return new Combinator(target.closureArg(), target.elementParam(), target.containerArg(),
-                target.keyParam(), target.applied(), startsFrom);
+                target.keyParam(), target.positionParam(), target.applied(), startsFrom);
     }
 
     /** {@code rule}, read off the body of {@code operation}, held to where its signature puts the
@@ -222,9 +227,12 @@ public final class AppliedClosures {
         return walking.rule().<Read>map(Read.Applies::new).orElseGet(Read.Nothing::new);
     }
 
-    /** Where an element a closure is handed came from: an argument of the operation, and how many
-     *  of what it holds are handed. */
-    private record Source(int argument, boolean everyOne) {}
+    /**
+     * Where an element a closure is handed came from: an argument of the operation, how many of
+     * what it holds are handed, and whether they are walked in the order the argument holds them —
+     * which a listing a kernel answers of it is not shown to keep.
+     */
+    private record Source(int argument, boolean everyOne, boolean inItsOrder) {}
 
     /** What a value bound inside a body is, as far as these rules care. */
     private sealed interface Role {
@@ -235,8 +243,16 @@ public final class AppliedClosures {
 
         record Entry(Source from) implements Role {}
 
-        /** What a walk from {@code seed} carries, inside its step. */
-        record Carried(LibraryTerm seed) implements Role {}
+        /**
+         * What a walk from {@code seed} over {@code from} carries, inside its step, with the
+         * components of it that count the elements walked before the one the step is handed
+         * ({@link #counting}) — none where the walk is over no argument.
+         */
+        record Carried(LibraryTerm seed, Set<Integer> counting, Source from) implements Role {}
+
+        /** How many elements of {@code from} the walk came to before the one its step is handed,
+         *  which is that element's position counted from nought. */
+        record Position(Source from) implements Role {}
     }
 
     /**
@@ -273,28 +289,42 @@ public final class AppliedClosures {
          * every other site applying it again to the same element; where none is reached on every
          * run, by the one site applying it to at most one element; and otherwise it is applied to
          * some of them, which is all that is said.
+         *
+         * <p>The element's position is said only where every site hands it at the same parameter.
+         * A site handing the element where another hands it beside its position leaves that
+         * parameter something else on some application, and the element is still the element.
          */
         Optional<Combinator> rule() {
             if (unread || sites.isEmpty()) {
                 return Optional.empty();
             }
             Combinator first = sites.get(0).rule();
+            int position = first.positionParam();
             for (Site site : sites) {
                 if (!site.rule().positions().equals(first.positions())) {
                     return Optional.empty();
                 }
+                if (site.rule().positionParam() != position) {
+                    position = Combinator.NO_POSITION;
+                }
             }
             for (Site site : sites) {
                 if (site.always()) {
-                    return Optional.of(site.rule());
+                    return Optional.of(atPosition(site.rule(), position));
                 }
             }
             if (sites.size() == 1 && first.applied() == HowAClosureIsApplied.AT_MOST_ONE) {
                 return Optional.of(first);
             }
             return Optional.of(new Combinator(first.closureArg(), first.elementParam(),
-                    first.containerArg(), first.keyParam(), HowAClosureIsApplied.TO_SOME,
+                    first.containerArg(), first.keyParam(), position, HowAClosureIsApplied.TO_SOME,
                     Combinator.FROM_THE_FIRST));
+        }
+
+        /** {@code rule} with the element's position at {@code position}. */
+        private static Combinator atPosition(Combinator rule, int position) {
+            return new Combinator(rule.closureArg(), rule.elementParam(), rule.containerArg(),
+                    rule.keyParam(), position, rule.applied(), rule.startsFrom());
         }
 
         private boolean isTheClosure(LibraryTerm term) {
@@ -332,7 +362,7 @@ public final class AppliedClosures {
                         Source from = sourceOf(call.args().get(argument));
                         if (from != null) {
                             inside = scope.with(on.value(), new Role.Element(
-                                    new Source(from.argument(), false)));
+                                    new Source(from.argument(), false, false)));
                         }
                     }
                     walk(on.present(), inside, false);
@@ -383,9 +413,13 @@ public final class AppliedClosures {
                     if (from == null || !from.everyOne()) {
                         unread = true;
                     } else {
+                        // A position in what the operation walks is one in the argument only
+                        // where the one is the other as it stands.
                         sites.add(new Site(new Combinator(closure, applies.elementParam(),
-                                from.argument(), applies.keyParam(), applies.applied(),
-                                Combinator.FROM_THE_FIRST), always));
+                                from.argument(), applies.keyParam(),
+                                from.inItsOrder() ? applies.positionParam()
+                                        : Combinator.NO_POSITION,
+                                applies.applied(), Combinator.FROM_THE_FIRST), always));
                     }
                 } else if (arg instanceof LibraryTerm.Closure inner) {
                     Scope inside = new Scope(scope.roles(), applies.applied());
@@ -405,8 +439,10 @@ public final class AppliedClosures {
                     TheWalk walk = library.walk();
                     if (call.operation().equals(walk.operation())
                             && walk.accumulator() < inner.params().size()) {
-                        inside = inside.with(inner.params().get(walk.accumulator()),
-                                new Role.Carried(call.args().get(walk.seed())));
+                        BindingId carried = inner.params().get(walk.accumulator());
+                        LibraryTerm seed = call.args().get(walk.seed());
+                        inside = inside.with(carried, new Role.Carried(seed,
+                                from == null ? Set.of() : counting(inner, carried, seed), from));
                     }
                     stopping(inner, inside);
                     walk(inner.body(), inside, true);
@@ -426,7 +462,7 @@ public final class AppliedClosures {
                     || (op != BinOp.OR && op != BinOp.AND)
                     || !isTheClosure(applied.function())
                     || !(inside.roles().get(carried.binding())
-                            instanceof Role.Carried(LibraryTerm.Truth(boolean seed)))
+                            instanceof Role.Carried(LibraryTerm.Truth(boolean seed), var _, var _))
                     || inside.enclosing() != HowAClosureIsApplied.TO_EVERY_ELEMENT) {
                 return;
             }
@@ -437,7 +473,7 @@ public final class AppliedClosures {
             Combinator rule = applying(applied, inside);
             if (rule != null) {
                 sites.add(new Site(new Combinator(rule.closureArg(), rule.elementParam(),
-                        rule.containerArg(), rule.keyParam(),
+                        rule.containerArg(), rule.keyParam(), rule.positionParam(),
                         or ? HowAClosureIsApplied.UNTIL_ONE_HOLDS
                                 : HowAClosureIsApplied.UNTIL_ONE_FAILS,
                         Combinator.FROM_THE_FIRST), true));
@@ -458,12 +494,15 @@ public final class AppliedClosures {
             }
         }
 
-        /** Where the element and the key are among {@code applied}'s arguments, and how far the
-         *  closure is applied there — null where no argument is an element. */
+        /** Where the element, the key and the element's position are among {@code applied}'s
+         *  arguments, and how far the closure is applied there — null where no argument is an
+         *  element. */
         private Combinator applying(LibraryTerm.Applied applied, Scope scope) {
             int element = -1;
             int key = Combinator.NO_KEY;
             Source from = null;
+            List<Integer> positions = new ArrayList<>();
+            Source counted = null;
             for (int at = 0; at < applied.args().size(); at++) {
                 Role role = roleOf(applied.args().get(at), scope);
                 if (role instanceof Role.Element(Source source) && element < 0) {
@@ -474,6 +513,9 @@ public final class AppliedClosures {
                     if (from == null) {
                         from = source;
                     }
+                } else if (role instanceof Role.Position(Source source)) {
+                    positions.add(at);
+                    counted = source;
                 }
             }
             if (element < 0 || from == null) {
@@ -484,17 +526,27 @@ public final class AppliedClosures {
             if (how == null) {
                 return null;
             }
-            return new Combinator(closure, element, from.argument(), key, how,
+            // The position of the very element handed beside it, in the argument as it stands,
+            // and at one parameter: two would leave which one a reader asks a question of the
+            // closure's own.
+            int position = positions.size() == 1 && from.equals(counted) && from.inItsOrder()
+                    ? positions.getFirst() : Combinator.NO_POSITION;
+            return new Combinator(closure, element, from.argument(), key, position, how,
                     Combinator.FROM_THE_FIRST);
         }
 
-        /** What {@code value} is, where it is an element, a key, an entry or what a walk carries. */
+        /** What {@code value} is, where it is an element, a key, an entry, what a walk carries or
+         *  the position of the element its step is handed. */
         private Role roleOf(LibraryTerm value, Scope scope) {
             return switch (value) {
                 case LibraryTerm.Bound(BindingId binding) -> scope.roles().get(binding);
                 case LibraryTerm.Component(LibraryTerm.Bound(BindingId binding), int index)
                         when scope.roles().get(binding) instanceof Role.Entry(Source from) ->
                         index == 0 ? new Role.Key(from) : index == 1 ? new Role.Element(from) : null;
+                case LibraryTerm.Component(LibraryTerm.Bound(BindingId binding), int index)
+                        when scope.roles().get(binding)
+                                instanceof Role.Carried(var _, Set<Integer> counting, Source from)
+                        && counting.contains(index) -> new Role.Position(from);
                 default -> null;
             };
         }
@@ -536,15 +588,94 @@ public final class AppliedClosures {
      *  null where it is none. */
     private Source sourceOf(LibraryTerm container) {
         if (container instanceof LibraryTerm.Parameter(int position)) {
-            return new Source(position, true);
+            return new Source(position, true, true);
         }
         if (container instanceof LibraryTerm.Call call
                 && listings.of(call.operation()) instanceof Listing.EveryElementOf(int argument,
                         var _)
                 && argument < call.args().size()) {
-            return sourceOf(call.args().get(argument));
+            Source listed = sourceOf(call.args().get(argument));
+            return listed == null ? null : new Source(listed.argument(), listed.everyOne(), false);
         }
         return null;
+    }
+
+    /**
+     * The components of what a walk from {@code seed} carries that count the elements it has
+     * walked: nought in the seed, and one more in every answer of the step than in what the step
+     * was handed at {@code carried}.
+     *
+     * <p>By induction over the walk, which hands its step every element of its list once each in
+     * order from the first ({@link TheWalk}): such a component is, inside the step, how many
+     * elements came before the one the step is handed — and so what the step reads of it before
+     * it answers is that element's position. What the step answers is the next count, and is not.
+     */
+    private static Set<Integer> counting(LibraryTerm.Closure step, BindingId carried,
+                                         LibraryTerm seed) {
+        if (!(seed instanceof LibraryTerm.TupleOf(List<LibraryTerm> starts))) {
+            return Set.of();
+        }
+        Set<Integer> out = new LinkedHashSet<>();
+        for (int at = 0; at < starts.size(); at++) {
+            if (starts.get(at) instanceof LibraryTerm.WholeNumber(long start) && start == 0
+                    && answersOneMore(step.body(), at, carried, new HashMap<>())) {
+                out.add(at);
+            }
+        }
+        return Set.copyOf(out);
+    }
+
+    /**
+     * Whether {@code answer}, on every way through it, is a tuple whose component {@code at} is
+     * one more than the same component of what {@code carried} holds — reading a name it bound on
+     * the way as what it was bound to.
+     */
+    private static boolean answersOneMore(LibraryTerm answer, int at, BindingId carried,
+                                          Map<BindingId, LibraryTerm> bound) {
+        return switch (answer) {
+            case LibraryTerm.Let let -> {
+                bound.put(let.binding(), let.value());
+                yield answersOneMore(let.body(), at, carried, bound);
+            }
+            case LibraryTerm.Fork fork -> answersOneMore(fork.then(), at, carried, bound)
+                    && answersOneMore(fork.otherwise(), at, carried, bound);
+            case LibraryTerm.OnAnOption on -> answersOneMore(on.present(), at, carried, bound)
+                    && answersOneMore(on.absent(), at, carried, bound);
+            case LibraryTerm.Bound(BindingId binding) when bound.containsKey(binding) ->
+                    answersOneMore(bound.get(binding), at, carried, bound);
+            case LibraryTerm.TupleOf(List<LibraryTerm> parts) -> at < parts.size()
+                    && parts.get(at) instanceof LibraryTerm.Operator(BinOp op, LibraryTerm left,
+                            LibraryTerm right, var _)
+                    && op == BinOp.ADD
+                    && ((isOne(right) && isTheComponent(left, at, carried, bound))
+                            || (isOne(left) && isTheComponent(right, at, carried, bound)));
+            default -> false;
+        };
+    }
+
+    private static boolean isOne(LibraryTerm term) {
+        return term instanceof LibraryTerm.WholeNumber(long n) && n == 1;
+    }
+
+    /** Whether {@code term} is the component {@code at} of what {@code carried} holds, through the
+     *  names it was bound under. */
+    private static boolean isTheComponent(LibraryTerm term, int at, BindingId carried,
+                                          Map<BindingId, LibraryTerm> bound) {
+        LibraryTerm read = followed(term, bound);
+        return read instanceof LibraryTerm.Component(LibraryTerm tuple, int index) && index == at
+                && followed(tuple, bound) instanceof LibraryTerm.Bound(BindingId binding)
+                && binding.equals(carried);
+    }
+
+    /** {@code term} with every name on the way read as what it was bound to. */
+    private static LibraryTerm followed(LibraryTerm term, Map<BindingId, LibraryTerm> bound) {
+        LibraryTerm at = term;
+        Set<BindingId> met = new HashSet<>();
+        while (at instanceof LibraryTerm.Bound(BindingId binding) && bound.containsKey(binding)
+                && met.add(binding)) {
+            at = bound.get(binding);
+        }
+        return at;
     }
 
     /** The map argument of the operation whose every entry {@code container} holds, each once — or
@@ -554,7 +685,7 @@ public final class AppliedClosures {
                 && listings.of(call.operation()) instanceof Listing.EveryEntryOf(int argument)
                 && argument < call.args().size()
                 && call.args().get(argument) instanceof LibraryTerm.Parameter(int position)) {
-            return new Source(position, true);
+            return new Source(position, true, false);
         }
         return null;
     }

@@ -18,7 +18,9 @@ import java.util.function.UnaryOperator;
  * values as stand at the place named, each of them one of them: that is what a sum needs, since a
  * total does not depend on which came first. An operation that does depend on it — a first, a
  * running total, anything read by index — is not entitled to rest on this, and would need something
- * that says the walk kept the order as well.
+ * that says the walk kept the order as well. The one run here that does is a total of what was
+ * computed of each element by where it stands, and it holds that something
+ * ({@link InTheOrderWritten}).
  *
  * <p>Beside {@link TermPath} and not a kind of one. A path says where a location is and says
  * nothing about how many values stand there, deliberately: a rule written about a location and a
@@ -55,8 +57,10 @@ public sealed interface RunSource {
             case FlattenedOccurrences flat -> at != null
                     && at.containersHoldingIt().size() == flat.subjectPath().containersHoldingIt().size()
                     ? new FlattenedOccurrences(at) : null;
-            case ComputedOccurrences computed ->
-                    computedOverTheElementsAt(at, computed.computation(), computed.each());
+            // What was shown of the order was shown of the elements where they stood, and nothing
+            // says those moved to stand in it, so a run that needs the order does not move.
+            case ComputedOccurrences computed -> computed.computation().readsThePosition() ? null
+                    : computedOverTheElementsAt(at, computed.computation(), computed.each(), null);
             // The nodes below a node are the same fields of it wherever it stands, and moved
             // inside a container it is one tree of many.
             case ReachableNodes nodes ->
@@ -206,18 +210,37 @@ public sealed interface RunSource {
      * of {@code q * 2} is not the total of {@code q}, and what makes them different is the
      * computation, so it is part of what these are equal by.
      *
+     * <p>A computation that turns on where an element stands claims the order as well, and holds
+     * what showed it; one that does not claims nothing of the order and holds nothing. So two runs
+     * of one such computation over one position are the same run whatever the walk that reached
+     * them did to the order on the way.
+     *
      * @param elements    where each element of the walked container stands
      * @param computation what the closure made of one of them
      * @param each        what one computed value stands as, with the names it is written under
      *                    taken off
+     * @param order       that the walk was handed the elements in the order the row writes them,
+     *                    where the computation reads where they stand; null where it does not
      */
-    record ComputedOccurrences(TermPath elements, ElementValue computation, Type each)
-            implements RunSource {
+    record ComputedOccurrences(TermPath elements, ElementValue computation, Type each,
+                               InTheOrderWritten order) implements RunSource {
 
         public ComputedOccurrences {
             requireOneRun(elements);
             Objects.requireNonNull(computation, "a computed run is computed by something");
             Objects.requireNonNull(each, "and what it computes stands as some type");
+            if (computation.readsThePosition() != (order != null)) {
+                throw new IllegalArgumentException(computation.readsThePosition()
+                        ? "{" + computation + "} turns on where each element stands, and nothing"
+                                + " showed the walk was handed `" + elements + "` in the order"
+                                + " written"
+                        : "{" + computation + "} turns on no element's position, and claims"
+                                + " nothing of their order");
+            }
+            if (order != null && !order.elements().equals(elements)) {
+                throw new IllegalArgumentException("the order was shown of `" + order.elements()
+                        + "` and not of `" + elements + "`");
+            }
         }
 
         @Override
@@ -275,13 +298,58 @@ public sealed interface RunSource {
     }
 
     /**
+     * That a walk was handed the elements at {@code elements}, every one of them once and in the
+     * order the row writes them there.
+     *
+     * <p>Made where the reading of the input showed it ({@link InputReads#inTheOrderWrittenAt}),
+     * and so in this package and nowhere else: a run is not made to claim the order by saying so.
+     * Equal by the elements it was shown of, since that is all it says.
+     */
+    final class InTheOrderWritten {
+
+        private final TermPath elements;
+
+        InTheOrderWritten(TermPath elements) {
+            this.elements = Objects.requireNonNull(elements, "an order is shown of some elements");
+        }
+
+        public TermPath elements() {
+            return elements;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof InTheOrderWritten that && elements.equals(that.elements);
+        }
+
+        @Override
+        public int hashCode() {
+            return elements.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "in the order " + elements + " is written";
+        }
+    }
+
+    /**
      * The values computed of each element of the walk over {@code elements}, or null where those
-     * elements are not one run.
+     * elements are not one run — or where the computation turns on where each element stands and
+     * {@code order} does not show the walk was handed them in the order written.
+     *
+     * @param order what showed the order, or null where nothing did
      */
     static RunSource computedOverTheElementsAt(TermPath elements, ElementValue computation,
-                                               Type each) {
-        return elements != null && computation != null && each != null && namesOneRun(elements)
-                ? new ComputedOccurrences(elements, computation, each) : null;
+                                               Type each, InTheOrderWritten order) {
+        if (elements == null || computation == null || each == null || !namesOneRun(elements)) {
+            return null;
+        }
+        if (!computation.readsThePosition()) {
+            return new ComputedOccurrences(elements, computation, each, null);
+        }
+        return order != null && order.elements().equals(elements)
+                ? new ComputedOccurrences(elements, computation, each, order) : null;
     }
 
     /** The one invariant of every run, said as a refusal for a run made without asking. */

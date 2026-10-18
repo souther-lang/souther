@@ -502,10 +502,12 @@ final class TermReading {
             return new Reading.NotNumber();
         }
         List<ExactRatio> terms = new ArrayList<>();
+        // The elements come in the order the row holds them, which is where each stands.
+        long position = 0;
         for (Function<ElementProjection, ObservedValue> element : each) {
             // The fields are asked for as the computation needs them, so what a row holds at a
             // field the element's own choice does not reach is no part of this element's number.
-            OneElement fields = new OneElement(on, element);
+            OneElement fields = new OneElement(on, element, position++);
             ExactAnswer<ExactRatio> made = computed.computation().at(fields);
             if (made == null) {
                 return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
@@ -545,11 +547,19 @@ final class TermReading {
 
         private final TermOrders on;
         private final Function<ElementProjection, ObservedValue> element;
+        private final long position;
         private Reading stopped;
 
-        OneElement(TermOrders on, Function<ElementProjection, ObservedValue> element) {
+        OneElement(TermOrders on, Function<ElementProjection, ObservedValue> element,
+                   long position) {
             this.on = on;
             this.element = element;
+            this.position = position;
+        }
+
+        @Override
+        public long position() {
+            return position;
         }
 
         @Override
