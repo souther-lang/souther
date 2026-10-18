@@ -1867,6 +1867,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * ({@link #leftBy}) is asked beside the region, and a line no row crosses inside it turns
      * nothing there.
      *
+     * <p>The two are asked apart, each for values on both sides, and not for one row meeting both:
+     * a region holds nothing of the quantity's own values, so all it can say of them is a run. So
+     * this answers that a row on each side is not ruled out, which is what keeps a case, and never
+     * that one stands there — a product of ten and another number is three nowhere, though the
+     * run and the case both hold three. Whether a row stands at each point is the search's, which
+     * proves the points nothing can stand at, as it does for any line on the product.
+     *
      * <p>Read off the case once, and asked of every region the case is put to: what the case
      * leaves the quantity is the same whatever arrives.
      */
