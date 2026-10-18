@@ -245,6 +245,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.operatorTerm",
                     "hands it to the interner, for a binary the recognition beside it found to be"
                             + " no comparison"),
+            new Held("souther.compiler.check.Terms.joinedText",
+                    "asks whether it joins two texts, so that a fact about a text written joined is"
+                            + " filed under the text it comes to"),
             new Held("souther.compiler.check.Term.foldedWhole",
                     "does the sum, the difference or the product of two written whole numbers, so"
                             + " that a divisor is read as the number it comes to and not as it was"

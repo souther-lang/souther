@@ -40,8 +40,8 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * What one comparison comes to on the input space: one reading, and everything read off it.
@@ -809,16 +809,16 @@ sealed interface ComparisonAssessment {
                     "a rule watched at no place is not one to ask what arrives at: " + read);
         }
         if (cutting != null) {
-            if (!arrivesAtSomePlace(cutting, way, arrivals,
-                    region -> cutting.reachedIn(region, drawnByAnInvariant))) {
+            Arrived arrived = whatArrives(cutting, way, arrivals, drawnByAnInvariant,
+                    read instanceof AcrossPositions);
+            if (arrived == Arrived.NOTHING_AT_THE_LINE) {
                 return new NothingArrivesAtItsLine(cutting);
             }
             // A relation whose rows all come out one way where they arrive is decided there: no
             // value of any position it relates comes out the other way, so it divides none of them,
             // and what the other side reaches is no question about it. The line is still the line
             // the rule draws, and its points still the ones no row can stand at.
-            if (read instanceof AcrossPositions across
-                    && !arrivesAtSomePlace(cutting, way, arrivals, cutting::crossedIn)) {
+            if (read instanceof AcrossPositions across && arrived != Arrived.ACROSS_THE_LINE) {
                 return across.decided();
             }
         }
@@ -850,9 +850,21 @@ sealed interface ComparisonAssessment {
         return List.of(reaching);
     }
 
+    /** How far the rows arriving at a line get: none to it, to it, or to both sides of it. */
+    enum Arrived { NOTHING_AT_THE_LINE, AT_THE_LINE, ACROSS_THE_LINE }
+
     /**
-     * Whether some place the rule is watched at leaves {@code asked} true of the region a row
-     * arriving there is in.
+     * Whether the rows arriving at some place the rule is watched at hold a value at the line, and
+     * — where {@code crossing} asks it — whether at some place they stand on both sides of it.
+     *
+     * <p>Asked of the regions that between them hold every row past the way
+     * ({@link Reachability.Reaching#holdingEveryRow}). A way through a choice between runs of one
+     * number is a row in one run or another: a line between the runs is reached by neither, and a
+     * row in one run and a row in the other differ in a line as two rows in one run do. So whether
+     * a row holds a value at the line is asked of each region, and whether rows stand on both sides
+     * of it is asked of all of a place's regions, one side in one region and the other in another
+     * ({@link Cutting.Sides}). The region that spans them holds the values between the runs, which
+     * are no row's, and is asked neither.
      *
      * <p>A way no row takes is one no row arrives at the line by, wherever the tree that runs holds
      * the rule. Otherwise every place the rule is watched at, and the answer is no only where all of
@@ -863,25 +875,72 @@ sealed interface ComparisonAssessment {
      * <p>Which is why one place that could not be projected leaves the question to the declarations
      * and the way: what a walk did not settle is not a proof that nothing arrives, and a line has to
      * be dropped by a proof rather than by the absence of one.
+     *
+     * <p>A region is narrowed to a place and read once for both questions, and none is read once
+     * both are answered.
+     *
+     * @param crossing whether to ask if rows stand on both sides of it, which a line of a relation
+     *                 is asked as well
      */
-    private static boolean arrivesAtSomePlace(Cutting cutting, Reachability way,
+    private static Arrived whatArrives(Cutting cutting, Reachability way,
+                                       List<ComparisonArrival> arrivals,
+                                       boolean drawnByAnInvariant, boolean crossing) {
+        if (!(way instanceof Reachability.Reaching taken)) {
+            return Arrived.NOTHING_AT_THE_LINE;
+        }
+        List<SearchRegion> past = taken.holdingEveryRow();
+        boolean reached = false;
+        boolean crossed = false;
+        for (ComparisonArrival arrival : arrivals) {
+            if (arrival instanceof ComparisonArrival.NothingArrives) {
+                continue;
+            }
+            Cutting.Sides sides = new Cutting.Sides(cutting);
+            for (SearchRegion region : past) {
+                Border.Values values = valuesAt(cutting, region, arrival);
+                reached = reached || cutting.reachedBy(values, drawnByAnInvariant);
+                crossed = crossed || (crossing && sides.add(values));
+                if (reached && (crossed || !crossing)) {
+                    return crossed ? Arrived.ACROSS_THE_LINE : Arrived.AT_THE_LINE;
+                }
+            }
+        }
+        return reached ? Arrived.AT_THE_LINE : Arrived.NOTHING_AT_THE_LINE;
+    }
+
+    /**
+     * Whether the rows arriving at some place the rule is watched at, in the case {@code keptTo}
+     * keeps a region's values to ({@link Cutting#keptTo}), stand on both sides of the line —
+     * asked of the regions {@link #whatArrives} asks, a region at a time.
+     */
+    private static boolean crossedAtSomePlace(Cutting cutting, Reachability way,
                                               List<ComparisonArrival> arrivals,
-                                              Predicate<SearchRegion> asked) {
-        if (!(way instanceof Reachability.Reaching reaching)) {
+                                              UnaryOperator<Border.Values> keptTo) {
+        if (!(way instanceof Reachability.Reaching taken)) {
             return false;
         }
+        List<SearchRegion> past = taken.holdingEveryRow();
         for (ComparisonArrival arrival : arrivals) {
-            boolean reaches = switch (arrival) {
-                case ComparisonArrival.NothingArrives _ -> false;
-                case ComparisonArrival.Values values ->
-                        asked.test(cutting.narrowedBy(values, reaching.region()));
-                case ComparisonArrival.NoProjection _ -> asked.test(reaching.region());
-            };
-            if (reaches) {
-                return true;
+            if (arrival instanceof ComparisonArrival.NothingArrives) {
+                continue;
+            }
+            Cutting.Sides sides = new Cutting.Sides(cutting);
+            for (SearchRegion region : past) {
+                if (sides.add(keptTo.apply(valuesAt(cutting, region, arrival)))) {
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    /** What {@code region} leaves the line's quantity for the rows arriving at a place. */
+    private static Border.Values valuesAt(Cutting cutting, SearchRegion region,
+                                          ComparisonArrival arrival) {
+        return cutting.valuesIn(switch (arrival) {
+            case ComparisonArrival.Values arriving -> cutting.narrowedBy(arriving, region);
+            case ComparisonArrival.NoProjection _, ComparisonArrival.NothingArrives _ -> region;
+        });
     }
 
     /**
@@ -919,16 +978,16 @@ sealed interface ComparisonAssessment {
         for (DecidingCase each : part.cases()) {
             if (each.saidAlone()) {
                 Reachability toIt = wayToACase.apply(each.condition());
-                if (arrivesAtSomePlace(cutting, toIt, arrivals,
-                        cutting.crossedIn(each.condition(), reading))) {
+                if (crossedAtSomePlace(cutting, toIt, arrivals,
+                        cutting.keptTo(each.condition(), reading))) {
                     reached.add(each);
                     deciding.addAll(waysArrivedBy(toIt, arrivals));
                 }
                 continue;
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
-                    arrivesAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
-                            cutting.crossedIn(condition, reading)));
+                    crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
+                            cutting.keptTo(condition, reading)));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
