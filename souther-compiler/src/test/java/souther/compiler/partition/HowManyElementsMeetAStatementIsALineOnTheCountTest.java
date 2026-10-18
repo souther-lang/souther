@@ -74,6 +74,25 @@ class HowManyElementsMeetAStatementIsALineOnTheCountTest {
     }
 
     /**
+     * What an element and another number come to multiplied is a number a row's own values say, so
+     * how many elements it is above three for is a count a line is drawn on, and the count is
+     * written with the product as the author wrote it.
+     */
+    @Test
+    void aCountOfElementsWhoseProductWithANumberMeetsSomethingIsALineOnTheCount() {
+        List<JsonNode> counts = countBorders(reportOf("""
+                module probe
+
+                behavior atLeastTwo : (xs: List<Int>, limit: Int) -> Int
+                let atLeastTwo (xs, limit) =
+                    if List.length(List.filter(x -> x * limit > 3, xs)) >= 2 then 1 else 0
+                """));
+        assertEquals(1, counts.size(), () -> "one line on the count: " + counts);
+        assertEquals("#xs [limit * xs[*] > 3]",
+                counts.getFirst().at("/lineId/target/quantity/counted").asString());
+    }
+
+    /**
      * The rows #2218 was written with, each standing where as many of its elements are above the
      * limit as it holds: none, one and two meet the line's three points.
      */

@@ -1011,6 +1011,16 @@ public sealed interface BorderQuantity
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
+                        // What two numbers come to multiplied, against the level it is held at,
+                        // which is how a line on the product writes it.
+                        Quantity.ProductOfTwo product = AStatementAtARow.productIn(affine);
+                        if (form == null && product != null) {
+                            ExactRatio weight = affine.form().coefs().get(product);
+                            yield product.spelled() + " "
+                                    + (weight.signum() < 0 ? rel.turned() : rel).written() + " "
+                                    + affine.form().constant().negated().dividedBy(weight)
+                                            .map(ExactRatio::spelled).orNull();
+                        }
                         yield form == null ? stated.key()
                                 : OrderedAffineBoundary.spelled(form.coefs()) + " " + rel.written()
                                         + " " + form.constant().negated().spelled();

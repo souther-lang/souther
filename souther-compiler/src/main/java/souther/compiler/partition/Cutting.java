@@ -1718,6 +1718,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     holds ? affine.proposition() : affine.proposition().denied(),
                     written, reads, read.rules()), read.quantities());
         }
+        return onANumberNoPositionHolds(behavior, affine, holds, read);
+    }
+
+    /**
+     * The line a relation draws on a number of the input no position holds — how many elements
+     * meet something, what a division leaves of a form, what two numbers come to multiplied — or
+     * null where it is over none of them.
+     *
+     * <p>Every way such a relation is a line, for {@link #lineOn} and for what a case of where a
+     * line decides leaves the line's own number ({@link #leftBy}).
+     */
+    private static Read onANumberNoPositionHolds(String behavior, Relation.Affine affine,
+                                                 boolean holds, InputReading read) {
         return firstDrawn(onACount(behavior, affine, holds, read),
                 () -> firstDrawn(onARemainder(behavior, affine, holds, read),
                         () -> onAProduct(behavior, affine, holds, read)));
@@ -1831,9 +1844,57 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     boolean crossedIn(SearchRegion region) {
         Border.Values values = valuesIn(region);
+        return values != null && crossedBy(values);
+    }
+
+    /**
+     * The same, of the rows {@code region} holds that are in {@code where}, a case of where this
+     * line decides.
+     *
+     * <p>The region is what the way and the case leave the input's own numbers, and it says
+     * nothing about a number no position holds. A case of where a line on such a number decides is
+     * mostly other relations over that same number: {@code Int.max(0, a * b) <= 3} turns on where
+     * the product is nought only where it is above three, and the region is the same on both sides
+     * of nought whatever the case says. So what the case leaves this line's own quantity
+     * ({@link #leftBy}) is asked beside the region, and a line no row crosses inside it turns
+     * nothing there.
+     */
+    boolean crossedIn(SearchRegion region, Proposition where, InputReading read) {
+        Border.Values values = valuesIn(region);
         if (values == null) {
             return false;
         }
+        LevelRegion onIt = leftBy(where, read);
+        return crossedBy(onIt == null ? values : new Border.Values() {
+            @Override
+            public boolean extendTo(Level level) {
+                return values.extendTo(level) && onIt.parts().stream().anyMatch(part ->
+                        new LevelInterval(withItsEnd(part.low()), withItsEnd(part.high()))
+                                .contains(level));
+            }
+
+            @Override
+            public boolean holdAt(Level level) {
+                return values.holdAt(level) && onIt.contains(level);
+            }
+
+            @Override
+            public boolean holdOnSide(Level level, Towards side, boolean including) {
+                Bound end = Bound.at(level, including);
+                LevelRegion past = LevelRegion.of(side == Towards.ABOVE
+                        ? new LevelInterval(end, null) : new LevelInterval(null, end));
+                // A run the order could not say anything of is no proof that nothing is there.
+                return values.holdOnSide(level, side, including)
+                        && onIt.meet(past).parts().stream().anyMatch(run -> {
+                            Occupancy held = of.levels().inspect(run);
+                            return held instanceof Occupancy.NotWorkedOut || held.any();
+                        });
+            }
+        });
+    }
+
+    /** Whether {@code values} stand on both sides of this line. */
+    private boolean crossedBy(Border.Values values) {
         return switch (claim) {
             case ComparisonClaim.Cut _ -> Border.reachesBothSides(at, seam(), values);
             // The value it names and a row beside it on either side. With the value put above the
@@ -1843,6 +1904,74 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             values)
                             || Border.standsBeside(at, Seam.where(of, at, Towards.BELOW),
                                     Towards.ABOVE, values));
+        };
+    }
+
+    /** {@code end} keeping the value at its place, or no end. */
+    private static Bound withItsEnd(Bound end) {
+        return end == null ? null : new Bound(end.at(), true);
+    }
+
+    /**
+     * What {@code where} leaves this line's own quantity, where it is a number no position holds:
+     * every value each relation of it on that quantity leaves, read as a line on it would be — or
+     * null where none of it is about the quantity, or where the quantity is a form of the input's
+     * own numbers, which the region already holds every relation over.
+     *
+     * <p>Read the way the line itself was, by the reading that draws a line on such a number
+     * ({@link #onANumberNoPositionHolds}). A relation that comes to a line on this same quantity
+     * leaves it the values on the side it holds on; anything else in the case leaves it whatever it
+     * had.
+     */
+    private LevelRegion leftBy(Proposition where, InputReading read) {
+        return switch (where) {
+            case Proposition.All all -> joined(all.parts(), read, true);
+            case Proposition.Any any -> joined(any.parts(), read, false);
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine affine
+                    && onANumberNoPositionHolds(of.behavior(), affine, compared.holds(), read)
+                            instanceof Read.Cuts(Cutting on, AuthoredPointMapping _)
+                    && on.of().equals(of) -> on.holdsOn();
+            default -> null;
+        };
+    }
+
+    /**
+     * What {@code parts} leave this quantity together: what every one of them leaves where
+     * {@code every}, and what any one leaves where not — null where they leave it whatever it had.
+     */
+    private LevelRegion joined(List<Proposition> parts, InputReading read, boolean every) {
+        LevelRegion out = null;
+        for (Proposition part : parts) {
+            LevelRegion one = leftBy(part, read);
+            if (one == null) {
+                if (every) {
+                    continue;
+                }
+                return null;
+            }
+            if (out == null) {
+                out = one;
+            } else if (every) {
+                out = out.meet(one);
+            } else {
+                List<LevelInterval> either = new ArrayList<>(out.parts());
+                either.addAll(one.parts());
+                out = new LevelRegion(either);
+            }
+        }
+        return out;
+    }
+
+    /** The values of this quantity the comparison holds at. */
+    private LevelRegion holdsOn() {
+        return switch (claim.statedRelation()) {
+            case EQ -> LevelRegion.point(at);
+            case NE -> LevelRegion.EVERYTHING.without(at);
+            case GE -> LevelRegion.of(new LevelInterval(Bound.at(at, true), null));
+            case GT -> LevelRegion.of(new LevelInterval(Bound.at(at, false), null));
+            case LE -> LevelRegion.of(new LevelInterval(null, Bound.at(at, true)));
+            case LT -> LevelRegion.of(new LevelInterval(null, Bound.at(at, false)));
         };
     }
 

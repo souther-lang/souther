@@ -1,11 +1,13 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -13,6 +15,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -94,9 +97,10 @@ final class AStatementAtARow {
 
     /**
      * Whether a row's own values say whether {@code stated} holds at it: relations over the
-     * input's own numbers, whether a position of the input is true, holds a value or is one of
-     * some cases of a sum, joined, statements about the elements of a container the input holds —
-     * some element meeting something, or how many do, against a number — or nothing asked at all.
+     * input's own numbers or over what two of them come to multiplied, whether a position of the
+     * input is true, holds a value or is one of some cases of a sum, joined, statements about the
+     * elements of a container the input holds — some element meeting something, or how many do,
+     * against a number — or nothing asked at all.
      *
      * <p>Anything else is no statement a row can be asked about. Something nobody read, a truth of
      * what a dependency answered, or a count against another of the input's numbers is not settled
@@ -141,6 +145,7 @@ final class AStatementAtARow {
                     || switch (compared.relation()) {
                 case Relation.Affine affine ->
                         WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null
+                        || productIn(affine) != null
                         || (countIn(affine) instanceof Quantity.HowManyMeet count
                                 && askable(count.ofTheElement()));
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
@@ -159,6 +164,13 @@ final class AStatementAtARow {
         return affine.form().coefs().size() == 1
                 && affine.form().coefs().keySet().iterator().next()
                         instanceof Quantity.HowManyMeet count ? count : null;
+    }
+
+    /** The one product {@code affine} weighs where it weighs one and nothing else, or null. */
+    static Quantity.ProductOfTwo productIn(Relation.Affine affine) {
+        return affine.form().coefs().size() == 1
+                && affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.ProductOfTwo product ? product : null;
     }
 
     /**
@@ -259,6 +271,8 @@ final class AStatementAtARow {
                                 WhatTheDeclarationsLeave.ofTheInput(affine.form());
                         if (form != null) {
                             into.addAll(form.coefs().keySet());
+                        } else if (productIn(affine) instanceof Quantity.ProductOfTwo product) {
+                            into.addAll(product.factors());
                         }
                     }
                     case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _,
@@ -312,6 +326,10 @@ final class AStatementAtARow {
             if (each instanceof OneRelation.OnAQuantity read && read.terms().stream()
                     .noneMatch(term -> under(term.subjectPath(), taken))) {
                 read.over().lookAt(row);
+            }
+            if (each instanceof OneRelation.OnAProduct product && product.terms().stream()
+                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                product.factors().lookAt(row);
             }
         }
         for (TermPath each : positions) {
@@ -495,14 +513,13 @@ final class AStatementAtARow {
                 }
                 yield countedAgainst(compared, affine, counted);
             }
-            case Proposition.Compared compared when askable(compared) -> {
-                Answer held = switch (relations.get(compared.relation())) {
-                    case OneRelation.OnAQuantity read -> heldAt(read, row);
-                    case OneRelation.NoQuantity unread -> unread.at();
-                };
-                yield compared.holds() || held instanceof Answer.CouldNotTell ? held
-                        : held instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
-            }
+            case Proposition.Compared compared when askable(compared) ->
+                    switch (relations.get(compared.relation())) {
+                        case OneRelation.OnAQuantity read ->
+                                heldAs(compared.holds(), heldAt(read, row));
+                        case OneRelation.OnAProduct product -> product.at(row, compared.holds());
+                        case OneRelation.NoQuantity unread -> unread.at();
+                    };
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.SameValue _, Proposition.Unread _,
                  Proposition.OnAnApplication _, Proposition.SomeReachable _ -> notAsked(part);
@@ -1061,6 +1078,38 @@ final class AStatementAtARow {
                         out.add(Count.number(at).exactly());
                     }
                 }
+                // Over one factor, a product is the other factor's multiple of it: it turns at the
+                // level over what the other holds, and where the product passes an end of its type
+                // and holds no value at all. Where the other holds nought it is nought, and turns
+                // nowhere.
+                case OneRelation.OnAProduct product -> {
+                    int at = product.terms().indexOf(term);
+                    if (at < 0) {
+                        continue;
+                    }
+                    Place other = beside.get(product.terms().get(1 - at));
+                    if (other == null) {
+                        return null;
+                    }
+                    ExactRatio by = Count.number(other).exactly();
+                    if (by.signum() == 0) {
+                        continue;
+                    }
+                    if (!(product.weight().times(by).flatMap(weighed -> product.constant()
+                            .negated().dividedBy(weighed))
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+                        return null;
+                    }
+                    out.add(level);
+                    for (Endpoint end : List.of(Carrier.WHOLE.extent().low(),
+                            Carrier.WHOLE.extent().high())) {
+                        if (!(end.at() instanceof Count count) || !(count.exactly().dividedBy(by)
+                                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio past))) {
+                            return null;
+                        }
+                        out.add(past);
+                    }
+                }
                 // A relation no row is read at turns wherever it does, which is not known.
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
                     if (form.coefs().containsKey(term)) {
@@ -1105,6 +1154,11 @@ final class AStatementAtARow {
                         out.add(at);
                     }
                 }
+                case OneRelation.OnAProduct product -> {
+                    if (product.terms().contains(term)) {
+                        return null;
+                    }
+                }
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
                     if (form.coefs().containsKey(term)) {
                         return null;
@@ -1140,7 +1194,8 @@ final class AStatementAtARow {
 
         /**
          * A form over positions some of which have no numbers under them, and which is not two of
-         * them held against each other: no quantity reads a row at it.
+         * them held against each other — or the factors of a product that are not both whole
+         * numbers: no quantity reads a row at it.
          *
          * <p>Kept, and not dropped from the statement, because what it is about is still the row's:
          * every row answers it as not known, and where a value of one of its terms turns it over is
@@ -1180,8 +1235,59 @@ final class AStatementAtARow {
             }
         }
 
+        /**
+         * What two whole numbers of the input come to multiplied, weighed and with a constant
+         * added, against nought.
+         *
+         * <p>The factors are read as a form of the two, each weighed by one, which is what reads a
+         * row's numbers; the product is worked out of them the way a line on it reads a row
+         * ({@link OrderedAffineBoundary#productAt}).
+         *
+         * @param factors  the two factors, read at a row
+         * @param weight   what the product is weighed by
+         * @param constant what is added to it
+         */
+        record OnAProduct(LinearQuantity factors, ExactRatio weight, ExactRatio constant, Rel rel)
+                implements OneRelation {
+
+            @Override
+            public List<NumericTerm> terms() {
+                return factors.terms();
+            }
+
+            /**
+             * Whether the relation holds at {@code row} where {@code holds}, and whether its denial
+             * does where not.
+             *
+             * <p>Both asked here, and not the second read off the first: a row whose product passes
+             * where the type stops has no product, and the run stops before it compares anything.
+             * It is on neither side, so the relation and its denial both fail there.
+             */
+            Answer at(BorderQuantity.Observation row, boolean holds) {
+                return switch (factors.valuesOf(factors.read(row))) {
+                    case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                            switch (OrderedAffineBoundary.productAt(terms(), values)
+                                    .flatMap(product -> product.isEmpty()
+                                            ? ExactAnswer.held(false)
+                                            : weight.times(product.get())
+                                                    .flatMap(weighed -> weighed.plus(constant))
+                                                    .map(sum -> (holds ? rel : rel.denied())
+                                                            .holds(sum.signum())))) {
+                                case ExactAnswer.Held<Boolean>(Boolean held) ->
+                                        held ? Answer.HOLDS : Answer.FAILS;
+                                case ExactAnswer.Unheld<Boolean> unheld -> new Answer.CouldNotTell(
+                                        Set.of(ReadingGap.of(unheld.why())));
+                            };
+                    case ValuesAtARow.CouldNotTell(var why) -> new Answer.CouldNotTell(why);
+                    case ValuesAtARow.NoneHere _ -> heldAs(holds, Answer.FAILS);
+                };
+            }
+        }
+
         static OneRelation of(Relation relation, String behavior, Quantities quantities) {
             return switch (relation) {
+                case Relation.Affine affine when productIn(affine) != null ->
+                        ofAProduct(affine, productIn(affine), behavior, quantities);
                 case Relation.Affine affine -> {
                     LinearForm<NumericTerm> form =
                             WhatTheDeclarationsLeave.ofTheInput(affine.form());
@@ -1200,6 +1306,28 @@ final class AStatementAtARow {
                 case Relation.Ordered ordered -> throw new IllegalStateException("a relation put"
                         + " to rows is over the input's own numbers: " + ordered);
             };
+        }
+
+        /**
+         * A relation over {@code product}, read at the two factors — or at no quantity where a
+         * factor is no whole number, which is the only product a row is read for here as it is
+         * for a line on one.
+         */
+        private static OneRelation ofAProduct(Relation.Affine affine,
+                                              Quantity.ProductOfTwo product, String behavior,
+                                              Quantities quantities) {
+            Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
+            boolean whole = true;
+            for (NumericTerm factor : product.factors()) {
+                each.put(factor, ExactRatio.ONE);
+                TermOrders orders = quantities.ordersOf(factor);
+                whole &= orders != null && orders.answered() instanceof Carrier.Whole;
+            }
+            LinearForm<NumericTerm> factors = new LinearForm<>(ExactRatio.ZERO, each);
+            LinearQuantity over = whole ? Cutting.readAt(behavior, factors, quantities) : null;
+            return over == null ? new NoQuantity(factors) : new OnAProduct(over,
+                    affine.form().coefs().get(product), affine.form().constant(),
+                    affine.proposition());
         }
     }
 
@@ -1226,6 +1354,9 @@ final class AStatementAtARow {
         for (OneRelation each : relations.values()) {
             if (each instanceof OneRelation.OnAQuantity read) {
                 out.add(read.over());
+            }
+            if (each instanceof OneRelation.OnAProduct product) {
+                out.add(product.factors());
             }
         }
         return List.copyOf(out);
