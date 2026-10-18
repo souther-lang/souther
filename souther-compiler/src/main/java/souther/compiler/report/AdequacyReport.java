@@ -6482,11 +6482,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("kind", "sum");
                 elementComputation(into.putObject("besides"), it.besides());
                 ArrayNode parts = into.putArray("choices");
-                for (ElementValue.SumOfChoices.Weighed each : it.chosen()) {
+                it.chosen().forEach((choice, weight) -> {
                     ObjectNode part = parts.addObject();
-                    part.put("weight", each.weight().spelled());
-                    elementComputation(part.putObject("value"), each.choice());
-                }
+                    part.put("weight", weight.spelled());
+                    elementComputation(part.putObject("value"), choice);
+                });
             }
         }
     }

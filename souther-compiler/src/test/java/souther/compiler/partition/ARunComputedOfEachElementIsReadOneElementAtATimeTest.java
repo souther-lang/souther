@@ -29,8 +29,10 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -327,6 +329,40 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
         ObservedValue other = ofCase(C, 3);
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
                 orders.readOverElements(List.of(field -> orders.in(field, other))));
+    }
+
+    /**
+     * A sum of choices is one value whichever order its choices arrive in, even where two of them
+     * are spelled alike: a flag under a sum's case called {@code Some} and one under an optional
+     * holding something are both written {@code @Some.on}, and are two places.
+     */
+    @Test
+    void aSumOfChoicesIsOneValueInWhateverOrderItsChoicesArrive() {
+        TypeSymbol some = TypeSymbols.declared(new TypeKey("probe", "Some"));
+        ElementProjection ofTheCase = THE_ELEMENT.narrowedTo(caseOf(some)).then("on");
+        ElementProjection ofTheOptional = THE_ELEMENT.narrowedTo(
+                CasesLeft.of(Refinement.of(new Case.Presence(true)))).then("on");
+        assertEquals(ofTheCase.toString(), ofTheOptional.toString());
+        assertNotEquals(ofTheCase, ofTheOptional);
+        ElementValue one = new ElementValue.Choose(ofTheCase,
+                form(ExactRatio.ONE, Map.of()), form(ExactRatio.ZERO, Map.of()));
+        ElementValue other = new ElementValue.Choose(ofTheOptional,
+                form(ExactRatio.of(2), Map.of()), form(ExactRatio.ZERO, Map.of()));
+        ElementValue.Affine besides = new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO,
+                Map.of(Q, ExactRatio.ONE)));
+
+        SequencedMap<ElementValue, ExactRatio> oneFirst = new LinkedHashMap<>();
+        oneFirst.put(one, ExactRatio.ONE);
+        oneFirst.put(other, ExactRatio.ONE);
+        SequencedMap<ElementValue, ExactRatio> otherFirst = new LinkedHashMap<>();
+        otherFirst.put(other, ExactRatio.ONE);
+        otherFirst.put(one, ExactRatio.ONE);
+        ElementValue.SumOfChoices a = new ElementValue.SumOfChoices(besides, oneFirst);
+        ElementValue.SumOfChoices b = new ElementValue.SumOfChoices(besides, otherFirst);
+
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        assertEquals(total(a), total(b), "and the term made of it is one term");
     }
 
     /** A number the exact arithmetic could not hold is said as that, and not as a value missing. */

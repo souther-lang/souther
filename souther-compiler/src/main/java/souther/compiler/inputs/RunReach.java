@@ -243,10 +243,10 @@ final class RunReach {
                 Map<Integer, ExactRatio> weights = new LinkedHashMap<>();
                 parts.add(sum.besides());
                 weights.put(0, ExactRatio.ONE);
-                for (ElementValue.SumOfChoices.Weighed each : sum.chosen()) {
-                    weights.put(parts.size(), each.weight());
-                    parts.add(each.choice());
-                }
+                sum.chosen().forEach((choice, weight) -> {
+                    weights.put(parts.size(), weight);
+                    parts.add(choice);
+                });
                 NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION);
                 Map<Integer, Granularity> kinds = new LinkedHashMap<>();
                 for (int i = 0; i < parts.size(); i++) {

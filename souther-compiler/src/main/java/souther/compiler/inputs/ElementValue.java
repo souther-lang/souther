@@ -16,12 +16,14 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -175,13 +177,13 @@ public sealed interface ElementValue {
                 if (!(times(sum.besides(), weight) instanceof Affine besides)) {
                     yield null;
                 }
-                List<SumOfChoices.Weighed> chosen = new ArrayList<>();
-                for (SumOfChoices.Weighed each : sum.chosen()) {
-                    if (!(each.weight().times(weight)
+                SequencedMap<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
+                for (Map.Entry<ElementValue, ExactRatio> each : sum.chosen().entrySet()) {
+                    if (!(each.getValue().times(weight)
                             instanceof ExactAnswer.Held<ExactRatio>(var weighed))) {
                         yield null;
                     }
-                    chosen.add(new SumOfChoices.Weighed(each.choice(), weighed));
+                    chosen.put(each.getKey(), weighed);
                 }
                 yield new SumOfChoices(besides, chosen);
             }
@@ -197,44 +199,46 @@ public sealed interface ElementValue {
      * choice ({@link Choose}, {@link OfItsCase}): one choice takes the form into its answers
      * ({@link #plus}), and a form is no choice.
      *
-     * <p>Equal however its terms were written: the choices are put in one order made of them
-     * alone where one of these is made, once, and every reader takes them in that order — what an
-     * element comes to, where a row first has nothing, and how the sum is spelled.
+     * <p>One value however its terms were written. The choices are a mapping, so two of these are
+     * equal and hash alike by which choices they add at which weights and by nothing else; and the
+     * mapping is laid out once, where one of these is made, in an order made of the choices alone,
+     * which every reader then takes them in — what an element comes to, where a row first has
+     * nothing, and how the sum is spelled.
      *
-     * @param chosen each choice once, at its weight
+     * @param chosen each choice, at the weight it is added at, never nought
      */
-    record SumOfChoices(Affine besides, List<Weighed> chosen) implements ElementValue {
-
-        /** A choice and the weight it is added at. */
-        public record Weighed(ElementValue choice, ExactRatio weight) {
-
-            public Weighed {
-                if (!(choice instanceof Choose || choice instanceof OfItsCase) || weight == null
-                        || weight.isZero()) {
-                    throw new IllegalArgumentException("what a sum of choices adds is a choice,"
-                            + " weighed by something, and this is " + choice + " at " + weight);
-                }
-            }
-        }
+    record SumOfChoices(Affine besides, SequencedMap<ElementValue, ExactRatio> chosen)
+            implements ElementValue {
 
         public SumOfChoices {
             if (besides == null || chosen == null || chosen.size() < 2) {
                 throw new IllegalArgumentException("a sum of choices holds a form and choices to"
                         + " add to it");
             }
-            if (chosen.stream().map(Weighed::choice).distinct().count() != chosen.size()) {
-                throw new IllegalArgumentException("a sum of choices holds each choice once, at"
-                        + " the weight it is added at: " + chosen);
+            for (Map.Entry<ElementValue, ExactRatio> each : chosen.entrySet()) {
+                if (!(each.getKey() instanceof Choose || each.getKey() instanceof OfItsCase)
+                        || each.getValue().isZero()) {
+                    throw new IllegalArgumentException("what a sum of choices adds is choices,"
+                            + " each weighed by something, and this is " + each);
+                }
             }
-            List<Weighed> inOrder = new ArrayList<>(chosen);
-            inOrder.sort(Comparator.comparing(each -> each.choice().toString()));
-            chosen = List.copyOf(inOrder);
+            chosen = laidOut(chosen);
+        }
+
+        /** {@code chosen} in the one order the choices' spelling gives, and fixed. */
+        private static SequencedMap<ElementValue, ExactRatio> laidOut(
+                Map<ElementValue, ExactRatio> chosen) {
+            List<Map.Entry<ElementValue, ExactRatio>> inOrder = new ArrayList<>(chosen.entrySet());
+            inOrder.sort(Comparator.comparing(each -> each.getKey().toString()));
+            SequencedMap<ElementValue, ExactRatio> out = new LinkedHashMap<>();
+            inOrder.forEach(each -> out.put(each.getKey(), each.getValue()));
+            return Collections.unmodifiableSequencedMap(out);
         }
 
         @Override
         public Set<ElementProjection> reads() {
             Set<ElementProjection> all = new LinkedHashSet<>(besides.reads());
-            chosen.forEach(each -> all.addAll(each.choice().reads()));
+            chosen.keySet().forEach(each -> all.addAll(each.reads()));
             return Set.copyOf(all);
         }
 
@@ -243,16 +247,16 @@ public sealed interface ElementValue {
         @Override
         public ExactAnswer<ExactRatio> at(OneElement element) {
             ExactAnswer<ExactRatio> total = besides.at(element);
-            for (Weighed each : chosen) {
+            for (Map.Entry<ElementValue, ExactRatio> each : chosen.entrySet()) {
                 if (total == null) {
                     return null;
                 }
-                ExactAnswer<ExactRatio> one = each.choice().at(element);
+                ExactAnswer<ExactRatio> one = each.getKey().at(element);
                 if (one == null) {
                     return null;
                 }
                 total = total.flatMap(sofar -> one.flatMap(made ->
-                        made.times(each.weight()).flatMap(sofar::plus)));
+                        made.times(each.getValue()).flatMap(sofar::plus)));
             }
             return total;
         }
@@ -266,83 +270,32 @@ public sealed interface ElementValue {
         @Override
         public String toString() {
             List<String> terms = new ArrayList<>();
-            for (Weighed each : chosen) {
-                terms.add(each.weight() + "·(" + each.choice() + ")");
-            }
+            chosen.forEach((choice, weight) -> terms.add(weight + "·(" + choice + ")"));
             terms.add(besides.toString());
             return String.join(" + ", terms);
         }
     }
 
     /**
-     * {@code constant + Σ weight·place + Σ weight·choice}; or null where the exact arithmetic
-     * cannot hold it.
+     * {@code constant + Σ weight·place + Σ weight·choice}, each of {@code chosen} a choice
+     * ({@link Choose}, {@link OfItsCase}) met once; or null where the exact arithmetic cannot hold
+     * it.
      *
      * <p>Without a choice it is a form; with one, that choice with the form in its answers; with
-     * more, the choices held side by side ({@link SumOfChoices}). What came back as a choice and is
-     * none — two answers that are one — is a form and is added to the form, and a sum of choices met
-     * among them is added term by term, so one number has one spelling however it was written.
+     * more, the choices held side by side ({@link SumOfChoices}).
      */
     static ElementValue summed(ExactRatio constant, Map<ElementProjection, ExactRatio> places,
                                Map<ElementValue, ExactRatio> chosen) {
         Affine besides = new Affine(new LinearForm<>(constant, places));
-        Map<ElementValue, ExactRatio> choices = new LinkedHashMap<>();
-        for (Map.Entry<ElementValue, ExactRatio> each : chosen.entrySet()) {
-            switch (each.getKey()) {
-                case Affine form -> {
-                    if (!(times(form, each.getValue()) instanceof Affine weighed)
-                            || !(plus(besides, weighed) instanceof Affine more)) {
-                        return null;
-                    }
-                    besides = more;
-                }
-                case Choose _, OfItsCase _ -> {
-                    if (!addTo(choices, each.getKey(), each.getValue())) {
-                        return null;
-                    }
-                }
-                case SumOfChoices sum -> {
-                    if (!(times(sum, each.getValue()) instanceof SumOfChoices weighed)
-                            || !(plus(besides, weighed.besides()) instanceof Affine more)) {
-                        return null;
-                    }
-                    besides = more;
-                    for (SumOfChoices.Weighed part : weighed.chosen()) {
-                        if (!addTo(choices, part.choice(), part.weight())) {
-                            return null;
-                        }
-                    }
-                }
-            }
-        }
-        choices.values().removeIf(ExactRatio::isZero);
-        if (choices.isEmpty()) {
+        if (chosen.isEmpty()) {
             return besides;
         }
-        if (choices.size() == 1) {
-            Map.Entry<ElementValue, ExactRatio> only = choices.entrySet().iterator().next();
+        if (chosen.size() == 1) {
+            Map.Entry<ElementValue, ExactRatio> only = chosen.entrySet().iterator().next();
             ElementValue weighed = times(only.getKey(), only.getValue());
             return weighed == null ? null : plus(weighed, besides);
         }
-        List<SumOfChoices.Weighed> weighed = new ArrayList<>();
-        choices.forEach((choice, weight) -> weighed.add(new SumOfChoices.Weighed(choice, weight)));
-        return new SumOfChoices(besides, weighed);
-    }
-
-    /** {@code weight} more of {@code choice} in {@code choices}; false where the exact arithmetic
-     *  cannot hold the weight. */
-    private static boolean addTo(Map<ElementValue, ExactRatio> choices, ElementValue choice,
-                                 ExactRatio weight) {
-        ExactRatio had = choices.get(choice);
-        if (had == null) {
-            choices.put(choice, weight);
-            return true;
-        }
-        if (!(had.plus(weight) instanceof ExactAnswer.Held<ExactRatio>(var more))) {
-            return false;
-        }
-        choices.put(choice, more);
-        return true;
+        return new SumOfChoices(besides, new LinkedHashMap<>(chosen));
     }
 
     /**
@@ -705,12 +658,18 @@ public sealed interface ElementValue {
                                 : ElementValue.choosingByCase(narrowed, arms, rest);
                     }
                     case DeclaredInput.Taking.Narrows(TermPath to) -> {
-                        // Every arm narrows the one place, so each is the same place narrowed.
+                        // What an arm takes is the place the elements stand at narrowed, below
+                        // them; and every arm of one match narrows the one place, since a
+                        // narrowing to several cases is narrowed again in place by each of them.
                         ElementProjection reached = ElementProjection.below(elements.at(), to);
-                        boolean ofOnePlace = reached != null && reached.narrowing() != null
-                                && (narrowed == null || narrowed.equals(reached.narrowedFrom()));
-                        ElementValue value = !ofOnePlace ? null
-                                : binding(arm.binder(), reached).value(arm.body());
+                        if (reached == null || reached.narrowing() == null
+                                || (narrowed != null
+                                        && !narrowed.equals(reached.narrowedFrom()))) {
+                            throw new IllegalStateException("an arm of a match on " + subject
+                                    + " was taken at " + to + ", which narrows no place the other"
+                                    + " arms narrow below " + elements.at());
+                        }
+                        ElementValue value = binding(arm.binder(), reached).value(arm.body());
                         if (value == null) {
                             return null;
                         }
@@ -741,8 +700,36 @@ public sealed interface ElementValue {
                         case Core.Match match -> byCase(match);
                         case null, default -> null;
                     };
-                    return choice == null ? null : LinearForm.atom(new Atom.Chosen(choice));
+                    return choice == null ? null : termsOf(choice);
                 }
+            };
+        }
+
+        /**
+         * {@code value} as terms of a form: a form is its own places, a sum of choices its form
+         * and each of its choices, and a choice one term.
+         *
+         * <p>What a branch or a {@code match} came to need not be a choice — two answers that are
+         * one are that answer, and arms adding choices up are a sum of them — and is put into the
+         * form as what it is, so that the form a choice stands in is made the one way however the
+         * choice turned out.
+         */
+        private static LinearForm<Atom> termsOf(ElementValue value) {
+            return switch (value) {
+                case Affine form -> {
+                    Map<Atom, ExactRatio> places = new LinkedHashMap<>();
+                    form.form().coefs().forEach((place, weight) ->
+                            places.put(new Atom.Place(place), weight));
+                    yield new LinearForm<>(form.form().constant(), places);
+                }
+                case SumOfChoices sum -> {
+                    LinearForm<Atom> besides = termsOf(sum.besides());
+                    Map<Atom, ExactRatio> all = new LinkedHashMap<>(besides.coefs());
+                    sum.chosen().forEach((choice, weight) ->
+                            all.put(new Atom.Chosen(choice), weight));
+                    yield new LinearForm<>(besides.constant(), all);
+                }
+                case Choose _, OfItsCase _ -> LinearForm.atom(new Atom.Chosen(value));
             };
         }
 
@@ -782,8 +769,10 @@ public sealed interface ElementValue {
                     if (ofTheElement == null) {
                         return null;
                     }
-                    Atom only = ofTheElement.coefs().keySet().iterator().next();
-                    return LinearForm.atom(new TheStep.OfTheElement(only));
+                    Map<TheStep, ExactRatio> terms = new LinkedHashMap<>();
+                    ofTheElement.coefs().forEach((atom, weight) ->
+                            terms.put(new TheStep.OfTheElement(atom), weight));
+                    return new LinearForm<>(ofTheElement.constant(), terms);
                 }
             });
             if (form == null

@@ -48,6 +48,7 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -134,7 +135,6 @@ final class ContainersAddingUp {
                                            RuleReadingContext reading,
                                            HowManyIsAskedFor alsoHolding,
                                            DemandsInside inside) {
-        RuleReadingSource ruleSource = reading.source();
         // What the caller asked inside an element contradicting itself is no way down that did not
         // plan: it is every way down, settled before any of them is tried. Met inside the walk it
         // was a refusal of one way that the walk had no account of.
@@ -146,10 +146,6 @@ final class ContainersAddingUp {
                     "what each element is asked to hold puts `" + conflict.at() + "` both at "
                             + conflict.one().spelled() + " and at " + conflict.other().spelled());
         }
-        // Which number is being built for, read off the answer that says which number it is of.
-        // Named beside it, the two were free to be about two numbers and this would fill a
-        // container found under one path with elements counted on another's order.
-        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
         // The lists of a list put end to end: a container inside the elements of another, so an
         // element holds as many occurrences of the number as its own container does and the total is
         // spread over the leaves and then grouped, level by level.
@@ -162,17 +158,63 @@ final class ContainersAddingUp {
         // reads, so the elements are chosen on that field's order and stand at its place. A
         // computation this does not solve for is a population this compiler writes none of, which
         // is not the same as the model admitting no row.
-        FieldSolved solved = null;
         if (orders.term() instanceof NumericTerm.TakenOver over
                 && over.source() instanceof RunSource.ComputedOccurrences computed) {
-            solved = FieldSolved.of(computed, orders);
-            if (solved == null) {
+            List<FieldSolved> ways = FieldSolved.of(computed, orders);
+            if (ways.isEmpty()) {
                 return new TermRealizations.Realization.Unexhausted(
                         CompositionShortfall.writing(
                                 Set.of(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR)),
                         null);
             }
+            return throughEach(ways, solved -> composedThrough(solved, answer, container,
+                    keptApart, orders, within, reading, alsoHolding, inside));
         }
+        return composedThrough(null, answer, container, keptApart, orders, within, reading,
+                alsoHolding, inside);
+    }
+
+    /**
+     * What is written for one point by each way of solving for it, tried until one writes
+     * something: the values of the first that does, and otherwise what every one of them came to
+     * without.
+     *
+     * <p>Every way and not the first. A choice by case is solved for through each arm that is a
+     * form of one field of its case, each writing the containers of that case alone, and which of
+     * them reaches a point is the point's to say — a total only a fee reaches is reached by the
+     * arm that adds the fee, whichever arm was written first.
+     */
+    private static TermRealizations.Realization throughEach(
+            List<FieldSolved> ways,
+            Function<FieldSolved, TermRealizations.Realization> composing) {
+        TermRealizations.Realization last = null;
+        CompositionShortfall met = CompositionShortfall.NONE;
+        for (FieldSolved way : ways) {
+            last = composing.apply(way);
+            if (last instanceof TermRealizations.Realization.Built) {
+                return last;
+            }
+            met = met.and(last.shortfall());
+        }
+        if (!met.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(met);
+        }
+        return met.nothing() ? last : new TermRealizations.Realization.Unexhausted(met, null);
+    }
+
+    /**
+     * What is written for {@code answer} where the elements are chosen on what {@code solved}
+     * solves for, or on the total's own values where it is null.
+     */
+    private static TermRealizations.Realization composedThrough(
+            FieldSolved solved, Place answer, Type container, List<List<String>> keptApart,
+            TermOrders orders, SearchRegion within, RuleReadingContext reading,
+            HowManyIsAskedFor alsoHolding, DemandsInside inside) {
+        RuleReadingSource ruleSource = reading.source();
+        // Which number is being built for, read off the answer that says which number it is of.
+        // Named beside it, the two were free to be about two numbers and this would fill a
+        // container found under one path with elements counted on another's order.
+        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
         Carrier elements = solved == null ? orders.answered() : solved.carrier();
         TermPath occurring = solved == null ? occurrences(target) : solved.field();
         if (!(answer instanceof Count total) || elements == null) {
@@ -501,11 +543,11 @@ final class ContainersAddingUp {
      * nothing here chooses, and solving for the first would be solving against a guess at the
      * second.
      *
-     * <p>A choice by case is solved for through one arm: the first whose answer is a form of one
-     * field of the case it took. The field stands under the case, so every element written to hold
-     * it is of that case and is taken by that arm, and its number is that arm's form. Those are some
-     * of the containers the total is over and not all of them — one mixing the cases is never
-     * written — which is said beside whatever is written.
+     * <p>A choice by case is solved for through each arm whose answer is a form of one field of the
+     * case it took ({@link #throughEach}). The field stands under the case, so every element written
+     * to hold it is of that case and is taken by that arm, and its number is that arm's form. Those
+     * are some of the containers the total is over and not all of them — one mixing the cases is
+     * never written — which is said beside whatever is written.
      *
      * @param field     where each element's field stands
      * @param carrier   the order the field's values are written on
@@ -517,23 +559,30 @@ final class ContainersAddingUp {
     private record FieldSolved(TermPath field, Carrier carrier, ExactRatio weight,
                                ExactRatio constant, boolean ofOneCase) {
 
-        /** The field a computation is solved for, or null where it is not a form of one. */
-        static FieldSolved of(RunSource.ComputedOccurrences run, TermOrders orders) {
-            return switch (run.computation()) {
-                case ElementValue.Affine affine -> ofAForm(affine, null, run, orders);
+        /** Every field a computation is solved for: the one field of a form, each arm's of a
+         *  choice by case, and none where it is neither. */
+        static List<FieldSolved> of(RunSource.ComputedOccurrences run, TermOrders orders) {
+            List<FieldSolved> out = new ArrayList<>();
+            switch (run.computation()) {
+                case ElementValue.Affine affine -> {
+                    FieldSolved solved = ofAForm(affine, null, run, orders);
+                    if (solved != null) {
+                        out.add(solved);
+                    }
+                }
                 case ElementValue.OfItsCase choice -> {
                     for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
                         if (arm.value() instanceof ElementValue.Affine affine) {
                             FieldSolved solved = ofAForm(affine, choice.taken(arm), run, orders);
                             if (solved != null) {
-                                yield solved;
+                                out.add(solved);
                             }
                         }
                     }
-                    yield null;
                 }
-                case ElementValue.Choose _, ElementValue.SumOfChoices _ -> null;
-            };
+                case ElementValue.Choose _, ElementValue.SumOfChoices _ -> { }
+            }
+            return List.copyOf(out);
         }
 
         /** The field {@code affine} is solved for, where it is a form of one field and, under an

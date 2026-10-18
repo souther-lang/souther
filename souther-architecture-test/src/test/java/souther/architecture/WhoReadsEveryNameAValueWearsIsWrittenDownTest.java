@@ -169,8 +169,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ConstructionPlan$WhatItMayHold;)L" + PARTITION
                             + "ConstructionPlan$NodeResult;",
                     THE_POSITION),
-            row(PARTITION + "ContainersAddingUp", "to",
-                    "(Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
+            row(PARTITION + "ContainersAddingUp", "composedThrough",
+                    "(L" + PARTITION + "ContainersAddingUp$FieldSolved;"
+                            + "Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
                             + "TermOrders;L" + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
                             + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION
                             + "DemandsInside;)" + REALIZATION,

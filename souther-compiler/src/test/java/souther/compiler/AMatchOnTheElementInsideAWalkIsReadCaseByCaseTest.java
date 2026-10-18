@@ -281,24 +281,35 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     }
 
     /**
-     * What is written is containers of one case, and a point only another case reaches is said as
-     * one this compiler did not try, not as one no row comes to.
-     *
-     * <p>Twice an amount is even, so no container of {@code A}s comes to five; a {@code B} with a
-     * fee of five does.
+     * Every arm that is a form of one field of its case is tried, whichever is written first: twice
+     * an amount is even, so no container of {@code A}s comes to five, and a {@code B} with a fee of
+     * five does.
      */
     @Test
-    void aPointOnlyAnotherCaseReachesIsLeftUntried() {
-        Compilation compiled = compiled(thresholded(FEES, """
+    void aPointOneCaseReachesIsWrittenWithThatCaseWhicheverArmComesFirst() {
+        String rows = rowsOf(thresholded(FEES, """
                 match d with
                         | A { amount } -> amount * 2
                         | B { fee } -> fee""", 6));
-        String rows = rowsOf(compiled);
-        List<Long> totals = totalsOf(rows, 2);
+        assertTrue(rows.contains("""
+                // fills OFF point of comparison@0:null
+                    | ([B { fee = 5 }])"""), rows);
+    }
 
-        assertTrue(totals.contains(6L), () -> "the point on the line: " + rows);
+    /**
+     * A point only a container mixing the cases reaches is said as one this compiler did not try,
+     * not as one no row comes to: an even number of each {@code A} and a multiple of three of each
+     * {@code B} come to five only together.
+     */
+    @Test
+    void aPointOnlyAMixOfCasesReachesIsLeftUntried() {
+        Compilation compiled = compiled(thresholded(FEES, """
+                match d with
+                        | A { amount } -> amount * 2
+                        | B { fee } -> fee * 3""", 6));
+        String rows = rowsOf(compiled);
         assertTrue(rows.contains("no row for `List.sum({when @A then 2·@A.amount + 0"
-                + " when @B then 1·@B.fee + 0 | deductions[*]}) = 5` in `decide`: the search left"
+                + " when @B then 3·@B.fee + 0 | deductions[*]}) = 5` in `decide`: the search left"
                 + " something untried"), rows);
         String report = report(compiled);
         assertTrue(report.lines().anyMatch(line -> line.contains("= 5 — ")

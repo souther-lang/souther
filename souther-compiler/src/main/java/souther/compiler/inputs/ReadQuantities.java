@@ -435,9 +435,11 @@ final class ReadQuantities implements Quantities {
             // The values are read on their own place's order, and which elements are of one key on
             // the key's.
             Map<ElementProjection, Type> keyType = new LinkedHashMap<>();
-            if (among instanceof NumericTerm.ExtremeOfItsKey extreme
-                    && typeAt.apply(extreme.key()) != null) {
-                keyType.put(extreme.keyField(), typeAt.apply(extreme.key()));
+            if (among instanceof NumericTerm.ExtremeOfItsKey extreme) {
+                Type keyedOn = typeAt.apply(extreme.key());
+                if (keyedOn != null) {
+                    keyType.put(extreme.keyField(), keyedOn);
+                }
             }
             return TermOrdering.of(term, typeAt.apply(term.subjectPath()), keyType, onTheWay,
                     ruleReading.source().symbols(), ruleReading.source().declarations());
