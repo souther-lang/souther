@@ -12,6 +12,7 @@ import souther.compiler.reach.Reachability;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -677,14 +678,77 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 guard Int.floorMod(3 - a.value, 7) /= b.value else Free
                 """);
         for (String guards : spellings) {
-            assertFalse(provenIn(charging2(guards), "charge").isEmpty(),
-                    () -> "something is proven unreachable:\n" + guards);
+            assertEquals(1, provenIn(charging2(guards), "charge").size(),
+                    () -> "the charge is the one arm nothing reaches:\n" + guards);
         }
         assertEquals(List.of(), provenIn(charging2("""
                 guard b.value >= 6 else Free
                 guard a.value < 4 || a.value + b.value == 10 else Free
                 guard a.value + b.value == 3 || a.value > 3 else Free
                 """), "charge"), "a of four and b of six reaches the charge");
+    }
+
+    /**
+     * How many choices a path has left undecided does not decide what the ones further on rule out:
+     * the first of them is still taken apart once the guards that single out its part come, however
+     * many stand between.
+     */
+    @Test
+    void aChoiceIsTakenApartWhateverNumberOfChoicesStandBetween() {
+        // Each stronger than the one before, and none ruled out by the choice that opens the path.
+        String between = IntStream.range(0, 40)
+                .mapToObj(i -> "guard a.value > %d || b.value > %d else Free\n".formatted(i, i))
+                .collect(Collectors.joining());
+        assertEquals(1, provenIn(charging2("""
+                guard b.value >= 7 else Free
+                guard a.value < 4 || a.value + b.value == 10 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                """), "charge").size(), "the reference spelling");
+        String closing = """
+                guard b.value >= 7 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                """;
+        String opening = "guard a.value < 4 || a.value + b.value == 10 else Free\n";
+        int first = provenIn(charging2(opening + between + closing), "charge").size();
+        int last = provenIn(charging2(between + opening + closing), "charge").size();
+        assertTrue(first > 0, "the choice opening the path is taken apart at the end");
+        assertEquals(last, first, "and so is it where it stands last");
+    }
+
+    /** A choice the later guards single out the part of, and a guard whose departure it then rules
+     *  out; the guard that settles it comes after, before, or in the same condition. */
+    @Test
+    void aGuardsDepartureIsRuledOutByChoicesWhateverOrderTheyAreWrittenIn() {
+        for (String guards : List.of("""
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                guard b.value >= 7 else Free
+                guard a.value > 3 else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                guard a.value > 3 else Free
+                """, """
+                guard (a.value + b.value == 3 || a.value > 3) && b.value >= 7 else Free
+                guard a.value > 3 else Free
+                """)) {
+            assertEquals(1, provenIn(charging2(guards), "charge").size(),
+                    () -> "the departure of the last guard is one nothing takes:\n" + guards);
+        }
+        assertEquals(List.of(), provenIn(charging2("""
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                guard b.value >= 2 else Free
+                guard a.value > 3 else Free
+                """), "charge"), "a of one and b of two takes it");
+    }
+
+    /** Two choices, the second of which is settled only once the first is. */
+    @Test
+    void choicesSettledOneAfterAnotherRuleOutWhatTheyLeaveNothingOf() {
+        assertEquals(1, provenIn(charging2("""
+                guard a.value < 4 || b.value < 4 else Free
+                guard b.value >= 4 || a.value < 2 else Free
+                guard a.value >= 4 else Free
+                """), "charge").size(), "a of four or more leaves b under four and then a under two");
     }
 
     private static String charging2(String guards) {

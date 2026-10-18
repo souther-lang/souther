@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -202,6 +203,7 @@ final class MeaningAssumptions {
                     taking.notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure));
         }
         taking.settleWhatWasLeftUndecided();
+        taking.sayWhatIsStillUndecided();
         // Read to the end only where every part was taken in: a part a path cannot hold leaves an
         // arm under it unsettled for this reader's reach, which is not a fact about the model.
         return new Predicates.Assumed(taking.known, taking.taken, taking.notTaken.isEmpty(),
@@ -215,10 +217,12 @@ final class MeaningAssumptions {
      * <p>A choice still between several parts stays as it was, and nothing it was read as is kept.
      * Every pass that goes on settles one choice, so the passes end.
      *
-     * <p>A choice is read again only if what is known is not what it was read over.
+     * <p>A choice is read again only if what is known is not what it was read over. Where the count
+     * of parts a reading takes alone runs out first, the choice stays as it was and the reading
+     * says so, since what the path rules out then turns on how the conditions were ordered.
      */
     private void settleWhatWasLeftUndecided() {
-        boolean settled = true;
+        boolean settled = known != entry;
         while (settled && !known.reachesNothing()) {
             settled = false;
             List<Known.Declined> pending = known.declinedChoices();
@@ -239,6 +243,27 @@ final class MeaningAssumptions {
                     settled = true;
                     break;
                 }
+                if (again.notTaken.contains(new WhyNotTaken.MoreAlternativesThanAreTried())) {
+                    WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(),
+                            choice.any()).forEach(this::notTaken);
+                }
+            }
+        }
+    }
+
+    /** Why each choice this reading leaves undecided, and no earlier one, was not taken in — none
+     *  where nothing is reached, since no part of a choice is then left unread. */
+    private void sayWhatIsStillUndecided() {
+        if (known.reachesNothing()) {
+            return;
+        }
+        Set<Known.Declined> before = Collections.newSetFromMap(new IdentityHashMap<>());
+        before.addAll(entry.declinedChoices());
+        for (Known.Declined choice : known.declinedChoices()) {
+            if (!before.contains(choice)) {
+                WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
+                        WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), choice.any())
+                        .forEach(this::notTaken);
             }
         }
     }
@@ -652,7 +677,9 @@ final class MeaningAssumptions {
      * <p>Which part holds is no fact of a path, but a part that cannot hold under what is known is
      * one the others are left to: each part is taken alone, from what is known here, and one that
      * leaves nothing is dropped. None left is nothing reached; one left is that one holding, taken
-     * as it would be on its own. Two or more left is which of them holds, and is declined.
+     * as it would be on its own. Two or more left is which of them holds: no part is taken, and the
+     * choice is kept undecided on the path ({@link Known.Declined}) for the conditions after it to
+     * single out a part of ({@link #settleWhatWasLeftUndecided}).
      *
      * <p>A part taken only in part and still leaving nothing is dropped all the same: what it left
      * out would only have narrowed further.
@@ -719,17 +746,15 @@ final class MeaningAssumptions {
                 boolean cutShort = left.stream().anyMatch(each -> each.notTaken.contains(
                         new WhyNotTaken.MoreAlternativesThanAreTried()));
                 leftUndecided = true;
-                if (!cutShort) {
-                    List<Known.Declined> kept = new ArrayList<>(known.declinedChoices());
+                if (cutShort) {
+                    WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
+                            .forEach(this::notTaken);
+                } else {
+                    // Said when the reading ends, and only if no later condition has settled it.
                     Known.Declined declined = new Known.Declined(any, at, places);
-                    kept.add(declined);
-                    known = known.leavingUndecided(kept);
+                    known = known.leavingUndecided(declined);
                     declinedAt.put(declined, known);
                 }
-                WhyNotTaken.declinedWhole(cutShort ? new WhyNotTaken.MoreAlternativesThanAreTried()
-                        : new WhyNotTaken.OutsideDomain(
-                                WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), any)
-                        .forEach(this::notTaken);
             }
         }
     }

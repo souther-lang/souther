@@ -73,11 +73,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * <p>{@code tries} is how many more parts the looking may take in alone along this path, across
      * every time it looks ({@link #PARTS_A_PATH_LOOKS_THROUGH}).
      */
-    record Choices(ChoiceLine held, Known wayIn, int tries, List<Declined> declined) {
-
-        Choices {
-            declined = List.copyOf(declined);
-        }
+    record Choices(ChoiceLine held, Known wayIn, int tries, DeclinedLine declined) {
 
         /**
          * How many parts of the choices a path holds are taken in alone along one path, looking
@@ -97,11 +93,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
          */
         static final int PARTS_A_PATH_LOOKS_THROUGH = 64;
 
-        /** How many choices read by their meaning a path keeps undecided at once; past it the
-         *  oldest is let go, which leaves the path knowing less and nothing wrong. */
-        static final int DECLINED_A_PATH_KEEPS = 16;
-
-        static final Choices NONE = new Choices(null, null, PARTS_A_PATH_LOOKS_THROUGH, List.of());
+        static final Choices NONE = new Choices(null, null, PARTS_A_PATH_LOOKS_THROUGH, null);
 
         int count() {
             return held == null ? 0 : held.count();
@@ -117,6 +109,11 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * as nothing reached where none is. The bindings are the ones where the choice stands, as for
      * {@link OneOf}.
      *
+     * <p>Every one a path passes is kept, so what it rules out does not turn on how many choices
+     * stand between a choice and the condition that singles out its part. What bounds the work is
+     * the count of parts a reading takes alone ({@link MeaningAssumptions}), which says so where
+     * it is reached.
+     *
      * <p>Equal only to itself, for the reason {@link OneOf} is.
      */
     record Declined(Proposition.Any any, Denotations at, MeaningAssumptions.InputPlaces places) {
@@ -131,6 +128,9 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
             return System.identityHashCode(this);
         }
     }
+
+    /** One choice left undecided, on top of the ones left before it. */
+    record DeclinedLine(Declined last, DeclinedLine before) {}
 
     /** One condition held, on top of the ones held before it, and how many that is in all. */
     record ChoiceLine(OneOf last, ChoiceLine before, int count) {}
@@ -399,16 +399,28 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
 
     /** The choices read by their meaning that no part has yet been settled for, oldest first. */
     List<Declined> declinedChoices() {
-        return oneOf.declined();
+        List<Declined> out = new ArrayList<>();
+        for (DeclinedLine at = oneOf.declined(); at != null; at = at.before()) {
+            out.add(at.last());
+        }
+        return out.reversed();
     }
 
     /** This, with {@code declined} as the choices read by their meaning left undecided. */
     Known leavingUndecided(List<Declined> declined) {
-        List<Declined> kept = declined.size() > Choices.DECLINED_A_PATH_KEEPS
-                ? declined.subList(declined.size() - Choices.DECLINED_A_PATH_KEEPS, declined.size())
-                : declined;
+        DeclinedLine line = null;
+        for (Declined each : declined) {
+            line = new DeclinedLine(each, line);
+        }
         return new Known(constraints, quantified, spoken, unguarded, cases,
-                new Choices(oneOf.held(), oneOf.wayIn(), oneOf.tries(), kept));
+                new Choices(oneOf.held(), oneOf.wayIn(), oneOf.tries(), line));
+    }
+
+    /** This, with {@code choice} left undecided after the ones left before it. */
+    Known leavingUndecided(Declined choice) {
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                new Choices(oneOf.held(), oneOf.wayIn(), oneOf.tries(),
+                        new DeclinedLine(choice, oneOf.declined())));
     }
 
     /** The conditions held here as one of their parts, in the order they were taken in. */

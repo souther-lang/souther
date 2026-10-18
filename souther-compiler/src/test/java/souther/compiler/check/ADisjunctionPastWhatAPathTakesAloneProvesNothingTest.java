@@ -92,6 +92,30 @@ class ADisjunctionPastWhatAPathTakesAloneProvesNothingTest {
         assertEquals(List.of(PAST_THE_FIGURE), asked.notTaken());
     }
 
+    /** A choice left between its parts is kept on the path, to be taken apart by what comes after. */
+    @Test
+    void twoLeftAreKeptUndecidedOnThePath() {
+        Predicates.Assumed asked = assumed(new Proposition.Any(List.of(
+                new Proposition.Always(true), new Proposition.Always(true))));
+
+        assertEquals(1, asked.known().declinedChoices().size());
+    }
+
+    /**
+     * What is said of a choice left undecided is said only of one the path still leaves: where the
+     * rest of the condition reaches nothing, no part of the choice is left unread.
+     */
+    @Test
+    void aChoiceUndecidedOnAPathThatReachesNothingSaysNothingWasLeftUnread() {
+        Predicates.Assumed asked = assumed(new Proposition.All(List.of(
+                new Proposition.Any(List.of(
+                        new Proposition.Always(true), new Proposition.Always(true))),
+                new Proposition.Always(false))));
+
+        assertTrue(asked.known().reachesNothing());
+        assertEquals(List.of(), asked.notTaken());
+    }
+
     /** And two left where neither was cut short is the path's own limit, as it always was. */
     @Test
     void twoLeftThatWereBothTakenWholeNameThePathsLimit() {
