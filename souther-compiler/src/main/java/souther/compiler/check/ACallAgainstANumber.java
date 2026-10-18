@@ -69,8 +69,18 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
                                                TheSignOfAnOrder.Sides<E> sides,
                                                Function<ValueName, F> factOf) {
         for (boolean callFirst : List.of(true, false)) {
-            Weighed<E> side = weighed(callFirst ? comparison.left() : comparison.right(), at,
-                    sides, factOf);
+            Core asWritten = callFirst ? comparison.left() : comparison.right();
+            // The call itself, or arithmetic over it on a side that is no number on every run: a
+            // side that is one is walked into for nothing, and a chain of names under it folded
+            // again at each link. Asked only of arithmetic, since what a side that is no
+            // arithmetic comes to is no call weighed by anything, and working out whether it is a
+            // number can cost as much as reading the comparison.
+            ValueStanding.ReadThrough<E> stands = under(asWritten, at, sides);
+            Weighed<E> side = called(stands, factOf);
+            if (side == null && isArithmetic(stands)
+                    && sides.constant(asWritten, at) == null) {
+                side = weighed(asWritten, at, sides, factOf);
+            }
             if (side == null) {
                 continue;
             }
@@ -110,12 +120,11 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
     private static <E, F> Weighed<E> weighed(Core side, E at, TheSignOfAnOrder.Sides<E> sides,
                                              Function<ValueName, F> factOf) {
         ValueStanding.ReadThrough<E> stands = under(side, at, sides);
-        Core e = Core.withoutStanding(stands.value());
-        AnOperationApplied applied = AnOperationApplied.of(e);
-        if (applied != null && factOf.apply(applied.operation()) != null) {
-            return new Weighed<>(stands, ExactRatio.ONE, ExactRatio.ZERO);
+        Weighed<E> itself = called(stands, factOf);
+        if (itself != null) {
+            return itself;
         }
-        return switch (e) {
+        return switch (Core.withoutStanding(stands.value())) {
             case Core.Neg n -> {
                 Weighed<E> inner = weighed(n.operand(), stands.at(), sides, factOf);
                 yield inner == null ? null : new Weighed<>(inner.call(), inner.scale().negated(),
@@ -149,6 +158,22 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
             }
             default -> null;
         };
+    }
+
+    /** Whether what {@code stands} for is arithmetic a call can be weighed in ({@link #weighed}). */
+    private static <E> boolean isArithmetic(ValueStanding.ReadThrough<E> stands) {
+        Core e = Core.withoutStanding(stands.value());
+        return e instanceof Core.Neg || e instanceof Core.Binary b
+                && (b.op() == BinOp.ADD || b.op() == BinOp.SUB || b.op() == BinOp.MUL);
+    }
+
+    /** {@code stands} as the call itself, weighed by nothing — or null where it is no call of an
+     *  operation {@code factOf} answers for. */
+    private static <E, F> Weighed<E> called(ValueStanding.ReadThrough<E> stands,
+                                            Function<ValueName, F> factOf) {
+        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(stands.value()));
+        return applied != null && factOf.apply(applied.operation()) != null
+                ? new Weighed<>(stands, ExactRatio.ONE, ExactRatio.ZERO) : null;
     }
 
     /** The call one operand of an operator is weighed by, beside the number the other is. */

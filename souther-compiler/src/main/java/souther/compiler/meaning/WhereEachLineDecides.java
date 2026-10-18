@@ -74,7 +74,7 @@ public final class WhereEachLineDecides {
      *              of parts, or nothing asked at all. Empty where it decides nowhere. None of them
      *              names {@code line}
      * @param scales the line held at every scale the statement wrote it at, {@code line} first:
-     *               what made each of them made the line ({@link OneSpellingPerLine})
+     *               what made each of them made the line, which the statement holds at the first
      */
     public record Decides(Proposition.Compared line, List<DecidingCase> cases,
                           List<Proposition.Compared> scales) {
