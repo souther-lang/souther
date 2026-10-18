@@ -378,7 +378,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks the enum whether the operator stops early"),
             new Held("souther.compiler.check.PathReachability.walk",
                     "asks the enum whether there is a right side that runs on some runs and not"
-                            + " others, and which way the left has to come out for it to"),
+                            + " others"),
+            new Held("souther.compiler.check.PathReachability.exitsOf",
+                    "asks the enum whether there is a right side that runs on some runs and not"
+                            + " others, since only such an operator has exits of its own"),
+            new Held("souther.compiler.check.PathReachability.shortCircuitOperands",
+                    "asks the enum which way the left has to come out for the right side to run"),
 
             // What the operator computes, is typed as, or is emitted as.
             new Held("souther.compiler.check.AffineForms.composed",

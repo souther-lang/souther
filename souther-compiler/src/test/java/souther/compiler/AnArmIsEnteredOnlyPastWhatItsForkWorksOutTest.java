@@ -117,6 +117,28 @@ class AnArmIsEnteredOnlyPastWhatItsForkWorksOutTest {
                 "one way out answers, so a run leaves the fork by it");
     }
 
+    /**
+     * A short circuit's right side runs for one value of its left, and a run gets the operator's
+     * other value out of it only by getting past the right. Where the right answers nothing, the arm
+     * for the value the right decides is entered by no run and the other arm is.
+     */
+    @Test
+    void anArmReachedOnlyWhereAShortCircuitsRightAnswersIsEnteredByNoRun() {
+        List<Diagnostic> and = deadBranches(body("""
+                    guard a == %s else No
+                    if b > 0 && a + 1 > 0 then Ok else No""".formatted(GREATEST)));
+        assertEquals(1, and.size(), said(and));
+        assertTrue(pointsAtAnAnswer(and.getFirst()), said(and));
+        List<Diagnostic> or = deadBranches(body("""
+                    guard a == %s else No
+                    if b <= 0 || a + 1 <= 0 then Ok else No""".formatted(GREATEST)));
+        assertEquals(1, or.size(), said(or));
+        assertTrue(pointsAtAnAnswer(or.getFirst()), said(or));
+        assertEquals(List.of(), deadBranches(body("""
+                    guard a == %s else No
+                    if b > 0 && a + 1 > 0 then Ok else No""".formatted(BELOW_THE_GREATEST))));
+    }
+
     @Test
     void pastAQuotientItsDivisorIsNotNought() {
         List<Diagnostic> dead = deadBranches(body("""
