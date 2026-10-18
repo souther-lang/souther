@@ -62,19 +62,84 @@ public record ElementProjection(List<String> steps) {
     public static ElementProjection read(Core answer, BindingId element,
                                          Map<BindingId, Core> held,
                                          DeclarationNewtypes newtypes) {
-        List<String> steps = new Reading(held, newtypes).from(answer, element);
-        return steps == null ? null : new ElementProjection(steps);
+        Found found = new Reading(held, newtypes, Licence.PLACE).from(answer, element);
+        return found == null ? null : new ElementProjection(found.steps());
     }
 
     /**
-     * One reading of one closure's answer.
+     * What a closure whose parameter is {@code element} answered, as far as which answers are
+     * equal goes: the value at a place of the element, or a newtype wearing it — or null where it
+     * is neither ({@link Licence#EQUAL_KEY}).
+     */
+    static OnePerElement.Answered readAsAKey(Core answer, BindingId element,
+                                            Map<BindingId, Core> held,
+                                            DeclarationNewtypes newtypes) {
+        Found found = new Reading(held, newtypes, Licence.EQUAL_KEY).from(answer, element);
+        return found == null ? null
+                : new OnePerElement.Answered(new ElementProjection(found.steps()), found.wrapped());
+    }
+
+    /** Whether what a closure whose parameter is {@code element} answered is the element itself
+     *  ({@link Licence#IDENTICAL_VALUE}). */
+    static boolean isTheElementItself(Core answer, BindingId element, Map<BindingId, Core> held,
+                                      DeclarationNewtypes newtypes) {
+        Found found = new Reading(held, newtypes, Licence.IDENTICAL_VALUE).from(answer, element);
+        return found != null && found.steps().isEmpty() && !found.wrapped();
+    }
+
+    /**
+     * What a reading of an answer proves of it, which decides what it reads through.
+     *
+     * <p>Three questions over one walk. Names, {@code let}s and a field read back out of a
+     * construction are crossed by all three: each leaves the value as it was. What else is
+     * crossed is each one's to say, at every node and so behind a name as much as at the answer
+     * itself.
+     */
+    private enum Licence {
+
+        /** Where in the element the value stands, whatever type it stands as. */
+        PLACE,
+
+        /**
+         * That answers are equal exactly where the values at a place of the element are. A
+         * newtype wearing one value is read through and said to be, since two of them are equal
+         * where the values are; a value standing as a wider type is not, since what the wider
+         * type calls equal is not shown to be what the narrower one does.
+         */
+        EQUAL_KEY,
+
+        /**
+         * That the answer is the element itself. A field read, a newtype's {@code value} among
+         * them, is another value; a newtype wearing the element, and the element standing as a
+         * wider type, are other values of other types.
+         */
+        IDENTICAL_VALUE
+    }
+
+    /** The way a reading found, and whether a newtype was read through on it. */
+    private record Found(List<String> steps, boolean wrapped) {
+
+        private static final Found THE_ELEMENT = new Found(List.of(), false);
+
+        Found {
+            steps = List.copyOf(steps);
+        }
+
+        Found worn() {
+            return new Found(steps, true);
+        }
+    }
+
+    /**
+     * One reading of one closure's answer, for one licence.
      *
      * <p>A value rather than a run of static calls, so that the bindings it is inside travel with
      * it. What stops it is that walk over the binding graph coming back to a binding it is already
      * answering ({@link BindingTrail}), which is the same law the reading of an input position
      * stops by — the one thing the two readings share.
      */
-    private record Reading(Map<BindingId, Core> held, DeclarationNewtypes newtypes) {
+    private record Reading(Map<BindingId, Core> held, DeclarationNewtypes newtypes,
+                           Licence licence) {
 
         private Reading {
             if (newtypes == null) {
@@ -83,13 +148,16 @@ public record ElementProjection(List<String> steps) {
             }
         }
 
-        private List<String> from(Core e, BindingId element) {
+        private Found from(Core e, BindingId element) {
             return steps(e, element, new BindingTrail());
         }
 
-        private List<String> steps(Core e, BindingId element, BindingTrail trail) {
-            // Where an element stands does not turn on the type it stands as.
-            return switch (Core.withoutStanding(e)) {
+        private Found steps(Core e, BindingId element, BindingTrail trail) {
+            return switch (e) {
+                // Where an element stands does not turn on the type it stands as; what is equal
+                // and what is the same value do.
+                case Core.Widen standing -> licence == Licence.PLACE
+                        ? steps(standing.value(), element, trail) : null;
                 // What a `let` comes to is what its body comes to, and the name it bound is answered
                 // where it is read. Ordinary binding semantics, and what a helper applied to the
                 // element leaves behind once it is spliced in: `amountOf(line).value` is a field of
@@ -98,7 +166,7 @@ public record ElementProjection(List<String> steps) {
                 case Core.LetIn let -> steps(let.body(), element, trail);
                 case Core.Read read -> {
                     if (element.equals(read.binding())) {
-                        yield List.of();
+                        yield Found.THE_ELEMENT;
                     }
                     Core through = held.get(read.binding());
                     yield through == null ? null
@@ -120,34 +188,45 @@ public record ElementProjection(List<String> steps) {
                         from = along.get(next).type();
                         next++;
                     }
-                    List<String> base = steps(read, element, trail);
+                    Found base = steps(read, element, trail);
                     if (base == null || next == along.size()) {
                         yield base;
                     }
-                    List<String> longer = new ArrayList<>(base);
+                    if (licence == Licence.IDENTICAL_VALUE) {
+                        yield null;
+                    }
+                    List<String> longer = new ArrayList<>(base.steps());
                     for (Core.FieldProjection.Step step : along.subList(next, along.size())) {
                         if (Location.isStep(from, step.field(), newtypes)) {
                             longer.add(step.field());
                         }
                         from = step.type();
                     }
-                    yield List.copyOf(longer);
+                    yield new Found(longer, base.wrapped());
                 }
                 // A field of a construction is the value the construction was given for it, which
                 // is where that value stands.
                 case Core.FieldAccess fa when givenTo(fa.target(), fa.field(), trail)
                         instanceof Core given -> steps(given, element, trail);
                 case Core.FieldAccess fa -> {
-                    List<String> base = steps(fa.target(), element, trail);
+                    Found base = licence == Licence.IDENTICAL_VALUE ? null
+                            : steps(fa.target(), element, trail);
                     if (base == null) {
                         yield null;
                     }
                     if (!Location.isStep(fa.target().type(), fa.field(), newtypes)) {
                         yield base;
                     }
-                    List<String> longer = new ArrayList<>(base);
+                    List<String> longer = new ArrayList<>(base.steps());
                     longer.add(fa.field());
-                    yield List.copyOf(longer);
+                    yield new Found(longer, base.wrapped());
+                }
+                // A newtype of one value is a name the value wears: equal where the value is, and
+                // not the value.
+                case Core.Construct made when licence == Licence.EQUAL_KEY
+                        && newtypes.of(made.typeName().key()) && made.values().size() == 1 -> {
+                    Found worn = steps(made.values().getFirst().value(), element, trail);
+                    yield worn == null ? null : worn.worn();
                 }
                 case null, default -> null;
             };
@@ -159,7 +238,9 @@ public record ElementProjection(List<String> steps) {
          * the input is read by ({@link ConstructionProjection#given}).
          */
         private Core givenTo(Core e, String field, BindingTrail trail) {
-            return switch (Core.withoutStanding(e)) {
+            return switch (e) {
+                case Core.Widen standing -> licence == Licence.PLACE
+                        ? givenTo(standing.value(), field, trail) : null;
                 case Core.Construct made -> ConstructionProjection.given(made, field);
                 case Core.LetIn let -> givenTo(let.body(), field, trail);
                 case Core.Read read -> {

@@ -459,8 +459,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "Ljava/util/function/Function;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/ElementProjection$Reading", "steps", "(" + core + "L" + c
-                + "types/BindingId;L" + c + "inputs/BindingTrail;)Ljava/util/List;",
-                Reading.NAMES, READS_THE_NAMES);
+                + "types/BindingId;L" + c + "inputs/BindingTrail;)L" + c
+                + "inputs/ElementProjection$Found;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/ElementProjection$Reading", "givenTo", "(" + core
                 + "Ljava/lang/String;L" + c + "inputs/BindingTrail;)" + core, Reading.NAMES,
                 READS_THE_NAMES);

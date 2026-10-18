@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.opentest4j.AssertionFailedError;
 
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceLayouts;
@@ -22,6 +23,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -484,8 +486,16 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
      */
     @Test
     void keysAMapWrappedInANewtypeAreCountedAsTheValuesTheyWrap() {
-        for (String keys : List.of("List.map(i -> Label(i.label), issues)",
-                "List.reverse(List.map(l -> l, List.map(i -> Label(i.label), issues)))")) {
+        record Wrapped(String key, String keys) { }
+        for (Wrapped wrapped : List.of(
+                new Wrapped("k", "List.map(i -> Label(i.label), issues)"),
+                new Wrapped("k",
+                        "List.reverse(List.map(l -> l, List.map(i -> Label(i.label), issues)))"),
+                new Wrapped("k", "List.map(i -> { let l = Label(i.label)\n l }, issues)"),
+                new Wrapped("k", "List.map(i -> { let l = Label(i.label)\n let m = l\n m },"
+                        + " issues)"),
+                new Wrapped("Label(k.label)", "issues"),
+                new Wrapped("{ let key = Label(k.label)\n key }", "issues"))) {
             Compilation compilation = measured("""
                     module example.popular
 
@@ -494,16 +504,16 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                     data Issue = { label: String }
 
                     let countsOf (issues: List<Issue>): Map<Label, Int> =
-                        List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc),
+                        List.fold((acc, k) -> Map.updateOrInsert(%s, 1, n -> n + 1, acc),
                             Map.empty, %s)
 
                     behavior popular : (issues: List<Issue>, atLeast: Int) -> Map<Label, Int>
 
                     let popular (issues, atLeast) =
                         Map.filterEntries((_, count) -> count >= atLeast, countsOf(issues))
-                    """.formatted(keys));
+                    """.formatted(wrapped.key(), wrapped.keys()));
             assertTrue(json(compilation).contains("multiplicity(issues[*].label)"),
-                    () -> keys + ": " + report(compilation));
+                    () -> wrapped + ": " + report(compilation));
         }
     }
 
@@ -740,15 +750,32 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         node.forEach(child -> unmet(child, out));
     }
 
+    /**
+     * The keys of a row are read to the end of the list: none from an empty one, a string with an
+     * escaped quote whole, a label as the string it wears, and anything else, or two keys with
+     * nothing between them, as a failure rather than a key left out.
+     */
+    @Test
+    void theKeysOfARowAreReadToTheEndOrNotAtAll() {
+        assertEquals(List.of(), keysIn(""));
+        assertEquals(List.of("a", "b\\\"c", "d"), keysIn("\"a\", \"b\\\"c\", Label(\"d\")"));
+        for (String unread : List.of("\"a\", 3", "\"a\" \"b\"", "\"a\",", "Name(\"a\")")) {
+            assertThrows(AssertionFailedError.class, () -> keysIn(unread), unread);
+        }
+    }
+
     /** A row the block offers, as it is written and as it is read back. */
     private record Offered(String written, Row row) { }
 
     private static final Pattern ROW = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
 
-    private static final Pattern KEY = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"");
+    /** One key of a list of them, where the last one read left off: a string, or a label wearing
+     *  one. */
+    private static final Pattern KEY = Pattern.compile(
+            "\\G(?:^|, )(?:\"((?:[^\"\\\\]|\\\\.)*)\"|Label\\(\"((?:[^\"\\\\]|\\\\.)*)\"\\))");
 
     /** Every row the block offers, each read back from how it is written; a row this cannot read
-     *  back fails, since a row left unread is one nothing checks. */
+     *  back to its end fails, since a part left unread is one nothing checks. */
     private static List<Offered> offered(Compilation compilation) {
         List<Offered> out = new ArrayList<>();
         for (String each : offeredInputs(compilation)) {
@@ -756,14 +783,27 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
             if (!matched.matches()) {
                 fail("an offered row is one this reads back: " + each);
             }
-            List<String> keys = new ArrayList<>();
-            Matcher key = KEY.matcher(matched.group(1));
-            while (key.find()) {
-                keys.add(key.group(1));
-            }
-            out.add(new Offered(each, new Row(keys, Integer.parseInt(matched.group(2)))));
+            out.add(new Offered(each, new Row(keysIn(matched.group(1)),
+                    Integer.parseInt(matched.group(2)))));
         }
         return out;
+    }
+
+    /** The keys {@code list} writes, one after another to its end, or a failure where something
+     *  in it is no key. */
+    private static List<String> keysIn(String list) {
+        List<String> keys = new ArrayList<>();
+        Matcher key = KEY.matcher(list);
+        int read = 0;
+        while (key.find()) {
+            keys.add(key.group(1) != null ? key.group(1) : key.group(2));
+            read = key.end();
+        }
+        if (read != list.length()) {
+            fail("the keys of an offered row are read to the end: " + list + " (read to " + read
+                    + ")");
+        }
+        return keys;
     }
 
     /** The rows the block offers, read back from how they are written. */

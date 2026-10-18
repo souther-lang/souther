@@ -630,7 +630,7 @@ final class InputPath {
         }
         Crossing crossing = crossing(operation, wanted);
         if (crossing == null) {
-            crossing = throughAnIdentityMap(operation, args, wanted);
+            crossing = throughAnIdentityMap(operation, args, wanted, names);
         }
         if (crossing == null) {
             PathResolution flattened = throughAFlattening(operation, args, wanted, names);
@@ -653,14 +653,14 @@ final class InputPath {
      * argument, and a place of one is a place of the other. Null where it is any other operation, or
      * where what is wanted is no element of the answer.
      */
-    private static Crossing throughAnIdentityMap(ValueName operation, List<Core> args,
-                                                 Wanted wanted) {
+    private Crossing throughAnIdentityMap(ValueName operation, List<Core> args, Wanted wanted,
+                                          BindingEnvironment names) {
         boolean ofAnElement = switch (wanted) {
             case Wanted.APart(HeldIn.Part part) -> part == HeldIn.Part.ELEMENT;
             case Wanted.APlaceOfAnElement _ -> true;
         };
-        DeclaredArgument same = ofAnElement
-                ? AnIdentityMap.of(operation, args, InputPath::blockStanding) : null;
+        DeclaredArgument same = ofAnElement ? AnIdentityMap.of(operation, args,
+                InputPath::blockStanding, names.heldByTheBody(), newtypes) : null;
         return same == null ? null : new Crossing(same, wanted);
     }
 
@@ -818,6 +818,33 @@ final class InputPath {
     record Beneath(Core from, OnePerElement.Answered answered) {}
 
     /**
+     * Whether a walk asking {@code question} goes on with the list {@code asked}, which following
+     * the names it stands for came to {@code reached}.
+     *
+     * <p>A question about one value for each element counts which of the values are equal, and
+     * what one type calls equal is not shown to be what another does. So the list must be of one
+     * type as it was asked and as it was reached, and stand as no wider type at either: following
+     * names is free to set aside the type a value stood as on the way, and a type kept from the
+     * one to the other is what this walk can show of it — a condition it asks, and no record that
+     * nothing was set aside. Whether a list holds something does not turn on the type it stands
+     * as, so that question asks none of this.
+     *
+     * <p>Asked before anything else is of what was reached, a position it names among them: a list
+     * that names one, reached from a list of another type, has held nothing yet the question can
+     * use.
+     */
+    static boolean goesOnThrough(Core asked, Core reached, ElementQuestion question) {
+        return switch (question) {
+            case ONE_PER_ELEMENT -> !(asked instanceof Core.Widen)
+                    && !(reached instanceof Core.Widen) && asked.type().equals(reached.type());
+            case SAME_EMPTINESS -> true;
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE ->
+                    throw new IllegalArgumentException("a list is followed beneath for a question"
+                            + " about one value for each element, not " + question);
+        };
+    }
+
+    /**
      * The step beneath {@code list} a walk asking {@code question} takes, where the list is the
      * answer of an operation the walk crosses or a binding an expansion said holds another's
      * elements — or null where it takes none.
@@ -849,7 +876,9 @@ final class InputPath {
         };
         // What a step that hands the elements on as they are answered of each, where it is asked.
         OnePerElement.Answered asTheyAre = asksWhatEachIs ? OnePerElement.Answered.ITSELF : null;
-        // Which elements a list holds does not turn on the type it stands as.
+        if (!goesOnThrough(list, list, question)) {
+            return null;
+        }
         Core e = Core.withoutStanding(list);
         if (e instanceof Core.Read r) {
             return switch (names.stepFrom(r.binding(), question, HeldIn.Part.ELEMENT)) {

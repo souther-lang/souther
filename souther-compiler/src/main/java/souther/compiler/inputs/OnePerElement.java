@@ -40,10 +40,12 @@ public record OnePerElement(TermPath container, ElementProjection projected, boo
      *
      * <p>A newtype of one value is a name the value wears, and two of them are equal exactly where
      * the values are, which is the whole of what a count of how often a key occurs asks. Its
-     * values are not the values of the place — {@code Money(x)} is not {@code x} — so the place
-     * itself is read as it was ({@link ElementProjection#read}) and the wrapping is said beside it.
-     * A value standing as a wider type is not read through: what the wider type says equal or in
-     * order is not shown to be what the narrower one does.
+     * values are not the values of the place — {@code Money(x)} is not {@code x} — so the way to
+     * the place is the one a place is read by and the wrapping is said beside it. A value standing
+     * as a wider type is not read through: what the wider type says equal or in order is not shown
+     * to be what the narrower one does. Both are said of every node on the way, behind a name or a
+     * {@code let} as much as at the answer itself, by the one walk a place is read by
+     * ({@link ElementProjection#readAsAKey}).
      *
      * @param at      the way from the element to the value the answer is or wears
      * @param wrapped whether the answer wears that value as a newtype rather than being it
@@ -66,19 +68,7 @@ public record OnePerElement(TermPath container, ElementProjection projected, boo
          */
         public static Answered of(Core answer, BindingId element, Map<BindingId, Core> held,
                                   DeclarationNewtypes newtypes) {
-            return switch (answer) {
-                case Core.Widen _ -> null;
-                case Core.Construct made when newtypes.of(made.typeName().key())
-                        && made.values().size() == 1 -> {
-                    Answered worn = of(made.values().getFirst().value(), element, held, newtypes);
-                    yield worn == null ? null : new Answered(worn.at(), true);
-                }
-                case null -> null;
-                default -> {
-                    ElementProjection at = ElementProjection.read(answer, element, held, newtypes);
-                    yield at == null ? null : new Answered(at, false);
-                }
-            };
+            return ElementProjection.readAsAKey(answer, element, held, newtypes);
         }
     }
 }

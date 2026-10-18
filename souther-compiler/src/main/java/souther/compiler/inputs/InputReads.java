@@ -2025,6 +2025,7 @@ public final class InputReads {
      */
     private OnePerElement beneathEachStep(Core list, ElementQuestion question, Symbols symbols,
                                           DeclarationNewtypes newtypes) {
+        Core asked = list;
         Denotation at = standing(list, symbols, newtypes);
         ElementProjection projected = new ElementProjection(List.of());
         boolean wrapped = false;
@@ -2032,6 +2033,11 @@ public final class InputReads {
         // already answered for; a step down an operation stays inside one finite tree.
         Set<BindingId> met = new HashSet<>();
         while (true) {
+            // Asked of the list as handed to the step and as it came to be reached, since
+            // following names sets aside what a value stood as on the way.
+            if (!InputPath.goesOnThrough(asked, at.value(), question)) {
+                return null;
+            }
             if (at.at().pathOf(at.value(), newtypes) instanceof PathResolution.At(
                     TermPath container)) {
                 return new OnePerElement(container, projected, wrapped);
@@ -2052,7 +2058,8 @@ public final class InputReads {
                 projected = step.answered().at().then(projected);
                 wrapped |= step.answered().wrapped();
             }
-            at = where.standing(step.from(), symbols, newtypes);
+            asked = step.from();
+            at = where.standing(asked, symbols, newtypes);
         }
     }
 

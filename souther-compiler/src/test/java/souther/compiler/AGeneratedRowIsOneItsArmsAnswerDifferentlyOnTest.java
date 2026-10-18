@@ -18,6 +18,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,7 +64,13 @@ class AGeneratedRowIsOneItsArmsAnswerDifferentlyOnTest {
         StringBuilder rows = new StringBuilder();
         for (String line : block.lines().filter(line -> !line.startsWith("//")).toList()) {
             Matcher row = CASE_ROW.matcher(line);
-            rows.append(!row.find() ? line : line.replace("<?>", "Points("
+            if (!row.find()) {
+                assertFalse(line.contains("<?>"), () -> "a row left to answer is one this"
+                        + " answers: " + line);
+                rows.append(line).append('\n');
+                continue;
+            }
+            rows.append(line.replace("<?>", "Points("
                     + (row.group(1).equals("Gold") ? row.group(2) : "0") + ")")).append('\n');
         }
         Compilation compilation = compiled(BONUS + "\n" + rows);
@@ -150,6 +157,8 @@ class AGeneratedRowIsOneItsArmsAnswerDifferentlyOnTest {
         for (String line : block.lines().filter(line -> !line.startsWith("//")).toList()) {
             Matcher row = ROW.matcher(line);
             if (!row.find()) {
+                assertFalse(line.contains("<?>"), () -> "a row left to answer is one this"
+                        + " answers: " + line);
                 out.append(line).append('\n');
                 continue;
             }

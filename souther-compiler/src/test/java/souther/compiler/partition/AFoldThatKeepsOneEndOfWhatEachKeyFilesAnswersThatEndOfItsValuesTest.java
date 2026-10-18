@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.opentest4j.AssertionFailedError;
 
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceLayouts;
@@ -23,6 +24,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -359,17 +361,40 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         node.forEach(child -> unmet(child, out));
     }
 
+    /**
+     * The elements of a row are read to the end of the list: none from an empty one, a touch
+     * whole with an escaped quote in its account, the touch a visit holds, and anything else, or
+     * two elements with nothing between them, as a failure rather than an element left out.
+     */
+    @Test
+    void theElementsOfARowAreReadToTheEndOrNotAtAll() {
+        assertEquals(List.of(), touchesIn(""));
+        assertEquals(List.of(new Touch("a\\\"b", 4), new Touch("c", -1)), touchesIn(
+                "Touch { account = \"a\\\"b\", days = 4 }, Visit { touch = Touch { account ="
+                        + " \"c\", days = -1 }, note = \"n\" }"));
+        for (String unread : List.of("Touch { account = \"a\", days = 4 }, 3",
+                "Touch { account = \"a\", days = 4 }Touch { account = \"b\", days = 1 }",
+                "Visit { touch = Touch { account = \"c\", days = 1 } }")) {
+            assertThrows(AssertionFailedError.class, () -> touchesIn(unread), unread);
+        }
+    }
+
     /** A row the block offers, as it is written and as it is read back. */
     private record Offered(String written, Row row) { }
 
     private static final Pattern ROW = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
 
-    private static final Pattern TOUCH = Pattern.compile(
-            "Touch \\{ account = \"((?:[^\"\\\\]|\\\\.)*)\", days = (-?\\d+) \\}");
+    private static final String TOUCH =
+            "Touch \\{ account = \"((?:[^\"\\\\]|\\\\.)*)\", days = (-?\\d+) \\}";
 
-    /** Every row the block offers, each read back from how it is written — the touches in it,
-     *  wherever they stand; a row this cannot read back fails, since a row left unread is one
-     *  nothing checks. */
+    /** One element of a list of them, where the last one read left off: a touch, or a visit
+     *  holding one. */
+    private static final Pattern ELEMENT = Pattern.compile("\\G(?:^|, )(?:" + TOUCH
+            + "|Visit \\{ touch = " + TOUCH + ", note = \"(?:[^\"\\\\]|\\\\.)*\" \\})");
+
+    /** Every row the block offers, each read back from how it is written — the touch each
+     *  element is or holds; a row this cannot read back to its end fails, since a part left
+     *  unread is one nothing checks. */
     private static List<Offered> offered(Compilation compilation) {
         List<Offered> out = new ArrayList<>();
         for (String each : offeredInputs(compilation)) {
@@ -377,14 +402,29 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
             if (!matched.matches()) {
                 fail("an offered row is one this reads back: " + each);
             }
-            List<Touch> touches = new ArrayList<>();
-            Matcher one = TOUCH.matcher(matched.group(1));
-            while (one.find()) {
-                touches.add(new Touch(one.group(1), Integer.parseInt(one.group(2))));
-            }
-            out.add(new Offered(each, new Row(touches, Integer.parseInt(matched.group(2)))));
+            out.add(new Offered(each, new Row(touchesIn(matched.group(1)),
+                    Integer.parseInt(matched.group(2)))));
         }
         return out;
+    }
+
+    /** The touches {@code list} writes, one element after another to its end, or a failure where
+     *  something in it is neither a touch nor a visit holding one. */
+    private static List<Touch> touchesIn(String list) {
+        List<Touch> touches = new ArrayList<>();
+        Matcher one = ELEMENT.matcher(list);
+        int read = 0;
+        while (one.find()) {
+            touches.add(one.group(1) != null
+                    ? new Touch(one.group(1), Integer.parseInt(one.group(2)))
+                    : new Touch(one.group(3), Integer.parseInt(one.group(4))));
+            read = one.end();
+        }
+        if (read != list.length()) {
+            fail("the elements of an offered row are read to the end: " + list + " (read to "
+                    + read + ")");
+        }
+        return touches;
     }
 
     /** The rows the block offers, read back from how they are written. */

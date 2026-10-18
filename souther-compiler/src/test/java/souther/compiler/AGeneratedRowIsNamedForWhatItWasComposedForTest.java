@@ -116,14 +116,27 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         return (int) block.lines().filter(line -> line.startsWith("    | ")).count();
     }
 
-    /** The names the block offers, in the order it writes them. */
+    /** The names the block offers, in the order it writes them — one for every row written with
+     *  a name, or a failure, since a row whose name this does not read is a row nothing checks. */
     private static List<String> names(String block) {
         List<String> found = new ArrayList<>();
-        Matcher m = OFFERED.matcher(block.replace("//", ""));
+        String rows = block.replace("//", "");
+        Matcher m = OFFERED.matcher(rows);
         while (m.find()) {
             found.add(m.group(1));
         }
+        assertEquals(namedRowsIn(rows), found.size(),
+                () -> "a name is read for every row the block writes with one: " + block);
         return found;
+    }
+
+    /** How many rows {@code rows} writes with a name, each of the others written with none. */
+    private static long namedRowsIn(String rows) {
+        List<String> written = rows.lines().map(String::trim)
+                .filter(line -> line.startsWith("|")).toList();
+        written.forEach(line -> assertTrue(line.startsWith("| \"") || line.startsWith("| ("),
+                () -> "a row is written with a name or with none: " + line));
+        return written.stream().filter(line -> line.startsWith("| \"")).count();
     }
 
     @Test
