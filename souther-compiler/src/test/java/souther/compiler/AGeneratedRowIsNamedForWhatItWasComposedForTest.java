@@ -5,17 +5,18 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -30,18 +31,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * meet a line this row also sits on, and the line stops being offered — and naming a row for it made
  * the name move when nothing about the row had.
  *
- * <p>That is what the second test here pins, and it pins the other direction too: the set a row
- * settles is allowed to change. The two are separate facts and only one of them is an identity.
+ * <p>That is what the tests here pin, and they pin the other direction too: the set a row settles is
+ * allowed to change. The two are separate facts and only one of them is an identity.
  */
 class AGeneratedRowIsNamedForWhatItWasComposedForTest {
 
+    /** The guard divides the amount and nothing divides the tier, so the row for the ceiling holds
+     *  the first tier and each other tier has a row composed for it alone, named for it. */
     private static final String LIMIT = """
             module example.limit
 
             data Amount = Int
                 invariant value >= 0
 
-            data Tier = Gold | Silver
+            data Tier = Gold | Silver | Bronze
             data Draft = { cost: Amount, tier: Tier }
             data Submitted = { cost: Amount, tier: Tier }
             data Rejected = { reason: String }
@@ -64,8 +67,18 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
                     -> Submitted { cost = Amount(0), tier = Silver }
             """;
 
-    /** {@code | "name" : (inputs)} as the block writes it, over lines the formatter may have wrapped. */
-    private static final Pattern OFFERED = Pattern.compile("\\|\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\n?\\s*:");
+    /** A row at the bottom of the range in the first tier, which meets the lines the row for the
+     *  second tier stood at and settles nothing that row was composed for. */
+    private static final String AND_A_ROW_AT_NOTHING = LIMIT + """
+
+            example submit
+                | "a gold draft at nothing is submitted"
+                    : (Draft { cost = Amount(0), tier = Gold })
+                    -> Submitted { cost = Amount(0), tier = Gold }
+            """;
+
+    /** The values of the generated row for the second tier, as the block writes them. */
+    private static final String SILVER = "(Draft { cost = Amount(0), tier = Silver })";
 
     private static String block(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -74,8 +87,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
-                        souther.compiler.query.OfferingRequest.overTheModule(
-                                compilation.modules().get(0))),
+                        OfferingRequest.overTheModule(compilation.modules().get(0))),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
     }
 
@@ -111,66 +123,62 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
                 | "a cap of nothing caps everything" : (5, Policy { rate = Rate(10), cap = Cap(0) }) -> 0
             """;
 
-    /** How many rows the block writes, named or not. A row the formatter wrapped is still one. */
-    private static int rows(String block) {
-        return (int) block.lines().filter(line -> line.startsWith("    | ")).count();
-    }
-
-    /** The names the block offers, in the order it writes them — one for every row written with
-     *  a name, or a failure, since a row whose name this does not read is a row nothing checks. */
+    /** The names the block's rows are written with, in its order. */
     private static List<String> names(String block) {
-        List<String> found = new ArrayList<>();
-        String rows = block.replace("//", "");
-        Matcher m = OFFERED.matcher(rows);
-        while (m.find()) {
-            found.add(m.group(1));
-        }
-        assertEquals(namedRowsIn(rows), found.size(),
-                () -> "a name is read for every row the block writes with one: " + block);
-        return found;
-    }
-
-    /** How many rows {@code rows} writes with a name, each of the others written with none. */
-    private static long namedRowsIn(String rows) {
-        List<String> written = rows.lines().map(String::trim)
-                .filter(line -> line.startsWith("|")).toList();
-        written.forEach(line -> assertTrue(line.startsWith("| \"") || line.startsWith("| ("),
-                () -> "a row is written with a name or with none: " + line));
-        return written.stream().filter(line -> line.startsWith("| \"")).count();
+        return RowsOfABlock.of(block).stream().flatMap(row -> row.name().stream()).toList();
     }
 
     @Test
     void noTwoRowsOfOneBehaviorAreOfferedUnderOneName() {
         String block = block(LIMIT);
-        List<String> offered = names(block);
+        Map<String, List<String>> byBehavior = new LinkedHashMap<>();
+        for (RowsOfABlock.Row row : RowsOfABlock.of(block)) {
+            row.name().ifPresent(name -> byBehavior
+                    .computeIfAbsent(row.behavior(), _ -> new ArrayList<>()).add(name));
+        }
+        List<String> offered = byBehavior.getOrDefault("submit", List.of());
 
-        assertEquals(4, rows(block),
-                "two rows for the classes and two at the points of the border:\n" + block);
+        // A claim about names holds of nothing where no row carries one: the two tiers the row for
+        // the ceiling does not hold are each a row composed for that tier alone.
+        assertTrue(offered.size() >= 2, () -> "rows of one behavior are named: " + block);
 
-        // Two of the four classes are offered a row, each said over it rather than named: the row
-        // over the ceiling was composed for the decision rule the class is reached by as well, the
-        // row for the other tier is the one handed for a point of the amount's line, and a row for
-        // several things is named for none. The two classes neither is offered for are where the
-        // offered rows stand: the row at the top of the range holds the first tier, and the row for
-        // the other tier holds the bottom of the range. No class moves onto the row that answers
-        // it — which class that row also settles is in the report.
-        assertEquals(List.of(), offered, block);
-        assertTrue(offeredFor(block).containsAll(
-                List.of("request.cost=100 < x", "request.tier=Silver")), block);
-
-        Set<String> distinct = new LinkedHashSet<>(offered);
-        assertEquals(offered.size(), distinct.size(),
-                "a name says which row it is, so no two rows share one: " + offered);
+        byBehavior.forEach((behavior, named) -> assertEquals(named.size(),
+                new LinkedHashSet<>(named).size(),
+                "a name says which row of " + behavior + " it is, so no two share one: " + named));
     }
 
     /**
-     * A class stays offered when a row settles something else it also sat on.
+     * A row keeps its name when another row meets a line it stood at.
      *
-     * <p>Offered and not named, which are two things and only the first is what this is about. A
-     * row that answers one thing carries its name; one that answers two carries neither and says
-     * what it fills over itself — and the class over the ceiling is answered by the same values as
-     * the arm the guard sends a run down, so what it is offered under moves from the name to the
-     * line above it. What would be a defect is the class going unmentioned.
+     * <p>The row for the second tier is composed for that tier and stands at the bottom of the
+     * amount's range, so it is the row handed for the points there as well. A row written at the
+     * bottom of the range in another tier meets those points and settles nothing the row for the
+     * second tier was composed for, so its values and its name stay. What it is handed for beside
+     * that is said over it while it is handed it, and not after.
+     */
+    @Test
+    void aRowKeepsItsNameWhenAnotherRowMeetsALineItStoodAt() {
+        String before = block(LIMIT);
+        String after = block(AND_A_ROW_AT_NOTHING);
+
+        RowsOfABlock.Row was = RowsOfABlock.at(before, SILVER);
+        RowsOfABlock.Row is = RowsOfABlock.at(after, SILVER);
+        assertEquals(Optional.of("request.tier=Silver"), was.name(), before);
+        assertEquals(Optional.of("request.tier=Silver"), is.name(),
+                "and the same name once a row meets the line it stood at: " + after);
+
+        assertTrue(was.fills().contains("value = 0"),
+                "a named row still says what else it is handed for: " + before);
+        assertFalse(is.fills().contains("value = 0"),
+                "and stops saying it once another row is handed it: " + after);
+    }
+
+    /**
+     * A class stays offered, and unnamed, when a row settles something else it also sat on.
+     *
+     * <p>The class over the ceiling is answered by the same values as the arm the guard sends a run
+     * down, so its row was composed for several things, carries no name, and says each over itself.
+     * A row written for another tier changes neither.
      */
     @Test
     void aRowKeepsWhatItIsOfferedForWhenAnotherRowSettlesWhatItAlsoSatOn() {
@@ -178,34 +186,29 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         String after = block(AND_A_ROW);
 
         String over = "request.cost=100 < x";
-        assertTrue(offeredFor(before).contains(over),
-                "the class is owed before anything is written: " + before);
-        assertTrue(offeredFor(after).contains(over),
-                "and is still what a row is offered for, beside the row written by hand: " + after);
-    }
-
-    /** What the block says its rows are for, whether as a name or as a line over an unnamed row. */
-    private static List<String> offeredFor(String block) {
-        List<String> found = new ArrayList<>(names(block));
-        block.lines().filter(line -> line.contains("fills "))
-                .map(line -> line.substring(line.indexOf("fills ") + "fills ".length()))
-                .forEach(found::add);
-        return found;
+        RowsOfABlock.Row was = RowsOfABlock.forThe(before, over);
+        RowsOfABlock.Row is = RowsOfABlock.forThe(after, over);
+        assertEquals(Optional.empty(), was.name(),
+                "a row composed for several things is named for none of them: " + before);
+        assertTrue(was.fills().contains(over), "and says each over itself: " + before);
+        assertEquals(Optional.empty(), is.name(),
+                "and is still, beside the row written by hand: " + after);
+        assertTrue(is.fills().contains(over), "saying the class over itself: " + after);
     }
 
     /**
-     * The other direction: what a row settles is the generation's to change. The line at the bottom of
-     * the range is offered while nothing meets it and is not offered once a row does, and neither says
-     * anything about the row named for the cell above.
+     * The other direction: what a row settles is the generation's to change. The class the row by
+     * hand sits in is offered a row while nothing is in it and is not once a row is, and neither says
+     * anything about the row composed for the cell above.
      */
     @Test
     void whatIsOfferedBesideItIsAllowedToChange() {
-        List<String> before = offeredFor(block(LIMIT));
-        List<String> after = offeredFor(block(AND_A_ROW));
+        String before = block(LIMIT);
+        String after = block(AND_A_ROW);
 
-        assertTrue(before.contains("request.tier=Silver"),
+        assertTrue(RowsOfABlock.of(before).stream().anyMatch(row -> row.isFor("request.tier=Silver")),
                 "the class the row was written for was owed: " + before);
-        assertTrue(!after.contains("request.tier=Silver"),
+        assertTrue(RowsOfABlock.of(after).stream().noneMatch(row -> row.isFor("request.tier=Silver")),
                 "and is not owed once a row sits in it: " + after);
     }
 
@@ -220,14 +223,13 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
     void aRowTwoLinesComposeIsOfferedWithoutAName() {
         String before = block(POLICY);
         String after = block(POLICY_AND_A_ROW_AT_THE_CAP);
-        String written = "| (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>";
+        assertEquals(Optional.empty(),
+                RowsOfABlock.at(before, "(0, Policy { rate = Rate(0), cap = Cap(0) })").name(),
+                "the row two lines compose carries no name: " + before);
         // Once the cap's line is met, the cap is the row's to choose, and it is chosen so that the
         // arm answering what accrued could be told from the arm answering the cap.
-        Pattern unnamed = Pattern.compile(
-                " {4}\\| \\(0, Policy \\{ rate = Rate\\(0\\), cap = Cap\\([0-9]+\\) \\}\\) -> <\\?>");
-
-        assertTrue(before.contains(written), "the row two lines compose carries no name: " + before);
-        assertTrue(after.lines().anyMatch(line -> unnamed.matcher(line).matches()),
+        assertEquals(Optional.empty(),
+                RowsOfABlock.at(after, "(0, Policy { rate = Rate(0), cap = Cap(").name(),
                 "and carries none once a row meets one of the two lines: " + after);
         assertEquals(List.of(), names(before), "there is nothing here a cell composed");
         assertEquals(List.of(), names(after), "nor after");

@@ -227,8 +227,11 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
                         OfferingRequest.overTheModule("example.doubled")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
                 compilation.db()).text();
-        assertTrue(block.contains("\"the body answering what doubled zero answers\"")
-                        && block.contains("\"the body answering what doubled one answers\""),
+        List<RowsOfABlock.Row> rows = RowsOfABlock.of(block);
+        assertTrue(rows.stream().anyMatch(
+                        row -> row.isFor("the body answering what doubled zero answers"))
+                        && rows.stream().anyMatch(
+                                row -> row.isFor("the body answering what doubled one answers")),
                 () -> "a row composed for each says which: " + block);
     }
 
