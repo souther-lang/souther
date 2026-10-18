@@ -134,10 +134,22 @@ public final class WhatARelationLeavesUndivided {
      * which is everything they could be. The values left are then asked what a term that is apart
      * reaches, as {@link #of} asks it, so a value neither shown to settle the relation nor shown to
      * leave it is no answer at all.
+     *
+     * <p><b>An answer about where the relation divides the term, and not about which rows can be
+     * run.</b> The ends where the type stops are read as the class's account says: an end value
+     * the relation comes out one way at only because its partner would pass where the type stops is
+     * no class of the model's, as {@code x < y} draws no line at the greatest {@code x}. So
+     * {@link Undivided} says the relation draws no line on the term, and not that every value the
+     * type holds has a row on each side the run can hold: at the least {@code Int},
+     * {@code x * y >= 1000} has none with {@code y} at minus one. Whether a row has a value the run
+     * can hold is asked of the row, where the arithmetic is done in the type
+     * ({@code OrderedAffineBoundary.productAt}); a reader wanting a row on each side for every
+     * value asks that, and not this.
      */
     public sealed interface Leaves {
 
-        /** Every value the term may hold leaves the relation coming out either way. */
+        /** The relation draws no line on the term: every value it may hold leaves the relation
+         *  coming out either way, an end of the type read as the class's account reads it. */
         record Undivided() implements Leaves {}
 
         /**
@@ -337,20 +349,21 @@ public final class WhatARelationLeavesUndivided {
      * a value there — which lie between the level over each end of the run, and over an end the run
      * has none of, nought.
      *
-     * <p>A product past where its type stops is a run that aborts, and no row of either side. Every
-     * value of the other the reaching needs lies within one of the level over the value, so its
-     * product lies within the value of the level, and no further out than the value itself where
-     * the value is further out than the level. So where twice the level is a value of the type,
-     * none of those products is past where it stops, but the one of the least value there is with
-     * minus one. Where it is not, nothing is shown. That least value is where the representation
-     * stops and not a value a rule a model writes is about, and a relation reads an order as though
-     * it ran on past such an end; so a run of values left between is shown undivided over it beside
-     * the values past it, and not over it alone — where the least value is all that is left between,
-     * nothing is shown.
+     * <p>The ends where the type stops are read as a relation reads them (the class's account):
+     * an end value the relation comes out one way at only because its partner would pass where the
+     * type stops is no class, and a run of values that would is shown nothing. Every value of the
+     * other the reaching needs lies within one of the level over the value, so its product lies
+     * within the value of the level, and no further out than the value itself where the value is
+     * further out than the level. So where twice the level is a value of the type, the one product
+     * past where it stops is the least value's with minus one: the least value alone, which is the
+     * end of the type, as {@code x < y} has no {@code y} past the greatest {@code x} and divides
+     * nothing there. Where twice the level is past the type, a run of values would need such a
+     * partner, and nothing is shown.
      *
      * <p>A run that settles the relation is a class only where some row of it has a value: its value
      * nearest nought times the other's nearest nought, which is the least product there is, must be
-     * a value of the type, or nothing is shown.
+     * a value of the type, or the run is one every value of which stands only past where the type
+     * stops, and nothing is shown.
      *
      * <p>Held equal or unequal, only against nought: a product is nought where either factor is,
      * and against any other level, which values of {@code it} leave the other a whole number to
@@ -358,13 +371,11 @@ public final class WhatARelationLeavesUndivided {
      *
      * @param apart    whether the other is apart from {@code it} and tied to it by nothing, which is
      *                 what it takes for what the other reaches to be asked
-     * @param least    the least value the type of the product holds, or null where it holds no
-     *                 least
      * @param greatest the greatest value the type of the product holds, or null where it holds no
      *                 greatest
      */
     public static <P> Leaves leavesOfAProduct(Term<P> it, Term<P> other, ExactRatio level,
-                                              Rel relation, boolean apart, BigInteger least,
+                                              Rel relation, boolean apart,
                                               BigInteger greatest) {
         if (greatest != null && !(level.abs().times(ExactRatio.of(2))
                 instanceof ExactAnswer.Held<ExactRatio>(ExactRatio twice)
@@ -408,10 +419,8 @@ public final class WhatARelationLeavesUndivided {
             if (between == null) {
                 return null;
             }
-            if (between.holdsAWholeNumber() && (onlyTheEnd(between, least)
-                    || !(apart && other.realizes() != null
-                            && reachesOverAFactor(other.realizes(), between, sign, level,
-                                    relation)))) {
+            if (between.holdsAWholeNumber() && !(apart && other.realizes() != null
+                    && reachesOverAFactor(other.realizes(), between, sign, level, relation))) {
                 return null;
             }
         }
@@ -552,11 +561,6 @@ public final class WhatARelationLeavesUndivided {
         if (at != null && at.holdsAWholeNumber()) {
             out.add(at);
         }
-    }
-
-    /** Whether {@code run} holds the least value of its type and nothing else. */
-    private static boolean onlyTheEnd(WholeRun run, BigInteger least) {
-        return least != null && least.equals(run.low) && least.equals(run.high);
     }
 
     /** How far from nought the value of {@code run} nearest it is, or null where the run is no

@@ -2,6 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -12,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -243,6 +250,56 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
 
     private static String describe(List<BorderAssessment> lines) {
         return lines.stream().map(each -> each.axis() + " @ " + each.value()).toList().toString();
+    }
+
+    /**
+     * An end of the type the relation comes out one way at only because the partner would pass
+     * where the type stops is no class, for a product as for an order. A factor held to the least
+     * {@code Int} and the one above it fails {@code a * b >= 1000} at the least whatever {@code b}
+     * the run can multiply it by, and draws no line there, as a value held to the greatest
+     * {@code Int} and the one below it fails {@code x < y} at the greatest and draws none.
+     */
+    @Test
+    void anEndOfTheTypeIsNoClassOfAProductAsOfAnOrder() {
+        Map<String, List<String>> product = classesOf(measured(compiled("""
+                data Low = Int
+                    invariant value <= -9223372036854775807
+                """, "a: Low, b: Int", "a.value * b >= 1000")));
+        assertTrue(!product.containsKey("a"), product.toString());
+
+        Map<String, List<String>> order = classesOf(measured(compiled("""
+                data High = Int
+                    invariant value >= 9223372036854775806
+                """, "x: High, y: Int", "x.value < y")));
+        assertTrue(!order.containsKey("x"), order.toString());
+    }
+
+    /**
+     * A row whose product passes where the type stops has no product, which is not the exact
+     * arithmetic failing to hold one: the run stops there, and the row stands on neither side of a
+     * line on the product. The least value times one and the greatest times one are products; the
+     * least times minus one and the greatest times two are not.
+     */
+    @Test
+    void aProductPastWhereTheTypeStopsIsNone() {
+        NumericTerm x = new NumericTerm.ValueOf(TermPath.of("x"));
+        NumericTerm y = new NumericTerm.ValueOf(TermPath.of("y"));
+        long least = Long.MIN_VALUE;
+        long greatest = Long.MAX_VALUE;
+        assertEquals(Optional.empty(), productOf(x, y, least, -1));
+        assertEquals(Optional.empty(), productOf(x, y, greatest, 2));
+        assertEquals(Optional.of(ExactRatio.of(least)), productOf(x, y, least, 1));
+        assertEquals(Optional.of(ExactRatio.of(greatest)), productOf(x, y, greatest, 1));
+        assertEquals(Optional.of(ExactRatio.ZERO), productOf(x, y, least, 0));
+    }
+
+    private static Optional<ExactRatio> productOf(NumericTerm x, NumericTerm y, long one,
+                                                  long other) {
+        Map<NumericTerm, Place> values = new LinkedHashMap<>();
+        values.put(x, Count.of(one));
+        values.put(y, Count.of(other));
+        return OrderedAffineBoundary.productAt(List.of(x, y), values)
+                instanceof ExactAnswer.Held<Optional<ExactRatio>>(var product) ? product : null;
     }
 
     /** One row of a measurement: what each input was written as and what each point is for. */

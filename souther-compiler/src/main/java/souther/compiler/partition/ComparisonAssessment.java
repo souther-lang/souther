@@ -1255,6 +1255,11 @@ sealed interface ComparisonAssessment {
      * A relation's word at each of {@code places}: that it relates the value there to another
      * value and divides none of them, where it is shown to leave the place undivided, and that the
      * other value is not shown to reach every value there, where it is not.
+     *
+     * <p>Undivided is where the relation draws no line, the ends of a type read as a relation
+     * reads them ({@link WhatARelationLeavesUndivided.Leaves}), and that is all it is read as here.
+     * It is not that every value the type holds has a row on each side the run can hold, and a
+     * reader wanting that asks it of the rows.
      */
     static List<LeftAt> relatingAt(List<FilingCoordinate> places,
                                    Set<FilingCoordinate> undivided) {

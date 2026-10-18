@@ -1352,11 +1352,14 @@ public sealed interface BorderQuantity
                 case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
                 case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
                         switch (OrderedAffineBoundary.productAt(terms(), values)) {
-                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                            case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
                                     Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
-                            case ExactAnswer.Held<ExactRatio>(ExactRatio product) ->
-                                    where.holds(new Level.OfTheQuantity(product))
-                                            ? Stands.YES : Stands.NO;
+                            // A row whose product passes where the type stops has none, and
+                            // stands on neither side of the line.
+                            case ExactAnswer.Held<Optional<ExactRatio>>(Optional<ExactRatio> product)
+                                    -> product.isPresent()
+                                    && where.holds(new Level.OfTheQuantity(product.get()))
+                                    ? Stands.YES : Stands.NO;
                         };
             };
         }
@@ -1624,8 +1627,7 @@ public sealed interface BorderQuantity
                     remainder.dividend().terms(), values -> OrderedAffineBoundary.remainderAt(
                             remainder.wholeDividend(), remainder.divisor(), values));
             case ProductOfAPair product -> HeldValues.OfAForm.of(region, product.terms(),
-                    values -> OrderedAffineBoundary.productAt(product.terms(), values)
-                            .map(Optional::of));
+                    values -> OrderedAffineBoundary.productAt(product.terms(), values));
             case HowMany _ -> HeldValues.NONE;
         };
     }

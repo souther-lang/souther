@@ -52,7 +52,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                                      boolean apart) {
         return WhatARelationLeavesUndivided.leavesOfAProduct(term("x", 1, it, it),
                 term("y", 1, other, reached), ExactRatio.of(level), relation, apart,
-                BigInteger.valueOf(Long.MIN_VALUE), GREATEST_INT);
+                GREATEST_INT);
     }
 
     private static SettledRun settled(Long from, Long to, boolean holds) {
@@ -90,18 +90,21 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
-     * {@code x * y >= 1000} with {@code x} held at the least value of the type. With {@code y}
-     * held at minus one the run settling it is that one pair, whose product passes where the type
-     * stops, so it is no class. With {@code y} from minus one to one, the only row on the side the
-     * rule holds is that pair too, and what is left between is the least value alone, which a
-     * relation reads as though the order ran on past it: nothing is shown either way.
+     * {@code x * y >= 1000} with {@code x} at the least value of the type, whose product with minus
+     * one passes where the type stops. That the rule fails there with every {@code y} the run can
+     * multiply it by is the end of the type, as {@code x < y} fails at the greatest {@code x}, and
+     * draws no line: beside the next value up, which minus one takes over the level, and alone,
+     * {@code x} is undivided. Where the one pair a run would be settled by is that one, the run
+     * stands only past the type, and nothing is shown.
      */
     @Test
-    void aProductOnlyTheLeastValueMeetsIsShownNothingOf() {
+    void theLeastValueAloneIsTheEndOfTheTypeAndDrawsNoLine() {
         long least = Long.MIN_VALUE;
+        assertEquals(new Leaves.Undivided(), ofAProduct(run(least, least + 1),
+                NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, 1000, Rel.GE, true));
+        assertEquals(new Leaves.Undivided(), ofAProduct(run(least, least), run(-1L, 1L),
+                run(-1L, 1L), 1000, Rel.GE, true));
         assertNull(ofAProduct(run(least, least), run(-1L, -1L), run(-1L, -1L), 1000, Rel.GE,
-                true));
-        assertNull(ofAProduct(run(least, least), run(-1L, 1L), run(-1L, 1L), 1000, Rel.GE,
                 true));
     }
 

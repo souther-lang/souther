@@ -996,7 +996,7 @@ public final class LevelRealizer {
                                    ValuesTried tried) {
         List<NumericTerm> both = List.of(over.one(), over.other());
         Realization named = amongTheValuesNamed(both,
-                values -> OrderedAffineBoundary.productAt(both, values).map(Optional::of),
+                values -> OrderedAffineBoundary.productAt(both, values),
                 over.where(), within, tried);
         if (named != null) {
             return named;
@@ -1013,6 +1013,12 @@ public final class LevelRealizer {
             if (asked == null || !asked.isWhole()
                     || !(asked.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger product))) {
                 // A level no two whole numbers multiply to.
+                continue;
+            }
+            // A level past where the type stops is a product the run stops at, which no row has;
+            // that the point is the relation's own is not settled by it either way.
+            if (!Carrier.WHOLE.extent().admits(Count.of(new BigDecimal(product)))) {
+                bounded = false;
                 continue;
             }
             PairsMultiplyingTo pairs = PairsMultiplyingTo.of(product);

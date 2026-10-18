@@ -10,6 +10,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -188,17 +189,23 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
     }
 
     /**
-     * What the two numbers {@code factors} come to multiplied at a row, or which way the exact
-     * arithmetic could not hold the product.
+     * What the two whole numbers {@code factors} come to multiplied at a row — none where the
+     * product passes where their type stops — or which way the exact arithmetic could not hold it.
      *
      * <p>The one place a product of two numbers is worked out of the numbers a row holds, so a row
      * read against a border on it, a value read for what it comes to and a row a search composed
-     * are read alike.
+     * are read alike. The run multiplies the two in their type and stops where the product is
+     * past its ends, so such a row has no product at all, and stands on neither side of a line on
+     * it: none is that, which the exact arithmetic failing to hold a number is not.
      */
-    static ExactAnswer<ExactRatio> productAt(List<NumericTerm> factors,
-                                             Map<NumericTerm, Place> values) {
+    static ExactAnswer<Optional<ExactRatio>> productAt(List<NumericTerm> factors,
+                                                       Map<NumericTerm, Place> values) {
         return Count.number(values.get(factors.get(0))).exactly()
-                .times(Count.number(values.get(factors.get(1))).exactly());
+                .times(Count.number(values.get(factors.get(1))).exactly())
+                .map(product -> product.floor() instanceof ExactAnswer.Held<BigInteger>(
+                        BigInteger whole)
+                        && Carrier.WHOLE.extent().admits(Count.of(new BigDecimal(whole)))
+                        ? Optional.of(product) : Optional.empty());
     }
 
     /**
