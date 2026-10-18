@@ -351,7 +351,7 @@ public final class InputNumber {
     public static SeedAndAdded ofAWalkAdding(Core e, InputDomain inputs, InputReads reads,
                                              RuleReadingSource source,
                                              Function<Core, Core.Block> blockOf) {
-        SeededWalk walk = SeededWalk.of(e, blockOf);
+        SeededWalk walk = SeededWalk.overEveryElement(e, blockOf);
         if (walk == null) {
             return null;
         }

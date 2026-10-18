@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
 
 import java.util.List;
@@ -16,18 +17,25 @@ import java.util.function.Function;
  * step. Which end of two values the step keeps is read here ({@link #endKept}), because it is a
  * question about the step alone.
  *
+ * <p>A reader concluding something of every element — that the walk ends with a total of what
+ * each adds, with the end kept of every one, or that each was asked what the step asks — takes a
+ * walk that applies its step to every element ({@link #overEveryElement}). That is a fact about
+ * the operation proved of its body ({@link HowAClosureIsApplied}), and not one a walk from a seed
+ * is by being one.
+ *
  * @param seed        what the walk starts from
  * @param container   what the walk walks
  * @param step        the closure the walk repeats
  * @param accumulator the parameter of the step the answer so far arrives on
  * @param element     the parameter of the step an element of the container arrives on
+ * @param applied     how far the operation goes applying the step
  */
 public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder accumulator,
-                         Core.Binder element) {
+                         Core.Binder element, HowAClosureIsApplied applied) {
 
     /**
      * What {@code node} is, where it is a call of a walk from a seed whose step is a block with both
-     * its parameters named, or null where it is anything else.
+     * its parameters named, or null where it is anything else — however far it applies the step.
      *
      * @param blockOf the block a closure argument stands for, where the call stands
      */
@@ -39,7 +47,20 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
         return walk == null || walk.element() == null || walk.element().binding() == null
                 || walk.accumulator() == null || walk.accumulator().binding() == null
                 ? null : new SeededWalk(walk.seed(), walk.container(), walk.step(),
-                        walk.accumulator(), walk.element());
+                        walk.accumulator(), walk.element(), walk.applied());
+    }
+
+    /**
+     * The same, where the walk applies its step to every element of the container, each in turn
+     * whatever an application answers — or null where it is no walk, or one that may stop short
+     * or pass some by.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static SeededWalk overEveryElement(Core node, Function<Core, Core.Block> blockOf) {
+        SeededWalk walk = of(node, blockOf);
+        return walk != null && walk.applied() == HowAClosureIsApplied.TO_EVERY_ELEMENT
+                ? walk : null;
     }
 
     /**
@@ -59,8 +80,9 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
      *
      * <p>Such a step answers the greater or the lesser of what it was carried and that value, so by
      * induction over the walk what the walk ends with is that end of the seed and the value on
-     * every element. {@code if l.discount > w then l.discount else w} and
-     * {@code Int.max(w, l.discount)} keep the greater of {@code w} and {@code l.discount}; a step
+     * every element the step was applied to — every element of the container, of a walk over
+     * every element ({@link #overEveryElement}). {@code if l.discount > w then l.discount else w}
+     * and {@code Int.max(w, l.discount)} keep the greater of {@code w} and {@code l.discount}; a step
      * that adds to what it chose, or chooses by anything but how the two stand, keeps neither.
      *
      * <p>What the step answers is read where the reader reads names

@@ -485,7 +485,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                    List<OnAWay> conditions, boolean heldWhole) {
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
-                termsAlong(sources, carriers, region, stating, heldWhole);
+                termsAlong(sources, carriers, region, read.quantities().region(), stating,
+                        heldWhole);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -592,15 +593,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * Each side as a term of the relation over the rows in {@code region}: where it may lie, what
      * it is shown to take there, and what it takes compared by equality.
+     *
+     * @param declared what the declarations alone leave, which is what elements other than the
+     *                 ones a way reads are left ({@link #keptAlong})
      */
     private List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> termsAlong(
             List<Source> sources, List<Carrier> carriers, SearchRegion region,
-            List<List<OnAWay>> stating, boolean heldWhole) {
+            SearchRegion declared, List<List<OnAWay>> stating, boolean heldWhole) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
             if (each.kept() != null) {
-                terms.add(keptAlong(each, sources.get(i), carriers.get(i), region,
+                terms.add(keptAlong(each, sources.get(i), carriers.get(i), region, declared,
                         stating.get(i), heldWhole));
                 continue;
             }
@@ -634,12 +638,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * and none before it further out. Nothing is said of which values it takes by equality, which
      * are no values of the element's place.
      *
+     * <p>The elements before are not the ones the way to the comparison reads. A condition on the
+     * way about the element's number — the element the step is applied to, or one an enclosing
+     * walk hands over, which the region holds as the same number — says nothing of the others,
+     * which an end above it may have been kept of. So where the earlier elements lie is what the
+     * declarations alone leave the number ({@code declared}), and they are shown to take its
+     * values only where the way states nothing of it. How many the container holds is one value
+     * of the run, and is read where the comparison is.
+     *
      * @param ofEach   what the declarations leave the element's number
      * @param carrier  the order the element's number is counted on
+     * @param region   the rows the way to the comparison lets through
+     * @param declared what the declarations alone leave
      * @param stating  what the way states of the element's number
      */
     private static WhatARelationLeavesUndivided.Term<FilingCoordinate> keptAlong(
-            Side side, Source ofEach, Carrier carrier, SearchRegion region,
+            Side side, Source ofEach, Carrier carrier, SearchRegion region, SearchRegion declared,
             List<OnAWay> stating, boolean heldWhole) {
         Quantity.KeptSoFar kept = side.kept();
         if (!(Count.written(kept.seed()) instanceof ExactAnswer.Held<Optional<Count>>(
@@ -654,7 +668,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds twoOrMore =
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(2)), null);
         // Where the element's number lies past the seed, on any element before.
-        NumericDomain.Bounds lies = (region.projectionOf(kept.ofEach())
+        NumericDomain.Bounds lies = (declared.projectionOf(kept.ofEach())
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
                 ? within : NumericDomain.Bounds.OPEN).meet(past);
         boolean atMostOne = kept.howMany() != null && region.projectionOf(kept.howMany())
@@ -667,10 +681,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds realizes = seed;
         NumericDomain.Bounds several = kept.howMany() == null ? null
                 : region.wholeRunOf(kept.howMany());
-        Way way = heldWhole ? wayOf(kept.ofEach(), stating) : Way.TIES;
-        NumericDomain.Bounds taken = ofEach == null || way == Way.TIES || several == null
+        boolean untouched = heldWhole && wayOf(kept.ofEach(), stating) == Way.UNTOUCHED;
+        NumericDomain.Bounds taken = ofEach == null || !untouched || several == null
                 || !several.meet(twoOrMore).holdsAValue() ? null
-                : realized(kept.ofEach(), ofEach, region, way);
+                : realized(kept.ofEach(), ofEach, declared, Way.UNTOUCHED);
         if (taken != null && taken.meet(past).holdsAValue()) {
             // One run with the seed where nothing lies between them: the seed is taken, or on
             // whole numbers the one next to it past it is.

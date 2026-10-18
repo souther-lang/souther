@@ -1583,7 +1583,7 @@ final class Pullback {
      * ({@link #addedUpOver}).
      */
     private Sized sizeOfAWalk(Core e, InputReads reads) {
-        SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
+        SeededWalk walk = SeededWalk.overEveryElement(e, blocksAt(new Denotation(e, reads)));
         if (walk == null || !(subjectOf(walk.container(), reads)
                 instanceof DecisionSubject.AnInput held)) {
             return null;
@@ -4688,7 +4688,7 @@ final class Pullback {
             return Optional.empty();
         }
         Denotation call = new Denotation(uses.applications().getFirst().call(), at);
-        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        SeededWalk walk = SeededWalk.overEveryElement(call.value(), blocksAt(call));
         if (walk == null || !name.binding().equals(walk.accumulator().binding())) {
             return Optional.empty();
         }
@@ -5459,7 +5459,7 @@ final class Pullback {
      * however deep the walks go.
      */
     private Derivation acrossAWalk(Core e, AnswerAspect aspect, InputReads reads) {
-        SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
+        SeededWalk walk = SeededWalk.overEveryElement(e, blocksAt(new Denotation(e, reads)));
         DecisionSubject container = walk == null ? null : subjectOf(walk.container(), reads);
         if (container == null || !quantifying.add(container)) {
             return null;
@@ -6437,7 +6437,7 @@ final class Pullback {
             ValueStanding.ReadThrough<InputReads> resolved =
                     Extreme.comparedAs(side, reads, sides());
             Denotation stands = new Denotation(resolved.value(), resolved.at());
-            SeededWalk walk = SeededWalk.of(stands.value(), blocksAt(stands));
+            SeededWalk walk = SeededWalk.overEveryElement(stands.value(), blocksAt(stands));
             SeededWalk.AnEndKept<InputReads> kept = walk == null ? null
                     : walk.endKept(stands.at(), sides());
             return kept == null ? null : new AWalkKeepingAnEnd(stands, walk, kept);

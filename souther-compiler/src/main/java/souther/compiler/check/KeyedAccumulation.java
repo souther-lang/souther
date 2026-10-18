@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.proof.KeyedUpdates;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
@@ -23,7 +24,8 @@ import java.util.function.Function;
  * answers the seed or the step applied to an earlier answer and an element ({@link Reductions});
  * the step files one value under one key of the answer so far and leaves every other key as it was
  * — an operation the library writes that way ({@link KeyedUpdates}), or the same written out as a
- * lookup of the key and a filing under it. So by induction over the walk the answer holds a key
+ * lookup of the key and a filing under it. Of a walk that applies its step to every element
+ * ({@link HowAClosureIsApplied#TO_EVERY_ELEMENT}), so by induction over it the answer holds a key
  * exactly where some element of the list has it, and what it holds there is what {@link Filed}
  * says the elements of that key come to.
  *
@@ -120,7 +122,8 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             return null;
         }
         Reductions.Reducing walk = Reductions.reducing(call, blockOf);
-        if (walk == null || !(AnOperationApplied.of(sides.standing(walk.seed(), at).value())
+        if (walk == null || walk.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                || !(AnOperationApplied.of(sides.standing(walk.seed(), at).value())
                 instanceof AnOperationApplied seed)
                 || !seed.operation().equals(EMPTY) || walk.element() == null
                 || walk.element().binding() == null || walk.accumulator() == null

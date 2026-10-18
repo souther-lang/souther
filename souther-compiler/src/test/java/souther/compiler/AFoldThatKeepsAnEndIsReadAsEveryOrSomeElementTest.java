@@ -242,6 +242,27 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     /**
+     * What holds of the element the step is applied to holds of no element before it. A step
+     * choosing only under a condition on its element keeps no end, so neither its comparison of
+     * the end nor the comparison inside it is read as one; and under a condition on another
+     * element of the same list, the end may still have been kept of a discount above it, so the
+     * greatest discount there is is what passes every end, at a hundred and not at five.
+     */
+    @Test
+    void whatHoldsOfOneElementIsNotTakenOfTheOnesTheEndWasKeptOf() {
+        String guarded = report(folded("if l.discount <= 5 then (if l.discount > w then"
+                + " l.discount else w) else w", BELOW, "<= 10"));
+        assertTrue(guarded.contains(MADE_FROM_IT), guarded);
+        assertTrue(guarded.contains(NOT_SHOWN_TO_REACH), guarded);
+        String another = report(model("List.any(m -> m.discount <= 5 && List.fold((w, l) ->"
+                + " if l.discount >= w then l.discount else w, %d, lines) <= 10, lines)"
+                .formatted(BELOW)));
+        assertTrue(another.contains("no IN point is owed at lines[*].discount = 100 (comparison@"),
+                another);
+        assertFalse(another.contains("lines[*].discount = 5 (comparison@"), another);
+    }
+
+    /**
      * A seed the input holds ties the end kept to it, which nothing here works out, and a rule of
      * the list that reads its elements may tie one element to another: the comparison inside the
      * step is said not to be worked out.
