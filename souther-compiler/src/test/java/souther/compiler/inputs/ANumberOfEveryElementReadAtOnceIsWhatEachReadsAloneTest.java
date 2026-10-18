@@ -158,6 +158,8 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
                         Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
                                 Limits.DEFAULT.nodesFigure()))),
                 ofAKey.getFirst(), "the first of the key's values stops it, and nothing after");
+        assertEquals(ofAKey.getFirst(), ofAKey.get(1),
+                "a value of the key after one that was not read is never asked");
         assertEquals(read(3), ofAKey.get(2), "another key's nothing is no part of this key's end");
         List<TermOrders.Neighbouring<String>> ofAnyKey = eachReadsAtOnceWhatItReadsAlone(on,
                 List.of(unreadDays("a"), noAccount, touch("b", 3)));

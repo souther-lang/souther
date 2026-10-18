@@ -175,9 +175,10 @@ public final class TermOrders {
         /**
          * The number {@code own}, one of the elements, reads among them.
          *
-         * <p>What stops it is the first thing its reading asks that holds nothing — its own value,
-         * or its own key and then each key and each value of its key in the order the elements
-         * stand — and failing that, what the number's own reading of the values says.
+         * <p>What stops it is the first thing its reading asks that holds nothing — its own value
+         * and then every element's, or its own key and then each key and each value of its key
+         * in the order the elements stand, up to the first of those values that was not read —
+         * and failing that, what the number's own reading of the values says.
          */
         Neighbouring<G> numberOf(Function<ElementProjection, Holding<G>> own);
     }

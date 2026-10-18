@@ -12,6 +12,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.AnswerObservation;
@@ -75,6 +77,69 @@ class ARowReadOncePerElementLooksAtEachOfItsValuesAFewTimesTest {
             }
             assertEquals(readFirst, walk.answersRead(),
                     "what an occurrence came to is read once however many readings ask it");
+        }
+    }
+
+    private static final String BESIDE = """
+            module g
+
+            data Row = { sku: String, qty: Int }
+
+            behavior decide : (rows: List<Row>, tags: List<String>) -> Int
+            """;
+
+    private static final TermPath TAGS = TermPath.of("tags");
+
+    /**
+     * What is read of the elements of one container together is read once however many elements
+     * of another container the readings choose between: the tags are the same tags under every
+     * row, so how often a tag occurs and how many tags are there are asked of them once.
+     */
+    @Test
+    void whatOneContainerComesToIsNotReadAgainForEachElementOfAnother() {
+        long readFirst = -1;
+        for (int length : List.of(4, 8, 16)) {
+            NumericTerm.Multiplicity tagged = NumericTerm.Multiplicity.of(TAGS, TAGS.element());
+            NumericTerm.ValueOf qty = new NumericTerm.ValueOf(ROWS.element().then("qty"));
+            Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
+            on.put(tagged, TermOrdersFixtures.orders(tagged, Carrier.TEXT, WHOLE));
+            on.put(qty, TermOrdersFixtures.itself(qty, WHOLE));
+            Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+            on.keySet().forEach(term -> coefs.put(term, ExactRatio.ONE));
+            LinearQuantity quantity = new BorderQuantity.OverAForm("decide",
+                    new LinearForm<>(ExactRatio.ZERO, coefs), on);
+            AStatementAtARow someTag = AStatementAtARow.of(new Proposition.Some(
+                    new DecisionSubject.AnInput(TAGS),
+                    new Proposition.Present(new DecisionSubject.AnInput(TAGS.element()), true),
+                    true), "decide", null);
+            List<ObservedValue> rows = new ArrayList<>();
+            List<ObservedValue> tags = new ArrayList<>();
+            for (int each = 0; each < length; each++) {
+                rows.add(new ObservedValue.Constructed(sym("Row"), Map.of(
+                        "sku", new ObservedValue.Text("sku"),
+                        "qty", new ObservedValue.Integer(each))));
+                tags.add(new ObservedValue.Text("tag" + each % 3));
+            }
+            BehaviorInputs where = new BehaviorInputs(List.of("rows", "tags"),
+                    List.of(new Type.ListOf(Type.ref(sym("Row"))),
+                            new Type.ListOf(Type.Prim.STRING)),
+                    RuleReadings.ofSource(BESIDE), POLICY);
+            StandingAtAPoint.Readings readings = StandingAtAPoint.readings(where,
+                    new ObservedInputs(List.of(new ObservedValue.Sequence(rows),
+                            new ObservedValue.Sequence(tags)), new Generator.Watched.NoAccount(),
+                            new AnswerObservation.NotAnswered()),
+                    quantity);
+            assertEquals(length * length, readings.tried().size(), "a reading per row and tag");
+            for (BorderQuantity.Observation reading : readings.tried()) {
+                quantity.read(reading);
+                someTag.at(reading);
+            }
+            StandingAtAPoint.RowWalk walk =
+                    ((StandingAtAPoint.WalkOfARow) readings.tried().getFirst()).walk();
+            if (readFirst < 0) {
+                readFirst = walk.answersRead();
+            }
+            assertEquals(readFirst, walk.answersRead(), () -> "over " + length + " rows");
         }
     }
 

@@ -81,15 +81,43 @@ final class AStatementAtARow {
     private final Map<String, OverTheElements> elements;
     /** The positions a part asks of their own value: whether it is true, whether there is one. */
     private final Set<TermPath> positions;
+    /**
+     * Every container whose element a reading chose can change what the statement comes to: the
+     * containers holding anything it reads, its own parts' and the elements' it reads together.
+     */
+    private final Set<TermPath> turnsOn;
 
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
-                             Map<String, OverTheElements> elements, Set<TermPath> positions) {
+                             Map<String, OverTheElements> elements, Set<TermPath> positions,
+                             Set<TermPath> lasts) {
         this.stated = stated;
         // In the order the relations were met, which is the order their containers are found in
         // when a row is walked for them.
         this.relations = Collections.unmodifiableMap(new LinkedHashMap<>(relations));
         this.elements = Collections.unmodifiableMap(new LinkedHashMap<>(elements));
         this.positions = Collections.unmodifiableSet(new LinkedHashSet<>(positions));
+        Set<TermPath> on = new HashSet<>();
+        for (TermPath each : positions) {
+            on.addAll(each.containersHoldingIt());
+        }
+        for (TermPath each : lasts) {
+            on.addAll(each.containersHoldingIt());
+        }
+        for (OneRelation each : relations.values()) {
+            for (NumericTerm term : each.terms()) {
+                on.addAll(term.subjectPath().containersHoldingIt());
+            }
+        }
+        for (OverTheElements each : elements.values()) {
+            on.addAll(each.container().containersHoldingIt());
+            on.addAll(each.ofTheElement().turnsOn);
+        }
+        this.turnsOn = Set.copyOf(on);
+    }
+
+    /** Whether what this comes to at a row can turn on the element chosen in {@code container}. */
+    boolean turnsOn(TermPath container) {
+        return turnsOn.contains(container);
     }
 
     /**
@@ -161,15 +189,22 @@ final class AStatementAtARow {
         Map<Relation, OneRelation> relations = new LinkedHashMap<>();
         Map<String, OverTheElements> elements = new LinkedHashMap<>();
         Set<TermPath> positions = new LinkedHashSet<>();
-        gather(stated, behavior, quantities, relations, elements, positions);
-        return new AStatementAtARow(stated, relations, elements, positions);
+        Set<TermPath> lasts = new LinkedHashSet<>();
+        gather(stated, behavior, quantities, relations, elements, positions, lasts);
+        return new AStatementAtARow(stated, relations, elements, positions, lasts);
     }
 
+    /**
+     * @param lasts every position a part asks whether an element is the last to hold its value
+     *              at, which is read at a row and asks nothing of it to find its containers
+     */
     private static void gather(Proposition stated, String behavior, Quantities quantities,
                                Map<Relation, OneRelation> into,
-                               Map<String, OverTheElements> elements, Set<TermPath> positions) {
+                               Map<String, OverTheElements> elements, Set<TermPath> positions,
+                               Set<TermPath> lasts) {
         switch (stated) {
-            case Proposition.Always _, Proposition.LastToHold _ -> { }
+            case Proposition.Always _ -> { }
+            case Proposition.LastToHold last -> lasts.add(last.position());
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
                     positions.add(at);
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
@@ -183,15 +218,15 @@ final class AStatementAtARow {
                 positions.add(other);
             }
             case Proposition.All all -> all.parts().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
+                    gather(part, behavior, quantities, into, elements, positions, lasts));
             case Proposition.Any any -> any.parts().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
+                    gather(part, behavior, quantities, into, elements, positions, lasts));
             case Proposition.WhereItAnswers where -> {
-                gather(where.answers(), behavior, quantities, into, elements, positions);
-                gather(where.states(), behavior, quantities, into, elements, positions);
+                gather(where.answers(), behavior, quantities, into, elements, positions, lasts);
+                gather(where.states(), behavior, quantities, into, elements, positions, lasts);
             }
             case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
+                    gather(part, behavior, quantities, into, elements, positions, lasts));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
                             of(some.ofTheElement(), behavior, quantities)));
@@ -346,13 +381,18 @@ final class AStatementAtARow {
         return row.keptOf(new HowManyMeet(this, container));
     }
 
-    /** How many elements of a container meet one statement, by the statement and the container. */
+    /**
+     * How many elements of a container meet one statement, by the statement and the container:
+     * turning on the containers that hold the container and those the statement reads under, and
+     * not on the container, whose elements are all of them whichever a reading chose.
+     */
     private record HowManyMeet(AStatementAtARow statement, TermPath container)
             implements BorderQuantity.ReadAlike<HowManyAtARow> {
 
         @Override
         public boolean turnsOn(TermPath each) {
-            return !each.equals(container);
+            return !each.equals(container) && (container.containersHoldingIt().contains(each)
+                    || statement.turnsOn(each));
         }
 
         @Override

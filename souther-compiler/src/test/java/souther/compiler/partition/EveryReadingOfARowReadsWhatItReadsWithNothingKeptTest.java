@@ -15,6 +15,8 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.AnswerObservation;
@@ -37,7 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every reading of a row reads what it reads with nothing kept between the readings: what one
- * reading of an occurrence read for the others is what each would have read for itself.
+ * reading of an occurrence read for the others is what each would have read for itself, over a
+ * walk of the row that read no other reading.
  *
  * <p>Held over rows where the occurrences are not alike — orders whose lines are the same values,
  * orders of different lengths so that some readings choose a line their order does not have, an
@@ -95,8 +98,10 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
     }
 
     /**
-     * Reads every reading of a row holding {@code orders} at the quantity, as the measurement
-     * reads them and through a walk that keeps nothing, and holds them equal term by term.
+     * Reads every reading of a row holding {@code orders} as the measurement reads them, all of
+     * them over one walk of the row, and each again over a walk of its own that read no other
+     * reading: at every term of the quantity, whether a line is the last of its sku, and whether
+     * some tag of its order is there.
      */
     private static void everyReadingReadsAlike(ObservedValue... orders) {
         NumericTerm.Multiplicity often = NumericTerm.Multiplicity.of(LINES,
@@ -122,57 +127,28 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
                 new LinearForm<>(ExactRatio.ZERO, coefs), on);
         BehaviorInputs where = new BehaviorInputs(List.of("orders"),
                 List.of(new Type.ListOf(named("Order"))), rules, POLICY);
-        StandingAtAPoint.Readings readings = StandingAtAPoint.readings(where,
-                new ObservedInputs(List.of(new ObservedValue.Sequence(List.of(orders))),
-                        new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered()),
-                quantity);
-        assertTrue(readings.tried().size() > 1, "a row with a reading per element");
-        for (BorderQuantity.Observation reading : readings.tried()) {
+        ObservedInputs row = new ObservedInputs(
+                List.of(new ObservedValue.Sequence(List.of(orders))),
+                new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered());
+        AStatementAtARow someTag = AStatementAtARow.of(new Proposition.Some(
+                new DecisionSubject.AnInput(TAGS),
+                new Proposition.Present(new DecisionSubject.AnInput(TAGS.element()), true), true),
+                "decide", null);
+        TermPath sku = LINES.element().then("sku");
+        List<BorderQuantity.Observation> together =
+                StandingAtAPoint.readings(where, row, quantity).tried();
+        assertTrue(together.size() > 1, "a row with a reading per element");
+        for (int which = 0; which < together.size(); which++) {
+            BorderQuantity.Observation reading = together.get(which);
+            BorderQuantity.Observation alone =
+                    StandingAtAPoint.readings(where, row, quantity).tried().get(which);
             QuantityReading kept = quantity.read(reading);
-            QuantityReading alone = quantity.read(new KeepingNothing(reading));
+            QuantityReading itsOwn = quantity.read(alone);
             for (TermOrders each : on.values()) {
-                assertEquals(alone.of(each), kept.of(each), () -> each + " at " + reading);
+                assertEquals(itsOwn.of(each), kept.of(each), () -> each + " at " + reading);
             }
-        }
-    }
-
-    /** A reading of a row that keeps nothing it read for another, and is otherwise the reading. */
-    private record KeepingNothing(BorderQuantity.Observation within)
-            implements BorderQuantity.Observation {
-
-        @Override
-        public WalkResult<ObservationAtPoint> at(TermPath path) {
-            return within.at(path);
-        }
-
-        @Override
-        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
-            return within.everyValueAt(path);
-        }
-
-        @Override
-        public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath container) {
-            return within.eachElementOf(container);
-        }
-
-        @Override
-        public BorderQuantity.Lastness lastToHold(TermPath container, TermPath position) {
-            return within.lastToHold(container, position);
-        }
-
-        @Override
-        public WalkResult<BorderQuantity.Among> among(TermPath container) {
-            return within.among(container);
-        }
-
-        @Override
-        public WalkResult<List<BorderQuantity.AnElement>> elementsOf(TermPath container) {
-            return within.elementsOf(container);
-        }
-
-        @Override
-        public boolean choseAnElement() {
-            return within.choseAnElement();
+            assertEquals(alone.lastToHold(LINES, sku), reading.lastToHold(LINES, sku));
+            assertEquals(someTag.at(alone), someTag.at(reading));
         }
     }
 

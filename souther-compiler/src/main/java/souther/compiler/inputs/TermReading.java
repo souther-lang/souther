@@ -193,9 +193,10 @@ final class TermReading {
      * is asked about and never for a key nobody asks about.
      *
      * <p>What stops an element is its own key where it holds nothing there, then the first element
-     * in order that holds nothing at a key, or at a value of its key, whichever stands first; then
-     * its own key where that was not read, and then whichever stands first of an element whose key
-     * was not read and one of its key whose value was not.
+     * in order that holds nothing at a key, or at a value of its key that was asked, whichever
+     * stands first — a value after one of its key that was not read is never asked; then its own
+     * key where that was not read, and then whichever stands first of an element whose key was
+     * not read and one of its key whose value was not.
      */
     private static final class KeyedEnds<G> implements ElementsTogether<G> {
 

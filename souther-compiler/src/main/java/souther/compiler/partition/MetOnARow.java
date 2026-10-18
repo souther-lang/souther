@@ -164,9 +164,11 @@ final class MetOnARow {
             };
         }
 
+        /** The containers holding this one and those what stops the operation reads under. */
         @Override
         public boolean turnsOn(TermPath each) {
-            return !each.equals(container);
+            return !each.equals(container) && (container.containersHoldingIt().contains(each)
+                    || stops.turnsOn(each));
         }
 
         @Override

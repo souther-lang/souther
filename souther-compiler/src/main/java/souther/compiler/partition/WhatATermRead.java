@@ -128,15 +128,16 @@ sealed interface WhatATermRead {
 
     /**
      * The elements of the occurrence of a container a reading is in, put together for a number of
-     * an element read off its neighbours: of every reading that chose alike in every container
-     * but that one.
+     * an element read off its neighbours: of every reading that chose alike in the containers
+     * holding that one. A number reads fields of an element and enters no container below it,
+     * so nothing a reading chose elsewhere is any part of it.
      */
     record ItsNeighbours(TermOrders on) implements
             BorderQuantity.ReadAlike<WalkResult<TermOrders.ElementsTogether<WhatATermRead>>> {
 
         @Override
         public boolean turnsOn(TermPath container) {
-            return !container.equals(on.amongItsNeighbours().container());
+            return on.amongItsNeighbours().container().containersHoldingIt().contains(container);
         }
 
         @Override
@@ -222,14 +223,15 @@ sealed interface WhatATermRead {
         return row.keptOf(new ARunOfEachElement(on, computed));
     }
 
-    /** A run computed of each element of a container, of every reading that chose alike in every
-     *  other container. */
+    /** A run computed of each element of a container, of every reading that chose alike in the
+     *  containers holding the elements, the outermost apart. */
     record ARunOfEachElement(TermOrders on, RunSource.ComputedOccurrences computed)
             implements BorderQuantity.ReadAlike<WhatATermRead> {
 
         @Override
         public boolean turnsOn(TermPath container) {
-            return !container.equals(computed.elements().outermostContainer());
+            return !container.equals(computed.elements().outermostContainer())
+                    && computed.elements().containersHoldingIt().contains(container);
         }
 
         @Override
