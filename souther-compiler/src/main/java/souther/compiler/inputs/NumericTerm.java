@@ -643,7 +643,7 @@ public sealed interface NumericTerm
                 return null;
             }
             TermPath container = holding.getLast();
-            return of(container, new ElementProjection(key).from(container.element()), value,
+            return of(container, ElementProjection.ofFields(key).from(container.element()), value,
                     extreme);
         }
 
@@ -723,7 +723,7 @@ public sealed interface NumericTerm
 
         @Override
         public String toString() {
-            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().steps())
+            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().fields())
                     .spelledAt(value.toString());
         }
     }
@@ -753,10 +753,17 @@ public sealed interface NumericTerm
 
         private final ValueName.Stdlib operation;
         private final RunSource source;
+        /**
+         * The hash of the two, worked out once. A run computed of each element holds the whole
+         * computation, which a term keyed into a set or a map would otherwise walk again each time
+         * it is asked — and a term is asked many times over, by every reading that files it.
+         */
+        private final int hash;
 
         private TakenOver(ValueName.Stdlib operation, RunSource source) {
             this.operation = operation;
             this.source = source;
+            this.hash = Objects.hash(operation, source);
         }
 
         /**
@@ -844,7 +851,7 @@ public sealed interface NumericTerm
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, source);
+            return hash;
         }
 
         @Override
@@ -1024,12 +1031,7 @@ public sealed interface NumericTerm
     /** The way from an element of {@code container} to {@code place}, which
      *  {@link #fieldsBelowAnElement} has said is fields alone. */
     private static ElementProjection fieldsTo(TermPath container, TermPath place) {
-        List<String> names = new ArrayList<>();
-        List<TermPath.Step> steps = place.steps();
-        for (TermPath.Step step : steps.subList(container.element().steps().size(), steps.size())) {
-            names.add(((TermPath.Step.Field) step).name());
-        }
-        return new ElementProjection(names);
+        return ElementProjection.below(container.element(), place);
     }
 
     /**

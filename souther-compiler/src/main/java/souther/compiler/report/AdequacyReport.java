@@ -6455,15 +6455,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 Comparator.comparing(ElementProjection::toString)))
                         .forEach(each -> {
                             ObjectNode term = terms.addObject();
-                            term.put("field", String.join(".", each.getKey().steps()));
+                            term.put("field", each.getKey().spelled());
                             term.put("weight", each.getValue().spelled());
                         });
             }
             case ElementValue.Choose it -> {
                 into.put("kind", "choose");
-                into.put("flag", String.join(".", it.flag().steps()));
+                into.put("flag", it.flag().spelled());
                 elementComputation(into.putObject("whenSet"), it.whenSet());
                 elementComputation(into.putObject("otherwise"), it.otherwise());
+            }
+            case ElementValue.OfItsCase it -> {
+                into.put("kind", "case");
+                into.put("subject", it.subject().spelled());
+                ArrayNode arms = into.putArray("arms");
+                for (ElementValue.OfItsCase.Arm arm : it.arms()) {
+                    ObjectNode each = arms.addObject();
+                    each.put("taken", it.taken(arm).spelled());
+                    elementComputation(each.putObject("value"), arm.value());
+                }
+                if (it.rest() != null) {
+                    elementComputation(into.putObject("otherwise"), it.rest());
+                }
+            }
+            case ElementValue.SumOfChoices it -> {
+                into.put("kind", "sum");
+                elementComputation(into.putObject("besides"), it.besides());
+                ArrayNode parts = into.putArray("choices");
+                it.chosen().forEach((choice, weight) -> {
+                    ObjectNode part = parts.addObject();
+                    part.put("weight", weight.spelled());
+                    elementComputation(part.putObject("value"), choice);
+                });
             }
         }
     }
