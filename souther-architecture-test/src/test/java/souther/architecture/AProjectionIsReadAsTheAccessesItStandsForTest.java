@@ -383,6 +383,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + " between them answer what the base answers");
         row(out, c + "check/Terms", "rootBinding", "(" + core + ")L" + c + "types/BindingId;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "check/Terms", "stepsAlong", "(" + core + ")L" + c + "check/Terms$Steps;",
+                Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/Terms", "subjectKey", "(" + core + at + ")L" + c + "check/Term;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/Terms$2", "readsThrough", "(L" + CORE + "$FieldAccess;" + at + ")Z",

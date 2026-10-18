@@ -246,8 +246,11 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     }
 
     /**
-     * What two numbers of the input come to multiplied, where neither is a constant and each is the
-     * number of one position: a price times a quantity.
+     * What two whole numbers of the input come to multiplied, where neither is a constant and each
+     * is the number of one position: a price times a quantity.
+     *
+     * <p>Whole numbers, which the reading that makes one sees to: a product of two is worked out at
+     * a row and drawn a line on as a product of two whole numbers, and of decimals it is not made.
      *
      * <p>A number of its own and no form over the two. Fixing either factor leaves a form over the
      * other, weighed by the value fixed, so a rule about the product relates the two positions and

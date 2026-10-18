@@ -919,7 +919,8 @@ sealed interface ComparisonAssessment {
         for (DecidingCase each : part.cases()) {
             if (each.saidAlone()) {
                 Reachability toIt = wayToACase.apply(each.condition());
-                if (arrivesAtSomePlace(cutting, toIt, arrivals, cutting::crossedIn)) {
+                if (arrivesAtSomePlace(cutting, toIt, arrivals,
+                        cutting.crossedIn(each.condition(), reading))) {
                     reached.add(each);
                     deciding.addAll(waysArrivedBy(toIt, arrivals));
                 }
@@ -927,7 +928,7 @@ sealed interface ComparisonAssessment {
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
                     arrivesAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
-                            cutting::crossedIn));
+                            cutting.crossedIn(condition, reading)));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
