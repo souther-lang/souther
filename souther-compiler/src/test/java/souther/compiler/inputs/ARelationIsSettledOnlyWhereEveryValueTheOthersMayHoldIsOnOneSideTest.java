@@ -7,12 +7,16 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided.Line;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.SettledRun;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -38,13 +42,19 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                                                                  NumericDomain.Bounds holds,
                                                                  NumericDomain.Bounds realizes) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
-                realizes, null, true);
+                realizes, null, true, Granularity.DISCRETE);
+    }
+
+    private static WhatARelationLeavesUndivided.Term<String> denseTerm(
+            String place, long weight, NumericDomain.Bounds holds, NumericDomain.Bounds realizes) {
+        return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight),
+                holds, realizes, null, true, Granularity.DENSE);
     }
 
     private static Leaves leavesOf(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
                                    long constant, Rel relation) {
         return WhatARelationLeavesUndivided.leavesOf(terms, at, ExactRatio.of(constant), relation,
-                String::equals, (one, other) -> true, true, GREATEST_INT);
+                String::equals, (one, other) -> true, Granularity.DISCRETE, GREATEST_INT);
     }
 
     private static Leaves ofAProduct(NumericDomain.Bounds it, NumericDomain.Bounds other,
@@ -56,18 +66,18 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     private static SettledRun settled(Long from, Long to, boolean holds) {
-        return new SettledRun(from == null ? null : BigInteger.valueOf(from),
+        return SettledRun.whole(from == null ? null : BigInteger.valueOf(from),
                 to == null ? null : BigInteger.valueOf(to), holds);
     }
 
     private static Leaves.Settled settledIn(Long least, Long greatest, SettledRun... runs) {
-        return new Leaves.Settled(List.of(runs),
+        return Leaves.Settled.ofWhole(List.of(runs),
                 least == null ? null : BigInteger.valueOf(least),
                 greatest == null ? null : BigInteger.valueOf(greatest));
     }
 
     private static Line line(Rel relation, long at) {
-        return new Line(relation, BigInteger.valueOf(at));
+        return new Line(relation, ExactRatio.of(at));
     }
 
     /**
@@ -268,5 +278,267 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                         settled(100L, null, true)).lines());
         assertEquals(List.of(line(Rel.GE, 0), line(Rel.LE, 5), line(Rel.GE, 10), line(Rel.LE, 20)),
                 settledIn(null, null, settled(0L, 5L, false), settled(10L, 20L, true)).lines());
+    }
+
+    private static NumericDomain.Bounds dense(String low, boolean lowIn, String high,
+                                              boolean highIn) {
+        return new NumericDomain.Bounds(
+                new Endpoint(Count.of(new BigDecimal(low)), lowIn),
+                new Endpoint(Count.of(new BigDecimal(high)), highIn));
+    }
+
+    private static Leaves denseLeavesOf(NumericDomain.Bounds it, NumericDomain.Bounds other,
+                                        NumericDomain.Bounds reached, long weight,
+                                        Rel relation) {
+        return denseLeavesOf(denseTerm("x", 1, it, it), denseTerm("y", weight, other, reached),
+                relation);
+    }
+
+    private static Leaves denseLeavesOf(WhatARelationLeavesUndivided.Term<String> x,
+                                        WhatARelationLeavesUndivided.Term<String> y,
+                                        Rel relation) {
+        return WhatARelationLeavesUndivided.leavesOf(List.of(x, y), 0, ExactRatio.ZERO, relation,
+                String::equals, (one, two) -> true, Granularity.DENSE, null);
+    }
+
+    /**
+     * {@code x > w} with both between nought and one: nought is settled and a value above it is
+     * not, so the one line is {@code x <= 0}, with nought on the settled side. A value just
+     * above nought has {@code w} on both sides only because {@code w} takes nought itself, which
+     * the run left to ask about does not.
+     */
+    @Test
+    void aDenseTermIsPartedAtTheEndTheOtherTermsRunStopsAt() {
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        Leaves leaves = denseLeavesOf(unit, unit, unit, -1, Rel.GT);
+        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) leaves).lines());
+        assertNull(denseLeavesOf(unit, unit, dense("0.5", true, "1", true), -1, Rel.GT));
+    }
+
+    /**
+     * {@code x + y < 0} with {@code y} between nought and one, both left out, holds at minus one
+     * and fails at nought. Between them a decimal {@code y} is on both sides of {@code -x} except
+     * at the one step from an end: at minus a step, the least decimal above nought is not below
+     * {@code -x}, so the relation fails there whatever {@code y} is, and nothing is shown.
+     */
+    @Test
+    void anOpenEndTheOtherTermTakesNoValueAtIsNoEndItReachesFromBothSides() {
+        NumericDomain.Bounds open = dense("0", false, "1", false);
+        assertNull(denseLeavesOf(NumericDomain.Bounds.OPEN, open, open, 1, Rel.LT));
+    }
+
+    /** A term that is not dense has no value between an end it leaves out and the next, so the
+     *  same open run is not one it reaches the values inside from both sides. */
+    @Test
+    void aTermThatIsNotDenseIsNotTakenAsOneThatTakesValuesNearAnEndItLeavesOut() {
+        NumericDomain.Bounds open = dense("0", false, "1", false);
+        assertNull(denseLeavesOf(denseTerm("x", 1, NumericDomain.Bounds.OPEN,
+                        NumericDomain.Bounds.OPEN), term("y", 1, open, open), Rel.LT));
+    }
+
+    private static Leaves.Settled denseAgainstOne(long weight, Rel relation) {
+        NumericDomain.Bounds one = dense("1", true, "1", true);
+        return (Leaves.Settled) denseLeavesOf(
+                denseTerm("x", weight, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                denseTerm("y", -1, one, one), relation);
+    }
+
+    /**
+     * {@code 3x == y} with {@code y} always one: the number it holds at is a third, which no
+     * decimal is, so no value of {@code x} makes it hold. It fails below the third and above it,
+     * and those are one run, there being nothing between to part them.
+     */
+    @Test
+    void aNumberNoDecimalIsIsNoValueTheRelationHoldsAt() {
+        Leaves.Settled settled = denseAgainstOne(3, Rel.EQ);
+        assertEquals(1, settled.runs().size());
+        SettledRun only = settled.runs().getFirst();
+        assertEquals(false, only.holds());
+        assertNull(only.from());
+        assertNull(only.to());
+        assertEquals(List.of(), settled.lines());
+    }
+
+    /** The relation turned round holds at every decimal, and parts nothing. */
+    @Test
+    void aNumberNoDecimalIsIsNoValueTheRelationFailsAtEither() {
+        Leaves.Settled settled = denseAgainstOne(3, Rel.NE);
+        assertEquals(1, settled.runs().size());
+        assertEquals(true, settled.runs().getFirst().holds());
+        assertEquals(List.of(), settled.lines());
+    }
+
+    /** A half is a decimal, so {@code 2x == y} holds there and fails on either side. */
+    @Test
+    void aNumberADecimalIsIsAValueTheRelationHoldsAt() {
+        ExactRatio half = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
+        assertEquals(List.of(new Line(Rel.LT, half), new Line(Rel.LE, half)),
+                denseAgainstOne(2, Rel.EQ).lines());
+    }
+
+    private static Set<String> undivided(WhatARelationLeavesUndivided.Term<String> x,
+                                         WhatARelationLeavesUndivided.Term<String> y, Rel relation) {
+        return WhatARelationLeavesUndivided.of(List.of(x, y), ExactRatio.ZERO, relation,
+                String::equals, (one, two) -> true);
+    }
+
+    /**
+     * Two values held to the same ends are not the same values: {@code x == y} with {@code x}
+     * between nought and one is false at a half whichever whole number {@code y} is, so a whole
+     * {@code y} does not reach every {@code x}, whereas every whole {@code y} is the value of some
+     * {@code x}.
+     */
+    @Test
+    void aWholeTermDoesNotTakeEveryValueOfADenseOneWithTheSameEnds() {
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        for (Rel relation : List.of(Rel.EQ, Rel.NE)) {
+            assertEquals(Set.of("y"), undivided(denseTerm("x", 1, unit, unit),
+                    term("y", -1, unit, unit), relation), relation.toString());
+            assertEquals(Set.of("x"), undivided(term("x", 1, unit, unit),
+                    denseTerm("y", -1, unit, unit), relation), relation.toString());
+            assertEquals(Set.of("x", "y"), undivided(denseTerm("x", 1, unit, unit),
+                    denseTerm("y", -1, unit, unit), relation), relation.toString());
+            assertEquals(Set.of("x", "y"), undivided(term("x", 1, unit, unit),
+                    term("y", -1, unit, unit), relation), relation.toString());
+        }
+    }
+
+    /** One whole value is a value a whole term takes, and a dense one too. */
+    @Test
+    void aWholeTermTakesTheOneValueADenseTermIsHeldTo() {
+        NumericDomain.Bounds one = dense("1", true, "1", true);
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        assertEquals(Set.of("x"), undivided(denseTerm("x", 1, one, one),
+                term("y", -1, unit, unit), Rel.EQ));
+    }
+
+    /**
+     * {@code x > y} with both above nought and up to one: at the least decimal above nought,
+     * {@code y} has no value below {@code x}, so the relation fails there and {@code x} is not
+     * left either way for being a dense term whose run is open at nought. Closed at nought, the
+     * run holds a value below any {@code x} above it, and the line is at nought.
+     */
+    @Test
+    void aRunOpenAtTheEndTheOtherTermIsHeldToIsNotReachedBeyondIt() {
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        NumericDomain.Bounds aboveNought = dense("0", false, "1", true);
+        assertEquals(Set.of(), undivided(denseTerm("x", 1, aboveNought, aboveNought),
+                denseTerm("y", -1, aboveNought, aboveNought), Rel.GT));
+        assertNull(denseLeavesOf(denseTerm("x", 1, unit, unit),
+                denseTerm("y", -1, aboveNought, aboveNought), Rel.GT));
+        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) denseLeavesOf(
+                denseTerm("x", 1, unit, unit), denseTerm("y", -1, unit, unit), Rel.GT)).lines());
+    }
+
+    /** {@code x > 0} for {@code x} from the least decimal there is to twice it holds at every
+     *  value, whatever the width of the run: nothing is parted. */
+    @Test
+    void aRunOfTheFinestScaleIsSettledAsAnyOtherIs() {
+        NumericDomain.Bounds oneStepToTwo = dense("1E-2147483647", true, "2E-2147483647", true);
+        NumericDomain.Bounds nought = dense("0", true, "0", true);
+        Leaves.Settled settled = (Leaves.Settled) denseLeavesOf(
+                denseTerm("x", 1, oneStepToTwo, oneStepToTwo), denseTerm("y", -1, nought, nought),
+                Rel.GT);
+        assertEquals(1, settled.runs().size());
+        assertEquals(true, settled.runs().getFirst().holds());
+        assertEquals(List.of(), settled.lines());
+    }
+
+    /**
+     * {@code 2x < y} with {@code x} above nought and {@code y} the finest step: the least decimal
+     * {@code x} takes is the step, twice it is past {@code y}, and the relation fails at every
+     * value. The numbers it holds at, between nought and half a step, are no decimal's, and no run
+     * of them is offered.
+     */
+    @Test
+    void aRunBetweenTwoDecimalsHoldsNoneWhenAnEndIsNoDecimal() {
+        NumericDomain.Bounds aboveNought = new NumericDomain.Bounds(
+                Endpoint.exclusive(Count.of(0)), Endpoint.inclusive(Count.of(1)));
+        NumericDomain.Bounds step = dense("1E-2147483647", true, "1E-2147483647", true);
+        Leaves.Settled settled = (Leaves.Settled) denseLeavesOf(
+                denseTerm("x", 2, aboveNought, aboveNought), denseTerm("y", -1, step, step),
+                Rel.LT);
+        assertEquals(List.of(), settled.lines());
+        assertEquals(List.of(false), settled.runs().stream().map(run -> run.holds()).distinct()
+                .toList());
+    }
+
+    /**
+     * {@code x + 3y < 0} with {@code x} from minus two to minus one and {@code y} from nought to
+     * one: it holds at {@code y == 0} and fails at {@code y == 1} whatever {@code x} is, so
+     * {@code x} is undivided. The values of {@code y} that are asked of lie from a third to two
+     * thirds, which no decimal writes; the decimals just outside them are what {@code y} takes.
+     */
+    @Test
+    void anEndNoDecimalWritesNeedsNoDecimalAtIt() {
+        NumericDomain.Bounds x = dense("-2", true, "-1", true);
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        assertEquals(Leaves.Undivided.class, denseLeavesOf(x, unit, unit, 3, Rel.LT).getClass());
+    }
+
+    /**
+     * {@code 3y > x}: the values of {@code y} that {@code x} needs are a third of {@code x}, which
+     * lie on a grid a third of a step fine. At {@code x} one step, {@code 3y} is past it whatever
+     * {@code y} is, so {@code x} is not left undivided by {@code y} reaching either side of a third
+     * of the step: the grid of the decimals is not the grid of what is needed.
+     */
+    @Test
+    void aWeightThatDividesTheStepSaysNoGridOfTheValuesNeeded() {
+        NumericDomain.Bounds step = dense("1E-2147483647", true, "1E-2147483647", true);
+        NumericDomain.Bounds upToAStep = dense("0", false, "1E-2147483647", true);
+        NumericDomain.Bounds aboveNought = dense("0", false, "1", true);
+        NumericDomain.Bounds fromAStep = dense("1E-2147483647", true, "1", true);
+        assertEquals(false, undivided(denseTerm("x", -1, upToAStep, upToAStep),
+                denseTerm("y", 3, step, step), Rel.GT).contains("x"));
+        assertEquals(false, undivided(denseTerm("x", -1, aboveNought, aboveNought),
+                denseTerm("y", 3, fromAStep, fromAStep), Rel.GT).contains("x"));
+    }
+
+    /**
+     * A decimal of a half is a value a whole term cannot take, and a decimal of one is: with
+     * {@code x} held to the one decimal and {@code y} whole from nought to one, {@code x == y}
+     * is false at a half whatever {@code y} is, and at one it is left either way.
+     */
+    @Test
+    void aWholeTermTakesTheOneDecimalOnlyWhereItIsWhole() {
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        NumericDomain.Bounds half = dense("0.5", true, "0.5", true);
+        NumericDomain.Bounds one = dense("1", true, "1", true);
+        for (Rel relation : List.of(Rel.EQ, Rel.NE)) {
+            assertEquals(false, undivided(denseTerm("x", 1, half, half),
+                    term("y", -1, unit, unit), relation).contains("x"), relation.toString());
+            assertEquals(true, undivided(denseTerm("x", 1, one, one),
+                    term("y", -1, unit, unit), relation).contains("x"), relation.toString());
+        }
+    }
+
+    /**
+     * {@code 3x - y < 0} with {@code y} from nought to one: {@code x} lies below a third wherever
+     * {@code y} is, which no decimal writes. The line is at the third all the same, and the
+     * values between nought and it are asked of {@code y} as they are.
+     */
+    @Test
+    void anEndNoDecimalWritesIsStillTheEndOfTheRunAskedAbout() {
+        NumericDomain.Bounds aboveNought = new NumericDomain.Bounds(
+                Endpoint.exclusive(Count.of(0)), null);
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        Leaves leaves = denseLeavesOf(denseTerm("x", 3, aboveNought, aboveNought),
+                denseTerm("y", -1, unit, unit), Rel.LT);
+        assertEquals(List.of(new Line(Rel.GE, ExactRatio.of(BigInteger.ONE,
+                BigInteger.valueOf(3)))), ((Leaves.Settled) leaves).lines());
+    }
+
+    /** Runs a point apart are lines apart: a point both leave out is not covered. */
+    @Test
+    void aPointNoRunTakesIsAGapBetweenTwoDenseRuns() {
+        ExactRatio five = ExactRatio.of(5);
+        Leaves.Settled apart = new Leaves.Settled(List.of(
+                new SettledRun(null, ExactCut.exclusive(five), true),
+                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false);
+        assertEquals(List.of(new Line(Rel.LT, five), new Line(Rel.GT, five)), apart.lines());
+        Leaves.Settled touching = new Leaves.Settled(List.of(
+                new SettledRun(null, ExactCut.inclusive(five), true),
+                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false);
+        assertEquals(List.of(new Line(Rel.LE, five)), touching.lines());
     }
 }

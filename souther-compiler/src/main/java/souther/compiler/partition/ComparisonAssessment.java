@@ -23,7 +23,6 @@ import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.reach.ComparisonArrival;
@@ -239,7 +238,7 @@ sealed interface ComparisonAssessment {
             List<AtAPosition> here = new ArrayList<>();
             for (WhatARelationLeavesUndivided.Line each : lines) {
                 Cutting drawn = Cutting.onOneTerm(beside.behavior(), term,
-                        ExactRatio.of(each.at()), each.relation(), reading.quantities());
+                        each.at(), each.relation(), reading.quantities());
                 if (drawn == null || !(onTheQuantity(beside.at(), drawn, beside.noPlaceOfIt(drawn),
                         reading, false) instanceof AtAPosition line)) {
                     here = null;
