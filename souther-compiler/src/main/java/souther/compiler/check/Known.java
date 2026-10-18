@@ -13,8 +13,10 @@ import souther.compiler.values.Allowance;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What holds where the walk stands: numeric relations, predicates known to hold or to fail, relations
@@ -39,15 +41,15 @@ import java.util.Map;
  * ({@link #oneOf}). Kept as they were written and taken apart only by a reader that has a question
  * the parts answer and the whole does not: a domain holding each part of each of them would be one
  * state per way of choosing a part, multiplied at every such condition the path passes, whether or
- * not anything below was ever asked of them.
+ * not anything below was ever asked of them. Told on as the spoken terms are, for the same reason:
+ * a path holds one more of them at each such condition it passes.
  */
 record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
                      AppendOnly<FactSubject, Boolean> spoken, Unguarded unguarded,
-                     Map<FactSubject, CasesLeft> cases, List<OneOf> oneOf) {
+                     Map<FactSubject, CasesLeft> cases, AppendOnly<OneOf, Boolean> oneOf) {
 
     Known {
         cases = Map.copyOf(cases);
-        oneOf = List.copyOf(oneOf);
     }
 
     /**
@@ -61,8 +63,23 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * <p>The bindings are the ones in force where the condition stands, because that is where its
      * names mean what they mean. A reader further in has entered more of them and a name it holds
      * may be another value.
+     *
+     * <p>Equal only to itself, as the other states this holds are: which condition was taken in is
+     * which reading took it, and the same guard read twice is two of these. Compared by what they
+     * hold, two would also walk the trees they were read out of.
      */
-    record OneOf(ClauseExpr.Joined of, Denotations at) {}
+    record OneOf(ClauseExpr.Joined of, Denotations at) {
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
+        }
+    }
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
@@ -138,7 +155,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         return new Known(ConstraintState.top(FactSubject.inOneOrder(), closures), List.of(),
                 AppendOnly.empty(),
                 new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)), Map.of(),
-                List.of());
+                AppendOnly.empty());
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
@@ -292,17 +309,23 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * named anywhere else is not held to it.
      */
     Known holdingOneOf(OneOf condition) {
-        List<OneOf> more = new ArrayList<>(oneOf);
-        more.add(condition);
-        return new Known(constraints, quantified, spoken, unguarded, cases, more);
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                oneOf.with(condition, true));
     }
 
-    /** This, with {@code condition} no longer held as one of its parts: a reader taking it apart
-     * holds one part in its place. */
-    Known apartFrom(OneOf condition) {
-        // The one held here and not one equal to it: the same guard read twice is held twice.
-        List<OneOf> rest = new ArrayList<>(oneOf);
-        rest.removeIf(each -> each == condition);
-        return new Known(constraints, quantified, spoken, unguarded, cases, rest);
+    /** The conditions held here as one of their parts, in the order they were taken in. */
+    List<OneOf> heldAsOneOfTheirParts() {
+        return List.copyOf(oneOf.keys());
+    }
+
+    /** The terms this speaks of that {@code before} does not, in the order they were spoken of. */
+    Set<FactSubject> spokenBeyond(Known before) {
+        Set<FactSubject> out = new LinkedHashSet<>();
+        for (FactSubject term : spoken.keys()) {
+            if (!before.speaksOf(term)) {
+                out.add(term);
+            }
+        }
+        return out;
     }
 }

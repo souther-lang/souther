@@ -1032,15 +1032,55 @@ final class Predicates {
      * condition stood in and over what is known here — which may be more than was known where it
      * stood. That is the point of keeping it: a part read against a guard written after it can be
      * one nothing enters, and the way it would have been is left out by whoever asks.
+     *
+     * <p>Each way still holds {@code condition}; which conditions a reader has taken apart is the
+     * reader's to keep. And no way speaks of a term {@code k} does not: what a condition names was
+     * spoken where it was taken in ({@link #takingOneOf}), so a way knows more of the values and
+     * names none that the whole did not.
      */
     List<Known> eachWayOf(Known.OneOf condition, Known k) {
-        Known apart = k.apartFrom(condition);
         List<Known> ways = new ArrayList<>();
         for (ClauseExpr part : List.of(condition.of().left(), condition.of().right())) {
             ways.add(new Assuming(this).read(part, condition.at(), terms::inside, null)
-                    .from(apart).known());
+                    .from(k).known());
         }
         return ways;
+    }
+
+    /**
+     * {@code whole} — what taking {@code condition} in as it stands came to — with what its parts
+     * say that the whole could not.
+     *
+     * <p>Each part is taken in alone over what is known here, which is the rule a reading of a
+     * condition's meaning takes a disjunction by ({@link MeaningAssumptions}) and is decided the same
+     * way. A part that leaves nothing is no way a run comes here, and it is dropped. Where none is
+     * left, nothing is reached; where one is, the condition holds as that part and is taken in as
+     * it; where both are, the condition is held as one of them, for a reader whose question its
+     * parts answer to take apart ({@link #eachWayOf}).
+     *
+     * <p>What the condition names is what its parts name, whichever of them holds. Naming is a fact
+     * about what was written and not about which way a run went: {@code a == x && b > 0} names
+     * {@code a} written alone, and written as one part of a choice it is the same comparison of the
+     * same value. A whole that named less than its parts would have a clause over that value left
+     * to the run-time check here and asked of each way it comes apart in, so which clauses are read
+     * would turn on whether anything took the condition apart.
+     */
+    private Assumed takingOneOf(Known.OneOf condition, Assumed whole) {
+        Known k = whole.known();
+        Set<FactSubject> named = new LinkedHashSet<>();
+        List<Known> left = new ArrayList<>();
+        for (Known way : eachWayOf(condition, k)) {
+            named.addAll(way.spokenBeyond(k));
+            if (!way.reachesNothing()) {
+                left.add(way);
+            }
+        }
+        Known out = switch (left.size()) {
+            case 0 -> k.reachingNothing();
+            case 1 -> left.getFirst();
+            default -> k.holdingOneOf(condition);
+        };
+        return new Assumed(out.speaking(named), whole.taken(), whole.shapeRead(), whole.notTaken());
     }
 
     /**
@@ -1123,11 +1163,8 @@ final class Predicates {
         // saying they were named a value one of them computes is one nothing has ever spoken of.
         if (part instanceof ClauseExpr.Joined join) {
             Assumed whole = taking(cond, join.writtenHalves(), k, at, positive);
-            // What the choice says beyond that is held as the choice, for a reader whose question
-            // its parts answer to take apart ({@link #eachWayOf}).
             return join.how() != ConditionJoin.EITHER || whole.known().reachesNothing() ? whole
-                    : new Assumed(whole.known().holdingOneOf(new Known.OneOf(join, at)),
-                            whole.taken(), whole.shapeRead(), whole.notTaken());
+                    : takingOneOf(new Known.OneOf(join, at), whole);
         }
         List<StatedComparison> readings =
                 Conditions.comparisonsStatedBy(terms, cond, at).holdingWhere(positive);

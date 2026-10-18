@@ -95,10 +95,61 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
         // each other, a reading that derived nothing at all would agree with itself at every count
         // and this would come out green while saying that no work grew — which is true of a check
         // that does no work, and is not what this is for.
-        assertEquals(List.of(theProduct, theProduct), none,
-                "each of the construction's two readings derived the product it is over");
+        assertEquals(List.of(theProduct), none,
+                "the construction's reading derived the product it is over, and no clause is"
+                        + " refuted, so the reading without the path is never made");
         assertEquals(none, derivedWhileCompiling(behaviorWith(10)));
         assertEquals(none, derivedWhileCompiling(behaviorWith(100)));
+    }
+
+    /**
+     * A construction no way of the conditions on the path reaches is one no run gets past, so what
+     * is written after it is never read: the readings are the ones the body makes without it. Read
+     * on as though it were reached, each construction after it would take the same conditions
+     * apart again to find the same nothing.
+     */
+    @Test
+    void whatIsWrittenPastAConstructionNoWayReachesIsNotRead() {
+        String body = """
+                module demo
+                data Share = Int
+                    invariant value >= 1000
+                behavior apportion : (amount: Int, among: Int) -> Share
+                    constructs Share
+                let apportion (amount, among) = {
+                    guard amount >= 0 && amount <= 100 else Share(1000)
+                    guard among >= 2 || among <= 0 - 2 else Share(1000)
+                    guard among >= 0 - 1 && among <= 1 else Share(1000)
+                    let first = Share(Rational.toInt(DOWN, amount / among))
+                    %s
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("first")),
+                derivedWhileCompiling(body.formatted("Share(amount - 1000)")));
+    }
+
+    /**
+     * A choice one part of which cannot hold where it is taken in is the other part, and is read
+     * as that part written alone: the construction under it is read once, as it is under the part,
+     * and not once and then again under each way the choice comes apart in.
+     */
+    @Test
+    void aChoiceOnePartOfWhichCannotHoldIsReadAsTheOther() {
+        String body = """
+                module demo
+                data Share = Int
+                    invariant value >= 0 && value <= 50
+                behavior apportion : (amount: Int, among: Int) -> Share
+                    constructs Share
+                let apportion (amount, among) = {
+                    guard amount >= 0 && amount <= 100 else Share(1)
+                    guard among >= 0 else Share(1)
+                    guard %s else Share(1)
+                    Share(Rational.toInt(DOWN, amount / among))
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("among >= 2")),
+                derivedWhileCompiling(body.formatted("among >= 2 || among <= 0 - 2")));
     }
 
     /**

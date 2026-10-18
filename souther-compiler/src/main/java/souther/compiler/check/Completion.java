@@ -72,5 +72,14 @@ sealed interface Completion {
          * there is the departure being taken, and a departure is a run carrying on.
          */
         record RefutedConstruction(Core.Construct made) implements NoCompletionProof {}
+
+        /**
+         * No way the conditions on the path come apart in reaches {@code made}: each part of a
+         * condition that holds as one of its parts cannot hold beside what else is known there.
+         *
+         * <p>Found where the construction is judged and not where the conditions were taken in,
+         * because that is the one place they are taken apart.
+         */
+        record NoWayIn(Core.Construct made) implements NoCompletionProof {}
     }
 }
