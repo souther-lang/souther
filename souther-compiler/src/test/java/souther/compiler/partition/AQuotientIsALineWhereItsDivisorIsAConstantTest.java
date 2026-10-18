@@ -351,6 +351,7 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
                             + " on " + apart.on() + ", " + apart.against();
             case BorderQuantity.HowMany count -> count.left();
             case BorderQuantity.RemainderOfAForm remainder -> remainder.left();
+            case BorderQuantity.ProductOfAPair product -> product.left();
         };
     }
 }

@@ -188,18 +188,19 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         assertTrue(report.contains("read as f/3 * a + 6 * b: = 51"), report);
         // And what it leaves the positions is said in the same words as well, whoever wrote it. The
         // positions are held to their declared runs, which are all their rules say: every a has a b
-        // of nought, under which the rule holds, and one of ten, under which it fails. A b of ten
-        // fails it whatever a is, so which values of b settle it on their own is not worked out.
+        // of nought, under which the rule holds, and one of ten, under which it fails. A b of three
+        // or less holds it whatever a is and one of nine or more fails it, so those are classes of
+        // b's own, and between them a reaches either side.
         String relating = "it relates the value here to another value rather than dividing the"
                 + " values here, about `a`";
-        String notShown = "it relates the value here to another value not shown to reach every"
-                + " value here, so which values here settle it on their own is not worked out,"
-                + " about `b`";
+        String settledAbove = "`b/9 <= x <= 10`";
+        String between = "`b/3 < x < 9`";
         assertTrue(report.contains(relating), report);
-        assertTrue(report.contains(notShown), report);
+        assertTrue(report.contains(settledAbove) && report.contains(between), report);
         String again = report(guarded(
                 "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"));
-        assertTrue(again.contains(relating) && again.contains(notShown),
+        assertTrue(again.contains(relating) && again.contains(settledAbove)
+                        && again.contains(between),
                 "a body's conditions say it the same way");
     }
 
