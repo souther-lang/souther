@@ -840,23 +840,31 @@ final class InputPath {
     static Beneath oneStepBeneath(Core list, ElementQuestion question, BindingEnvironment names,
                                   DeclarationNewtypes newtypes,
                                   Function<Core, Core.Block> blockOf) {
-        switch (question) {
-            case ONE_PER_ELEMENT, SAME_EMPTINESS -> { }
+        boolean asksWhatEachIs = switch (question) {
+            case ONE_PER_ELEMENT -> true;
+            case SAME_EMPTINESS -> false;
             case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE ->
                     throw new IllegalArgumentException("a step beneath a list is taken for a"
                             + " question about one value for each element, not " + question);
-        }
+        };
+        // What a step that hands the elements on as they are answered of each, where it is asked.
+        OnePerElement.Answered asTheyAre = asksWhatEachIs ? OnePerElement.Answered.ITSELF : null;
         // Which elements a list holds does not turn on the type it stands as.
         Core e = Core.withoutStanding(list);
         if (e instanceof Core.Read r) {
             return switch (names.stepFrom(r.binding(), question, HeldIn.Part.ELEMENT)) {
                 case ElementStep.Through(var same) -> new Beneath(
-                        new Core.Read(r.name(), same, r.type(), r.pos()),
-                        OnePerElement.Answered.ITSELF);
+                        new Core.Read(r.name(), same, r.type(), r.pos()), asTheyAre);
                 // What was made from the elements, or some of them, is not them each once.
                 case ElementStep.Refused _ -> null;
-                // What the name holds is the reading's to follow, and it has.
-                case ElementStep.NoEdge _ -> null;
+                // Where nothing says where the elements came from, what the binding holds is all
+                // there is, looked up over the whole body as the walk after a position does: a
+                // container built by one operation and handed to the next is bound beside the
+                // closure that reads it rather than above it.
+                case ElementStep.NoEdge _ -> {
+                    Core held = names.heldAnywhereBy(r.binding());
+                    yield held == null ? null : new Beneath(held, asTheyAre);
+                }
             };
         }
         ValueName operation;
@@ -882,7 +890,7 @@ final class InputPath {
         int permuted = built.permutesTheElementsOf() == null ? -1
                 : CallArguments.positionOf(built.permutesTheElementsOf(), operation);
         if (permuted >= 0 && permuted < args.size()) {
-            return new Beneath(args.get(permuted), OnePerElement.Answered.ITSELF);
+            return new Beneath(args.get(permuted), asTheyAre);
         }
         int mapped = built.mapsEachElementOf() == null ? -1
                 : CallArguments.positionOf(built.mapsEachElementOf(), operation);
@@ -892,15 +900,11 @@ final class InputPath {
                 || closure.params().getFirst().binding() == null) {
             return null;
         }
-        return switch (question) {
-            case SAME_EMPTINESS -> new Beneath(args.get(mapped), null);
-            case ONE_PER_ELEMENT -> {
-                OnePerElement.Answered answered = OnePerElement.Answered.of(closure.body(),
-                        closure.params().getFirst().binding(), names.heldByTheBody(), newtypes);
-                yield answered == null ? null : new Beneath(args.get(mapped), answered);
-            }
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE ->
-                    throw new IllegalArgumentException(question.toString());
-        };
+        if (!asksWhatEachIs) {
+            return new Beneath(args.get(mapped), null);
+        }
+        OnePerElement.Answered answered = OnePerElement.Answered.of(closure.body(),
+                closure.params().getFirst().binding(), names.heldByTheBody(), newtypes);
+        return answered == null ? null : new Beneath(args.get(mapped), answered);
     }
 }

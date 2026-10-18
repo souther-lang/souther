@@ -66,11 +66,6 @@ public record OnePerElement(TermPath container, ElementProjection projected, boo
          */
         public static Answered of(Core answer, BindingId element, Map<BindingId, Core> held,
                                   DeclarationNewtypes newtypes) {
-            ElementProjection at = answer instanceof Core.Widen ? null
-                    : ElementProjection.read(answer, element, held, newtypes);
-            if (at != null) {
-                return new Answered(at, false);
-            }
             return switch (answer) {
                 case Core.Widen _ -> null;
                 case Core.Construct made when newtypes.of(made.typeName().key())
@@ -78,7 +73,11 @@ public record OnePerElement(TermPath container, ElementProjection projected, boo
                     Answered worn = of(made.values().getFirst().value(), element, held, newtypes);
                     yield worn == null ? null : new Answered(worn.at(), true);
                 }
-                case null, default -> null;
+                case null -> null;
+                default -> {
+                    ElementProjection at = ElementProjection.read(answer, element, held, newtypes);
+                    yield at == null ? null : new Answered(at, false);
+                }
             };
         }
     }

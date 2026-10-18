@@ -2028,13 +2028,16 @@ public final class InputReads {
         Denotation at = standing(list, symbols, newtypes);
         ElementProjection projected = new ElementProjection(List.of());
         boolean wrapped = false;
-        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
+        // A step to a name is a step over the binding graph, and a name come round to again is one
+        // already answered for; a step down an operation stays inside one finite tree.
+        Set<BindingId> met = new HashSet<>();
         while (true) {
             if (at.at().pathOf(at.value(), newtypes) instanceof PathResolution.At(
                     TermPath container)) {
                 return new OnePerElement(container, projected, wrapped);
             }
-            if (!met.add(Core.withoutStanding(at.value()))) {
+            if (Core.withoutStanding(at.value()) instanceof Core.Read name
+                    && !met.add(name.binding())) {
                 return null;
             }
             InputReads where = at.at();

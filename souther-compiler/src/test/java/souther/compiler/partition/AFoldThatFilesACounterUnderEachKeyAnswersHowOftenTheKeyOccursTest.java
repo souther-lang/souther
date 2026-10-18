@@ -448,13 +448,21 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     @Test
     void aKeyReadBackOutOfARecordTheStepBuiltIsTheValueItWasGiven() {
         for (String key : List.of("(Key { label = i.label }).label",
-                "{ let made = Key { label = i.label }\n made.label }")) {
+                "{ let made = Key { label = i.label }\n made.label }",
+                "(Outer { key = Key { label = i.label } }).key.label",
+                "{ let made = Outer { key = Key { label = i.label } }\n made.key.label }",
+                "{ let made = Shell { outer = Outer { key = Key { label = i.label } } }\n"
+                        + " let inner = made.outer.key\n inner.label }")) {
             Compilation compilation = measured("""
                     module example.popular
 
                     data Issue = { label: String }
 
                     data Key = { label: String }
+
+                    data Outer = { key: Key }
+
+                    data Shell = { outer: Outer }
 
                     let countsOf (issues: List<Issue>): Map<String, Int> =
                         List.fold((acc, i) -> Map.updateOrInsert(%s, 1, n -> n + 1, acc),

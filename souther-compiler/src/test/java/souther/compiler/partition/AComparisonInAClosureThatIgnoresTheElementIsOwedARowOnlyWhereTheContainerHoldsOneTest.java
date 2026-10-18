@@ -129,14 +129,20 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
         String source = COUNTS.replace("Map.empty, xs)",
                 "Map.empty, List.map(y -> String.append(y, \"!\"), xs))");
         assertEveryRowStandsAtItsPoint(source, "busy", row -> !isEmpty(row.get(1)));
-        Compilation compilation = Compilation.ofSource(source.replace("n -> n,", "n -> n + 1,"),
-                "Main");
+        String moving = source.replace("n -> n,", "n -> n + 1,");
+        assertFalse(jsonOf(moving).contains("multiplicity("),
+                "a counter that moves over keys made of the elements is no count of a place");
+        assertTrue(jsonOf(moving.replace("String.append(y, \"!\")", "y")).contains(
+                        "multiplicity(xs[*])"),
+                "the same counter over the elements as they are is one");
+    }
+
+    private static String jsonOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        assertFalse(AdequacyReport.of(compilation)
-                        .json(SourceRendering.namedByIdentity(SourceLayouts.NONE))
-                        .contains("multiplicity("),
-                "a counter that moves over keys made of the elements is no count of a place");
+        return AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     @Test
