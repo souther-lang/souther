@@ -5431,6 +5431,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " different things where the helper is written";
             case WhyUnread.NotMetByTheReading _ -> "a condition the reading of what conditions"
                     + " mean did not meet";
+            case WhyUnread.WhichElementARunStopsAt _ -> "a condition over the elements of a"
+                    + " container, where what is stated of one answers nothing on some rows and"
+                    + " nothing here says which element a run reaches first";
         };
     }
 
@@ -6082,6 +6085,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case WhyUnread.CopiesStateDifferentThings _ ->
                             "copies_state_different_things";
                     case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";
+                    case WhyUnread.WhichElementARunStopsAt _ ->
+                            "which_element_a_run_stops_at";
                 });
             }
             case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> {

@@ -735,6 +735,14 @@ public final class InputDomain {
     }
 
     /**
+     * Whether what stands at {@code path} holds its elements in the order a row writes them: a list,
+     * whose order is the row's, and not a set or a map, whose order is the type's.
+     */
+    public boolean holdsItsElementsInTheOrderWritten(TermPath path, RuleReadingSource source) {
+        return typeAt(path, source) instanceof Type.ListOf;
+    }
+
+    /**
      * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
      *
      * <p>The position first and the declarations only where there is none, which is the one

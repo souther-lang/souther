@@ -78,7 +78,8 @@ public sealed interface WhyUnread {
                  NoFormOfWhatItAnswers _, ANumberOfWhatAnOperationAnswers _,
                  CodePointsOfWhatAnOperationAnswers _, AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
                  WhatARecursiveHelperAnswers _, SeveralValuesNotGoneInto _,
-                 CopiesStateDifferentThings _, NotMetByTheReading _ -> Optional.empty();
+                 CopiesStateDifferentThings _, NotMetByTheReading _,
+                 WhichElementARunStopsAt _ -> Optional.empty();
         };
     }
 
@@ -349,4 +350,17 @@ public sealed interface WhyUnread {
 
     /** A construct the reading of what a body's conditions mean did not meet. */
     record NotMetByTheReading() implements WhyUnread {}
+
+    /**
+     * A statement about the elements of a container, or the steps of a walk, where what is stated
+     * of one answers nothing on some rows — a quotient by what the element holds divides by nought
+     * there — and which element a run stops at turns what the whole comes to, in an order nothing
+     * here says.
+     *
+     * <p>The statement about each element is read. What the operation answers is not: where it
+     * stops at the first element meeting the statement, a run reaching an element that answers
+     * nothing before that one stops there, and where the row's order is not one the row writes
+     * freely, nothing says which comes first.
+     */
+    record WhichElementARunStopsAt() implements WhyUnread {}
 }
