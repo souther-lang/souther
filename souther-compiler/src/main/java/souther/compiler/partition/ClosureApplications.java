@@ -186,6 +186,9 @@ sealed interface ClosureApplications {
         List<Application> out = new ArrayList<>();
         boolean handed = false;
         boolean asked = false;
+        // Whether the block's body may stop a run: one question of the block, whichever
+        // application around it is asking, and asked only of one applied to every value.
+        Boolean mayStop = null;
         for (Application around : outer) {
             switch (Pullback.applicationsOf(block, around.reads(), read)) {
                 case InputReads.Applications.NoneMade _ -> handed = true;
@@ -194,15 +197,16 @@ sealed interface ClosureApplications {
                     // Applied to every value, an application is made past the ones before it only
                     // where each of them answered; what a body that is no truth answers is no
                     // statement read here, so which of those a run gets past is not said.
-                    boolean mayStop = WhatMayStopARun.in(block.body());
-                    if (how == HowAClosureIsApplied.TO_EVERY_ELEMENT && mayStop
-                            && !Type.BOOL.equals(block.body().type())) {
+                    boolean toEvery = how == HowAClosureIsApplied.TO_EVERY_ELEMENT;
+                    if (toEvery && mayStop == null) {
+                        mayStop = WhatMayStopARun.in(block.body());
+                    }
+                    if (toEvery && mayStop && !Type.BOOL.equals(block.body().type())) {
                         return new NotSaid(around.metOn().notSaidAnywhere(
                                 new ReadingGap.ReachNotRead(
                                         ReadingGap.ReachNotRead.Why.A_PART_NOT_READ)));
                     }
-                    List<Proposition> answers =
-                            how == HowAClosureIsApplied.TO_EVERY_ELEMENT && !mayStop ? null
+                    List<Proposition> answers = toEvery && !mayStop ? null
                             : each.stream().map(one -> WhatConditionsState.of(read)
                                     .truth(block.body(), one.reads(), read).proposition()).toList();
                     List<List<Proposition>> keptBy = each.stream()

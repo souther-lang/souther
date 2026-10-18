@@ -1381,8 +1381,16 @@ public sealed interface Proposition {
 
     /** Whether some part of {@code stated} answers only where an operation does. */
     private static boolean holdsAnAnswering(Proposition stated) {
-        return stated instanceof WhereItAnswers
-                || stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
+        return switch (stated) {
+            case WhereItAnswers _ -> true;
+            // What one of these holds answers on every row, which its constructor saw to, so
+            // nothing under it is walked again for each one it stands inside.
+            case Some _, SoManyHold _, SomeReachable _ -> false;
+            case All _, Any _, OnAnApplication _ ->
+                    stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
+                 Carried _, Unread _ -> false;
+        };
     }
 
     /**
