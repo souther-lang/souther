@@ -607,7 +607,7 @@ public final class AnswerAsAnInput {
             case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
-                 Quantity.WhatAnOperationAnswers _ -> null;
+                 Quantity.ProductOfTwo _, Quantity.WhatAnOperationAnswers _ -> null;
         };
     }
 }

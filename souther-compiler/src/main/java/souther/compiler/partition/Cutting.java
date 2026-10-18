@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NonAffineOperation;
@@ -319,14 +320,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (!(relation instanceof Relation.Affine affine)) {
             return Optional.empty();
         }
-        // A count, or what a division leaves, rises as that number does: the line is drawn on the
-        // number itself, and the relation weighs it by its coefficient.
-        if (of instanceof BorderQuantity.HowMany || of instanceof BorderQuantity.RemainderOfAForm) {
+        // A count, what a division leaves, or what two numbers come to multiplied, rises as that
+        // number does: the line is drawn on the number itself, and the relation weighs it by its
+        // coefficient.
+        if (of instanceof BorderQuantity.HowMany || of instanceof BorderQuantity.RemainderOfAForm
+                || of instanceof BorderQuantity.ProductOfAPair) {
             for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
                 if ((each.getKey() instanceof Quantity.HowManyMeet
                         && of instanceof BorderQuantity.HowMany)
                         || (each.getKey() instanceof Quantity.RemainderOfADividend
-                                && of instanceof BorderQuantity.RemainderOfAForm)) {
+                                && of instanceof BorderQuantity.RemainderOfAForm)
+                        || (each.getKey() instanceof Quantity.ProductOfTwo
+                                && of instanceof BorderQuantity.ProductOfAPair)) {
                     return each.getValue().signum() == 0 ? Optional.empty()
                             : Optional.of(each.getValue().signum() > 0);
                 }
@@ -645,6 +650,62 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * The line on {@code term} alone where it stands to {@code at} as {@code relation}, as a
+     * comparison of the term against that number draws it — or null where it draws none there.
+     *
+     * <p>For a line a reading worked out rather than one a comparison wrote: where the values of a
+     * term that settle a relation end ({@link UndividedByARelation}).
+     */
+    static Cutting onOneTerm(String behavior, NumericTerm term, ExactRatio at, Rel relation,
+                             Quantities quantities) {
+        return realized(behavior, new AffineReading(
+                new LinearForm<>(ExactRatio.ZERO, Map.of(term, ExactRatio.ONE)), at,
+                ComparisonClaim.stating(relation)), quantities)
+                instanceof Read.Cuts(Cutting cutting, AuthoredPointMapping _) ? cutting : null;
+    }
+
+    /**
+     * The line a relation over what two whole numbers of the input come to multiplied draws — or
+     * null where the relation is no such thing: the product alone against a number, each factor on
+     * an order of whole numbers.
+     *
+     * <p>A line on the product and on neither factor: where the product is the level turns on both,
+     * so what a row is at is what its two numbers multiply to.
+     */
+    private static Read onAProduct(String behavior, Relation.Affine affine, boolean holds,
+                                   InputReading read) {
+        if (affine.form().coefs().size() != 1
+                || !(affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.ProductOfTwo product)) {
+            return null;
+        }
+        ExactRatio weight = affine.form().coefs().get(product);
+        if (!(affine.form().constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+            return null;
+        }
+        Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
+        Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
+        for (NumericTerm factor : product.factors()) {
+            TermOrders orders = read.quantities().ordersOf(factor);
+            if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
+                return null;
+            }
+            on.put(factor, orders);
+            each.put(factor, ExactRatio.ONE);
+        }
+        // Over the product's weight, which turns the relation round where it is below nought.
+        ComparisonClaim claim = ComparisonClaim.stating(
+                holds ? affine.proposition() : affine.proposition().denied());
+        BorderQuantity.ProductOfAPair of = new BorderQuantity.ProductOfAPair(behavior,
+                new BorderQuantity.OverAForm(behavior, new LinearForm<>(ExactRatio.ZERO, each),
+                        on));
+        Cutting drawn = made(of, new Level.OfTheQuantity(level),
+                weight.signum() < 0 ? claim.turned() : claim, read.quantities());
+        return drawn == null ? null : cutsOrRefused(drawn);
+    }
+
+    /**
      * The line a relation over how many elements of a container meet something and numbers of the
      * input draws — or null where the relation is no such thing: one count, and nothing but numbers
      * of the input beside it.
@@ -785,9 +846,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 && stated.proposition() instanceof Proposition.Compared(
                         Relation.Affine affine, boolean holds, String _)
                 ? onARemainder(behavior, affine, holds, read) : null;
+        // And what two of them come to multiplied, which is a line on the product.
+        Read product = overTheInput == null && counted == null && remainder == null
+                && stated.proposition() instanceof Proposition.Compared(
+                        Relation.Affine affine, boolean holds, String _)
+                ? onAProduct(behavior, affine, holds, read) : null;
         // And numbers about how its values stand to one another, which no position holds.
         List<FilingCoordinate> related = overTheInput == null && counted == null
-                && remainder == null
+                && remainder == null && product == null
                 ? heldOverValuesRelatedToOneAnother(stated.proposition()) : null;
         return switch (stated.proposition()) {
             case Proposition.Always _ -> new Read.CutsNothing(
@@ -799,6 +865,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             comparison.left(), reads, read.rules()), read.quantities());
             case Proposition.Compared _ when counted != null -> counted;
             case Proposition.Compared _ when remainder != null -> remainder;
+            case Proposition.Compared _ when product != null -> product;
             case Proposition.Compared _ when related != null ->
                     against(related, stated.proposition());
             case Proposition.Some some

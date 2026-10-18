@@ -754,6 +754,9 @@ public final class Generator {
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
+                             // The divisors past this one were never asked for, so what the search
+                             // came to is about the pairs of the ones it tried.
+                             DIVISORS_OF_A_PRODUCT_TRIED,
                              // The numbers past this one were never asked for, so what the search
                              // came to is about the numbers it tried and about nothing else. The
                              // word says that, where the word for a set walked to its end says the

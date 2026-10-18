@@ -5204,6 +5204,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     case A_REMAINDER_OF_A_FORM ->
                                             "what a division leaves of a form of several"
                                                     + " numbers";
+                                    case A_PRODUCT_OF_TWO_NUMBERS ->
+                                            "what two numbers come to multiplied";
                                     case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
                                     case AN_ORDER_OF_NO_ONE_POSITION ->
                                             "a place on an order of a term that is no one"

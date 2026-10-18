@@ -297,6 +297,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes what a moved remainder is on a stretch of the place's remainder as the"
                             + " place's moved by a number, so that its comparison with another"
                             + " value is read where any comparison of a sum is"),
+            new Held("souther.compiler.partition.Pullback.productAt",
+                    "asks whether the expression the arithmetic stopped at is the product it"
+                            + " stopped for, so the two numbers multiplied are read as one"),
             new Held("souther.compiler.check.QuotientByAValue.operated",
                     "writes the number times the divisor as the source would, through the rule"
                             + " for the operator, so that the comparison is read where any"
