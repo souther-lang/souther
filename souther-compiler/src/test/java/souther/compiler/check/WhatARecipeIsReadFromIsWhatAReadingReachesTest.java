@@ -168,7 +168,7 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         }
 
         @Override
-        public boolean extents(Bounds a, Bounds b) {
+        public boolean extents(Derivation.DivisorExtent a, Derivation.DivisorExtent b) {
             return a == b;
         }
     };
