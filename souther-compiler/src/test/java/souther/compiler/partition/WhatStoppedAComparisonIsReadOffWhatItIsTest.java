@@ -294,6 +294,43 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     }
 
     /**
+     * And so where the value is bound inside a helper the comparison calls, which the comparison
+     * does not name: each place is worded by where the comparison's own arithmetic stopped, and
+     * the side is a value an operation made either way.
+     */
+    @Test
+    void aValueBoundInsideAHelperIsWordedAtEachPlaceUnderAnOperationAnsweringOneOfSeveral() {
+        String model = """
+                module demo
+
+                data Ok
+                data No
+
+                let h (t: String): Int = {
+                    let y = String.length(String.trim(t))
+                    y
+                }
+
+                behavior f : (c: Int, s: String) -> Ok | No
+                let f (c, s) = {
+                    guard %s else No
+                    Ok
+                }
+                """;
+        PartitionEvidence alone = measured(model.formatted("h(s) <= c"));
+
+        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                whyAt(alone, "s"));
+        for (String condition : List.of("Int.abs(h(s)) <= c", "Int.max(0, h(s)) <= c")) {
+            PartitionEvidence under = measured(model.formatted(condition));
+            for (String position : List.of("s", "c")) {
+                assertEquals(whyAt(alone, position), whyAt(under, position),
+                        condition + " at " + position);
+            }
+        }
+    }
+
+    /**
      * Two values whose readings stopped at two different operations are no one operation, and the
      * relations they leave undrawn are named for neither: naming the first would say of the second
      * that it was not there. Which of them is written first does not choose.
@@ -338,12 +375,11 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
 
         assertEquals(List.of(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE),
                 whyAt(alone, "c"));
-        for (String position : List.of("a", "b", "c")) {
-            assertEquals(List.of(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE),
-                    whyAt(beside, position).stream()
-                            .filter(why -> why != UndividedPosition.Reason.RULE_RELATING_TWO_VALUES)
-                            .toList(), position);
+        for (String position : List.of("a", "c", "xs")) {
+            assertEquals(whyAt(alone, position), whyAt(beside, position), position);
         }
+        assertEquals(List.of(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE),
+                whyAt(beside, "b"));
     }
 
     /**
