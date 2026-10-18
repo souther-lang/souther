@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.RuleRef;
@@ -16,10 +17,13 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Text;
+import souther.compiler.numeric.Towards;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -30,7 +34,9 @@ import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -58,7 +64,17 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
 
     /** A position held to the multiples of a thousand. */
     private static final HeldValues THOUSANDS = new HeldValues.OfAPosition(WHOLE,
-            new Congruences(BigInteger.ZERO, BigInteger.valueOf(1000)), ValueSet.ANY);
+            new ClassHeldTo.OfWholeNumbers(
+                    new Congruences(BigInteger.ZERO, BigInteger.valueOf(1000))), ValueSet.ANY);
+
+    private static final Carrier DAYS = new Carrier.Days();
+
+    /** A position held to the first of each month. */
+    private static final ClassHeldTo FIRST_OF_A_MONTH = new ClassHeldTo.OfDays(
+            new DatePartsLeft(Map.of(TakenAs.DatePart.DAY, onlyAt(1))));
+
+    private static final HeldValues FIRSTS =
+            new HeldValues.OfAPosition(DAYS, FIRST_OF_A_MONTH, ValueSet.ANY);
 
     /** A position held away from two. */
     private static final HeldValues NOT_TWO = new HeldValues.OfAPosition(WHOLE, null,
@@ -72,6 +88,57 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
         assertFalse(THOUSANDS.refuses(whole(2000)));
         assertTrue(NOT_TWO.refuses(whole(2)));
         assertFalse(NOT_TWO.refuses(whole(3)));
+        assertTrue(FIRSTS.refuses(day("2024-05-15")));
+        assertFalse(FIRSTS.refuses(day("2024-06-01")));
+    }
+
+    /**
+     * A run of days the first of no month falls in is one the declarations leave nothing in, and a
+     * run reaching into the next month is not — the class is walked over the calendar and not
+     * stepped by a fixed number of days, since months are not one length.
+     */
+    @Test
+    void aRunOfDaysHoldingNoFirstOfAMonthIsOneTheyLeaveNothingIn() {
+        assertTrue(FIRSTS.leaveNothingIn(between(day("2024-02-01"), day("2024-03-01")), null));
+        assertFalse(FIRSTS.leaveNothingIn(new LevelInterval(Bound.at(day("2024-02-01"), false),
+                Bound.at(day("2024-03-01"), true)), null));
+    }
+
+    /**
+     * The members of a run are drawn from the class from the end the item is named for, so a row
+     * offered beside a line on the fifteenth of May is the first of June and the first of May, and
+     * a twenty-ninth of February is looked for across the years that have one.
+     */
+    @Test
+    void theMembersOfARunAreTheDaysOfTheClassNearestTheLine() {
+        assertEquals(List.of(epochDay("2024-06-01"), epochDay("2024-07-01")),
+                FIRST_OF_A_MONTH.within(new NumericDomain.Bounds(Endpoint.exclusive(dayCount("2024-05-15")),
+                        null), Towards.ABOVE, 2).values());
+        assertEquals(List.of(epochDay("2024-05-01"), epochDay("2024-04-01")),
+                FIRST_OF_A_MONTH.within(new NumericDomain.Bounds(null,
+                        Endpoint.inclusive(dayCount("2024-05-15"))), Towards.BELOW, 2).values());
+        ClassHeldTo leapDays = new ClassHeldTo.OfDays(new DatePartsLeft(Map.of(
+                TakenAs.DatePart.DAY, onlyAt(29), TakenAs.DatePart.MONTH, onlyAt(2))));
+        assertEquals(List.of(epochDay("2028-02-29")),
+                leapDays.within(new NumericDomain.Bounds(Endpoint.inclusive(dayCount("2025-01-01")),
+                        null), Towards.ABOVE, 1).values());
+    }
+
+    private static NumericDomain.Bounds onlyAt(long value) {
+        return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(value)),
+                Endpoint.inclusive(Count.of(value)));
+    }
+
+    private static Count dayCount(String iso) {
+        return Dates.dayOf(iso);
+    }
+
+    private static BigInteger epochDay(String iso) {
+        return BigInteger.valueOf(LocalDate.parse(iso).toEpochDay());
+    }
+
+    private static Level day(String iso) {
+        return new Level.OnACarrier(DAYS, Dates.dayOf(iso));
     }
 
     /**

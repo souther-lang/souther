@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.ConstraintState;
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
@@ -2283,6 +2284,26 @@ final class ReadQuantities implements Quantities {
                         StructuralContext under))
                 || !under.holds(opened.opening()) ? null
                 : opened.rules().bounds().valueClassAt(at.named());
+    }
+
+    /**
+     * Where the declarations of the date at {@code place} leave its parts, or null where they say
+     * nothing of any.
+     *
+     * <p>Read off the value's own rules ({@link FieldDomains#datePartsAt}) under the context the
+     * term is asked in, as the class of a whole number is ({@link #classDeclaredAt}).
+     */
+    public DatePartsLeft datePartsAt(NumericTerm.ValueOf place) {
+        UnderARoot at = rootOf(place.subjectPath());
+        if (at == null) {
+            return null;
+        }
+        OpenedRules opened = byRoot.get(at.root());
+        return opened == null
+                || !(asking(Set.of(place)) instanceof StructuralContext.Merge.Together(
+                        StructuralContext under))
+                || !under.holds(opened.opening()) ? null
+                : opened.rules().bounds().datePartsAt(at.named());
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no

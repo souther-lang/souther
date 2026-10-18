@@ -347,7 +347,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;"
                             + "Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/values/ValueSet;"
-                            + "Lsouther/compiler/numeric/Congruences;"
+                            + "Lsouther/compiler/partition/ClassHeldTo;"
                             + "Lsouther/compiler/numeric/PlacesApart;"
                             + "Ljava/util/Set;)"
                             + "Lsouther/compiler/numeric/Place;",

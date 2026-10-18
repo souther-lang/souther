@@ -1,7 +1,10 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ValueName;
 
 /**
@@ -46,6 +49,46 @@ record DerivedNumber(RuleKey position, ValueName operation, TakenArguments argum
                 ? new DerivedNumber(at.position(), taken.operation(), taken.arguments(),
                         taken.from())
                 : null;
+    }
+
+    /**
+     * Whether the values at {@link #position} are read back out of what the rules leave this number,
+     * beyond the counts every position of a counted type has: a part of the date standing there, or
+     * its remainder by a divisor that was written.
+     *
+     * <p>Those are the numbers the reading of a position's values holds a class for
+     * ({@link FieldDomains#datePartsAt}, {@link FieldDomains#valueClassAt}). Any other number an
+     * operation answers is one nothing turns back into values, and a line on it read as a line on the
+     * position would be an account of a rule nobody carried out.
+     */
+    boolean holdsTheValuesOf() {
+        if (!(from instanceof ValueTransformation.Identity)) {
+            return false;
+        }
+        return switch (DefaultBoundOperationFacts.get().takenAs(operation, arguments)) {
+            case TakenAs.PartOfDate _ -> arguments.none();
+            case TakenAs.TheFloorRemainder remainder -> remainder.settledBy(arguments)
+                    && arguments.byPosition().size() == 1;
+            case null, default -> false;
+        };
+    }
+
+    /**
+     * Whether the values {@code range} leaves this number are the values the reading of the
+     * position holds of it, so that a rule leaving it there is carried out whole.
+     *
+     * <p>A count of any range is, and so is a part of a date — the days are walked for it. A remainder
+     * is only where the range is one number, since what is held of a value is the one class it leaves
+     * by the divisor: {@code Int.floorMod(value, 7) >= 3} leaves four classes, and held as one of them
+     * or as none it would be a rule read as more or less than it says.
+     */
+    boolean carriesOut(OrderedInterval range) {
+        return switch (DefaultBoundOperationFacts.get().takenAs(operation, arguments)) {
+            case TakenAs.HowManyItHolds _, TakenAs.PartOfDate _ -> true;
+            case TakenAs.TheFloorRemainder _ ->
+                    new NumericDomain.Bounds(range.low(), range.high()).holdsOneWholeNumber() != null;
+            case null, default -> false;
+        };
     }
 
     /** The same number as the subject every other reader knows it by. */

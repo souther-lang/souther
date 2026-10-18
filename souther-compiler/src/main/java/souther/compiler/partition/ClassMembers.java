@@ -98,7 +98,7 @@ record ClassMembers(List<BigInteger> values, boolean stoppedShort) {
      * inside it where it is a whole number it excludes, and the next whole number inward where it is
      * between two. Null where the end names no number this reads.
      */
-    private static BigInteger wholeEnd(Endpoint end, boolean lower) {
+    static BigInteger wholeEnd(Endpoint end, boolean lower) {
         if (!(end.at() instanceof Count count)) {
             return null;
         }

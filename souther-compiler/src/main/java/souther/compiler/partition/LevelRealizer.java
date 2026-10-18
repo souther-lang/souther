@@ -352,8 +352,8 @@ public final class LevelRealizer {
                               SearchRegion within,
                               Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
-        Congruences members = one.term() instanceof NumericTerm.ValueOf value
-                ? within.valueClassAt(value) : null;
+        ClassHeldTo members = one.term() instanceof NumericTerm.ValueOf value
+                ? ClassHeldTo.at(within, value) : null;
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         // A place the rules refuse once it stands with the rest of the row is not offered again
         // here: the places a point is offered are the ones before it that were not refused, and a
@@ -488,7 +488,7 @@ public final class LevelRealizer {
                 Place at = here == null ? null
                         : placeMeeting(here, reading.settles(), two.of(), settled,
                                 reading.settles() instanceof NumericTerm.ValueOf value
-                                        ? within.valueClassAt(value) : null,
+                                        ? ClassHeldTo.at(within, value) : null,
                                 looking, within, tried,
                                 Map.of(RealizationTarget.of(reading.anchors()), common),
                                 List.of(), stoppedBy);
@@ -1987,7 +1987,7 @@ public final class LevelRealizer {
      */
     private static Place placeMeeting(Criterion where, NumericTerm.FromOnePosition term,
                                       Carrier carrier, NumericDomain.Bounds bounds,
-                                      Congruences members, WitnessSearch looking,
+                                      ClassHeldTo members, WitnessSearch looking,
                                       SearchRegion region, ValuesTried tried,
                                       Map<RealizationTarget, Place> given,
                                       List<Place> refused, Set<CompositionBudget> stoppedBy) {
@@ -2054,7 +2054,7 @@ public final class LevelRealizer {
      */
     private static Place someValueIn(Criterion.Within within, Carrier carrier,
                                      NumericDomain.Bounds bounds, ValueSet admits,
-                                     Congruences members, PlacesApart apart,
+                                     ClassHeldTo members, PlacesApart apart,
                                      Supplier<Meter> allowance, Set<CompositionBudget> stoppedBy) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
@@ -2098,7 +2098,7 @@ public final class LevelRealizer {
      * search that left members untried found no proof that there is none.
      */
     private static Place someMemberIn(Criterion.Within within, List<LevelInterval> runs,
-                                      Carrier carrier, ValueSet admits, Congruences members,
+                                      Carrier carrier, ValueSet admits, ClassHeldTo members,
                                       PlacesApart apart, Set<CompositionBudget> stoppedBy) {
         boolean leftSome = false;
         for (LevelInterval look : runs) {
@@ -2106,7 +2106,7 @@ public final class LevelRealizer {
             if (run == null) {
                 continue;
             }
-            ClassMembers inside = ClassMembers.within(members,
+            ClassMembers inside = members.within(
                     new NumericDomain.Bounds(run.low(), run.high()), within.away(),
                     VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
             for (Place each : inside.notApart(apart)) {

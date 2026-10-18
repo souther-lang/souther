@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
@@ -26,6 +27,7 @@ import souther.compiler.values.ValueSet;
 import souther.compiler.numeric.Count;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -260,7 +262,14 @@ public final class FieldDomains {
      * <p>Asked at every projection of a number of the place, and the answer turns on the rules of
      * this value alone, so it is worked out once for each place and not once for each question.
      */
-    private final Map<RuleKey, Optional<Congruences>> classes = new ConcurrentHashMap<>();
+    private final Map<RuleKey, Residues> classes = new ConcurrentHashMap<>();
+
+    /** The place {@link #classLeavingNothing} found, worked out the first time it is asked. */
+    private volatile Optional<RuleKey> leavingNothing;
+
+    /** Where the rules leave the parts of the date at each place ({@link #datePartsAt}), kept for
+     *  the same reason {@link #classes} is. */
+    private final Map<RuleKey, Optional<DatePartsLeft>> dateParts = new ConcurrentHashMap<>();
 
     /**
      * What the rules keep the elements of each place apart at ({@link #keptApartAt}), and what the
@@ -348,14 +357,17 @@ public final class FieldDomains {
      * a word for it, so a contradiction can be held entirely by a domain that has nothing to do with
      * intervals — and a reading that asked the numbers alone answered that a value exists because
      * the domain it asked had never heard of the rules.
+     *
+     * <p>And of the classes a place is held to, which that state holds as atoms of their own
+     * ({@link #classLeavingNothing}).
      */
     public boolean infeasible() {
-        return constraints.isBottom();
+        return constraints.isBottom() || classLeavingNothing() != null;
     }
 
     /** The same, borrowing what {@code machines} has already made where deciding takes one. */
     public boolean infeasible(StringMachineAnswers machines) {
-        return constraints.isBottom(machines);
+        return constraints.isBottom(machines) || classLeavingNothing() != null;
     }
 
     /**
@@ -369,12 +381,24 @@ public final class FieldDomains {
      * subject, and what this value's rules call the place it is at is known here and nowhere else.
      */
     public Optional<Emptiness> holdsNothing() {
-        return constraints.holdsNothing(spelled(namedBy));
+        return constraints.holdsNothing(spelled(namedBy)).or(this::aClassHoldsNothing);
     }
 
     /** The same, borrowing what {@code machines} has already made where deciding takes one. */
     public Optional<Emptiness> holdsNothing(StringMachineAnswers machines) {
-        return constraints.holdsNothing(spelled(namedBy), machines);
+        return constraints.holdsNothing(spelled(namedBy), machines).or(this::aClassHoldsNothing);
+    }
+
+    /**
+     * The place whose class holds no value, as the proof says it: the rules leave the place no value
+     * its order holds, which is what two remainders no number leaves and a day the month never has
+     * are, as two equalities naming different values are.
+     */
+    private Optional<Emptiness> aClassHoldsNothing() {
+        RuleKey path = classLeavingNothing();
+        return path == null ? Optional.empty()
+                : Optional.of(new Emptiness.AtAField(whereOf(path),
+                        new Emptiness.EmptyOrderedInterval()));
     }
 
     /**
@@ -387,10 +411,14 @@ public final class FieldDomains {
     private static <A> SequencedMap<A, Emptiness.AtAField.Where> spelled(
             SequencedMap<A, RuleKey> named) {
         SequencedMap<A, Emptiness.AtAField.Where> out = new LinkedHashMap<>();
-        named.forEach((subject, name) -> out.put(subject,
-                name.isTheValueItself() ? new Emptiness.AtAField.Where.TheValueItself()
-                        : new Emptiness.AtAField.Where.In(name.toString())));
+        named.forEach((subject, name) -> out.put(subject, whereOf(name)));
         return out;
+    }
+
+    /** Where {@code name} sits, as a proof of emptiness says it. */
+    private static Emptiness.AtAField.Where whereOf(RuleKey name) {
+        return name.isTheValueItself() ? new Emptiness.AtAField.Where.TheValueItself()
+                : new Emptiness.AtAField.Where.In(name.toString());
     }
 
     /**
@@ -2101,14 +2129,61 @@ public final class FieldDomains {
      * range the value runs in say nothing of the numbers between them.
      */
     public Congruences valueClassAt(RuleKey path) {
-        return classes.computeIfAbsent(path, at -> Optional.ofNullable(classOf(at))).orElse(null);
+        return residuesAt(path) instanceof Residues.Within(Congruences class_) ? class_ : null;
+    }
+
+    /**
+     * What the remainders the rules hold the value at a place to leave it.
+     *
+     * <p>Three answers and not a class or null. Remainders no number leaves together leave the value
+     * nothing, which is the opposite of holding it to no class, and read as null the two were one:
+     * a value no number can be was searched as one any number can.
+     */
+    private sealed interface Residues {
+
+        /** No remainder of the value is held at one number. */
+        record NoneHeld() implements Residues {}
+
+        /** The value is held to {@code class_}. */
+        record Within(Congruences class_) implements Residues {}
+
+        /** No whole number leaves every remainder held. */
+        record NoNumberLeavesThem() implements Residues {}
+    }
+
+    private Residues residuesAt(RuleKey path) {
+        return classes.computeIfAbsent(path, this::classOf);
+    }
+
+    /**
+     * The place whose class the rules leave no value of, or null where every place's class holds
+     * one: remainders no whole number leaves together, or parts no date of the calendar has.
+     *
+     * <p>A contradiction the numeric state does not hold, because a remainder and a part of a date
+     * are each an atom of their own there, and what ties them to the value is read here. Asked of
+     * every place once.
+     */
+    private RuleKey classLeavingNothing() {
+        if (leavingNothing == null) {
+            RuleKey found = null;
+            for (RuleKey path : atomAt.keySet()) {
+                DatePartsLeft parts = datePartsAt(path);
+                if (residuesAt(path) instanceof Residues.NoNumberLeavesThem
+                        || (parts != null && !parts.leaveADate())) {
+                    found = path;
+                    break;
+                }
+            }
+            leavingNothing = Optional.ofNullable(found);
+        }
+        return leavingNothing.orElse(null);
     }
 
     /** The class {@link #valueClassAt} says, worked out: a walk of every subject the rules hold. */
-    private Congruences classOf(RuleKey path) {
+    private Residues classOf(RuleKey path) {
         FactSubject place = atomAt.get(path);
         if (place == null) {
-            return null;
+            return new Residues.NoneHeld();
         }
         Congruences together = null;
         for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
@@ -2135,10 +2210,50 @@ public final class FieldDomains {
                     BigInteger.valueOf(written).abs());
             together = together == null ? leaves : together.meet(leaves);
             if (together == null) {
-                return null;
+                return new Residues.NoNumberLeavesThem();
             }
         }
-        return together;
+        return together == null ? new Residues.NoneHeld() : new Residues.Within(together);
+    }
+
+    /**
+     * Where the rules leave the parts of the date at {@code path}, or null where they say nothing of
+     * any part of it.
+     *
+     * <p>Read off what the rules leave each part and not off how a clause spells it, as
+     * {@link #valueClassAt} is: {@code Date.day(value) == 1} and a pair of bounds meeting at one
+     * leave the date in the same class. A part asked of the date moved by days is no part of this
+     * one, so only a part taken of the date as it stands is read.
+     */
+    public DatePartsLeft datePartsAt(RuleKey path) {
+        return dateParts.computeIfAbsent(path, at -> Optional.ofNullable(datePartsOf(at)))
+                .orElse(null);
+    }
+
+    /** The parts {@link #datePartsAt} says, worked out: a walk of every subject the rules hold. */
+    private DatePartsLeft datePartsOf(RuleKey path) {
+        FactSubject place = atomAt.get(path);
+        if (place == null) {
+            return null;
+        }
+        Map<TakenAs.DatePart, NumericDomain.Bounds> left = new EnumMap<>(TakenAs.DatePart.class);
+        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+            Term call = atom.identity();
+            ValueName operation = call.calledOperation();
+            if (operation == null || call.parts().size() != 1
+                    || !call.parts().getFirst().equals(place.identity())
+                    || !(DefaultBoundOperationFacts.get().takenAs(operation)
+                            instanceof TakenAs.PartOfDate part)) {
+                continue;
+            }
+            // The range the part is left, and not every number the projection names: a part held
+            // inside a range by rules the projection lost is a part the range still holds, so
+            // reading the range keeps every date the rules leave.
+            NumericDomain.Bounds bounds = constraints.numbers().boundsOf(atom);
+            left.merge(part.part(), bounds, NumericDomain.Bounds::meet);
+        }
+        left.values().removeIf(bounds -> bounds.min() == null && bounds.max() == null);
+        return left.isEmpty() ? null : new DatePartsLeft(left);
     }
 
     /**

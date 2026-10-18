@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -216,6 +217,18 @@ public interface SearchRegion {
      * nothing of one, which is what the default is.
      */
     default Congruences valueClassAt(NumericTerm.ValueOf place) {
+        return null;
+    }
+
+    /**
+     * Where the declarations of the date at {@code place} leave its parts, or null where they say
+     * nothing of any.
+     *
+     * <p>The same question as {@link #valueClassAt} for a value counted in days: which days of the
+     * run the value may be, which a range on the date does not say. A region that reads no
+     * declarations says nothing of one, which is what the default is.
+     */
+    default DatePartsLeft datePartsAt(NumericTerm.ValueOf place) {
         return null;
     }
 
