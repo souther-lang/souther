@@ -6,7 +6,6 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -129,17 +128,6 @@ public final class TermOrders {
         return at == null ? null : read(observed.valueOf(at));
     }
 
-    /**
-     * The number of times the value {@code own} an element holds occurs among {@code every} value
-     * the elements of its container hold there, for a term that counts them.
-     */
-    public NumericTerm.Reading readAmong(ObservedValue own, List<ObservedValue> every) {
-        if (!(term instanceof NumericTerm.Multiplicity)) {
-            throw new IllegalArgumentException(term + " is not a count of an element's equals");
-        }
-        return TermReading.among(this, own, every);
-    }
-
     /** The term, for a reader of a number of an element read off the elements beside it. */
     public NumericTerm.OfAnElementsNeighbours amongItsNeighbours() {
         if (!(term instanceof NumericTerm.OfAnElementsNeighbours among)) {
@@ -149,56 +137,66 @@ public final class TermOrders {
     }
 
     /**
-     * The number the element {@code own} reads among {@code each}, the elements of the occurrence
-     * of the container it is in, for a term read off an element's neighbours.
+     * The elements of one occurrence of the container a term read off an element's neighbours is
+     * taken over, put together once for the number of any of them.
      *
-     * <p>An element is handed as what it holds at each way into it, and holding nothing at one the
-     * number is read from is an answer the caller has and says: the reading stops there.
+     * <p>Each element is handed as what it holds at each way into it. Whatever is asked of it is
+     * what the number of an element asks and no more, and an element is asked only when some
+     * number needs it: how often a value occurs reads every element's value, and the end of a
+     * key's values reads every element's key and the values of that key's elements alone, the
+     * first time that key is asked about.
      *
-     * @param own  the element under consideration, as what it holds at each way into it
-     * @param each every element of its container, the same way
+     * @param each every element of the occurrence, in the order the container holds them
      */
-    public NumericTerm.Reading readInItsOccurrence(
-            Function<ElementProjection, ObservedValue> own,
-            List<Function<ElementProjection, ObservedValue>> each) {
-        return switch (amongItsNeighbours()) {
-            case NumericTerm.Multiplicity often -> TermReading.among(this,
-                    own.apply(often.placeField()), heldAt(often.placeField(), each));
-            case NumericTerm.ExtremeOfItsKey _ -> TermReading.extremeOfItsKey(this, own, each);
-        };
+    public <G> ElementsTogether<G> together(List<Function<ElementProjection, Holding<G>>> each) {
+        return TermReading.together(this, each);
     }
 
     /**
-     * What each of {@code each} reads, in their order — {@link #readInItsOccurrence} for all of
-     * them, over one pass of the container rather than one per element.
+     * What an element holds at a way into it: a value, or nothing, for a reason in the words of
+     * whoever handed the element over.
+     *
+     * <p>Nothing is an answer the caller has and this does not. A row that wrote nothing there and
+     * a walk that could not reach the place are two things to a row, and a value of another shape
+     * is a third to a read-back; the number only says which nothing it came to first.
      */
-    public List<NumericTerm.Reading> readEachInItsOccurrence(
-            List<Function<ElementProjection, ObservedValue>> each) {
-        return switch (amongItsNeighbours()) {
-            case NumericTerm.Multiplicity often ->
-                    TermReading.amongEach(this, heldAt(often.placeField(), each));
-            case NumericTerm.ExtremeOfItsKey _ -> TermReading.extremeOfEachKey(this, each);
-        };
+    public sealed interface Holding<G> {
+
+        record Value<G>(ObservedValue value) implements Holding<G> {
+
+            public Value {
+                Objects.requireNonNull(value, "a value held is a value");
+            }
+        }
+
+        record Nothing<G>(G why) implements Holding<G> {
+
+            public Nothing {
+                Objects.requireNonNull(why, "holding nothing says why");
+            }
+        }
     }
 
-    private static List<ObservedValue> heldAt(ElementProjection field,
-                                              List<Function<ElementProjection, ObservedValue>> each) {
-        List<ObservedValue> held = new ArrayList<>(each.size());
-        for (Function<ElementProjection, ObservedValue> one : each) {
-            held.add(one.apply(field));
-        }
-        return held;
+    /** The elements of one occurrence, put together ({@link #together}). */
+    public interface ElementsTogether<G> {
+
+        /**
+         * The number {@code own}, one of the elements, reads among them.
+         *
+         * <p>What stops it is the first thing its reading asks that holds nothing — its own value
+         * and then every element's, or its own key and then each key and each value of its key
+         * in the order the elements stand, up to the first of those values that was not read —
+         * and failing that, what the number's own reading of the values says.
+         */
+        Neighbouring<G> numberOf(Function<ElementProjection, Holding<G>> own);
     }
 
-    /**
-     * What each of {@code every} reads, in their order, for a term that counts an element's equals
-     * — {@link #readAmong} for all of them, counting each value once rather than once per value.
-     */
-    public List<NumericTerm.Reading> readEachAmong(List<ObservedValue> every) {
-        if (!(term instanceof NumericTerm.Multiplicity)) {
-            throw new IllegalArgumentException(term + " is not a count of an element's equals");
-        }
-        return TermReading.amongEach(this, every);
+    /** A number read among an element's neighbours, or the nothing its reading came to first. */
+    public sealed interface Neighbouring<G> {
+
+        record Read<G>(NumericTerm.Reading reading) implements Neighbouring<G> {}
+
+        record HeldNothing<G>(G why) implements Neighbouring<G> {}
     }
 
     /**

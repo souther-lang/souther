@@ -476,6 +476,27 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A month against a number a guard holds to the months: December is at or above every such
+     * number, and a number of one has every month at or above it, so each is a class of its own.
+     * Held to nought through thirteen, the number reaches past every month, which leaves the month
+     * undivided, and nought, one and thirteen settle the comparison whatever the month is.
+     */
+    @Test
+    void aMonthIsDividedAtTheEndOfTheNumbersAGuardHoldsTheOtherSideTo() {
+        String months = "if k >= 1 && k <= 12 then Date.month(d) >= k else false";
+        assertEquals(Map.of(), left("d: Date, k: Int", "data Unused = Int", months, "4:56"));
+        assertEquals(List.of("Date.month(d)/1 <= x < 12", "Date.month(d)/12 <= x <= 12"),
+                classesAt("d: Date, k: Int", "data Unused = Int", months, "Date.month(d)"));
+        assertEquals(List.of("k/x < 1", "k/1 <= x <= 1", "k/1 < x <= 12", "k/12 < x"),
+                classesAt("d: Date, k: Int", "data Unused = Int", months, "k"));
+        String wider = "if k >= 0 && k <= 13 then Date.month(d) >= k else false";
+        assertEquals(Map.of("Date.month(d)", RELATES),
+                left("d: Date, k: Int", "data Unused = Int", wider, "4:56"));
+        assertEquals(List.of("k/x < 0", "k/0 <= x <= 1", "k/1 < x < 13", "k/13 <= x <= 13",
+                "k/13 < x"), classesAt("d: Date, k: Int", "data Unused = Int", wider, "k"));
+    }
+
+    /**
      * A way that chooses is proved along each choice: under {@code x == 0 || x == 1} a row holds
      * {@code x} at nought or at one, so a {@code y} of two makes {@code x == y} false wherever the
      * row arrives, though the two choices together leave {@code x} anything a whole number can be
