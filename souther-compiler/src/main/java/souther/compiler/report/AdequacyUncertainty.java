@@ -3,10 +3,12 @@ package souther.compiler.report;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.List;
@@ -215,6 +217,39 @@ public sealed interface AdequacyUncertainty {
         public NothingShowedARowCanBeWritten {
             if (subject == null) {
                 throw new IllegalArgumentException("nothing showed a row at some point");
+            }
+        }
+
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
+        }
+    }
+
+    /**
+     * Something worked out on the way to a point may stop a run on operands nothing here says, so
+     * what showed a value can stand at the point does not show a run getting there with it.
+     *
+     * <p>Beside {@link NothingShowedARowCanBeWritten} and not it: something did show a value at
+     * the point, and what is open is the way there. Nothing was compared against a figure, so no
+     * allowance changes it.
+     *
+     * @param at what kind of thing each of the things that may stop a run is, each kind once
+     */
+    record TheWayThereMayStop(Subject subject, CanonicalSelection<WhatMayStopARun> at)
+            implements AdequacyUncertainty {
+
+        public TheWayThereMayStop {
+            if (subject == null) {
+                throw new IllegalArgumentException("a way to some point may stop");
+            }
+            if (at == null || at.isEmpty()) {
+                throw new IllegalArgumentException("a way that may stop does so somewhere");
             }
         }
 

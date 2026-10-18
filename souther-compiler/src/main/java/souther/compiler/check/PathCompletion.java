@@ -1,7 +1,20 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.core.Core;
+import souther.compiler.types.BinOp;
+
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Whether one evaluation can answer, under what is known where it stands.
@@ -54,6 +67,11 @@ final class PathCompletion {
      *          after would be asking whether an evaluation answers under the assumption that it did
      */
     Completion of(Core e, Known k, Denotations at) {
+        return of(e, k, answering(e, k, at), at);
+    }
+
+    /** The same, told what holds where {@code e}'s operator answers ({@link #answering}). */
+    private Completion of(Core e, Known k, Known answered, Denotations at) {
         if (k.reachesNothing()) {
             // Nothing stands here, so there is no run to say anything about. Answered as the
             // weaker of the two, since a state that holds nothing proves whatever it is asked.
@@ -64,6 +82,11 @@ final class PathCompletion {
             // the path enters into it.
             return new Completion.CannotComplete(
                     new Completion.NoCompletionProof.TheModelSaysNothingArrives(said));
+        }
+        // Read before the recipes: what the operator asks of its operands is the language's, and
+        // a recipe says the number it computes, which is a second and narrower question.
+        if (answered.reachesNothing()) {
+            return new Completion.CannotComplete(new Completion.NoCompletionProof.NotHeld(e));
         }
         Core called = operationAt(e);
         if (called == null) {
@@ -95,13 +118,156 @@ final class PathCompletion {
     }
 
     /**
+     * What holds once a run that reached {@code e} with everything it is computed from answered has
+     * got past it: nothing, where {@code e} answers nothing ({@link #of}), and otherwise {@code k}
+     * with what its operator answering asks of the operands taken in.
+     *
+     * <p>What a walk asking where a run arrives carries on past an evaluation with. {@code a == MAX}
+     * and then {@code a + 1} leaves nothing; {@code a >= MAX - 1} and then {@code a + 1} leaves
+     * {@code a == MAX - 1}, which is what every run past the sum holds.
+     *
+     * <p>The invariant check asks {@link #of} and carries nothing more on. What it judges a
+     * construction against is read off what the path says of each value, and an end on every value
+     * a sum was worked out of says something of each of them — so every product over them would be
+     * derived at every construction, which is the work that check is held to doing only for what a
+     * construction is about. What it leaves out is a fact, and leaving one out decides nothing it
+     * would not otherwise decide.
+     *
+     * @param k what holds before {@code e} answers, as for {@link #of}
+     */
+    Known past(Core e, Known k, Denotations at) {
+        Known answered = answering(e, k, at);
+        return of(e, k, answered, at) instanceof Completion.CannotComplete
+                ? k.reachingNothing() : answered;
+    }
+
+    /**
+     * Whether where a run that reached {@code e} gets past it is read here, under {@code k}: every
+     * operand it answers on is one {@link #past} keeps, and every one it does not is one past
+     * leaves out.
+     *
+     * <p>Not whether it answers. A sum over two values held to a hundred answers everywhere they
+     * are held and is read; a sum over values nothing holds answers where it fits an {@code Int},
+     * which is what past takes in, and is read; a product of two values nothing holds answers where
+     * their product fits, which no form here says, and is not. A node that is no operator is read
+     * where it ends no run ({@link WhatARunMayEndFor}) and not read anywhere else: a call whose
+     * kernel may stop, a behavior whose body is not this one, a construction whose rule may refuse.
+     *
+     * <p>What a reader holding a run that got to a place past {@code e} cannot have is a showing
+     * that some run gets there, where this answers false: the rows past {@code e} that
+     * {@link #past} keeps include ones that stop at it.
+     */
+    boolean readsWhereItAnswers(Core standing, Known k, Denotations at) {
+        if (k.reachesNothing()) {
+            return true;
+        }
+        Core e = Core.withoutStanding(standing);
+        WhereAnOperatorAnswers where = switch (e) {
+            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                    binary.type(), List.of(binary.left().type(), binary.right().type()));
+            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+            default -> null;
+        };
+        if (where == null) {
+            return WhatARunMayEndFor.itself(e).endsNone();
+        }
+        return switch (where) {
+            case WhereAnOperatorAnswers.Everywhere _ -> true;
+            case WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest) ->
+                    e instanceof Core.Binary product && product.op() == BinOp.MUL
+                            ? heldWherever(product, least, greatest, k, at)
+                            : terms.affineOf(e, at) != null;
+            case WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _ ->
+                    e instanceof Core.Binary quotient
+                            && terms.affineOf(quotient.right(), at) instanceof LinearForm<FactSubject>
+                                    divisor
+                            && k.numbers().entails(divisor, Rel.NE);
+            case WhereAnOperatorAnswers.NotStated _ -> false;
+        };
+    }
+
+    /**
+     * Whether {@code product} comes to a number from {@code least} to {@code greatest} wherever
+     * {@code k} holds: a scalar multiple is a form, read by {@link #past} as any form is, and a
+     * product of two values is read where the ends each is held to keep every product inside.
+     */
+    private boolean heldWherever(Core.Binary product, BigInteger least, BigInteger greatest,
+                                 Known k, Denotations at) {
+        LinearForm<FactSubject> left = terms.affineOf(product.left(), at);
+        LinearForm<FactSubject> right = terms.affineOf(product.right(), at);
+        if (left == null || right == null) {
+            return false;
+        }
+        if (left.coefs().isEmpty() || right.coefs().isEmpty()) {
+            return true;
+        }
+        NumericDomain.Bounds of = k.numbers().boundsOf(left);
+        NumericDomain.Bounds by = k.numbers().boundsOf(right);
+        List<ExactRatio> ends = new ArrayList<>();
+        for (Endpoint one : new Endpoint[] {of.min(), of.max()}) {
+            for (Endpoint other : new Endpoint[] {by.min(), by.max()}) {
+                if (one == null || other == null || !(one.at() instanceof Count a)
+                        || !(other.at() instanceof Count b)
+                        || !(a.exactly().times(b.exactly())
+                                instanceof ExactAnswer.Held<ExactRatio>(var corner))) {
+                    return false;
+                }
+                ends.add(corner);
+            }
+        }
+        return ends.stream().allMatch(corner -> corner.compareTo(ExactRatio.of(least)) >= 0
+                && corner.compareTo(ExactRatio.of(greatest)) <= 0);
+    }
+
+    /**
+     * {@code k} with the operands of {@code e} where its operator answers
+     * ({@link WhereAnOperatorAnswers}), as far as the numbers here can say it.
+     *
+     * <p>Only where it answers on a run of numbers and the value is a form over what this reads: a
+     * sum, a difference, a scalar multiple, a negation. A product of two values is one atom here,
+     * and an end on that atom says nothing of either factor, though it is no less true. What is not
+     * said here is left as it was, which over-reads where a run gets past and never under-reads it.
+     */
+    private Known answering(Core standing, Known k, Denotations at) {
+        WhereAnOperatorAnswers where = switch (Core.withoutStanding(standing)) {
+            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                    binary.type(), List.of(binary.left().type(), binary.right().type()));
+            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+            default -> null;
+        };
+        if (!(where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
+                BigInteger least, BigInteger greatest))) {
+            return k;
+        }
+        LinearForm<FactSubject> form = terms.affineOf(standing, at);
+        if (form == null) {
+            return k;
+        }
+        // An end what holds already keeps the value inside is not taken again, so a run past an
+        // operator that answers wherever it is reached holds what it held — and the same state.
+        Known out = k;
+        if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var above)
+                && !k.numbers().entails(above, Rel.LE)) {
+            out = out.taking(above, Rel.LE, Known.Held.ON_THE_PATH, terms.kindsOf(above));
+        }
+        if (form.minus(LinearForm.constant(ExactRatio.of(least)))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var below)
+                && !k.numbers().entails(below, Rel.GE)) {
+            out = out.taking(below, Rel.GE, Known.Held.ON_THE_PATH, terms.kindsOf(below));
+        }
+        return out;
+    }
+
+    /**
      * {@code e} where it is a node whose own value this reading records arithmetic for, and null
      * where it is anything else.
      *
-     * <p>Which is an operator and a library call, and it is those because those are what
+     * <p>Which is a product, a quotient and a library call, and it is those because those are what
      * {@link Terms} records a recipe against — not because they are everything the language calls
-     * arithmetic. Negation is arithmetic and is neither, and nothing is recorded for it; a recipe
-     * written for it later belongs here, and until one is there would be nothing here to ask.
+     * arithmetic. A sum, a difference and a negation are forms, and where they answer is read off
+     * the form ({@link #answering}); no recipe is recorded for any of them, so asking one would name
+     * the value for nothing.
      *
      * <p>A name given such a value is not one of them. What a name reads was computed where it was
      * computed, and a run standing at the name has already come back from that — so asking here
@@ -109,6 +275,9 @@ final class PathCompletion {
      * one the program builds.
      */
     private static Core operationAt(Core e) {
-        return e instanceof Core.Binary || Terms.operationOf(e) != null ? e : null;
+        if (e instanceof Core.Binary binary) {
+            return binary.op() == BinOp.MUL || binary.op() == BinOp.DIV ? e : null;
+        }
+        return Terms.operationOf(e) != null ? e : null;
     }
 }

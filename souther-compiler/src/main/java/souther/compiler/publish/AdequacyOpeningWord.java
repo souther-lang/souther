@@ -37,6 +37,10 @@ public enum AdequacyOpeningWord {
      *  made, so there is no limit to raise and nothing to name. */
     NOTHING_SHOWED_IT,
 
+    /** The same point, where a value at it was shown and something worked out on the way to it
+     *  may stop a run on values this compiler does not say: no run was shown to get there. */
+    THE_WAY_THERE_MAY_STOP,
+
     /** An obligation every row of which reaches an {@code unreachable} the body states, which
      *  nothing here proves: no row there can be written, and the obligation is not met either. */
     EVERY_ROW_REACHES_AN_UNREACHABLE

@@ -9,6 +9,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -117,6 +118,18 @@ public final class AffineForms {
         }
 
         /**
+         * That the walk composed {@code operation} — a sum, a difference, a product or a negation
+         * an operator writes — into {@code form}, for a caller that reads where each operator a
+         * value is worked out through answers ({@link WhereAnOperatorAnswers}). What the walk
+         * composes is not changed by it.
+         *
+         * <p>Told of each operator and not only of the whole: {@code (a + b) - b} comes to
+         * {@code a}, and a run stops at {@code a + b} all the same.
+         */
+        default void composed(Core operation, LinearForm<A> form) {
+        }
+
+        /**
          * Whether a field access is a newtype's value read off something that is not a place.
          *
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
@@ -197,18 +210,26 @@ public final class AffineForms {
      * it is read in ({@link BindingWalk}), so an answer is taken again only for the same question.
      */
     static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading,
-                                   BindingWalk.Answers<Outcome<A, E>> answered) {
-        return of(raw, at, reading, new Walk<>(answered)) instanceof Outcome.Composed<A, E> composed
-                ? composed.form() : null;
+                                   BindingWalk.Answers<Outcome<A, E>> answered,
+                                   FoldedValue.Kept<E> folds) {
+        return of(raw, at, reading, new Walk<>(answered, folds))
+                instanceof Outcome.Composed<A, E> composed ? composed.form() : null;
     }
 
     /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */
     private static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
 
-        Walk() {}
+        /** What each name the folds met came to, kept by the caller beside what each name the walk
+         *  read came to — or null where nobody keeps it, and each fold is its own. */
+        private final FoldedValue.Kept<E> folds;
 
-        Walk(BindingWalk.Answers<Outcome<A, E>> answered) {
+        Walk() {
+            this.folds = null;
+        }
+
+        Walk(BindingWalk.Answers<Outcome<A, E>> answered, FoldedValue.Kept<E> folds) {
             super(answered);
+            this.folds = folds;
         }
     }
 
@@ -353,7 +374,7 @@ public final class AffineForms {
         // computed. What is asked here is a written decimal or a whole number, which is every
         // number a fold answers that the arms above do not: a fold comes to a fraction only through
         // the operators, and each of those is arithmetic this composes.
-        BigDecimal folded = foldedNumber(e, at, reading);
+        BigDecimal folded = foldedNumber(e, at, reading, following);
         if (folded != null) {
             return new Outcome.Composed<>(
                     LinearForm.constant(ExactRatio.of(folded)));
@@ -592,6 +613,16 @@ public final class AffineForms {
                 && !composed.form().coefs().isEmpty();
     }
 
+    /** {@code form}, with the reading told {@code operation} came to it ({@link Reading#composed})
+     *  — where it came to one. */
+    private static <A, E> LinearForm<A> told(Core operation, LinearForm<A> form,
+                                             Reading<A, E> reading) {
+        if (form != null) {
+            reading.composed(operation, form);
+        }
+        return form;
+    }
+
     /** No form, and {@code e} recorded as where the reading stopped and why — where nothing
      *  stopped it first. */
     private static <A, E> LinearForm<A> halted(Core e, E at, Halt<A, E> why, Stop<A, E> stopped) {
@@ -616,22 +647,24 @@ public final class AffineForms {
             // form of the operand negated would put a number there that no run has.
             case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) ->
                     halted(e, at, new Halt.NoNumberOnARun<>(), stopped);
-            case Core.Neg n -> Terms.negate(formOf(n.operand(), at, reading, following, stopped));
-            case Core.Binary b when b.op() == BinOp.ADD ->
+            case Core.Neg n -> told(n, Terms.negate(formOf(n.operand(), at, reading, following,
+                    stopped)), reading);
+            case Core.Binary b when b.op() == BinOp.ADD -> told(b,
                     operated(e, at, formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> Terms.sum(left, right, false), stopped);
-            case Core.Binary b when b.op() == BinOp.SUB ->
+                            (left, right) -> Terms.sum(left, right, false), stopped), reading);
+            case Core.Binary b when b.op() == BinOp.SUB -> told(b,
                     operated(e, at, formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> Terms.sum(left, right, true), stopped);
+                            (left, right) -> Terms.sum(left, right, true), stopped), reading);
             // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
             // not, so a product of two atoms comes back here as one value rather than as arithmetic
             // over two — unless the caller's atoms make it one (`Reading.productOf`).
-            case Core.Binary b when b.op() == BinOp.MUL ->
+            case Core.Binary b when b.op() == BinOp.MUL -> told(b,
                     operated(e, at, formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> productAsRead(left, right, reading), stopped);
+                            (left, right) -> productAsRead(left, right, reading), stopped),
+                    reading);
             // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
             // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
             // either operand's type writes — which is why this is arithmetic over a position at all
@@ -769,7 +802,7 @@ public final class AffineForms {
         // which is its arm's form where there is one and what is left of the walk where not.
         for (int i = through.size() - 1; i >= 0; i--) {
             Outcome<A, E> read = form != null ? new Outcome.Composed<>(form)
-                    : unread(through.get(i), at, reading, stops.get(i + 1));
+                    : unread(through.get(i), at, reading, following, stops.get(i + 1));
             if (read instanceof Outcome.StoppedAt<A, E> stop) {
                 if (stops.get(i).at == null) {
                     stops.get(i).at = stop;
@@ -783,9 +816,13 @@ public final class AffineForms {
     }
 
     /** The number {@code e} folds to read in {@code at} with the reading's own names
-     *  ({@link FoldedValue}), or null where it folds to none. */
-    private static <A, E> BigDecimal foldedNumber(Core e, E at, Reading<A, E> reading) {
-        return FoldedValue.number(FoldedValue.of(e, at, reading, reading.symbols()));
+     *  ({@link FoldedValue}), or null where it folds to none — with what each name came to kept
+     *  where the walk's caller keeps it. */
+    private static <A, E> BigDecimal foldedNumber(Core e, E at, Reading<A, E> reading,
+                                                  Walk<A, E> following) {
+        return FoldedValue.number(following.folds == null
+                ? FoldedValue.of(e, at, reading, reading.symbols())
+                : FoldedValue.of(e, at, reading, reading.symbols(), following.folds));
     }
 
     /**
@@ -794,8 +831,8 @@ public final class AffineForms {
      * reads one through has nothing to ask.
      */
     private static <A, E> Outcome<A, E> unread(Core.FieldProjection p, E at, Reading<A, E> reading,
-                                               Stop<A, E> stopped) {
-        BigDecimal folded = foldedNumber(p, at, reading);
+                                               Walk<A, E> following, Stop<A, E> stopped) {
+        BigDecimal folded = foldedNumber(p, at, reading, following);
         if (folded != null) {
             return new Outcome.Composed<>(LinearForm.constant(ExactRatio.of(folded)));
         }

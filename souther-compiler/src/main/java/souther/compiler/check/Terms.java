@@ -526,7 +526,7 @@ final class Terms {
      * to be written.
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
-        return AffineForms.of(raw, at, affineReading, affineAnswers);
+        return AffineForms.of(raw, at, affineReading, affineAnswers, affineFolds);
     }
 
     /**
@@ -541,6 +541,13 @@ final class Terms {
      */
     private final BindingWalk.Answers<AffineForms.Outcome<FactSubject, Denotations>> affineAnswers =
             new BindingWalk.Answers<>();
+
+    /**
+     * What each name the affine reading folded came to, by the environment it was read in — held
+     * for as long as this is, for the same reason. A walk asks the form of each operator it passes,
+     * and every one of them over a chain of names folds the names under it.
+     */
+    private final FoldedValue.Kept<Denotations> affineFolds = new FoldedValue.Kept<>();
 
     /**
      * The same, saying where the reading stopped where it did, and naming only the atoms
@@ -644,6 +651,12 @@ final class Terms {
                 public ValueStanding.ReadThrough<Denotations> readThrough(Core.Read read,
                                                                         Denotations at) {
                     return Terms.this.readThrough(read, at);
+                }
+
+                @Override
+                public Object standingOf(Core.Read read, Denotations at) {
+                    Object stands = at.standingOf(read.binding());
+                    return stands != null ? stands : at;
                 }
 
                 /**
@@ -2591,6 +2604,13 @@ final class Terms {
      */
     private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                           Leaf leaf) {
+        // A list written with no elements has no element to say its type, and is the empty list of
+        // whatever it stands as — asked before what it stands as is taken off. What the library
+        // works out over none of them, a sum or a product, is a number of that element type, and
+        // two of them are two values.
+        if (Core.withoutStanding(raw) instanceof Core.ListLit l && l.elements().isEmpty()) {
+            return new Naming.Named(interned.emptyList(raw.type()));
+        }
         Core e = asOperator(raw);
         BindingId root = rootBinding(e);
         if (root != null) {

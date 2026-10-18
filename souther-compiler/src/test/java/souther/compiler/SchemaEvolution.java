@@ -147,8 +147,12 @@ public final class SchemaEvolution {
                         compare(was, is, here, was.isObject(), out, roots);
                 case "contains" -> compare(was, is, here,
                         !shipped.has("maxContains") && !current.has("maxContains"), out, roots);
-                case "allOf", "anyOf" ->
-                        eachBranch(was, is, here, out, _ -> true, _ -> false, roots);
+                // Every branch has to take a document, so one added is one more thing asked of it.
+                case "allOf" -> eachBranch(was, is, here, out, _ -> true, _ -> false, roots);
+                // Some branch has to take it, so one added takes more and refuses nothing a
+                // shipped branch took — here, where what is here accepting more is the whole
+                // accepting more, which is the only place this is reached.
+                case "anyOf" -> eachBranch(was, is, here, out, _ -> true, _ -> true, roots);
                 case "oneOf" -> eachBranch(was, is, here, out,
                         i -> exclusive(was, i, shipped, roots.shipped())
                                 && exclusive(is, i, current, roots.current()),

@@ -1,6 +1,7 @@
 package souther.compiler.reach;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 
 /**
  * One fork on the way to a place, and the way it went.
@@ -23,7 +24,10 @@ public record PathDecision(SourcePos at, Way way) {
         /** A condition, failed. */
         FAILED,
         /** An arm of a {@code match}, taken: the value is one of the cases it selects. */
-        TAKEN
+        TAKEN,
+        /** An operator, answered: what it was worked out of lies where it answers a value
+         *  ({@link WhereAnOperatorAnswers}). */
+        ANSWERED
     }
 
     public PathDecision {
@@ -36,21 +40,27 @@ public record PathDecision(SourcePos at, Way way) {
     }
 
     /**
-     * Which of the three a reader says for this fork, chosen by the way it went.
+     * Which of the four a reader says for this fork, chosen by the way it went.
      *
      * <p>Chosen here, so that a reader saying it holds no table of the ways and a way added later
      * stops this compiling rather than any of them.
      */
-    public <T> T said(T held, T failed, T taken) {
+    public <T> T said(T held, T failed, T taken, T answered) {
         return switch (way) {
             case HELD -> held;
             case FAILED -> failed;
             case TAKEN -> taken;
+            case ANSWERED -> answered;
         };
     }
 
     /** A condition at {@code at}, held where {@code held} says so and failed otherwise. */
     public static PathDecision ofACondition(SourcePos at, boolean held) {
         return new PathDecision(at, held ? Way.HELD : Way.FAILED);
+    }
+
+    /** An operator at {@code at}, which a run got past only where it answered. */
+    public static PathDecision ofAnAnswer(SourcePos at) {
+        return new PathDecision(at, Way.ANSWERED);
     }
 }

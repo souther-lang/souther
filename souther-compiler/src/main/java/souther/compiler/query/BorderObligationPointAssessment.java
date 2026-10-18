@@ -10,6 +10,7 @@ import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
@@ -253,10 +254,14 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      *
      * @param premisesOf the parts of the reading's body every row reaching the line there would
      *                   reach, or nothing where some such row answers
+     * @param stopsOf    what a run getting to the reading's line may stop at on the way for what
+     *                   nothing here says, or nothing where a run gets there with everything on
+     *                   the way read
      */
     public static List<BorderObligationPointAssessment> across(
             List<BorderAssessment> readings,
-            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
+            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf,
+            Function<BorderAssessment, List<WhatMayStopARun>> stopsOf) {
         Map<BorderObligationPoint, java.util.SequencedMap<Reading, BorderAssessment>> byPoint =
                 new LinkedHashMap<>();
         Map<BorderObligationPoint, Map<Reading, ReadingSeat>> seats = new LinkedHashMap<>();
@@ -317,7 +322,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         }
         List<BorderObligationPointAssessment> out = new ArrayList<>();
         byPoint.forEach((point, met) ->
-                out.add(of(point, attribution.get(point), met, seats.get(point), premisesOf)));
+                out.add(of(point, attribution.get(point), met, seats.get(point), premisesOf,
+                        stopsOf)));
         return List.copyOf(out);
     }
 
@@ -339,12 +345,32 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             souther.compiler.partition.PointAttribution attribution,
             java.util.SequencedMap<Reading, BorderAssessment> met,
             Map<Reading, ReadingSeat> seats,
-            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
+            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf,
+            Function<BorderAssessment, List<WhatMayStopARun>> stopsOf) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Optional<Demand> asked = asked(point, met, seats);
         return new BorderObligationPointAssessment(point, attribution,
                 reachedBy(point, readings), asked,
-                came(met, seats, asked, premisesOf), met, seats);
+                came(met, seats, asked, premisesOf, stopsOf), met, seats);
+    }
+
+    /**
+     * Where a run getting to the point may stop on the way for what nothing here says, over every
+     * reading of it, or nothing where some reading has a run that gets there with everything on the
+     * way read — the same rule {@link #premisesAt} keeps, for the same reason.
+     */
+    private static List<WhatMayStopARun> stopsAt(
+            List<BorderAssessment> readings,
+            Function<BorderAssessment, List<WhatMayStopARun>> stopsOf) {
+        Set<WhatMayStopARun> out = new LinkedHashSet<>();
+        for (BorderAssessment reading : readings) {
+            List<WhatMayStopARun> here = stopsOf.apply(reading);
+            if (here.isEmpty()) {
+                return List.of();
+            }
+            out.addAll(here);
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -550,7 +576,9 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                                              Optional<Demand> asked,
                                              Function<BorderAssessment,
                                                      List<WhereNothingIsAnswered.Premise>>
-                                                     premisesOf) {
+                                                     premisesOf,
+                                             Function<BorderAssessment,
+                                                     List<WhatMayStopARun>> stopsOf) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         if (asked.isPresent() && asked.get() instanceof Demand.NotOwed not) {
             throw new IllegalStateException(
@@ -592,7 +620,10 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         }
         return new ObligationAssessment(asked.map(Demand::criterion),
                 ObligationCoverage.acrossTheReadings(coverage), projection, searched,
-                ObligationDisposition.openOn(premisesAt(readings, premisesOf)));
+                // A row seen run to the comparison shows a run gets there, whatever may stop
+                // others on the way; only where none was is the way there what stays open.
+                ObligationDisposition.openOn(premisesAt(readings, premisesOf),
+                        searched.ranThere() ? List.of() : stopsAt(readings, stopsOf)));
     }
 
     /** The measured half, which a point owed a row always has. */

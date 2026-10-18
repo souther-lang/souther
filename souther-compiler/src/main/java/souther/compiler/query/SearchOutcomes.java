@@ -132,6 +132,15 @@ public record SearchOutcomes(List<Made> made) {
     }
 
     /**
+     * Whether a row was composed, read back standing where it was composed for, and seen run to
+     * the comparison the line is drawn at ({@link ItemAssessment.Attempt.Certified#ranThere}).
+     */
+    public boolean ranThere() {
+        return each().stream().anyMatch(it ->
+                it instanceof ItemAssessment.Attempt.Certified made && made.ranThere());
+    }
+
+    /**
      * Which figures of this compiler's leave a showing here unable to establish the point, and
      * empty where none do — each with every copy a reading whose search it stopped was read at.
      *

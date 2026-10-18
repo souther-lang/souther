@@ -359,9 +359,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/PathReachability", "appliedToNothing",
                 "(" + core + "L" + c + "reach/Proof;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "check/PathReachability", "walk",
-                "(" + core + "L" + c + "check/Known;" + at + reads + "Ljava/util/List;Z)V",
-                Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/Predicates", "chosenCalls",
                 "(" + core + at + "Ljava/util/Map;Ljava/util/Set;)V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);

@@ -7,6 +7,7 @@ import souther.compiler.observe.Limits;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationCoverage;
@@ -15,6 +16,7 @@ import souther.compiler.query.ReadingReasons;
 import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.reach.WhatMayStopARun;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -88,6 +90,9 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
         table.put("Stopped[nothing composed]", List.of("ShowingStopped/MAY_CHANGE"));
         // And a point where nothing was stopped and nothing arrived.
         table.put("NothingShowedIt", List.of("NothingShowedARowCanBeWritten/UNAFFECTED"));
+        // And a point a value was shown at, the way to which may stop a run: one opener, naming
+        // every kind of thing that may, and no allowance reads where any of them answers.
+        table.put("TheWayThereMayStop", List.of("TheWayThereMayStop/UNAFFECTED"));
         // And a point every row of which reaches an `unreachable`: one opener per premise, since
         // each is a thing to prove or answer, and no allowance proves one.
         table.put("EveryRowReachesAnUnreachable",
@@ -191,6 +196,11 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
                         Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))));
         out.put("NothingShowedIt",
                 new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt());
+        out.put("TheWayThereMayStop",
+                new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.TheWayThereMayStop(
+                        PublicationOrders.WHAT_MAY_STOP_A_RUN.keep(List.of(
+                                new WhatMayStopARun.AnOperator(),
+                                new WhatMayStopARun.ACall()))));
         // Two premises with the same words, which are two things to prove.
         out.put("EveryRowReachesAnUnreachable",
                 new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten

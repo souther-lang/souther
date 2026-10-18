@@ -187,6 +187,7 @@ import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.RowDisposition;
 import souther.compiler.query.RowObligation;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.query.RowSummary;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.text.DisplayColumns;
@@ -2358,6 +2359,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                         it.by().readAt(gap))));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
                         out.add(new AdequacyUncertainty.NothingShowedARowCanBeWritten(subject));
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.TheWayThereMayStop
+                        it -> out.add(new AdequacyUncertainty.TheWayThereMayStop(subject, it.at()));
                 // One opening per premise, which is what a reader has to prove or answer; the
                 // point is one of the obligations resting on it.
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten
@@ -3721,7 +3724,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + " ever holds";
             case NOTHING_ARRIVES_AT_THE_RULES_LINE ->
                     "it was read to the end, and no row that arrives at it holds a value at its"
-                            + " line — the conditions on the way there rule those values out";
+                            + " line — what holds on the way there, the conditions and what a run"
+                            + " got past working out, rules those values out";
             case RULE_NEVER_TURNS_ON_THIS_LINE ->
                     "it was read to the end and states several things at once, and wherever a row"
                             + " reaches its line here the rest of it already decides the outcome";
@@ -4683,6 +4687,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
                         "nothing could show a row can be written at the " + point
                                 + " — no search of it established one";
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.TheWayThereMayStop
+                        stops -> "nothing could show a row gets to the " + point + " — a run may"
+                                + " stop on the way, at " + String.join(" or ", stops.at()
+                                        .written().stream().map(WhatMayStopARun::said).toList())
+                                + " worked out before it, on values this compiler does not say";
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten
                         .EveryRowReachesAnUnreachable resting ->
                         "no row can be written at the " + point + " — every row there reaches"
@@ -9317,6 +9326,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     });
             case AdequacyUncertainty.NothingShowedARowCanBeWritten _ ->
                     new PublishedOpening.Kind.AnOpening(AdequacyOpeningWord.NOTHING_SHOWED_IT);
+            case AdequacyUncertainty.TheWayThereMayStop _ ->
+                    new PublishedOpening.Kind.AnOpening(AdequacyOpeningWord.THE_WAY_THERE_MAY_STOP);
             case AdequacyUncertainty.EveryRowReachesAnUnreachable _ ->
                     new PublishedOpening.Kind.AnOpening(
                             AdequacyOpeningWord.EVERY_ROW_REACHES_AN_UNREACHABLE);

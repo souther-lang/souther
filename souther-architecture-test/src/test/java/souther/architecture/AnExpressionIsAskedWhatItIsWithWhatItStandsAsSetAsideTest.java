@@ -537,8 +537,8 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "check/InvariantChecker", "without",
                 "(" + core + "Ljava/util/Set;" + core + ")" + core, 3, REWRITES_UNDER_IT);
         row(out, c + "check/PathCompletion", "of",
-                "(" + core + "L" + c + "check/Known;L" + c + "check/Denotations;)L" + c
-                        + "check/Completion;", 1, PAST_IT_ALREADY);
+                "(" + core + "L" + c + "check/Known;L" + c + "check/Known;L" + c
+                        + "check/Denotations;)L" + c + "check/Completion;", 1, PAST_IT_ALREADY);
         row(out, c + "check/PathCompletion", "operationAt", "(" + core + ")" + core, 1,
                 PAST_IT_ALREADY);
         row(out, c + "check/PathEngine", "answeredHere",
@@ -554,7 +554,12 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + "inputs/InputReads;Ljava/util/List;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "check/PathReachability", "walk",
                 "(" + core + "L" + c + "check/Known;L" + c + "check/Denotations;L" + c
-                        + "inputs/InputReads;Ljava/util/List;Z)V", 2, GOES_ON_INTO_IT);
+                        + "inputs/InputReads;Ljava/util/List;Ljava/util/List;Z)L" + c
+                        + "check/PathReachability$Walked;", 3, GOES_ON_INTO_IT);
+        row(out, c + "check/PathReachability", "mayStopBefore",
+                "(" + core + "L" + c + "check/PathReachability$Walked;)V", 1,
+                "asked of the node PathReachability.walk stands at once its parts are walked, which"
+                        + " goes on into what a Widen holds and files each node as itself");
         row(out, c + "check/Predicates", "chosenCalls",
                 "(" + core + "L" + c + "check/Denotations;Ljava/util/Map;Ljava/util/Set;)V", 2,
                 GOES_ON_INTO_IT);
@@ -646,6 +651,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 GOES_ON_INTO_IT);
         row(out, c + "coverage/Methods", "callsIn", "(" + core + "L" + c
                 + "types/ValueName$Helper;Ljava/util/List;)V", 1, COUNTS_THROUGH_IT);
+        row(out, c + "partition/Pullback", "whereEachOperatorAnswers",
+                "(Ljava/util/Map;)Ljava/util/List;", 1,
+                "asked of the operators AffineForms told of, each of which it took past a Widen"
+                        + " before it composed it");
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + "L" + c
                 + "inputs/InputReads;L" + c + "partition/ComparisonReadings$Body;)L" + c
                 + "partition/ComparisonReadings$Way;", 2, GOES_ON_INTO_IT);

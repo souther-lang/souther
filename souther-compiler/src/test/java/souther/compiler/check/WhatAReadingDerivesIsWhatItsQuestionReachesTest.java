@@ -103,8 +103,9 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
 
     /**
      * The other question asked of these recipes: whether one operation answers a value. There is one
-     * such reading per operation the walk reaches, so how many there are does grow with the
-     * arithmetic a behavior holds — and what each of them evaluates does not.
+     * such reading per operation each walk reaches — the invariant check's, and the reading of where
+     * a run arrives — so how many there are does grow with the arithmetic a behavior holds, and
+     * what each of them evaluates does not.
      *
      * <p>Which is the whole of what it may cost. A reading that answered about one operation by
      * deriving what the body holds would be the shape the reading above was made to end, arriving
@@ -116,8 +117,8 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
         for (int unrelated : List.of(0, 10, 100)) {
             List<Set<String>> asked = derivedWhileCompiling(behaviorWith(unrelated),
                     DerivedNumericFacts.Question.WHETHER_AN_OPERATION_ANSWERS);
-            assertEquals(unrelated + 1, asked.size(),
-                    "one reading per operation the walk reaches, over " + unrelated
+            assertEquals(2 * (unrelated + 1), asked.size(),
+                    "one reading per operation each of the two walks reaches, over " + unrelated
                             + " products beside the one the construction is over");
             assertEquals(List.of(), asked.stream().filter(one -> one.size() > 1).toList(),
                     "and each of them derived its own recipe and nothing else");

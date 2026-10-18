@@ -190,14 +190,26 @@ sealed interface ClosureApplications {
                 case InputReads.Applications.NoneMade _ -> handed = true;
                 case InputReads.Applications.Each(var each, var how) -> {
                     handed = true;
-                    // What each application states, where the body is a truth: where it answers is
-                    // the reading's to say, and a run gets past it only there. A body applied to
-                    // every value that is no truth states nothing read here, and an application of
-                    // it is past the ones before it wherever they are made.
-                    List<Proposition> answers = how == HowAClosureIsApplied.TO_EVERY_ELEMENT
-                            && !Type.BOOL.equals(block.body().type()) ? null
-                            : each.stream().map(one -> WhatConditionsState.of(read)
-                                    .truth(block.body(), one.reads(), read).proposition()).toList();
+                    // What each application states, where the body is a truth, read only where
+                    // every operator the body works out answers: a run gets past an application
+                    // only there. A body applied to every value that is no truth states nothing
+                    // read here, and is past where its operators answer.
+                    boolean aTruth = Type.BOOL.equals(block.body().type());
+                    List<Proposition> regions = new ArrayList<>();
+                    each.forEach(one -> regions.add(
+                            Pullback.whereItsOperatorsAnswer(block.body(), one.reads(), read)));
+                    List<Proposition> answers = null;
+                    if (aTruth || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                            || regions.stream().anyMatch(Objects::nonNull)) {
+                        answers = new ArrayList<>();
+                        for (int at = 0; at < each.size(); at++) {
+                            Proposition states = aTruth ? WhatConditionsState.of(read)
+                                    .truth(block.body(), each.get(at).reads(), read).proposition()
+                                    : WhereAnApplicationIsMade.nothingAsked();
+                            answers.add(WhereAnApplicationIsMade.whereItAnswers(regions.get(at),
+                                    states));
+                        }
+                    }
                     List<List<Proposition>> keptBy = each.stream()
                             .map(one -> keptBy(one.keptWhere(), read)).toList();
                     List<Proposition> reached = WhereAnApplicationIsMade.reached(answers, keptBy,

@@ -309,7 +309,8 @@ final class AReportOfOneBorder {
                 new souther.compiler.query.BehaviorEvidence(
                         Adequacy.RowReading.NONE, null, partition, lines,
                         lines.readAs(read -> souther.compiler.query
-                                .BorderObligationPointAssessment.across(read, _ -> List.of())
+                                .BorderObligationPointAssessment.across(read, _ -> List.of(),
+                                        _ -> List.of())
                                 .stream()
                                 .filter(point -> point.belongsToBehaviorAccount("weigh"))
                                 .toList()),

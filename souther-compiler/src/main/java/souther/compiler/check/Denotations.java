@@ -104,6 +104,19 @@ record Denotations(Map<BindingId, Means> bound) {
     }
 
 
+    /**
+     * What {@code binding} stands for here, as an object every environment it was carried into
+     * holds the same — or null where nothing entered it.
+     *
+     * <p>A binding's value is read where the name is read, and that is a different environment at
+     * every read further down; what it is read as is the same in all of them, since what the value
+     * names was entered before it. So this is what a reader keeping an answer for each name keys it
+     * on ({@link ValueStanding.Names#standingOf}).
+     */
+    Object standingOf(BindingId binding) {
+        return bound.get(binding);
+    }
+
     /** Which arithmetic {@code binding} is and where its operands are read, or null where it is not
      *  arithmetic this reads. */
     Terms.Computed numericOf(BindingId binding) {
