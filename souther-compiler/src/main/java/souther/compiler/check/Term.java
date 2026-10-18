@@ -676,6 +676,21 @@ final class Term {
         return shape == Shape.CALLED ? (ValueName) of : null;
     }
 
+    /** The text this term is written as, or null where it is no written text. */
+    String writtenText() {
+        return shape == Shape.STRING ? (String) of : null;
+    }
+
+    /** What this construction gave {@code field}, or null where it is no construction or gave no
+     *  field of that name. */
+    Term givenTo(String field) {
+        if (shape != Shape.BUILT) {
+            return null;
+        }
+        int at = ((Built) of).fields().indexOf(field);
+        return at < 0 ? null : parts.get(at);
+    }
+
     /**
      * The whole number this term comes to where it is written whole numbers added, subtracted,
      * multiplied or negated — or null where it is anything else, or the number is out of what an
