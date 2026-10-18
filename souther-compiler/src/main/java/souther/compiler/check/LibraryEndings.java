@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.ast.Hir;
@@ -24,9 +25,11 @@ import java.util.Set;
  *
  * <p>Read off the body from the same owners, and never classified a second time: what an operator in
  * it ends a run for is {@link AbortSites}', and what another operation it calls ends one for is this
- * table's own. A body's operands carry no type, so an operator is answered over every typing it is
- * admitted at ({@link AbortSites#ofAnOperatorOfAnyType}), which is no less than a call of one typing
- * ends a run for; where {@link AbortSites} cannot bound that, it is not known.
+ * table's own. A body's operands carry no type, so an operator is answered by the sites every typing
+ * of it is written as ({@link AbortSites#ofAnOperatorOfAnyType}), which is no less than the sites of
+ * one typing end a run for. {@link AbortSites} answers what each site ends a run for on its own; what
+ * a site runs beyond itself is this reading's to follow, and an invariant a construction runs is not
+ * in this tree.
  *
  * <p>A function runs where it is applied, and every place one is applied is not known here: a
  * function the body is handed or binds, applied by the body; a parameter the library applies in a
@@ -161,8 +164,7 @@ final class LibraryEndings {
          */
         private Endings itself(Hir.Expr e) {
             return switch (e) {
-                case Hir.Binary binary -> AbortSites.ofAnOperatorOfAnyType(binary.op())
-                        .<Endings>map(Endings.Known::new).orElse(NOT_KNOWN);
+                case Hir.Binary binary -> operator(binary);
                 case Hir.Neg _ -> new Endings.Known(AbortSites.ofANegationOfAnyType());
                 case Hir.Unreachable _ -> new Endings.Known(AbortSites.ofAnUnreachableWherever());
                 case Hir.Apply apply -> applied(apply);
@@ -173,6 +175,18 @@ final class LibraryEndings {
                      Hir.FieldAccess _, Hir.Match _, Hir.If _, Hir.ListLit _, Hir.RowCollection _,
                      Hir.ListComp _, Hir.LetIn _, Hir.Block _, Hir.Tuple _, Hir.TupleGet _ -> NONE;
             };
+        }
+
+        /**
+         * What the sites an operator is written as end a run for ({@link AbortSites}), where that
+         * is all they run. Where an unheld invariant is among the reasons, a construction may stand
+         * there, and so may the invariant clauses it runs: those are its declaration's, not in this
+         * tree, and what they end a run for is not known here.
+         */
+        private static Endings operator(Hir.Binary binary) {
+            AbortSet sites = AbortSites.ofAnOperatorOfAnyType(binary.op());
+            return sites.contains(AbortKind.INVARIANT_NOT_HELD)
+                    ? NOT_KNOWN : new Endings.Known(sites);
         }
 
         /** An application of an operation of the library is what that operation ends a run for;

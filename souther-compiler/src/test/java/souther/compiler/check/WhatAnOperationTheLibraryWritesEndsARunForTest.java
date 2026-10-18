@@ -53,6 +53,16 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
                 LibraryEndings.of(rewritten).of(IS_EMPTY));
     }
 
+    /** A quotient builds nothing, so what it ends a run for is said whatever its operands are. */
+    @Test
+    void aQuotientEndsARunForWhatItsSitesDo() {
+        Stdlib rewritten = rewritten(IS_EMPTY_BODY, "List.length(xs) / 1 >= 0");
+
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.DIVISION_BY_ZERO,
+                        AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                LibraryEndings.of(rewritten).of(IS_EMPTY));
+    }
+
     /** A kernel's is what its contract says, and not read again here. */
     @Test
     void aKernelEndsARunForWhatItsContractSays() {

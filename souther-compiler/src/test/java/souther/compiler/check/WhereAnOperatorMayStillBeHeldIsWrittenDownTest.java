@@ -133,9 +133,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.abort.AbortSites.whateverItsTypes",
                     "the same, for an operator whose answer turns on no type"),
             new Held("souther.compiler.abort.AbortSites.ofAnOperatorOfAnyType",
-                    "the same, over every typing the operator is admitted at, for a tree whose"
-                            + " operands carry no type"),
-            new Held("souther.compiler.check.LibraryEndings.Reading.itself",
+                    "the same, of the sites every typing the operator is admitted at is written"
+                            + " as, for a tree whose operands carry no type"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.operator",
                     "hands the operator a library operation's body writes to AbortSites, which"
                             + " answers what it ends a run for"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
