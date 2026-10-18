@@ -31,9 +31,13 @@ import java.util.function.Function;
  * @param accumulator the parameter of the step the answer so far arrives on
  * @param element     the parameter of the step an element of the container arrives on
  * @param applied     how far the operation goes applying the step
+ * @param inTheContainersOrder whether the elements arrive at the step in the order the container
+ *                    holds them, first to last. A reader that unrolls the walk element by element
+ *                    asks it; one concluding something of every element does not need it
  */
 public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder accumulator,
-                         Core.Binder element, HowAClosureIsApplied applied) {
+                         Core.Binder element, HowAClosureIsApplied applied,
+                         boolean inTheContainersOrder) {
 
     /**
      * What {@code node} is, where it is a call of a walk from a seed whose step is a block with both
@@ -64,7 +68,8 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
         return walk == null || walk.element() == null || walk.element().binding() == null
                 || walk.accumulator() == null || walk.accumulator().binding() == null
                 ? null : new SeededWalk(walk.seed(), walk.container(), walk.step(),
-                        walk.accumulator(), walk.element(), walk.applied());
+                        walk.accumulator(), walk.element(), walk.applied(),
+                        walk.inTheContainersOrder());
     }
 
     /**

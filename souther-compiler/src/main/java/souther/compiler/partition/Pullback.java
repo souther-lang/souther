@@ -4863,7 +4863,9 @@ final class Pullback {
      */
     private LinearForm<Quantity> foldOfWrittenOut(Denotation call) {
         SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
-        if (walk == null) {
+        // Unrolled in the order the container is written, which is the order of the walk only where
+        // the operation hands the step its elements in the order the container holds them.
+        if (walk == null || !walk.inTheContainersOrder()) {
             return null;
         }
         Denotation container = call.at().standing(walk.container(), read.rules().symbols(),

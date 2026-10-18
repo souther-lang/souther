@@ -84,6 +84,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     void aTotalOverWhatAFilterKeepsOnTheRowIsNotTheSumOfAll() {
         String report = measured(
                 "List.sum(List.filter(p -> p >= 100, List.map(m -> m.pay, [a, b, c])))");
+        assertTrue(report.contains("not read"), report);
         assertNotEquals(measured(SUM), report);
     }
 
@@ -93,9 +94,30 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
         assertEquals(measured("(a.pay * 2 + b.pay) * 2 + c.pay"), report);
     }
 
+    /**
+     * The elements of a walk from the end arrive last to first, so unrolled in the order they are
+     * written the step would be read on other numbers: {@code 4 * a.pay + 4} and not
+     * {@code a.pay + 10}.
+     */
+    @Test
+    void aWalkFromTheEndIsNotUnrolledInTheOrderTheListIsWritten() {
+        String report = measured("List.foldRight((m, acc) -> acc * 2 + m, 0, [a.pay, 1, 2])");
+        assertTrue(report.contains("not read"), report);
+        assertFalse(report.contains("= 74"), "the line of 4 * a.pay + 4: " + report);
+        assertTrue(measured("a.pay + 10").contains("read as f/a.pay: = 290"),
+                "the line the walk would draw were it read");
+    }
+
+    @Test
+    void aWalkOverAContainerWithNoOrderIsNotUnrolled() {
+        String report = measured("Set.fold((acc, m) -> acc * 2 + m, 0, Set.fromList([a.pay, 1]))");
+        assertTrue(report.contains("not read"), report);
+    }
+
     @Test
     void aWalkWhoseStepIsNotAnAdditionIsNotTheSum() {
         String report = measured("List.fold((acc, m) -> acc * m.pay, 1, [a, b, c])");
+        assertTrue(report.contains("not read"), report);
         assertNotEquals(measured(SUM), report);
     }
 
