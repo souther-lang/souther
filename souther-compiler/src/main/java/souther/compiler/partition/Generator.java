@@ -11748,7 +11748,7 @@ public final class Generator {
                 // What building these met is what building the position's offer met, which
                 // {@link #met} already holds.
                 for (FixtureTemplate each : Partitions.displacedRepresentativesOf(slot.type(),
-                        reading, slot.within(), slot.held()).values()) {
+                        reading, slot.limits()).values()) {
                     if (here.stream().noneMatch(had -> had.text().equals(each.text()))) {
                         here.add(each);
                     }
@@ -11808,8 +11808,7 @@ public final class Generator {
             }
             FieldDomains.ConstructionLimits limits = left.limitsAt(slot.at());
             NumericDomain.Bounds here = limits.values();
-            FieldDomains.Held held = limits.held();
-            Proposals stands = subject.representativesHolding(slot.type(), here, held);
+            Proposals stands = subject.representativesHolding(slot.type(), limits);
             met = met.and(stands.met());
             if (stands.isEmpty()) {
                 // Nothing could be written at all: a position of a type nothing stands for. Which is
@@ -11829,14 +11828,13 @@ public final class Generator {
             paths.add(slot.at());
             values.add(stands.values());
             reserves.add(Partitions.inReserve(slot.type(), reading, here, stands.values()));
-            displacing.add(new Displacing(slot.type(), here, held));
+            displacing.add(new Displacing(slot.type(), limits));
         }
         return new Choices(plan, paths, values, reserves, null, Set.of(), displacing, met);
     }
 
     /** What a position's value is displaced within: its type, and what its rules leave of it. */
-    private record Displacing(Type type, NumericDomain.Bounds within,
-                              FieldDomains.Held held) {}
+    private record Displacing(Type type, FieldDomains.ConstructionLimits limits) {}
 
     /**
      * A row stands at no class of this axis.

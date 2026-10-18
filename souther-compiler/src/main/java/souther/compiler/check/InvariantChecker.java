@@ -1005,7 +1005,8 @@ public final class InvariantChecker {
         Map<RuleRef.Invariant, ReadByClauses.OfARule> narrowedBy = new LinkedHashMap<>();
         // The numbers this value's clauses can be about, read before any of them is. Both the fold
         // below and the walk that classifies a comparison are given this one table.
-        Coordinates numbers = c.coordinatesOf(atoms, keys, held, typeAt);
+        Coordinates numbers = c.coordinatesOf(atoms, keys, held, typeAt,
+                k.numbers().atomsSpokenOf());
         // One reader for this value's positions, used over however many clauses reach it, and
         // the one that decides the choices in what they came to.
         StatedByClauses.Reading reader = StatedByClauses
@@ -2067,11 +2068,20 @@ public final class InvariantChecker {
      * @param byPath every name a place is written under, the place's own value and every number
      *               taken of it alike. Made with the table: every statement of every clause asks it,
      *               and worked out per statement it was a walk of the whole table each time
+     * @param readBack the numbers an operation answers of a place that the values there are read
+     *               back out of ({@link DerivedNumber#holdsTheValuesOf}), under the name the clauses
+     *               write for each. Apart from {@code byName} because they are no number the place
+     *               has: an end is placed on, a form is read over and a relation is drawn between
+     *               the numbers there, and none of those is said of a part of a date. A reader that
+     *               wants these — which number one whole side of a comparison is, and the reading
+     *               of the numbers an operation answers — asks for them by name
      */
     private record Coordinates(Map<FactSubject, Coordinate> byName, Term.Chains chains,
-                               Map<RuleKey, Set<FactSubject>> byPath) {
+                               Map<RuleKey, Set<FactSubject>> byPath,
+                               Map<FactSubject, DerivedNumber> readBack) {
 
-        static Coordinates of(Map<FactSubject, Coordinate> byName) {
+        static Coordinates of(Map<FactSubject, Coordinate> byName,
+                              Map<FactSubject, DerivedNumber> readBack) {
             List<Term> held = new ArrayList<>(byName.size());
             Map<RuleKey, Set<FactSubject>> byPath = new LinkedHashMap<>();
             for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
@@ -2080,11 +2090,17 @@ public final class InvariantChecker {
                         .add(each.getKey());
             }
             return new Coordinates(Collections.unmodifiableMap(byName), new Term.Chains(held),
-                    Collections.unmodifiableMap(byPath));
+                    Collections.unmodifiableMap(byPath), Collections.unmodifiableMap(readBack));
         }
 
         Coordinate get(FactSubject name) {
             return byName.get(name);
+        }
+
+        /** The number {@code name} is where it is one the values are read back out of, or null. */
+        Coordinate readBackAs(FactSubject name) {
+            DerivedNumber number = readBack.get(name);
+            return number == null ? null : new Coordinate(number.asNumber(), Carrier.WHOLE);
         }
 
         /** Every name {@code path} is written under, or none where this value has no such place. */
@@ -2146,11 +2162,15 @@ public final class InvariantChecker {
      * asks which of the positions a leaf orders, so that a rule bounding a length is not taken for
      * one whose end nothing worked out. Built twice, the two would answer about two tables the day
      * one of them learned a number the other had not.
+     *
+     * @param spoken every number the clauses of this value were read as speaking of, among which
+     *               are the numbers an operation answers of a position that are no count of it
      */
     private Coordinates coordinatesOf(Map<RuleKey, FactSubject> atoms,
                                       Map<RuleKey, FactSubject> keys,
                                       Map<RuleKey, FieldDomains.Counted> held,
-                                      Map<RuleKey, Type> typeAt) {
+                                      Map<RuleKey, Type> typeAt,
+                                      Set<FactSubject> spoken) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier =
@@ -2168,7 +2188,20 @@ public final class InvariantChecker {
         held.forEach((path, counted) -> byName.put(counted.atom(),
                 new Coordinate(NumberAt.takenAsItStands(path, counted.by()),
                         Carrier.WHOLE)));
-        return Coordinates.of(byName);
+        // And, kept apart, the numbers an operation answers of a position that the values there are
+        // read back out of ({@link DerivedNumber#holdsTheValuesOf}): a part of the date standing
+        // there, and its remainder by a written divisor. Which of them a value has is which ones
+        // its clauses speak of, since a divisor is written in a clause and not in a type.
+        Map<Term, RuleKey> positionOf = new LinkedHashMap<>();
+        atoms.forEach((path, atom) -> positionOf.putIfAbsent(atom.identity(), path));
+        Map<FactSubject, DerivedNumber> readBack = new LinkedHashMap<>();
+        for (FactSubject each : spoken) {
+            DerivedNumber number = DerivedNumber.readBack(each.identity(), positionOf::get);
+            if (number != null && !byName.containsKey(each)) {
+                readBack.put(each, number);
+            }
+        }
+        return Coordinates.of(byName, readBack);
     }
 
     /**
@@ -2753,7 +2786,12 @@ public final class InvariantChecker {
         Map<FactSubject, DerivedNumber> numbers = new LinkedHashMap<>();
         Map<DerivedNumber, Carrier> carriers = new LinkedHashMap<>();
         Map<RuleKey, Set<FactSubject>> positions = new LinkedHashMap<>();
-        byName.forEach((name, coordinate) -> {
+        Map<FactSubject, Coordinate> every = new LinkedHashMap<>();
+        byName.forEach(every::put);
+        // And the numbers the values are read back out of, which this reading reads as it reads a
+        // count: a line on what the operation answers.
+        byName.readBack().keySet().forEach(name -> every.put(name, byName.readBackAs(name)));
+        every.forEach((name, coordinate) -> {
             DerivedNumber number = DerivedNumber.of(coordinate.at());
             if (number == null || coordinate.carrier() == null) {
                 return;
@@ -2935,8 +2973,10 @@ public final class InvariantChecker {
     private Coordinate heldAgainstAConstant(Core.Binary bin, Denotations at,
                                             Coordinates byName,
                                             Arrivals answering) {
-        Coordinate left = byName.get(nameOf(bin.left(), at));
-        Coordinate right = byName.get(nameOf(bin.right(), at));
+        // A whole side may be a number the values are read back out of as well, which is the one
+        // place a line on one is found: no form is read over such a number.
+        Coordinate left = wholeSide(nameOf(bin.left(), at), byName);
+        Coordinate right = wholeSide(nameOf(bin.right(), at), byName);
         if (left != null && right == null
                 && coordinatesIn(bin.right(), at, byName, answering).isEmpty()) {
             return left;
@@ -2946,6 +2986,13 @@ public final class InvariantChecker {
             return right;
         }
         return null;
+    }
+
+    /** The number a whole side named {@code name} is, among those the position has and those the
+     *  values are read back out of, or null where it is neither. */
+    private static Coordinate wholeSide(FactSubject name, Coordinates byName) {
+        Coordinate held = byName.get(name);
+        return held != null ? held : byName.readBackAs(name);
     }
 
     /** Which of the two a line on {@code number} is, said by the number itself. */
