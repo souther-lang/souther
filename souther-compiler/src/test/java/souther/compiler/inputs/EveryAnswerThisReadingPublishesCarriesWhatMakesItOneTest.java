@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
+import souther.compiler.core.EnteredArm;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -186,6 +187,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         }
         if (type == BindingId.class) {
             return new BindingId(new BindingOwner.OfValue("example", "f"), 0);
+        }
+        if (type == EnteredArm.class) {
+            return new EnteredArm(new BindingId(new BindingOwner.OfValue("example", "f"), 0));
         }
         if (type == InputReads.ContainerOf.class) {
             return new InputReads.ContainerOf.AtAPosition(TermPath.of("x"));

@@ -317,6 +317,178 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         }
     }
 
+    private static String modelWith(String touchRule, String step) {
+        return modelOf(step, "").replace("data Touch = { account: String, days: Int }",
+                "data Touch = { account: String, days: Int }\n    invariant " + touchRule);
+    }
+
+    private static final String WITHIN_A_HUNDRED = "days >= 0 && days <= 100";
+
+    private static final String COMPARED_WITH_WHAT_WAS_FOUND = "Map.updateOrInsert(t.account,"
+            + " t.days, seen -> if t.days < seen then t.days else seen, acc)";
+
+    /**
+     * What the step finds under the key is the end of the values of the earlier elements of that
+     * key, so the comparison of the element's value against it is read: the value has that end on
+     * both sides of it among elements of one key, but at the end its range stops at.
+     */
+    @Test
+    void theComparisonAgainstWhatWasFoundUnderTheKeyIsRead() {
+        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED,
+                COMPARED_WITH_WHAT_WAS_FOUND));
+        assertFalse(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
+    /** A key worked out of the value is no place two elements share, and nothing is said of what
+     *  was found under it. */
+    private static final String LOOKUP_AND_FILING = """
+            match Map.get(t.account, acc) with
+                    | None -> Map.insert(t.account, t.days, acc)
+                    | Some seen -> Map.insert(t.account,
+                          if t.days < seen then t.days else seen, acc)""";
+
+    /**
+     * What was found is the least of the earlier values of the key, which no value above the top of
+     * the range can be below: the comparison is false for a value at the top, and may come out
+     * either way for every one under it. So it draws one line, at the top, and no value under is
+     * divided by it. The same line, and nothing else, however the step is written.
+     */
+    @Test
+    void theComparisonDrawsItsLineAtTheTopOfTheRangeAndNowhereUnderIt() {
+        for (String step : List.of(COMPARED_WITH_WHAT_WAS_FOUND, LOOKUP_AND_FILING)) {
+            String report = report(measured(modelWith(WITHIN_A_HUNDRED, step)));
+            assertTrue(report.contains(
+                    "no IN point is owed at touches[*].days = 100 (comparison@"), report);
+            assertFalse(report.contains("touches[*].days = 0 (comparison@"), report);
+            assertFalse(report.contains("not read"), report);
+        }
+    }
+
+    /**
+     * Elements of one key hold the number the key is, so what was found is the number of the one
+     * compared and no other value: the comparison is false for every value, which the range over
+     * every element does not say. Left unread, written either way, whether or not a rule of the
+     * element names the key.
+     */
+    @Test
+    void aKeyThatIsTheValueLeavesTheComparisonUnread() {
+        for (String rule : List.of("other >= 0", "days >= 0", "days >= 0 && days <= 100")) {
+            for (String step : List.of(
+                    "Map.updateOrInsert(t.days, t.days,"
+                            + " seen -> if t.days < seen then t.days else seen, acc)",
+                    """
+                    match Map.get(t.days, acc) with
+                            | None -> Map.insert(t.days, t.days, acc)
+                            | Some seen -> Map.insert(t.days,
+                                  if t.days < seen then t.days else seen, acc)""")) {
+                String report = report(measured("""
+                        module example.stale
+
+                        data Touch = { days: Int, other: Int }
+                            invariant %s
+
+                        let sinceOf (touches: List<Touch>): Map<Int, Int> =
+                            List.fold((acc, t) -> %s, Map.empty, touches)
+
+                        behavior stale : (touches: List<Touch>) -> List<Int>
+
+                        let stale (touches) = Map.keys(sinceOf(touches))
+                        """.formatted(rule, step)));
+                assertTrue(report.contains("not read"), () -> rule + "\n" + step + "\n" + report);
+            }
+        }
+    }
+
+    /** With at most one element there is no earlier one to have found anything. */
+    @Test
+    void aListOfOneAtMostHasNoEarlierElementToHaveFoundAValue() {
+        String report = report(measured("""
+                module example.stale
+
+                data Touch = { account: String, days: Int }
+                    invariant days >= 0 && days <= 100
+
+                data Quote = { touches: List<Touch> }
+                    invariant List.length(touches) <= 1
+
+                let sinceOf (touches: List<Touch>): Map<String, Int> =
+                    List.fold((acc, t) -> %s, Map.empty, touches)
+
+                behavior stale : (quote: Quote, staleAfter: Int) -> Map<String, Int>
+
+                let stale (quote, staleAfter) =
+                    Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
+                """.formatted(COMPARED_WITH_WHAT_WAS_FOUND)));
+        assertTrue(report.contains("it relates the value here to another value not shown to"
+                + " reach every value here"), report);
+    }
+
+    @Test
+    void theComparisonAfterALookupOfTheKeyIsReadAsTheOneInsideTheClosure() {
+        String lookup = """
+                match Map.get(t.account, acc) with
+                        | None -> Map.insert(t.account, t.days, acc)
+                        | Some seen -> Map.insert(t.account,
+                              if t.days < seen then t.days else seen, acc)""";
+        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED, lookup));
+        assertFalse(report(compilation).contains("not read"), () -> report(compilation));
+        assertEquals(axisOf(measured(modelWith(WITHIN_A_HUNDRED, COMPARED_WITH_WHAT_WAS_FOUND))),
+                axisOf(compilation));
+    }
+
+    @Test
+    void aKeyWorkedOutOfTheValueLeavesTheComparisonUnread() {
+        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED,
+                "Map.updateOrInsert(String.fromInt(t.days + 1), t.days,"
+                        + " seen -> if t.days < seen then t.days else seen, acc)"));
+        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
+    /** A rule of the element relating the key to the value leaves the earlier values of one key
+     *  no wider than this one's, which the range over every element does not say. */
+    @Test
+    void aRuleRelatingTheKeyToTheValueLeavesTheComparisonUnread() {
+        Compilation compilation = measured(modelWith(
+                WITHIN_A_HUNDRED + " && (account /= \"a\" || days <= 10)",
+                COMPARED_WITH_WHAT_WAS_FOUND));
+        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
+    /** A rule of the element that reads only the key leaves the numbers of the elements of one key
+     *  as free as it leaves every number, so it is no reason to leave the comparison unread. */
+    @Test
+    void aRuleOfTheElementReadingOnlyTheKeyLeavesTheComparisonRead() {
+        for (String step : List.of(COMPARED_WITH_WHAT_WAS_FOUND, LOOKUP_AND_FILING)) {
+            String report = report(measured(modelWith(
+                    WITHIN_A_HUNDRED + " && String.length(account) > 0", step)));
+            assertFalse(report.contains("not read"), report);
+        }
+    }
+
+    /** Elements the list's own rule keeps from sharing a key have no earlier element of their key
+     *  to be compared with, which the comparison is not read as having. */
+    @Test
+    void aRuleKeepingTheKeysApartLeavesTheComparisonUnread() {
+        Compilation compilation = measured("""
+                module example.stale
+
+                data Touch = { account: String, days: Int }
+                    invariant days >= 0 && days <= 100
+
+                data Quote = { touches: List<Touch> }
+                    invariant List.allDistinctBy(t -> t.account, touches)
+
+                let sinceOf (touches: List<Touch>): Map<String, Int> =
+                    List.fold((acc, t) -> %s, Map.empty, touches)
+
+                behavior stale : (quote: Quote, staleAfter: Int) -> Map<String, Int>
+
+                let stale (quote, staleAfter) =
+                    Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
+                """.formatted(COMPARED_WITH_WHAT_WAS_FOUND));
+        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
     /** What a fold files that keeps no end of one value of each element says nothing of it. */
     @Test
     void aFoldThatKeepsNoEndOfOneValueIsNotReadAsOne() {

@@ -74,12 +74,15 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
          *
          * @param value   what each element files, read of the element
          * @param extreme which end of its own value and the one found a further element keeps
+         * @param found   the name the step gives the value found under the key, which is that end
+         *                of the values of the earlier elements of the same key
          */
-        record Kept(Core value, Extreme extreme) implements Filed {
+        record Kept(Core value, Extreme extreme, BindingId found) implements Filed {
 
             public Kept {
                 Objects.requireNonNull(value, "an element files a value");
                 Objects.requireNonNull(extreme, "and one end of two of them is kept");
+                Objects.requireNonNull(found, "of what the step finds under the key");
             }
         }
     }
@@ -100,6 +103,19 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
 
     /** What one step of the walk files, and under which key. */
     private record Filing(Core key, Filed filed) {}
+
+    /**
+     * The map {@code applied} reads a key of, where it is a lookup in it or an operation the
+     * library writes that files under a key of it — or null where it is neither.
+     */
+    public static Core mapOf(AnOperationApplied applied) {
+        if (applied.operation().equals(GET)) {
+            return applied.args().size() == 2 ? applied.args().get(1) : null;
+        }
+        KeyedUpdates.Update update = applied.operation() instanceof ValueName.Stdlib.Operation named
+                ? Derived.UPDATES.get(named) : null;
+        return update == null ? null : applied.args().get(update.mapArg());
+    }
 
     /**
      * What {@code container}, read in {@code at}, is the answer of, where it is a map built so, or
@@ -231,7 +247,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             Extreme extreme = Extreme.keptBy(Extreme.casesOf(moved.value(), moved.at(), sides),
                     e -> isThe(Extreme.comparedAs(e, moved.at(), sides).value(), found),
                     e -> Core.sameValue(Extreme.comparedAs(e, moved.at(), sides).value(), filed));
-            return extreme == null ? null : new Filed.Kept(first, extreme);
+            return extreme == null ? null : new Filed.Kept(first, extreme, found);
         }
 
         /** The value {@code body} files under the key read as {@code key} in the answer so far, as
