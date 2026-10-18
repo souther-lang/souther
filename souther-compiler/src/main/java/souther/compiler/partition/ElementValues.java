@@ -89,7 +89,7 @@ final class ElementValues {
                 new BehaviorInputs(List.of(container.head()), List.of(type), reading.source(),
                         reading.policy()),
                 new ObservedInputs(List.of(new ObservedValue.Sequence(values)),
-                        new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered())));
+                        new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
     }
 
     /** The element alone, holding {@code value}. */
@@ -98,7 +98,7 @@ final class ElementValues {
                 new StandingAtAPoint.RowWalk(
                         new BehaviorInputs(List.of(ALONE), List.of(element), reading.source(),
                                 reading.policy()),
-                        new ObservedInputs(List.of(value), new Generator.Watched.NoAccount(),
+                        new ObservedInputs(List.of(value), new Generator.Watched.NotRun(),
                                 new AnswerObservation.NotAnswered()))));
     }
 

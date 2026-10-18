@@ -425,6 +425,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " figure"),
             Map.entry("souther.compiler.partition.Generator#<clinit>()V",
                     "how many assignments a search composes"),
+            // The rows a walk hands the choice among rows. The budget is held here as the figure
+            // the walk is stopped at, and handed over from here as what it left untried.
+            Map.entry("souther.compiler.partition.Generator$TellingArmsApart#<clinit>()V",
+                    "how many rows a walk composing a row for a point hands the choice of a row,"
+                            + " and the figure it names where it stopped there"),
             Map.entry("souther.compiler.partition.Generator#conditioned("
                             + "Lsouther/compiler/partition/ConstructionPlan;Ljava/util/Map;"
                             + "Ljava/util/Map;"
