@@ -1980,6 +1980,89 @@ public final class InputReads {
         return names.projectionAt(binding);
     }
 
+    /**
+     * What {@code answer}, made of the element handed to {@code element}, is as far as which
+     * answers are equal goes, through the names the body bound on the way — or null where it is no
+     * place of that element and no newtype wearing one ({@link OnePerElement.Answered}).
+     */
+    public OnePerElement.Answered answeredOf(Core answer, BindingId element,
+                                             DeclarationNewtypes newtypes) {
+        return element == null ? null
+                : OnePerElement.Answered.of(answer, element, heldByTheBody(), newtypes);
+    }
+
+    /**
+     * The container of the input {@code list}, read here, holds one value for each element of,
+     * and where in the element that value stands — or null where it holds no such run of one
+     * ({@link ElementQuestion#ONE_PER_ELEMENT}).
+     */
+    public OnePerElement onePerElementOf(Core list, Symbols symbols,
+                                         DeclarationNewtypes newtypes) {
+        return beneathEachStep(list, ElementQuestion.ONE_PER_ELEMENT, symbols, newtypes);
+    }
+
+    /**
+     * The position of the container of the input {@code list}, read here, holds something exactly
+     * where it does, or no position where there is none ({@link ElementQuestion#SAME_EMPTINESS}).
+     */
+    public PathResolution holdingSomethingWhere(Core list, Symbols symbols,
+                                                DeclarationNewtypes newtypes) {
+        OnePerElement beneath =
+                beneathEachStep(list, ElementQuestion.SAME_EMPTINESS, symbols, newtypes);
+        return beneath == null ? new PathResolution.NotAPosition()
+                : new PathResolution.At(beneath.container());
+    }
+
+    /**
+     * {@code list} followed down the steps {@code question} crosses ({@link InputPath#oneStepBeneath})
+     * to a container of the input, with what each step answered of the elements beneath it — or
+     * null where a step is one the question does not cross.
+     *
+     * <p>Each step is taken where the list it is taken from stands: a name, or a parameter of a
+     * body this reading entered, is what this reading says it stands for, and what the step says
+     * of the operation is the question's. What a step answered is read only for the question that
+     * asks it, and for the other the way to the value is the element itself.
+     */
+    private OnePerElement beneathEachStep(Core list, ElementQuestion question, Symbols symbols,
+                                          DeclarationNewtypes newtypes) {
+        Core asked = list;
+        Denotation at = standing(list, symbols, newtypes);
+        ElementProjection projected = new ElementProjection(List.of());
+        boolean wrapped = false;
+        // A step to a name is a step over the binding graph, and a name come round to again is one
+        // already answered for; a step down an operation stays inside one finite tree.
+        Set<BindingId> met = new HashSet<>();
+        while (true) {
+            // Asked of the list as handed to the step and as it came to be reached, since
+            // following names sets aside what a value stood as on the way.
+            if (!InputPath.goesOnThrough(asked, at.value(), question)) {
+                return null;
+            }
+            if (at.at().pathOf(at.value(), newtypes) instanceof PathResolution.At(
+                    TermPath container)) {
+                return new OnePerElement(container, projected, wrapped);
+            }
+            if (Core.withoutStanding(at.value()) instanceof Core.Read name
+                    && !met.add(name.binding())) {
+                return null;
+            }
+            InputReads where = at.at();
+            InputPath.Beneath step = InputPath.oneStepBeneath(at.value(), question,
+                    where.names(), newtypes, closure -> Core.withoutStanding(
+                            where.standing(closure, symbols, newtypes).value())
+                            instanceof Core.Block block ? block : null);
+            if (step == null) {
+                return null;
+            }
+            if (step.answered() != null) {
+                projected = step.answered().at().then(projected);
+                wrapped |= step.answered().wrapped();
+            }
+            asked = step.from();
+            at = where.standing(asked, symbols, newtypes);
+        }
+    }
+
     /** What the walk handing {@code binding} its element answered, as the closure, where a licence
      *  says it answered one value per element ({@link ElementAnswer}). */
     ElementAnswer answerAt(BindingId binding) {

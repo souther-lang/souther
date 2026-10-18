@@ -169,6 +169,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == TermPath.class) {
             return TermPath.of("x");
         }
+        if (type == ElementProjection.class) {
+            return new ElementProjection(List.of());
+        }
         if (type == AnEvaluation.class) {
             return Evaluations.of(new ValueName.Behavior("example", "f"), 0);
         }
