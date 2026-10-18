@@ -1333,16 +1333,20 @@ public final class FieldDomains {
         // alone here, the written places they were decided at would be gone one call before the
         // account that names the rule, and two facts about two clauses would arrive as one.
         Set<RuleShortfall> why = took.stoppedBy(rule, named);
+        // Where the arithmetic stopped on a part nothing took in, which is the rule's as well and
+        // is said beside what the reading of values could not take apart.
+        Set<FormShortfall> form = took.stoppedOnTheForm(rule, named);
         // And what the answer this question waited on was short of, which is the name's and is
         // taken beside the rule's rather than where the rule has none of its own.
         Set<StoppedReading> answered = new LinkedHashSet<>();
         unreadByName.getOrDefault(at, List.of()).stream()
                 .filter(each -> standsBesideARulesOwnAccount(each.why()))
                 .forEach(answered::add);
-        if (why.isEmpty() && answered.isEmpty()) {
+        if (why.isEmpty() && form.isEmpty() && answered.isEmpty()) {
             throw new AStandingQuestionWithNoAccount(rule, named);
         }
-        return new RuleAccounting.Why.TheValueReadingSays(why, new AnswerShortfalls(answered));
+        return new RuleAccounting.Why.TheValueReadingSays(why, form,
+                took.decidedWhereTheArithmeticStopped(rule, why), new AnswerShortfalls(answered));
     }
 
     /**
@@ -2194,10 +2198,11 @@ public final class FieldDomains {
                 DerivedNumber number = DerivedNumber.of(new NumberAt<>(path, kind));
                 yield number == null ? null : derived.knownAt(number);
             }
-            // No choice settles how many of a string's code points are in a class, how often a
-            // value occurs among its neighbours, or the end of the values of a key: nothing the
-            // declarations write is about them.
+            // No choice settles how many of a string's code points are in a class, what they come
+            // to, how often a value occurs among its neighbours, or the end of the values of a
+            // key: nothing the declarations write is about them.
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
+                 NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
         };
@@ -2281,6 +2286,7 @@ public final class FieldDomains {
                             ? atomOf(countAt.get(path)) : null;
             // A number the declarations never mention.
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
+                 NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
         };

@@ -234,6 +234,7 @@ final class Intervals {
             // The class of code points counted, which the term says and the place does not.
             case NumericTerm.CodePointClassCount count -> "number of code points that are "
                     + count.counted();
+            case NumericTerm.CodePointValueSum _ -> "sum of the code points";
         };
     }
 

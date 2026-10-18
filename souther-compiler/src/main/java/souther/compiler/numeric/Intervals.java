@@ -102,10 +102,9 @@ public final class Intervals {
      *                range: a range with nothing in it is not a divisor whose sign and magnitude
      *                could be read, and what a range admitting zero leaves depends on how its values
      *                are spaced, which is not something a range says. Over the whole numbers a
-     *                divisor between zero and five divides by one at the nearest, and the quotients
-     *                are bounded; over a dense order there is no nearest and they are not. A caller
-     *                that has a divisor it cannot hold off zero has a rule that does not apply, and
-     *                answering that here would put it in the same value as a bound.
+     *                divisor between minus five and five divides by one at the nearest, so the
+     *                caller asks this of each side of nought; over a dense order there is no nearest
+     *                and the quotients are not bounded.
      */
     public static NumericDomain.Bounds truncatingQuotient(NumericDomain.Bounds dividend,
                                                           NumericDomain.Bounds divisor) {

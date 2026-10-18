@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import net.unit8.notation199x.pattern.CodePoints;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
@@ -12,10 +13,18 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -26,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -62,6 +72,8 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
     private static final NumericTerm LENGTH = NumericTerm.TakenOf.asItStands(
             ValueName.Stdlib.operation("String", "length"), AT, Type.STRING,
             ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
+    private static final NumericTerm SUM = NumericTerm.CodePointValueSum.of(AT, Type.STRING,
+            ScopedDeclarations.wrapsOf(SYMBOLS));
 
     private static NumericTerm.CodePointClassCount counting(CodePointClass counted) {
         return NumericTerm.CodePointClassCount.of(AT, counted, Type.STRING,
@@ -90,8 +102,58 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
         }
 
         TermRealizations.Realization written() {
-            return TermRealizations.stringsHoldingTheirCounts(measured, Type.STRING, asked, null,
-                    READING);
+            return writtenWithin(null);
+        }
+
+        TermRealizations.Realization writtenWithin(SearchRegion within) {
+            return TermRealizations.stringsHoldingTheirNumbers(measured, Type.STRING, asked,
+                    within, READING);
+        }
+    }
+
+    /** A region leaving every number between two whole numbers, and saying nothing else. */
+    private static final class LeavingEveryNumberBetween implements SearchRegion {
+
+        private final NumericDomain.Bounds between;
+
+        LeavingEveryNumberBetween(long from, long to) {
+            this.between = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(from)),
+                    Endpoint.inclusive(Count.of(to)));
+        }
+
+        @Override
+        public Assumption assuming(LinearForm<NumericTerm> form, Rel rel) {
+            return new Assumption.Taken(this);
+        }
+
+        @Override
+        public SearchRegion assuming(NumericTerm.FromOnePosition term, Place at, Rel rel) {
+            return this;
+        }
+
+        @Override
+        public SearchRegion given(Map<NumericTerm, Place> fixed) {
+            return this;
+        }
+
+        @Override
+        public SearchRegion apartFrom(NumericTerm.FromOnePosition term, Place at) {
+            return this;
+        }
+
+        @Override
+        public PlacesApart apartAt(NumericTerm.FromOnePosition term) {
+            return PlacesApart.NONE;
+        }
+
+        @Override
+        public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+            return new NumericDomain.FormProjection.Within(between);
+        }
+
+        @Override
+        public Optional<EmptyInput> emptiness() {
+            return Optional.empty();
         }
     }
 
@@ -239,12 +301,15 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
                 .exactly(NOT_WHITESPACE, 2).written());
     }
 
-    /** Or more than the string is long. */
+    /** Or more than the string is long — at every length, the empty string and one code point
+     *  among them, where the counts looked at run past the largest asked. */
     @Test
     void aClassHoldingMoreThanTheStringIsLongHasNoString() {
-        assertInstanceOf(TermRealizations.Realization.None.class, new Demands()
-                .exactly(NOT_WHITESPACE, 3)
-                .exactly(LENGTH, 2).written());
+        for (int length : new int[] {0, 1, 2}) {
+            assertInstanceOf(TermRealizations.Realization.None.class, new Demands()
+                    .exactly(NOT_WHITESPACE, length + 1)
+                    .exactly(LENGTH, length).written(), () -> "a string " + length + " long");
+        }
     }
 
     /** A separator that is whitespace leaves nothing out of what is not whitespace. */
@@ -283,5 +348,155 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
                 "no string answers it, which this did not search far enough to say");
         assertEquals(Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL),
                 stopped.met().figures(), "and it says which figure it stopped at");
+    }
+
+    /**
+     * What the code points come to beside how many of them there are and how many are not
+     * whitespace: the counts choose the string's kinds of code point, and the sum is reached by
+     * which code points of each kind are written, so every number reads back off one string.
+     */
+    @Test
+    void aStringIsWrittenWhoseCodePointsComeToTheSumBesideItsCounts() {
+        for (long sum : new long[] {32 * 3 + 97, 300, 3 * 0x4E00, 0x10FFFF + 2 * 32}) {
+            List<String> strings = offered(new Demands()
+                    .exactly(SUM, sum)
+                    .exactly(NOT_WHITESPACE, 1)
+                    .exactly(LENGTH, 3).written());
+            for (String each : strings) {
+                assertEquals(sum, sumOf(each), each);
+                assertEquals(1, notWhitespaceIn(each), each);
+                assertEquals(3, lengthOf(each), each);
+            }
+        }
+    }
+
+    /**
+     * A sum every code point of the string is moved to reach: three of them that are not
+     * whitespace and come to five, and three that each hold the most a code point does.
+     */
+    @Test
+    void aStringIsWrittenWhoseEveryCodePointIsMovedToComeToTheSum() {
+        for (long sum : new long[] {5, 3L * Character.MAX_CODE_POINT}) {
+            List<String> strings = offered(new Demands()
+                    .exactly(SUM, sum)
+                    .exactly(NOT_WHITESPACE, 3)
+                    .exactly(LENGTH, 3).written());
+            for (String each : strings) {
+                assertEquals(sum, sumOf(each), each);
+                assertEquals(3, notWhitespaceIn(each), each);
+                assertEquals(3, lengthOf(each), each);
+            }
+        }
+    }
+
+    /**
+     * A sum is no count, and the counts of a string do not decide it: a sum asked alone is not read
+     * as a length to write the string at. A million is one code point, and the strings offered
+     * beside that one are no longer than a string is searched for in full, and not a million.
+     */
+    @Test
+    void aSumAskedAloneIsNotReadAsALength() {
+        List<String> strings = offered(new Demands().exactly(SUM, 1_000_000).written());
+        for (String each : strings) {
+            assertEquals(1_000_000, sumOf(each), each);
+            assertEquals(true, lengthOf(each)
+                    <= CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL.maximum(), each);
+        }
+        assertEquals(true, strings.stream().anyMatch(each -> lengthOf(each) == 1),
+                strings::toString);
+    }
+
+    /**
+     * Which code points of a kind are written is a few of the ones it has, so a sum inside what the
+     * counts can come to that nothing moved reaches is a string this did not write and never a
+     * string said not to exist — even where none does, as no one code point is a surrogate and the
+     * hundredth is no whitespace, though whitespace runs from below it to above it.
+     */
+    @Test
+    void aSumNothingMovedReachesIsNotSaidToHaveNoString() {
+        for (Demands unreached : List.of(
+                new Demands().exactly(SUM, 0xD800).exactly(LENGTH, 1),
+                new Demands().exactly(SUM, 100).exactly(NOT_WHITESPACE, 0).exactly(LENGTH, 1))) {
+            TermRealizations.Realization made = unreached.written();
+            assertEquals(false, made instanceof TermRealizations.Realization.None, made::toString);
+            assertEquals(false, made instanceof TermRealizations.Realization.Built,
+                    made::toString);
+        }
+    }
+
+    /**
+     * But a sum outside every run the counts of a string of the length asked can come to is one no
+     * string has, however its code points are chosen: none come to nothing but nought, one
+     * whitespace code point to no less than the least whitespace, and one code point to no more
+     * than the greatest there is.
+     */
+    @Test
+    void aSumNoStringOfTheLengthCanComeToHasNoString() {
+        for (Demands none : List.of(
+                new Demands().exactly(SUM, 5).exactly(LENGTH, 0),
+                new Demands().exactly(SUM, 5).exactly(NOT_WHITESPACE, 0).exactly(LENGTH, 1),
+                new Demands().exactly(SUM, Character.MAX_CODE_POINT + 1L).exactly(LENGTH, 1))) {
+            assertInstanceOf(TermRealizations.Realization.None.class, none.written());
+        }
+    }
+
+    /**
+     * And without the length a longer string may still come to it, so the same sum asked alone is
+     * not said to have none — nor is three of the greatest whitespace code point in a string of
+     * nothing else, which no string as long as the counts looked at comes to and three ideographic
+     * spaces do.
+     */
+    @Test
+    void aSumWithoutALengthIsNotSaidToHaveNoString() {
+        for (String each : offered(new Demands().exactly(SUM, Character.MAX_CODE_POINT + 1L)
+                .written())) {
+            assertEquals(Character.MAX_CODE_POINT + 1L, sumOf(each), each);
+        }
+        TermRealizations.Realization longer = new Demands()
+                .exactly(SUM, 3 * 0x3000).exactly(NOT_WHITESPACE, 0).written();
+        assertEquals(false, longer instanceof TermRealizations.Realization.None,
+                longer::toString);
+    }
+
+    /**
+     * The numbers tried are walked between the ends the demand and the rules leave together. A
+     * demand open at both ends beside a region leaving fewer numbers than are tried is otherwise
+     * walked from nought to the end of the window looking for one more: the most a long holds for
+     * a sum, the most an int holds for a length. Held to the region, what is said is where it is,
+     * and at once.
+     */
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void theNumbersTriedAreThoseTheRulesLeave() {
+        long far = 1_000_000_000_000L;
+        TermRealizations.Realization.Stopped stopped = assertInstanceOf(
+                TermRealizations.Realization.Stopped.class,
+                new Demands().notNought(SUM)
+                        .writtenWithin(new LeavingEveryNumberBetween(far, far + 5)));
+        assertEquals(Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL),
+                stopped.met().figures());
+        List<String> near = offered(new Demands().notNought(SUM)
+                .writtenWithin(new LeavingEveryNumberBetween(1_000, 1_005)));
+        for (String each : near) {
+            assertEquals(true, sumOf(each) >= 1_000 && sumOf(each) <= 1_005, each);
+        }
+        for (String each : offered(new Demands().notNought(LENGTH)
+                .writtenWithin(new LeavingEveryNumberBetween(3, 5)))) {
+            assertEquals(true, lengthOf(each) >= 3 && lengthOf(each) <= 5, each);
+        }
+    }
+
+    /** A sum more code points than a string is searched for come to is said as that figure. */
+    @Test
+    void aSumPastWhatAStringIsSearchedForIsSaidAsTheFigure() {
+        TermRealizations.Realization.Stopped stopped = assertInstanceOf(
+                TermRealizations.Realization.Stopped.class,
+                new Demands().exactly(SUM, 3_000_000_000L).written());
+        assertEquals(Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL),
+                stopped.met().figures());
+    }
+
+    private static long sumOf(String text) {
+        return text.codePoints().asLongStream().sum();
     }
 }

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * whole numbers the exact quotient lies between — a quotient rounded to the scale nought
  * (spec §invariant-discharge-arithmetic). Where the path holds the divisor off nought, what holds of
  * the dividend and the divisor is what holds of the narrowed answer, and a guard restating it is one
- * the model need not write.
+ * the model need not write. A whole divisor the path leaves on both sides of nought is read on each.
  */
 class ANarrowedQuotientByAValueLiesBetweenItsCornersTest {
 
@@ -116,14 +116,91 @@ class ANarrowedQuotientByAValueLiesBetweenItsCornersTest {
     }
 
     /**
-     * The control. A divisor that may be on either side of nought is no divisor the rule reads, and
-     * the share is not taken to be at or above nought for want of a sign.
+     * A whole divisor that may be on either side of nought divides by at least one either way, so
+     * the share lies within the span of the shares by each side: a hundred among one, and a hundred
+     * among minus one. Not nearer than that, and not on one side of nought for want of a sign.
+     *
+     * <p>Each claim left owed has a share that breaks it, and the share is checked rather than
+     * named: pinned to those inputs the reading is exact, and the construction is refused.
      */
     @Test
-    void aDivisorOfEitherSignStatesNothing() {
-        assertEquals(List.of("E2011"), reported("value >= 0", """
-                guard amount >= 0 else Share(1)
+    void aWholeDivisorOfEitherSignBoundsTheShareByEachSide() {
+        String amongAny = """
+                guard amount >= 0 && amount <= 100 else Share(1)
                     guard among /= 0 else Share(1)
+                    Share(Rational.toInt(DOWN, amount / among))""";
+        assertEquals(List.of(), reported("value >= 0 - 100 && value <= 100", amongAny));
+        assertEquals(List.of("E2011"), reported("value <= 99", amongAny));
+        refusedAt("value <= 99", 100, "1");
+        assertEquals(List.of("E2011"), reported("value >= 0 - 99", amongAny));
+        refusedAt("value >= 0 - 99", 100, "0 - 1");
+        assertEquals(List.of("E2011"), reported("value >= 0", amongAny));
+        refusedAt("value >= 0", 1, "0 - 1");
+    }
+
+    /** And without a guard on the divisor: a divide by nought answers nothing, so what is judged is
+     * the share by the divisor's other values. */
+    @Test
+    void aWholeDivisorNoughtIsAmongBoundsTheShareByTheOthers() {
+        assertEquals(List.of(), reported("value >= 0 - 100 && value <= 100", """
+                guard amount >= 0 && amount <= 100 else Share(1)
+                    Share(Rational.toInt(DOWN, amount / among))"""));
+    }
+
+    /**
+     * The control beside the whole divisors: a decimal divisor that may be nought is read on
+     * neither side, since a decimal other than nought can be nearer nought than any number named.
+     * Under {@code y > 0}, a divisor of {@code y - 1} is minus a half at a half, and one shared that
+     * way is minus two, which the claim fails.
+     */
+    @Test
+    void aDecimalDivisorThatMayBeNoughtStatesNothing() {
+        String model = """
+                module demo
+
+                data Share = Int
+                    invariant value >= 0
+
+                behavior apportion : (amount: Decimal, y: Decimal) -> Share
+                    constructs Share
+
+                let apportion (amount, y) = {
+                    guard amount >= 0m && amount <= 100m else Share(1)
+                    guard y > 0m else Share(1)
+                    Share(Rational.toInt(DOWN, amount / (y - 1m)))
+                }
+                """;
+        assertEquals(List.of("E2011"), Compiler.compileWithWarnings(model).warnings().stream()
+                .map(Diagnostic::code).toList());
+    }
+
+    /** A dividend of either sign by a divisor of either sign: the span is the dividend's furthest
+     * end either way, which a divide by one or by minus one reaches. */
+    @Test
+    void aDividendAndADivisorBothEitherSideOfNoughtSpanTheDividendEitherWay() {
+        String both = """
+                guard amount >= 0 - 100 && amount <= 100 else Share(1)
+                    guard among >= 0 - 5 && among <= 5 else Share(1)
+                    Share(Rational.toInt(DOWN, amount / among))""";
+        assertEquals(List.of(), reported("value >= 0 - 100 && value <= 100", both));
+        assertEquals(List.of("E2011"), reported("value >= 0 - 99", both));
+        refusedAt("value >= 0 - 99", 100, "0 - 1");
+    }
+
+    /**
+     * A divisor nought is the one end of is read on its other side alone, so the share keeps the
+     * dividend's sign there, as it does by a divisor held off nought. The span of both sides would
+     * have lost it.
+     */
+    @Test
+    void aWholeDivisorNoughtEndsIsReadOnItsOtherSide() {
+        assertEquals(List.of(), reported("value >= 0 && value <= 100", """
+                guard amount >= 0 && amount <= 100 else Share(1)
+                    guard among >= 0 && among <= 5 else Share(1)
+                    Share(Rational.toInt(DOWN, amount / among))"""));
+        assertEquals(List.of(), reported("value >= 0 - 100 && value <= 0", """
+                guard amount >= 0 && amount <= 100 else Share(0)
+                    guard among >= 0 - 5 && among <= 0 else Share(0)
                     Share(Rational.toInt(DOWN, amount / among))"""));
     }
 
@@ -131,16 +208,41 @@ class ANarrowedQuotientByAValueLiesBetweenItsCornersTest {
      * A quotient no decimal writes is held outward at each end: a third lies between nought and
      * one, so a share of one among three is at most one and at least nought, and not more than
      * that.
+     *
+     * <p>The mode is not read, so the two ends are the same for every mode. Each is left owed under
+     * the mode that lands on the other: a third rounded down is nought, and rounded up it is one.
      */
     @Test
     void aQuotientNoDecimalWritesIsHeldOutward() {
         String oneAmongThree = """
-                guard amount == 1 else Share(1)
-                    guard among == 3 else Share(1)
-                    Share(Rational.toInt(CEILING, amount / among))""";
-        assertEquals(List.of(), reported("value >= 0 && value <= 1", oneAmongThree));
-        assertEquals(List.of("E2011"), reported("value >= 1", oneAmongThree),
-                "the mode is not read, so the share is not shown to be one rather than nought");
+                guard amount == 1 else Share(%2$s)
+                    guard among == 3 else Share(%2$s)
+                    Share(Rational.toInt(%1$s, amount / among))""";
+        for (String mode : List.of("DOWN", "CEILING")) {
+            assertEquals(List.of(),
+                    reported("value >= 0 && value <= 1", oneAmongThree.formatted(mode, "1")), mode);
+        }
+        assertEquals(List.of("E2011"), reported("value >= 1", oneAmongThree.formatted("DOWN", "1")),
+                "a third rounded down is nought");
+        assertEquals(List.of("E2011"),
+                reported("value <= 0", oneAmongThree.formatted("CEILING", "0")),
+                "a third rounded up is one");
+    }
+
+    /** The construction refused where the inputs are pinned to {@code amount} and {@code among},
+     * which is a share there that the invariant fails. Only for a quotient that is a whole number:
+     * the mode is not read, so one that is not lands on either of two. The share the guards depart
+     * with is asked first, so the refusal is the quotient's and not theirs. */
+    private static void refusedAt(String bounds, int amount, String among) {
+        assertEquals(List.of(), reported(bounds, "Share(1)"),
+                "the share the guards depart with is one the invariant fails, and would be refused");
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compileWithWarnings(model(bounds, """
+                        guard amount == %d else Share(1)
+                            guard among == %s else Share(1)
+                            Share(Rational.toInt(DOWN, amount / among))""".formatted(amount, among))),
+                "no share the invariant fails at amount " + amount + " among " + among);
+        assertEquals("E2010", refused.getMessage().substring(0, 5), refused.getMessage());
     }
 
     /**
