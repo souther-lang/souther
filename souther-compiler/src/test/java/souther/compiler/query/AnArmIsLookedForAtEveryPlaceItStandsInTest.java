@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.RowsOfABlock;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.GeneratedRows;
 
@@ -85,16 +86,9 @@ class AnArmIsLookedForAtEveryPlaceItStandsInTest {
                 "and none in the second");
     }
 
-    /**
-     * Whether some row of the block is offered for the helper's own {@code Off} arm.
-     *
-     * <p>Either way a row says what it was composed for. A row that fills one thing wears the name
-     * inline and a row that fills several is written under a note apiece, and which of the two a
-     * run produces turns on what else the model leaves — neither is what this is about.
-     */
+    /** Whether some row of the block is offered for the helper's own {@code Off} arm. */
     private static boolean offersARowForTheHelpersArm(String model) {
-        return blockOf(model).lines().anyMatch(line ->
-                line.startsWith("// fills case Off (") || line.contains("\"case Off\""));
+        return RowsOfABlock.of(blockOf(model)).stream().anyMatch(row -> row.isFor("case Off"));
     }
 
     /** What the block says about the helper's arm where it offers no row for it. */

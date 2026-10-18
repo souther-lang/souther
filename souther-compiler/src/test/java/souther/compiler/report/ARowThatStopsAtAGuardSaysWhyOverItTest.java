@@ -98,7 +98,8 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
         int line = ONLY_NAMED.lines().toList().indexOf(ONLY_NAMED.lines()
                 .filter(each -> each.contains("guard ")).findFirst().orElseThrow()) + 1;
         String said = over(block, "kind=Plain");
-        assertTrue(said.startsWith("// stops at the guard at settle.sou:" + line + ":"),
+        assertTrue(said.lines().anyMatch(
+                        each -> each.startsWith("// stops at the guard at settle.sou:" + line + ":")),
                 () -> "over the row, the guard it stops at: " + block);
     }
 

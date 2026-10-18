@@ -22,6 +22,7 @@ class RowsOfABlockTest {
             // stops at the guard at 0:15:5
                 | (Draft { cost = Amount(101) }) -> <?>
             // fills value = 0
+            // fills case Off (12:5)
                 | "a \\"quoted\\" class" : (Draft { cost = Amount(0) }) -> <?>
             // no row for `x = 4` in `submit`: the search left something untried
 
@@ -42,7 +43,7 @@ class RowsOfABlockTest {
         assertEquals(List.of("a decision rule (the comparison at 15:30 does not hold)", "x=1 < x"),
                 rows.get(0).fills());
         assertEquals(3, rows.get(0).over().size(), "a stop is said over the row too");
-        assertEquals(List.of("value = 0"), rows.get(1).fills());
+        assertEquals(List.of("value = 0", "case Off (12:5)"), rows.get(1).fills());
         assertEquals(List.of(), rows.get(2).fills(),
                 "the note below a block is over no row, and a blank line ends what is over one");
         assertTrue(rows.get(2).written().contains("-> <?>"),
@@ -53,6 +54,10 @@ class RowsOfABlockTest {
     void whatARowIsForIsReadFromItsNameOrFromOverIt() {
         assertTrue(RowsOfABlock.forThe(BLOCK, "x=1 < x").name().isEmpty());
         assertEquals(Optional.of("wrapped"), RowsOfABlock.forThe(BLOCK, "wrapped").name());
+        assertEquals(Optional.of("a \"quoted\" class"), RowsOfABlock.forThe(BLOCK, "case Off").name(),
+                "a thing said with its place is the thing its words say");
+        assertFalse(RowsOfABlock.of(BLOCK).stream().anyMatch(row -> row.isFor("case O")),
+                "and not a thing whose words begin the same");
         assertFalse(RowsOfABlock.of(BLOCK).stream().anyMatch(row -> row.isFor("x = 4")),
                 "a thing no row is written for is no row's");
     }

@@ -366,12 +366,10 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                 report);
         assertFalse(report.contains("not read"), report);
         String rows = rowsOf(compiled);
-        assertTrue(rows.contains("""
-                // fills OFF point of comparison@0:null
-                    | "lines[*].cap=Some" : ([Line { cap = 0 }])"""), rows);
-        assertTrue(rows.contains("""
-                // fills OUT point of comparison@0:null
-                    | "lines[*].cap=None" : ([Line { cap = None }])"""), rows);
+        assertTrue(RowsOfABlock.at(rows, "([Line { cap = 0 }])").fills()
+                .contains("OFF point of comparison@0:null"), rows);
+        assertTrue(RowsOfABlock.at(rows, "([Line { cap = None }])").fills()
+                .contains("OUT point of comparison@0:null"), rows);
     }
 
     private static final String FEES = """

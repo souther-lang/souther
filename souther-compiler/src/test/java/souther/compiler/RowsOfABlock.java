@@ -55,9 +55,13 @@ public final class RowsOfABlock {
          * <p>Only for a claim that does not turn on which of the two it is — what the row holds,
          * or that something is offered a row at all. A claim about how a row is named asks
          * {@link #name} and {@link #fills} apart.
+         *
+         * <p>A name is a thing's words, and a line over a row says the words and, where the thing
+         * has one, its place in parentheses after them; so {@code thing} is the words.
          */
         public boolean isFor(String thing) {
-            return name.filter(thing::equals).isPresent() || fills().contains(thing);
+            return name.filter(thing::equals).isPresent() || fills().stream()
+                    .anyMatch(said -> said.equals(thing) || said.startsWith(thing + " ("));
         }
     }
 
