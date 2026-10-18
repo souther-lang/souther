@@ -176,38 +176,40 @@ class AGuardThatHoldsAsOneOfItsPartsIsReadPartByPartTest {
     }
 
     /**
-     * A choice names what its parts name, whichever of them holds. A string an operation answered
-     * is read against a clause only where a guard on the path has said something of it, and saying
-     * it in one part of a choice is saying it: so the clause is asked here whether or not anything
-     * takes the choice apart. Taken apart, one part leaves the value the clause refuses and the
-     * other does not, which is a construction that may abort. The control's parts both leave a
-     * value the clause admits.
+     * Taking a choice apart says what follows from its parts and not what its author named. A
+     * string an operation answered is read against a clause only where a guard on the path has
+     * said something of it, and a choice names the two parts it joins and nothing written inside
+     * them. So a clause over a value only a comparison inside one part names is left to the
+     * run-time check, here where the choice is taken apart for the share as everywhere else; were
+     * the ways to name what their comparisons compare, the clause would be asked only because
+     * something took the choice apart, and the part leaving the value it refuses would make this
+     * a construction that may abort.
+     *
+     * <p>The control names the value in a conjunction, which names both of its halves, and the
+     * value the guard leaves is the one the clause refuses.
      */
     @Test
-    void aChoiceNamesWhatItsPartsName() {
+    void aValueOnlyAComparisonInsideAPartNamesIsNotNamedByTakingTheChoiceApart() {
         String model = """
                 module demo
 
                 data Labelled = { q: Int, s: String }
-                    invariant q >= 0 && q <= 100
+                    invariant q >= 0 - 50 && q <= 50
                     invariant s /= "pos"
 
-                behavior label : (amount: Int, name: String) -> Labelled
+                behavior label : (among: Int, name: String) -> Labelled
                     constructs Labelled
 
-                let label (amount, name) = {
-                    guard amount >= 0 && amount <= 100 else Labelled { q = 0, s = "none" }
+                let label (among, name) = {
                     guard %s else Labelled { q = 0, s = "none" }
-                    Labelled { q = amount, s = String.trim(name) }
+                    Labelled { q = Rational.toInt(DOWN, 100 / among), s = String.trim(name) }
                 }
                 """;
-        assertEquals(List.of("E2011"), judged(model.formatted(
-                "(amount <= 50 && String.trim(name) == \"pos\")"
-                        + " || (amount > 50 && String.trim(name) == \"neg\")")));
         assertEquals(List.of(), judged(model.formatted(
-                "(amount <= 50 && String.trim(name) == \"low\")"
-                        + " || (amount > 50 && String.trim(name) == \"neg\")")));
-        assertEquals(List.of("E2010"), judged(model.formatted("String.trim(name) == \"pos\"")));
+                "(among >= 2 && String.trim(name) == \"pos\")"
+                        + " || (among <= 0 - 2 && String.trim(name) == \"neg\")")));
+        assertEquals(List.of("E2010"), judged(model.formatted(
+                "among >= 2 && String.trim(name) == \"pos\"")));
     }
 
     /**

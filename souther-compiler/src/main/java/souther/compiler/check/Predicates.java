@@ -1034,15 +1034,21 @@ final class Predicates {
      * one nothing enters, and the way it would have been is left out by whoever asks.
      *
      * <p>Each way still holds {@code condition}; which conditions a reader has taken apart is the
-     * reader's to keep. And no way speaks of a term {@code k} does not: what a condition names was
-     * spoken where it was taken in ({@link #takingOneOf}), so a way knows more of the values and
-     * names none that the whole did not.
+     * reader's to keep.
+     *
+     * <p>And each way speaks of exactly what {@code k} does. Two questions are asked of a condition
+     * and this answers one of them: what follows from it, which is what a way is for, and what its
+     * author named, which is settled where the condition was taken in as written — a choice names
+     * the two halves it composes and nothing under them. A part taken in alone is read as though it
+     * had been written alone, and would name what its comparisons compare; kept, that would make
+     * which clauses are read at a construction turn on whether anything took the choice apart.
+     * So what a way knows of the values is the part's, and what it has named is the whole's.
      */
     List<Known> eachWayOf(Known.OneOf condition, Known k) {
         List<Known> ways = new ArrayList<>();
         for (ClauseExpr part : List.of(condition.of().left(), condition.of().right())) {
             ways.add(new Assuming(this).read(part, condition.at(), terms::inside, null)
-                    .from(k).known());
+                    .from(k).known().speakingAs(k));
         }
         return ways;
     }
@@ -1058,19 +1064,14 @@ final class Predicates {
      * it; where both are, the condition is held as one of them, for a reader whose question its
      * parts answer to take apart ({@link #eachWayOf}).
      *
-     * <p>What the condition names is what its parts name, whichever of them holds. Naming is a fact
-     * about what was written and not about which way a run went: {@code a == x && b > 0} names
-     * {@code a} written alone, and written as one part of a choice it is the same comparison of the
-     * same value. A whole that named less than its parts would have a clause over that value left
-     * to the run-time check here and asked of each way it comes apart in, so which clauses are read
-     * would turn on whether anything took the condition apart.
+     * <p>What the condition names is what {@code whole} named, wherever this lands: a way names
+     * nothing its whole did not, so a choice one part of which is left names its two halves as a
+     * choice both parts of which are left does.
      */
     private Assumed takingOneOf(Known.OneOf condition, Assumed whole) {
         Known k = whole.known();
-        Set<FactSubject> named = new LinkedHashSet<>();
         List<Known> left = new ArrayList<>();
         for (Known way : eachWayOf(condition, k)) {
-            named.addAll(way.spokenBeyond(k));
             if (!way.reachesNothing()) {
                 left.add(way);
             }
@@ -1080,7 +1081,7 @@ final class Predicates {
             case 1 -> left.getFirst();
             default -> k.holdingOneOf(condition);
         };
-        return new Assumed(out.speaking(named), whole.taken(), whole.shapeRead(), whole.notTaken());
+        return new Assumed(out, whole.taken(), whole.shapeRead(), whole.notTaken());
     }
 
     /**

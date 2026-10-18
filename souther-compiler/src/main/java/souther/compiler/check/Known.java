@@ -13,10 +13,8 @@ import souther.compiler.values.Allowance;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What holds where the walk stands: numeric relations, predicates known to hold or to fail, relations
@@ -318,14 +316,15 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         return List.copyOf(oneOf.keys());
     }
 
-    /** The terms this speaks of that {@code before} does not, in the order they were spoken of. */
-    Set<FactSubject> spokenBeyond(Known before) {
-        Set<FactSubject> out = new LinkedHashSet<>();
-        for (FactSubject term : spoken.keys()) {
-            if (!before.speaksOf(term)) {
-                out.add(term);
-            }
-        }
-        return out;
+    /**
+     * This, speaking of exactly what {@code other} speaks of.
+     *
+     * <p>For a state read from {@code other} to answer what follows from a condition and not what
+     * its author named ({@link Predicates#eachWayOf}): what it knows of the values is its own, and
+     * which values the path has said something of is {@code other}'s.
+     */
+    Known speakingAs(Known other) {
+        return other.spoken == spoken ? this
+                : new Known(constraints, quantified, other.spoken, unguarded, cases, oneOf);
     }
 }
