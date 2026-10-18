@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.RowsOfABlock;
 import souther.compiler.cst.CstParser;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Limits;
@@ -85,27 +86,9 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
                 new SourceRendering(id -> "settle.sou", compilation.texts())).text();
     }
 
-    /** The line just over the row named {@code name}. */
+    /** Every comment over the row offered for {@code name}. */
     private static String over(String block, String name) {
-        // The row for `name`, named by it or with it said over an unnamed row — a row composed for
-        // a class and for the decision rule the class is reached by is for two things, and is
-        // named for neither — and every comment over that row.
-        List<String> lines = block.lines().toList();
-        for (int at = 0; at < lines.size(); at++) {
-            if (lines.get(at).startsWith("    | \"" + name + "\"")
-                    || lines.get(at).equals("// fills " + name)) {
-                int row = at;
-                while (!lines.get(row).startsWith("    | ")) {
-                    row++;
-                }
-                int top = row;
-                while (top > 0 && lines.get(top - 1).startsWith("//")) {
-                    top--;
-                }
-                return String.join("\n", lines.subList(top, row));
-            }
-        }
-        throw new AssertionError("no row is offered for " + name + " in " + block);
+        return String.join("\n", RowsOfABlock.forThe(block, name).over());
     }
 
     /** The guard where it is written: its line in the source the row is offered for. */
