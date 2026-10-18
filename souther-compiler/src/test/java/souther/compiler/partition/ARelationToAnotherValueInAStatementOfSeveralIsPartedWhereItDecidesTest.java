@@ -40,7 +40,7 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
 
             data Item = { n: Int }
                 invariant n >= 0 && n <= 100
-            data Order = { items: List<Item>, q: Int, floor: Int, open: Bool }
+            data Order = { items: List<Item>, nums: List<Int>, q: Int, floor: Int, open: Bool }
                 invariant q >= 0 && floor >= 0
             """;
 
@@ -115,6 +115,24 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
                 report);
         assertFalse(report.contains("relates the value here to another value not shown to reach"),
                 report);
+    }
+
+    /**
+     * What an application states about a value no position holds is parted the same way: that
+     * some element of {@code nums} is {@code q} holds nowhere while the list is empty, and that
+     * parts the lengths of the list.
+     */
+    @Test
+    void anApplicationStatingARelationToAnotherValuePartsWhatSettlesIt() {
+        ComparisonReadings.Reading contains = walked("List.contains(o.q, o.nums)").stream()
+                .filter(each -> each.statement() instanceof ComparisonReadings.Stated.AnApplication)
+                .findFirst().orElseThrow();
+        ComparisonAssessment read = assertInstanceOf(BoundaryPolicy.Standing.Admitted.class,
+                contains.standing()).read();
+        ComparisonAssessment.AgainstAnotherValue relation =
+                assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, read,
+                        read::toString);
+        assertFalse(relation.settling().isEmpty(), read::toString);
     }
 
     private static ComparisonAssessment.Several.Part relationPart(

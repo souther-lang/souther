@@ -553,6 +553,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
                     "how many ways of choosing a case are asked, counted before any is: past the"
                             + " figure, more cases than are taken apart, and none is asked"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#allAsked("
+                            + "Lsouther/compiler/meaning/DecidingCase;"
+                            + "Ljava/util/function/Function;)"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Atoms;",
+                    "how many ways of choosing a case are asked, counted before any is: past the"
+                            + " figure, more cases than are taken apart, and none is asked"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
                             + "Ljava/util/List;)V",
                     "out of steps, naming them and the cases left nobody took apart"),

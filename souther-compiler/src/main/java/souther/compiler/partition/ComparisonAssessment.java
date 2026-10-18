@@ -216,7 +216,8 @@ sealed interface ComparisonAssessment {
          *  comparison claimed, and where an application states the relation, what it claims
          *  itself. */
         AuthoredPointMapping noPlaceOfIt(Cutting drawn) {
-            return new AuthoredPointMapping.NotAnAuthoredBoundary(line, claim.orElse(drawn.claim()));
+            return new AuthoredPointMapping.NotAnAuthoredBoundary(line,
+                    claim.orElse(drawn.claim()));
         }
     }
 
@@ -1115,9 +1116,8 @@ sealed interface ComparisonAssessment {
      * The cases {@code line} turns the statement in, the ways rows reach it by there, and the
      * figures the cases nobody worked out stopped at.
      */
-    record CasesReached(List<DecidingCase> reached,
-                                List<Reachability.Reaching> deciding,
-                                Set<CompositionBudget> stoppedAt) {}
+    record CasesReached(List<DecidingCase> reached, List<Reachability.Reaching> deciding,
+                        Set<CompositionBudget> stoppedAt) {}
 
     /**
      * Each of {@code cases} where a row on each side of {@code cutting} can stand in it. Rows on
@@ -1162,14 +1162,20 @@ sealed interface ComparisonAssessment {
     }
 
     /**
+     * What a relation to another value parts in one case: the lines that turn the statement in it,
+     * and whether any row takes the way to it.
+     */
+    record InACase(boolean reachable, List<AtAPosition> lines) {}
+
+    /**
      * A relation to another value as a part of a statement of several, on the way and then in each
      * case where it decides: each line parting the values that settle it, read in the cases it
      * turns the statement in.
      *
      * <p>Which values settle the relation is a question about the rows that arrive, so it is
-     * asked again in each case, over the rows that arrive there: a case that says the walk began
-     * high parts the values at a different place than the declarations alone do. A line is then
-     * read in a case only where rows stand on both sides of it, as a line is.
+     * asked again in each case, over the rows that arrive there, which are no more than the
+     * declarations leave. A line is then read in a case only where rows stand on both sides of
+     * it, as a line is.
      *
      * <p>The relation itself, with no line, stays beside them where some case has no line that
      * turns the statement in it, or none was worked out there: a place is left without its
@@ -1182,42 +1188,48 @@ sealed interface ComparisonAssessment {
             InputReading reading) {
         // What a condition says of the way to it and of the lines it parts is the condition's
         // and not the case's, and a case said for several is asked of each condition in turn.
-        Map<Proposition, List<AtAPosition>> turning = new HashMap<>();
-        Function<Proposition, List<AtAPosition>> linesTurningIn = condition ->
-                turning.computeIfAbsent(condition, _ -> {
+        Map<Proposition, InACase> asked = new HashMap<>();
+        Function<Proposition, InACase> inCase = condition ->
+                asked.computeIfAbsent(condition, _ -> {
                     Reachability toIt = wayToACase.apply(condition);
-                    return against.whereRowsArrive(reading, waysArrivedBy(toIt, arrivals))
-                            .settling().stream()
-                            .filter(line -> crossedAtSomePlace(line.cutting(), toIt, arrivals,
-                                    line.cutting().keptTo(condition, reading)))
-                            .toList();
+                    return new InACase(toIt instanceof Reachability.Reaching,
+                            against.whereRowsArrive(reading, waysArrivedBy(toIt, arrivals))
+                                    .settling().stream()
+                                    .filter(line -> crossedAtSomePlace(line.cutting(), toIt,
+                                            arrivals, line.cutting().keptTo(condition, reading)))
+                                    .toList());
                 });
+        // Each case is taken apart to the end and asked by itself: the lines of a narrower case
+        // are not the lines of a wider one, so no case is given up or said for several before
+        // its own lines are known. Cases are said for several only past that, where they part the
+        // values by the same lines.
         List<List<AtAPosition>> partedBy = new ArrayList<>();
         List<List<DecidingCase>> casesOf = new ArrayList<>();
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         boolean someCaseLeftUndrawn = part.cases().isEmpty();
         for (DecidingCase each : part.cases()) {
-            List<DecidingCase> turned;
-            if (each.saidAlone()) {
-                turned = linesTurningIn.apply(each.condition()).isEmpty() ? List.of() : List.of(each);
-            } else {
-                CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each,
-                        condition -> !linesTurningIn.apply(condition).isEmpty());
-                turned = found.decidesIn();
-                stoppedAt.addAll(found.notWorkedOut());
-            }
-            someCaseLeftUndrawn |= turned.isEmpty();
-            for (DecidingCase one : turned) {
-                List<AtAPosition> lines = linesTurningIn.apply(one.condition());
+            CasesOfALineAsked.Atoms<InACase> atoms = CasesOfALineAsked.atomsOf(each, inCase);
+            stoppedAt.addAll(atoms.notWorkedOut());
+            for (CasesOfALineAsked.Atom<InACase> atom : atoms.each()) {
+                // A case no row takes is no case of the statement.
+                if (!atom.answer().reachable()) {
+                    continue;
+                }
+                List<AtAPosition> lines = atom.answer().lines();
+                if (lines.isEmpty()) {
+                    someCaseLeftUndrawn = true;
+                    continue;
+                }
                 int at = partedBy.indexOf(lines);
                 if (at < 0) {
                     partedBy.add(lines);
                     casesOf.add(new ArrayList<>());
                     at = partedBy.size() - 1;
                 }
-                casesOf.get(at).add(one);
+                casesOf.get(at).add(DecidingCase.alone(atom.condition()));
             }
         }
+        someCaseLeftUndrawn |= partedBy.isEmpty();
         List<Several.Part> out = new ArrayList<>();
         for (int i = 0; i < partedBy.size(); i++) {
             out.add(new Several.Part(part.id(), against.partedBy(partedBy.get(i)),
