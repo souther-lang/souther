@@ -89,11 +89,13 @@ class AValueARowWroteIsLookedUpWhereItWouldBeLookedForTest {
             StandingAtAPoint.Written written = walk.at(path);
             List<BehaviorInputs.Occurrence> values = written.values();
             for (Map<TermPath, Integer> chosen : choices()) {
-                assertEquals(firstUnder(values, chosen, null), written.under(chosen),
+                StandingAtAPoint.OneReadingOfARow reading =
+                        new StandingAtAPoint.OneReadingOfARow(walk, chosen);
+                assertEquals(firstUnder(values, chosen, null), written.under(reading),
                         () -> path + " under " + chosen);
                 for (TermPath container : path.containersHoldingIt()) {
                     assertEquals(allUnder(values, chosen, container),
-                            written.besideOf(container, chosen),
+                            written.besideOf(container, reading),
                             () -> path + " beside " + container + " under " + chosen);
                 }
             }

@@ -105,9 +105,9 @@ sealed interface WhatATermRead {
      * first of those is what the row is told, and a field of an element nothing asked about stops
      * nothing.
      *
-     * <p>The elements are put together once for every reading that chose alike in every other
-     * container ({@link BorderQuantity.Observation#keptOf}), since what each of them holds does not
-     * turn on which of them a reading chose; each reading asks the number of its own element.
+     * <p>The elements are put together once for every reading of the occurrence
+     * ({@link BorderQuantity.Observation#keptOf}), since what each of them holds does not turn on
+     * which of them a reading chose; each reading asks the number of its own element.
      */
     static WhatATermRead inItsOccurrence(TermOrders on, BorderQuantity.Observation row) {
         TermPath element = on.amongItsNeighbours().container().element();
@@ -128,17 +128,10 @@ sealed interface WhatATermRead {
 
     /**
      * The elements of the occurrence of a container a reading is in, put together for a number of
-     * an element read off its neighbours: of every reading that chose alike in the containers
-     * holding that one. A number reads fields of an element and enters no container below it,
-     * so nothing a reading chose elsewhere is any part of it.
+     * an element read off its neighbours.
      */
     record ItsNeighbours(TermOrders on) implements
             BorderQuantity.ReadAlike<WalkResult<TermOrders.ElementsTogether<WhatATermRead>>> {
-
-        @Override
-        public boolean turnsOn(TermPath container) {
-            return on.amongItsNeighbours().container().containersHoldingIt().contains(container);
-        }
 
         @Override
         public WalkResult<TermOrders.ElementsTogether<WhatATermRead>> readAt(
@@ -192,11 +185,6 @@ sealed interface WhatATermRead {
             implements BorderQuantity.ReadAlike<WhatATermRead> {
 
         @Override
-        public boolean turnsOn(TermPath container) {
-            return false;
-        }
-
-        @Override
         public WhatATermRead readAt(BorderQuantity.Observation reading) {
             return switch (reading.everyValueAt(subject)) {
                 case WalkResult.CouldNotWalk<List<ObservedValue>> _ ->
@@ -215,24 +203,17 @@ sealed interface WhatATermRead {
      * run where the computation needs it, and says nothing where the element's own choice does not
      * reach it. What stopped the first element that could not be read is what the row is told.
      *
-     * <p>Read once for every reading that chose alike in every container but the one the run is
-     * computed over, whose elements are all of them whichever a reading chose.
+     * <p>Read once for every reading of the container the run is computed over, whose elements
+     * are all of them whichever a reading chose.
      */
     static WhatATermRead overElements(TermOrders on, RunSource.ComputedOccurrences computed,
                                       BorderQuantity.Observation row) {
         return row.keptOf(new ARunOfEachElement(on, computed));
     }
 
-    /** A run computed of each element of a container, of every reading that chose alike in the
-     *  containers holding the elements, the outermost apart. */
+    /** A run computed of each element of a container. */
     record ARunOfEachElement(TermOrders on, RunSource.ComputedOccurrences computed)
             implements BorderQuantity.ReadAlike<WhatATermRead> {
-
-        @Override
-        public boolean turnsOn(TermPath container) {
-            return !container.equals(computed.elements().outermostContainer())
-                    && computed.elements().containersHoldingIt().contains(container);
-        }
 
         @Override
         public WhatATermRead readAt(BorderQuantity.Observation reading) {

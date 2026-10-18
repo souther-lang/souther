@@ -1941,7 +1941,7 @@ public sealed interface BorderQuantity
 
         /**
          * What {@code asked} reads at this reading, read once for every reading of the row that
-         * chose alike in each container the answer turns on.
+         * chose alike wherever reading it asked what was chosen.
          *
          * <p>For a number, a count or a prefix of the elements of one occurrence of a container:
          * every reading of the row that chose an element of that occurrence would otherwise read
@@ -1973,15 +1973,13 @@ public sealed interface BorderQuantity
 
     /**
      * Something read of a row that every reading of the row answers alike wherever they chose
-     * alike in the containers it turns on.
+     * alike in the containers reading it asks what was chosen in.
      *
      * <p>Two of these are one question where they are equal, so what they are equal by is what
-     * the answer is of.
+     * the answer is of. Which choices the answer turns on is not said here: reading it asks them,
+     * and the walk that keeps it hears what was asked.
      */
     interface ReadAlike<T> {
-
-        /** Whether what this reads turns on the element a reading chose in {@code container}. */
-        boolean turnsOn(TermPath container);
 
         /** What this reads at {@code reading}. */
         T readAt(Observation reading);

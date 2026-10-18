@@ -132,9 +132,9 @@ final class MetOnARow {
     /**
      * One container stopped short in.
      *
-     * <p>What one occurrence of it came to is the same for every reading that chose alike beside
-     * it, so it is read once for all of them ({@link #readAt}), and kept by the walk over the row
-     * rather than here: this lives as long as the line, and the rows it is asked of do not.
+     * <p>What one occurrence of it came to is the same for every reading of it, so it is read
+     * once for all of them ({@link #readAt}), and kept by the walk over the row rather than here:
+     * this lives as long as the line, and the rows it is asked of do not.
      */
     private static final class Stopping implements Level, BorderQuantity.ReadAlike<Prefix> {
 
@@ -162,13 +162,6 @@ final class MetOnARow {
                     yield reading.keptOf(this).before(among.chosen());
                 }
             };
-        }
-
-        /** The containers holding this one and those what stops the operation reads under. */
-        @Override
-        public boolean turnsOn(TermPath each) {
-            return !each.equals(container) && (container.containersHoldingIt().contains(each)
-                    || stops.turnsOn(each));
         }
 
         @Override
