@@ -274,9 +274,22 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     void whetherAMapHoldsAnythingIsReadWhateverOrderTheFoldWalksTheKeysIn() {
         Compilation plain = measured(modelOfWhetherItHoldsAnything("xs"));
         assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
+        assertSidesAreRead(plain);
         Compilation reversed = measured(modelOfWhetherItHoldsAnything("List.reverse(xs)"));
         assertEquals(axisOf(plain), axisOf(reversed), () -> report(reversed));
+        assertEquals(decisionsOf(plain), decisionsOf(reversed), () -> report(reversed));
         assertFalse(report(reversed).contains("not read"), () -> report(reversed));
+    }
+
+    /** Each side of a line is read, and neither is read as the other. */
+    private static void assertSidesAreRead(Compilation compilation) {
+        List<String> decisions = decisionsOf(compilation);
+        assertTrue(decisions.stream().anyMatch(each -> each.endsWith(" held")),
+                () -> decisions + report(compilation));
+        assertTrue(decisions.stream().anyMatch(each -> each.endsWith(" denied")),
+                () -> decisions + report(compilation));
+        assertTrue(decisions.stream().noneMatch(each -> each.startsWith("not_read")),
+                () -> decisions + report(compilation));
     }
 
     /** How many keys a fold adds one for each of, the fold walking {@code keys}. */
@@ -298,8 +311,37 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     void howManyAFoldCountsIsReadWhateverOrderItWalksTheKeysIn() {
         Compilation plain = measured(modelOfHowManyAFoldCounts("xs"));
         assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
+        assertTrue(pointsOf(plain).stream().anyMatch(each -> each.startsWith("on ")),
+                () -> pointsOf(plain) + report(plain));
+        assertTrue(pointsOf(plain).stream().anyMatch(each -> each.startsWith("off ")),
+                () -> pointsOf(plain) + report(plain));
         Compilation reversed = measured(modelOfHowManyAFoldCounts("List.reverse(xs)"));
         assertEquals(axisOf(plain), axisOf(reversed), () -> report(reversed));
+        assertEquals(pointsOf(plain), pointsOf(reversed), () -> report(reversed));
+    }
+
+    /**
+     * A step that stops at an element whose length is nought, and that skips the elements after
+     * what it has already found, answers by the order it walks in: walking the reordered list
+     * says nothing more than walking the list does.
+     */
+    @Test
+    void aFoldThatStopsAtSomeElementsIsNotReadMoreForAReorderedList() {
+        String model = """
+                module example.popular
+
+                let found (xs: List<String>): Bool =
+                    List.fold((acc, i) -> acc || 10 / String.length(i) > 1, false, %s)
+
+                behavior popular : (xs: List<String>) -> Bool
+
+                let popular (xs) = found(xs)
+                """;
+        Compilation plain = measured(model.formatted("xs"));
+        Compilation reversed = measured(model.formatted("List.reverse(xs)"));
+        assertEquals(decisionsOf(plain), decisionsOf(reversed), () -> report(reversed));
+        assertTrue(decisionsOf(plain).stream().anyMatch(each -> each.startsWith("not_read")),
+                () -> "the order the step stops in is not read: " + report(plain));
     }
 
     /** A list that kept some of the elements holds other keys than the list. */
@@ -893,6 +935,30 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
             out.add(node);
         }
         node.forEach(child -> collect(child, out));
+    }
+
+    /** What each decision of the behavior comes to, with how it was read, in the order drawn. */
+    private static List<String> decisionsOf(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        decisions(JSON.readTree(json(compilation)), out);
+        return out;
+    }
+
+    private static void decisions(JsonNode node, List<String> out) {
+        if (node.isObject() && node.has("condition") && node.has("outcome")) {
+            out.add(node.path("kind").asString() + " " + node.path("condition").asString() + " "
+                    + node.path("outcome").asString());
+        }
+        node.forEach(child -> decisions(child, out));
+    }
+
+    /** Each point of each line: the side it is on, and where it stands against the quantity. */
+    private static List<String> pointsOf(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        bordersOf(compilation).forEach(border -> border.path("items").forEach(item ->
+                out.add(item.path("point").asString() + " " + item.path("relation").asString()
+                        + " " + item.path("against").asString())));
+        return out;
     }
 
     /** The quantity each border is on, as the report names it. */

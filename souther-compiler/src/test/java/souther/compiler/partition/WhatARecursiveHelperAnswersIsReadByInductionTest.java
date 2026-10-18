@@ -58,6 +58,19 @@ class WhatARecursiveHelperAnswersIsReadByInductionTest {
     }
 
     @Test
+    void aWalkOfAListReorderedIsSomeElementMeetingWhatItsStepAsksOfTheListItWasReorderedFrom() {
+        Proposition stated = stated("""
+                partial let go (xs: List<Int>): List<Int> =
+                    match List.get(0, xs) with
+                        | None -> []
+                        | Some x -> if x > 0 then [ x ] else go(List.drop(1, xs))
+                """, "Bool.not(List.isEmpty(go(List.reverse(i.xs))))");
+        Proposition.Some some = assertInstanceOf(Proposition.Some.class, stated);
+        assertEquals(new DecisionSubject.AnInput(TermPath.of("i").then("xs")), some.container());
+        assertTrue(some.holds());
+    }
+
+    @Test
     void aWalkWhoseAnswerTurnsOnTheLastElementIsNotRead() {
         Proposition stated = stated("""
                 partial let go (xs: List<Int>): List<Int> =

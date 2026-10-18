@@ -5414,10 +5414,19 @@ final class Pullback {
         if (itself != null) {
             return itself;
         }
+        TermPath from = reorderedFrom(walked, reads);
+        return from == null ? null : new DecisionSubject.AnInput(from);
+    }
+
+    /**
+     * The list {@code walked} holds every element of, each as often, though it is no place a row
+     * writes — or null where it is no such thing.
+     */
+    private TermPath reorderedFrom(Core walked, InputReads reads) {
         return reads.everyElementOf(walked, read.rules().newtypes())
                 instanceof PathResolution.At(TermPath elements)
                 && elements.steps().getLast() instanceof TermPath.Step.Element
-                ? new DecisionSubject.AnInput(elements.containersHoldingIt().getLast()) : null;
+                ? elements.containersHoldingIt().getLast() : null;
     }
 
     /** What a dependency answered, or a place inside it, that {@code e} is — or null where it is
@@ -5926,8 +5935,10 @@ final class Pullback {
             return recursion.search().map(search -> acrossATree(helper, body, search, args,
                     aspect, e, reads)).orElse(null);
         }
-        if (!(reads.pathOf(args.get(walk.walked()), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath list))) {
+        Core walked = args.get(walk.walked());
+        TermPath list = reads.pathOf(walked, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath at) ? at : reorderedFrom(walked, reads);
+        if (list == null) {
             return null;
         }
         InputReads step = reads.steppingThrough(body, args, walk.element().binding(),
