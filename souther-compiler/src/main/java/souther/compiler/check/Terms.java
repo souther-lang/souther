@@ -2547,6 +2547,11 @@ final class Terms {
      *  one that names every node again below each one it passes start the same walks. */
     static long[] COUNTING_NAMED;
 
+    /** Where a test counts the names a chain read off a construction writes out, and null
+     *  everywhere else. A chain read off anything else is the one the interner extends, and writes
+     *  out none. */
+    static long[] COUNTING_READ_OFF;
+
     /**
      * What a walk over an expression does where the term grammar runs out.
      *
@@ -2604,19 +2609,20 @@ final class Terms {
         BindingId root = rootBinding(e);
         if (root != null) {
             Term here = bound.get(root);
-            if (here != null && leaf == Leaf.AN_EVALUATION) {
-                return new Naming.Named(readOff(here, FieldPath.of(chainOf(e))));
+            if (here != null && leaf == Leaf.AN_EVALUATION && here.shape() == Term.Shape.BUILT) {
+                return new Naming.Named(readOff(here, stepsAlong(e).steps()));
             }
             return here != null ? new Naming.Named(interned.on(here, chainOf(e)))
                     : Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
         }
         return switch (e) {
             // A field read off a record built right there is what the record was given for it: the
-            // record is named as the construction it is, and the field read off that.
+            // record is named as the construction it is, and its steps read off that.
             case Core.FieldAccess _, Core.FieldProjection _
-                    when leaf == Leaf.AN_EVALUATION && chainHead(e) instanceof Core.Construct ->
-                    named(naming(chainHead(e), at, bound, depth, leaf),
-                            record -> readOff(record, FieldPath.of(chainOf(e))));
+                    when leaf == Leaf.AN_EVALUATION
+                            && stepsAlong(e) instanceof Steps(Core head, FieldPath steps)
+                            && Core.withoutStanding(head) instanceof Core.Construct built ->
+                    named(naming(built, at, bound, depth, leaf), record -> readOff(record, steps));
             case Core.Read _, Core.FieldAccess _, Core.FieldProjection _ ->
                     Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
             case Core.Int i -> new Naming.Named(interned.written(i.value()));
@@ -2904,12 +2910,28 @@ final class Terms {
         };
     }
 
-    /** What a {@code x.a.b} chain reads its fields off, or {@code e} itself where it is no chain. */
-    private static Core chainHead(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.FieldAccess fa -> chainHead(fa.target());
-            case Core.FieldProjection p -> chainHead(p.base());
-            case Core other -> other;
+    /** What a chain reads its names off, and the names along it that are steps. */
+    private record Steps(Core head, FieldPath steps) {}
+
+    /**
+     * What a {@code x.a.b} chain reads its names off, or {@code e} itself where it is no chain, with
+     * the names that are steps of a value — the rule {@link #subjectKey} reads a chain by, so a
+     * chain named off what its head is and the same chain filed under its head's subject are one
+     * term: a newtype's own {@code value} is the value under the name and no step ({@link
+     * Location#isStep}).
+     */
+    private Steps stepsAlong(Core standing) {
+        return switch (Core.withoutStanding(standing)) {
+            case Core.FieldAccess fa -> {
+                Steps under = stepsAlong(fa.target());
+                yield Location.isStep(fa.target().type(), fa.field(), newtypes())
+                        ? new Steps(under.head(), under.steps().then(fa.field())) : under;
+            }
+            case Core.FieldProjection p -> {
+                Steps under = stepsAlong(p.base());
+                yield new Steps(under.head(), under.steps().then(stepsOf(p)));
+            }
+            case Core other -> new Steps(other, FieldPath.NONE);
         };
     }
 
@@ -2984,7 +3006,7 @@ final class Terms {
             }
             case Core.FieldAccess fa ->
                     Location.isStep(fa.target().type(), fa.field(), newtypes())
-                            ? readOff(subjectKey(fa.target(), at), FieldPath.of(List.of(fa.field())))
+                            ? readOff(subjectKey(fa.target(), at), FieldPath.NONE.then(fa.field()))
                             : subjectKey(fa.target(), at);
             // The rule above taken a name at a time, along the names rather than down the stack.
             // The steps are read off together: a term read on by one name and then another is the
@@ -3005,7 +3027,16 @@ final class Terms {
      * it.
      */
     private Term readOff(Term base, FieldPath fields) {
+        // Most chains are read off a place or a value nothing built here, and those are the chain
+        // the interner makes, which a projection's steps are already worked out for.
+        if (base.shape() != Term.Shape.BUILT || fields.isEmpty()) {
+            return interned.on(base, fields);
+        }
         List<String> names = fields.names();
+        long[] counting = COUNTING_READ_OFF;
+        if (counting != null) {
+            counting[0] += names.size();
+        }
         Term reached = base;
         int read = 0;
         while (read < names.size()) {
@@ -3016,7 +3047,8 @@ final class Terms {
             reached = given;
             read++;
         }
-        return interned.on(reached, FieldPath.of(names.subList(read, names.size())));
+        return read == 0 ? interned.on(base, fields)
+                : interned.on(reached, FieldPath.of(names.subList(read, names.size())));
     }
 
     /** The names of {@code p} that are steps of a position, the first one first: a newtype's own

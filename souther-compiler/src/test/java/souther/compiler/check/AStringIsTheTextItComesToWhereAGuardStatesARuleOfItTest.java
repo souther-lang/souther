@@ -9,7 +9,9 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A guard's text is the text it comes to, however it is spelled.
@@ -36,6 +38,9 @@ class AStringIsTheTextItComesToWhereAGuardStatesARuleOfItTest {
                 invariant jp = String.startsWith("JP", value)
             data Prefix = { p: String }
             data Nested = { inner: Prefix }
+            data Maybe = { p: String? }
+            data Tag = String
+            data Tagged = { tag: Tag }
             """;
 
     /** {@code f} building a {@code Code} out of {@code s} where {@code TEXT} is what it starts with. */
@@ -105,7 +110,7 @@ class AStringIsTheTextItComesToWhereAGuardStatesARuleOfItTest {
 
     /**
      * Inside a closure, where a name is the place it is bound at and not a value of its own: the
-     * text the guard is written with is the same text either way, and so is the answer.
+     * text the guard is written with is the same text either way, and either way it discharges.
      */
     @Test
     void insideAClosure() {
@@ -114,22 +119,64 @@ class AStringIsTheTextItComesToWhereAGuardStatesARuleOfItTest {
                     constructs Code
                 let f (ss) = List.map(s -> if String.startsWith(TEXT, s) then Code(s) else Code("JP"), ss)
                 """;
-        assertEquals(answerOf(applied.replace("TEXT", "\"JP\"")),
-                answerOf(applied.replace("TEXT", "\"J\" ++ \"P\"")));
+        assertEquals(List.of(), answerOf(applied.replace("TEXT", "\"JP\"")));
+        assertEquals(List.of(), answerOf(applied.replace("TEXT", "\"J\" ++ \"P\"")));
+        assertEquals(List.of("E2011"), answerOf(applied.replace("TEXT", "\"U\" ++ \"S\"")));
     }
 
-    /** In an arm, whose name is entered as what the value it opened holds. */
+    /**
+     * In an arm, whose name is entered as what the value it opened holds. The arm for no value is
+     * one the rules make dead, which is said beside it and is not what is asked here.
+     */
     @Test
     void insideAnArm() {
         String opened = TYPES + """
                 behavior f : (s: String) -> Code
-                    constructs Code
-                let f (s) = match Some(TEXT) with
-                    | Some p -> if String.startsWith(p, s) then Code(s) else Code("JP")
-                    | None -> Code("JP")
+                    constructs Code, Maybe
+                let f (s) = {
+                    let m = Maybe { p = TEXT }
+                    match m.p with
+                        | Some p -> if String.startsWith(p, s) then Code(s) else Code("JP")
+                        | None -> Code("JP")
+                }
                 """;
-        assertEquals(answerOf(opened.replace("TEXT", "\"JP\"")),
-                answerOf(opened.replace("TEXT", "\"J\" ++ \"P\"")));
+        assertFalse(answerOf(opened.replace("TEXT", "\"JP\"")).contains("E2011"));
+        assertFalse(answerOf(opened.replace("TEXT", "\"J\" ++ \"P\"")).contains("E2011"));
+        assertTrue(answerOf(opened.replace("TEXT", "\"U\" ++ \"S\"")).contains("E2011"));
+    }
+
+    /**
+     * A newtype's {@code value} is the newtype, read through a name, off a record or off the
+     * construction itself: one value, so one answer. The text under a newtype is not the newtype,
+     * so none of the three is the text a rule about strings states, and the construction stays
+     * owed.
+     */
+    @Test
+    void theValueOfANewtypeIsTheNewtypeHoweverItIsReached() {
+        String direct = TYPES + """
+                behavior f : (s: String) -> Code
+                    constructs Code, Tag
+                let f (s) = if String.startsWith(Tag("J" ++ "P").value, s) then Code(s) else Code("JP")
+                """;
+        String named = TYPES + """
+                behavior f : (s: String) -> Code
+                    constructs Code, Tag
+                let f (s) = {
+                    let t = Tag("J" ++ "P")
+                    if String.startsWith(t.value, s) then Code(s) else Code("JP")
+                }
+                """;
+        String held = TYPES + """
+                behavior f : (s: String) -> Code
+                    constructs Code, Tag, Tagged
+                let f (s) = {
+                    let h = Tagged { tag = Tag("J" ++ "P") }
+                    if String.startsWith(h.tag.value, s) then Code(s) else Code("JP")
+                }
+                """;
+        assertEquals(List.of("E2011"), answerOf(direct));
+        assertEquals(answerOf(direct), answerOf(named));
+        assertEquals(answerOf(direct), answerOf(held));
     }
 
     @Test
