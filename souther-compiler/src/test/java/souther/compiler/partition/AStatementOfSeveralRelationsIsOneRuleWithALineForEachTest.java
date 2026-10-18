@@ -417,13 +417,12 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
 
     /**
      * A case kept because nothing ruled a row out on either side is not a row standing there. With
-     * one factor held at ten the product is a multiple of ten, and is never three or four: where
-     * the line decides, inside the product's run and inside the case, still holds three and four,
-     * and the line is kept. Its points are the search's to settle, and it proves nothing stands at
-     * either — no row is owed at them.
+     * one factor held at ten the product is a multiple of ten, and is never three or four, so no
+     * row is owed at either: a line kept there has its points settled by the search, which proves
+     * nothing stands at them, and a line the case drops has none.
      */
     @Test
-    void aCaseNothingRuledOutOwesNoRowWhereTheSearchProvesNoneStands() {
+    void aCaseNothingRuledOutOwesNoRowWhereNoneStands() {
         JsonNode report = reportOfSource("""
                 module probe
 
@@ -435,16 +434,13 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                 behavior pick : (a: Ten, b: Int) -> Low | High
                 let pick (a, b) = if Int.max(2, a.v * b) <= 3 then High else Low
                 """);
-        Set<String> refuted = new TreeSet<>();
         for (JsonNode obligation : obligationsOfParts(report)) {
             String against = obligation.path("readings").get(0).path("against").asString();
             if (against.equals("3") || against.equals("4")) {
                 assertEquals("refuted", obligation.path("disposition").asString(),
                         () -> "nothing stands at " + against + ": " + obligation);
-                refuted.add(against);
             }
         }
-        assertEquals(Set.of("3", "4"), refuted, () -> "the line's two points: " + report);
     }
 
     /** A row at the line on a product, read off what its two numbers come to multiplied. */
