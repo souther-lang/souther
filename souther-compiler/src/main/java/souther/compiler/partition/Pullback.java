@@ -349,6 +349,11 @@ final class Pullback {
      */
     private final Map<BindingId, LinearForm<Quantity>> sizedSoFar = new HashMap<>();
     /**
+     * What a walk over a container the body wrote out has carried, by the name its step is handed
+     * it under, while the step is read for the next element ({@link #foldOfWrittenOut}).
+     */
+    private final Map<BindingId, LinearForm<Quantity>> carriedSoFar = new HashMap<>();
+    /**
      * How many more readings this reading of a condition makes in all
      * ({@link CompositionBudget#TOTAL_READINGS_OF_ONE_CONDITION}), across every case, value and
      * application it is split into and every rule tried on each.
@@ -4814,6 +4819,121 @@ final class Pullback {
     }
 
     /**
+     * What the container {@code node} adds up is the total of, as the sum of the forms its elements
+     * read as — or null where {@code node} is no such total, the container is not written out, or an
+     * element is there on some rows and not on others, which makes the total one form per way of
+     * keeping and not one form. The elements are those {@link #sizeOf} counts.
+     */
+    private LinearForm<Quantity> totalOfWrittenOut(Core node, InputReads at) {
+        if (!(AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied total
+                && total.operation() instanceof ValueName.Stdlib operation
+                && DefaultBoundOperationFacts.get().takenAs(operation)
+                        instanceof TakenAs.TheSumOfWhatItHolds
+                && total.args().size() == 1)) {
+            return null;
+        }
+        return unlessUnread(() -> sumOfWrittenOut(total.args().getFirst(), at));
+    }
+
+    /**
+     * {@code reading}, which reads numbers one element at a time, with what it met of the
+     * container's elements kept only where it concluded a form: a reading that stopped halfway has
+     * named elements no reading taken names, and a later number would be refused beside them.
+     */
+    private LinearForm<Quantity> unlessUnread(Supplier<LinearForm<Quantity>> reading) {
+        ElementsMet metBefore = elementsMet.copied();
+        LinearForm<Quantity> form = reading.get();
+        if (form == null) {
+            elementsMet = metBefore;
+        }
+        return form;
+    }
+
+    /** What {@code added}, a container the body wrote out, adds up to ({@link #totalOfWrittenOut}). */
+    private LinearForm<Quantity> sumOfWrittenOut(Core added, InputReads at) {
+        Denotation container = at.standing(added, read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each)) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
+        if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())
+                || splitInto(at, occurrences.size()) != null) {
+            return null;
+        }
+        List<LinearForm<Quantity>> forms = new ArrayList<>();
+        for (ReadMeaning.Occurrence occurrence : occurrences) {
+            Denotation element = occurrence.value();
+            if (!(AffineForms.outcome(element.value(), element.at(), quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                            LinearForm<Quantity> form))) {
+                return null;
+            }
+            forms.add(form);
+        }
+        return LinearForm.sum(forms) instanceof ExactAnswer.Held<LinearForm<Quantity>>(var sum)
+                ? sum : null;
+    }
+
+    /**
+     * What a walk from a seed ends with, where {@code node} is one over a container the body wrote
+     * out and every element is there on every row — or null where it is anything else.
+     * Read from {@link #seedPlusWhatEachElementAdds}, which has already stood the node, and has
+     * asked the walk over a position first.
+     *
+     * <p>The walk hands every element to its step once, in order, so what it ends with is the step
+     * read once per element with what it carried standing for what the elements before came to.
+     * Whatever the step does with it, it is read as it is written: a step that does not compose
+     * into a form of the input is no form.
+     *
+     * @param call {@code node} as it stands, which the walk is read from
+     */
+    private LinearForm<Quantity> foldOfWrittenOut(Denotation call) {
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        // Unrolled in the order the container is written, which is the order of the walk only where
+        // the operation hands the step its elements in the order the container holds them.
+        if (walk == null || !walk.inTheContainersOrder()) {
+            return null;
+        }
+        Denotation container = call.at().standing(walk.container(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each)) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
+        if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())
+                || splitInto(call.at(), occurrences.size()) != null
+                || !(AffineForms.outcome(walk.seed(), call.at(), quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> seed))) {
+            return null;
+        }
+        BindingId accumulator = walk.accumulator().binding();
+        LinearForm<Quantity> carried = seed;
+        try {
+            for (ReadMeaning.Occurrence occurrence : occurrences) {
+                InputReads handing = call.at().handingTheElement(walk.step(), walk.container(),
+                        occurrence.value(), read.rules().newtypes());
+                if (handing == null) {
+                    return null;
+                }
+                carriedSoFar.put(accumulator, carried);
+                if (!(AffineForms.outcome(walk.step().body(), handing, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> next))) {
+                    return null;
+                }
+                carried = next;
+            }
+        } finally {
+            carriedSoFar.remove(accumulator);
+        }
+        return carried;
+    }
+
+    /**
      * The seed and what the step adds over every element, where {@code node} is a walk from a seed
      * whose step only adds to the answer so far ({@link InputNumber#ofAWalkAdding}) — or null where
      * it is not.
@@ -4827,7 +4947,7 @@ final class Pullback {
         InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(walk.value(), read.domain(),
                 walk.at(), read.rules(), blocksAt(walk));
         if (added == null) {
-            return null;
+            return unlessUnread(() -> foldOfWrittenOut(walk));
         }
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         added.added().coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
@@ -4990,6 +5110,10 @@ final class Pullback {
             public LinearForm<Quantity> leafOf(
                     Core node, InputReads at,
                     AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
+                if (Core.withoutStanding(node) instanceof Core.Read name
+                        && carriedSoFar.get(name.binding()) instanceof LinearForm<Quantity> carried) {
+                    return carried;
+                }
                 LinearForm<Quantity> filedUnder = valueOfAnEntry(node, at);
                 if (filedUnder != null) {
                     return filedUnder;
@@ -5016,6 +5140,11 @@ final class Pullback {
                         && measured.args().size() == 1) {
                     return sizeOf(measured.args().getFirst(), at)
                             instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
+                }
+                // What a container the body wrote out adds up to, element by element.
+                LinearForm<Quantity> total = totalOfWrittenOut(node, at);
+                if (total != null) {
+                    return total;
                 }
                 // What a division by a written number leaves of a form of the input's numbers,
                 // which is the same number however the comparison it is met in is written: in it,
