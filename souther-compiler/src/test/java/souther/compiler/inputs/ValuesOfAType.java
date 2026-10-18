@@ -182,18 +182,26 @@ final class ValuesOfAType {
         Set<Object> out = new LinkedHashSet<>();
         for (int i = 0; i < components.length; i++) {
             for (Object value : offered.get(i)) {
-                firstMadeWith(canonical, offered, i, value).ifPresent(out::add);
+                nearestMadeWith(canonical, offered, i, value).ifPresent(out::add);
             }
         }
-        List<Object> values = List.copyOf(out);
+        // A component the nearest values leave varied alone in no two of them is asked again over
+        // every combination of the others, and refused only if that finds none either: that the
+        // nearest ones held no such pair says where the asking stopped, not that there is none.
         for (int i = 0; i < components.length; i++) {
-            if (!variedAlone(values, components, i)) {
-                throw new AssertionError("no two values of " + record.getName() + " made here"
-                        + " differ in " + components[i].getName() + " alone, so nothing asked"
-                        + " over them says whether an order reads it");
+            if (variedAlone(List.copyOf(out), components, i)) {
+                continue;
+            }
+            for (Object value : offered.get(i)) {
+                anyMadeWith(canonical, offered, i, value).ifPresent(out::add);
+            }
+            if (!variedAlone(List.copyOf(out), components, i)) {
+                throw new AssertionError("no two values of " + record.getName() + " differ in "
+                        + components[i].getName() + " alone, whatever the other components are,"
+                        + " so nothing asked over them says whether an order reads it");
             }
         }
-        return values;
+        return List.copyOf(out);
     }
 
     private static Type resolved(Type type, Map<TypeVariable<?>, Type> bound) {
@@ -218,21 +226,22 @@ final class ValuesOfAType {
     }
 
     /**
-     * {@code value} at component {@code at}, beside the first values of the others the constructor
-     * accepts: the first value of each, and then each other component moved off its first value
-     * alone.
+     * {@code value} at component {@code at}, beside the nearest values of the others the
+     * constructor accepts: the first value of each, and then each other component moved off its
+     * first value alone — or nothing where none of those is accepted, which is where this stopped
+     * asking and not that no combination is.
      *
-     * <p>What is being asked is whether the constructor takes this value, and what it ties a value
-     * to is one other component — an absent owner beside the origin that means one. A value it
-     * refuses whatever stands beside it, a null where a component is never absent, is refused at
-     * every combination, and counting through all of them as an odometer does asked one record of
-     * four components the same question the better part of a million times. A value a constructor
-     * takes only beside two others moved at once is not made here, and a component that leaves
-     * with no other value is one no two values differ in alone, which {@link #ofARecord} refuses
-     * rather than passes over.
+     * <p>Nearest first because what a constructor ties a value to is usually one other component —
+     * an absent owner beside the origin that means one — and a value it refuses whatever stands
+     * beside it, a null where a component is never absent, is refused at every combination:
+     * counting through all of them for each such value asked one record of four components the
+     * same question the better part of a million times. Where the nearest values leave a component
+     * varied alone in no two of them, {@link #ofARecord} asks that component again over every
+     * combination ({@link #anyMadeWith}).
      */
-    private static Optional<Object> firstMadeWith(Constructor<?> canonical,
-                                                  List<List<Object>> offered, int at, Object value) {
+    private static Optional<Object> nearestMadeWith(Constructor<?> canonical,
+                                                    List<List<Object>> offered, int at,
+                                                    Object value) {
         Object[] first = new Object[offered.size()];
         for (int i = 0; i < first.length; i++) {
             first[i] = i == at ? value : offered.get(i).get(0);
@@ -246,6 +255,37 @@ final class ValuesOfAType {
             }
         }
         return made;
+    }
+
+    /**
+     * {@code value} at component {@code at}, beside the first values of the others the constructor
+     * accepts among every combination of them, counted through as an odometer does — or nothing
+     * where it accepts none.
+     */
+    private static Optional<Object> anyMadeWith(Constructor<?> canonical,
+                                                List<List<Object>> offered, int at, Object value) {
+        int[] index = new int[offered.size()];
+        while (true) {
+            Object[] arguments = new Object[offered.size()];
+            for (int i = 0; i < arguments.length; i++) {
+                arguments[i] = i == at ? value : offered.get(i).get(index[i]);
+            }
+            Optional<Object> made = made(canonical, arguments);
+            if (made.isPresent()) {
+                return made;
+            }
+            int turning = offered.size() - 1;
+            while (turning >= 0) {
+                if (turning != at && ++index[turning] < offered.get(turning).size()) {
+                    break;
+                }
+                index[turning] = 0;
+                turning--;
+            }
+            if (turning < 0) {
+                return Optional.empty();
+            }
+        }
     }
 
     /** What the constructor makes of {@code arguments}, or nothing where it refuses them. */

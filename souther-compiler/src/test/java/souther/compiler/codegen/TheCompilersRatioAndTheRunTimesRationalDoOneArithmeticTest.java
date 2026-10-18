@@ -59,27 +59,39 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
     }
 
     /**
-     * Values whose every part is one a layer could get wrong: a numerator of each sign, a
-     * denominator other than one, and each exponent at both ends of its range, near them and in
+     * Values whose every part is one a layer could get wrong: a numerator of each sign over a
+     * denominator other than one, with each exponent at both ends of its range, near them and in
      * between. What a pair of them comes to is the one implementation's, so what is asked is that
-     * each type hands it the parts and reads the answer back, and says a failure in its own terms
-     * — which a part that is one, or a second numerator of the same sign, asks nothing more of.
+     * each type hands it the parts and reads the answer back, and says a failure in its own terms.
+     *
+     * <p>And a part that is one, which is where an answer is put in its canonical form differently
+     * — a whole number, the identity of a product — beside nought exponents and the two ends at
+     * once: a numerator and a denominator of one, each of them alone, at each of those.
      */
     private static List<Pair> values() {
         List<Pair> out = new ArrayList<>();
         for (long n : new long[] {-3, 7}) {
-            for (long d : new long[] {3}) {
-                for (long twos : TWOS) {
-                    for (long fives : FIVES) {
-                        BigInteger numerator = BigInteger.valueOf(n);
-                        BigInteger denominator = BigInteger.valueOf(d);
-                        out.add(new Pair(new ExactRatio(numerator, denominator, twos, fives),
-                                new Rational(numerator, denominator, twos, fives)));
-                    }
+            for (long twos : TWOS) {
+                for (long fives : FIVES) {
+                    out.add(pair(n, 3, twos, fives));
                 }
             }
         }
+        long[][] ones = {{1, 1}, {1, 3}, {-3, 1}, {7, 1}};
+        long[][] ends = {{0, 0}, {Long.MAX_VALUE, Long.MIN_VALUE}, {Long.MIN_VALUE, Long.MAX_VALUE}};
+        for (long[] one : ones) {
+            for (long[] end : ends) {
+                out.add(pair(one[0], one[1], end[0], end[1]));
+            }
+        }
         return out;
+    }
+
+    private static Pair pair(long n, long d, long twos, long fives) {
+        BigInteger numerator = BigInteger.valueOf(n);
+        BigInteger denominator = BigInteger.valueOf(d);
+        return new Pair(new ExactRatio(numerator, denominator, twos, fives),
+                new Rational(numerator, denominator, twos, fives));
     }
 
     private static Came ofRatio(Supplier<ExactAnswer<ExactRatio>> operation) {
