@@ -184,7 +184,9 @@ final class MetOnARow {
      *
      * <p>An element is told every reason met before it, in the order they were first met. So each
      * reason is kept once, with the first element it was met at, and the elements between hold
-     * nothing of their own.
+     * nothing of their own. The elements are read in order, so the reasons stand in the order of
+     * the elements they were first met at, and what an element is told is read up to the first
+     * reason met at it or after: as much as it is told, whatever was met later.
      *
      * @param stopsAt the first element it stops at, or null where it stops at none
      * @param firstAt each reason whether it stops could not be read for, in the order they were
@@ -224,11 +226,12 @@ final class MetOnARow {
                 return AStatementAtARow.Answer.FAILS;
             }
             Set<ReadingGap> why = new LinkedHashSet<>();
-            firstAt.forEach((gap, at) -> {
-                if (at < element) {
-                    why.add(gap);
+            for (Map.Entry<ReadingGap, Integer> each : firstAt.entrySet()) {
+                if (each.getValue() >= element) {
+                    break;
                 }
-            });
+                why.add(each.getKey());
+            }
             return why.isEmpty() ? AStatementAtARow.Answer.HOLDS
                     : new AStatementAtARow.Answer.CouldNotTell(why);
         }

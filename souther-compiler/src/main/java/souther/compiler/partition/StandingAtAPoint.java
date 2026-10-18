@@ -941,23 +941,27 @@ public final class StandingAtAPoint {
      * one takes a value under any of its elements: the walk finding a row's readings chooses
      * nothing, and an element it reads chooses only its own container.
      *
-     * <p>Every value at one path was reached through the same containers, in the same order: a
-     * step into a container is taken by everything standing before it or the walk stops
-     * ({@link BehaviorInputs#occurrencesAt}). So one choice of elements is one key.
+     * <p>And by how deep each value was reached. A value that was not read whole stands at every
+     * path below it, reached through the containers it was taken from and none further, and is
+     * under every element of the containers it never entered
+     * ({@link BehaviorInputs#occurrencesAt}).
+     * So the values at one path were reached through the first so many of the same containers,
+     * and a choice is looked up at each depth there is. Which of those it takes is the first in the
+     * order the row wrote them, whatever its depth, as a walk looking through them would.
      */
     static final class Written {
 
         private final RowWalk walk;
         private final WalkResult<List<BehaviorInputs.Occurrence>> found;
 
-        /** The containers every value here was reached through, outermost first; worked out when
-         *  first asked. */
+        /** The containers the deepest value here was reached through, outermost first, and how
+         *  many of them each depth there is enters; worked out when first asked. */
         private List<TermPath> containers;
+        private List<Integer> depths;
 
-        /** The values reached under each choice of the containers a walk named, in the order the
-         *  row wrote them, by which of the containers it named. */
-        private final Map<List<Boolean>, Map<List<Integer>, List<BehaviorInputs.Occurrence>>>
-                byElements = new HashMap<>();
+        /** Where each value stands in the order the row wrote them, by how deep it was reached and
+         *  the elements it was taken from in the containers a walk named, by those containers. */
+        private final Map<List<Boolean>, Map<Reached, List<Integer>>> byElements = new HashMap<>();
 
         Written(RowWalk walk, WalkResult<List<BehaviorInputs.Occurrence>> found) {
             this.walk = walk;
@@ -981,23 +985,54 @@ public final class StandingAtAPoint {
 
         /** The first value reached through the elements {@code chosen} names, or null. */
         ObservedValue under(Map<TermPath, Integer> chosen) {
-            Choice choice = choice(chosen, null);
-            walk.lookedAt++;
-            List<BehaviorInputs.Occurrence> found = indexed(choice.named()).get(choice.elements());
-            return found == null ? null : found.getFirst().value();
+            int first = Integer.MAX_VALUE;
+            for (List<Integer> each : atEachDepth(choice(chosen, null))) {
+                walk.lookedAt++;
+                first = Math.min(first, each.getFirst());
+            }
+            return first == Integer.MAX_VALUE ? null : values().get(first).value();
         }
 
         /**
          * Every value reached under what {@code chosen} names of every container but
          * {@code container}, in the order the row wrote them.
+         *
+         * <p>The values at each depth are in that order already, so they are put together by
+         * taking the first of them at whichever depth stands first, as many times as there are
+         * values, each time over the depths.
          */
         List<BehaviorInputs.Occurrence> besideOf(TermPath container,
                                                  Map<TermPath, Integer> chosen) {
-            Choice choice = choice(chosen, container);
-            List<BehaviorInputs.Occurrence> found = indexed(choice.named())
-                    .getOrDefault(choice.elements(), List.of());
-            walk.lookedAt += found.size();
-            return found;
+            List<List<Integer>> each = atEachDepth(choice(chosen, container));
+            int[] next = new int[each.size()];
+            List<BehaviorInputs.Occurrence> out = new ArrayList<>();
+            while (true) {
+                int depth = -1;
+                for (int at = 0; at < each.size(); at++) {
+                    if (next[at] < each.get(at).size() && (depth < 0
+                            || each.get(at).get(next[at]) < each.get(depth).get(next[depth]))) {
+                        depth = at;
+                    }
+                }
+                if (depth < 0) {
+                    return out;
+                }
+                walk.lookedAt++;
+                out.add(values().get(each.get(depth).get(next[depth]++)));
+            }
+        }
+
+        /** Where the values {@code choice} is under stand, at each depth some value is under it. */
+        private List<List<Integer>> atEachDepth(Choice choice) {
+            Map<Reached, List<Integer>> index = indexed(choice.named());
+            List<List<Integer>> out = new ArrayList<>(depths.size());
+            for (int depth : depths) {
+                List<Integer> found = index.get(new Reached(depth, choice.within(depth)));
+                if (found != null) {
+                    out.add(found);
+                }
+            }
+            return out;
         }
 
         /** The elements of {@code container} reached under what {@code chosen} names of every
@@ -1013,16 +1048,24 @@ public final class StandingAtAPoint {
             return elements;
         }
 
-        /** Every value by the elements it was reached through in the containers {@code named}
-         *  marks, made the first time a walk names those containers. */
-        private Map<List<Integer>, List<BehaviorInputs.Occurrence>> indexed(List<Boolean> named) {
-            Map<List<Integer>, List<BehaviorInputs.Occurrence>> known = byElements.get(named);
+        /** Where every value stands, by how deep it was reached and the elements it was taken
+         *  from in the containers {@code named} marks; made the first time a walk names those. */
+        private Map<Reached, List<Integer>> indexed(List<Boolean> named) {
+            Map<Reached, List<Integer>> known = byElements.get(named);
             if (known == null) {
                 known = new HashMap<>();
-                for (BehaviorInputs.Occurrence each : values()) {
+                List<BehaviorInputs.Occurrence> values = values();
+                for (int at = 0; at < values.size(); at++) {
                     walk.lookedAt++;
-                    known.computeIfAbsent(elementsOf(each, named), _ -> new ArrayList<>())
-                            .add(each);
+                    List<ElementsTaken.Taken> taken = values.get(at).at().outermostFirst();
+                    List<Integer> elements = new ArrayList<>();
+                    for (int container = 0; container < taken.size(); container++) {
+                        if (named.get(container)) {
+                            elements.add(taken.get(container).element());
+                        }
+                    }
+                    known.computeIfAbsent(new Reached(taken.size(), elements),
+                            _ -> new ArrayList<>()).add(at);
                 }
                 byElements.put(named, known);
             }
@@ -1053,41 +1096,58 @@ public final class StandingAtAPoint {
          * @param named    whether it names an element of each, in the containers' order
          * @param elements the elements it names, in the same order
          */
-        private record Choice(List<Boolean> named, List<Integer> elements) {}
+        private record Choice(List<Boolean> named, List<Integer> elements) {
 
-        private List<TermPath> containers() {
-            if (containers == null) {
-                List<TermPath> first = null;
-                for (BehaviorInputs.Occurrence each : values()) {
-                    walk.lookedAt++;
-                    List<TermPath> these = new ArrayList<>();
-                    for (ElementsTaken.Taken taken : each.at().outermostFirst()) {
-                        these.add(taken.container());
-                    }
-                    if (first == null) {
-                        first = these;
-                    } else if (!first.equals(these)) {
-                        throw new IllegalStateException("the values at one path were reached"
-                                + " through " + first + " and through " + these);
+            /** The elements it names in the first {@code depth} of the containers. */
+            List<Integer> within(int depth) {
+                int named = 0;
+                for (int container = 0; container < depth; container++) {
+                    if (named().get(container)) {
+                        named++;
                     }
                 }
-                containers = first == null ? List.of() : List.copyOf(first);
+                return elements.subList(0, named);
             }
-            return containers;
         }
 
-        /** The elements {@code each} was reached through in the containers {@code named} marks,
-         *  in the containers' order. */
-        private static List<Integer> elementsOf(BehaviorInputs.Occurrence each,
-                                                List<Boolean> named) {
-            List<ElementsTaken.Taken> taken = each.at().outermostFirst();
-            List<Integer> out = new ArrayList<>();
-            for (int at = 0; at < taken.size(); at++) {
-                if (named.get(at)) {
-                    out.add(taken.get(at).element());
+        /**
+         * A value as the index has it: how many of the containers it was reached through, and
+         * the elements it was taken from in those a walk named.
+         */
+        private record Reached(int depth, List<Integer> elements) {}
+
+        /**
+         * The containers the deepest value was reached through, each value's being the first so
+         * many of them — which the walk to a path holds to, and which is refused here rather than
+         * read as some other choice of elements.
+         */
+        private List<TermPath> containers() {
+            if (containers == null) {
+                List<TermPath> deepest = List.of();
+                Set<Integer> reached = new TreeSet<>();
+                List<List<TermPath>> each = new ArrayList<>();
+                for (BehaviorInputs.Occurrence one : values()) {
+                    walk.lookedAt++;
+                    List<TermPath> these = new ArrayList<>();
+                    for (ElementsTaken.Taken taken : one.at().outermostFirst()) {
+                        these.add(taken.container());
+                    }
+                    each.add(these);
+                    reached.add(these.size());
+                    if (these.size() > deepest.size()) {
+                        deepest = these;
+                    }
                 }
+                for (List<TermPath> these : each) {
+                    if (!these.equals(deepest.subList(0, these.size()))) {
+                        throw new IllegalStateException("a value at one path was reached through "
+                                + these + ", which is not where another was: " + deepest);
+                    }
+                }
+                containers = List.copyOf(deepest);
+                depths = List.copyOf(reached);
             }
-            return out;
+            return containers;
         }
     }
 

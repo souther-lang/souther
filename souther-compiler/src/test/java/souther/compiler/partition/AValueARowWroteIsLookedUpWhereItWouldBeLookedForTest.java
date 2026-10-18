@@ -6,6 +6,7 @@ import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -51,12 +52,36 @@ class AValueARowWroteIsLookedUpWhereItWouldBeLookedForTest {
     private static final TermPath TAGS = ORDERS.element().then("tags");
 
     @Test
-    void everyChoiceIsLookedUpAsItWouldBeLookedFor() {
+    void ordersOfDifferentLengthsAreLookedUpAsTheyWouldBeLookedFor() {
+        everyChoiceIsLookedUpAsItWouldBeLookedFor(order(3, 2), order(1, 0), order(0, 1),
+                order(4, 3));
+    }
+
+    /**
+     * A value not read stands at every path below it, under every element of the containers it
+     * never entered, beside values reached through all of them: an order, an order's lines and
+     * one line, each before and after what was read whole, so that which of them is first is the
+     * order the row wrote them in and not how deep each was reached.
+     */
+    @Test
+    void whatWasNotReadIsLookedUpWhereverItStoppedAsItWouldBeLookedFor() {
+        ObservedValue cut = new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure());
+        ObservedValue cutLines = new ObservedValue.Constructed(sym("Order"), Map.of(
+                "lines", cut, "tags", new ObservedValue.Sequence(List.of())));
+        ObservedValue cutLine = new ObservedValue.Constructed(sym("Order"), Map.of(
+                "lines", new ObservedValue.Sequence(List.of(line(0), cut, line(2))),
+                "tags", new ObservedValue.Sequence(List.of(cut))));
+        everyChoiceIsLookedUpAsItWouldBeLookedFor(cut, order(3, 1), cutLines, order(2, 2),
+                cutLine);
+        everyChoiceIsLookedUpAsItWouldBeLookedFor(order(3, 1), cutLine, order(2, 2), cutLines,
+                cut);
+    }
+
+    private static void everyChoiceIsLookedUpAsItWouldBeLookedFor(ObservedValue... orders) {
         StandingAtAPoint.RowWalk walk = new StandingAtAPoint.RowWalk(
                 new BehaviorInputs(List.of("orders"), List.of(new Type.ListOf(named("Order"))),
                         RuleReadings.ofSource(MODEL), POLICY),
-                new ObservedInputs(List.of(new ObservedValue.Sequence(List.of(
-                        order(3, 2), order(1, 0), order(0, 1), order(4, 3)))),
+                new ObservedInputs(List.of(new ObservedValue.Sequence(List.of(orders))),
                         new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered()));
         List<TermPath> paths = List.of(ORDERS, ORDERS.element(), LINES, LINES.element(),
                 LINES.element().then("sku"), TAGS, TAGS.element());
@@ -79,7 +104,7 @@ class AValueARowWroteIsLookedUpWhereItWouldBeLookedForTest {
     private static List<Map<TermPath, Integer>> choices() {
         List<Map<TermPath, Integer>> out = new ArrayList<>();
         out.add(Map.of());
-        for (Map.Entry<TermPath, Integer> container : Map.of(ORDERS, 4, LINES, 4, TAGS, 3)
+        for (Map.Entry<TermPath, Integer> container : Map.of(ORDERS, 5, LINES, 4, TAGS, 3)
                 .entrySet()) {
             List<Map<TermPath, Integer>> wider = new ArrayList<>(out);
             for (Map<TermPath, Integer> each : out) {
@@ -121,12 +146,16 @@ class AValueARowWroteIsLookedUpWhereItWouldBeLookedForTest {
         return out;
     }
 
+    private static ObservedValue line(int each) {
+        return new ObservedValue.Constructed(sym("Line"), Map.of(
+                "sku", new ObservedValue.Text("s" + each % 2),
+                "qty", new ObservedValue.Integer(each)));
+    }
+
     private static ObservedValue order(int lines, int tags) {
         List<ObservedValue> written = new ArrayList<>();
         for (int each = 0; each < lines; each++) {
-            written.add(new ObservedValue.Constructed(sym("Line"), Map.of(
-                    "sku", new ObservedValue.Text("s" + each % 2),
-                    "qty", new ObservedValue.Integer(each))));
+            written.add(line(each));
         }
         List<ObservedValue> tagged = new ArrayList<>();
         for (int each = 0; each < tags; each++) {

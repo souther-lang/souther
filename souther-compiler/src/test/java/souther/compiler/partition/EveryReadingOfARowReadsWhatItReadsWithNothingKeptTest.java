@@ -10,6 +10,8 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
@@ -54,7 +56,7 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
 
             data Line = { sku: String, qty: Int }
 
-            data Order = { lines: List<Line>, tags: List<String> }
+            data Order = { lines: List<Line>, tags: List<String>, rank: Int }
 
             behavior decide : (orders: List<Order>) -> Int
             """;
@@ -100,8 +102,9 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
     /**
      * Reads every reading of a row holding {@code orders} as the measurement reads them, all of
      * them over one walk of the row, and each again over a walk of its own that read no other
-     * reading: at every term of the quantity, whether a line is the last of its sku, and whether
-     * some tag of its order is there.
+     * reading: at every term of the quantity, a run computed of each order among them; whether
+     * a line is the last of its sku, whether some tag of its order is there, and whether an
+     * operation stopped before the line.
      */
     private static void everyReadingReadsAlike(ObservedValue... orders) {
         NumericTerm.Multiplicity often = NumericTerm.Multiplicity.of(LINES,
@@ -121,6 +124,15 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
                 Map.of(least.keyField(), Carrier.TEXT)));
         on.put(tagged, TermOrdersFixtures.orders(tagged, Carrier.TEXT, WHOLE));
         on.put(total, TermOrdersFixtures.itself(total, WHOLE));
+        ElementProjection rank = new ElementProjection(List.of("rank"));
+        NumericTerm.TakenOver computed = NumericTerm.TakenOver.of(
+                ValueName.Stdlib.operation("List", "sum"),
+                new RunSource.ComputedOccurrences(ORDERS.element(), new ElementValue.Affine(
+                        new LinearForm<>(ExactRatio.ONE, Map.of(rank, ExactRatio.of(2)))),
+                        Type.Prim.INT),
+                Type.Prim.INT, ScopedDeclarations.wrapsOf(symbols), symbols);
+        on.put(computed, TermOrdersFixtures.computed(computed, WHOLE, WHOLE,
+                Map.of(rank, WHOLE)));
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         on.keySet().forEach(term -> coefs.put(term, ExactRatio.ONE));
         LinearQuantity quantity = new BorderQuantity.OverAForm("decide",
@@ -135,6 +147,10 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
                 new Proposition.Present(new DecisionSubject.AnInput(TAGS.element()), true), true),
                 "decide", null);
         TermPath sku = LINES.element().then("sku");
+        MetOnARow stoppedAtALine = MetOnARow.of(new ElementsMetOn(
+                List.of(new ElementsMetOn.Level.StopsAt(LINES,
+                        new Proposition.Present(new DecisionSubject.AnInput(sku), true))),
+                new Proposition.Always(true)), "decide", null);
         List<BorderQuantity.Observation> together =
                 StandingAtAPoint.readings(where, row, quantity).tried();
         assertTrue(together.size() > 1, "a row with a reading per element");
@@ -149,6 +165,7 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
             }
             assertEquals(alone.lastToHold(LINES, sku), reading.lastToHold(LINES, sku));
             assertEquals(someTag.at(alone), someTag.at(reading));
+            assertEquals(stoppedAtALine.at(alone), stoppedAtALine.at(reading));
         }
     }
 
@@ -157,7 +174,8 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
         tags.forEach(tag -> written.add(new ObservedValue.Text(tag)));
         return new ObservedValue.Constructed(sym("Order"), Map.of(
                 "lines", new ObservedValue.Sequence(lines),
-                "tags", new ObservedValue.Sequence(written)));
+                "tags", new ObservedValue.Sequence(written),
+                "rank", new ObservedValue.Integer(lines.size())));
     }
 
     private static ObservedValue line(String sku, long qty) {
