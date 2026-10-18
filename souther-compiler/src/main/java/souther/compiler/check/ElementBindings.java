@@ -284,7 +284,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ClosureUses> entered = ClosureEntries.of(roots, held);
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
                 : new ElementBindings(found, held, provenance, projected, values, closures,
-                        entered, OrderOfElements.of(roots));
+                        entered, OrderOfElements.of(roots, held));
     }
 
     /**
@@ -664,7 +664,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      * compiler builds, and reading it as a closure nobody wrote would file the rule inside it
      * nowhere and say nothing about having done so.
      */
-    private static Core.Block blockOf(Core closure, Map<BindingId, Core> held) {
+    static Core.Block blockOf(Core closure, Map<BindingId, Core> held) {
         Core at = Core.withoutStanding(closure);
         Set<BindingId> met = new HashSet<>();
         while (at instanceof Core.Read read) {

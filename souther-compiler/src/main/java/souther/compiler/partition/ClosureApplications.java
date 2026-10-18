@@ -4,7 +4,8 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.WhatMayStopARun;
+import souther.compiler.check.QuotientByAValue;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
@@ -186,27 +187,30 @@ sealed interface ClosureApplications {
         List<Application> out = new ArrayList<>();
         boolean handed = false;
         boolean asked = false;
-        // Whether the block's body may stop a run: one question of the block, whichever
-        // application around it is asking, and asked only of one applied to every value.
-        Boolean mayStop = null;
+        // Whether what the block's body states may answer nothing on some rows: one question of
+        // the block, whichever application around it is asking, and asked only of one applied to
+        // every value.
+        Boolean mayAnswerNothing = null;
         for (Application around : outer) {
             switch (Pullback.applicationsOf(block, around.reads(), read)) {
                 case InputReads.Applications.NoneMade _ -> handed = true;
                 case InputReads.Applications.Each(var each, var how) -> {
                     handed = true;
                     // Applied to every value, an application is made past the ones before it only
-                    // where each of them answered; what a body that is no truth answers is no
-                    // statement read here, so which of those a run gets past is not said.
+                    // where each of them answered, as a reading reads where a statement answers;
+                    // what a body that is no truth answers is no statement read here, so which of
+                    // those a run gets past is not said.
                     boolean toEvery = how == HowAClosureIsApplied.TO_EVERY_ELEMENT;
-                    if (toEvery && mayStop == null) {
-                        mayStop = WhatMayStopARun.in(block.body());
+                    if (toEvery && mayAnswerNothing == null) {
+                        mayAnswerNothing = WhatARunMayEndFor.of(block.body())
+                                .mayEndFor(QuotientByAValue.WHERE_IT_ANSWERS_NOTHING);
                     }
-                    if (toEvery && mayStop && !Type.BOOL.equals(block.body().type())) {
+                    if (toEvery && mayAnswerNothing && !Type.BOOL.equals(block.body().type())) {
                         return new NotSaid(around.metOn().notSaidAnywhere(
                                 new ReadingGap.ReachNotRead(
                                         ReadingGap.ReachNotRead.Why.A_PART_NOT_READ)));
                     }
-                    List<Proposition> answers = toEvery && !mayStop ? null
+                    List<Proposition> answers = toEvery && !mayAnswerNothing ? null
                             : each.stream().map(one -> WhatConditionsState.of(read)
                                     .truth(block.body(), one.reads(), read).proposition()).toList();
                     List<List<Proposition>> keptBy = each.stream()

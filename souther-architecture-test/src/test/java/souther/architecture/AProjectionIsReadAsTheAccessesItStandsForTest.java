@@ -514,11 +514,13 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "readOnceForEveryValue", "(" + core + reads
                 + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
-        row(out, c + "check/OrderOfElements", "walk", "(" + core + "[Z[I)V",
+        row(out, c + "check/OrderOfElements", "walk", "(" + core + "Ljava/util/Map;[Z[I)V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "check/WhatMayStopARun", "in", "(" + core + ")Z", Reading.STRUCTURE,
-                "looks for a division or a call: a name read off a value is neither, so what a"
-                        + " projection may stop on is what its base may");
+        row(out, c + "check/WhatARunMayEndFor", "of", "(" + core + ")L" + c
+                        + "check/WhatARunMayEndFor$Endings;", Reading.STRUCTURE,
+                "asks each node what it ends a run for, an operator or a call: a name read off a"
+                        + " value ends none, so what a projection may end one for is what its base"
+                        + " may");
         row(out, c + "partition/Pullback", "measuredByCases", "(L" + c + "inputs/Denotation;"
                 + "Ljava/util/Map;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);

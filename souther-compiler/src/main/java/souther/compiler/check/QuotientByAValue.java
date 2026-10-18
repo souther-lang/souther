@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.AbortKind;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -40,6 +41,14 @@ import java.util.Objects;
  * is {@code (1 * d) / 2} and not a product no source could write.
  */
 public final class QuotientByAValue {
+
+    /**
+     * What a run ends for where a comparison read here answers nothing: a nought divisor. A
+     * statement read through no such comparison holds no part that answers only somewhere, so a
+     * tree that may end a run for nothing else may be read as answering on every row it is read
+     * on — the other ways a run ends being ones no reading of a statement says.
+     */
+    public static final AbortKind WHERE_IT_ANSWERS_NOTHING = AbortKind.DIVISION_BY_ZERO;
 
     private QuotientByAValue() {}
 

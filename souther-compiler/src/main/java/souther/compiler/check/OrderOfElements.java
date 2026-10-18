@@ -1,11 +1,15 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -25,7 +29,10 @@ import java.util.Set;
  * the library defines in terms of how many elements meet something, or what each is mapped to, or
  * what they add up to, reads no order; every other one handed a list may, and so may anything a
  * helper, a behavior or a function value is handed beyond a single number or string — what it does
- * with it is not in this tree. Whether a closure may answer nothing is {@link WhatMayStopARun}'s.
+ * with it is not in this tree. Every way a run may end counts, a sum with no place among them:
+ * a run that ends answers nothing and is no row of anything, whatever the reason it ended for.
+ * What a closure may end a run for is {@link WhatARunMayEndFor}'s, and a closure handed by a name
+ * is the block the name was given.
  *
  * <p>The rules a declaration writes on the input are not in these trees. An invariant reading the
  * order of a list, or one whose closure may answer nothing, is a form the reading of a declaration's
@@ -34,22 +41,26 @@ import java.util.Set;
  *
  * @param read     whether something in the body may read the order a list holds its elements in
  * @param stopping how many operations stop at the first element meeting what their closure states,
- *                 where what it states may answer nothing on some rows
+ *                 where the closure may end a run or is not known not to
  */
 public record OrderOfElements(boolean read, int stopping) {
 
     /** What is said of a body nothing was read of: that its order is read, whatever it is. */
     public static final OrderOfElements NOT_KNOWN = new OrderOfElements(true, 0);
 
-    /** The operations over a list whose answer is the same in whatever order it holds them. */
+    /**
+     * The operations over a list whose answer, and whether they answer at all, are the same in
+     * whatever order it holds them: each works out every element, or answers by whether some
+     * element meets something — which is order-free where what each is asked of answers on every
+     * row, and otherwise {@code stopping}'s. Not a sum or a product, which ends a run where a sum
+     * part way through has no place, and which part sums there are is the order's.
+     */
     private static final Set<ValueName> IN_ANY_ORDER = Set.of(
             ValueName.Stdlib.operation("List", "any"),
             ValueName.Stdlib.operation("List", "all"),
             ValueName.Stdlib.operation("List", "length"),
             ValueName.Stdlib.operation("List", "isEmpty"),
             ValueName.Stdlib.operation("List", "contains"),
-            ValueName.Stdlib.operation("List", "sum"),
-            ValueName.Stdlib.operation("List", "product"),
             ValueName.Stdlib.operation("List", "max"),
             ValueName.Stdlib.operation("List", "min"),
             ValueName.Stdlib.operation("List", "sort"),
@@ -58,11 +69,6 @@ public record OrderOfElements(boolean read, int stopping) {
             ValueName.Stdlib.operation("List", "append"),
             ValueName.Stdlib.operation("List", "allDistinctBy"),
             ValueName.Stdlib.operation("Set", "fromList"));
-
-    /** Of those, the ones that stop at the first element their closure answers one way on. */
-    private static final Set<ValueName> STOPPING = Set.of(
-            ValueName.Stdlib.operation("List", "any"),
-            ValueName.Stdlib.operation("List", "all"));
 
     public OrderOfElements {
         if (stopping < 0) {
@@ -84,17 +90,38 @@ public record OrderOfElements(boolean read, int stopping) {
         return !read && stopping <= 1;
     }
 
-    /** What {@code roots}, a body and the trees of the values it builds, read. */
-    public static OrderOfElements of(List<Core> roots) {
+    /**
+     * What {@code roots}, a body and the trees of the values it builds, read, with {@code held}
+     * what each name they bind was given: a closure handed by its name is the block the name was
+     * given ({@link ElementBindings#blockOf}).
+     */
+    static OrderOfElements of(List<Core> roots, Map<BindingId, Core> held) {
         boolean[] read = {false};
         int[] stopping = {0};
         for (Core root : roots) {
-            walk(root, read, stopping);
+            walk(root, held, read, stopping);
         }
         return new OrderOfElements(read[0], stopping[0]);
     }
 
-    private static void walk(Core e, boolean[] read, int[] stopping) {
+    /**
+     * Whether {@code applied} goes through what it is handed until its closure answers one way, and
+     * its closure may end a run: what the closure ends a run for ({@link WhatARunMayEndFor}) is
+     * something or not known, or the closure is no block a name was given.
+     */
+    private static boolean stopsAtTheFirstAndMayEndARun(AnOperationApplied applied,
+                                                        Map<BindingId, Core> held) {
+        Combinator rule = Combinators.of(applied.operation());
+        if (rule == null || (rule.applied() != HowAClosureIsApplied.UNTIL_ONE_HOLDS
+                && rule.applied() != HowAClosureIsApplied.UNTIL_ONE_FAILS)
+                || rule.closureArg() >= applied.args().size()) {
+            return false;
+        }
+        Core.Block step = ElementBindings.blockOf(applied.args().get(rule.closureArg()), held);
+        return step == null || !WhatARunMayEndFor.of(step.body()).endsNone();
+    }
+
+    private static void walk(Core e, Map<BindingId, Core> held, boolean[] read, int[] stopping) {
         if (read[0]) {
             return;
         }
@@ -110,11 +137,7 @@ public record OrderOfElements(boolean read, int stopping) {
                     return;
                 }
             }
-            // A closure handed by a name is a body this walk does not go into here, and may stop.
-            if (STOPPING.contains(applied.operation()) && applied.args().stream()
-                    .anyMatch(argument -> argument.type() instanceof Type.FnOf
-                            && (!(Core.withoutStanding(argument) instanceof Core.Block step)
-                                    || WhatMayStopARun.in(step.body())))) {
+            if (stopsAtTheFirstAndMayEndARun(applied, held)) {
                 stopping[0]++;
             }
         }
@@ -131,7 +154,7 @@ public record OrderOfElements(boolean read, int stopping) {
             read[0] = true;
             return;
         }
-        Core.forEachChild(node, child -> walk(child, read, stopping));
+        Core.forEachChild(node, child -> walk(child, held, read, stopping));
     }
 
     /** Whether a value of {@code type} holds a list anywhere a reader can tell from the type. */

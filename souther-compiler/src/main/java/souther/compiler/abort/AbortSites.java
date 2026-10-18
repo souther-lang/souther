@@ -269,6 +269,20 @@ public final class AbortSites {
     }
 
     /**
+     * What {@code binary} itself can end a run without a value for, wherever it stands: for a reader
+     * of a tree this was not built over, which asks the one reading of an operator rather than
+     * making a second.
+     */
+    public static AbortSet ofAnOperator(Core.Binary binary) {
+        return arithmetic(binary);
+    }
+
+    /** The same, of a unary minus. */
+    public static AbortSet ofANegation(Core.Neg neg) {
+        return negation(neg);
+    }
+
+    /**
      * What {@code binary} — one of {@code + - * /} — can end a run without a value for, read off
      * {@link Core.Binary#type} rather than off an operand's: an answer of {@code Rational} is one
      * {@code BodyGen} computes through {@code RationalMath}, whether the operator read its operands
