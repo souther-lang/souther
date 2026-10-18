@@ -1980,6 +1980,17 @@ public final class InputReads {
         return names.projectionAt(binding);
     }
 
+    /**
+     * Where in the element handed to {@code element} the value {@code answer} stands, through the
+     * names the body bound on the way, or null where it is no place of that element
+     * ({@link ElementProjection#read}).
+     */
+    public ElementProjection projectionOf(Core answer, BindingId element,
+                                          DeclarationNewtypes newtypes) {
+        return element == null ? null
+                : ElementProjection.read(answer, element, heldByTheBody(), newtypes);
+    }
+
     /** What the walk handing {@code binding} its element answered, as the closure, where a licence
      *  says it answered one value per element ({@link ElementAnswer}). */
     ElementAnswer answerAt(BindingId binding) {

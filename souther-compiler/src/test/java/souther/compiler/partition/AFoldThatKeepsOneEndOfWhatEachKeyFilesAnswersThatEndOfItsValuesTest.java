@@ -244,6 +244,51 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 () -> report(compilation));
     }
 
+    /**
+     * Touches a map took out of visits, one for each, keep the same ends under the same keys as the
+     * visits do with the touch taken inside the step: the line is on the end of a place of the
+     * visits, and the rows offered are the rows a fold over the visits is offered.
+     */
+    @Test
+    void touchesAMapTookOutOfTheVisitsKeepTheEndsTheVisitsDo() {
+        String model = """
+                module example.stale
+
+                data Touch = { account: String, days: Int }
+
+                data Visit = { touch: Touch, note: String }
+
+                let sinceOf (visits: List<Visit>): Map<String, Int> =
+                    List.fold((acc, t) -> %s, Map.empty, %s)
+
+                behavior stale : (visits: List<Visit>, staleAfter: Int) -> Map<String, Int>
+
+                let stale (visits, staleAfter) =
+                    Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(visits))
+                """;
+        Compilation direct = measured(model.formatted(
+                "Map.updateOrInsert(t.touch.account, t.touch.days,"
+                        + " seen -> Int.min(seen, t.touch.days), acc)", "visits"));
+        Compilation projected = measured(model.formatted(LEAST,
+                "List.reverse(List.map(v -> v.touch, visits))"));
+        assertTrue(json(projected).contains("least(visits[*].touch.days by touch.account)"),
+                () -> report(projected));
+        assertEquals(axisOf(direct), axisOf(projected), () -> report(projected));
+        List<String> rows = Adequacy.offeredFor(projected.db(),
+                        OfferingRequest.overTheModule("example.stale"))
+                .rowsByBehavior().getOrDefault("stale", List.of()).stream()
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList();
+        assertFalse(rows.isEmpty(), () -> report(projected));
+        assertEquals(Adequacy.offeredFor(direct.db(),
+                        OfferingRequest.overTheModule("example.stale"))
+                .rowsByBehavior().getOrDefault("stale", List.of()).stream()
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList(), rows);
+    }
+
     /** The line is written in a document the schema shipped beside this accepts. */
     @Test
     void theDocumentNamingTheEndIsOneTheSchemaAccepts() {

@@ -274,6 +274,227 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         }
     }
 
+    /**
+     * Issues with a label inside a detail, folded with the step {@code (acc, k) -> step} over
+     * {@code keys}, which is written over {@code issues}.
+     */
+    private static String modelOfIssues(String step, String keys) {
+        return """
+                module example.popular
+
+                data Detail = { label: String, weight: Int }
+
+                data Issue = { label: String, detail: Detail, tags: List<String> }
+
+                let countsOf (issues: List<Issue>): Map<String, Int> =
+                    List.fold((acc, k) -> %s, Map.empty, %s)
+
+                behavior popular : (issues: List<Issue>, atLeast: Int) -> Map<String, Int>
+
+                let popular (issues, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast, countsOf(issues))
+                """.formatted(step, keys);
+    }
+
+    private static String countedUnder(String key) {
+        return "Map.updateOrInsert(" + key + ", 1, n -> n + 1, acc)";
+    }
+
+    /**
+     * Keys a map took out of each element are the values at that place of the elements, one for
+     * each, so how often a key occurs among them is how often it occurs there: the line is the one
+     * a fold over the elements draws with the key taken inside the step, however many maps and
+     * reorderings stand between.
+     */
+    @Test
+    void keysAMapTookOutOfTheElementsAreCountedAtThePlaceItTookThemFrom() {
+        record Taken(String step, String keys, String counted) { }
+        for (Taken taken : List.of(
+                new Taken(countedUnder("k"), "List.map(i -> i.label, issues)", "label"),
+                new Taken(countedUnder("k"), "List.reverse(List.map(i -> i.label, issues))",
+                        "label"),
+                new Taken(countedUnder("k"), "List.map(i -> i.label, List.reverse(issues))",
+                        "label"),
+                new Taken(countedUnder("k.label"), "List.map(i -> i.detail, issues)",
+                        "detail.label"),
+                new Taken(countedUnder("k"),
+                        "List.map(d -> d.label, List.map(i -> i.detail, issues))",
+                        "detail.label"),
+                new Taken(countedUnder("k"),
+                        "List.map(d -> d, List.map(i -> { let d = i.detail\n d.label }, issues))",
+                        "detail.label"))) {
+            Compilation direct = measured(modelOfIssues(countedUnder("k." + taken.counted()),
+                    "issues"));
+            Compilation compilation = measured(modelOfIssues(taken.step(), taken.keys()));
+            assertEquals(axisOf(direct), axisOf(compilation),
+                    () -> taken + ": " + report(compilation));
+            assertTrue(json(compilation).contains(
+                            "multiplicity(issues[*]." + taken.counted() + ")"),
+                    () -> taken + ": " + report(compilation));
+            assertFalse(report(compilation).contains("not read"),
+                    () -> taken + ": " + report(compilation));
+        }
+    }
+
+    /**
+     * Rows written by hand meet the points of the line on the labels where a fold over the labels
+     * the step takes inside meets them: two issues of one label against two stand on the line,
+     * against three one short of it, and the third issue's label well short of three. No row is
+     * offered for a key at a field, so the meaning of the
+     * line is held against what the fold counts on rows written out. The details carry a label
+     * of their own, the same for all three, so a count read at that place meets other points.
+     */
+    @Test
+    void rowsWrittenOutMeetTheLineOnTheLabelsAsTheyDoOverTheIssues() {
+        String issue = "Issue { label = \"%s\", detail = Detail { label = \"x\", weight = 1 },"
+                + " tags = [] }";
+        String issues = List.of("a", "a", "b").stream().map(issue::formatted).toList().toString();
+        String examples = """
+
+                example popular
+                    | "on" : (%s, 2) -> [("a", 2)]
+                    | "off" : (%s, 3) -> []
+                """.formatted(issues, issues);
+        Compilation direct = measured(modelOfIssues(countedUnder("k.label"), "issues")
+                + examples);
+        Compilation projected = measured(modelOfIssues(countedUnder("k"),
+                "List.map(i -> i.label, issues)") + examples);
+        assertEquals(3, metOf(direct).stream().filter(Boolean::booleanValue).count(),
+                () -> "the rows stand at the ON, OFF and OUT points: " + report(direct));
+        assertEquals(metOf(direct), metOf(projected), () -> report(projected));
+    }
+
+    /** Whether a row stands at each point of each line drawn, in the order they are drawn. */
+    private static List<Boolean> metOf(Compilation compilation) {
+        List<Boolean> out = new ArrayList<>();
+        bordersOf(compilation).forEach(border -> border.path("items").forEach(item ->
+                out.add(item.path("hit").asBoolean())));
+        return out;
+    }
+
+    /**
+     * What a map answered that is no value at a place of the element — something made of one, the
+     * same value for every element — and what keeps some elements or answers several for one, are
+     * not the values at any place of the elements, each once: nothing is said of how often they
+     * occur.
+     */
+    @Test
+    void keysThatAreNoPlaceOfTheElementsEachOnceAreNotCounted() {
+        for (String keys : List.of(
+                "List.map(i -> String.append(i.label, \"!\"), issues)",
+                "List.map(i -> \"same\", issues)",
+                "List.map(i -> i.label, List.filter(i -> i.detail.weight > 1, issues))",
+                "List.flatMap(i -> i.tags, issues)")) {
+            Compilation compilation = measured(modelOfIssues(countedUnder("k"), keys));
+            assertFalse(json(compilation).contains("multiplicity("),
+                    () -> keys + ": " + report(compilation));
+        }
+    }
+
+    /**
+     * A key read off the element another walk was handed is one key for every element the fold
+     * walks: it occurs as often as there are elements, which is no count of a value among them.
+     */
+    @Test
+    void aKeyReadOffAnotherWalksElementIsNotCountedAsTheElementsKey() {
+        Compilation compilation = measured("""
+                module example.popular
+
+                data Issue = { label: String }
+
+                let under (j: Issue, issues: List<Issue>): Map<String, Int> =
+                    List.fold((acc, i) -> Map.updateOrInsert(j.label, 1, n -> n + 1, acc),
+                        Map.empty, issues)
+
+                behavior popular : (issues: List<Issue>, atLeast: Int) -> List<Int>
+
+                let popular (issues, atLeast) =
+                    List.map(j -> Map.size(Map.filterEntries((_, count) -> count >= atLeast,
+                        under(j, issues))), issues)
+                """);
+        assertFalse(json(compilation).contains("multiplicity("), () -> report(compilation));
+    }
+
+    /** A key wrapped in a newtype is the value it wraps under a name, and occurs as often. */
+    @Test
+    void aKeyWrappedInANewtypeIsCountedAsTheValueItWraps() {
+        Compilation compilation = measured("""
+                module example.popular
+
+                data Label = String
+
+                data Issue = { label: String }
+
+                let countsOf (issues: List<Issue>): Map<Label, Int> =
+                    List.fold((acc, i) -> Map.updateOrInsert(Label(i.label), 1, n -> n + 1, acc),
+                        Map.empty, issues)
+
+                behavior popular : (issues: List<Issue>, atLeast: Int) -> Map<Label, Int>
+
+                let popular (issues, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast, countsOf(issues))
+                """);
+        assertTrue(json(compilation).contains("multiplicity(issues[*].label)"),
+                () -> report(compilation));
+    }
+
+    /**
+     * Keys a map took out of wrapped elements as the values they wrap are those elements: the
+     * rows offered are the rows for counting the elements, and written they meet the line.
+     */
+    @Test
+    void keysAMapUnwrappedAreCountedAndTheirRowsMeetTheLine() {
+        String model = """
+                module example.popular
+
+                data Label = String
+
+                let countsOf (xs: List<Label>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> n + 1, acc),
+                        Map.empty, List.map(l -> l.value, xs))
+
+                behavior popular : (xs: List<Label>, atLeast: Int) -> Map<String, Int>
+
+                let popular (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast, countsOf(xs))
+                %s""";
+        String examples = """
+
+                example popular
+                    | "some" : ([Label("a"), Label("a"), Label("b")], 2) -> [("a", 2)]
+                    | "none" : ([], 2) -> []
+                """;
+        Compilation before = measured(model.formatted(examples));
+        assertTrue(json(before).contains("multiplicity(xs[*])"), () -> report(before));
+        assertEquals(2, unmetOf(before).size(),
+                () -> "the line's two sides are owed: " + report(before));
+        List<String> offered = offeredInputs(before);
+        Pattern row = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
+        StringBuilder written = new StringBuilder(examples);
+        int named = 0;
+        for (String each : offered) {
+            Matcher matched = row.matcher(each);
+            if (!matched.matches()) {
+                continue;
+            }
+            List<String> keys = new ArrayList<>();
+            Matcher key = Pattern.compile("Label\\(\"((?:[^\"\\\\]|\\\\.)*)\"\\)")
+                    .matcher(matched.group(1));
+            while (key.find()) {
+                keys.add(key.group(1));
+            }
+            Row counted = new Row(keys, Integer.parseInt(matched.group(2)));
+            written.append("    | \"offered ").append(named++).append("\" : (")
+                    .append(each).append(") -> ").append(entries(counted.kept(1, 1)))
+                    .append("\n");
+        }
+        assertTrue(named > 0, () -> "rows are offered: " + offered + "\n" + report(before));
+        Compilation after = measured(model.formatted(written));
+        assertFalse(bordersOf(after).isEmpty(), () -> report(after));
+        assertEquals(List.of(), unmetOf(after),
+                () -> "the rows that were offered meet the line: " + report(after));
+    }
+
     /** The lookup and the filing written out are the operation that does both. */
     @Test
     void aCounterWrittenAsALookupAndAFilingMeansTheSameCounters() {

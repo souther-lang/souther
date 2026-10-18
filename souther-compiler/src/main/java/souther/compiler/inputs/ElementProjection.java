@@ -47,7 +47,8 @@ public record ElementProjection(List<String> steps) {
      *
      * <p><b>Null wherever the answer is not read out of the element.</b> A branch chooses between
      * two of them and is neither; arithmetic over one is a value the element does not hold; a
-     * construction is something new. None of those is a place a row writes, so a rule about what a
+     * construction is something new, unless it is a newtype wearing one value of the element as
+     * its name. None of those is a place a row writes, so a rule about what a
      * walk answered is not a rule about any position, and saying so is this reading's whole job on
      * that side.
      *
@@ -131,9 +132,25 @@ public record ElementProjection(List<String> steps) {
                     longer.add(fa.field());
                     yield List.copyOf(longer);
                 }
+                // A newtype made of one value is that value wearing a name, so it stands where the
+                // value does — the rule a position of the input is read by ({@link InputPath}).
+                case Core.Construct construct when newtypes.of(construct.typeName().key())
+                        && construct.values().size() == 1 ->
+                        steps(construct.values().getFirst().value(), element, trail);
                 case null, default -> null;
             };
         }
+    }
+
+    /**
+     * The way to what {@code after} reaches from the value this reaches: where a walk answered this
+     * of each element and a second walk answered {@code after} of each of those, the second's
+     * answer stands at this way and then that one in the first walk's element.
+     */
+    public ElementProjection then(ElementProjection after) {
+        List<String> longer = new ArrayList<>(steps);
+        longer.addAll(after.steps);
+        return new ElementProjection(longer);
     }
 
     /** The position this reaches from {@code element}. */
