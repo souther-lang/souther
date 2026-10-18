@@ -286,7 +286,8 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
 
     private static Known reaching(ConstraintState<FactSubject> constraints) {
         return new Known(constraints, List.of(), AppendOnly.empty(),
-                new Known.Unguarded(ConstraintState.top(FactSubject.inOneOrder())), Map.of());
+                new Known.Unguarded(ConstraintState.top(FactSubject.inOneOrder())), Map.of(),
+                List.of());
     }
 
     private static ConstraintState<FactSubject> numbersAtBottom() {

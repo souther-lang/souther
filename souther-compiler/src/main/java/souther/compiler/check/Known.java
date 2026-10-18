@@ -34,14 +34,35 @@ import java.util.Map;
  * terms its assumptions named are compared as the objects they are and not by what they hold
  * ({@link AppendOnly}). So two of these are equal where they were made of the same states, and
  * nothing asks it whether two paths know alike — a reader with that question asks what each knows.
+ *
+ * <p>And the conditions on the path that hold as one of their parts, which no domain here holds
+ * ({@link #oneOf}). Kept as they were written and taken apart only by a reader that has a question
+ * the parts answer and the whole does not: a domain holding each part of each of them would be one
+ * state per way of choosing a part, multiplied at every such condition the path passes, whether or
+ * not anything below was ever asked of them.
  */
 record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
                      AppendOnly<FactSubject, Boolean> spoken, Unguarded unguarded,
-                     Map<FactSubject, CasesLeft> cases) {
+                     Map<FactSubject, CasesLeft> cases, List<OneOf> oneOf) {
 
     Known {
         cases = Map.copyOf(cases);
+        oneOf = List.copyOf(oneOf);
     }
+
+    /**
+     * A condition that holds here as one of its parts, and the bindings it was read under.
+     *
+     * <p>Not one of the parts, and not what the parts have in common: {@code y >= 0.5 || y <= -0.5}
+     * says each value of {@code y} is in one of two ranges, and the range they span holds
+     * {@code 0}. What the condition says is said by taking each part in alone, under what else is
+     * known where the question is asked ({@link Predicates#eachWayOf}).
+     *
+     * <p>The bindings are the ones in force where the condition stands, because that is where its
+     * names mean what they mean. A reader further in has entered more of them and a name it holds
+     * may be another value.
+     */
+    record OneOf(ClauseExpr.Joined of, Denotations at) {}
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
@@ -116,13 +137,15 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     static Known top(ClosedStates closures) {
         return new Known(ConstraintState.top(FactSubject.inOneOrder(), closures), List.of(),
                 AppendOnly.empty(),
-                new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)), Map.of());
+                new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)), Map.of(),
+                List.of());
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
     Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
         return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases);
+                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases,
+                oneOf);
     }
 
     /**
@@ -143,7 +166,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         ConstraintState<FactSubject> values =
                 ConstraintState.top(FactSubject.inOneOrder()).takingRead(read, sets);
         return new Known(constraints.meet(values, sets), quantified, spoken,
-                new Unguarded(unguarded.constraints().meet(values, sets)), cases);
+                new Unguarded(unguarded.constraints().meet(values, sets)), cases, oneOf);
     }
 
     /**
@@ -156,7 +179,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     Known holdingOnThePath(Confinement.Worked<FactSubject> read, Allowance<FactSubject> sets) {
         ConstraintState<FactSubject> values =
                 ConstraintState.top(FactSubject.inOneOrder()).takingRead(read, sets);
-        return new Known(constraints.meet(values, sets), quantified, spoken, unguarded, cases);
+        return new Known(constraints.meet(values, sets), quantified, spoken, unguarded, cases,
+                oneOf);
     }
 
     /**
@@ -167,14 +191,16 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * strings do not add. A condition says it, so it reaches the path and not the value.
      */
     Known bounding(OrderedIntervals<FactSubject> bounded, Map<FactSubject, Carrier> on) {
-        return new Known(constraints.taking(bounded, on), quantified, spoken, unguarded, cases);
+        return new Known(constraints.taking(bounded, on), quantified, spoken, unguarded, cases,
+                oneOf);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
      * is false — as far as {@code held} reaches. */
     Known taking(FactSubject key, boolean positive, Held held) {
         return new Known(constraints.taking(key, positive), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded, cases);
+                held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded, cases,
+                oneOf);
     }
 
     /**
@@ -193,7 +219,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         if (was == null) {
             Map<FactSubject, CasesLeft> more = new HashMap<>(cases);
             more.put(value, left);
-            return new Known(constraints, quantified, spoken, unguarded, more);
+            return new Known(constraints, quantified, spoken, unguarded, more, oneOf);
         }
         if (!was.atoms().getFirst().getClass().equals(left.atoms().getFirst().getClass())) {
             return this;
@@ -207,7 +233,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         }
         Map<FactSubject, CasesLeft> narrowed = new HashMap<>(cases);
         narrowed.put(value, both);
-        return new Known(constraints, quantified, spoken, unguarded, narrowed);
+        return new Known(constraints, quantified, spoken, unguarded, narrowed, oneOf);
     }
 
     /**
@@ -220,7 +246,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * the program never builds rather than one it builds wrongly.
      */
     Known reachingNothing() {
-        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded, cases);
+        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded, cases,
+                oneOf);
     }
 
     /**
@@ -240,7 +267,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
                 all = all.with(term, true);
             }
         }
-        return all == spoken ? this : new Known(constraints, quantified, all, unguarded, cases);
+        return all == spoken ? this
+                : new Known(constraints, quantified, all, unguarded, cases, oneOf);
     }
 
     /** Whether an assumption on this path named {@code term}. */
@@ -254,6 +282,27 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         }
         List<Quantified> all = new ArrayList<>(quantified);
         all.addAll(more);
-        return new Known(constraints, List.copyOf(all), spoken, unguarded, cases);
+        return new Known(constraints, List.copyOf(all), spoken, unguarded, cases, oneOf);
+    }
+
+    /**
+     * This, with {@code condition} holding as one of its parts, on the path only.
+     *
+     * <p>On the path for the reason every condition is: it is the guard that says it, and a value
+     * named anywhere else is not held to it.
+     */
+    Known holdingOneOf(OneOf condition) {
+        List<OneOf> more = new ArrayList<>(oneOf);
+        more.add(condition);
+        return new Known(constraints, quantified, spoken, unguarded, cases, more);
+    }
+
+    /** This, with {@code condition} no longer held as one of its parts: a reader taking it apart
+     * holds one part in its place. */
+    Known apartFrom(OneOf condition) {
+        // The one held here and not one equal to it: the same guard read twice is held twice.
+        List<OneOf> rest = new ArrayList<>(oneOf);
+        rest.removeIf(each -> each == condition);
+        return new Known(constraints, quantified, spoken, unguarded, cases, rest);
     }
 }

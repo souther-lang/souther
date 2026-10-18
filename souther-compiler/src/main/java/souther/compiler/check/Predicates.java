@@ -13,6 +13,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
@@ -1019,6 +1020,30 @@ final class Predicates {
     }
 
     /**
+     * {@code k} with {@code condition} taken apart: once with each of its two parts taken in alone,
+     * in the order they were written.
+     *
+     * <p>Every value the condition admits is admitted by one of the parts, so a question asked of
+     * each of these and answered alike by all of them is answered of {@code k}. Neither part is
+     * taken under the other's denial. The parts may overlap, and a value in both is asked about
+     * twice, which costs a reading and changes no answer that every way has to agree on.
+     *
+     * <p>Each part is taken by the reading the whole was ({@link Assuming}), under the bindings the
+     * condition stood in and over what is known here — which may be more than was known where it
+     * stood. That is the point of keeping it: a part read against a guard written after it can be
+     * one nothing enters, and the way it would have been is left out by whoever asks.
+     */
+    List<Known> eachWayOf(Known.OneOf condition, Known k) {
+        Known apart = k.apartFrom(condition);
+        List<Known> ways = new ArrayList<>();
+        for (ClauseExpr part : List.of(condition.of().left(), condition.of().right())) {
+            ways.add(new Assuming(this).read(part, condition.at(), terms::inside, null)
+                    .from(apart).known());
+        }
+        return ways;
+    }
+
+    /**
      * What taking a clause as holding does to what is known, before it is given a state to do it to.
      *
      * <p>Threading a state through the parts is this reading's own algebra and not the shape's: the
@@ -1050,7 +1075,8 @@ final class Predicates {
          *
          * <p>One of a choice's parts holds and this cannot say which, so taking either of them in
          * would rule out values the condition admits. What is left of it is that the author named
-         * the two, which the part it is read as says.
+         * the two, which the part it is read as says, and the choice itself, held for a reader that
+         * takes it apart ({@link Known#oneOf}).
          */
         @Override
         public Descent<Assumption> at(ClauseExpr.Joined join) {
@@ -1096,7 +1122,12 @@ final class Predicates {
         // it is not asked for one. What it names is the two halves the shape composed, and without
         // saying they were named a value one of them computes is one nothing has ever spoken of.
         if (part instanceof ClauseExpr.Joined join) {
-            return taking(cond, join.writtenHalves(), k, at, positive);
+            Assumed whole = taking(cond, join.writtenHalves(), k, at, positive);
+            // What the choice says beyond that is held as the choice, for a reader whose question
+            // its parts answer to take apart ({@link #eachWayOf}).
+            return join.how() != ConditionJoin.EITHER || whole.known().reachesNothing() ? whole
+                    : new Assumed(whole.known().holdingOneOf(new Known.OneOf(join, at)),
+                            whole.taken(), whole.shapeRead(), whole.notTaken());
         }
         List<StatedComparison> readings =
                 Conditions.comparisonsStatedBy(terms, cond, at).holdingWhere(positive);

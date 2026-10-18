@@ -4405,7 +4405,7 @@ public final class InvariantChecker {
                 // A construction the value fails wherever it is built is one that aborts, so what
                 // is written after it is written after nothing — the same shape as an operation
                 // that answers no value, and taken in through the same door.
-                yield carriedOn(out, refused(judge(made, out, at, false))
+                yield carriedOn(out, refused(judge(made, out, at, false, copies))
                         ? new Completion.CannotComplete(
                                 new Completion.NoCompletionProof.RefutedConstruction(made))
                         : Completion.MAY);
@@ -4431,7 +4431,7 @@ public final class InvariantChecker {
                 // An attempt is the one construction a failing invariant does not abort: the
                 // departure is taken and the run carries on, so what this comes out as says nothing
                 // about whether anything is reached.
-                judge(ic.construct(), out, at, true);
+                judge(ic.construct(), out, at, true, copies);
                 // Reaching `then` is the construction having held, so the binding carries the type's
                 // invariant exactly as an input of that type does — which is a location, and not the
                 // construction read again. What the construction denotes is what the check could say
@@ -4642,7 +4642,8 @@ public final class InvariantChecker {
      * there is nothing to recognise here: a construction was settled where the tree was built, and
      * what it builds and what each of its fields is given came with it.
      */
-    private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
+    private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted,
+                           ContextMultiplicity copies) {
         // Which form the name was declared in, asked of what was settled when its module was
         // indexed. Only a product carries an invariant to judge a construction against; reading the
         // declaration to find that out is what had this check re-run for a declaration of another
@@ -4651,8 +4652,11 @@ public final class InvariantChecker {
                 || kinds.of(type.key()) != DeclarationKind.PRODUCT) {
             return null;
         }
-        Judgment judged = verdictOf(made, type, k, at);
-        report(made, type, made.pos(), attempted, judged);
+        Judgment judged = verdictOf(made, type, k, at, copies);
+        // No value is built here, which is a thing to say nothing about.
+        if (judged != null) {
+            report(made, type, made.pos(), attempted, judged);
+        }
         return judged;
     }
 
@@ -4665,11 +4669,12 @@ public final class InvariantChecker {
     }
 
     /**
-     * The verdict for one construction, over what each field is being given. A case split never
-     * reaches here: the walk opens it before anything is checked, so what a field is given is a
-     * value and not a choice of arms.
+     * The verdict for one construction, over what each field is being given, or null where the
+     * conditions on the path leave no way to it. A case split never reaches here: the walk opens it
+     * before anything is checked, so what a field is given is a value and not a choice of arms.
      */
-    private Judgment verdictOf(Core.Construct nd, TypeSymbol.AtModule type, Known k, Denotations at) {
+    private Judgment verdictOf(Core.Construct nd, TypeSymbol.AtModule type, Known k, Denotations at,
+                               ContextMultiplicity copies) {
         Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName());
         Map<BindingId, Core> given = new HashMap<>();
         for (Core.FieldValue fv : nd.values()) {
@@ -4682,7 +4687,54 @@ public final class InvariantChecker {
             Core written = terms.writtenValue(fv.value(), at);
             given.put(field, written != null ? written : fv.value());
         }
-        return verdictOf(nd.typeName(), given, k, at, !constantlyBuilt(type, nd));
+        return verdictOf(nd.typeName(), given, k, at, !constantlyBuilt(type, nd), copies);
+    }
+
+    /**
+     * The verdict for a construction of {@code named}, with the conditions on the path that hold as
+     * one of their parts taken apart where the whole of each leaves the invariant not shown to
+     * hold — or null where no way they come apart in is entered, so no value is built here.
+     *
+     * <p>Only there. A clause established without them is established in each way they could be
+     * taken apart, since each way knows more than this; so is a clause that could not be read,
+     * which no fact about the values makes readable. A clause refuted without them is refuted in
+     * each way as well, and what taking them apart can still show is that no way is entered.
+     *
+     * <p>One condition at a time, the first held, and every way it comes apart judged — so the
+     * conditions held further down are taken apart only in a way that still leaves the invariant
+     * not shown to hold. A way nothing enters is no value built and is not judged. The ways that
+     * are left are combined as the arms of a split are ({@link Judgment#of}): a clause holds where
+     * it holds in every one of them and is refuted where every one refutes it.
+     *
+     * <p>Each way is this construction judged again, which is a copy of the reading the walk made
+     * here, and it is counted with the copies the walk has made already ({@link ContextMultiplicity}).
+     * A condition whose ways would compound past that is not taken apart, and nor is any condition
+     * after it on this way. What is answered then is the verdict without them: a judgment made of
+     * the ways that were taken apart and not the others would be a proof over some of the values.
+     */
+    private Judgment verdictOf(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
+                               Denotations at, boolean decidesFalse, ContextMultiplicity copies) {
+        Judgment whole = verdictOf(named, given, k, at, decidesFalse);
+        if (whole.verdict().holds() || k.oneOf().isEmpty()) {
+            return whole;
+        }
+        Known.OneOf first = k.oneOf().getFirst();
+        List<Known> ways = predicates.eachWayOf(first, k);
+        ContextMultiplicity opened = copies.opening(ways.size());
+        if (opened == null) {
+            return whole;
+        }
+        Judgment together = null;
+        for (Known way : ways) {
+            if (way.reachesNothing()) {
+                continue;
+            }
+            Judgment here = verdictOf(named, given, way, at, decidesFalse, opened);
+            if (here != null) {
+                together = together == null ? here : Judgment.of(together, here);
+            }
+        }
+        return together;
     }
 
     /** Which of the values a construction hands over is not one a clause may be read against
