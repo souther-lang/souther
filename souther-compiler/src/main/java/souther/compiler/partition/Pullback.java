@@ -1369,10 +1369,12 @@ final class Pullback {
                     new WhyUnread.AnInvariantNotReached(), false));
         }
         List<Derivation> holds = new ArrayList<>();
+        InputReads inTheRules = reads.forADeclaredRule();
         for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
             holds.add(switch (clause) {
                 case ClausesInOrder.OneClause.Stated stated ->
-                        observe(stated.states(), AnswerAspect.TRUTH, reads.forADeclaredRule());
+                        observe(stated.term(), AnswerAspect.TRUTH,
+                                handingTheFields(inTheRules, stated.given(), reads));
                 case ClausesInOrder.OneClause.Unread unread -> new Derivation.Stopped(
                         new WhyUnread.AClauseOfAnInvariant(unread.clause(), unread.why()), false);
             });
@@ -1391,6 +1393,22 @@ final class Pullback {
                                     .orElse(true))
                     .toList();
             out.add(new Derivation.ItDeparted(holds, answers));
+        }
+        return out;
+    }
+
+    /**
+     * {@code inTheRules}, where each field of a declaration stands for what a construction handed
+     * it. A value is read where the construction is, {@code reads}, and the clause that names the
+     * field where the declaration is written: the two are not one tree, and a value that is
+     * substituted into the clause is read as if they were.
+     */
+    private InputReads handingTheFields(InputReads inTheRules, Map<BindingId, Core> given,
+                                        InputReads reads) {
+        InputReads out = inTheRules;
+        for (Map.Entry<BindingId, Core> field : given.entrySet()) {
+            out = out.handing(field.getKey(), new Denotation(field.getValue(), reads),
+                    read.rules().newtypes());
         }
         return out;
     }

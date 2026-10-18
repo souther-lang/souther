@@ -13,6 +13,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A newtype rebuilt in a helper and read by an operation the running tree expands is reported as
@@ -63,6 +64,33 @@ class ARebuiltNewtypeReadByAnExpandedOperationReportsAsIfWrittenInlineTest {
         assertFalse(measured(inline.out()).isEmpty(), inline::toString);
         assertEquals(measured(inline.out()), measured(helper.out()),
                 () -> "inline:\n" + inline + "\nhelper:\n" + helper);
+        // Equal to the inline report is not yet a report: both say that the invariant is not
+        // accounted for and that no row takes the decision.
+        for (Run run : List.of(inline, helper)) {
+            assertTrue(run.out().contains("measurement: partial"), run::toString);
+            assertTrue(run.out().contains("adequacy: not satisfied"), run::toString);
+        }
+    }
+
+    /** The helper alone, with nothing expanded over what it builds, is the control that the
+     *  report was never the part that failed. */
+    @Test
+    void aHelperWhoseValueNothingExpandsReportsAsWell() throws Exception {
+        Run helper = examples("""
+                module probe.i
+
+                %s
+                let rebuild (input: Amount): Amount = {
+                    guard Amount(input.value) as amount else unreachable "same value"
+                    amount
+                }
+
+                behavior result : (input: Amount) -> Decimal
+
+                let result (input) = rebuild(input).value
+                """.formatted(AMOUNT));
+        assertEquals(0, helper.code(), helper::toString);
+        assertTrue(helper.out().contains("adequacy: not satisfied"), helper::toString);
     }
 
     /** What the report says about {@code result}; a place in it names its line and the helper it
