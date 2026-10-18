@@ -356,6 +356,123 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                 """), "b below five leaves the statement to the line");
     }
 
+    /**
+     * A relation on what two numbers come to multiplied is a line among several as a relation on a
+     * position is, and decides where the statement turns on it.
+     *
+     * <p>{@code Int.max(0, a * b.v) <= 3} draws a line where the product is three and a line where
+     * it is nought. The first decides where the product is above nought, and a row on each side of
+     * three is there. The second decides only where the product is above three, where no row
+     * stands at nought: the two arms of max meet there and the answer does not jump.
+     */
+    @Test
+    void aLineOnAProductAmongSeveralIsDrawnWhereItDecides() {
+        JsonNode report = reportOf("Int.max(0, a * b.v) <= 3", "");
+        assertTrue(reasonsAt(report, "a").stream()
+                        .noneMatch("several_lines_in_one_rule"::equals),
+                () -> "the statement is drawn, not held back: " + reasonsAt(report, "a"));
+        assertTrue(reasonsAt(report, "a").contains("rule_never_turns_on_this_line"),
+                () -> "the line where the arms meet decides nowhere: " + reasonsAt(report, "a"));
+        assertEquals(Set.of("pick/a * b.v 3", "pick/a * b.v 4"), pointsOfParts(report),
+                "a row is owed on each side of three and nowhere about nought");
+    }
+
+    /** A statement about a product that holds of no row turns on none of its lines. */
+    @Test
+    void aStatementOnAProductThatHoldsNowhereTurnsOnNoLine() {
+        JsonNode report = reportOf("Int.max(0, a * b.v) <= -1", "");
+        assertEquals(List.of("rule_never_turns_on_this_line"),
+                reasonsAt(report, "a").stream().distinct().toList(),
+                () -> "neither line turns the statement: " + reasonsAt(report, "a"));
+        assertTrue(obligationsOfParts(report).isEmpty(),
+                () -> "and no row is owed at either: " + obligationsOfParts(report));
+    }
+
+    /**
+     * Where a line on how many elements meet something decides is read off the other relations on
+     * that count, as it is for a line on a position: no row stands on both sides of two where the
+     * count is above five.
+     */
+    @Test
+    void aLineOnACountTurnsOnlyWhereItsCaseLeavesTheCountOnBothSides() {
+        JsonNode report = reportOfSource("""
+                module probe
+
+                data Low
+                data High
+
+                behavior pick : (xs: List<Int>) -> Low | High
+                let pick (xs) = {
+                    let n = List.length(List.filter(x -> x > 0, xs))
+                    if Int.max(2, n) <= 5 then High else Low
+                }
+                """);
+        assertTrue(reasonsAt(report, "xs[*]").contains("rule_never_turns_on_this_line"),
+                () -> "the line where the arms meet decides nowhere: "
+                        + reasonsAt(report, "xs[*]"));
+        assertEquals(Set.of("pick/#xs [xs[*] > 0] 5", "pick/#xs [xs[*] > 0] 6"),
+                pointsOfParts(report),
+                "a row is owed on each side of five and nowhere about two");
+    }
+
+    /**
+     * A case kept because nothing ruled a row out on either side is not a row standing there. With
+     * one factor held at ten the product is a multiple of ten, and is never three or four, so no
+     * row is owed at either: a line kept there has its points settled by the search, which proves
+     * nothing stands at them, and a line the case drops has none.
+     */
+    @Test
+    void aCaseNothingRuledOutOwesNoRowWhereNoneStands() {
+        JsonNode report = reportOfSource("""
+                module probe
+
+                data Low
+                data High
+                data Ten = { v: Int }
+                    invariant v == 10
+
+                behavior pick : (a: Ten, b: Int) -> Low | High
+                let pick (a, b) = if Int.max(2, a.v * b) <= 3 then High else Low
+                """);
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            String against = obligation.path("readings").get(0).path("against").asString();
+            if (against.equals("3") || against.equals("4")) {
+                assertEquals("refuted", obligation.path("disposition").asString(),
+                        () -> "nothing stands at " + against + ": " + obligation);
+            }
+        }
+    }
+
+    /** A row at the line on a product, read off what its two numbers come to multiplied. */
+    @Test
+    void aRowAtALineOnAProductMeetsItWhereItsNumbersMultiplyToThePoint() {
+        JsonNode report = reportOf("Int.max(0, a * b.v) <= 3", """
+                example pick
+                    | "three" : (3, Pos { v = 1 }) -> High
+                """);
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            JsonNode reading = obligation.path("readings").get(0);
+            if (reading.path("against").asString().equals("3")) {
+                assertTrue(reading.path("hit").asBoolean(), () -> "met at three: " + obligation);
+                return;
+            }
+        }
+        throw new AssertionError("the line on the product has a point at three: " + report);
+    }
+
+    /** Each point owed at a line of a statement of several, as its axis and where it stands. */
+    private static Set<String> pointsOfParts(JsonNode report) {
+        Set<String> out = new TreeSet<>();
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            String against = obligation.path("readings").get(0).path("against").asString();
+            if (!against.contains("<")) {
+                out.add(obligation.path("readings").get(0).path("axis").asString() + " "
+                        + against);
+            }
+        }
+        return out;
+    }
+
     /** Whether the point at a = 6 of the line on a was met by the rows {@code examples} writes. */
     private static boolean theLineOnAIsMetAtSixBy(String examples) {
         JsonNode report = reportOf("Int.max(a, b.v) > 5", examples);

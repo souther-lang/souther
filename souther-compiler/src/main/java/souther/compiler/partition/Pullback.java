@@ -6197,6 +6197,11 @@ final class Pullback {
      * {@code p * q * 2}, {@code p * q - 5} and {@code -(p * q)} for products the reading would hold
      * against the level. A square and a product of three are not read here either, and for each of
      * these the stop stands.
+     *
+     * <p>And only of two whole numbers, which are the numbers a product of two is worked out of at a
+     * row ({@link OrderedAffineBoundary#productAt}) and a line drawn on: a product of decimals is
+     * answered at a scale the run settles, and its stop stands too. Said here, where the product is
+     * made, so that everything reading one reads a product of two whole numbers.
      */
     private LinearForm<Quantity> productAt(Core node, InputReads at,
                                            AffineForms.Outcome.StoppedAt<Quantity, InputReads>
@@ -6212,10 +6217,17 @@ final class Pullback {
         }
         NumericTerm.FromOnePosition left = aFactor(written.left(), at);
         NumericTerm.FromOnePosition right = aFactor(written.right(), at);
-        if (left == null || right == null || left.position().equals(right.position())) {
+        if (left == null || right == null || left.position().equals(right.position())
+                || !countsWhole(left) || !countsWhole(right)) {
             return null;
         }
         return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
+    }
+
+    /** Whether the reading counts {@code term} in whole numbers. */
+    private boolean countsWhole(NumericTerm term) {
+        TermOrders orders = read.quantities().ordersOf(term);
+        return orders != null && orders.answered() instanceof Carrier.Whole;
     }
 
     /**
