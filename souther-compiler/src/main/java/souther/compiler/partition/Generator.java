@@ -9022,11 +9022,13 @@ public final class Generator {
                 if (++handed > MOST_REPAIRS) {
                     return Acceptance.STOPPED;
                 }
-                if (ranked.contains(RunOnce.writtenAs(new RowToRun(inputs, answers)))) {
+                RowToRun row = new RowToRun(inputs, answers);
+                List<String> written = RunOnce.writtenAs(row);
+                if (ranked.contains(written)) {
                     return Acceptance.PASSED;
                 }
                 Acceptance met = meets.take(inputs);
-                return met == Acceptance.TAKEN ? rank(inputs) : met;
+                return met == Acceptance.TAKEN ? rank(row, written) : met;
             };
         }
 
@@ -9041,9 +9043,9 @@ public final class Generator {
         }
 
         /** What is made of one row that meets the requirement, not ranked before. */
-        private Acceptance rank(List<FixtureTemplate> inputs) {
-            RowToRun row = new RowToRun(inputs, answers);
-            ranked.add(RunOnce.writtenAs(row));
+        private Acceptance rank(RowToRun row, List<String> written) {
+            List<FixtureTemplate> inputs = row.inputs();
+            ranked.add(written);
             ObservedRun ran = trial.runsRows() ? trial.run(row) : ObservedRun.nothingRan();
             // Where nothing applied the row, or nothing was recording and it answered nothing,
             // nothing says whether it answers; the first row is offered as it is composed.
