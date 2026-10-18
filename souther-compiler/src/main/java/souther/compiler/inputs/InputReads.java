@@ -1233,16 +1233,16 @@ public final class InputReads {
             Objects.requireNonNull(entered, "under some arm of the match on it");
         }
 
-        /** The same call itself: comparing the trees under it would cost what they hold. */
+        /** The same arm: the name it binds is of one lookup, and the call read through the names
+         *  in force is a new tree each time it is read, which would tell equal readings apart. */
         @Override
         public boolean equals(Object other) {
-            return other instanceof LookupOpened that && lookup == that.lookup
-                    && entered.equals(that.entered);
+            return other instanceof LookupOpened that && entered.equals(that.entered);
         }
 
         @Override
         public int hashCode() {
-            return System.identityHashCode(lookup) * 31 + entered.hashCode();
+            return entered.hashCode();
         }
     }
 
