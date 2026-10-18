@@ -14,10 +14,10 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -156,20 +156,23 @@ final class WhatConditionsState {
     }
 
     /**
-     * The case of one input position each arm of a fork stands for.
+     * The question a fork on a computed value asks of the input, and what each arm answers.
      *
-     * @param of      the position the arms divide
-     * @param answers what each arm leaves it, in the order of the arms, and null for an arm the
-     *                declarations already decide
+     * @param of       the position the arms divide
+     * @param question what the arms leave it, which is the answers of the one question
+     * @param answered which of those the arm at an index leaves it. An arm the declarations already
+     *                 decide asks nothing and has no entry
      */
-    record DividedInput(DecisionSubject.AnInput of, List<CasesLeft> answers) { }
+    record DividedInput(DecisionSubject.AnInput of, Set<CasesLeft> question,
+                        Map<Integer, CasesLeft> answered) { }
 
     /**
      * The position of the input the arms of {@code fork} divide between them, where every arm
      * states a case of that one position and no two leave it a case in common; empty where an arm
      * states anything else, because nothing then says the arms divide it. What each leaves the
-     * position is what the declarations leave it ({@link ReachingCuts#taking(TermPath, CasesLeft, InputReading)}), as for a fork on
-     * the position itself.
+     * position is what the declarations leave it
+     * ({@link ReachingCuts#taking(TermPath, CasesLeft, InputReading)}), as for a fork on the
+     * position itself.
      *
      * <p>A fact of the whole fork, so read once for it and not once for each arm a reader asks
      * about.
@@ -180,11 +183,11 @@ final class WhatConditionsState {
 
     private Optional<DividedInput> divide(Core.Match fork, InputReads reads) {
         DecisionSubject.AnInput subject = null;
-        List<CasesLeft> answers = new ArrayList<>();
+        Map<Integer, CasesLeft> answered = new LinkedHashMap<>();
         Set<Refinement> covered = new HashSet<>();
         for (int part = 0; part < fork.cases().size(); part++) {
             CaseOfAnInput stated = caseOfAnInput(arm(fork, part, reads).proposition());
-            if (stated == null || subject != null && !subject.equals(stated.of())) {
+            if (isNoCaseOf(subject, stated)) {
                 return Optional.empty();
             }
             subject = stated.of();
@@ -199,10 +202,12 @@ final class WhatConditionsState {
                         return Optional.empty();
                     }
                 }
+                answered.put(part, answer);
             }
-            answers.add(answer);
         }
-        return subject == null ? Optional.empty() : Optional.of(new DividedInput(subject, answers));
+        return subject == null ? Optional.empty()
+                : Optional.of(new DividedInput(subject,
+                        new LinkedHashSet<>(answered.values()), answered));
     }
 
     /** Some cases of one input position, which is what an arm of a fork states of the input when
@@ -229,7 +234,7 @@ final class WhatConditionsState {
                 Set<Refinement> atoms = new LinkedHashSet<>();
                 for (Proposition part : parts) {
                     CaseOfAnInput one = caseOfAnInput(part);
-                    if (one == null || of != null && !of.equals(one.of())) {
+                    if (isNoCaseOf(of, one)) {
                         yield null;
                     }
                     of = one.of();
@@ -252,7 +257,7 @@ final class WhatConditionsState {
                         continue;
                     }
                     CaseOfAnInput one = caseOfAnInput(part);
-                    if (one == null || of != null && !of.equals(one.of())) {
+                    if (isNoCaseOf(of, one)) {
                         yield null;
                     }
                     of = one.of();
@@ -270,6 +275,11 @@ final class WhatConditionsState {
             }
             default -> null;
         };
+    }
+
+    /** Whether {@code one} is nothing said of the position {@code of} names, where it names one. */
+    private static boolean isNoCaseOf(DecisionSubject.AnInput of, CaseOfAnInput one) {
+        return one == null || (of != null && !of.equals(one.of()));
     }
 
     private static CaseOfAnInput casesOf(DecisionSubject.AnInput of, Set<Refinement> atoms) {

@@ -34,10 +34,6 @@ class AForkOnAComputedValueAnswersAboutTheInputTest {
             data Hot
             data Cold
             data Flag = Hot | Cold
-            data Left
-            data Middle
-            data Right
-            data Place = Left | Middle | Right
             data Done
             data Other
             """;
@@ -193,9 +189,8 @@ class AForkOnAComputedValueAnswersAboutTheInputTest {
         assertEquals(spelled(casesOf(direct).iterator().next()),
                 spelled(casesOf(rotated).iterator().next()),
                 "one input divided into its three cases whichever way the body asks");
-        assertTrue(casesOf(direct).iterator().next().of()
-                        .equals(casesOf(rotated).iterator().next().of()),
-                "and asked of the same subject");
+        assertEquals(casesOf(direct).iterator().next().of(),
+                casesOf(rotated).iterator().next().of(), "and asked of the same subject");
     }
 
     /**

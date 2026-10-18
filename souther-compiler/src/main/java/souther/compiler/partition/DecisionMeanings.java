@@ -18,11 +18,9 @@ import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.UnaryOperator;
 
 /**
@@ -363,14 +361,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
     private Optional<DecidedCondition.Narrowed> asACaseOfTheInput(Core.Match match, int part,
                                                                   InputReads reads) {
         Optional<WhatConditionsState.DividedInput> divided = states.inputDividedBy(match, reads);
-        if (divided.isEmpty() || divided.get().answers().get(part) == null) {
+        if (divided.isEmpty() || !divided.get().answered().containsKey(part)) {
             return Optional.empty();
         }
-        Set<CasesLeft> answers = new LinkedHashSet<>(divided.get().answers());
-        answers.remove(null);
         return Optional.of(new DecidedCondition.Narrowed(
-                new DecisionCondition.ACase(divided.get().of(), answers),
-                divided.get().answers().get(part)));
+                new DecisionCondition.ACase(divided.get().of(), divided.get().question()),
+                divided.get().answered().get(part)));
     }
 
     /**
