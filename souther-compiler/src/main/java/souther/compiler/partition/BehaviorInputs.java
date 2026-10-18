@@ -142,7 +142,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      *
      * @param at which element was taken at each step inside a container, outermost first. Empty
      *           where the path enters no container, which is one occurrence and stands with every
-     *           other
+     *           other. A value that was not read whole is carried down the rest of the path as it
+     *           is, so it was taken through the containers above where it stopped and none below:
+     *           what the values at one path were taken through is the first so many of the same
+     *           containers
      */
     public record Occurrence(ElementsTaken at, ObservedValue value) {
 

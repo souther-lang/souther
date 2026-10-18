@@ -28,5 +28,20 @@ public enum ElementQuestion {
 
     /** Which position holds these very values, every occurrence of it and each as often as the
      *  container holds it, so that a total of them is a total of everything standing there. */
-    EVERY_OCCURRENCE
+    EVERY_OCCURRENCE,
+
+    /**
+     * Which container of the input a list holds one value for each element of, in the one
+     * occurrence of the container the list was made from, and where in the element that value
+     * stands — so that how often a value occurs in the list is how often it occurs there.
+     *
+     * <p>Not {@link #EVERY_OCCURRENCE}: a list made from the items of one order holds those items
+     * and none of another order's, and how often a value occurs among them is a number of that
+     * order.
+     */
+    ONE_PER_ELEMENT,
+
+    /** Which container of the input a list holds something exactly where it does, whatever the
+     *  values it holds are. */
+    SAME_EMPTINESS
 }

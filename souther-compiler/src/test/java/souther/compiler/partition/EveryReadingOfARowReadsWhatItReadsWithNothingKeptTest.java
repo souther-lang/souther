@@ -1,0 +1,196 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclarationAccess;
+import souther.compiler.check.Extreme;
+import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.ScopedDeclarations;
+import souther.compiler.check.Symbols;
+import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.ElementValue;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
+import souther.compiler.values.AsACompilationAllows;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Every reading of a row reads what it reads with nothing kept between the readings: what one
+ * reading of an occurrence read for the others is what each would have read for itself, over a
+ * walk of the row that read no other reading.
+ *
+ * <p>Held over rows where the occurrences are not alike — orders whose lines are the same values,
+ * orders of different lengths so that some readings choose a line their order does not have, an
+ * order with no lines, values that were not read — and over a quantity reading a number of an
+ * element among its neighbours, at two containers chosen apart, beside a run over every value.
+ */
+class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
+
+    private static final String MODEL = """
+            module g
+
+            data Line = { sku: String, qty: Int }
+
+            data Order = { lines: List<Line>, tags: List<String>, rank: Int }
+
+            behavior decide : (orders: List<Order>) -> Int
+            """;
+
+    private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
+            AsACompilationAllows.admittedValues(), AsACompilationAllows.whatARuleLeaves());
+
+    private static final TermPath ORDERS = TermPath.of("orders");
+
+    private static final TermPath LINES = ORDERS.element().then("lines");
+
+    private static final TermPath TAGS = ORDERS.element().then("tags");
+
+    private static final Carrier WHOLE = Carrier.ofValue(Type.Prim.INT, DeclarationAccess.NONE);
+
+    private static final ObservedValue TRUNCATED =
+            new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure());
+
+    @Test
+    void ordersOfAlikeLinesAreEachTheirOwnOccurrence() {
+        everyReadingReadsAlike(order(List.of(line("x", 9), line("x", 2)), List.of("a", "a")),
+                order(List.of(line("x", 2)), List.of("a")));
+    }
+
+    @Test
+    void aReadingOfALineItsOrderDoesNotHaveReadsAsItDoesAlone() {
+        everyReadingReadsAlike(
+                order(List.of(line("x", 1), line("y", 2), line("x", 3), line("z", 4)),
+                        List.of("a", "b", "a")),
+                order(List.of(line("y", 5)), List.of()),
+                order(List.of(), List.of("c")));
+    }
+
+    @Test
+    void whatWasNotReadStopsEachReadingAsItDoesAlone() {
+        everyReadingReadsAlike(
+                order(List.of(line(new ObservedValue.Text("x"), TRUNCATED), line("x", 3),
+                        line(TRUNCATED, new ObservedValue.Integer(1)), line("y", 2)),
+                        List.of("a")),
+                order(List.of(line("y", 7)), List.of("b", "b")));
+    }
+
+    /**
+     * Reads every reading of a row holding {@code orders} as the measurement reads them, all of
+     * them over one walk of the row, and each again over a walk of its own that read no other
+     * reading: at every term of the quantity, a run computed of each order among them; whether
+     * a line is the last of its sku, whether some tag of its order is there, and whether an
+     * operation stopped before the line.
+     */
+    private static void everyReadingReadsAlike(ObservedValue... orders) {
+        NumericTerm.Multiplicity often = NumericTerm.Multiplicity.of(LINES,
+                LINES.element().then("sku"));
+        NumericTerm.ExtremeOfItsKey least = NumericTerm.ExtremeOfItsKey.of(LINES,
+                LINES.element().then("sku"), LINES.element().then("qty"), Extreme.LEAST);
+        NumericTerm.Multiplicity tagged = NumericTerm.Multiplicity.of(TAGS, TAGS.element());
+        RuleReadingSource rules = RuleReadings.ofSource(MODEL);
+        Symbols symbols = rules.symbols();
+        NumericTerm.TakenOver total = NumericTerm.TakenOver.of(
+                ValueName.Stdlib.operation("List", "sum"),
+                new RunSource.FlattenedOccurrences(LINES.element().then("qty")), Type.Prim.INT,
+                ScopedDeclarations.wrapsOf(symbols), symbols);
+        Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
+        on.put(often, TermOrdersFixtures.orders(often, Carrier.TEXT, WHOLE));
+        on.put(least, TermOrdersFixtures.computed(least, WHOLE, WHOLE,
+                Map.of(least.keyField(), Carrier.TEXT)));
+        on.put(tagged, TermOrdersFixtures.orders(tagged, Carrier.TEXT, WHOLE));
+        on.put(total, TermOrdersFixtures.itself(total, WHOLE));
+        ElementProjection rank = ElementProjection.ofFields(List.of("rank"));
+        NumericTerm.TakenOver computed = NumericTerm.TakenOver.of(
+                ValueName.Stdlib.operation("List", "sum"),
+                new RunSource.ComputedOccurrences(ORDERS.element(), new ElementValue.Affine(
+                        new LinearForm<>(ExactRatio.ONE, Map.of(rank, ExactRatio.of(2)))),
+                        Type.Prim.INT),
+                Type.Prim.INT, ScopedDeclarations.wrapsOf(symbols), symbols);
+        on.put(computed, TermOrdersFixtures.computed(computed, WHOLE, WHOLE,
+                Map.of(rank, WHOLE)));
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        on.keySet().forEach(term -> coefs.put(term, ExactRatio.ONE));
+        LinearQuantity quantity = new BorderQuantity.OverAForm("decide",
+                new LinearForm<>(ExactRatio.ZERO, coefs), on);
+        BehaviorInputs where = new BehaviorInputs(List.of("orders"),
+                List.of(new Type.ListOf(named("Order"))), rules, POLICY);
+        ObservedInputs row = new ObservedInputs(
+                List.of(new ObservedValue.Sequence(List.of(orders))),
+                new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered());
+        AStatementAtARow someTag = AStatementAtARow.of(new Proposition.Some(
+                new DecisionSubject.AnInput(TAGS),
+                new Proposition.Present(new DecisionSubject.AnInput(TAGS.element()), true), true),
+                "decide", null);
+        TermPath sku = LINES.element().then("sku");
+        MetOnARow stoppedAtALine = MetOnARow.of(new ElementsMetOn(
+                List.of(new ElementsMetOn.Level.StopsAt(LINES,
+                        new Proposition.Present(new DecisionSubject.AnInput(sku), true))),
+                new Proposition.Always(true)), "decide", null);
+        List<BorderQuantity.Observation> together =
+                StandingAtAPoint.readings(where, row, quantity).tried();
+        assertTrue(together.size() > 1, "a row with a reading per element");
+        for (int which = 0; which < together.size(); which++) {
+            BorderQuantity.Observation reading = together.get(which);
+            BorderQuantity.Observation alone =
+                    StandingAtAPoint.readings(where, row, quantity).tried().get(which);
+            QuantityReading kept = quantity.read(reading);
+            QuantityReading itsOwn = quantity.read(alone);
+            for (TermOrders each : on.values()) {
+                assertEquals(itsOwn.of(each), kept.of(each), () -> each + " at " + reading);
+            }
+            assertEquals(alone.lastToHold(LINES, sku), reading.lastToHold(LINES, sku));
+            assertEquals(someTag.at(alone), someTag.at(reading));
+            assertEquals(stoppedAtALine.at(alone), stoppedAtALine.at(reading));
+        }
+    }
+
+    private static ObservedValue order(List<ObservedValue> lines, List<String> tags) {
+        List<ObservedValue> written = new ArrayList<>();
+        tags.forEach(tag -> written.add(new ObservedValue.Text(tag)));
+        return new ObservedValue.Constructed(sym("Order"), Map.of(
+                "lines", new ObservedValue.Sequence(lines),
+                "tags", new ObservedValue.Sequence(written),
+                "rank", new ObservedValue.Integer(lines.size())));
+    }
+
+    private static ObservedValue line(String sku, long qty) {
+        return line(new ObservedValue.Text(sku), new ObservedValue.Integer(qty));
+    }
+
+    private static ObservedValue line(ObservedValue sku, ObservedValue qty) {
+        return new ObservedValue.Constructed(sym("Line"), Map.of("sku", sku, "qty", qty));
+    }
+
+    private static Type named(String data) {
+        return Type.ref(sym(data));
+    }
+
+    private static TypeSymbol sym(String data) {
+        return TypeSymbols.declared(new TypeKey("g", data));
+    }
+}

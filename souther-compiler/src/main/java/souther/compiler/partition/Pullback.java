@@ -40,7 +40,6 @@ import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.check.AnIndexedMap;
-import souther.compiler.inputs.AnIdentityMap;
 import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
@@ -51,6 +50,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.OnePerElement;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RunSource;
@@ -998,8 +998,10 @@ final class Pullback {
      *
      * <p>A container at a position of the input is that position. A map built by filing under the
      * key of each element of a list ({@link KeyedAccumulation}) has an entry for each element's
-     * key, so it holds something exactly where the list does. Any other container — a filter
-     * of one, say — may be empty with what it was made of not, and is not read back to it.
+     * key, so it holds something exactly where the list does, and the list exactly where the
+     * container it was made from does ({@link InputReads#holdingSomethingWhere}), whatever values it
+     * made of that container's elements. Any other container — a filter of one, say — may be empty
+     * with what it was made of not, and is not read back to it.
      */
     static Optional<TermPath> positionHoldingWhatItHolds(Denotation container,
                                                          InputReading read) {
@@ -1010,15 +1012,10 @@ final class Pullback {
             return Optional.of(at);
         }
         Denotation whole = container.at().standing(container.value(), symbols, newtypes);
-        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), closure ->
-                Core.withoutStanding(whole.at().standing(closure, symbols, newtypes).value())
-                        instanceof Core.Block block ? block : null);
-        if (filed == null) {
-            return Optional.empty();
-        }
-        Denotation walked = whole.at().standing(filed.walked(), symbols, newtypes);
-        return walked.at().pathOf(walked.value(), newtypes) instanceof PathResolution.At(
-                TermPath at) ? Optional.of(at) : Optional.empty();
+        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(),
+                blocksAt(whole, symbols, newtypes));
+        return filed != null && whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
+                instanceof PathResolution.At(TermPath at) ? Optional.of(at) : Optional.empty();
     }
 
     /**
@@ -2855,17 +2852,14 @@ final class Pullback {
 
         /**
          * Where the entries of {@code container} stand, where it is a map filed under the key of
-         * each element of a list standing at a position — or null where it is not.
+         * each element of a list holding something exactly where a container standing at a
+         * position does ({@link InputReads#holdingSomethingWhere}) — or null where it is not.
          */
         private Located entriesOf(Denotation container, List<Kept> pending, List<Kept> located,
                                  ElementAt outerEach, Denotation outerHanded) {
             KeyedAccumulation filed = KeyedAccumulation.of(container.value(), blockIn(container));
-            if (filed == null) {
-                return null;
-            }
-            Denotation walked = container.at().standing(filed.walked(), read.rules().symbols(),
-                    read.rules().newtypes());
-            if (!(walked.at().pathOf(walked.value(), read.rules().newtypes())
+            if (filed == null || !(container.at().holdingSomethingWhere(filed.walked(),
+                    read.rules().symbols(), read.rules().newtypes())
                     instanceof PathResolution.At(TermPath held))) {
                 return null;
             }
@@ -4458,9 +4452,13 @@ final class Pullback {
 
     /** The block a closure is, read where {@code container} stands. */
     private Function<Core, Core.Block> blocksAt(Denotation container) {
-        return closure -> Core.withoutStanding(container.at().standing(closure,
-                read.rules().symbols(), read.rules().newtypes()).value())
-                instanceof Core.Block block ? block : null;
+        return blocksAt(container, read.rules().symbols(), read.rules().newtypes());
+    }
+
+    private static Function<Core, Core.Block> blocksAt(Denotation container, Symbols symbols,
+                                                       DeclarationNewtypes newtypes) {
+        return closure -> Core.withoutStanding(container.at().standing(closure, symbols, newtypes)
+                .value()) instanceof Core.Block block ? block : null;
     }
 
     /**
@@ -4473,45 +4471,55 @@ final class Pullback {
      * end of the values its elements file, for an end kept. An element files under its own key, so
      * each element of a key reads the same number and some entry meets a statement exactly where
      * some element does.
+     *
+     * <p>The key and the value filed are read as places of the element the step is handed, and
+     * through the container of the input the list walked holds one value for each element of
+     * ({@link InputReads#onePerElementOf}) as places of that container's element. A key read
+     * anywhere else — off another walk's element, say — is the same for every element, and how
+     * often it occurs is how many elements there are, not how many share a value. A key may wear
+     * the value as a newtype, which keeps which keys are equal; the value an end is kept of may
+     * not, since nothing says the newtype keeps the order.
+     *
+     * <p>A counter that never moves holds what it starts at under every key, whichever keys they
+     * are, so it asks only that the map has an entry where the container has an element.
      */
     private LinearForm<Quantity> valueOfAnEntry(Core node, InputReads at) {
         Core container = at.containerOfTheElement(node);
         if (container == null) {
             return null;
         }
-        Denotation whole = at.standing(container, read.rules().symbols(), read.rules().newtypes());
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation whole = at.standing(container, symbols, newtypes);
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), blocksAt(whole));
         if (filed == null) {
             return null;
         }
-        Denotation walked = holdingEachAsOften(whole.at().standing(filed.walked(),
-                read.rules().symbols(), read.rules().newtypes()));
-        if (!(walked.at().pathOf(walked.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath held))) {
+        if (filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
+                && counted.step().signum() == 0) {
+            return whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
+                    instanceof PathResolution.At ? LinearForm.constant(counted.first()) : null;
+        }
+        OnePerElement walked = whole.at().onePerElementOf(filed.walked(), symbols, newtypes);
+        OnePerElement.Answered key = walked == null ? null
+                : whole.at().answeredOf(filed.key(), filed.element().binding(), newtypes);
+        if (key == null) {
             return null;
         }
-        TermPath place = placeOf(whole, filed.key());
-        if (place == null) {
-            return null;
-        }
+        TermPath held = walked.container();
+        TermPath place = walked.placeOf(key.at());
         return switch (filed.filed()) {
             case KeyedAccumulation.Filed.Counted counted -> counted(held, place, counted);
             case KeyedAccumulation.Filed.Kept kept -> {
-                TermPath value = placeOf(whole, kept.value());
-                NumericTerm.ExtremeOfItsKey extreme = value == null ? null
-                        : NumericTerm.ExtremeOfItsKey.of(held, place, value, kept.extreme());
+                OnePerElement.Answered value = walked.wrapped() ? null
+                        : whole.at().answeredOf(kept.value(), filed.element().binding(), newtypes);
+                NumericTerm.ExtremeOfItsKey extreme = value == null || value.wrapped() ? null
+                        : NumericTerm.ExtremeOfItsKey.of(held, place, walked.placeOf(value.at()),
+                                kept.extreme());
                 yield readOnAnOrder(extreme)
                         ? LinearForm.atom(new DecisionAtom.OfTheInput(extreme)) : null;
             }
         };
-    }
-
-    /** The position {@code e}, read where {@code whole} stands, is, or null where it is none. */
-    private TermPath placeOf(Denotation whole, Core e) {
-        Denotation standing = whole.at().standing(e, read.rules().symbols(),
-                read.rules().newtypes());
-        return whole.at().pathOf(standing.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath place) ? place : null;
     }
 
     /**
@@ -4525,9 +4533,6 @@ final class Pullback {
         NumericTerm.Multiplicity occurrences = NumericTerm.Multiplicity.of(held, place);
         if (!readOnAnOrder(occurrences)) {
             return null;
-        }
-        if (filed.step().signum() == 0) {
-            return LinearForm.constant(filed.first());
         }
         return filed.first().plus(filed.step().negated())
                 instanceof ExactAnswer.Held<ExactRatio>(ExactRatio constant)
@@ -4574,30 +4579,6 @@ final class Pullback {
         added.added().coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
                 by));
         return new LinearForm<>(added.seed(), coefs);
-    }
-
-    /**
-     * What {@code container} holds, beneath the operations that only put its elements in another
-     * order or answer each of them as it is: the same values, each as often as {@code container}
-     * holds it, which is what a count of them is a count of.
-     */
-    private Denotation holdingEachAsOften(Denotation container) {
-        Denotation at = container;
-        while (Core.withoutStanding(at.value()) instanceof Core.PreservedCall call) {
-            ValueName operation = call.declared().operation();
-            BuiltFrom<DeclaredArgument> built =
-                    DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
-            DeclaredArgument from = built == null ? null : built.permutesTheElementsOf();
-            if (from == null) {
-                from = AnIdentityMap.of(operation, call.args(), blocksAt(at));
-            }
-            if (from == null) {
-                break;
-            }
-            at = at.at().standing(call.args().get(from.position()), read.rules().symbols(),
-                    read.rules().newtypes());
-        }
-        return at;
     }
 
     /**
