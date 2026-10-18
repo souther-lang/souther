@@ -2631,6 +2631,16 @@ final class Terms {
      *  whatever asked for it. */
     static long[] COUNTING_WALKS;
 
+    /** Where a test counts the nodes the walks name, and null everywhere else. A walk counted once
+     *  where it begins says nothing of how far it goes, and a reader that names each node once and
+     *  one that names every node again below each one it passes start the same walks. */
+    static long[] COUNTING_NAMED;
+
+    /** Where a test counts the names a chain read off a construction writes out, and null
+     *  everywhere else. A chain read off anything else is the one the interner extends, and writes
+     *  out none. */
+    static long[] COUNTING_READ_OFF;
+
     /**
      * What a walk over an expression does where the term grammar runs out.
      *
@@ -2680,14 +2690,28 @@ final class Terms {
      */
     private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                           Leaf leaf) {
+        long[] counting = COUNTING_NAMED;
+        if (counting != null) {
+            counting[0]++;
+        }
         Core e = asOperator(raw);
         BindingId root = rootBinding(e);
         if (root != null) {
             Term here = bound.get(root);
+            if (here != null && leaf == Leaf.AN_EVALUATION && here.shape() == Term.Shape.BUILT) {
+                return new Naming.Named(readOff(here, stepsAlong(e).steps()));
+            }
             return here != null ? new Naming.Named(interned.on(here, chainOf(e)))
                     : Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
         }
         return switch (e) {
+            // A field read off a record built right there is what the record was given for it: the
+            // record is named as the construction it is, and its steps read off that.
+            case Core.FieldAccess _, Core.FieldProjection _
+                    when leaf == Leaf.AN_EVALUATION
+                            && stepsAlong(e) instanceof Steps(Core head, FieldPath steps)
+                            && Core.withoutStanding(head) instanceof Core.Construct built ->
+                    named(naming(built, at, bound, depth, leaf), record -> readOff(record, steps));
             case Core.Read _, Core.FieldAccess _, Core.FieldProjection _ ->
                     Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
             case Core.Int i -> new Naming.Named(interned.written(i.value()));
@@ -2912,7 +2936,31 @@ final class Terms {
         if (placed != null) {
             return over(sides, at, bound, depth, leaf, ps -> comparisonTerm(placed, ps));
         }
+        if (leaf == Leaf.AN_EVALUATION) {
+            return over(sides, at, bound, depth, leaf, ps -> joinedText(b, ps));
+        }
         return over(sides, at, bound, depth, leaf, ps -> operatorTerm(b, ps));
+    }
+
+    /**
+     * Two texts joined: the text they come to where both sides are written texts, and the operator
+     * over them otherwise — as every operator but a join is.
+     *
+     * <p>Built into the term, where a number a term comes to is read off it ({@link
+     * Term#foldedWholeNumber}), because a text is filed under what it is: a rule about a string is
+     * a rule about one text, and {@code "J" ++ "P"} is the text {@code "JP"} is. Asked of the terms
+     * the sides already are — a name is what it was entered as — so a chain of names is joined a
+     * link at a time and never followed again from its head. What joining comes to is {@link
+     * ConstantAlgebra}'s, which the fold asks as well.
+     */
+    private Term joinedText(Core.Binary b, List<Term> sides) {
+        String left = sides.get(0).writtenText();
+        String right = sides.get(1).writtenText();
+        if (b.op() == BinOp.CONCAT && left != null && right != null
+                && ConstantAlgebra.binary(b.op(), left, right).orElse(null) instanceof String text) {
+            return interned.written(text);
+        }
+        return operatorTerm(b, sides);
     }
 
     /** The term a comparison is: what the claim says it states, over the terms its two sides are. */
@@ -2948,6 +2996,31 @@ final class Terms {
             case Core.FieldAccess fa -> rootBinding(fa.target());
             case Core.FieldProjection p -> rootBinding(p.base());
             default -> null;
+        };
+    }
+
+    /** What a chain reads its names off, and the names along it that are steps. */
+    private record Steps(Core head, FieldPath steps) {}
+
+    /**
+     * What a {@code x.a.b} chain reads its names off, or {@code e} itself where it is no chain, with
+     * the names that are steps of a value — the rule {@link #subjectKey} reads a chain by, so a
+     * chain named off what its head is and the same chain filed under its head's subject are one
+     * term: a newtype's own {@code value} is the value under the name and no step ({@link
+     * Location#isStep}).
+     */
+    private Steps stepsAlong(Core standing) {
+        return switch (Core.withoutStanding(standing)) {
+            case Core.FieldAccess fa -> {
+                Steps under = stepsAlong(fa.target());
+                yield Location.isStep(fa.target().type(), fa.field(), newtypes())
+                        ? new Steps(under.head(), under.steps().then(fa.field())) : under;
+            }
+            case Core.FieldProjection p -> {
+                Steps under = stepsAlong(p.base());
+                yield new Steps(under.head(), under.steps().then(stepsOf(p)));
+            }
+            case Core other -> new Steps(other, FieldPath.NONE);
         };
     }
 
@@ -3022,15 +3095,49 @@ final class Terms {
             }
             case Core.FieldAccess fa ->
                     Location.isStep(fa.target().type(), fa.field(), newtypes())
-                            ? interned.on(subjectKey(fa.target(), at), List.of(fa.field()))
+                            ? readOff(subjectKey(fa.target(), at), FieldPath.NONE.then(fa.field()))
                             : subjectKey(fa.target(), at);
             // The rule above taken a name at a time, along the names rather than down the stack.
             // The steps are read off together: a term read on by one name and then another is the
             // term read on by both, and building each one between is a term per name.
-            case Core.FieldProjection p ->
-                    interned.on(subjectKey(p.base(), at), stepsOf(p));
+            case Core.FieldProjection p -> readOff(subjectKey(p.base(), at), stepsOf(p));
             default -> interned.evaluated(evaluationIdOf(e));
         };
+    }
+
+    /**
+     * {@code fields} read off {@code base}, where a field of a construction is what the construction
+     * gave it.
+     *
+     * <p>A record built of written values is those values, so a field read off one is the value
+     * written into it: {@code Prefix { p = "JP" }.p} is the text {@code "JP"} is. Only of an
+     * identity. What the symbolic reading reads is the chain that was written, and the interner
+     * builds the same chain for both, so this stands beside {@link Term.Interner#on} rather than in
+     * it.
+     */
+    private Term readOff(Term base, FieldPath fields) {
+        // Most chains are read off a place or a value nothing built here, and those are the chain
+        // the interner makes, which a projection's steps are already worked out for.
+        if (base.shape() != Term.Shape.BUILT || fields.isEmpty()) {
+            return interned.on(base, fields);
+        }
+        List<String> names = fields.names();
+        long[] counting = COUNTING_READ_OFF;
+        if (counting != null) {
+            counting[0] += names.size();
+        }
+        Term reached = base;
+        int read = 0;
+        while (read < names.size()) {
+            Term given = reached.givenTo(names.get(read));
+            if (given == null) {
+                break;
+            }
+            reached = given;
+            read++;
+        }
+        return read == 0 ? interned.on(base, fields)
+                : interned.on(reached, FieldPath.of(names.subList(read, names.size())));
     }
 
     /** The names of {@code p} that are steps of a position, the first one first: a newtype's own
