@@ -104,6 +104,18 @@ final class AStatementAtARow {
      * it says nothing about.
      */
     static boolean askable(Proposition stated) {
+        return askable(stated, false);
+    }
+
+    /**
+     * The same of every part of {@code stated} that is no relation, its relations left to be asked
+     * one at a time — for a line, or for what else each relates.
+     */
+    static boolean askableBesideItsRelations(Proposition stated) {
+        return askable(stated, true);
+    }
+
+    private static boolean askable(Proposition stated, boolean besideItsRelations) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
@@ -116,14 +128,17 @@ final class AStatementAtARow {
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
                                        boolean _, String _) -> true;
             case Proposition.LastToHold _ -> true;
-            case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::askable);
-            case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
-            case Proposition.WhereItAnswers where ->
-                    askable(where.answers()) && askable(where.states());
-            case Proposition.SoManyHold counted ->
-                    counted.statements().stream().allMatch(AStatementAtARow::askable);
-            case Proposition.Some some -> askable(some.ofTheElement());
-            case Proposition.Compared compared -> switch (compared.relation()) {
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(each -> askable(each, besideItsRelations));
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(each -> askable(each, besideItsRelations));
+            case Proposition.WhereItAnswers where -> askable(where.answers(), besideItsRelations)
+                    && askable(where.states(), besideItsRelations);
+            case Proposition.SoManyHold counted -> counted.statements().stream()
+                    .allMatch(each -> askable(each, besideItsRelations));
+            case Proposition.Some some -> askable(some.ofTheElement(), besideItsRelations);
+            case Proposition.Compared compared -> besideItsRelations
+                    || switch (compared.relation()) {
                 case Relation.Affine affine ->
                         WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null
                         || (countIn(affine) instanceof Quantity.HowManyMeet count
@@ -336,28 +351,41 @@ final class AStatementAtARow {
      * How many of the elements of {@code container} the row wrote meet this statement: the least
      * it can be, and how many more it may be where an element could not be read.
      *
+     * <p>Counted once for every reading of the row that chose alike where counting asked: the
+     * elements counted are all of them whichever a reading chose, and a row read once per
+     * element of another container would otherwise count them once per reading.
+     *
      * @return null where the walk could not reach the container
      */
     HowManyAtARow howManyMeetIn(TermPath container, BorderQuantity.Observation row) {
-        if (!(row.eachElementOf(container)
-                instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
-            return null;
-        }
-        List<BorderQuantity.Observation> each = reached.value();
-        int meet = 0;
-        int unread = 0;
-        Set<ReadingGap> why = new LinkedHashSet<>();
-        for (BorderQuantity.Observation element : each) {
-            switch (at(element)) {
-                case Answer.Holds _ -> meet++;
-                case Answer.Fails _ -> { }
-                case Answer.CouldNotTell(var stopped) -> {
-                    unread++;
-                    why.addAll(stopped);
+        return row.keptOf(new MeetingIn(this, container));
+    }
+
+    /** How many elements of a container meet one statement, by the statement and the container. */
+    private record MeetingIn(AStatementAtARow statement, TermPath container)
+            implements BorderQuantity.ReadAlike<HowManyAtARow> {
+
+        @Override
+        public HowManyAtARow readAt(BorderQuantity.Observation row) {
+            if (!(row.eachElementOf(container)
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+                return null;
+            }
+            int meet = 0;
+            int unread = 0;
+            Set<ReadingGap> why = new LinkedHashSet<>();
+            for (BorderQuantity.Observation element : reached.value()) {
+                switch (statement.at(element)) {
+                    case Answer.Holds _ -> meet++;
+                    case Answer.Fails _ -> { }
+                    case Answer.CouldNotTell(var stopped) -> {
+                        unread++;
+                        why.addAll(stopped);
+                    }
                 }
             }
+            return new HowManyAtARow(meet, unread, why);
         }
-        return new HowManyAtARow(meet, unread, why);
     }
 
     /**

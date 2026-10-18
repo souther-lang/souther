@@ -606,6 +606,7 @@ final class InputPath {
             return switch (asked) {
                 case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
                 case EVERY_OCCURRENCE -> PathResolution.inEveryCase(each);
+                case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
             };
         }
         // Or through an operation that answers what it was given, in either of the two shapes a
@@ -629,7 +630,7 @@ final class InputPath {
         }
         Crossing crossing = crossing(operation, wanted);
         if (crossing == null) {
-            crossing = throughAnIdentityMap(operation, args, wanted);
+            crossing = throughAnIdentityMap(operation, args, wanted, names);
         }
         if (crossing == null) {
             PathResolution flattened = throughAFlattening(operation, args, wanted, names);
@@ -652,14 +653,14 @@ final class InputPath {
      * argument, and a place of one is a place of the other. Null where it is any other operation, or
      * where what is wanted is no element of the answer.
      */
-    private static Crossing throughAnIdentityMap(ValueName operation, List<Core> args,
-                                                 Wanted wanted) {
+    private Crossing throughAnIdentityMap(ValueName operation, List<Core> args, Wanted wanted,
+                                          BindingEnvironment names) {
         boolean ofAnElement = switch (wanted) {
             case Wanted.APart(HeldIn.Part part) -> part == HeldIn.Part.ELEMENT;
             case Wanted.APlaceOfAnElement _ -> true;
         };
-        DeclaredArgument same = ofAnElement
-                ? AnIdentityMap.of(operation, args, InputPath::blockStanding) : null;
+        DeclaredArgument same = ofAnElement ? AnIdentityMap.of(operation, args,
+                InputPath::blockStanding, names.heldByTheBody(), newtypes) : null;
         return same == null ? null : new Crossing(same, wanted);
     }
 
@@ -794,6 +795,145 @@ final class InputPath {
                     case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
                             : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
                     case NAMED_POSITION, EVERY_OCCURRENCE -> null;
+                    case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
                 };
+    }
+
+    /** A walk after a position was handed a question about one value for each element, which is
+     *  answered a step at a time ({@link #oneStepBeneath}) and never by this walk. */
+    private IllegalStateException unaskedHere() {
+        return new IllegalStateException("a walk after a position was asked " + asked
+                + ", which is answered a step at a time beneath a list");
+    }
+
+    /**
+     * One step from a list to the list it was made from, for a walk asking {@code question}: the
+     * list one step beneath, and what the step answered of each of that list's elements — or null
+     * where the list was made by nothing this question crosses.
+     *
+     * @param from     the list beneath
+     * @param answered what the list holds for each element of {@code from}, where the question asks
+     *                 it ({@link ElementQuestion#ONE_PER_ELEMENT}); null where it does not
+     */
+    record Beneath(Core from, OnePerElement.Answered answered) {}
+
+    /**
+     * Whether a walk asking {@code question} goes on with the list {@code asked}, which following
+     * the names it stands for came to {@code reached}.
+     *
+     * <p>A question about one value for each element counts which of the values are equal, and
+     * what one type calls equal is not shown to be what another does. So the list must be of one
+     * type as it was asked and as it was reached, and stand as no wider type at either: following
+     * names is free to set aside the type a value stood as on the way, and a type kept from the
+     * one to the other is what this walk can show of it — a condition it asks, and no record that
+     * nothing was set aside. Whether a list holds something does not turn on the type it stands
+     * as, so that question asks none of this.
+     *
+     * <p>Asked before anything else is of what was reached, a position it names among them: a list
+     * that names one, reached from a list of another type, has held nothing yet the question can
+     * use.
+     */
+    static boolean goesOnThrough(Core asked, Core reached, ElementQuestion question) {
+        return switch (question) {
+            case ONE_PER_ELEMENT -> !(asked instanceof Core.Widen)
+                    && !(reached instanceof Core.Widen) && asked.type().equals(reached.type());
+            case SAME_EMPTINESS -> true;
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE ->
+                    throw new IllegalArgumentException("a list is followed beneath for a question"
+                            + " about one value for each element, not " + question);
+        };
+    }
+
+    /**
+     * The step beneath {@code list} a walk asking {@code question} takes, where the list is the
+     * answer of an operation the walk crosses or a binding an expansion said holds another's
+     * elements — or null where it takes none.
+     *
+     * <p>The one statement of what each of the two questions about one value for each element
+     * crosses. An operation that puts the elements in another order holds each of them once, so
+     * both cross it. An operation answering one value for each element holds something exactly
+     * where its argument does, so the walk after holding something crosses it whatever the closure
+     * answers; the walk after one value for each element crosses it only where the closure answers
+     * a place of the element, or a newtype wearing one ({@link OnePerElement.Answered}). An
+     * operation keeping some of the elements, or answering several for one, is crossed by neither.
+     * What an expansion wrote of a binding's elements is read for the question
+     * ({@link souther.compiler.check.ElementProvenance#stepFrom}).
+     *
+     * <p>A step and not the walk: what a name stands for, and what a parameter of a body entered is
+     * handed, is the reading's to say, and the reading takes the step from where the list stands.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    static Beneath oneStepBeneath(Core list, ElementQuestion question, BindingEnvironment names,
+                                  DeclarationNewtypes newtypes,
+                                  Function<Core, Core.Block> blockOf) {
+        boolean asksWhatEachIs = switch (question) {
+            case ONE_PER_ELEMENT -> true;
+            case SAME_EMPTINESS -> false;
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE ->
+                    throw new IllegalArgumentException("a step beneath a list is taken for a"
+                            + " question about one value for each element, not " + question);
+        };
+        // What a step that hands the elements on as they are answered of each, where it is asked.
+        OnePerElement.Answered asTheyAre = asksWhatEachIs ? OnePerElement.Answered.ITSELF : null;
+        if (!goesOnThrough(list, list, question)) {
+            return null;
+        }
+        Core e = Core.withoutStanding(list);
+        if (e instanceof Core.Read r) {
+            return switch (names.stepFrom(r.binding(), question, HeldIn.Part.ELEMENT)) {
+                case ElementStep.Through(var same) -> new Beneath(
+                        new Core.Read(r.name(), same, r.type(), r.pos()), asTheyAre);
+                // What was made from the elements, or some of them, is not them each once.
+                case ElementStep.Refused _ -> null;
+                // Where nothing says where the elements came from, what the binding holds is all
+                // there is, looked up over the whole body as the walk after a position does: a
+                // container built by one operation and handed to the next is bound beside the
+                // closure that reads it rather than above it.
+                case ElementStep.NoEdge _ -> {
+                    Core held = names.heldAnywhereBy(r.binding());
+                    yield held == null ? null : new Beneath(held, asTheyAre);
+                }
+            };
+        }
+        ValueName operation;
+        List<Core> args;
+        switch (e) {
+            case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                operation = reached.denotes();
+                args = call.args();
+            }
+            case Core.PreservedCall kept -> {
+                operation = kept.declared().operation();
+                args = kept.args();
+            }
+            default -> {
+                return null;
+            }
+        }
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        if (built == null) {
+            return null;
+        }
+        int permuted = built.permutesTheElementsOf() == null ? -1
+                : CallArguments.positionOf(built.permutesTheElementsOf(), operation);
+        if (permuted >= 0 && permuted < args.size()) {
+            return new Beneath(args.get(permuted), asTheyAre);
+        }
+        int mapped = built.mapsEachElementOf() == null ? -1
+                : CallArguments.positionOf(built.mapsEachElementOf(), operation);
+        Core.Block closure = mapped < 0 || mapped >= args.size() ? null
+                : AnIdentityMap.closureBeside(args, mapped, blockOf);
+        if (closure == null || closure.params().size() != 1
+                || closure.params().getFirst().binding() == null) {
+            return null;
+        }
+        if (!asksWhatEachIs) {
+            return new Beneath(args.get(mapped), null);
+        }
+        OnePerElement.Answered answered = OnePerElement.Answered.of(closure.body(),
+                closure.params().getFirst().binding(), names.heldByTheBody(), newtypes);
+        return answered == null ? null : new Beneath(args.get(mapped), answered);
     }
 }

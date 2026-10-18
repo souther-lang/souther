@@ -135,8 +135,7 @@ public sealed interface LinearQuantity extends BorderQuantity
                     // from ({@code TermReading}).
                     case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _,
                          RunSource.ReachableNodes _ ->
-                            WhatATermRead.over(orders,
-                                    observation.everyValueAt(over.subjectPath()));
+                            WhatATermRead.over(orders, observation, over.subjectPath());
                     case RunSource.ComputedOccurrences computed ->
                             WhatATermRead.overElements(orders, computed, observation);
                 };

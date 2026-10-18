@@ -68,8 +68,9 @@ public sealed interface NumericTerm
      * <p>One kind and not two terms each asked about separately, because what follows from being one
      * is the same for both: the number is read among the elements of the one occurrence of
      * {@link #container()} the element is in, the elements are looked at only at
-     * {@link #fieldsRead()}, and nothing about it is read off one position. A reader asks it of this type rather than of
-     * the two, so a third number of the kind is one that reader already handles.
+     * {@link #fieldsRead()}, and nothing about it is read off one position. A reader asks it of
+     * this type rather than of the two, so a third number of the kind is one that reader already
+     * handles.
      */
     sealed interface OfAnElementsNeighbours extends NumericTerm
             permits Multiplicity, ExtremeOfItsKey {

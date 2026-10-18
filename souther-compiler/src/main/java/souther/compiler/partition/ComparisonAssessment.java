@@ -483,19 +483,45 @@ sealed interface ComparisonAssessment {
          * <p>Every line it drew is said not to be drawn, and why: a reader composing rows against a
          * line with nothing that holds them where the line decides would be owed rows the statement
          * answers alike on both sides. A line that was refused keeps its own reason.
+         *
+         * <p>Where every part was a line, the statement is a reading that stopped, at each place
+         * one of them is at. A relation that was no line is no stop: it stays what it was, and the
+         * statement stays its parts, each line said not drawn at its own places.
          */
         ComparisonAssessment withNoWayForItsParts() {
+            List<Part> each = new ArrayList<>();
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why =
                     new LinkedHashMap<>();
+            boolean allStopped = true;
             for (Part part : parts) {
-                if (part.line() instanceof Unread unread) {
-                    unread.why().forEach(why::putIfAbsent);
+                Unread stopped = notDrawn(part.line());
+                if (stopped == null) {
+                    allStopped = false;
+                    each.add(part);
                 } else {
-                    cuttingOf(part.line()).over().forEach(at ->
-                            why.putIfAbsent(at, new BlockReason.SeveralLinesInOneRule()));
+                    stopped.why().forEach(why::putIfAbsent);
+                    each.add(new Part(part.id(), stopped, List.of()));
                 }
             }
-            return new Unread(why);
+            return allStopped ? new Unread(why) : new Several(each);
+        }
+
+        /**
+         * {@code line} said not drawn, or kept its own reason where it was refused — or null where
+         * it is no line at all.
+         */
+        private static Unread notDrawn(ComparisonAssessment line) {
+            return switch (line) {
+                case Unread unread -> unread;
+                case AtAPosition _, AcrossPositions _, OutsideTheDomain _,
+                     NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _ ->
+                        new Unread(atEachOf(cuttingOf(line).over(),
+                                new BlockReason.SeveralLinesInOneRule()));
+                case AgainstAnotherValue _, AnswerDependent _, OnADependencysAnswer _,
+                     StatesNoRelation _, NoInput _, CutsNothing _ -> null;
+                case Several _ -> throw new IllegalStateException(
+                        "a line of a statement is what one line comes to: " + line);
+            };
         }
     }
 
@@ -660,13 +686,24 @@ sealed interface ComparisonAssessment {
         };
     }
 
-    /** The same, for each line of a statement of several, carrying where each decides. */
+    /**
+     * The same, for each line of a statement of several, carrying where each decides — and each of
+     * its relations that is no line as what it is: one relating the input to another value, or a
+     * line no row could be held to where it decides, said not to be drawn.
+     */
     private static ComparisonAssessment eachLineOf(Cutting.Read.Several lines, Citation at,
                                                    InputReading read, boolean drawnByAnInvariant,
                                                    Supplier<ComparisonAssessment> aboutNoPosition) {
         return new Several(lines.parts().stream()
-                .map(part -> Several.Part.ofCases(part.id(), aLine(part.line(), at, read,
-                        drawnByAnInvariant, aboutNoPosition), part.cases()))
+                .map(part -> Several.Part.ofCases(part.id(), switch (part.line()) {
+                    case Cutting.Read.AgainstAnotherValue against ->
+                            AgainstAnotherValue.of(against, read);
+                    case Cutting.Read.Stopped stopped -> new Unread(stopped.why());
+                    case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
+                         Cutting.Read.NumberNoRatioHolds _, Cutting.Read.CutsNothing _,
+                         Cutting.Read.Several _, Cutting.Read.StatesNoRelation _ ->
+                            aLine(part.line(), at, read, drawnByAnInvariant, aboutNoPosition);
+                }, part.cases()))
                 .toList());
     }
 
