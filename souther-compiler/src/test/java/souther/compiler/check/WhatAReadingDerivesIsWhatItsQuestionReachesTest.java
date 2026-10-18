@@ -129,6 +129,30 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
     }
 
     /**
+     * Whether a construction is reached is asked apart from what its invariant comes to. One whose
+     * invariant holds of any value it could be given, under a choice a later guard leaves no part
+     * of, is still one no run gets past, and what is written after it is not read.
+     */
+    @Test
+    void aConstructionWhoseInvariantHoldsStillStopsTheWalkWhereNoWayReachesIt() {
+        String body = """
+                module demo
+                data NonNeg = Int
+                    invariant value >= 0
+                behavior f : (x: Int) -> NonNeg
+                    constructs NonNeg
+                let f (x) = {
+                    guard x >= 5 || x <= 0 else NonNeg(0)
+                    guard x >= 1 && x <= 4 else NonNeg(0)
+                    let valid = NonNeg(0)
+                    %s
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("valid")),
+                derivedWhileCompiling(body.formatted("NonNeg(x - 100)")));
+    }
+
+    /**
      * A choice one part of which cannot hold where it is taken in is the other part, and is read
      * as that part written alone: the construction under it is read once, as it is under the part,
      * and not once and then again under each way the choice comes apart in.

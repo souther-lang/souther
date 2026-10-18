@@ -244,31 +244,33 @@ class AGuardThatHoldsAsOneOfItsPartsIsReadPartByPartTest {
     }
 
     /**
-     * A choice about a value the construction does not read is passed over and costs no copy, so
-     * however many stand before the one that matters, that one is still taken apart. Without the
-     * passing over, the eight before it would have taken every copy the walk may make.
+     * What each part says may be a relation between two values and nothing about where either
+     * lies: under {@code x >= y || x == y} the difference is never below nought, though neither
+     * part moves a bound of {@code x} or of {@code y} the path did not already have. So the choice
+     * is taken apart for the difference all the same. The control's second part lets the
+     * difference be minus one, which a pinned input shows the clause refuses.
      */
     @Test
-    void aChoiceAboutAValueTheConstructionDoesNotReadIsPassedOver() {
-        StringBuilder before = new StringBuilder();
-        for (int i = 0; i < 8; i++) {
-            before.append("guard tag >= %d || tag <= %d else Share(1)\n    "
-                    .formatted(50 + i, 49 + i));
-        }
-        assertEquals(List.of(), judged("""
+    void aChoiceWhosePartsRelateTwoValuesIsTakenApartForTheirRelation() {
+        String model = """
                 module demo
 
-                data Share = Int
-                    invariant value >= 0 - 50 && value <= 50
+                data NonNeg = Int
+                    invariant value >= 0
 
-                behavior apportion : (amount: Int, among: Int, tag: Int) -> Share
-                    constructs Share
+                behavior f : (x: Int, y: Int) -> NonNeg
+                    constructs NonNeg
 
-                let apportion (amount, among, tag) = {
-                    %s
+                let f (x, y) = {
+                    guard x <= 1000 && y <= 1000 && x >= 0 - 1000 && y >= 0 - 1000 else NonNeg(0)
+                    guard %s else NonNeg(0)
+                    NonNeg(x - y)
                 }
-                """.formatted(share(before
-                + "guard among >= 2 || among <= 0 - 2 else Share(1)"))));
+                """;
+        assertEquals(List.of(), judged(model.formatted("x >= y || x == y")));
+        assertEquals(List.of("E2011"), judged(model.formatted("x >= y || x == y - 1")));
+        assertEquals(List.of("E2010"),
+                judged(model.formatted("(x >= y || x == y - 1) && x == 0 && y == 1")));
     }
 
     /**

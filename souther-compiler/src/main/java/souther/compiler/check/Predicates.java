@@ -1046,9 +1046,40 @@ final class Predicates {
      */
     List<Known> eachWayOf(Known.OneOf condition, Known k) {
         List<Known> ways = new ArrayList<>();
+        for (Assumed way : takingEachPartOf(condition, k)) {
+            ways.add(way.known());
+        }
+        return ways;
+    }
+
+    /**
+     * Whether a condition {@code k} holds as one of its parts has no part that can hold beside
+     * what else {@code k} knows, so no run stands where {@code k} does.
+     *
+     * <p>Each condition alone, which is what a path holds them as: one is held only where both its
+     * parts could hold when it was taken in ({@link #takingOneOf}), and what was taken in after it
+     * may have ruled both out. That a combination of parts of several of them can hold nowhere is
+     * a different question, with one answer per way of choosing a part from each, and it is asked
+     * where they are taken apart together.
+     */
+    boolean leavesNoWay(Known k) {
+        for (Known.OneOf condition : k.heldAsOneOfTheirParts()) {
+            if (eachWayOf(condition, k).stream().allMatch(Known::reachesNothing)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** What taking each part of {@code condition} in alone over {@code k} came to, the state and
+     *  what the reading made of the part ({@link #eachWayOf}). */
+    private List<Assumed> takingEachPartOf(Known.OneOf condition, Known k) {
+        List<Assumed> ways = new ArrayList<>();
         for (ClauseExpr part : List.of(condition.of().left(), condition.of().right())) {
-            ways.add(new Assuming(this).read(part, condition.at(), terms::inside, null)
-                    .from(k).known().speakingAs(k));
+            Assumed taken = new Assuming(this).read(part, condition.at(), terms::inside, null)
+                    .from(k);
+            ways.add(new Assumed(taken.known().speakingAs(k), taken.taken(), taken.shapeRead(),
+                    taken.notTaken()));
         }
         return ways;
     }
@@ -1067,21 +1098,24 @@ final class Predicates {
      * <p>What the condition names is what {@code whole} named, wherever this lands: a way names
      * nothing its whole did not, so a choice one part of which is left names its two halves as a
      * choice both parts of which are left does.
+     *
+     * <p>And what the reading made of it is what was read. None left is read to the end, as a
+     * condition no case satisfies is; one left is that part's reading, which took the part in; both
+     * left is the whole's, which took neither.
      */
     private Assumed takingOneOf(Known.OneOf condition, Assumed whole) {
-        Known k = whole.known();
-        List<Known> left = new ArrayList<>();
-        for (Known way : eachWayOf(condition, k)) {
-            if (!way.reachesNothing()) {
+        List<Assumed> left = new ArrayList<>();
+        for (Assumed way : takingEachPartOf(condition, whole.known())) {
+            if (!way.known().reachesNothing()) {
                 left.add(way);
             }
         }
-        Known out = switch (left.size()) {
-            case 0 -> k.reachingNothing();
-            case 1 -> left.getFirst();
-            default -> k.holdingOneOf(condition);
+        return switch (left.size()) {
+            case 0 -> new Assumed(whole.known().reachingNothing(), true, true);
+            case 1 -> left.getFirst().alsoRead(whole.taken(), whole.shapeRead());
+            default -> new Assumed(whole.known().holdingOneOf(condition), whole.taken(),
+                    whole.shapeRead(), whole.notTaken());
         };
-        return new Assumed(out, whole.taken(), whole.shapeRead(), whole.notTaken());
     }
 
     /**

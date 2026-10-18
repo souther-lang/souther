@@ -4648,9 +4648,18 @@ public final class InvariantChecker {
      * <p>Answered as what a run past it comes to: nothing, where the value fails wherever it is
      * built and the construction is not an attempt, or where no way the conditions on the path come
      * apart in reaches it — which is no value built, and nothing is said of it.
+     *
+     * <p>Whether a way reaches it is asked first, of every construction, and apart from what its
+     * invariant comes to. It is a question about the path and has an answer whatever the value is
+     * and whether or not anything is owed of it: asked only where the verdict left something to
+     * take apart, a construction whose invariant holds would be one the walk went on past although
+     * no run arrives at it.
      */
     private Completion judge(Core.Construct made, Known k, Denotations at, boolean attempted,
                              ContextMultiplicity copies) {
+        if (predicates.leavesNoWay(k)) {
+            return new Completion.CannotComplete(new Completion.NoCompletionProof.NoWayIn(made));
+        }
         // Which form the name was declared in, asked of what was settled when its module was
         // indexed. Only a product carries an invariant to judge a construction against; reading the
         // declaration to find that out is what had this check re-run for a declaration of another
@@ -4703,22 +4712,21 @@ public final class InvariantChecker {
     /**
      * The verdict for a construction of {@code named}, with the conditions on the path that hold as
      * one of their parts taken apart where the whole of each leaves the invariant not shown to
-     * hold — or null where no way they come apart in is entered, so no value is built here.
+     * hold — or null where no combination of their parts is entered, so no value is built here.
      *
      * <p>Only there. A clause established without them is established in each way they could be
      * taken apart, since each way knows more than this; so is a clause that could not be read,
      * since which clauses are read turns on the values the path has named, and no way names one
      * the whole did not ({@link Predicates#eachWayOf}). A clause refuted without them is refuted in
-     * each way as well, and what taking them apart can still show is that no way is entered.
+     * each way as well. Whether each condition alone leaves a way at all was asked before this
+     * ({@link Predicates#leavesNoWay}); what taking them apart together can still find is a
+     * combination of their parts none of which is entered.
      *
-     * <p>One condition at a time, in the order they are held. A condition is taken apart where it
-     * bears on what the clauses read: where one of its ways is entered by nothing, or where a way
-     * leaves one of the values the clauses reach — what they are decided by, and what those are
-     * computed from and carry ({@link Terms#reachedFrom}) — somewhere the whole did not. One that
-     * leaves all of them where they were cannot change what the clauses come to, and it is passed
-     * over without judging the construction again. Passed over here and not dropped: each way of a
-     * condition taken apart further on still holds it, and asks it again under what that way knows,
-     * which is where two conditions that only say something together are both taken apart.
+     * <p>One condition at a time, in the order they are held, and every one of them taken apart
+     * while the copies allow. Nothing passes a condition over for looking as though it could not
+     * matter: what a part says may be a relation between values none of whose bounds it moves, as
+     * {@code x >= y || x == y} says of {@code x - y}, and the only answer to whether it changes
+     * what the clauses come to is the verdict under it.
      *
      * <p>A way nothing enters is no value built and is not judged. The ways that are left are
      * combined as the arms of a split are ({@link Judgment#of}): a clause holds where it holds in
@@ -4730,6 +4738,8 @@ public final class InvariantChecker {
      * A condition whose ways would compound past that is not taken apart, and nor is any condition
      * after it on this way. What is answered then is the verdict without them: a judgment made of
      * the ways that were taken apart and not the others would be a proof over some of the values.
+     * Which conditions the copies reach is the order they are held in, as it is for any bound on
+     * a search.
      */
     private Judgment verdictOf(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
                                Denotations at, boolean decidesFalse, ContextMultiplicity copies) {
@@ -4741,26 +4751,23 @@ public final class InvariantChecker {
      * stands, and {@code apart} the conditions {@code k} holds that it already holds a part of. */
     private Judgment takenApart(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
                                 Denotations at, boolean decidesFalse, ContextMultiplicity copies,
-                                Judging whole, Set<Known.OneOf> apart) {
-        if (whole.judgment().verdict().holds()) {
-            return whole.judgment();
+                                Judgment whole, Set<Known.OneOf> apart) {
+        if (whole.verdict().holds()) {
+            return whole;
         }
-        Set<FactSubject> reached = null;
         for (Known.OneOf condition : k.heldAsOneOfTheirParts()) {
             if (apart.contains(condition)) {
                 continue;
             }
-            if (reached == null) {
-                reached = terms.reachedFrom(whole.decidedBy());
+            List<Known> entered = predicates.eachWayOf(condition, k).stream()
+                    .filter(way -> !way.reachesNothing())
+                    .toList();
+            if (entered.isEmpty()) {
+                return null;
             }
-            List<Known> ways = predicates.eachWayOf(condition, k);
-            List<Known> entered = ways.stream().filter(way -> !way.reachesNothing()).toList();
-            if (entered.size() == ways.size() && !movesAny(entered, k, reached)) {
-                continue;
-            }
-            ContextMultiplicity opened = entered.isEmpty() ? copies : copies.opening(entered.size());
+            ContextMultiplicity opened = copies.opening(entered.size());
             if (opened == null) {
-                return whole.judgment();
+                return whole;
             }
             Set<Known.OneOf> further = new HashSet<>(apart);
             further.add(condition);
@@ -4774,25 +4781,7 @@ public final class InvariantChecker {
             }
             return together;
         }
-        return whole.judgment();
-    }
-
-    /** Whether one of {@code ways} leaves one of {@code reached} somewhere {@code k} did not: a
-     * number between other bounds, or a predicate settled where it was not. */
-    private static boolean movesAny(List<Known> ways, Known k, Set<FactSubject> reached) {
-        for (FactSubject atom : reached) {
-            NumericDomain.Projection was = k.numbers().projectionOf(atom);
-            boolean held = k.facts().entails(atom, true);
-            boolean failed = k.facts().entails(atom, false);
-            for (Known way : ways) {
-                if (!way.numbers().projectionOf(atom).equals(was)
-                        || way.facts().entails(atom, true) != held
-                        || way.facts().entails(atom, false) != failed) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return whole;
     }
 
     /** Which of the values a construction hands over is not one a clause may be read against
@@ -4869,18 +4858,10 @@ public final class InvariantChecker {
         }
     }
 
-    /**
-     * A verdict and the atoms the clauses it was reached over are decided by.
-     *
-     * <p>Both from one reading, because the second is what was asked in making the first: a reader
-     * that wants to know what the verdict could turn on would otherwise read the clauses again.
-     */
-    private record Judging(Judgment judgment, Set<FactSubject> decidedBy) {}
-
     /** The discharge verdict for a construction of {@code type} whose fields are being given
-     * {@code given}. */
-    private Judging judging(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
-                            Denotations at, boolean decidesFalse) {
+     * {@code given}, under {@code k} as it stands. */
+    private Judgment judging(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
+                             Denotations at, boolean decidesFalse) {
         // What the construction hands over that no clause may be read against. A clause naming one of
         // them is left to the run-time check, and one that is decided outright is still decided: what
         // cannot be guarded is not the same as what cannot be computed.
@@ -4922,8 +4903,8 @@ public final class InvariantChecker {
             }
         }
         if (owed.isEmpty()) {
-            return new Judging(new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED,
-                    ClauseJudgments.of(found)), Set.of());
+            return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED,
+                    ClauseJudgments.of(found));
         }
         // What the clauses are decided by, which is one half of what the reading can reach. The
         // other half is what the domain speaks of, and that is the domain's own to answer.
@@ -4965,15 +4946,7 @@ public final class InvariantChecker {
                 : alongside ? Verdict.REFUTED_NOT_ALONE
                 : unknown ? Verdict.UNKNOWN
                 : unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED;
-        // What a verdict turns on is the numbers the reading was asked about and the predicates a
-        // clause is settled by, which are two questions to the domain and one to a reader of this.
-        Set<FactSubject> decidedBy = new LinkedHashSet<>(asked);
-        for (Owing owing : owed) {
-            if (owing.owed().fact() != null) {
-                decidedBy.addAll(owing.owed().fact().keys());
-            }
-        }
-        return new Judging(new Judgment(verdict, ClauseJudgments.of(found)), decidedBy);
+        return new Judgment(verdict, ClauseJudgments.of(found));
     }
 
     /**
