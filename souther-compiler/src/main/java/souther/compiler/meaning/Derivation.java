@@ -1934,9 +1934,38 @@ public sealed interface Derivation {
                 case EITHER -> Proposition.any(parts);
                 case BOTH -> Proposition.all(parts);
             };
+            Proposition actual = distributed(unfolded);
+            Proposition required = distributed(expected);
             return TruthTable.holdsWhateverItsPartsAre(Proposition.any(List.of(
-                    Proposition.all(List.of(unfolded, expected)),
-                    Proposition.all(List.of(unfolded.denied(), expected.denied())))));
+                    Proposition.all(List.of(actual, required)),
+                    Proposition.all(List.of(actual.denied(), required.denied())))));
+        }
+
+        /**
+         * {@code stated} with some element meeting either of two things written as some element
+         * meeting the one or some element meeting the other, and no element meeting either as no
+         * element meeting the one and none the other, under the joins it is made of. A truth table
+         * takes each quantified part for a part of its own, so without this it cannot see that one
+         * node-wide quantifier over a join is the join of the quantifiers. The inside of a search
+         * ({@link Proposition.SomeReachable}) is left as it is: its parts are of the node it was
+         * written at.
+         */
+        private static Proposition distributed(Proposition stated) {
+            return switch (stated) {
+                case Proposition.All all -> Proposition.all(
+                        all.parts().stream().map(ATreeSearched::distributed).toList());
+                case Proposition.Any any -> Proposition.any(
+                        any.parts().stream().map(ATreeSearched::distributed).toList());
+                case Proposition.Some some
+                        when some.ofTheElement() instanceof Proposition.Any either -> {
+                    List<Proposition> each = either.parts().stream()
+                            .map(part -> distributed(new Proposition.Some(some.container(), part,
+                                    some.holds())))
+                            .toList();
+                    yield some.holds() ? Proposition.any(each) : Proposition.all(each);
+                }
+                default -> stated;
+            };
         }
     }
 

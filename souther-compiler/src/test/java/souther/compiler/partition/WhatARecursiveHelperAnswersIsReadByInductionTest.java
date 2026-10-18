@@ -144,6 +144,35 @@ class WhatARecursiveHelperAnswersIsReadByInductionTest {
     }
 
     @Test
+    void aSearchWhoseNodeAsksSeveralConditionsOfTheNodesBelowItIsSomeReachableNode() {
+        Proposition.SomeReachable reached = assertInstanceOf(Proposition.SomeReachable.class,
+                stated("""
+                        let reaches (node: Node, w: Int): Bool =
+                            List.any(c -> c.v > w || c.v == 0 || reaches(c, w), node.below)
+                        """, "reaches(i.t, i.w)"));
+        assertTrue(reached.holds());
+    }
+
+    @Test
+    void aSearchWhoseNodesBelowMustEachMeetSomethingIsNoReachableNodeFailingIt() {
+        Proposition.SomeReachable reached = assertInstanceOf(Proposition.SomeReachable.class,
+                stated("""
+                        let fits (node: Node, w: Int): Bool =
+                            List.all(c -> c.v > w && fits(c, w), node.below)
+                        """, "fits(i.t, i.w)"));
+        assertFalse(reached.holds());
+    }
+
+    @Test
+    void aSearchWhoseNodeAsksBothOfTheNodesBelowItIsNotTakenForOneAskingEither() {
+        Proposition stated = stated("""
+                let reaches (node: Node, w: Int): Bool =
+                    List.any(c -> c.v > w && reaches(c, w), node.below)
+                """, "reaches(i.t, i.w)");
+        assertFalse(stated instanceof Proposition.SomeReachable, () -> "read as " + stated);
+    }
+
+    @Test
     void aSearchWhoseNodesMustEachMeetSomethingIsNoNodeFailingIt() {
         Proposition.SomeReachable reached = assertInstanceOf(Proposition.SomeReachable.class,
                 stated("""
