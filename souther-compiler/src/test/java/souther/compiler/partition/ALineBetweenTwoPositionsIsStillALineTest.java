@@ -280,8 +280,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(TWO_NEWTYPES);
 
         assertTrue(report.contains("read as benefitOf/charge: = ceiling"), report);
-        // The comparison is the body's one line; the two types' own bounds are the declarations'.
-        assertTrue(report.contains("border      borders 1   obligations 2/4"), report);
+        // The comparison is the body's one line owed rows, and beside it the line parting the
+        // charges never above the ceiling from the rest, which is no line of the author's and owes
+        // none; the two types' own bounds are the declarations'.
+        assertTrue(report.contains("border      borders 2   obligations 2/4"), report);
         assertTrue(report.contains("declarations   borders 2 "), report);
     }
 
@@ -299,7 +301,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("border      borders 1   obligations 3/4"), report);
+        assertTrue(report.contains("border      borders 2   obligations 3/4"), report);
         assertFalse(report.contains("read as benefitOf/charge: = ceiling\n"),
                 report);
         assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1"),
@@ -424,19 +426,17 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      * What the relation leaves the partition is said where the partition is.
      *
      * <p>The rule relates two positions, and what that leaves the classes of one of them is an
-     * answer about the classes: here that the ceiling, held to a thousand and above, is not shown to
-     * reach every charge — a charge at a thousand or below is never above it. The two are separate
-     * answers about one comparison, and the note about the first of them belongs under the first of
-     * them — printed under the boundary count it sat two rows beneath the line that same comparison
-     * had drawn.
+     * answer about the classes: here that every ceiling leaves a charge on either side, so the
+     * ceiling is related and not divided. The two are separate answers about one comparison, and
+     * the note about the first of them belongs under the first of them — printed under the boundary
+     * count it sat two rows beneath the line that same comparison had drawn.
      */
     @Test
     void thePositionIsStillOneNothingDividesAndTheNoteIsUnderThePartition() {
         String report = report(TWO_NEWTYPES);
 
-        String said = "it relates the value here to another value not shown to reach every value"
-                + " here, so which values here settle it on their own is not worked out, about"
-                + " `charge`";
+        String said = "it relates the value here to another value rather than dividing the values"
+                + " here, about `ceiling`";
         int partition = report.indexOf("    partition ");
         int note = report.indexOf(said);
         int boundary = report.indexOf("    border ");

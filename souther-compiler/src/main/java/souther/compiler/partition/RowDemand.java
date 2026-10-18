@@ -939,6 +939,10 @@ public sealed interface RowDemand {
          *  position holds and no composer writes a row at when it is what a way passes. */
         A_REMAINDER_OF_A_FORM,
 
+        /** What two numbers of the input come to multiplied, which no position holds and no
+         *  composer writes a row at when it is what a way passes. */
+        A_PRODUCT_OF_TWO_NUMBERS,
+
         /** Two subjects of a row being one value. */
         TWO_SUBJECTS_ONE_VALUE,
 

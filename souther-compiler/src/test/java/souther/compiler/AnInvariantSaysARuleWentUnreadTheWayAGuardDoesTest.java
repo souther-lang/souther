@@ -46,6 +46,12 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
             let mix (order) =
                 if Int.add(order.straw.value, order.choco.value) <= 150 then Ok else No
 
+            data Loose = { straw: Int, choco: Int }
+
+            behavior mixLoose : (order: Loose) -> Ok | No
+            let mixLoose (order) =
+                if Int.add(order.straw, order.choco) <= 150 then Ok else No
+
             data Pair = { x: Int, y: Int }
                 invariant x < y + 1
 
@@ -117,13 +123,23 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         return block.toString();
     }
 
-    /** The {@code guard}, which always said it, at both the positions it compares. */
+    /**
+     * The {@code guard}, which reads the rule to the end: with both positions at nought or more,
+     * either one past a hundred and fifty fails it whatever the other is, which divides each of
+     * them there, and neither is left a word of a rule not read. Where nothing bounds the two,
+     * nothing settles it alone, and the guard names both positions.
+     */
     @Test
     void aGuardNamesBothPositionsItCompares() {
         String block = blockOf("mix");
 
-        assertTrue(notReadAbout(block, "order.straw"), block);
-        assertTrue(notReadAbout(block, "order.choco"), block);
+        assertTrue(block.contains("partition   axes 2 "), block);
+        assertFalse(notReadAbout(block, "order.straw"), block);
+        assertFalse(notReadAbout(block, "order.choco"), block);
+
+        String loose = blockOf("mixLoose");
+        assertTrue(notReadAbout(loose, "order.straw"), loose);
+        assertTrue(notReadAbout(loose, "order.choco"), loose);
     }
 
     /** And the {@code invariant} of the same shape, at both the positions it compares. */
@@ -135,10 +151,11 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         assertTrue(notReadAbout(block, "parcel.width"), block);
     }
 
-    /** In the same words, since what stopped each of them is the same fact about this compiler. */
+    /** In the same words as the guard that names its positions, since what stopped each of them is
+     *  the same fact about this compiler. */
     @Test
     void andInTheSameWords() {
-        assertEquals(saidAbout(blockOf("mix"), "order.straw"),
+        assertEquals(saidAbout(blockOf("mixLoose"), "order.straw"),
                 saidAbout(blockOf("quote"), "parcel.length"));
     }
 
