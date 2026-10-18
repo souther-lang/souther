@@ -8,7 +8,9 @@ package souther.compiler;
  * a form none of them has a word for. Which spelling has that property is a fact about what this
  * compiler reads today, and it moves: {@code String.startsWith} had it until the reading of string
  * predicates learned what such a call says about a position, and eight test files that had each
- * written that call out went quiet about what they were for on the same day (issue #1249).
+ * written that call out went quiet about what they were for on the same day (issue #1249). A
+ * comparison does not have it: where the arithmetic stops on one it says where, so a comparison of
+ * a value an operation made is told as that and not as a form nobody has a word for.
  *
  * <p>So the spelling is one line, and {@link ARuleNoReadingTakesInIsStillOneTest} is what holds the
  * property to it. The next capability that takes this clause in fails that one test, which says
@@ -25,12 +27,12 @@ public final class ARuleNoReadingTakesIn {
     /**
      * The clause, about whatever {@code subject} names.
      *
-     * <p>Wide on purpose: it holds of every string but the empty one, so a model that carries rows
-     * keeps them, and what a test is measuring is the reading rather than a value it had to go and
-     * change. A clause admitting one value would make every row beside it about the clause.
+     * <p>Wide on purpose: it holds of every string, so a model that carries rows keeps them, and
+     * what a test is measuring is the reading rather than a value it had to go and change. A clause
+     * admitting one value would make every row beside it about the clause.
      */
     public static String about(String subject) {
-        return "String.reverse(" + subject + ") /= \"\"";
+        return "String.endsWith(\"\", String.reverse(" + subject + "))";
     }
 
     /** A value it admits, where a row has to carry one. */

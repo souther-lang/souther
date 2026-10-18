@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 /**
  * One rule where it applies to one value, every question it raises there, and what answered each.
@@ -264,9 +266,18 @@ public final class RuleAccounting {
         default WhatAQuestionStandsOn stopped() {
             return switch (this) {
                 case TheValueReadingSays it -> new WhatAQuestionStandsOn(
-                        RuleReasons.from(it.shortfalls().stream()
-                                .map(each -> new RuleReasons.Said(each.site(), sentTo(each),
-                                        BlockReason.ofARuleTheValueReadingLeft(each.why())))
+                        RuleReasons.from(Stream.concat(
+                                it.shortfalls().stream()
+                                        .filter(it.toldByTheForm().negate())
+                                        .map(each -> new RuleReasons.Said(each.site(),
+                                                sentTo(each),
+                                                BlockReason.ofARuleTheValueReadingLeft(
+                                                        each.why()))),
+                                // A part the arithmetic stopped on is the thing an author
+                                // rewrites, as a part the reading of values has no word for is.
+                                it.theForm().stream()
+                                        .map(each -> new RuleReasons.Said(each.site(),
+                                                RuleSite.theRuleItself(), each.why())))
                                 .toList()),
                         WhatAQuestionStandsOn.oneOf(it.aboutTheAnswer().reasons().stream()
                                 .map(BlockReason::ofTheAnswerTheReadingCouldNotBuild).toList()));
@@ -321,17 +332,52 @@ public final class RuleAccounting {
          * document. What {@link #why()} answers with is a projection that loses the places, and
          * where a reader is owed the author's order it is the source that is asked.
          */
-        record TheValueReadingSays(Set<RuleShortfall> shortfalls,
+        record TheValueReadingSays(Set<RuleShortfall> shortfalls, Set<FormShortfall> theForm,
+                                   Set<RuleShortfall> whereTheArithmeticStopped,
                                    AnswerShortfalls aboutTheAnswer) implements Why {
 
             public TheValueReadingSays {
-                if (shortfalls == null || aboutTheAnswer == null) {
+                if (shortfalls == null || theForm == null || whereTheArithmeticStopped == null
+                        || aboutTheAnswer == null) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
-                if (shortfalls.isEmpty() && aboutTheAnswer.isEmpty()) {
+                if (shortfalls.isEmpty() && theForm.isEmpty() && aboutTheAnswer.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
+                }
+                if (!shortfalls.containsAll(whereTheArithmeticStopped)) {
+                    throw new IllegalArgumentException(
+                            "where the arithmetic stopped is said of what the reading of values"
+                                    + " was short of, and of nothing else");
+                }
+                if (!whereTheArithmeticStopped.isEmpty() && theForm.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a part the arithmetic stopped on says where it stopped");
                 }
                 shortfalls = Collections.unmodifiableSet(new LinkedHashSet<>(shortfalls));
+                theForm = Collections.unmodifiableSet(new LinkedHashSet<>(theForm));
+                whereTheArithmeticStopped = Set.copyOf(whereTheArithmeticStopped);
+            }
+
+            /**
+             * Which shortfalls are a form the reading of values does not take apart, decided only
+             * in comparisons the arithmetic said of where it stopped, at the same position
+             * ({@link #whereTheArithmeticStopped}).
+             *
+             * <p>Then the arithmetic's word is the one said of it. A form that reading does not
+             * take apart is a statement that no reading here took the form apart, which is not true
+             * of a comparison the arithmetic read as far as the place it stopped at; what is true is
+             * that place. Only that reason: a rule relating two positions, a choice nothing could
+             * read and a pattern too large to build are other facts about the part, and are said
+             * beside it.
+             *
+             * <p>Asked where the words are said and not where the facts are held. What the reading
+             * of values was short of is still that ({@link #why()}), and only the word a reader is
+             * told turns on the arithmetic.
+             */
+            Predicate<RuleShortfall> toldByTheForm() {
+                return shortfall -> shortfall.kind() == RuleShortfall.Kind.LEAF
+                        && shortfall.why().why() == UnreadReason.FORM_NOT_READ
+                        && whereTheArithmeticStopped.contains(shortfall);
             }
 
             /**
