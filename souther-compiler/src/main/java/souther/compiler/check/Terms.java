@@ -1758,7 +1758,7 @@ final class Terms {
     private Derivation divided(Core over, Core by, Denotations at, Divided made) {
         LinearForm<FactSubject> numerator = affineOf(over, at);
         LinearForm<FactSubject> divisor = affineOf(by, at);
-        NumericDomain.Bounds extent = extentOf(by.type());
+        Derivation.DivisorExtent extent = divisorExtentOf(by.type());
         if (numerator == null || divisor == null || extent == null) {
             return null;
         }
@@ -1771,7 +1771,7 @@ final class Terms {
     private Derivation rounded(Core over, Core by, Core places, Denotations at) {
         LinearForm<FactSubject> numerator = affineOf(over, at);
         LinearForm<FactSubject> divisor = affineOf(by, at);
-        NumericDomain.Bounds extent = extentOf(by.type());
+        Derivation.DivisorExtent extent = divisorExtentOf(by.type());
         if (numerator == null || divisor == null || extent == null) {
             return null;
         }
@@ -1784,7 +1784,7 @@ final class Terms {
      * parts, so what tells them apart is which recipe is made and nothing else. */
     private interface Divided {
         Derivation of(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                      NumericDomain.Bounds divisorExtent);
+                      Derivation.DivisorExtent divisorExtent);
     }
 
     /**
@@ -1804,11 +1804,20 @@ final class Terms {
      */
     private NumericDomain.Bounds extentOf(Type type) {
         Carrier carrier = Carrier.ofValue(type, declarations());
-        if (carrier == null) {
-            return null;
-        }
+        return carrier == null ? null : extentOf(carrier);
+    }
+
+    private static NumericDomain.Bounds extentOf(Carrier carrier) {
         OrderedInterval extent = carrier.extent();
         return new NumericDomain.Bounds(extent.low(), extent.high());
+    }
+
+    /** Every value a divisor of {@code type} can take, and how they are spaced, or null where
+     * nothing orders its values. Both are read off one carrier ({@link #extentOf(Type)}). */
+    private Derivation.DivisorExtent divisorExtentOf(Type type) {
+        Carrier carrier = Carrier.ofValue(type, declarations());
+        return carrier == null ? null
+                : new Derivation.DivisorExtent(extentOf(carrier), carrier.spacing());
     }
 
     /**
@@ -1825,7 +1834,7 @@ final class Terms {
      * it states of the arm it stands beside — so a recipe added later answers for its own shape
      * rather than being compared by a case somebody remembered to write.
      */
-    private static boolean sameDerivation(Derivation a, Derivation b) {
+    static boolean sameDerivation(Derivation a, Derivation b) {
         return a.sameAs(b, SAME_NUMBERS);
     }
 
@@ -1871,8 +1880,9 @@ final class Terms {
         }
 
         @Override
-        public boolean extents(NumericDomain.Bounds a, NumericDomain.Bounds b) {
-            return (a == null || b == null) ? a == b : sameExtent(a, b);
+        public boolean extents(Derivation.DivisorExtent a, Derivation.DivisorExtent b) {
+            return (a == null || b == null) ? a == b
+                    : a.spacing() == b.spacing() && sameExtent(a.within(), b.within());
         }
     };
 

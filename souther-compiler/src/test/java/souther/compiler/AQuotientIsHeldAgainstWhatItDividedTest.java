@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A truncating divide says how what it answered stands to what it divided, and not only where its
@@ -229,6 +231,47 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
                 """;
         assertEquals(List.of(), Compiler.compileWithWarnings(model).warnings().stream()
                 .map(Diagnostic::code).distinct().toList());
+    }
+
+    /**
+     * A divisor the guards leave on either side of nought divides by at least one either way, so the
+     * quotient lies within the span of the quotients by each side: a hundred by one, and a hundred by
+     * minus one. The control is one short of that span, and a hundred by minus one breaks it: pinned
+     * there, the reading is exact and the construction is refused.
+     */
+    @Test
+    void aQuotientByADivisorEitherSideOfNoughtLiesWithinWhatEachSideAnswers() {
+        String byEither = """
+                match Int.truncatingDivide(100, 額 - 50) with
+                        | Int as k -> 硬貨枚数(k + %s)
+                        | DivisionByZero -> 硬貨枚数(0)""";
+        assertEquals(List.of(), reported("額 >= 0 && 額 <= 100", byEither.formatted("100")));
+        assertEquals(List.of("E2011"), reported("額 >= 0 && 額 <= 100", byEither.formatted("99")));
+        CompileException refused = assertThrows(CompileException.class,
+                () -> reported("額 == 49", byEither.formatted("99")),
+                "a hundred by minus one is minus a hundred");
+        assertEquals("E2010", refused.getMessage().substring(0, 5), refused.getMessage());
+    }
+
+    /**
+     * And what such a divide leaves is smaller than the divisor furthest from nought, as it is by
+     * a divisor of one sign: by values from minus fifty to fifty, below fifty.
+     *
+     * <p>The dividend is a number and not the value the divisor is made of, so the control has a
+     * divide that breaks it: forty-nine by fifty or by minus fifty leaves forty-nine. A dividend tied
+     * to the divisor would leave less than the range says, and a control over it would be owed for
+     * want of reading the tie rather than for a remainder that breaks it. That remainder is not
+     * checked by pinning the inputs, since what is read of a remainder is where it lies and not
+     * which value it is.
+     */
+    @Test
+    void aRemainderByADivisorEitherSideOfNoughtIsBelowItsFurthestEnd() {
+        String byEither = """
+                match Int.truncatingRemainder(49, 額 - 50) with
+                        | Int as r -> 硬貨枚数(%s - r)
+                        | DivisionByZero -> 硬貨枚数(0)""";
+        assertEquals(List.of(), reported("額 >= 0 && 額 <= 100", byEither.formatted("49")));
+        assertEquals(List.of("E2011"), reported("額 >= 0 && 額 <= 100", byEither.formatted("48")));
     }
 
     /** The control beside both: the value arm says the divisor is not zero and says nothing about
