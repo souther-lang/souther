@@ -14,7 +14,6 @@ import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -70,34 +69,38 @@ class WhatAnAnswerIsReadAsTurnsOnWhatTheReadingProvesTest {
                 new Written(new Core.Read("key", NAME, value.type(), POS), Map.of(NAME, value)));
     }
 
-    private static <T> void readAlikeHoweverWritten(Core value, Function<Written, T> read,
-                                                    T expected) {
+    private static void readAlikeHoweverWritten(Core value, Read read, Object expected) {
         for (Written written : everyWayOfWriting(value)) {
-            assertEquals(expected, read.apply(written), () -> "read of " + written);
+            assertEquals(expected, read.of(written), () -> read + " of " + written);
         }
     }
 
-    private static final Function<Written, OnePerElement.Answered> AS_A_KEY = written ->
-            ElementProjection.readAsAKey(written.answer(), ELEMENT, written.held(), NEWTYPES);
+    /** The three readings of an answer, each asked of one way of writing it. */
+    private enum Read {
+        AS_A_KEY, ITSELF, A_PLACE;
 
-    private static final Function<Written, Boolean> ITSELF = written ->
-            ElementProjection.isTheElementItself(written.answer(), ELEMENT, written.held(),
-                    NEWTYPES);
-
-    private static final Function<Written, ElementProjection> A_PLACE = written ->
-            ElementProjection.read(written.answer(), ELEMENT, written.held(), NEWTYPES);
-
+        Object of(Written written) {
+            return switch (this) {
+                case AS_A_KEY -> ElementProjection.readAsAKey(written.answer(), ELEMENT,
+                        written.held(), NEWTYPES);
+                case ITSELF -> ElementProjection.isTheElementItself(written.answer(), ELEMENT,
+                        written.held(), NEWTYPES);
+                case A_PLACE -> ElementProjection.read(written.answer(), ELEMENT, written.held(),
+                        NEWTYPES);
+            };
+        }
+    }
     private static final ElementProjection THE_LABEL = ElementProjection.ofFields(List.of("label"));
 
     @Test
     void aNewtypeWearingAPlaceIsThatKeyWrappedHoweverItIsWritten() {
-        readAlikeHoweverWritten(wearing(LABEL_OF_IT), AS_A_KEY,
+        readAlikeHoweverWritten(wearing(LABEL_OF_IT), Read.AS_A_KEY,
                 new OnePerElement.Answered(THE_LABEL, true));
     }
 
     @Test
     void aPlaceIsThatKeyHoweverItIsWritten() {
-        readAlikeHoweverWritten(LABEL_OF_IT, AS_A_KEY,
+        readAlikeHoweverWritten(LABEL_OF_IT, Read.AS_A_KEY,
                 new OnePerElement.Answered(THE_LABEL, false));
     }
 
@@ -105,19 +108,19 @@ class WhatAnAnswerIsReadAsTurnsOnWhatTheReadingProvesTest {
      *  is still where it stands. */
     @Test
     void aValueStandingWiderIsNoKeyHoweverItIsWritten() {
-        readAlikeHoweverWritten(widened(LABEL_OF_IT), AS_A_KEY, null);
-        readAlikeHoweverWritten(widened(LABEL_OF_IT), A_PLACE, THE_LABEL);
+        readAlikeHoweverWritten(widened(LABEL_OF_IT), Read.AS_A_KEY, null);
+        readAlikeHoweverWritten(widened(LABEL_OF_IT), Read.A_PLACE, THE_LABEL);
     }
 
     /** A newtype stands nowhere a place does: the reading of a place does not read through it. */
     @Test
     void aNewtypeIsNoPlace() {
-        readAlikeHoweverWritten(wearing(LABEL_OF_IT), A_PLACE, null);
+        readAlikeHoweverWritten(wearing(LABEL_OF_IT), Read.A_PLACE, null);
     }
 
     @Test
     void theElementIsItselfHoweverItIsWritten() {
-        readAlikeHoweverWritten(THE_ELEMENT, ITSELF, true);
+        readAlikeHoweverWritten(THE_ELEMENT, Read.ITSELF, true);
     }
 
     /** A field of the element, a newtype wearing it and the element standing as a wider type are
@@ -125,7 +128,7 @@ class WhatAnAnswerIsReadAsTurnsOnWhatTheReadingProvesTest {
     @Test
     void whatIsMadeOfTheElementIsNotItself() {
         for (Core other : List.of(LABEL_OF_IT, wearing(THE_ELEMENT), widened(THE_ELEMENT))) {
-            readAlikeHoweverWritten(other, ITSELF, false);
+            readAlikeHoweverWritten(other, Read.ITSELF, false);
         }
     }
 
