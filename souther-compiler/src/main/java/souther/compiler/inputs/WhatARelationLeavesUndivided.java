@@ -13,6 +13,7 @@ import souther.compiler.numeric.Rel;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -270,6 +271,41 @@ public final class WhatARelationLeavesUndivided {
      *  write are its values, and a third is none. */
     private static boolean isAValue(ExactRatio at) {
         return at.fitsWrittenDecimal();
+    }
+
+    /** The distance between two decimals of the finest scale there is. */
+    private static final ExactRatio STEP = ExactRatio.of(new BigDecimal(BigInteger.ONE,
+            Integer.MAX_VALUE));
+
+    /**
+     * Whether the numbers {@code low} and {@code high}, which differ, are no further apart than a
+     * step of the finest scale.
+     *
+     * <p>A dense term is read as one with a value between any two it is asked of, and that is how
+     * far the reading goes. Between two numbers a step or less apart there may be none, so no
+     * claim is made of a run that narrow, whichever way it would fall: a reading that has to
+     * decide whether a value lies in it, or reach one near its end, gives nothing instead. A value
+     * within a step of the end of a wider run is idealised the same way, and is no value anyone
+     * asks a line to part.
+     */
+    private static boolean isNoWiderThanAStep(ExactRatio low, ExactRatio high) {
+        ExactRatio width = high.minus(low).orNull();
+        return width != null && width.signum() > 0 && width.compareTo(STEP) <= 0;
+    }
+
+    /** Whether the dense term {@code term} takes a run too narrow to reason with. */
+    private static <P> boolean takesANarrowRun(Term<P> term) {
+        if (term.spacing() != Granularity.DENSE) {
+            return false;
+        }
+        for (NumericDomain.Bounds bounds : Arrays.asList(term.holds(), term.realizes())) {
+            Interval run = bounds == null ? null : Interval.of(bounds);
+            if (run != null && run.low() != null && run.high() != null
+                    && isNoWiderThanAStep(run.low(), run.high())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -849,7 +885,7 @@ public final class WhatARelationLeavesUndivided {
                                                  Independence independent, Interval rest) {
         Term<P> it = terms.get(at);
         Span held = Span.ofTheValues(it.holds());
-        if (held == null) {
+        if (held == null || terms.stream().anyMatch(WhatARelationLeavesUndivided::takesANarrowRun)) {
             return null;
         }
         List<SettledRun> runs = new ArrayList<>();
@@ -867,6 +903,9 @@ public final class WhatARelationLeavesUndivided {
                 }
                 between = left;
                 Span here = settling.meet(held);
+                if (here.isNarrowerThanAStep()) {
+                    return null;
+                }
                 if (here.holdsAValue()) {
                     runs.add(new SettledRun(here.lower(), here.upper(), holds));
                 }
@@ -876,7 +915,8 @@ public final class WhatARelationLeavesUndivided {
             return null;
         }
         for (Span each : between) {
-            if (!reachedBySome(terms, at, new Interval(each.lower(), each.upper()), constant,
+            if (each.isNarrowerThanAStep() || !reachedBySome(terms, at,
+                    new Interval(each.lower(), each.upper()), constant,
                     relation, overlap, independent)) {
                 return null;
             }
@@ -934,6 +974,11 @@ public final class WhatARelationLeavesUndivided {
                                              ExactRatio constant, Rel relation,
                                              BiPredicate<P, P> overlap,
                                              Independence independent) {
+        if (terms.stream().anyMatch(WhatARelationLeavesUndivided::takesANarrowRun)
+                || (within != null && within.low() != null && within.high() != null
+                        && isNoWiderThanAStep(within.low(), within.high()))) {
+            return false;
+        }
         for (int other = 0; other < terms.size(); other++) {
             if (other != at && apart(terms, other, overlap) && untied(terms, other, independent)
                     && reaches(terms, other, at, within, constant, relation)) {
@@ -1073,7 +1118,8 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         if (exactly) {
-            return needed.within(reaching.realizes());
+            return needed.within(reaching.realizes())
+                    && !(coversADenserRun(terms, by) && !needed.holdsOneValue());
         }
         boolean strictlyBelow = strictlyBelow(relation, reaching.weight());
         if ((strictlyBelow ? needed.runsDown() : needed.runsUp())
@@ -1081,6 +1127,23 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         return needed.around(reaching.realizes(), strictlyBelow, reaching.spacing());
+    }
+
+    /**
+     * Whether the term at {@code by} takes whole numbers only while a term beside it takes the
+     * values between them too, so that a run of the others is one it cannot take every value of
+     * for having the same ends.
+     */
+    private static <P> boolean coversADenserRun(List<Term<P>> terms, int by) {
+        if (terms.get(by).spacing() != Granularity.DISCRETE) {
+            return false;
+        }
+        for (int i = 0; i < terms.size(); i++) {
+            if (i != by && terms.get(i).spacing() == Granularity.DENSE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1235,6 +1298,9 @@ public final class WhatARelationLeavesUndivided {
         /** Whether this run leaves out its greatest value. */
         boolean greatestIsOpen();
 
+        /** Whether this run is the one value, both its ends. */
+        boolean holdsOneValue();
+
         /** Whether {@code realized} holds every value of this run. */
         default boolean within(NumericDomain.Bounds realized) {
             return lowFrom(realized.min(), Reach.EVERY_VALUE, false)
@@ -1329,6 +1395,12 @@ public final class WhatARelationLeavesUndivided {
         }
 
         @Override
+        public boolean holdsOneValue() {
+            return min != null && max != null && !openBelow && !openAbove
+                    && min.compareTo(max) == 0;
+        }
+
+        @Override
         public Integer againstTheLeast(Place end) {
             return end.compareTo(min);
         }
@@ -1365,6 +1437,12 @@ public final class WhatARelationLeavesUndivided {
         @Override
         public boolean greatestIsOpen() {
             return openAbove;
+        }
+
+        @Override
+        public boolean holdsOneValue() {
+            return min != null && max != null && !openBelow && !openAbove
+                    && min.compareTo(max) == 0;
         }
 
         @Override
@@ -1634,16 +1712,27 @@ public final class WhatARelationLeavesUndivided {
                     ExactCut.tighterUpper(upper, other.upper));
         }
 
-        /** Whether some value of a dense term lies in this run, which {@link #isAValue} decides
-         *  for the one point a run of equal ends is. */
+        /** Whether some value of a dense term may lie in this run: not where it is empty. */
         boolean holdsAValue() {
+            return !isEmpty();
+        }
+
+        /** Whether no value lies in this run, which {@link #isAValue} decides for the one point a
+         *  run of equal ends is. */
+        boolean isEmpty() {
             if (lower == null || upper == null) {
-                return true;
+                return false;
             }
             int order = lower.at().compareTo(upper.at());
-            return order < 0
-                    || (order == 0 && lower.inclusive() && upper.inclusive()
-                            && isAValue(lower.at()));
+            return order > 0
+                    || (order == 0 && !(lower.inclusive() && upper.inclusive()
+                            && isAValue(lower.at())));
+        }
+
+        /** Whether this run is too narrow for a value to be said to lie in it or not, being no
+         *  wider than a step of the scale a decimal has. */
+        boolean isNarrowerThanAStep() {
+            return lower != null && upper != null && isNoWiderThanAStep(lower.at(), upper.at());
         }
 
         /** What is left of this run with {@code taken} out of it: up to two runs. */

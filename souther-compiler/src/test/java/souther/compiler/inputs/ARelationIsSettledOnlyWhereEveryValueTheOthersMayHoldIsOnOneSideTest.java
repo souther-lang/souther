@@ -16,6 +16,7 @@ import souther.compiler.numeric.Rel;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -375,6 +376,59 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         ExactRatio half = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
         assertEquals(List.of(new Line(Rel.LT, half), new Line(Rel.LE, half)),
                 denseAgainstOne(2, Rel.EQ).lines());
+    }
+
+    private static Set<String> undivided(WhatARelationLeavesUndivided.Term<String> x,
+                                         WhatARelationLeavesUndivided.Term<String> y, Rel relation) {
+        return WhatARelationLeavesUndivided.of(List.of(x, y), ExactRatio.ZERO, relation,
+                String::equals, (one, two) -> true);
+    }
+
+    /**
+     * Two values held to the same ends are not the same values: {@code x == y} with {@code x}
+     * between nought and one is false at a half whichever whole number {@code y} is, so a whole
+     * {@code y} does not reach every {@code x}, whereas every whole {@code y} is the value of some
+     * {@code x}.
+     */
+    @Test
+    void aWholeTermDoesNotTakeEveryValueOfADenseOneWithTheSameEnds() {
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        for (Rel relation : List.of(Rel.EQ, Rel.NE)) {
+            assertEquals(Set.of("y"), undivided(denseTerm("x", 1, unit, unit),
+                    term("y", -1, unit, unit), relation), relation.toString());
+            assertEquals(Set.of("x"), undivided(term("x", 1, unit, unit),
+                    denseTerm("y", -1, unit, unit), relation), relation.toString());
+            assertEquals(Set.of("x", "y"), undivided(denseTerm("x", 1, unit, unit),
+                    denseTerm("y", -1, unit, unit), relation), relation.toString());
+            assertEquals(Set.of("x", "y"), undivided(term("x", 1, unit, unit),
+                    term("y", -1, unit, unit), relation), relation.toString());
+        }
+    }
+
+    /** One whole value is a value a whole term takes, and a dense one too. */
+    @Test
+    void aWholeTermTakesTheOneValueADenseTermIsHeldTo() {
+        NumericDomain.Bounds one = dense("1", true, "1", true);
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        assertEquals(Set.of("x"), undivided(denseTerm("x", 1, one, one),
+                term("y", -1, unit, unit), Rel.EQ));
+    }
+
+    /**
+     * Two numbers a step of the finest scale or less apart may have no value between them, so a
+     * run that narrow is neither reached nor said to be empty: {@code x > y} with both above
+     * nought and up to a step is false at every value there is, the one step, and taking the
+     * runs for dense would have {@code y} below {@code x} wherever {@code x} is.
+     */
+    @Test
+    void aRunNoWiderThanAStepOfTheFinestScaleIsNothingIsClaimedOf() {
+        NumericDomain.Bounds aboveNoughtToAStep = dense("0", false, "1E-2147483647", true);
+        WhatARelationLeavesUndivided.Term<String> x = denseTerm("x", 1, aboveNoughtToAStep,
+                aboveNoughtToAStep);
+        WhatARelationLeavesUndivided.Term<String> y = denseTerm("y", -1, aboveNoughtToAStep,
+                aboveNoughtToAStep);
+        assertEquals(Set.of(), undivided(x, y, Rel.GT));
+        assertNull(denseLeavesOf(x, y, Rel.GT));
     }
 
     /** The same asked at the least end of the run alone: {@code x > y} for {@code y} above nought
