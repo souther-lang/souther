@@ -78,8 +78,13 @@ public final class WrittenOutElements {
     /** The same, inside a walk that has already met the names {@code met}. */
     static Walked of(Denotation container, Symbols symbols, DeclarationNewtypes newtypes,
                      Set<BindingId> met) {
-        return switch (ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container.value(),
-                container.at()), new Names(symbols, newtypes, met))) {
+        return from(ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, met)));
+    }
+
+    /** What a walk in this reading of names came to, as its occurrences. */
+    private static Walked from(ElementsWrittenOut.Walked<InputReads> walked) {
+        return switch (walked) {
             case ElementsWrittenOut.Walked.Each<InputReads>(var each) ->
                     new Walked.Each(each.stream().map(WrittenOutElements::occurrence).toList());
             case ElementsWrittenOut.Walked.PastTheFigure<InputReads> _ ->

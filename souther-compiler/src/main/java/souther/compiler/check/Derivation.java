@@ -332,7 +332,7 @@ sealed interface Derivation {
 
     /**
      * How many a container holds, where the law of the operation that answered it says whether it
-     * holds anything by whether its arguments do: {@code a ++ b} holds something exactly where
+     * holds anything by what its arguments are: {@code a ++ b} holds something exactly where
      * {@code a} or {@code b} does.
      *
      * <p>Not a relation between the sizes. Where text is put beside text its canonical form can be
@@ -340,11 +340,16 @@ sealed interface Derivation {
      * which side of nought each argument is on is where the path puts it. So what is recorded is the
      * law, over the counts it reads, and what it comes to is read under each domain.
      *
-     * @param holds when the answer holds something, as a statement over the counts of the arguments
+     * @param holds when the answer holds something, as a statement over the counts and numbers of
+     *              the arguments
      */
     record HoldsSomethingWhere(Holding holds) implements Derivation {
 
-        /** A statement about which of some counts are above nought. */
+        /**
+         * A statement over the counts and numbers of some arguments: which counts are above nought,
+         * and how forms over them stand against nought. A form a {@link Stands} holds may be over
+         * numbers that go below nought, so it is no count and nothing about counts is said of it.
+         */
         sealed interface Holding {
 
             /** The container {@code count} counts holds something. */

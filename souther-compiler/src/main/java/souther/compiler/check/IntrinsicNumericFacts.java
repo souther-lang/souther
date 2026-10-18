@@ -102,16 +102,15 @@ final class IntrinsicNumericFacts {
         // And exactly as many as the law of the operation that answered it says, where it says a
         // number of the arguments this names: `a ++ b` holds as many as both halves together, which
         // no number of bounds on it against either half says.
-        LinearForm<FactSubject> lawSays = LawOverAtoms.sizeOf(
-                AnOperationApplied.of(Core.withoutStanding(container)), at, terms);
+        LinearForm<FactSubject> lawSays =
+                LawOverAtoms.sizeOf(AnOperationApplied.of(container), at, terms);
         if (lawSays != null && LinearForm.atom(atom).minus(lawSays)
                 instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
             out.add(new NumericConstraint(held.value(), Rel.EQ));
         }
         // And as many as it was written out with, where it was, which is what a size of it read
-        // as a number is ({@link Terms#writtenSize}) and so what the atom a law names it by is.
-        OptionalLong written = ElementsWrittenOut.sizeOf(
-                new ElementsWrittenOut.Stood<>(container, at), terms.elementsReading());
+        // as a number is and so what the atom a law names it by is.
+        OptionalLong written = terms.writtenCount(container, at);
         if (written.isPresent()) {
             out.add(new NumericConstraint(LinearForm.atomMinusConstant(atom,
                     ExactRatio.of(written.getAsLong())), Rel.EQ));

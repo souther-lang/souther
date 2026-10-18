@@ -701,28 +701,25 @@ final class DerivedNumericFacts {
             case Derivation.HoldsSomethingWhere.Holding.Stands(
                     LinearForm<FactSubject> form, Rel rel) -> {
                 Bounds lies = boundsOf(form, base, terms, done, deriving, copies);
-                Bounds where = whereItStands(rel, true);
-                Bounds whereNot = whereItStands(rel, false);
-                yield !lies.meet(whereNot).holdsAValue() ? Shown.YES
-                        : !lies.meet(where).holdsAValue() ? Shown.NO : Shown.UNSETTLED;
+                yield everywhere(lies, rel) ? Shown.YES
+                        : everywhere(lies, rel.denied()) ? Shown.NO : Shown.UNSETTLED;
             }
         };
     }
 
     /**
-     * Where a number stands against nought as {@code rel} says, or as it does not where
-     * {@code holds} is false — as one range, which a number other than nought is not: that one is
-     * the whole line, and so says nothing it does not hold at nought.
+     * Whether every number in {@code lies} stands against nought as {@code rel} says. Asked of each
+     * relation on its own terms rather than through the range of its denial: a number other than
+     * nought is no one range, so its denial — exactly nought — could not be asked that way.
      */
-    private static Bounds whereItStands(Rel rel, boolean holds) {
-        Rel asked = holds ? rel : rel.denied();
-        return switch (asked) {
-            case GE -> AT_OR_ABOVE_NOUGHT;
-            case GT -> new Bounds(Endpoint.exclusive(Count.ZERO), null);
-            case LE -> AT_OR_BELOW_NOUGHT;
-            case LT -> new Bounds(null, Endpoint.exclusive(Count.ZERO));
-            case EQ -> AT_NOUGHT;
-            case NE -> Bounds.OPEN;
+    private static boolean everywhere(Bounds lies, Rel rel) {
+        return switch (rel) {
+            case GE -> lies.liesWithin(AT_OR_ABOVE_NOUGHT);
+            case GT -> lies.liesWithin(new Bounds(Endpoint.exclusive(Count.ZERO), null));
+            case LE -> lies.liesWithin(AT_OR_BELOW_NOUGHT);
+            case LT -> lies.liesWithin(new Bounds(null, Endpoint.exclusive(Count.ZERO)));
+            case EQ -> lies.liesWithin(AT_NOUGHT);
+            case NE -> !lies.admits(ExactRatio.ZERO);
         };
     }
 

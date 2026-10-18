@@ -930,10 +930,17 @@ final class Terms {
         if (container == null) {
             return null;
         }
-        Given written = given(container, at);
-        OptionalLong counted = ElementsWrittenOut.sizeOf(
-                new ElementsWrittenOut.Stood<>(written.value(), written.at()), elements);
+        OptionalLong counted = writtenCount(container, at);
         return counted.isPresent() ? BigDecimal.valueOf(counted.getAsLong()) : null;
+    }
+
+    /** How many elements {@code container}, followed through the names it was given, was written
+     *  out with on every run ({@link ElementsWrittenOut#sizeOf}), or empty where it was not. What a
+     *  size of it read as a number is, and what the atom a size of it is named by carries. */
+    OptionalLong writtenCount(Core container, Denotations at) {
+        Given written = given(container, at);
+        return ElementsWrittenOut.sizeOf(
+                new ElementsWrittenOut.Stood<>(written.value(), written.at()), elements);
     }
 
     /** How a walk of the elements of a container ({@link ElementsWrittenOut}) reads names here. */
@@ -1752,17 +1759,7 @@ final class Terms {
     /** {@code form}, each value it is written over read as the form it is in {@code at} — or null
      *  where one of them reads as none, or the sum has no representation. */
     private LinearForm<FactSubject> formOver(LinearForm<Core> form, Denotations at) {
-        LinearForm<FactSubject> out = LinearForm.constant(form.constant());
-        for (Map.Entry<Core, ExactRatio> each : form.coefs().entrySet()) {
-            LinearForm<FactSubject> value = affineOf(each.getKey(), at);
-            LinearForm<FactSubject> before = out;
-            out = value == null ? null
-                    : value.times(each.getValue()).flatMap(before::plus).orNull();
-            if (out == null) {
-                return null;
-            }
-        }
-        return out;
+        return form.over(value -> affineOf(value, at));
     }
 
     /**

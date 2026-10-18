@@ -10,13 +10,10 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -185,29 +182,8 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     }
 
     @Override
-    public Symbols symbols() {
-        return elements.symbols();
-    }
-
-    @Override
-    public ElementsWrittenOut.Stood<Denotations> standing(Core e, Denotations in) {
-        return elements.standing(e, in);
-    }
-
-    @Override
-    public Denotations handing(Denotations in, BindingId element,
-                               ElementsWrittenOut.Stood<Denotations> value) {
-        return elements.handing(in, element, value);
-    }
-
-    @Override
-    public Denotations choosing(Denotations in, Choice.Decides decidedBy) {
-        return elements.choosing(in, decidedBy);
-    }
-
-    @Override
-    public Optional<Object> folded(ElementsWrittenOut.Stood<Denotations> value) {
-        return elements.folded(value);
+    public ElementsWrittenOut.Reading<Denotations> elements() {
+        return elements;
     }
 
     @Override
@@ -311,17 +287,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     /** {@code form}, over numbers of the arguments, as a form over the atoms each is — or null
      *  where one of them is none, or the sum has no representation. */
     private LinearForm<FactSubject> form(LinearForm<LawNumber<DeclaredArgument>> form) {
-        LinearForm<FactSubject> out = LinearForm.constant(form.constant());
-        for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> each : form.coefs().entrySet()) {
-            LinearForm<FactSubject> number = LawAtACall.number(each.getKey(), this);
-            LinearForm<FactSubject> before = out;
-            out = number == null ? null
-                    : number.times(each.getValue()).flatMap(before::plus).orNull();
-            if (out == null) {
-                return null;
-            }
-        }
-        return out;
+        return form.over(number -> LawAtACall.number(number, this));
     }
 
     /** The count of what {@code argument} is, by the measure its type is counted by, or null where

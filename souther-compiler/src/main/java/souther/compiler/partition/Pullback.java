@@ -1956,25 +1956,32 @@ final class Pullback {
         private final AnOperationApplied applied;
         private final Core e;
         private final InputReads reads;
-        /** How a walk of a container's elements reads names in this reading. */
-        private final ElementsWrittenOut.Reading<InputReads> walking =
-                WrittenOutElements.reading(read.rules().symbols(), read.rules().newtypes());
         /** The containers a statement about some element of each is being read inside, and what
          *  the element is there. */
         private final Map<DeclaredArgument, ElementAt> elements = new HashMap<>();
         /** Where the closure's body is read, where one application of it is: a container written
          *  out hands it one value at a time. */
         private InputReads application;
+        /** How a walk of a container's elements reads names in this reading, one for a law's
+         *  reading however far it is carried on. */
+        private final ElementsWrittenOut.Reading<InputReads> walking;
 
         ALawRead(AnOperationApplied applied, Core e, InputReads reads) {
+            this(applied, e, reads,
+                    WrittenOutElements.reading(read.rules().symbols(), read.rules().newtypes()));
+        }
+
+        private ALawRead(AnOperationApplied applied, Core e, InputReads reads,
+                         ElementsWrittenOut.Reading<InputReads> walking) {
             this.applied = applied;
             this.e = e;
             this.reads = reads;
+            this.walking = walking;
         }
 
         /** {@code read}, part way through, carried on in {@code reads}. */
         private ALawRead(ALawRead read, InputReads reads) {
-            this(read.applied, read.e, reads);
+            this(read.applied, read.e, reads, read.walking);
             this.elements.putAll(read.elements);
             this.application = read.application;
         }
@@ -1990,29 +1997,8 @@ final class Pullback {
         }
 
         @Override
-        public Symbols symbols() {
-            return walking.symbols();
-        }
-
-        @Override
-        public ElementsWrittenOut.Stood<InputReads> standing(Core value, InputReads at) {
-            return walking.standing(value, at);
-        }
-
-        @Override
-        public InputReads handing(InputReads at, BindingId element,
-                                  ElementsWrittenOut.Stood<InputReads> value) {
-            return walking.handing(at, element, value);
-        }
-
-        @Override
-        public InputReads choosing(InputReads at, Choice.Decides decidedBy) {
-            return walking.choosing(at, decidedBy);
-        }
-
-        @Override
-        public Optional<Object> folded(ElementsWrittenOut.Stood<InputReads> value) {
-            return walking.folded(value);
+        public ElementsWrittenOut.Reading<InputReads> elements() {
+            return walking;
         }
 
         @Override

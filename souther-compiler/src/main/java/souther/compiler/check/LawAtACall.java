@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -11,7 +12,6 @@ import souther.compiler.types.TypeSymbol;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.OptionalLong;
 import java.util.function.Function;
 
@@ -49,7 +49,11 @@ public final class LawAtACall {
      * @param <P> the reader's answer to a part of a law
      * @param <N> the reader's answer to a number of one
      */
-    public interface Reading<E, P, N> extends ElementsWrittenOut.Reading<E> {
+    public interface Reading<E, P, N> {
+
+        /** How names are followed in {@code E}, as a walk of a container's elements follows
+         *  them. */
+        ElementsWrittenOut.Reading<E> elements();
 
         /** The value the call was handed as {@code argument}, where it was written — or null where
          *  the call was handed none there. */
@@ -58,7 +62,7 @@ public final class LawAtACall {
         /** A part saying the same whatever the arguments are. */
         P settles(LawProposition.Always<DeclaredArgument> always);
 
-        /** Every one of {@code parts}, each read as {@code each}. */
+        /** Every one of {@code all}'s parts, each read as {@code each} says, in order. */
         P joins(LawProposition.All<DeclaredArgument> all, List<P> each);
 
         /** Some one of {@code any}'s parts, each read where the reader asks for it by
@@ -153,7 +157,7 @@ public final class LawAtACall {
         }
         boolean turns = false;
         for (ElementsWrittenOut.Occurrence<E> one : each) {
-            Boolean there = ElementsWrittenOut.onEveryRun(one, reading);
+            Boolean there = ElementsWrittenOut.onEveryRun(one, reading.elements());
             Boolean meets = Boolean.FALSE.equals(there) ? Boolean.FALSE
                     : meets(some.ofTheElement(), some.container(), one.value(), reading);
             if (Boolean.TRUE.equals(there) && Boolean.TRUE.equals(meets)) {
@@ -174,7 +178,7 @@ public final class LawAtACall {
         }
         long many = 0;
         for (ElementsWrittenOut.Occurrence<E> one : each) {
-            Boolean there = ElementsWrittenOut.onEveryRun(one, reading);
+            Boolean there = ElementsWrittenOut.onEveryRun(one, reading.elements());
             Boolean meets = Boolean.FALSE.equals(there) ? Boolean.FALSE
                     : meets(counted.ofTheElement(), counted.container(), one.value(), reading);
             if (there == null || meets == null) {
@@ -185,13 +189,13 @@ public final class LawAtACall {
         return OptionalLong.of(many);
     }
 
-    /** Every element of the container the call was handed as {@code container}, or null where it
-     *  is no container a walk writes out. */
+    /** Every element of the container the call was handed as {@code container}, followed through
+     *  the names it was given, or null where it is no container a walk writes out. */
     private static <E> List<ElementsWrittenOut.Occurrence<E>> writtenOut(
             DeclaredArgument container, Reading<E, ?, ?> reading) {
         ElementsWrittenOut.Stood<E> given = reading.argument(container);
-        return given != null && ElementsWrittenOut.of(given, reading)
-                instanceof ElementsWrittenOut.Walked.Each<E>(var each) ? each : null;
+        return given != null && ElementsWrittenOut.of(reading.elements().standing(given.value(),
+                given.at()), reading.elements()) instanceof ElementsWrittenOut.Walked.Each<E>(var each) ? each : null;
     }
 
     /**
@@ -237,10 +241,10 @@ public final class LawAtACall {
                     yield null;
                 }
                 Boolean holds = switch (side.aspect()) {
-                    case TRUTH -> reading.folded(value).orElse(null) instanceof Boolean truth
-                            ? truth : null;
+                    case TRUTH -> reading.elements().folded(value).orElse(null)
+                            instanceof Boolean truth ? truth : null;
                     case EMPTINESS -> {
-                        OptionalLong size = ElementsWrittenOut.sizeOf(value, reading);
+                        OptionalLong size = ElementsWrittenOut.sizeOf(value, reading.elements());
                         yield size.isPresent() ? size.getAsLong() > 0 : null;
                     }
                     case PRESENCE -> null;
@@ -248,18 +252,11 @@ public final class LawAtACall {
                 yield holds == null ? null : holds == side.holds();
             }
             case LawProposition.Compared<DeclaredArgument>(var form, var states) -> {
-                ExactRatio total = form.constant();
-                for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> each
-                        : form.coefs().entrySet()) {
-                    ExactRatio value = numberOf(each.getKey(), container, element, reading);
-                    ExactRatio before = total;
-                    total = value == null ? null
-                            : value.times(each.getValue()).flatMap(before::plus).orNull();
-                    if (total == null) {
-                        yield null;
-                    }
-                }
-                yield states.holds(total.signum());
+                LinearForm<Object> total = form.over(number -> {
+                    ExactRatio value = numberOf(number, container, element, reading);
+                    return value == null ? null : LinearForm.constant(value);
+                });
+                yield total == null ? null : states.holds(total.constant().signum());
             }
             case LawProposition.SomeElement<DeclaredArgument> _,
                  LawProposition.Same<DeclaredArgument> _ -> null;
@@ -277,13 +274,13 @@ public final class LawAtACall {
                 ElementsWrittenOut.Stood<E> value =
                         valueOf(new LawSubject.Argument<>(at), container, element, reading);
                 BigDecimal folded = value == null ? null
-                        : FoldedValue.number(reading.folded(value));
+                        : FoldedValue.number(reading.elements().folded(value));
                 yield folded == null ? null : ExactRatio.of(folded);
             }
             case LawNumber.SizeOf<DeclaredArgument>(var of) -> {
                 ElementsWrittenOut.Stood<E> value = valueOf(of, container, element, reading);
                 OptionalLong size = value == null ? OptionalLong.empty()
-                        : ElementsWrittenOut.sizeOf(value, reading);
+                        : ElementsWrittenOut.sizeOf(value, reading.elements());
                 yield size.isPresent() ? ExactRatio.of(size.getAsLong()) : null;
             }
             case LawNumber.HowManyMeet<DeclaredArgument> _,
@@ -309,15 +306,15 @@ public final class LawAtACall {
             case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument at) -> {
                 ElementsWrittenOut.Stood<E> handed = reading.argument(at);
                 ElementsWrittenOut.Stood<E> closure = handed == null ? null
-                        : reading.standing(handed.value(), handed.at());
+                        : reading.elements().standing(handed.value(), handed.at());
                 if (closure == null
                         || !(Core.withoutStanding(closure.value()) instanceof Core.Block block)
                         || block.params().size() != 1 || block.params().getFirst() == null
                         || block.params().getFirst().binding() == null) {
                     yield null;
                 }
-                yield new ElementsWrittenOut.Stood<>(block.body(), reading.handing(closure.at(),
-                        block.params().getFirst().binding(), element));
+                yield new ElementsWrittenOut.Stood<>(block.body(), reading.elements().handing(
+                        closure.at(), block.params().getFirst().binding(), element));
             }
             case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
                     reading.argument(at);

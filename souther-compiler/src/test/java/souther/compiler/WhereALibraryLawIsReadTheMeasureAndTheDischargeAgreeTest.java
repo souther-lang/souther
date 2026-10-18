@@ -61,6 +61,10 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
                     Set.of("2", "3", "4", "5"), true),
             new Row("if List.isEmpty(List.filter(n -> n > 2, [c])) then 0 - 1 else c", 0,
                     Set.of("2", "3", "4", "5"), false),
+            // And through the name it was given.
+            new Row("{\n        let kept = [c, 3]\n"
+                    + "        if List.isEmpty(List.filter(n -> n > 2, kept)) then 0 - 1 else c\n"
+                    + "    }", 0, Set.of("2", "3", "4", "5"), true),
             // A comparison answers one of three numbers by how the two stand.
             new Row("c + 1 + Int.compare(c, 0)", 0, Set.of("2", "3"), true),
             new Row("Int.compare(c, 0) + 4", 0, Set.of("0", "1"), true),

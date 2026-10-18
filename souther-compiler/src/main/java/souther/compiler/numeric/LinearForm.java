@@ -132,6 +132,26 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
     }
 
     /**
+     * This form with each atom read as the form {@code each} answers for it, weighed as the atom
+     * was — or null where one of them reads as none, or the exact arithmetic cannot hold the sum.
+     * The pieces are added at once ({@link #sum}), so the answer does not turn on which atom was
+     * read first.
+     */
+    public <B> LinearForm<B> over(Function<A, LinearForm<B>> each) {
+        List<LinearForm<B>> parts = new ArrayList<>();
+        parts.add(constant(constant));
+        for (Map.Entry<A, ExactRatio> one : coefs.entrySet()) {
+            LinearForm<B> read = each.apply(one.getKey());
+            LinearForm<B> weighed = read == null ? null : read.times(one.getValue()).orNull();
+            if (weighed == null) {
+                return null;
+            }
+            parts.add(weighed);
+        }
+        return sum(parts).orNull();
+    }
+
+    /**
      * The sum, or which way the exact arithmetic could not hold it.
      *
      * <p>A model's own decimals can put a constant or a coefficient of one side far enough apart in
