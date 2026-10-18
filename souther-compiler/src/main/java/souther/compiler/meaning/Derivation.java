@@ -1602,8 +1602,7 @@ public sealed interface Derivation {
                     }
                     yield rest;
                 }
-                case NOT_SAID -> numbering.unread(
-                        new Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+                case NOT_SAID -> numbering.whichElementARunStopsAt();
             };
         }
     }
@@ -1704,13 +1703,11 @@ public sealed interface Derivation {
             return switch (asked) {
                 case EVERY_ONE -> Proposition.whereItAnswers(every, some);
                 case UNTIL_ONE_MEETS_IT -> alike ? Proposition.whereItAnswers(every, some)
-                        : numbering.unread(
-                                new Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+                        : numbering.whichElementARunStopsAt();
                 case UNTIL_ONE_MEETS_IT_IN_AN_ORDER_OF_THE_ROWS -> alike
                         ? Proposition.whereItAnswers(every, some)
                         : Proposition.whereItAnswers(Proposition.any(List.of(some, every)), some);
-                case NOT_SAID -> numbering.unread(
-                        new Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+                case NOT_SAID -> numbering.whichElementARunStopsAt();
             };
         }
 
@@ -1849,8 +1846,7 @@ public sealed interface Derivation {
             // the tree's, and no order a row chooses.
             if (Proposition.mayAnswerNothing(read)
                     || noneBelow.filter(Proposition::mayAnswerNothing).isPresent()) {
-                return numbering.unread(
-                        new Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+                return numbering.whichElementARunStopsAt();
             }
             return searchFrom(node, node, through, read, noneBelow, how);
         }
@@ -1919,7 +1915,7 @@ public sealed interface Derivation {
             Proposition read = numbering.of(atANode);
             // As where the search is read from ({@link ATreeSearched#conclusion}).
             return Proposition.mayAnswerNothing(read)
-                    ? numbering.unread(new Stopped(new WhyUnread.WhichElementARunStopsAt(), false))
+                    ? numbering.whichElementARunStopsAt()
                     : searchFrom(at, from, through, read, Optional.empty(), how);
         }
     }

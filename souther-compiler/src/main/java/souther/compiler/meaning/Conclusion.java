@@ -260,6 +260,16 @@ public final class Conclusion {
         return unread(new Derivation.Stopped(new WhyUnread.TwoElementsOfOneContainer(), false));
     }
 
+    /**
+     * A part nothing read, for a statement about elements where what is stated of one may answer
+     * nothing on some rows and nothing says which element a run reaches first
+     * ({@link HowTheElementsAreAsked}): a quantifier, a count or a search is of statements every row
+     * answers, so the one a step would make is not made.
+     */
+    Proposition whichElementARunStopsAt() {
+        return unread(new Derivation.Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+    }
+
     Proposition unread(Derivation.Stopped stopped) {
         return new Proposition.Unread(shared.where, shared.unread++, stopped.why(),
                 stopped.fixed(), true);
