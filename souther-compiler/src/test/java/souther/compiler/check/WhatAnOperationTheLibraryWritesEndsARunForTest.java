@@ -14,6 +14,7 @@ import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What an operation the library writes in the language ends a run for is what its body ends one
@@ -92,6 +93,30 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         assertEquals(new Endings.NotKnown(), LibraryEndings.of(rewritten).of(ANY));
     }
 
+    /**
+     * A kernel handed a function applies it, and its contract says nothing of what the function
+     * ends a run for: a closure dividing by the element it is applied to is handed to one here.
+     */
+    @Test
+    void aKernelHandedAFunctionIsNotKnown() {
+        Stdlib rewritten = rewritten(IS_EMPTY_BODY,
+                "List.length(xs) == 0 && List.length(List.sortBy(n -> 100 / n, [0])) >= 0");
+        LibraryEndings endings = LibraryEndings.of(rewritten);
+
+        assertEquals(new Endings.NotKnown(), endings.of(IS_EMPTY));
+        assertEquals(new Endings.NotKnown(),
+                endings.of(ValueName.Stdlib.operation("List", "sortBy")));
+    }
+
+    /** The same of an operation of the library handed to one by its name. */
+    @Test
+    void aKernelHandedAnOperationByItsNameIsNotKnown() {
+        Stdlib rewritten = rewritten(IS_EMPTY_BODY,
+                "List.length(xs) == 0 && List.length(List.sortBy(Int.abs, [1])) >= 0");
+
+        assertEquals(new Endings.NotKnown(), LibraryEndings.of(rewritten).of(IS_EMPTY));
+    }
+
     /** A closure built and never applied runs nothing of its body. */
     @Test
     void aClosureNeverAppliedEndsNoRun() {
@@ -99,6 +124,23 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
                 "{\n    let f = n -> 100 / n\n    List.length(xs) == 0\n}");
 
         assertEquals(NONE, LibraryEndings.of(rewritten).of(IS_EMPTY));
+    }
+
+    /** As shipped, an operation derived from the fold applies the function it is handed. */
+    @Test
+    void anOperationThroughTheFoldIsNotKnown() {
+        assertEquals(new Endings.NotKnown(), LibraryEndings.of(DefaultStdlib.get()).of(ANY));
+    }
+
+    /**
+     * {@code + - *} over a newtype build it again, and what a construction ends a run for is its
+     * declaration's: a body whose operands carry no type may be building one.
+     */
+    @Test
+    void anArithmeticThatMayBuildANewtypeIsNotKnown() {
+        Stdlib rewritten = rewritten(IS_EMPTY_BODY, "List.length(xs) + 0 == 0");
+
+        assertEquals(new Endings.NotKnown(), LibraryEndings.of(rewritten).of(IS_EMPTY));
     }
 
     /** An operation the library does not have is refused, and not answered as not known. */
@@ -112,7 +154,16 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         return rewritten(text -> text.replace(shipped, body));
     }
 
+    /** The library with {@code rewriting} applied, which must change some text of it: a rewrite
+     *  that matched nothing would hold the shipped body to what the test says of another. */
     private static Stdlib rewritten(UnaryOperator<String> rewriting) {
-        return StdlibLoader.load(rewriting);
+        boolean[] changed = {false};
+        Stdlib library = StdlibLoader.load(text -> {
+            String out = rewriting.apply(text);
+            changed[0] |= !out.equals(text);
+            return out;
+        });
+        assertTrue(changed[0], "the rewrite matched nothing the library writes");
+        return library;
     }
 }

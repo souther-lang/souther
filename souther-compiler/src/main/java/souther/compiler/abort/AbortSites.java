@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Every {@link Core} site of a program, classified by which {@link AbortKind} a run reaching it can
@@ -132,11 +133,7 @@ public final class AbortSites {
 
     /** The one place a construction's abort is decided, for a site this walks and for one it does not. */
     private static AbortSet ordinaryConstruction(Constructible type) {
-        return ordinaryConstruction(type.holdsInvariants());
-    }
-
-    private static AbortSet ordinaryConstruction(boolean holdsInvariants) {
-        return holdsInvariants
+        return type.holdsInvariants()
                 ? AbortSet.of(AbortKind.INVARIANT_NOT_HELD)
                 : AbortSet.NONE;
     }
@@ -295,25 +292,21 @@ public final class AbortSites {
     /**
      * What {@code op} may end a run for over any operands the checker admits it to: every reason
      * {@link #ofAnOperator} answers for some typing of it, which may be more than a site of one
-     * typing ends a run for. For a reader of a tree whose operands carry no type.
+     * typing ends a run for. For a reader of a tree whose operands carry no type. Empty where some
+     * typing does what no reason here covers.
      *
      * <p>Worked out by asking the typed reading of every typing the operator is admitted at, and not
      * read off the operator a second time. {@code + - * /} take two numbers of one type, or a
      * {@code Rational} beside any number, which answers a {@code Rational}
      * (spec §an-operator-takes-the-types-it-is-defined-for). {@code + - *} take a numeric newtype
-     * too, and answer it by building it again around the arithmetic on what it wraps, which is a
-     * construction of a type that may hold an invariant; {@code /} over two of one newtype answers
-     * the {@code Rational} the quotient of what they wrap is, and builds nothing.
+     * too, and answer it by building it again around the arithmetic on what it wraps: what that
+     * construction works out is its declaration's invariant, which no operator answers for, so
+     * theirs is empty. {@code /} over two of one newtype answers the {@code Rational} the quotient
+     * of what they wrap is, and builds nothing.
      */
-    public static AbortSet ofAnOperatorOfAnyType(BinOp op) {
+    public static Optional<AbortSet> ofAnOperatorOfAnyType(BinOp op) {
         return switch (op) {
-            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> {
-                AbortSet out = ordinaryConstruction(true);
-                for (Type answer : NUMBERS) {
-                    out = out.union(arithmeticType(op, answer));
-                }
-                yield out;
-            }
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> Optional.empty();
             case BinOp.DIV -> {
                 AbortSet out = AbortSet.NONE;
                 for (Type left : NUMBERS) {
@@ -323,10 +316,10 @@ public final class AbortSites {
                         }
                     }
                 }
-                yield out;
+                yield Optional.of(out);
             }
             case BinOp.CONCAT, BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE,
-                 BinOp.AND, BinOp.OR -> whateverItsTypes(op);
+                 BinOp.AND, BinOp.OR -> Optional.of(whateverItsTypes(op));
         };
     }
 

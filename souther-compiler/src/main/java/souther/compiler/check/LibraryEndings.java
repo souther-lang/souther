@@ -8,6 +8,7 @@ import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
@@ -16,22 +17,26 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * What each operation of a library may end a run without a value for, over every call of it: a
- * kernel's is {@link KernelContracts}', and one the library writes in the language ends a run for
- * what its body does.
+ * What each operation of a library may end a run without a value for, over every call of it and
+ * everything the call runs: a kernel's own is {@link KernelContracts}', and one the library writes in
+ * the language ends a run for what its body does. {@link Endings.Known} of none is said only where
+ * nothing it runs ends one, whatever it is handed.
  *
  * <p>Read off the body from the same owners, and never classified a second time: what an operator in
  * it ends a run for is {@link AbortSites}', and what another operation it calls ends one for is this
- * table's own. A body's operands carry no type, so an operator is answered for every typing it is
- * admitted at ({@link AbortSites#ofAnOperatorOfAnyType}) — what some call may end a run for, which
- * is no more than a call of one typing may. {@link Endings.Known} of none is so only where nothing
- * the body works out ends a run whatever it is handed.
+ * table's own. A body's operands carry no type, so an operator is answered over every typing it is
+ * admitted at ({@link AbortSites#ofAnOperatorOfAnyType}), which is no less than a call of one typing
+ * ends a run for; where {@link AbortSites} cannot bound that, it is not known.
  *
- * <p>Where the body says nothing of what it runs, what it ends a run for is not known: a function it
- * is handed or binds, applied; a construction, whose invariant is its declaration's; an attempt at
- * one, whose refusal takes another arm. A closure it builds runs nothing of its own body until
- * something applies it, and what applies it is one of those. An operation coming back to itself,
- * directly or through another, is not known until the cycle is read, and this reads none.
+ * <p>A function runs where it is applied, and every place one is applied is not known here: a
+ * function the body is handed or binds, applied by the body; a parameter the library applies in a
+ * body of its own; and a kernel handed a function, whose contract answers for what the kernel itself
+ * does and not for what the function it applies does. So a closure the body builds, and an operation
+ * of the library it names without applying, run nothing of their own where they stand.
+ *
+ * <p>Also not known: a construction, whose invariant is its declaration's; an attempt at one, whose
+ * refusal takes another arm; an operation coming back to itself, directly or through another, until
+ * the cycle is read, and this reads none.
  *
  * <p>A pure function of a library, and the shipped one's is held once — the pattern
  * {@link LibraryReadThrough} follows.
@@ -110,7 +115,8 @@ final class LibraryEndings {
         private Endings worked(ValueName.Stdlib.Operation operation) {
             Stdlib.Intrinsic intrinsic = library.intrinsicOf(operation);
             if (intrinsic != null) {
-                return new Endings.Known(KernelContracts.abortsOf(intrinsic.kernel()));
+                return handedAFunction(operation) ? NOT_KNOWN
+                        : new Endings.Known(KernelContracts.abortsOf(intrinsic.kernel()));
             }
             Hir.FnDef declaration = library.helpers().get(operation);
             if (declaration != null) {
@@ -122,6 +128,16 @@ final class LibraryEndings {
             }
             throw new IllegalArgumentException(
                     "`" + operation.qualified() + "` is no operation of this library");
+        }
+
+        /** Whether the kernel {@code operation} is takes a function, which it may apply. */
+        private boolean handedAFunction(ValueName.Stdlib.Operation operation) {
+            Stdlib.Entry entry = library.entry(operation);
+            if (entry == null) {
+                throw new IllegalStateException(
+                        "`" + operation.qualified() + "` is a kernel the library declares no entry for");
+            }
+            return entry.signature().params().stream().anyMatch(Type.FnOf.class::isInstance);
         }
 
         /** What working {@code e} out, and everything under it it works out, ends a run for. */
@@ -145,8 +161,8 @@ final class LibraryEndings {
          */
         private Endings itself(Hir.Expr e) {
             return switch (e) {
-                case Hir.Binary binary ->
-                        new Endings.Known(AbortSites.ofAnOperatorOfAnyType(binary.op()));
+                case Hir.Binary binary -> AbortSites.ofAnOperatorOfAnyType(binary.op())
+                        .<Endings>map(Endings.Known::new).orElse(NOT_KNOWN);
                 case Hir.Neg _ -> new Endings.Known(AbortSites.ofANegationOfAnyType());
                 case Hir.Unreachable _ -> new Endings.Known(AbortSites.ofAnUnreachableWherever());
                 case Hir.Apply apply -> applied(apply);
@@ -169,8 +185,8 @@ final class LibraryEndings {
 
         /**
          * A name read: an operation of the library that takes nothing is worked out where it is
-         * read, and anything else names a value already worked out or a function not applied here.
-         * A name that names nothing says nothing of what it reads.
+         * read, and anything else names a value already worked out or a function, which runs where
+         * it is applied. A name that names nothing says nothing of what it reads.
          */
         private Endings read(Hir.Var name) {
             return switch (name) {
