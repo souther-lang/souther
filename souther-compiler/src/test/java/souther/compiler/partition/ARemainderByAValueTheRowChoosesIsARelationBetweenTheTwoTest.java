@@ -88,8 +88,19 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
                 data Positive = Int
                     invariant value >= 1
                 """, "eaches: Positive, pack: Int", "Int.floorMod(eaches.value, pack) == 0");
-        assertEquals(List.of("pack/x <= -9223372036854775808", "pack/= -1", "pack/= 1",
-                        "pack/-9223372036854775808 < x and x /= -1, 1"),
+        assertEquals(List.of("pack/= -9223372036854775808", "pack/= -1", "pack/= 1",
+                        "pack//= -9223372036854775808, -1, 1"),
+                classesOf(measured(compilation)).get("pack"));
+    }
+
+    /** Dividends below nought reach a multiple of every divisor the type holds: no run beyond. */
+    @Test
+    void everyDivisorHasAMultipleAmongDividendsBelowNought() {
+        Compilation compilation = compiled("""
+                data Negative = Int
+                    invariant value <= -1
+                """, "eaches: Negative, pack: Int", "Int.floorMod(eaches.value, pack) == 0");
+        assertEquals(List.of("pack/= -1", "pack/= 1", "pack//= -1, 1"),
                 classesOf(measured(compilation)).get("pack"));
     }
 

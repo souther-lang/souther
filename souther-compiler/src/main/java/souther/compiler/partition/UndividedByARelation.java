@@ -538,8 +538,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && independent.between(0, 1);
             for (int at = 0; at < 2; at++) {
                 putDown(at, WhatARelationLeavesUndivided.leavesOfADivisibility(terms.get(0),
-                        terms.get(1), at == 0, relation, apart, greatestOf(carriers.get(0))), out,
-                        settled);
+                        terms.get(1), at == 0, relation, apart, endsOf(carriers.get(0)),
+                        endsOf(carriers.get(1))), out, settled);
             }
             return new WhatItLeaves(out, settled);
         }
@@ -604,6 +604,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         return greatest.exactly().floor().orNull();
+    }
+
+    /** The least whole number {@code carrier} holds, or null where it holds no least or none this
+     *  reads as a number. */
+    private static BigInteger leastOf(Carrier carrier) {
+        if (carrier == null || carrier.extent().low() == null
+                || !(carrier.extent().low().at() instanceof Count least)) {
+            return null;
+        }
+        return least.exactly().ceiling().orNull();
+    }
+
+    /** Where {@code carrier} stops at either end. */
+    private static WhatARelationLeavesUndivided.Ends endsOf(Carrier carrier) {
+        return new WhatARelationLeavesUndivided.Ends(leastOf(carrier), greatestOf(carrier));
     }
 
     /** What the way states of each side, asked once and read by both readings. */
