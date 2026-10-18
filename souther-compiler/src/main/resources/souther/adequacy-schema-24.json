@@ -1206,7 +1206,7 @@
       ]
     },
     "elementComputation": {
-      "description": "What one element's number is made of: a sum of its fields each weighed by a number, or the choice between two such by a flag the element holds. A field is named by its steps from the element, joined by dots, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
+      "description": "What one element's number is made of: a sum of its fields each weighed by a number, the choice between two such by a flag the element holds, the choice among them by which case a value of the element is, or several such choices added up. A field is named by its steps from the element, joined by dots, with a narrowing to a case written `@` and the case, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
       "oneOf": [
         {
           "type": "object",
@@ -1267,6 +1267,86 @@
             },
             "otherwise": {
               "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The arm a `match` on a value of the element takes, tried in the order written: each arm by the place its name stands at, which is the value narrowed to the case the arm took, and what the element comes to there. `otherwise` is what an element no listed arm takes comes to, and is absent where the arms take every value.",
+          "required": [
+            "kind",
+            "subject",
+            "arms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "case"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "arms": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "taken",
+                  "value"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "taken": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "$ref": "#/$defs/elementComputation"
+                  }
+                }
+              }
+            },
+            "otherwise": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Choices of the element added up, each at its weight, with a form beside them. Each choice is made for the element on its own. The choices are listed in one order made of them alone.",
+          "required": [
+            "kind",
+            "besides",
+            "choices"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "sum"
+            },
+            "besides": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "choices": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "required": [
+                  "weight",
+                  "value"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "weight": {
+                    "type": "string",
+                    "description": "An exact number, written one way for one value."
+                  },
+                  "value": {
+                    "$ref": "#/$defs/elementComputation"
+                  }
+                }
+              }
             }
           }
         }
@@ -5829,6 +5909,7 @@
                           "places_in_a_run_that_are_named",
                           "elements_chosen_for_a_count",
                           "elements_a_computed_total_is_solved_for",
+                          "mixes_of_cases_a_total_is_spread_over",
                           "trees_written_for_a_count"
                         ]
                       }
