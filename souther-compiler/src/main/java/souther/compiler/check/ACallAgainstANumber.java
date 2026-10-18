@@ -3,14 +3,16 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A comparison one side of which is a call of an operation carrying a fact, alone or moved and
@@ -25,7 +27,9 @@ import java.util.function.Function;
  * newtype's construction is the value it wraps, so {@code Yen(Rational.toInt(DOWN, total / 3))}
  * held against {@code Yen(100)} is the rounding held against a hundred, as it is for the arithmetic
  * ({@link AffineForms}). Each reader finding the call for itself found it under what that reader
- * thought of, and the next one written would have found it under less.
+ * thought of, and the next one written would have found it under less. And the arithmetic it is
+ * moved and scaled by is read by the reader's own arithmetic ({@link AffineForms#overTheCalls}), so
+ * what a side comes to is said once, by the walk every reader of a number reads it with.
  *
  * @param <E> the environment the call is read in
  * @param <F> the fact the operation carries
@@ -68,19 +72,16 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
     static <E, F> ACallAgainstANumber<E, F> of(StatedComparison comparison, E at,
                                                TheSignOfAnOrder.Sides<E> sides,
                                                Function<ValueName, F> factOf) {
+        Predicate<Core> isTheCall = e -> AnOperationApplied.of(e) instanceof AnOperationApplied
+                applied && factOf.apply(applied.operation()) != null;
         for (boolean callFirst : List.of(true, false)) {
             Core asWritten = callFirst ? comparison.left() : comparison.right();
-            // The call itself, or arithmetic over it on a side that is no number on every run: a
-            // side that is one is walked into for nothing, and a chain of names under it folded
-            // again at each link. Asked only of arithmetic, since what a side that is no
-            // arithmetic comes to is no call weighed by anything, and working out whether it is a
-            // number can cost as much as reading the comparison.
+            // The call itself — an operation the arithmetic reads as a form of its arguments is
+            // still the call here — or the arithmetic over it, as the reader reads arithmetic.
             ValueStanding.ReadThrough<E> stands = under(asWritten, at, sides);
-            Weighed<E> side = called(stands, factOf);
-            if (side == null && isArithmetic(stands)
-                    && sides.constant(asWritten, at) == null) {
-                side = weighed(asWritten, at, sides, factOf);
-            }
+            Weighed<E> side = isTheCall.test(Core.withoutStanding(stands.value()))
+                    ? new Weighed<>(stands, ExactRatio.ONE, ExactRatio.ZERO)
+                    : weighed(sides.overTheCalls(asWritten, at, isTheCall));
             if (side == null) {
                 continue;
             }
@@ -110,91 +111,18 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
                               ExactRatio offset) {}
 
     /**
-     * {@code side} as a call of an operation {@code factOf} answers for, negated, added to, taken
-     * from or multiplied by numbers the same on every run — or null where it is none. So {@code
-     * compare(a, b) + 10 >= 12} is the sign held at or above two, as the arithmetic reads it
-     * ({@link AffineForms}), and the comparison is of the call however the source moved its
-     * number. A quotient is left out: what it comes to of a whole number is the arithmetic's to
-     * say, and this does not say it a second time.
+     * A side read as arithmetic over the calls, where it is one of them weighed by numbers the same
+     * on every run — or null where it is no call, or more than one. So {@code compare(a, b) + 10 >=
+     * 12} is the sign held at or above two.
      */
-    private static <E, F> Weighed<E> weighed(Core side, E at, TheSignOfAnOrder.Sides<E> sides,
-                                             Function<ValueName, F> factOf) {
-        ValueStanding.ReadThrough<E> stands = under(side, at, sides);
-        Weighed<E> itself = called(stands, factOf);
-        if (itself != null) {
-            return itself;
+    private static <E> Weighed<E> weighed(LinearForm<AffineForms.ACall<E>> side) {
+        if (side == null || side.coefs().size() != 1) {
+            return null;
         }
-        return switch (Core.withoutStanding(stands.value())) {
-            case Core.Neg n -> {
-                Weighed<E> inner = weighed(n.operand(), stands.at(), sides, factOf);
-                yield inner == null ? null : new Weighed<>(inner.call(), inner.scale().negated(),
-                        inner.offset().negated());
-            }
-            case Core.Binary b when b.op() == BinOp.ADD || b.op() == BinOp.SUB -> {
-                boolean taken = b.op() == BinOp.SUB;
-                Beside<E> beside = beside(b, stands.at(), sides, factOf);
-                if (beside == null) {
-                    yield null;
-                }
-                Weighed<E> call = beside.call();
-                ExactRatio offset = beside.callLeft()
-                        ? (taken ? call.offset().minus(beside.number())
-                                : call.offset().plus(beside.number())).orNull()
-                        : (taken ? beside.number().minus(call.offset())
-                                : beside.number().plus(call.offset())).orNull();
-                yield offset == null ? null : new Weighed<>(call.call(),
-                        taken && !beside.callLeft() ? call.scale().negated() : call.scale(),
-                        offset);
-            }
-            case Core.Binary b when b.op() == BinOp.MUL -> {
-                Beside<E> beside = beside(b, stands.at(), sides, factOf);
-                if (beside == null || beside.number().isZero()) {
-                    yield null;
-                }
-                ExactRatio scale = beside.call().scale().times(beside.number()).orNull();
-                ExactRatio offset = beside.call().offset().times(beside.number()).orNull();
-                yield scale == null || offset == null ? null
-                        : new Weighed<>(beside.call().call(), scale, offset);
-            }
-            default -> null;
-        };
-    }
-
-    /** Whether what {@code stands} for is arithmetic a call can be weighed in ({@link #weighed}). */
-    private static <E> boolean isArithmetic(ValueStanding.ReadThrough<E> stands) {
-        Core e = Core.withoutStanding(stands.value());
-        return e instanceof Core.Neg || (e instanceof Core.Binary b
-                && (b.op() == BinOp.ADD || b.op() == BinOp.SUB || b.op() == BinOp.MUL));
-    }
-
-    /** {@code stands} as the call itself, weighed by nothing — or null where it is no call of an
-     *  operation {@code factOf} answers for. */
-    private static <E, F> Weighed<E> called(ValueStanding.ReadThrough<E> stands,
-                                            Function<ValueName, F> factOf) {
-        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(stands.value()));
-        return applied != null && factOf.apply(applied.operation()) != null
-                ? new Weighed<>(stands, ExactRatio.ONE, ExactRatio.ZERO) : null;
-    }
-
-    /** The call one operand of an operator is weighed by, beside the number the other is. */
-    private record Beside<E>(Weighed<E> call, ExactRatio number, boolean callLeft) {}
-
-    /**
-     * The operand of {@code b} that weighs the call, beside the other as a number the same on every
-     * run — or null where neither is. Only the operand beside a number is walked, so a value named
-     * on both sides of an operator, and again under each of those, is not walked once for each way
-     * down to it.
-     */
-    private static <E, F> Beside<E> beside(Core.Binary b, E at, TheSignOfAnOrder.Sides<E> sides,
-                                           Function<ValueName, F> factOf) {
-        ExactRatio right = sides.constant(b.right(), at);
-        if (right != null) {
-            Weighed<E> call = weighed(b.left(), at, sides, factOf);
-            return call == null ? null : new Beside<>(call, right, true);
-        }
-        ExactRatio left = sides.constant(b.left(), at);
-        Weighed<E> call = left == null ? null : weighed(b.right(), at, sides, factOf);
-        return call == null ? null : new Beside<>(call, left, false);
+        Map.Entry<AffineForms.ACall<E>, ExactRatio> only =
+                side.coefs().entrySet().iterator().next();
+        return new Weighed<>(new ValueStanding.ReadThrough<>(only.getKey().call(),
+                only.getKey().at()), only.getValue(), side.constant());
     }
 
     /** What {@code side} is under the names it was given and the newtypes it was built as. */

@@ -95,7 +95,8 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             new Row("if c < 0 then c + c + 7 else 5", 0, Set.of("-2", "-1", "0"), true),
             // A sign moved and scaled by numbers is still compared with a number, and the library's
             // bounds on it settle the comparison either way. Where they leave it, it is a relation
-            // of two rationals, which the measure draws no line on.
+            // of two rationals, which the measure draws no line on read or unread: that row is the
+            // discharge's control, a value the invariant refuses where the sign is above nought.
             new Row("if Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) + 10 >= 12"
                     + " then 0 - 1 else c", 0, Set.of("4", "5"), true),
             new Row("if 10 - 2 * Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 7"

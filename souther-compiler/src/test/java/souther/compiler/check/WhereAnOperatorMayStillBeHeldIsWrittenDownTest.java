@@ -354,11 +354,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             // What the operator computes, is typed as, or is emitted as.
             new Held("souther.compiler.check.AffineForms.composed",
                     "which arithmetic an expression composes into a form"),
-            new Held("souther.compiler.check.ACallAgainstANumber.weighed",
-                    "which arithmetic moves or scales a call by a number, so the comparison is of"
-                            + " the call against the number moved over"),
-            new Held("souther.compiler.check.ACallAgainstANumber.isArithmetic",
-                    "the same, asked before whether the side is a number at all"),
             new Held("souther.compiler.check.BinaryElaborator.elaborateBinary",
                     "what the operator makes of its operands' types"),
             new Held("souther.compiler.check.BinaryElaborator.operand",

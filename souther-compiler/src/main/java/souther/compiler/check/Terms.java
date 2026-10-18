@@ -40,6 +40,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What a value is to the invariant-discharge check: where it is, what it is called, and whether
@@ -538,6 +539,13 @@ final class Terms {
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
         return AffineForms.of(raw, at, affineReading, affineAnswers);
+    }
+
+    /** {@code raw} as arithmetic over the calls {@code taken} names, read as {@link #affineOf}
+     *  reads arithmetic ({@link AffineForms#overTheCalls}). */
+    LinearForm<AffineForms.ACall<Denotations>> overTheCalls(Core raw, Denotations at,
+                                                            Predicate<Core> taken) {
+        return AffineForms.of(raw, at, AffineForms.overTheCalls(affineReading, taken));
     }
 
     /**

@@ -129,6 +129,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -6702,6 +6703,12 @@ final class Pullback {
                         instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                                 LinearForm<Quantity> number)
                         && number.coefs().isEmpty() ? number.constant() : null;
+            }
+
+            @Override
+            public LinearForm<AffineForms.ACall<InputReads>> overTheCalls(
+                    Core e, InputReads at, Predicate<Core> taken) {
+                return AffineForms.of(e, at, AffineForms.overTheCalls(quantities(), taken));
             }
 
             @Override
