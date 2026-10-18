@@ -22,6 +22,7 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementsWrittenOut;
+import souther.compiler.check.Extreme;
 import souther.compiler.check.KeyedAccumulation;
 import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Location;
@@ -868,6 +869,7 @@ final class Pullback {
                 () -> ofAQuotientByAValue(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
+                () -> ofAWalkKeepingAnEnd(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
                 () -> throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get()),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
@@ -5852,6 +5854,21 @@ final class Pullback {
         } else {
             return null;
         }
+        return acrossTheElements(start, container, walked, meets, keeps, how, e, reads);
+    }
+
+    /**
+     * What a walk over {@code container} ends with, from {@code start}, where an element meeting
+     * {@code meets} decides it and the step keeps what it carried otherwise ({@code keeps}): the
+     * seed or some element meeting it, where {@code how} is either, and the seed and every element
+     * meeting it, where it is both.
+     *
+     * @param walked the expression the container is, whose size is read where some element meeting
+     *               the step has the container's holding anything as a part
+     */
+    private Derivation acrossTheElements(Derivation start, DecisionSubject container, Core walked,
+                                         Derivation meets, Derivation keeps, ConditionJoin how,
+                                         Core e, InputReads reads) {
         boolean holds = how == ConditionJoin.EITHER;
         Proposition element = holds ? trying.of(meets) : trying.of(meets).denied();
         Optional<Derivation> holdsSomething = Optional.empty();
@@ -6331,6 +6348,93 @@ final class Pullback {
         return new Derivation.AComparisonOfAChoice(
                 comparedCase(left, right, stated.claim().statedRelation(), at));
     }
+
+    /**
+     * A comparison one side of which is what a walk from a seed ends with, where the walk's step
+     * keeps one end of what it carried and a value of the element ({@link SeededWalk#endKept}):
+     * read by induction over the elements, as a walk's end is ({@link Derivation.AcrossAWalk}) — or
+     * null where neither side is such a walk, or what it walks stands at no subject.
+     *
+     * <p>The greatest of the seed and the values is at or below a number exactly where the seed is
+     * and the value on every element is, and at or above it where the seed is or the value on some
+     * element is; the least is the other way round. So the comparison is the same comparison of the
+     * seed, and of the value on every element or on some, each read as a comparison of a case is
+     * ({@link #comparedCase}): the seed and the value where the walk stands, and the other side
+     * where the comparison does. Equality is the end at or below and at or above, and a difference
+     * is the end below or above.
+     *
+     * <p>The value a newtype wears, read off what the walk ends with, is that end, ordered alike
+     * ({@link SeededWalk#opened}): {@code worst.value <= 0.10m} over a walk keeping the greatest
+     * rate is the comparison of every rate.
+     */
+    private Derivation ofAWalkKeepingAnEnd(StatedComparison stated, Denotation at,
+                                           InputReads reads) {
+        StatedComparison.Numbered<AWalkKeepingAnEnd> numbered = stated.at(side -> {
+            Denotation written = reads.standing(side, read.rules().symbols(),
+                    read.rules().newtypes());
+            Core opened = SeededWalk.opened(written.value(), read.rules().newtypes());
+            Denotation stands = opened == written.value() ? written
+                    : written.at().standing(opened, read.rules().symbols(),
+                            read.rules().newtypes());
+            SeededWalk walk = SeededWalk.of(stands.value(), blocksAt(stands));
+            SeededWalk.AnEndKept kept = walk == null ? null
+                    : walk.endKept(read.rules().newtypes());
+            return kept == null ? null : new AWalkKeepingAnEnd(stands, walk, kept);
+        });
+        if (numbered == null) {
+            return null;
+        }
+        Denotation ends = numbered.number().ends();
+        SeededWalk walk = numbered.number().walk();
+        SeededWalk.AnEndKept kept = numbered.number().kept();
+        DecisionSubject container = subjectOf(walk.container(), ends.at());
+        if (container == null) {
+            return null;
+        }
+        Denotation other = new Denotation(numbered.other(), reads);
+        Denotation value = new Denotation(kept.value(), ends.at());
+        Rel states = numbered.claim().statedRelation();
+        // The seed and the value are each compared with the other side, once for each end an
+        // equality or a difference is read as.
+        long most = READINGS.maximum();
+        long readAs = states == Rel.EQ || states == Rel.NE ? 2 : 1;
+        WhyUnread past = splitInto(reads, readAs * (readingsOf(new Denotation(walk.seed(),
+                ends.at()), most, true) + readingsOf(value, most, true))
+                * readingsOf(other, most, true));
+        if (past != null) {
+            return partOf(at, new Derivation.Stopped(past, false));
+        }
+        Function<Rel, Derivation> endedSo = rel -> {
+            boolean every = (rel == Rel.LT || rel == Rel.LE)
+                    == (kept.extreme() instanceof Extreme.Greatest);
+            ConditionJoin how = every ? ConditionJoin.BOTH : ConditionJoin.EITHER;
+            // Past the elements that decide it, the step answers the side of what it carried.
+            ACarriedValue carried = ACarriedValue.made();
+            return acrossTheElements(
+                    comparedCase(new Denotation(walk.seed(), ends.at()), other, rel, at),
+                    container, walk.container(), comparedCase(value, other, rel, at),
+                    new Derivation.Supposing(new Derivation.WhatAWalkCarried(carried), carried,
+                            !every),
+                    how, ends.value(), ends.at());
+        };
+        return switch (states) {
+            case LT, LE, GT, GE -> endedSo.apply(states);
+            case EQ -> new Derivation.Joined(ConditionJoin.BOTH, endedSo.apply(Rel.LE),
+                    endedSo.apply(Rel.GE));
+            case NE -> new Derivation.Joined(ConditionJoin.EITHER, endedSo.apply(Rel.LT),
+                    endedSo.apply(Rel.GT));
+        };
+    }
+
+    /**
+     * A side of a comparison that is what a walk keeping an end ends with.
+     *
+     * @param ends the walk's call, where it stands
+     * @param walk the walk the call is
+     * @param kept the end its step keeps
+     */
+    private record AWalkKeepingAnEnd(Denotation ends, SeededWalk walk,
+                                     SeededWalk.AnEndKept kept) {}
 
     /**
      * {@code left states right}, each side split into its cases where it is chosen by them, and

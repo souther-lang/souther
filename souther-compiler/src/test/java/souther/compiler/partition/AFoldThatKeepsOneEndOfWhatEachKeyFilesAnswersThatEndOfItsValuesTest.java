@@ -202,13 +202,15 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                         () -> "no point of the line is where nothing is filed: " + item)));
     }
 
-    /** The end kept, written with its two values the other way round, or as a lookup and a
-     *  filing, is the same end. */
+    /** The end kept, written with its two values the other way round, as an {@code if}, or as a
+     *  lookup and a filing, is the same end. */
     @Test
     void theSameEndWrittenAnotherWayIsTheSameLine() {
         List<String> plain = axisOf(measured(modelOf(LEAST, "")));
         for (String step : List.of(
                 "Map.updateOrInsert(t.account, t.days, seen -> Int.min(t.days, seen), acc)",
+                "Map.updateOrInsert(t.account, t.days,"
+                        + " seen -> if t.days < seen then t.days else seen, acc)",
                 """
                 match Map.get(t.account, acc) with
                         | None -> Map.insert(t.account, t.days, acc)

@@ -897,10 +897,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // lookup's answer compared as a whole is its entry under the key meeting the
             // comparison, and the line is the comparison's on the entry. Inside an either-or it is
             // the same parts, read there.
-            case Proposition.Some some when some.holds()
-                    && !Proposition.leavesSomethingUnread(some) ->
-                    asLines(behavior, comparison, some, onTheInput.arithmetic(), read, reads,
-                            answering, lines.get());
+            //
+            // And no element meeting them, which is every element failing them: a statement and
+            // its denial turn at the same lines and in the same cases, so the lines are read off
+            // some element meeting them. The greatest of some values at or below a number is no
+            // value above it, and its line is the line on a value.
+            case Proposition.Some some when !Proposition.leavesSomethingUnread(some) ->
+                    asLines(behavior, comparison, some.holds() ? some : some.denied(),
+                            onTheInput.arithmetic(), read, reads, answering, lines.get());
             default -> noLine(comparison, stated.proposition(),
                     Proposition.stopsIn(stated.proposition()), Set.of(), onTheInput.arithmetic(),
                     read, reads, answering);
