@@ -5,7 +5,10 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * One call's answer, held in a name and read by the conditions of two forks, is one construct of
@@ -34,6 +37,8 @@ class OneCallsTruthReadByTwoForksTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        assertDoesNotThrow(() -> AdequacyReport.of(compilation));
+        AdequacyReport report = assertDoesNotThrow(() -> AdequacyReport.of(compilation));
+        assertEquals(List.of("parse"), report.modules().getFirst().behaviors().stream()
+                .map(AdequacyReport.BehaviorReport::name).toList());
     }
 }
