@@ -531,6 +531,34 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
     }
 
     /**
+     * An operation the library writes in the language ends a run for what its body ends one for:
+     * {@code List.isEmpty} is {@code List.length(xs) == 0}, which ends none, so an operation stopping
+     * at the first element meeting it is no second one beside the one meeting a quotient, written
+     * through the operation or as its body.
+     */
+    @Test
+    void anOperationTheLibraryWritesEndsARunForWhatItsBodyDoes() {
+        for (String empty : List.of("List.isEmpty(m.tags)", "List.length(m.tags) == 0")) {
+            String report = human("""
+                    module demo
+
+                    data Month = { pay: Int, days: Int, tags: List<Int> }
+                    data Ok
+                    data No
+
+                    behavior f : (ms: List<Month>) -> Ok | No
+
+                    let f (ms) = {
+                        guard List.any(m -> %s, ms) else No
+                        guard List.any(m -> m.pay / m.days >= 100, ms) else No
+                        Ok
+                    }
+                    """.formatted(empty));
+            assertFalse(report.contains(WHICH_FIRST), () -> empty + "\n" + report);
+        }
+    }
+
+    /**
      * The control: a divisor the same on every application stops the first application where it
      * stops any, so the operation answers where every element divides, whatever the order — read
      * as such, and the comparison draws its line on each element. By the element's own divisor it
