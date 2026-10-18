@@ -1305,7 +1305,7 @@ public final class WhatARelationLeavesUndivided {
         }
 
         /**
-         * Whether {@code realized}, taken by a term spaced {@code spacing}, holds beside each value
+         * Whether {@code realized}, taken by a term spaced as {@code spacings} says, holds beside each value
          * of this run a value strictly below it and one at it or above — or, not
          * {@code strictlyBelow}, one strictly above it and one at it or below.
          */

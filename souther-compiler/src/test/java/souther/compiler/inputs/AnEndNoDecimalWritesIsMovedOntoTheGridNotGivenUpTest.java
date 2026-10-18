@@ -48,6 +48,20 @@ class AnEndNoDecimalWritesIsMovedOntoTheGridNotGivenUpTest {
         assertEquals(1, Lattice.compare(least, greatest));
     }
 
+    /**
+     * Two ends under the finest step, whose difference is no number that can be held: the run
+     * between them holds no decimal, and nothing is told of their order by the ends alone.
+     */
+    @Test
+    void anOrderOfEndsWhoseDifferenceIsNotHeldIsNotWorkedOut() {
+        ExactRatio step = ExactRatio.of(new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE));
+        ExactRatio squared = step.times(step).orNull();
+        ExactRatio cubed = squared.times(step).orNull();
+        Lattice.Point least = Lattice.least(Granularity.DENSE, ExactCut.inclusive(cubed));
+        Lattice.Point greatest = Lattice.greatest(Granularity.DENSE, ExactCut.inclusive(squared));
+        assertEquals(null, Lattice.compare(least, greatest));
+    }
+
     /** A decimal and an end beside it are told apart by which side of the end the decimal lies. */
     @Test
     void aDecimalIsBelowTheLeastPointAboveAnEndJustAboveIt() {
