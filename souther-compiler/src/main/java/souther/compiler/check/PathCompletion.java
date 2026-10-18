@@ -233,7 +233,7 @@ final class PathCompletion {
         return switch (operated.where()) {
             case WhereAnOperatorAnswers.Everywhere _ -> true;
             case WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest) ->
-                    e instanceof Core.Binary product && product.op() == BinOp.MUL
+                    (e instanceof Core.Binary product && product.op() == BinOp.MUL)
                             ? heldWherever(product, least, greatest, k, at)
                             : operated.form() != null;
             case WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _ -> operated.form() != null;
@@ -326,14 +326,18 @@ final class PathCompletion {
         if (operated.where() instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought) {
             return k.numbers().entails(form, Rel.EQ);
         }
-        return operated.where() instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
-                BigInteger least, BigInteger greatest)
-                && (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
-                        instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var above)
-                        && k.numbers().entails(above, Rel.GT)
-                || form.minus(LinearForm.constant(ExactRatio.of(least)))
-                        instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var below)
-                        && k.numbers().entails(below, Rel.LT));
+        if (!(operated.where() instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
+                BigInteger least, BigInteger greatest))) {
+            return false;
+        }
+        if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var above)
+                && k.numbers().entails(above, Rel.GT)) {
+            return true;
+        }
+        return form.minus(LinearForm.constant(ExactRatio.of(least)))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var below)
+                && k.numbers().entails(below, Rel.LT);
     }
 
     /**
