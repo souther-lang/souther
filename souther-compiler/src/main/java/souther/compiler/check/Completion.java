@@ -57,6 +57,13 @@ sealed interface Completion {
         record NoValue(Core operation, FactSubject answer) implements NoCompletionProof {}
 
         /**
+         * What {@code operation} computes, worked out exactly, is a number its type holds for no
+         * operand this reading admits — an {@code Int} sum past the greatest {@code Int} — and so
+         * it answers nothing ({@link souther.compiler.semantics.WhereAnOperatorAnswers}).
+         */
+        record NotHeld(Core operation) implements NoCompletionProof {}
+
+        /**
          * The model wrote that nothing arrives here.
          *
          * <p>Structural, and the one reason that is: it holds of every run and needs no path to say
@@ -72,5 +79,16 @@ sealed interface Completion {
          * there is the departure being taken, and a departure is a run carrying on.
          */
         record RefutedConstruction(Core.Construct made) implements NoCompletionProof {}
+
+        /**
+         * No way the conditions on the path come apart in reaches {@code made}: each part of a
+         * condition that holds as one of its parts cannot hold beside what else is known there.
+         *
+         * <p>Found where the construction is taken apart for its invariant: what was learned of the
+         * values after the conditions were taken in is not asked of them where it is learned. A
+         * path the conditions themselves leave no way along was found where they were taken in
+         * ({@link Predicates#assumeCond}), and reaches nothing before this.
+         */
+        record NoWayIn(Core.Construct made) implements NoCompletionProof {}
     }
 }

@@ -45,6 +45,10 @@ import souther.compiler.types.ValueName;
 import souther.compiler.coverage.EmittedComparisonState;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.flow.ValueArrivals;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
+import souther.compiler.reach.ComparisonArrival;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
@@ -52,10 +56,12 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -421,13 +427,15 @@ public final class GuardThresholds {
                 }
                 made.forEach(one -> one.site().ifPresent(site -> out.add(
                         new EmittedComparisonState.Observation(
-                                one.occurrence(), site, arrives.arrivalAt(one.occurrence())))));
+                                one.occurrence(), site, arrives.arrivalAt(one.occurrence()),
+                                arrives.stopsBefore(one.occurrence())))));
             }
             case CALL -> ModelOccurrence.statedAt(each.runsAs()).map(answers::madeFor)
                     .orElse(List.of()).forEach(one -> out.add(
                     new EmittedComparisonState.Observation(
                             one.application(), one.index(),
-                            arrives.arrivalAt(one.application()))));
+                            arrives.arrivalAt(one.application()),
+                            arrives.stopsBefore(one.application()))));
             case IF, GUARD, COMPREHENSION, MATCH, COLLECTION_LITERAL, NOT_WRITTEN ->
                     throw new IllegalStateException("`" + behavior + "` reads a comparison at "
                             + each.at() + " stated by a " + each.occurrence().origin().kind()
@@ -855,8 +863,31 @@ public final class GuardThresholds {
                 new LineOrigin.ComparisonOrigin.Read(
                         new RuleRef.Comparison(behavior, wrote), stated, anchor,
                         at.observations().stream().map(EmittedComparisonState.Observation::site)
-                                .toList(), metOn),
+                                .toList(), metOn, stopsBefore(at.observations())),
                 part, new LineFacts(cutting.claim()), authored);
+    }
+
+    /**
+     * What may stop a run on the way to the rule at every place it is watched at that a run
+     * arrives at, each kind once — none where one such place is reached with everything on the way
+     * read, since a run through it is a run through the rule.
+     *
+     * <p>A place nothing arrives at is no way to the rule, and is left out the way it is where a
+     * line is dropped for nothing arriving ({@link ComparisonAssessment#narrowedByWhatArrives}).
+     */
+    static CanonicalSelection<WhatMayStopARun> stopsBefore(
+            List<EmittedComparisonState.Observation> watched) {
+        Set<WhatMayStopARun> out = new LinkedHashSet<>();
+        for (EmittedComparisonState.Observation one : watched) {
+            if (one.arrival() instanceof ComparisonArrival.NothingArrives) {
+                continue;
+            }
+            if (one.stopsBefore().isEmpty()) {
+                return LineOrigin.NOTHING_ON_THE_WAY;
+            }
+            out.addAll(one.stopsBefore());
+        }
+        return PublicationOrders.WHAT_MAY_STOP_A_RUN.keep(out);
     }
 
     /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */

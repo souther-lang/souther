@@ -1875,7 +1875,8 @@ public final class Adequacy {
                     out = out.secondary(Region.point(each.at()), each.said(
                             new DeadBranchMessage.ThisOneHoldsOnTheWayHere(),
                             new DeadBranchMessage.ThisOneFailsOnTheWayHere(),
-                            new DeadBranchMessage.ThisArmIsTakenOnTheWayHere()));
+                            new DeadBranchMessage.ThisArmIsTakenOnTheWayHere(),
+                            new DeadBranchMessage.ThisHasToAnswerOnTheWayHere()));
                 }
                 return out;
             }
@@ -5287,7 +5288,8 @@ public final class Adequacy {
             Set<souther.compiler.partition.BorderObligationPoint> out = new HashSet<>();
             for (BorderObligationPointAssessment point : owed == null
                     ? List.<BorderObligationPointAssessment>of() : owed) {
-                if (point.carriedBy(behavior) && !point.owed().open().isEmpty()) {
+                if (point.carriedBy(behavior)
+                        && !ObligationDisposition.premisesIn(point.owed().open()).isEmpty()) {
                     out.add(point.point());
                 }
             }

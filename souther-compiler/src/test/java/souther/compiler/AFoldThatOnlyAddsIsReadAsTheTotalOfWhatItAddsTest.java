@@ -186,16 +186,21 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
      * What is not an addition of something the element alone holds says nothing of a total.
      *
      * <p>The answer so far moves by one for each of itself and by nothing else, which is asked of
-     * the step and not of how it is written: scaled, ignored, doubled, chosen between, or added to
-     * by a figure that turns on the answer so far, the answer is not the seed and a total.
+     * the step and not of how it is written: scaled, ignored, doubled, or added to by a figure that
+     * turns on the answer so far, the answer is not the seed and a total. Chosen between, it is
+     * the greater of the two, which is read as that and is no total either.
      */
     @Test
     void aStepThatIsNotAnAdditionIsNotReadAsOne() {
+        // Read as the greatest, its line is on what one element holds and on no total.
+        String chosen = report(model("if a.q > acc then a.q else acc", "0", 4));
+        assertTrue(chosen.contains("read as decide/xs[*].q: = 4"), chosen);
+        assertTrue(chosen.contains("read as decide/xs[*].q: = 3"), chosen);
+        assertFalse(chosen.contains("List.sum"), chosen);
         for (String step : List.of(
                 "acc * 2 + a.q",
                 "a.q",
                 "acc + acc",
-                "if a.q > acc then a.q else acc",
                 "acc + a.q * acc",
                 "acc + acc * a.q",
                 // Right at an answer of nought and of one and wrong past them: the step is judged

@@ -87,6 +87,15 @@ public final class WhereAnApplicationIsMade {
         return List.copyOf(out);
     }
 
+    /**
+     * What one application states, said only where {@code region} holds — where every operator the
+     * closure's body works out on it answers — or {@code states} itself where nothing says that is
+     * only somewhere. A run gets past an application only there, which {@link #reached} reads.
+     */
+    public static Proposition whereItAnswers(Proposition region, Proposition states) {
+        return region == null ? states : Proposition.whereItAnswers(region, states);
+    }
+
     /** What has to hold to be inside no closure at all, which is nothing. */
     public static Proposition nothingAsked() {
         return new Proposition.Always(true);

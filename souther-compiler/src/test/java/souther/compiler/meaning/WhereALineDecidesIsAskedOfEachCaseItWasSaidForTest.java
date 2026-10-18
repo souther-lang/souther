@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
  *
  * <p>Put to the asking with the answer for each condition written here, so what is checked is what
  * the asking makes of the answers: which conditions it asks, which cases it keeps, when it stops,
- * and what it says when a figure stopped it. Whether a region holds rows on both sides of a line is
- * {@code Cutting.crossedIn}'s, and is asked of models elsewhere.
+ * and what it says when a figure stopped it. Whether regions hold rows on both sides of a line is
+ * {@code Cutting.Sides}'s, and is asked of models elsewhere.
  */
 class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
 

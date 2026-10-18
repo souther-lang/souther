@@ -84,7 +84,7 @@ public final class WhatARunMayEndFor {
      * body is a root of its own, a function value, a construction whose invariant is its
      * declaration's — what working it out ends a run for is not in this tree.
      */
-    private static Endings itself(Core e) {
+    static Endings itself(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Unreachable unreachable ->
                     new Endings.Known(AbortSites.ofAnUnreachable(unreachable));

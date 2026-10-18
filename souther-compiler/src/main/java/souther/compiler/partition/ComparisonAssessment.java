@@ -20,6 +20,7 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
@@ -40,8 +41,8 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * What one comparison comes to on the input space: one reading, and everything read off it.
@@ -157,7 +158,9 @@ sealed interface ComparisonAssessment {
                                        UndividedByARelation.WhatItLeaves left,
                                        AuthoredPointMapping authored, InputReading reading) {
             return new AcrossPositions(cutting, at, places, relation, left,
-                    settlingLines(cutting, at, left, authored, reading), authored);
+                    settlingLines(new DrawnBeside(cutting.of().behavior(), at,
+                            new AuthoredPointMapping.NotAnAuthoredBoundary(authored.line(),
+                                    authored.claims())), left.settled(), reading), authored);
         }
 
         /** The coordinates {@code relation} is shown to leave undivided. */
@@ -195,31 +198,42 @@ sealed interface ComparisonAssessment {
     }
 
     /**
-     * The lines on single positions that part the values of each term {@code left} says some of
-     * whose values settle the relation, each drawn as a comparison of the term against a number
-     * draws it and said to be no place of the author's line — none for a term whose runs come to
-     * no such lines, or one of whose lines is no line on its position.
+     * What a line parting the values that settle a relation is drawn beside: the behavior it is a
+     * line of, where the comparison stands, and the author's line it is no place of.
      */
-    private static List<AtAPosition> settlingLines(Cutting cutting, Citation at,
-                                                   UndividedByARelation.WhatItLeaves left,
-                                                   AuthoredPointMapping authored,
-                                                   InputReading reading) {
-        AuthoredPointMapping noPlaceOfIt =
-                new AuthoredPointMapping.NotAnAuthoredBoundary(authored.line(), authored.claims());
+    record DrawnBeside(String behavior, Citation at, AuthoredPointMapping noPlaceOfIt) {
+
+        public DrawnBeside {
+            Objects.requireNonNull(behavior, "a line is some behavior's");
+            Objects.requireNonNull(at, "drawn beside a comparison standing somewhere");
+            Objects.requireNonNull(noPlaceOfIt, "and no place of some line of the author's");
+        }
+    }
+
+    /**
+     * The lines on single positions that part the values of each term of {@code settled} that
+     * settle the relation, each drawn as a comparison of the term against a number draws it and
+     * said to be no place of the author's line — none for a term whose runs come to no such lines,
+     * or one of whose lines is no line on its position.
+     */
+    private static List<AtAPosition> settlingLines(
+            DrawnBeside beside,
+            Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled,
+            InputReading reading) {
         List<AtAPosition> out = new ArrayList<>();
-        List<NumericTerm> settled = new ArrayList<>(left.settled().keySet());
-        for (NumericTerm term : NumericTerms.inOrder(settled)) {
+        List<NumericTerm> terms = new ArrayList<>(settled.keySet());
+        for (NumericTerm term : NumericTerms.inOrder(terms)) {
             List<WhatARelationLeavesUndivided.Line> lines =
-                    left.settled().get(term.atOnePosition()).lines();
+                    settled.get(term.atOnePosition()).lines();
             if (lines == null) {
                 continue;
             }
             List<AtAPosition> here = new ArrayList<>();
             for (WhatARelationLeavesUndivided.Line each : lines) {
-                Cutting drawn = Cutting.onOneTerm(cutting.of().behavior(), term,
+                Cutting drawn = Cutting.onOneTerm(beside.behavior(), term,
                         ExactRatio.of(each.at()), each.relation(), reading.quantities());
-                if (drawn == null || !(onTheQuantity(at, drawn, noPlaceOfIt, reading, false)
-                        instanceof AtAPosition line)) {
+                if (drawn == null || !(onTheQuantity(beside.at(), drawn, beside.noPlaceOfIt(),
+                        reading, false) instanceof AtAPosition line)) {
                     here = null;
                     break;
                 }
@@ -236,38 +250,57 @@ sealed interface ComparisonAssessment {
      * Read to the end, the comparison relates numbers of the input to a value no position holds
      * ({@link Cutting.Read.AgainstAnotherValue}).
      *
+     * <p>Where some values of a number it relates are shown to settle it whatever the other value
+     * holds, and every other value of the number to leave it either way, those values are a class
+     * of the number's own, as they are of a relation between positions ({@link AcrossPositions}):
+     * {@code l.discount > w}, with {@code w} the greatest a walk from nought has kept, is false
+     * wherever the discount is at or below nought. They are parted from the rest by lines on the
+     * number, drawn where the relation is a comparison the author wrote. Read as a part of a
+     * statement, or as what an application states, it is drawn nowhere and the number stays
+     * one the other value is not shown to reach.
+     *
      * @param filedAt   the coordinates of the input's numbers it relates
      * @param relations what it states, as the relations it is made of, for each reading of it
      * @param undivided those of {@code filedAt} some of {@code relations} are about and every one
      *                  of those is shown to leave undivided; at the others the other value is not
      *                  shown to reach every value there
+     * @param settling  the lines on single positions that part the values settling it from the
+     *                  rest, each no line of the author's
+     * @param beside    what those lines are drawn beside, or empty where none is drawn
      */
     record AgainstAnotherValue(List<FilingCoordinate> filedAt,
                                List<UndividedByARelation> relations,
-                               Set<FilingCoordinate> undivided)
+                               Set<FilingCoordinate> undivided, List<AtAPosition> settling,
+                               Optional<DrawnBeside> beside)
             implements ComparisonAssessment {
 
         public AgainstAnotherValue {
             filedAt = List.copyOf(filedAt);
             relations = List.copyOf(relations);
             undivided = Set.copyOf(undivided);
+            settling = List.copyOf(settling);
+            Objects.requireNonNull(beside, "drawn beside something, or nothing");
+            if (beside.isEmpty() && !settling.isEmpty()) {
+                throw new IllegalArgumentException("a line is drawn beside a comparison");
+            }
         }
 
-        /** {@code read}, with what it leaves undivided over what the declarations leave. */
+        /** {@code read}, with what it leaves undivided over what the declarations leave, and the
+         *  lines parting what settles it drawn {@code beside}. */
         static AgainstAnotherValue of(Cutting.Read.AgainstAnotherValue read,
-                                      InputReading reading) {
-            return new AgainstAnotherValue(read.over(), read.relations(), Set.of())
-                    .whereRowsArrive(reading, List.of());
+                                      InputReading reading, Optional<DrawnBeside> beside) {
+            return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
+                    beside).whereRowsArrive(reading, List.of());
         }
 
         /** The same, with what it leaves undivided over the rows that arrive along {@code ways}. */
         AgainstAnotherValue whereRowsArrive(InputReading reading,
                                             List<Reachability.Reaching> ways) {
             List<Set<FilingCoordinate>> about = new ArrayList<>();
-            List<Set<FilingCoordinate>> leaves = new ArrayList<>();
+            List<UndividedByARelation.WhatItLeaves> leaves = new ArrayList<>();
             for (UndividedByARelation each : relations) {
                 about.add(each.places());
-                leaves.add(each.undividedWhereRowsArrive(reading, ways));
+                leaves.add(each.leftWhereRowsArrive(reading, ways));
             }
             Set<FilingCoordinate> shown = new LinkedHashSet<>();
             for (FilingCoordinate at : filedAt) {
@@ -276,14 +309,52 @@ sealed interface ComparisonAssessment {
                 for (int i = 0; i < relations.size(); i++) {
                     if (about.get(i).contains(at)) {
                         said = true;
-                        everyOne &= leaves.get(i).contains(at);
+                        everyOne &= leaves.get(i).undivided().contains(at);
                     }
                 }
                 if (said && everyOne) {
                     shown.add(at);
                 }
             }
-            return new AgainstAnotherValue(filedAt, relations, shown);
+            List<AtAPosition> lines = beside.map(drawn -> settlingLines(drawn,
+                    settledByEvery(about, leaves), reading)).orElse(List.of());
+            return new AgainstAnotherValue(filedAt, relations, shown, lines, beside);
+        }
+
+        /**
+         * Each number some relation shows settled by some of its values where every relation
+         * about its place shows it settled by the same ones: a reading of the comparison on
+         * another application that shows its place nothing, or something else, leaves no class
+         * of its own there.
+         */
+        private static Map<NumericTerm.FromOnePosition,
+                WhatARelationLeavesUndivided.Leaves.Settled> settledByEvery(
+                List<Set<FilingCoordinate>> about,
+                List<UndividedByARelation.WhatItLeaves> leaves) {
+            Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> out =
+                    new LinkedHashMap<>();
+            for (UndividedByARelation.WhatItLeaves each : leaves) {
+                each.settled().forEach((term, runs) -> {
+                    FilingCoordinate at = FilingCoordinate.of(term);
+                    boolean alike = true;
+                    for (int i = 0; i < leaves.size(); i++) {
+                        if (about.get(i).contains(at)) {
+                            alike &= runs.equals(leaves.get(i).settled().get(term));
+                        }
+                    }
+                    if (alike) {
+                        out.putIfAbsent(term, runs);
+                    }
+                });
+            }
+            return out;
+        }
+
+        /** The places a line on one of them parts the values that settle the relation at. */
+        Set<FilingCoordinate> dividedBySettling() {
+            Set<FilingCoordinate> out = new LinkedHashSet<>();
+            settling.forEach(line -> out.addAll(line.cutting().over()));
+            return out;
         }
     }
 
@@ -640,7 +711,10 @@ sealed interface ComparisonAssessment {
                     -> new OnADependencysAnswer();
             // A relation of the input to another value, read to the end, which the rule is and
             // nothing short of it.
-            case Cutting.Read.AgainstAnotherValue against -> AgainstAnotherValue.of(against, read);
+            case Cutting.Read.AgainstAnotherValue against -> AgainstAnotherValue.of(against, read,
+                    Optional.of(new DrawnBeside(behavior, at,
+                            new AuthoredPointMapping.NotAnAuthoredBoundary(
+                                    WrittenLine.THE_COMPARISON, comparison.claim()))));
             // And where the reading stopped, its own answer for having stopped — decided where it
             // stopped rather than worked out again from the comparison afterwards — and where the
             // values a side holds came from, at each place it did not already answer. Here the walk
@@ -697,7 +771,7 @@ sealed interface ComparisonAssessment {
         return new Several(lines.parts().stream()
                 .map(part -> Several.Part.ofCases(part.id(), switch (part.line()) {
                     case Cutting.Read.AgainstAnotherValue against ->
-                            AgainstAnotherValue.of(against, read);
+                            AgainstAnotherValue.of(against, read, Optional.empty());
                     case Cutting.Read.Stopped stopped -> new Unread(stopped.why());
                     case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                          Cutting.Read.NumberNoRatioHolds _, Cutting.Read.CutsNothing _,
@@ -721,7 +795,8 @@ sealed interface ComparisonAssessment {
                 throw new IllegalStateException(
                         "a line an application states at " + at + " is over the input's numbers");
             });
-            case Cutting.Read.AgainstAnotherValue related -> AgainstAnotherValue.of(related, read);
+            case Cutting.Read.AgainstAnotherValue related ->
+                    AgainstAnotherValue.of(related, read, Optional.empty());
             case Cutting.Read.Cuts _, Cutting.Read.CutsNothing _, Cutting.Read.Stopped _,
                  Cutting.Read.NoOrderToCountOn _, Cutting.Read.NumberNoRatioHolds _,
                  Cutting.Read.StatesNoRelation _ ->
@@ -809,16 +884,16 @@ sealed interface ComparisonAssessment {
                     "a rule watched at no place is not one to ask what arrives at: " + read);
         }
         if (cutting != null) {
-            if (!arrivesAtSomePlace(cutting, way, arrivals,
-                    region -> cutting.reachedIn(region, drawnByAnInvariant))) {
+            Arrived arrived = whatArrives(cutting, way, arrivals, drawnByAnInvariant,
+                    read instanceof AcrossPositions);
+            if (arrived == Arrived.NOTHING_AT_THE_LINE) {
                 return new NothingArrivesAtItsLine(cutting);
             }
             // A relation whose rows all come out one way where they arrive is decided there: no
             // value of any position it relates comes out the other way, so it divides none of them,
             // and what the other side reaches is no question about it. The line is still the line
             // the rule draws, and its points still the ones no row can stand at.
-            if (read instanceof AcrossPositions across
-                    && !arrivesAtSomePlace(cutting, way, arrivals, cutting::crossedIn)) {
+            if (read instanceof AcrossPositions across && arrived != Arrived.ACROSS_THE_LINE) {
                 return across.decided();
             }
         }
@@ -850,9 +925,21 @@ sealed interface ComparisonAssessment {
         return List.of(reaching);
     }
 
+    /** How far the rows arriving at a line get: none to it, to it, or to both sides of it. */
+    enum Arrived { NOTHING_AT_THE_LINE, AT_THE_LINE, ACROSS_THE_LINE }
+
     /**
-     * Whether some place the rule is watched at leaves {@code asked} true of the region a row
-     * arriving there is in.
+     * Whether the rows arriving at some place the rule is watched at hold a value at the line, and
+     * — where {@code crossing} asks it — whether at some place they stand on both sides of it.
+     *
+     * <p>Asked of the regions that between them hold every row past the way
+     * ({@link Reachability.Reaching#holdingEveryRow}). A way through a choice between runs of one
+     * number is a row in one run or another: a line between the runs is reached by neither, and a
+     * row in one run and a row in the other differ in a line as two rows in one run do. So whether
+     * a row holds a value at the line is asked of each region, and whether rows stand on both sides
+     * of it is asked of all of a place's regions, one side in one region and the other in another
+     * ({@link Cutting.Sides}). The region that spans them holds the values between the runs, which
+     * are no row's, and is asked neither.
      *
      * <p>A way no row takes is one no row arrives at the line by, wherever the tree that runs holds
      * the rule. Otherwise every place the rule is watched at, and the answer is no only where all of
@@ -863,25 +950,72 @@ sealed interface ComparisonAssessment {
      * <p>Which is why one place that could not be projected leaves the question to the declarations
      * and the way: what a walk did not settle is not a proof that nothing arrives, and a line has to
      * be dropped by a proof rather than by the absence of one.
+     *
+     * <p>A region is narrowed to a place and read once for both questions, and none is read once
+     * both are answered.
+     *
+     * @param crossing whether to ask if rows stand on both sides of it, which a line of a relation
+     *                 is asked as well
      */
-    private static boolean arrivesAtSomePlace(Cutting cutting, Reachability way,
+    private static Arrived whatArrives(Cutting cutting, Reachability way,
+                                       List<ComparisonArrival> arrivals,
+                                       boolean drawnByAnInvariant, boolean crossing) {
+        if (!(way instanceof Reachability.Reaching taken)) {
+            return Arrived.NOTHING_AT_THE_LINE;
+        }
+        List<SearchRegion> past = taken.holdingEveryRow();
+        boolean reached = false;
+        boolean crossed = false;
+        for (ComparisonArrival arrival : arrivals) {
+            if (arrival instanceof ComparisonArrival.NothingArrives) {
+                continue;
+            }
+            Cutting.Sides sides = new Cutting.Sides(cutting);
+            for (SearchRegion region : past) {
+                Border.Values values = valuesAt(cutting, region, arrival);
+                reached = reached || cutting.reachedBy(values, drawnByAnInvariant);
+                crossed = crossed || (crossing && sides.add(values));
+                if (reached && (crossed || !crossing)) {
+                    return crossed ? Arrived.ACROSS_THE_LINE : Arrived.AT_THE_LINE;
+                }
+            }
+        }
+        return reached ? Arrived.AT_THE_LINE : Arrived.NOTHING_AT_THE_LINE;
+    }
+
+    /**
+     * Whether the rows arriving at some place the rule is watched at, in the case {@code keptTo}
+     * keeps a region's values to ({@link Cutting#keptTo}), stand on both sides of the line —
+     * asked of the regions {@link #whatArrives} asks, a region at a time.
+     */
+    private static boolean crossedAtSomePlace(Cutting cutting, Reachability way,
                                               List<ComparisonArrival> arrivals,
-                                              Predicate<SearchRegion> asked) {
-        if (!(way instanceof Reachability.Reaching reaching)) {
+                                              UnaryOperator<Border.Values> keptTo) {
+        if (!(way instanceof Reachability.Reaching taken)) {
             return false;
         }
+        List<SearchRegion> past = taken.holdingEveryRow();
         for (ComparisonArrival arrival : arrivals) {
-            boolean reaches = switch (arrival) {
-                case ComparisonArrival.NothingArrives _ -> false;
-                case ComparisonArrival.Values values ->
-                        asked.test(cutting.narrowedBy(values, reaching.region()));
-                case ComparisonArrival.NoProjection _ -> asked.test(reaching.region());
-            };
-            if (reaches) {
-                return true;
+            if (arrival instanceof ComparisonArrival.NothingArrives) {
+                continue;
+            }
+            Cutting.Sides sides = new Cutting.Sides(cutting);
+            for (SearchRegion region : past) {
+                if (sides.add(keptTo.apply(valuesAt(cutting, region, arrival)))) {
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    /** What {@code region} leaves the line's quantity for the rows arriving at a place. */
+    private static Border.Values valuesAt(Cutting cutting, SearchRegion region,
+                                          ComparisonArrival arrival) {
+        return cutting.valuesIn(switch (arrival) {
+            case ComparisonArrival.Values arriving -> cutting.narrowedBy(arriving, region);
+            case ComparisonArrival.NoProjection _, ComparisonArrival.NothingArrives _ -> region;
+        });
     }
 
     /**
@@ -919,16 +1053,16 @@ sealed interface ComparisonAssessment {
         for (DecidingCase each : part.cases()) {
             if (each.saidAlone()) {
                 Reachability toIt = wayToACase.apply(each.condition());
-                if (arrivesAtSomePlace(cutting, toIt, arrivals,
-                        cutting.crossedIn(each.condition(), reading))) {
+                if (crossedAtSomePlace(cutting, toIt, arrivals,
+                        cutting.keptTo(each.condition(), reading))) {
                     reached.add(each);
                     deciding.addAll(waysArrivedBy(toIt, arrivals));
                 }
                 continue;
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
-                    arrivesAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
-                            cutting.crossedIn(condition, reading)));
+                    crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
+                            cutting.keptTo(condition, reading)));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
@@ -1220,9 +1354,13 @@ sealed interface ComparisonAssessment {
                         .filter(place -> !divided.contains(place)).toList(), across.undivided());
             }
             // Another value is no position, and what the rule says is the same thing it says
-            // against one: where the value here stands against it.
-            case AgainstAnotherValue against ->
-                    relatingAt(against.filedAt(), against.undivided());
+            // against one: where the value here stands against it. A place a line parts the
+            // values settling it at is divided, and is left nothing here.
+            case AgainstAnotherValue against -> {
+                Set<FilingCoordinate> divided = against.dividedBySettling();
+                yield relatingAt(against.filedAt().stream()
+                        .filter(place -> !divided.contains(place)).toList(), against.undivided());
+            }
             case CutsNothing _ -> sameAtEachPlace(new BlockReason.ComparisonCuttingNothing());
             case OutsideTheDomain _ -> sameAtEachPlace(UnreadComparison.outsideWhatTheQuantityHolds());
             // Not the reason above: there the declarations never run as far as the line, and here

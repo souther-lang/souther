@@ -474,6 +474,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Derivation;",
                     "counts the cases a comparison is split into, and past the figure carries"
                             + " the comparison out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback#ofAWalkKeepingAnEnd("
+                            + "Lsouther/compiler/check/StatedComparison;"
+                            + "Lsouther/compiler/inputs/Denotation;"
+                            + "Lsouther/compiler/inputs/InputReads;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "counts the comparisons of the seed and of an element a comparison of a"
+                            + " walk's end is read as, and past the figure carries the comparison"
+                            + " out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback#answered("
                             + "Lsouther/compiler/inputs/Denotation;"
                             + "Lsouther/compiler/meaning/WhyUnread$AtNoPosition$Place;)"

@@ -1370,7 +1370,9 @@ public sealed interface BlockReason {
      * with nothing against it: every row that gets there is already past it. The line is inside
      * what the declarations leave, so this is not {@link ComparisonCuttingOutsideDomain} — an
      * author reading that one would look at the rule for a line their declarations refuse, and
-     * what refuses it is the conditions on the way to the comparison.
+     * what refuses it is what holds on the way to the comparison: the conditions taken, and what a
+     * run got past working out — {@code a + 1} is past only where {@code a} is below the greatest
+     * {@code Int}.
      *
      * <p>Said only on a proof. The values that arrive were read off the paths, and either nothing
      * arrives at all or what arrives stops short of the line; a comparison whose arrival nothing

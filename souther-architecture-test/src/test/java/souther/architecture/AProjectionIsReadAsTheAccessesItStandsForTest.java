@@ -355,18 +355,20 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "coverage/CoverageSites$Plan;Ljava/util/Map;Ljava/util/Map;)Ljava/util/Optional;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/PathReachability", "unreached",
-                "(" + core + "L" + c + "check/Known;" + at + reads + "Ljava/util/List;)V",
+                "(" + core + "L" + c + "check/PathReachability$Walked;" + at + reads + ")V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/PathReachability", "appliedToNothing",
                 "(" + core + "L" + c + "reach/Proof;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "check/PathReachability", "walk",
-                "(" + core + "L" + c + "check/Known;" + at + reads + "Ljava/util/List;Z)V",
-                Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/Predicates", "names", "(" + core + "L" + c + "check/Term$Chains;" + at
                 + ")Z",
                 Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
         row(out, c + "check/Predicates$Reads", "chain", "(" + core + ")Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "check/Extreme", "comparedAs",
+                "(" + core + "Ljava/lang/Object;L" + c + "check/TheSignOfAnOrder$Sides;)L" + c
+                        + "check/ValueStanding$ReadThrough;", Reading.NAMES,
+                "asks whether the last name read is the value a newtype wears, which goes"
+                        + " nowhere, and answers what it is read off");
         row(out, c + "check/StatedByClauses$Reading", "gather",
                 "(" + core + "Ljava/util/Set;" + at + ")V", Reading.FIRST_HELD,
                 FINDS_THE_FIRST_HELD);

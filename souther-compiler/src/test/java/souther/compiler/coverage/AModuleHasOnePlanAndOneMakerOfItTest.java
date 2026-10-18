@@ -94,7 +94,10 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
                     + " is written as",
             "souther.compiler.check.PathReachability.answeredAt", "what arrives where an"
                     + " application answers, filed under the application as a comparison's is"
-                    + " under the comparison; it asks nothing of the comparison there");
+                    + " under the comparison; it asks nothing of the comparison there",
+            "souther.compiler.check.PathReachability.mayStopBefore", "where a run arriving where"
+                    + " an application answers may have stopped on the way, filed under the"
+                    + " application as what arrives there is");
 
     @Test
     void onlyThePlanChoosesBetweenAnApplicationAndTheComparisonItAnswersAt() {

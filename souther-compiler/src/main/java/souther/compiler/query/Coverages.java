@@ -1565,11 +1565,21 @@ final class Coverages {
                         return whole;
                     }
                 }
+                SearchOutcomes alongEach = SearchOutcomes.none();
                 for (Reachability.Reaching along : able.along()) {
                     Looked one = lookedAlong(criterion, label, narrowing, along);
                     if (one.witness().isPresent()) {
                         return one;
                     }
+                    alongEach = alongEach.plus(one.outcomes());
+                }
+                // Split into every way a row takes, and along each of them the rules leave no
+                // value at the point: no row past the way stands there. The way whole spans the
+                // values between the ways and would offer one, and a row built there turns back
+                // before the point.
+                if (able.ways() instanceof Reachability.Ways.Each
+                        && alongEach.provesInfeasible()) {
+                    return new Looked(alongEach, null, Optional.empty());
                 }
                 return whole != null ? whole : lookedAlong(criterion, label, narrowing, able);
             }
@@ -2137,9 +2147,10 @@ final class Coverages {
             // hands on, and this is the only place they are turned into what a search came to.
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
                     switch (standing.get()) {
-                        case StandingAtAPoint.Met.AtPoint _ ->
+                        case StandingAtAPoint.Met.AtPoint at ->
                                 new ItemAssessment.Attempt.Certified(built.row(), within,
-                                        built.unrepresented());
+                                        built.unrepresented(),
+                                        at instanceof StandingAtAPoint.Met.Reached);
                         // Composed and not seen where it was composed for. Which says the way to
                         // the border was not composed against in full and never that the point is
                         // unwritable, and it carries what the composer could not act on because

@@ -95,16 +95,272 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
         // each other, a reading that derived nothing at all would agree with itself at every count
         // and this would come out green while saying that no work grew — which is true of a check
         // that does no work, and is not what this is for.
-        assertEquals(List.of(theProduct, theProduct), none,
-                "each of the construction's two readings derived the product it is over");
+        assertEquals(List.of(theProduct), none,
+                "the construction's reading derived the product it is over, and no clause is"
+                        + " refuted, so the reading without the path is never made");
         assertEquals(none, derivedWhileCompiling(behaviorWith(10)));
         assertEquals(none, derivedWhileCompiling(behaviorWith(100)));
     }
 
     /**
+     * A construction no way of the conditions on the path reaches is one no run gets past, so what
+     * is written after it is never read: the readings are the ones the body makes without it. Read
+     * on as though it were reached, each construction after it would take the same conditions
+     * apart again to find the same nothing.
+     */
+    @Test
+    void whatIsWrittenPastAConstructionNoWayReachesIsNotRead() {
+        String body = """
+                module demo
+                data Share = Int
+                    invariant value >= 1000
+                behavior apportion : (amount: Int, among: Int) -> Share
+                    constructs Share
+                let apportion (amount, among) = {
+                    guard amount >= 0 && amount <= 100 else Share(1000)
+                    guard among >= 2 || among <= 0 - 2 else Share(1000)
+                    guard among >= 0 - 1 && among <= 1 else Share(1000)
+                    let first = Share(Rational.toInt(DOWN, amount / among))
+                    %s
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("first")),
+                derivedWhileCompiling(body.formatted("Share(amount - 1000)")));
+    }
+
+    /**
+     * Whether a construction is reached is asked apart from what its invariant comes to. One whose
+     * invariant holds of any value it could be given, under a choice a later guard leaves no part
+     * of, is still one no run gets past, and what is written after it is not read.
+     */
+    @Test
+    void aConstructionWhoseInvariantHoldsStillStopsTheWalkWhereNoWayReachesIt() {
+        String body = """
+                module demo
+                data NonNeg = Int
+                    invariant value >= 0
+                behavior f : (x: Int) -> NonNeg
+                    constructs NonNeg
+                let f (x) = {
+                    guard x >= 5 || x <= 0 else NonNeg(0)
+                    guard x >= 1 && x <= 4 else NonNeg(0)
+                    let valid = NonNeg(0)
+                    %s
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("valid")),
+                derivedWhileCompiling(body.formatted("NonNeg(x - 100)")));
+    }
+
+    /**
+     * Two choices each of which leaves a way, and that leave none together, are a path nothing
+     * goes along, found where the second is taken in: nothing after it is read, the construction
+     * whose invariant holds of any value included.
+     */
+    @Test
+    void twoChoicesThatLeaveNoWayTogetherEndThePathWhereTheSecondIsTakenIn() {
+        String body = """
+                module demo
+                data NonNeg = Int
+                    invariant value >= 0
+                behavior f : (x: Int) -> NonNeg
+                    constructs NonNeg
+                let f (x) = {
+                    guard x == 0 || x == 2 else NonNeg(0)
+                    guard x == 1 || x == 3 else NonNeg(0)
+                    let first = NonNeg(0)
+                    %s
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("first")),
+                derivedWhileCompiling(body.formatted("NonNeg(x - 10)")));
+    }
+
+    /**
+     * A part that is itself a choice is taken apart too, in the way kept through a path's choices:
+     * the way through {@code (x == 0 || x == 1) || x == 3} is through {@code x == 0}, and not
+     * through a part that still holds a choice of its own. So a guard no value of {@code x} the
+     * choice leaves can pass ends the path there.
+     */
+    @Test
+    void aChoiceInsideAPartIsTakenApartInTheWayThroughThem() {
+        String body = """
+                module demo
+                data NonNeg = Int
+                    invariant value >= 0
+                behavior f : (x: Int) -> NonNeg
+                    constructs NonNeg
+                let f (x) = {
+                    guard (x == 0 || x == 1) || x == 3 else NonNeg(0)
+                    guard x == 2 else NonNeg(0)
+                    let first = NonNeg(0)
+                    %s
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("first")),
+                derivedWhileCompiling(body.formatted("NonNeg(x - 10)")));
+    }
+
+    /**
+     * Looking for a way through a path's choices spends one count for the whole path, so a path
+     * the looking gives up along is not looked along again: the guards after it read no part of
+     * the choices, however many there are. Here the way through seven choices of nought or one dies
+     * at a guard only every one taken as one gets past, the last way looked at — past the count.
+     */
+    @Test
+    void aPathTheLookingGivesUpAlongIsNotLookedAlongAgain() {
+        assertEquals(partsReadPastTheLookingGivingUp(2), partsReadPastTheLookingGivingUp(6),
+                "the guards after the looking gave up read no part");
+    }
+
+    /**
+     * And the count is the path's, not each look's: a way that dies at guard after guard is looked
+     * for again at each, every look finding one, and what the looks read together stops growing
+     * once the path has spent its count. Here each guard pins one more of the choices to the part
+     * the kept way did not take.
+     */
+    @Test
+    void lookingAgainAndAgainAlongAPathSpendsOneCount() {
+        assertEquals(partsReadPinningOneByOne(12), partsReadPinningOneByOne(16),
+                "the looks past the count read nothing more");
+    }
+
+    /** The parts read compiling a body of sixteen choices of nought or one, then {@code pinned}
+     *  guards each pinning one of them to one. */
+    private static long partsReadPinningOneByOne(int pinned) {
+        StringBuilder body = new StringBuilder();
+        List<String> each = new ArrayList<>();
+        for (int i = 0; i < 16; i++) {
+            body.append("guard x%1$d == 0 || x%1$d == 1 else NonNeg(0)\n    ".formatted(i));
+            each.add("x" + i);
+        }
+        for (int i = 0; i < pinned; i++) {
+            body.append("guard x%d == 1 else NonNeg(0)\n    ".formatted(i));
+        }
+        return partsReadCompiling(each, body.append("NonNeg(0)").toString());
+    }
+
+    /** The parts of held choices read compiling a behavior over {@code each} whose body is
+     *  {@code body}. */
+    private static long partsReadCompiling(List<String> each, String body) {
+        long[] counted = new long[1];
+        Predicates.COUNTING_PARTS_READ = counted;
+        try {
+            Compiler.compileWithWarnings("""
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior f : (%s) -> NonNeg
+                        constructs NonNeg
+                    let f (%s) = {
+                        %s
+                    }
+                    """.formatted(String.join(", ", each.stream().map(x -> x + ": Int").toList()),
+                    String.join(", ", each), body));
+        } finally {
+            Predicates.COUNTING_PARTS_READ = null;
+        }
+        return counted[0];
+    }
+
+    /** The parts read compiling a body whose looking gives up, then {@code after} more guards. */
+    private static long partsReadPastTheLookingGivingUp(int after) {
+        StringBuilder body = new StringBuilder();
+        List<String> each = new ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            body.append("guard x%1$d == 0 || x%1$d == 1 else NonNeg(0)\n    ".formatted(i));
+            each.add("x" + i);
+        }
+        body.append("guard %s == 7 else NonNeg(0)\n    ".formatted(String.join(" + ", each)));
+        for (int i = 0; i < after; i++) {
+            body.append("guard y >= %d else NonNeg(0)\n    ".formatted(i));
+        }
+        List<String> named = new ArrayList<>(each);
+        named.add("y");
+        return partsReadCompiling(named, body.append("NonNeg(0)").toString());
+    }
+
+    /**
+     * How often the parts of the choices a path holds are read: once at each condition taken in,
+     * whatever was held before it and however many constructions stand after.
+     *
+     * <p>A condition is asked of one way known to get through what is held, and not of every way
+     * of choosing a part of each; and a construction asks nothing of the choices unless its
+     * invariant is taken apart. So each more choice on the path costs what the one before it did,
+     * and each more construction whose invariant holds costs nothing.
+     */
+    @Test
+    void thePartsReadGrowWithTheChoicesOnThePathAndNotWithWhatStandsAfterThem() {
+        long four = partsReadOver(4, 1);
+        long eight = partsReadOver(8, 1);
+        long twelve = partsReadOver(12, 1);
+        assertEquals(eight - four, twelve - eight,
+                "each further choice is read as often as the one before it: " + List.of(four,
+                        eight, twelve));
+        assertEquals(eight, partsReadOver(8, 20),
+                "constructions after the choices read none of their parts");
+    }
+
+    /** The parts read compiling a body of {@code choices} choices the path gets through, then
+     *  {@code constructions} constructions whose invariant holds. */
+    private static long partsReadOver(int choices, int constructions) {
+        StringBuilder body = new StringBuilder();
+        for (int i = 0; i < choices; i++) {
+            body.append("guard x >= %d || x <= 0 - %d else NonNeg(0)\n    "
+                    .formatted(i, 1000 + i));
+        }
+        for (int i = 0; i < constructions; i++) {
+            body.append("let c%d = NonNeg(%d)\n    ".formatted(i, i));
+        }
+        body.append("c0");
+        long[] counted = new long[1];
+        Predicates.COUNTING_PARTS_READ = counted;
+        try {
+            Compiler.compileWithWarnings("""
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior f : (x: Int) -> NonNeg
+                        constructs NonNeg
+                    let f (x) = {
+                        %s
+                    }
+                    """.formatted(body));
+        } finally {
+            Predicates.COUNTING_PARTS_READ = null;
+        }
+        return counted[0];
+    }
+
+    /**
+     * A choice one part of which cannot hold where it is taken in is the other part, and is read
+     * as that part written alone: the construction under it is read once, as it is under the part,
+     * and not once and then again under each way the choice comes apart in.
+     */
+    @Test
+    void aChoiceOnePartOfWhichCannotHoldIsReadAsTheOther() {
+        String body = """
+                module demo
+                data Share = Int
+                    invariant value >= 0 && value <= 50
+                behavior apportion : (amount: Int, among: Int) -> Share
+                    constructs Share
+                let apportion (amount, among) = {
+                    guard amount >= 0 && amount <= 100 else Share(1)
+                    guard among >= 0 else Share(1)
+                    guard %s else Share(1)
+                    Share(Rational.toInt(DOWN, amount / among))
+                }
+                """;
+        assertEquals(derivedWhileCompiling(body.formatted("among >= 2")),
+                derivedWhileCompiling(body.formatted("among >= 2 || among <= 0 - 2")));
+    }
+
+    /**
      * The other question asked of these recipes: whether one operation answers a value. There is one
-     * such reading per operation the walk reaches, so how many there are does grow with the
-     * arithmetic a behavior holds — and what each of them evaluates does not.
+     * such reading per operation each walk reaches — the invariant check's, and the reading of where
+     * a run arrives — so how many there are does grow with the arithmetic a behavior holds, and
+     * what each of them evaluates does not.
      *
      * <p>Which is the whole of what it may cost. A reading that answered about one operation by
      * deriving what the body holds would be the shape the reading above was made to end, arriving
@@ -116,8 +372,8 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
         for (int unrelated : List.of(0, 10, 100)) {
             List<Set<String>> asked = derivedWhileCompiling(behaviorWith(unrelated),
                     DerivedNumericFacts.Question.WHETHER_AN_OPERATION_ANSWERS);
-            assertEquals(unrelated + 1, asked.size(),
-                    "one reading per operation the walk reaches, over " + unrelated
+            assertEquals(2 * (unrelated + 1), asked.size(),
+                    "one reading per operation each of the two walks reaches, over " + unrelated
                             + " products beside the one the construction is over");
             assertEquals(List.of(), asked.stream().filter(one -> one.size() > 1).toList(),
                     "and each of them derived its own recipe and nothing else");

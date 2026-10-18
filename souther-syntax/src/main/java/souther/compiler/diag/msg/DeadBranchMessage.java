@@ -37,6 +37,10 @@ public sealed interface DeadBranchMessage extends Message {
     /** An arm of a {@code match} on the way here, which the value it matched has to take. */
     record ThisArmIsTakenOnTheWayHere() implements DeadBranchMessage, Supporting {}
 
+    /** An operator on the way here, which has to answer — an {@code Int} sum a run gets past is
+     *  one whose value an {@code Int} holds. */
+    record ThisHasToAnswerOnTheWayHere() implements DeadBranchMessage, Supporting {}
+
     /** The values it is written for are not values the position can hold. */
     record ThePositionStopsShortOfIt(String position, String admits) implements DeadBranchMessage,
             Supporting {}

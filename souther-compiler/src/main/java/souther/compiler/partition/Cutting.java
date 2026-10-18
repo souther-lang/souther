@@ -52,8 +52,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -890,9 +890,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // Some element meeting several parts, which is the parts read of that element: a
             // lookup's answer compared as a whole is its entry under the key meeting the
             // comparison, and the line is the comparison's on the entry. Inside an either-or it is
-            // the same parts, read there.
-            case Proposition.Some some when some.holds()
-                    && !Proposition.leavesSomethingUnread(some) ->
+            // the same parts, read there. No element meeting them is the same parts as well, each
+            // turning what is said of an element either way round: the greatest of some values at
+            // or below a number is no value above it, and its line is the line on a value.
+            case Proposition.Some some when !Proposition.leavesSomethingUnread(some) ->
                     asLines(behavior, comparison, some, onTheInput.arithmetic(), read, reads,
                             answering, lines.get());
             default -> noLine(comparison, stated.proposition(),
@@ -1664,7 +1665,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Any any -> any.parts().stream().anyMatch(Cutting::holdsARelation);
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().anyMatch(Cutting::holdsARelation);
-            case Proposition.Some some -> some.holds() && holdsARelation(some.ofTheElement());
+            // Some element meeting it or none: the relation turns what is said of an element
+            // either way round.
+            case Proposition.Some some -> holdsARelation(some.ofTheElement());
             // Where it answers is no line of it.
             case Proposition.WhereItAnswers where -> holdsARelation(where.states());
             default -> false;
@@ -1824,14 +1827,22 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *                           has no far side for anything to stand on
      */
     boolean reachedIn(SearchRegion region, boolean drawnByAnInvariant) {
-        Border.Values values = valuesIn(region);
+        return reachedBy(valuesIn(region), drawnByAnInvariant);
+    }
+
+    /**
+     * {@link #reachedIn}, of what a region was already read to leave this quantity
+     * ({@link #valuesIn}) — null where it leaves nothing.
+     */
+    boolean reachedBy(Border.Values values, boolean drawnByAnInvariant) {
         return values != null
                 && Border.reaches(at, this::seam, claim, drawnByAnInvariant, values);
     }
 
     /**
-     * Whether the rows {@code region} holds stand on both sides of this line — at the value a rule
-     * names and beside it, for a rule that names one.
+     * Whether the rows some regions hold between them stand on both sides of a line — at the value
+     * a rule names and beside it, for a rule that names one — taken in a region at a time, so that
+     * no region is read once both sides are found.
      *
      * <p>What a line of a statement of several is asked in each case of where it decides. A case is
      * other relations holding or failing, and a row on one side of the line and a row on the other,
@@ -1840,17 +1851,64 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * other: {@code Int.min(a, 11 - a) > 5} decides on {@code 11 - a > 5} where {@code a > 5}, and
      * crossing from six to five takes {@code a > 5} with it, so the statement never turns there.
      *
+     * <p>Each side is asked of every region and the two sides need not be found in one. The rows are
+     * every row any region holds, so a row in one and a row in another differ in this line as two
+     * rows of one do; and the values between the regions are no row's, so the regions are not put
+     * together into one that spans them.
+     *
      * <p>A side that was not worked out is not a proof that no row stands on it, as it is not in
      * {@link #reachedIn}.
+     *
+     * <p>Two sides for each claim. A line that cuts has the values below it and the values above
+     * it. A line that names a value has the value and a row beside it on either side: with the
+     * value put above the seam, the seam parts it from what is below; put below, from what is
+     * above.
      */
-    boolean crossedIn(SearchRegion region) {
-        Border.Values values = valuesIn(region);
-        return values != null && crossedBy(values);
+    static final class Sides {
+
+        private final Cutting line;
+
+        private boolean one;
+
+        private boolean other;
+
+        Sides(Cutting line) {
+            this.line = line;
+        }
+
+        /**
+         * Takes in what one more region leaves the quantity ({@link #valuesIn}, null for
+         * nothing), and answers whether the rows taken in so far stand on both sides.
+         */
+        boolean add(Border.Values values) {
+            if (values != null) {
+                switch (line.claim) {
+                    case ComparisonClaim.Cut _ -> {
+                        one = one || Border.standsBeside(line.at, line.seam(), Towards.BELOW,
+                                values);
+                        other = other || Border.standsBeside(line.at, line.seam(), Towards.ABOVE,
+                                values);
+                    }
+                    case ComparisonClaim.Singled _ -> {
+                        one = one || values.holdAt(line.at);
+                        other = other
+                                || Border.standsBeside(line.at,
+                                        Seam.where(line.of, line.at, Towards.ABOVE),
+                                        Towards.BELOW, values)
+                                || Border.standsBeside(line.at,
+                                        Seam.where(line.of, line.at, Towards.BELOW),
+                                        Towards.ABOVE, values);
+                    }
+                }
+            }
+            return one && other;
+        }
     }
 
     /**
-     * The same, of the rows {@code region} holds that are in {@code where}, a case of where this
-     * line decides.
+     * What a region's values ({@link #valuesIn}) come to for the rows in {@code where}, a case of
+     * where this line decides — the values themselves where the case says nothing more of this
+     * line's quantity than the region does. What {@link Sides} takes in, in that case.
      *
      * <p>The region is what the way and the case leave the input's own numbers, and it says
      * nothing about a number no position holds. A case of where a line on such a number decides is
@@ -1870,17 +1928,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Read off the case once, and asked of every region the case is put to: what the case
      * leaves the quantity is the same whatever arrives.
      */
-    Predicate<SearchRegion> crossedIn(Proposition where, InputReading read) {
+    UnaryOperator<Border.Values> keptTo(Proposition where, InputReading read) {
         LevelRegion onIt = leftBy(where, read);
-        return onIt == null ? this::crossedIn : region -> crossedIn(region, onIt);
+        return onIt == null ? UnaryOperator.identity()
+                : values -> values == null ? null : keptTo(values, onIt);
     }
 
-    private boolean crossedIn(SearchRegion region, LevelRegion onIt) {
-        Border.Values values = valuesIn(region);
-        if (values == null) {
-            return false;
-        }
-        return crossedBy(new Border.Values() {
+    private Border.Values keptTo(Border.Values values, LevelRegion onIt) {
+        return new Border.Values() {
             @Override
             public boolean extendTo(Level level) {
                 return values.extendTo(level) && onIt.parts().stream().anyMatch(part ->
@@ -1905,20 +1960,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             return held instanceof Occupancy.NotWorkedOut || held.any();
                         });
             }
-        });
-    }
-
-    /** Whether {@code values} stand on both sides of this line. */
-    private boolean crossedBy(Border.Values values) {
-        return switch (claim) {
-            case ComparisonClaim.Cut _ -> Border.reachesBothSides(at, seam(), values);
-            // The value it names and a row beside it on either side. With the value put above the
-            // seam, the seam parts it from what is below; put below, from what is above.
-            case ComparisonClaim.Singled _ -> values.holdAt(at)
-                    && (Border.standsBeside(at, Seam.where(of, at, Towards.ABOVE), Towards.BELOW,
-                            values)
-                            || Border.standsBeside(at, Seam.where(of, at, Towards.BELOW),
-                                    Towards.ABOVE, values));
         };
     }
 
@@ -1997,7 +2038,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * What {@code region} leaves this quantity, as the two questions a line asks of it — or null
      * where it leaves the quantity nothing at all.
      */
-    private Border.Values valuesIn(SearchRegion region) {
+    Border.Values valuesIn(SearchRegion region) {
         NumericDomain.FormProjection runs = of.projectedIn(region);
         if (runs instanceof NumericDomain.FormProjection.NothingIsLeft) {
             return null;

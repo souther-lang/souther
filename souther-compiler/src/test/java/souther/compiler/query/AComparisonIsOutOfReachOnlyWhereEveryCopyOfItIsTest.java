@@ -363,7 +363,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         arrivals.putAll(arriving);
         return new PathReachability.Answers(COMPILED.answers().numbering(), found,
                 new PathReachability.Arrivals(compiled.numbering(), arrivals,
-                        compiled.recordedAt()));
+                        compiled.recordedAt(), compiled.stopsBefore()));
     }
 
     /** A row seen bringing the comparison out the way {@code place} is. */

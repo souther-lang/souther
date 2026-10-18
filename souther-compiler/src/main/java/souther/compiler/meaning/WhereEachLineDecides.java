@@ -315,9 +315,10 @@ public final class WhereEachLineDecides {
 
     /**
      * Adds every relation {@code stated} joins to {@code lines}, and the relations inside each
-     * quantifier it joins held that says a relation of the element it chose, each with how it
-     * stands: where each thing around it turns what holds it, outermost first, and where it turns
-     * what it stands in.
+     * quantifier it joins that says a relation of the element it chose, each with how it stands:
+     * where each thing around it turns what holds it, outermost first, and where it turns what it
+     * stands in. A quantifier the statement denies is one it joins as well: no element meeting a
+     * relation turns at the relation where some element meeting it does.
      *
      * <p>A relation inside a quantifier and not about the element it chose is about the row, and
      * stands wherever it is written. Lifted out of the quantifier, it is a part of what holds the
@@ -352,7 +353,7 @@ public final class WhereEachLineDecides {
                 }
                 lines.putIfAbsent(line.key(), line);
                 standings.computeIfAbsent(line.key(), k -> new ArrayList<>()).add(factors);
-            } else if (part instanceof Proposition.Some some && reading.standsHeld(some)
+            } else if (part instanceof Proposition.Some some
                     && statesARelation(some.ofTheElement())) {
                 List<List<DecidingCase>> inside = new ArrayList<>(around);
                 inside.add(reading.turnsOn(some));
@@ -1036,12 +1037,6 @@ public final class WhereEachLineDecides {
                             asking.with(possible, part, true)),
                     asking.oneNotTheOther(asking.with(decides, part, false),
                             asking.with(decides, part, true)));
-        }
-
-        /** Whether {@code quantifier} stands held somewhere in the statement. */
-        boolean standsHeld(Proposition.Some quantifier) {
-            return leaves.values().stream().anyMatch(leaf ->
-                    leaf.held() && leaf.part().equals(quantifier.key()));
         }
     }
 
