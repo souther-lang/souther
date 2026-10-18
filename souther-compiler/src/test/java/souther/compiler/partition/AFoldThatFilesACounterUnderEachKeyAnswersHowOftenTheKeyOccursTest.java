@@ -250,6 +250,76 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         }
     }
 
+    /** Whether the map a fold files holds anything, the fold walking {@code keys}. */
+    private static String modelOfWhetherItHoldsAnything(String keys) {
+        return """
+                module example.popular
+
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, i) -> Map.updateOrInsert(i, 1, n -> n + 1, acc),
+                        Map.empty, %s)
+
+                behavior popular : (xs: List<String>) -> Bool
+
+                let popular (xs) = Map.isEmpty(countsOf(xs))
+                """.formatted(keys);
+    }
+
+    /**
+     * A fold walking the elements of a list in another order holds the same keys, each as often, so
+     * whether the map it files holds anything is read as it is where the fold walks the list.
+     */
+    @Test
+    void whetherAMapHoldsAnythingIsReadWhateverOrderTheFoldWalksTheKeysIn() {
+        Compilation plain = measured(modelOfWhetherItHoldsAnything("xs"));
+        assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
+        for (String keys : List.of("List.reverse(xs)", "List.sort(xs)",
+                "List.reverse(List.sort(xs))")) {
+            Compilation compilation = measured(modelOfWhetherItHoldsAnything(keys));
+            assertEquals(axisOf(plain), axisOf(compilation), () -> keys + ": " + report(compilation));
+            assertFalse(report(compilation).contains("not read"),
+                    () -> keys + ": " + report(compilation));
+        }
+    }
+
+    /** How many keys a fold adds one for each of, the fold walking {@code keys}. */
+    private static String modelOfHowManyAFoldCounts(String keys) {
+        return """
+                module example.popular
+
+                let howMany (xs: List<String>): Int =
+                    List.length(List.fold((acc, i) -> List.append(acc, [i]), [], %s))
+
+                behavior popular : (xs: List<String>) -> Bool
+
+                let popular (xs) = howMany(xs) >= 2
+                """.formatted(keys);
+    }
+
+    /** What a fold adds for each element comes to the same in whatever order it walks them. */
+    @Test
+    void howManyAFoldCountsIsReadWhateverOrderItWalksTheKeysIn() {
+        Compilation plain = measured(modelOfHowManyAFoldCounts("xs"));
+        assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
+        for (String keys : List.of("List.reverse(xs)", "List.sort(xs)",
+                "List.reverse(List.sort(xs))")) {
+            Compilation compilation = measured(modelOfHowManyAFoldCounts(keys));
+            assertEquals(axisOf(plain), axisOf(compilation), () -> keys + ": " + report(compilation));
+        }
+    }
+
+    /** A list that kept some of the elements, or changed them, holds other keys than the list. */
+    @Test
+    void whetherAMapHoldsAnythingIsNotReadOffAListThatKeptOrChangedTheKeys() {
+        Compilation plain = measured(modelOfWhetherItHoldsAnything("xs"));
+        for (String keys : List.of("List.filter(k -> String.length(k) > 1, xs)",
+                "List.map(k -> String.append(k, \"!\"), xs)")) {
+            Compilation compilation = measured(modelOfWhetherItHoldsAnything(keys));
+            assertTrue(!axisOf(plain).equals(axisOf(compilation)),
+                    () -> keys + ": " + report(compilation));
+        }
+    }
+
     /** The rows offered for keys a map answered as they are are the rows offered for the keys. */
     @Test
     void theRowsOfferedForKeysAMapAnsweredAsTheyAreAreTheRowsOfferedForTheKeys() {

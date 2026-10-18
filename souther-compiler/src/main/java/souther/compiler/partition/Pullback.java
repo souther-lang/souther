@@ -1650,7 +1650,7 @@ final class Pullback {
      */
     private Sized sizeOfAWalk(Core e, InputReads reads) {
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
-        if (walk == null || !(subjectOf(walk.container(), reads)
+        if (walk == null || !(walkedContainer(walk.container(), reads)
                 instanceof DecisionSubject.AnInput held)) {
             return null;
         }
@@ -5400,6 +5400,26 @@ final class Pullback {
                 ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
     }
 
+    /**
+     * The subject whose elements a walk over {@code walked} quantifies: what {@link #subjectOf}
+     * says {@code walked} is, or else the container whose every element {@code walked} holds, each
+     * as often — which is where a reordering of a list's elements is quantified, though it is no
+     * place a row writes. Null where it is neither.
+     *
+     * <p>Only the container is named here. What the walk answers still depends on the order it
+     * takes, which its step is read for.
+     */
+    private DecisionSubject walkedContainer(Core walked, InputReads reads) {
+        DecisionSubject itself = subjectOf(walked, reads);
+        if (itself != null) {
+            return itself;
+        }
+        return reads.everyElementOf(walked, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath elements)
+                && elements.steps().getLast() instanceof TermPath.Step.Element
+                ? new DecisionSubject.AnInput(elements.containersHoldingIt().getLast()) : null;
+    }
+
     /** What a dependency answered, or a place inside it, that {@code e} is — or null where it is
      *  no such thing. */
     private DecisionSubject.AnAnswer answerAt(Core e, InputReads reads) {
@@ -5854,7 +5874,8 @@ final class Pullback {
      */
     private Derivation acrossAWalk(Core e, AnswerAspect aspect, InputReads reads) {
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
-        DecisionSubject container = walk == null ? null : subjectOf(walk.container(), reads);
+        DecisionSubject container =
+                walk == null ? null : walkedContainer(walk.container(), reads);
         if (container == null || !quantifying.add(container)) {
             return null;
         }
