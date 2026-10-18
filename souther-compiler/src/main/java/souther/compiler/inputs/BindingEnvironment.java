@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.OrderOfElements;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
@@ -134,6 +135,11 @@ final class BindingEnvironment {
     /** What the values built here are defined as, and where a definition is read. */
     ValueDefinitions values() {
         return values;
+    }
+
+    /** Whether the bodies read here read the order their lists hold their elements in. */
+    OrderOfElements order() {
+        return elements.order();
     }
 
     /** What {@code binding} is bound to on the way here, the nearest binding winning. */

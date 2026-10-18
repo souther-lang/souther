@@ -57,7 +57,7 @@ public final class KernelContracts {
      * the build rather than silently inheriting {@link AbortSet#NONE} — which is exactly the
      * "nothing said" state a hand-kept table cannot be told apart from a considered "never aborts".
      */
-    private static AbortSet abortsOf(Kernel kernel) {
+    public static AbortSet abortsOf(Kernel kernel) {
         return switch (kernel) {
             // Every read, search, and case-answering operation the library states no abort for, and
             // every one whose text or collection is no longer than one it was taken from, which has
