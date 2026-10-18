@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.RowsOfABlock;
 import souther.compiler.check.Carrier;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.Count;
@@ -135,7 +136,8 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
                 example pick
                     | "at three" : (3) -> High
                 """);
-        assertTrue(block.contains("fills x=x < 10 and x /= 3"), block);
+        assertTrue(RowsOfABlock.of(block).stream().anyMatch(row -> row.isFor("x=x < 10 and x /= 3")),
+                block);
         List<Long> offered = offeredAt(block);
         assertTrue(offered.stream().anyMatch(at -> at < 10 && at != 3), block);
         assertTrue(offered.stream().anyMatch(at -> at >= 10), block);

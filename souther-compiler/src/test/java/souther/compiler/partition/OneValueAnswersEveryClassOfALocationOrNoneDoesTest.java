@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.RowsOfABlock;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -421,8 +422,8 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         assertFalse(rows.contains("would have to hold two values at once"), rows);
         assertFalse(rows.contains("no row for"), rows);
-        assertTrue(rows.contains("// fills c== 2"), rows);
-        assertTrue(rows.contains("// fills c=/= 2"), rows);
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("c== 2")), rows);
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("c=/= 2")), rows);
     }
 
     /** A whole number held to three values, divided by what it leaves by two, three and five. */

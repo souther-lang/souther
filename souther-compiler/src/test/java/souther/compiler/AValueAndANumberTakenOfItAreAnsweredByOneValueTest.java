@@ -80,9 +80,10 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
 
         assertTrue(offered.contains("| (Box { s = \"xxxx\" })"),
                 () -> "the value the rules single out is written: " + offered);
-        assertTrue(offered.contains("// fills box.s== xxxx"),
+        RowsOfABlock.Row row = RowsOfABlock.at(offered, "(Box { s = \"xxxx\" })");
+        assertTrue(row.isFor("box.s== xxxx"),
                 () -> "and the row stands at the class of the place's own value: " + offered);
-        assertTrue(offered.contains("// fills box.s=3 < x"),
+        assertTrue(row.isFor("box.s=3 < x"),
                 () -> "and at the class of the number taken of it: " + offered);
         assertFalse(offered.contains(THE_POPULATION),
                 () -> "so nothing says this is a group nothing writes a value for: " + offered);
@@ -101,7 +102,7 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
 
         assertTrue(offered.contains("| (Box { s = \"x\" })"),
                 () -> "the value the rules single out is written: " + offered);
-        assertTrue(offered.contains("// fills box.s=0 <= x <= 3"),
+        assertTrue(RowsOfABlock.at(offered, "(Box { s = \"x\" })").isFor("box.s=0 <= x <= 3"),
                 () -> "and the row stands at the class its own length is in: " + offered);
         // What the model settles, and not a search that fell short. The rule above the line leaves
         // the place one value, so every value that reaches this point is that one — and its length

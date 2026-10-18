@@ -375,42 +375,52 @@ public final class GeneratedRows {
      * thing and no other thing in its block is called by the same words — and otherwise says over
      * itself, with the place, each thing it was composed for.
      *
-     * @param inputs   the row's values, in the form they are written in
-     * @param purposes the things it was composed for, in the order they were taken
-     * @param named    whether {@code purposes} is one thing and its name tells it from every other
-     *                 thing in the block
-     * @param stops    where the row stops and what looking for one that goes further came to, in
-     *                 this layer's words, one sentence per search that took it no further than a
-     *                 guard
+     * <p>What else the row is handed for is said over it, named or not. A line it stands at or a
+     * rewrite it tells apart is the run's to give and to take back — another row can meet the
+     * line — so it decides nothing about the name, and a name that came and went with it would
+     * rename a row nothing about which had changed.
+     *
+     * @param inputs  the row's values, in the form they are written in
+     * @param name    the one thing it was composed for, where that thing's name tells it from every
+     *                other thing in the block
+     * @param besides everything else it is for, in the order it was taken: what it was composed
+     *                for where no name was given, and then what it is handed for
+     * @param stops   where the row stops and what looking for one that goes further came to, in
+     *                this layer's words, one sentence per search that took it no further than a
+     *                guard
      */
-    private record Offered(String inputs, String standsIn, List<Called> purposes, boolean named,
-                           List<String> stops) {
+    private record Offered(String inputs, String standsIn, Optional<Called> name,
+                           List<Called> besides, List<String> stops) {
 
         Offered {
-            purposes = List.copyOf(purposes);
+            besides = List.copyOf(besides);
             stops = List.copyOf(stops);
-            if (named && (purposes.size() != 1 || purposes.getFirst().name().isEmpty())) {
-                throw new IllegalArgumentException("a row is named for one thing that has a name: "
-                        + purposes);
+            if (name.isPresent() && name.get().name().isEmpty()) {
+                throw new IllegalArgumentException("a row is named for a thing that has a name: "
+                        + name.get());
+            }
+            if (name.isPresent() && besides.stream()
+                    .anyMatch(each -> each.owed().equals(name.get().owed()))) {
+                throw new IllegalArgumentException("what names a row is not said over it again: "
+                        + name.get());
             }
         }
 
-        /** The row as it is written: named where one thing names it, and not otherwise. What a
-         *  row with several is for is said over it ({@link #blocks}) rather than in it — the
-         *  formatter parses what it is handed, and prose is not a row. */
+        /** The row as it is written: named where one thing names it, and not otherwise. What else
+         *  it is for is said over it ({@link #blocks}) rather than in it — the formatter parses
+         *  what it is handed, and prose is not a row. */
         String written() {
             // The name as the language writes a string, because that is what it is. Written out as
             // it stands, a name holding a quote — which a class named after a rule about strings
             // does — closes the literal early and the rest of it becomes source.
-            return named
-                    ? "    | " + CstLexer.literalOf(purposes.getFirst().words())
-                            + " : (" + inputs + ")" + standsIn + " -> " + UNANSWERED
-                    : "    | (" + inputs + ")" + standsIn + " -> " + UNANSWERED;
+            return name.map(thing -> "    | " + CstLexer.literalOf(thing.words())
+                            + " : (" + inputs + ")" + standsIn + " -> " + UNANSWERED)
+                    .orElse("    | (" + inputs + ")" + standsIn + " -> " + UNANSWERED);
         }
 
-        /** What to say over the row, which is nothing where its name already says it. */
+        /** What to say over the row: all it is for but what its name already says. */
         List<String> saidOver() {
-            return named ? List.of() : purposes.stream().map(Called::placed).toList();
+            return besides.stream().map(Called::placed).toList();
         }
     }
 
@@ -671,45 +681,54 @@ public final class GeneratedRows {
         offering.rowsByBehavior().forEach((behavior, rows) -> {
             WhatTheFindingsCall called = WhatTheFindingsCall.in(behavior,
                     offering.searched().get(behavior), db, module, rendering, places);
-            // What each row was composed for, and then the lines and rewrites it is the row a
-            // person is handed for. A row is never composed for a line — what a line is owed is
-            // answered in the account — and a row composed for something else may be the one a
+            // What each row was composed for, and apart from it the lines and rewrites it is the
+            // row a person is handed for. A row is never composed for a line — what a line is owed
+            // is answered in the account — and a row composed for something else may be the one a
             // rewrite is answered by, so those come from the offering's answer of where each is
-            // shown.
-            List<List<Called>> purposes = rows.stream().map(row -> {
+            // shown. Only the first can name the row.
+            List<List<Called>> composed = rows.stream()
+                    .map(row -> called.of(row.namedFor())).toList();
+            List<List<Called>> handed = new ArrayList<>();
+            for (int i = 0; i < rows.size(); i++) {
                 SequencedMap<Owed, Called> these = new LinkedHashMap<>();
-                called.of(row.namedFor()).forEach(thing -> these.putIfAbsent(thing.owed(), thing));
-                for (ObligationIdentity item : offering.shownOver(row.key())) {
+                for (ObligationIdentity item : offering.shownOver(rows.get(i).key())) {
                     Called thing = item instanceof ObligationIdentity.OfALine ? lines.get(item)
                             : called.of(item);
                     if (thing != null) {
                         these.putIfAbsent(thing.owed(), thing);
                     }
                 }
-                return List.copyOf(these.values());
-            }).toList();
+                composed.get(i).forEach(thing -> these.remove(thing.owed()));
+                handed.add(List.copyOf(these.values()));
+            }
             // Each name, and every thing of the behavior it is the name of: what the rows are for,
             // and every thing a finding of it names whether or not a row was composed for it. A
             // name is unique only against all of them, since the report and the notes below the
             // block say the ones with no row under the same words.
             Map<String, Set<Owed>> byName = new HashMap<>();
-            Stream.concat(purposes.stream().flatMap(List::stream), called.all())
+            Stream.of(composed.stream().flatMap(List::stream), handed.stream().flatMap(List::stream),
+                            called.all())
+                    .flatMap(each -> each)
                     .forEach(thing -> thing.name().ifPresent(name -> byName
                             .computeIfAbsent(name, _ -> new HashSet<>()).add(thing.owed())));
             List<Offered> here = new ArrayList<>();
             for (int i = 0; i < rows.size(); i++) {
                 OfferedRow row = rows.get(i);
-                List<Called> these = purposes.get(i);
-                boolean named = these.size() == 1 && these.getFirst().name()
-                        .map(name -> byName.get(name).size() == 1).orElse(false);
+                List<Called> forIt = composed.get(i);
+                Optional<Called> name = forIt.size() == 1 && forIt.getFirst().name()
+                        .map(words -> byName.get(words).size() == 1).orElse(false)
+                        ? Optional.of(forIt.getFirst()) : Optional.empty();
+                List<Called> besides = new ArrayList<>(name.isPresent() ? List.of() : forIt);
+                besides.addAll(handed.get(i));
                 // Whose search a stop was said only where the row is for more than one thing: a row
                 // for one already says, by its name or over it, which requirement it was looked
                 // for.
+                boolean several = forIt.size() + handed.get(i).size() > 1;
                 List<String> stops = new ArrayList<>();
                 for (RepairShortfall stop : row.stops()) {
-                    stops.add(stoppedShort(stop, these.size() > 1, db, rendering, places));
+                    stops.add(stoppedShort(stop, several, db, rendering, places));
                 }
-                here.add(new Offered(row.key().inputs(), standingIn(module, row), these, named,
+                here.add(new Offered(row.key().inputs(), standingIn(module, row), name, besides,
                         stops));
             }
             out.put(behavior, List.copyOf(here));
