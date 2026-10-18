@@ -246,6 +246,20 @@ public final class Conclusion {
     }
 
     /**
+     * Some element of {@code container} meeting {@code element}, where {@code element} picks out
+     * the one element worked out — the entry a lookup found — and so where that one answers is
+     * where the whole does: its divisor nought stops the run, and no other element is asked.
+     * Read as some element meeting it where it holds, on the rows no element it picks out answers
+     * nothing on ({@link #someElement}, of statements every row answers).
+     */
+    Proposition theEntryMeeting(DecisionSubject container, Proposition element) {
+        Proposition answers = Proposition.whereItAnswersAtAll(element);
+        return answers == null ? someElement(container, element)
+                : Proposition.whereItAnswers(someElement(container, answers.denied()).denied(),
+                        someElement(container, Proposition.whereItHolds(element)));
+    }
+
+    /**
      * {@code element} said of one element of {@code container} that a lookup picked out — or,
      * where {@code element} quantifies {@code container}, a part nothing read. The element picked
      * out stands at {@code container[*]} with no quantifier around it, so a quantifier over

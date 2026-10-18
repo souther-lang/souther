@@ -469,13 +469,18 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      * operations each stopping at the first element meeting a quotient by what it holds may each
      * need another element first: of {@code [0, 100]} and {@code [100, 0]}, the first stops the
      * second guard and the second stops the first, and read in an order of the rows each would be
-     * met. A list sorted first holds its elements in the order of their values.
+     * met — whether the closures are written in place or named first. A list sorted first holds
+     * its elements in the order of their values.
      */
     @Test
     void whereTheRowsDoNotChooseTheOrderWhichElementARunStopsAtIsNotRead() {
         for (String guards : List.of("""
                 guard List.any(x -> -100 / (x - 100) >= 1, xs) else No
-                    guard List.any(x -> 100 / x >= 1, xs) else No""",
+                    guard List.any(x -> 100 / x >= 1, xs) else No""", """
+                let first = x -> -100 / (x - 100) >= 1
+                    let second = x -> 100 / x >= 1
+                    guard List.any(first, xs) else No
+                    guard List.any(second, xs) else No""",
                 "guard List.any(x -> 100 / x >= 1, List.sort(xs)) else No")) {
             String report = human(OVER_A_LIST.formatted(guards));
             assertTrue(report.contains(WHICH_FIRST), () -> guards + "\n" + report);

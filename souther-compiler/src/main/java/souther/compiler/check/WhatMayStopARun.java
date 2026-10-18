@@ -2,13 +2,15 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 /**
  * Whether working an expression out may answer nothing on some rows, as far as a reading of what
  * it states would say so: it divides by something other than a number written, which divides by
  * nought where that something is nought, or it hands something to a helper, a behavior or a
- * function value, whose body is not in this tree and may.
+ * function value, or a closure by its name to an operation, whose body is not in this tree and
+ * may.
  *
  * <p>Read off what the tree writes and kept on the side of saying it may. What it is for is
  * telling where a reading has to say which of several applications a run reaches, and saying that
@@ -31,7 +33,15 @@ public final class WhatMayStopARun {
             return true;
         }
         AnOperationApplied applied = AnOperationApplied.of(node);
-        if (applied != null && !(applied.operation() instanceof ValueName.Stdlib)) {
+        if (applied == null ? node instanceof Core.Call
+                : !(applied.operation() instanceof ValueName.Stdlib)) {
+            return true;
+        }
+        // A closure handed by a name to an operation of the library is applied by it, and its
+        // body is not this tree's.
+        if (applied != null && applied.args().stream()
+                .anyMatch(argument -> argument.type() instanceof Type.FnOf
+                        && !(Core.withoutStanding(argument) instanceof Core.Block))) {
             return true;
         }
         boolean[] found = {false};

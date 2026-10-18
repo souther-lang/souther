@@ -455,7 +455,7 @@ public sealed interface Derivation {
                 if (arm.aboutTheEntry() && selects instanceof Proposition.Some(
                         DecisionSubject container, Proposition ofTheEntry, boolean holds, var _)
                         && holds) {
-                    arrives.add(numbering.someElement(container,
+                    arrives.add(numbering.theEntryMeeting(container,
                             Proposition.all(List.of(ofTheEntry, states))));
                 } else {
                     arrives.add(selects);

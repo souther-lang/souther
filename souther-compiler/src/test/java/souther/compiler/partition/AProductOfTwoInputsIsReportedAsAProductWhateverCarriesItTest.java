@@ -135,6 +135,18 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         let f (xs) = List.length(List.filter(
                             i -> 2 * i.q * i.p >= 1000 && i.q / i.p >= i.q, xs)) >= 1
                         """));
+        // A quotient against a number counted beside the product is read, and leaves what the
+        // comparison written out over the product leaves.
+        assertEquals(reasons("""
+                        behavior f : (xs: List<A>) -> Bool
+                        let f (xs) = List.length(List.filter(
+                            i -> 2 * i.q * i.p >= 1000 && i.q >= 10 * i.p, xs)) >= 1
+                        """),
+                reasons("""
+                        behavior f : (xs: List<A>) -> Bool
+                        let f (xs) = List.length(List.filter(
+                            i -> 2 * i.q * i.p >= 1000 && i.q / i.p >= 10, xs)) >= 1
+                        """));
     }
 
     @Test

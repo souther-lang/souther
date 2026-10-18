@@ -202,6 +202,30 @@ class WhatAnOperationOverElementsAnswersWhereOneMayAnswerNothingTest {
     }
 
     /**
+     * An arm about the entry a lookup picked out works out that one entry and no other, so it
+     * answers where that entry does: some element picked out and meeting the statement where it
+     * holds, read on the rows no element picked out answers nothing on.
+     */
+    @Test
+    void anArmAboutTheEntryPickedOutAnswersWhereThatEntryDoes() {
+        TermPath key = XS.element().then("k");
+        Derivation picked = new Derivation.SomeElementMeeting(CONTAINER, truthAt(key), true,
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        Derivation states = new Derivation.WhereItAnswers(truthAt(DIVIDES), truthAt(STATES));
+        Proposition stated = concluded(new Derivation.MatchArms(List.of(
+                new Derivation.MatchArms.Arm(picked, states, true),
+                new Derivation.MatchArms.Arm(new Derivation.UnderADenial(picked, true),
+                        new Derivation.WrittenOut(false)))));
+        Proposition entry = Proposition.all(List.of(truth(key),
+                Proposition.whereItAnswers(truth(DIVIDES), truth(STATES))));
+        Proposition meets = Proposition.whereItAnswers(
+                new Proposition.Some(CONTAINER,
+                        Proposition.whereItAnswersAtAll(entry).denied(), false),
+                new Proposition.Some(CONTAINER, Proposition.whereItHolds(entry), true));
+        assertEquals(meets, stated);
+    }
+
+    /**
      * A quantifier, a count or a search is of statements answering on every row: what each of
      * them comes to where one of its statements answers nothing is said where it is read, and
      * a reading that did not say it is stopped here.

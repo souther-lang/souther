@@ -27,6 +27,11 @@ import java.util.Set;
  * helper, a behavior or a function value is handed beyond a single number or string — what it does
  * with it is not in this tree. Whether a closure may answer nothing is {@link WhatMayStopARun}'s.
  *
+ * <p>The rules a declaration writes on the input are not in these trees. An invariant reading the
+ * order of a list, or one whose closure may answer nothing, is a form the reading of a declaration's
+ * rules leaves unread, and a behavior under one is not measured; the ones it does read — how many,
+ * whether some or every element meets something total, whether they are apart — read no order.
+ *
  * @param read     whether something in the body may read the order a list holds its elements in
  * @param stopping how many operations stop at the first element meeting what their closure states,
  *                 where what it states may answer nothing on some rows
@@ -105,16 +110,21 @@ public record OrderOfElements(boolean read, int stopping) {
                     return;
                 }
             }
+            // A closure handed by a name is a body this walk does not go into here, and may stop.
             if (STOPPING.contains(applied.operation()) && applied.args().stream()
-                    .anyMatch(argument -> Core.withoutStanding(argument) instanceof Core.Block step
-                            && WhatMayStopARun.in(step.body()))) {
+                    .anyMatch(argument -> argument.type() instanceof Type.FnOf
+                            && (!(Core.withoutStanding(argument) instanceof Core.Block step)
+                                    || WhatMayStopARun.in(step.body())))) {
                 stopping[0]++;
             }
         }
-        // A function value is a body this tree does not hold, and two values holding lists are the
-        // same value only where their elements stand in the same order.
+        // A function value, or a call this walk names no operation of, is a body this tree does not
+        // hold; and two values holding lists are the same value only where their elements stand
+        // in the same order.
         if ((node instanceof Core.Apply apply && apply.args().stream()
                 .anyMatch(argument -> !aNumberOrAString(argument.type())))
+                || (applied == null && node instanceof Core.Call call && call.args().stream()
+                        .anyMatch(argument -> !aNumberOrAString(argument.type())))
                 || (node instanceof Core.Binary binary
                         && (binary.op() == BinOp.EQ || binary.op() == BinOp.NE)
                         && !aNumberOrAString(binary.left().type()))) {
