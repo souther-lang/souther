@@ -125,6 +125,8 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
         COUNT_OF_ELEMENTS,
         /** What a division by a written number leaves of a form of several positions, at one of the
          *  remainders it can leave. */
-        REMAINDER_OF_A_FORM
+        REMAINDER_OF_A_FORM,
+        /** What two numbers of two positions come to multiplied, at a value of the product. */
+        PRODUCT_OF_TWO
     }
 }

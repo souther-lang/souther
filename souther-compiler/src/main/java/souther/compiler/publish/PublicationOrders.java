@@ -329,6 +329,8 @@ public final class PublicationOrders {
                     CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                     CompositionBudget.CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                     CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT,
+                    // Beside it, as what one level is then tried at.
+                    CompositionBudget.DIVISORS_OF_A_PRODUCT_TRIED,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
                     CompositionBudget.STEPS_A_SEARCH_MAY_TAKE,

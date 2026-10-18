@@ -287,6 +287,12 @@ final class Pullback {
      */
     private ElementsMet elementsMet = ElementsMet.NONE;
     /**
+     * The expression one side of the comparison being read is, names followed to what they stand
+     * for — or null where what is read is no side of a comparison of two numbers. A product of two
+     * numbers is read only as the whole of such a side ({@link #productAt}).
+     */
+    private Core sideAsWritten;
+    /**
      * How many each answer an operation sized by cases holds, in the case of it the comparison
      * being read is read in ({@link #inEachCaseOf}): a number of the input, where the arguments
      * stand as that case says.
@@ -4056,15 +4062,18 @@ final class Pullback {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
         List<Derivation.AComparisonRead.Counted> outerAlike = alike;
         ElementsMet outerElements = elementsMet;
+        Core outerSide = sideAsWritten;
         counting = new LinkedHashMap<>();
         alike = null;
         elementsMet = new ElementsMet();
+        sideAsWritten = null;
         try {
             return overQuantitiesCounting(left, right, states);
         } finally {
             counting = outer;
             alike = outerAlike;
             elementsMet = outerElements;
+            sideAsWritten = outerSide;
         }
     }
 
@@ -4101,7 +4110,15 @@ final class Pullback {
         List<Denotation> calls = new ArrayList<>();
         Derivation unread = null;
         for (Denotation side : List.of(left, right)) {
-            switch (AffineForms.outcome(side.value(), side.at(), quantities())) {
+            sideAsWritten = Core.withoutStanding(side.at().standing(side.value(),
+                    read.rules().symbols(), read.rules().newtypes()).value());
+            AffineForms.Outcome<Quantity, InputReads> outcome;
+            try {
+                outcome = AffineForms.outcome(side.value(), side.at(), quantities());
+            } finally {
+                sideAsWritten = null;
+            }
+            switch (outcome) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> {
                     sides.add(form);
                     calls.add(madeOfWhereItStopped(form) ? callOf(side) : null);
@@ -4552,6 +4569,12 @@ final class Pullback {
                 Quantity.RemainderOfADividend remainder = remainderAt(node, at);
                 if (remainder != null) {
                     return LinearForm.atom(remainder);
+                }
+                // What two numbers of the input come to multiplied, where the arithmetic stopped at
+                // the product itself: one number, whichever factor was written first.
+                LinearForm<Quantity> product = productAt(node, at, inside);
+                if (product != null) {
+                    return product;
                 }
                 List<TermPath.Step> steps = new ArrayList<>();
                 Core under = Core.withoutStanding(node);
@@ -6002,6 +6025,52 @@ final class Pullback {
         return new Quantity.RemainderOfADividend(division.call().operation(), new LinearForm<>(
                 ExactRatio.of(constantOf(form).mod(division.divisor())), form.coefs()),
                 division.divisor());
+    }
+
+    /**
+     * {@code node} as what two numbers of the input come to multiplied — or null where it is no
+     * such product.
+     *
+     * <p>Only where the arithmetic stopped at {@code node} for being a product of two values that
+     * are not constants, {@code node} is the whole of a side of the comparison being read
+     * ({@link #sideAsWritten}), and each factor is a number of one position as it is written, with
+     * no arithmetic of its own. The product is then the value the run compares, at every row it
+     * has one: a row whose product passes where its type stops has none, and is no row of either
+     * side. Anything more is arithmetic the run does in the type, before or after the product,
+     * and the value it comes to is not the one a form says. {@code 2 * p} and {@code -p} pass
+     * where the type stops for values of {@code p} the product's reading would count as rows, and
+     * {@code p * q * 2}, {@code p * q - 5} and {@code -(p * q)} for products the reading would hold
+     * against the level. A square and a product of three are not read here either, and for each of
+     * these the stop stands.
+     */
+    private LinearForm<Quantity> productAt(Core node, InputReads at,
+                                           AffineForms.Outcome.StoppedAt<Quantity, InputReads>
+                                                   inside) {
+        if (inside == null
+                || !(Core.withoutStanding(node) instanceof Core.Binary written)
+                || written.op() != BinOp.MUL || inside.node() != written
+                || written != sideAsWritten
+                || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
+                        NonAffineOperation operation))
+                || operation != NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES) {
+            return null;
+        }
+        NumericTerm.FromOnePosition left = aFactor(written.left(), at);
+        NumericTerm.FromOnePosition right = aFactor(written.right(), at);
+        if (left == null || right == null || left.position().equals(right.position())) {
+            return null;
+        }
+        return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
+    }
+
+    /**
+     * {@code factor} as one number of one position, read where its names stand for it and with no
+     * arithmetic of its own — or null where it is anything else.
+     */
+    private NumericTerm.FromOnePosition aFactor(Core factor, InputReads at) {
+        Denotation stands = at.standing(factor, read.rules().symbols(), read.rules().newtypes());
+        return InputNumber.of(stands.value(), read.domain(), stands.at(), read.rules(),
+                elementsMet) instanceof NumericTerm.FromOnePosition term ? term : null;
     }
 
     /** Whether every number of {@code form}, its constant included, is a whole one. */

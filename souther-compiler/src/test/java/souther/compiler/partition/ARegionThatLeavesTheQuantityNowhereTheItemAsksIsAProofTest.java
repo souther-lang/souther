@@ -244,6 +244,38 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 "and with the distance held at nought neither run has a value");
     }
 
+    /**
+     * And what two numbers come to multiplied: where the region leaves the first factor no value
+     * dividing the level the item asks for, every pair multiplying to it is one the region refuses,
+     * and the product is out of reach; where it leaves one, it is not.
+     *
+     * <p>The region holds {@code x} at two. Seven is no multiple of two, so every pair of its
+     * divisors puts {@code x} somewhere else; six is two times three. Held at minus two, six is
+     * minus two times minus three, which a walk of the divisors above nought alone would miss.
+     */
+    @Test
+    void aProductTheRegionLeavesNoPairOfIsOutOfReach() {
+        SearchRegion atTwo = region().assuming(form(1, 0, -2), Rel.EQ).taken();
+        SearchRegion atMinusTwo = region().assuming(form(1, 0, 2), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class, realize(productAt(7), atTwo),
+                "the first factor stands at two, which divides no pair multiplying to seven");
+        assertFalse(realize(productAt(6), atTwo) instanceof Realization.Impossible,
+                "and six is two times three");
+        assertFalse(realize(productAt(6), atMinusTwo) instanceof Realization.Impossible,
+                "and minus two times minus three");
+    }
+
+    /** What {@code x} and {@code y} come to multiplied, at one of the products. */
+    private static Standing productAt(long product) {
+        Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
+        on.put(term("x"), Carrier.WHOLE);
+        on.put(term("y"), Carrier.WHOLE);
+        return new Standing.OfAProduct(term("x"), term("y"), on,
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(product)));
+    }
+
     /** A remainder of {@code x + y} by seven, at one of the remainders. */
     private static Standing remainderAt(long remainder) {
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();

@@ -86,10 +86,22 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
                     atAPosition(at, originOf.apply(at.cutting(), at.authored()));
             // A value singled out on such a quantity is a line as an order is, where the quantity
             // counts: no position holds it as a class, so the line is where the rule is measured.
-            case ComparisonAssessment.AcrossPositions over -> over.drawsABorder()
-                    ? new ComparisonGeometry(List.of(), List.of(new LineDrawn(over.cutting(),
-                            originOf.apply(over.cutting(), over.authored()))))
-                    : NONE;
+            // And each line parting values that settle the relation is a line on its position.
+            case ComparisonAssessment.AcrossPositions over -> {
+                List<LineEvidence> evidence = new ArrayList<>();
+                List<LineDrawn> between = new ArrayList<>();
+                if (over.drawsABorder()) {
+                    between.add(new LineDrawn(over.cutting(),
+                            originOf.apply(over.cutting(), over.authored())));
+                }
+                for (ComparisonAssessment.AtAPosition each : over.settling()) {
+                    ComparisonGeometry line =
+                            atAPosition(each, originOf.apply(each.cutting(), each.authored()));
+                    evidence.addAll(line.evidence());
+                    between.addAll(line.between());
+                }
+                yield new ComparisonGeometry(evidence, between);
+            }
             case ComparisonAssessment.Several _ -> throw new IllegalArgumentException(
                     "a line of a statement is one line: " + assessed);
             case ComparisonAssessment.AnswerDependent _,
