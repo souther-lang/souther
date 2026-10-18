@@ -397,22 +397,6 @@ public enum CompositionBudget {
     ALTERNATIVES_A_PATH_TRIES(1024),
 
     /**
-     * How many parts of the choices a path holds the discharge walk takes in alone along one path,
-     * looking for a way through them where the way it kept dies.
-     *
-     * <p>Counted for the path and not per look: a way that dies at one guard after another is
-     * looked for at each, and a count kept per look would have the path pay the whole of it again
-     * every time. Set by what a part read costs here, which is a reading of the domain of every
-     * value on the path, and not by how many a reading of a condition's meaning may take
-     * ({@link #ALTERNATIVES_A_PATH_TRIES}), whose parts are read against far less.
-     *
-     * <p><b>Reaching it gives the looking up for the rest of the path.</b> The path is then one
-     * nothing has shown to reach nothing, which is what it is taken to be without the looking, so
-     * no construction on it is judged differently from one on a path that holds no choice.
-     */
-    PARTS_A_PATH_LOOKS_THROUGH_FOR_A_WAY(64),
-
-    /**
      * How many steps a statement of several relations is read in, to say where each of its lines
      * decides.
      *
@@ -658,9 +642,6 @@ public enum CompositionBudget {
             case ALTERNATIVES_A_PATH_TRIES ->
                     "how many parts of one of several things a path takes alone, to know which of"
                             + " them it leaves";
-            case PARTS_A_PATH_LOOKS_THROUGH_FOR_A_WAY ->
-                    "how many parts of the choices a path holds are taken alone along it, looking"
-                            + " for a way through them";
             case STEPS_A_STATEMENT_IS_READ_IN ->
                     "how many steps a statement is read in, to say where each of its lines"
                             + " decides";
@@ -729,8 +710,7 @@ public enum CompositionBudget {
                  READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
                  PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
-                 ALTERNATIVES_A_PATH_TRIES, PARTS_A_PATH_LOOKS_THROUGH_FOR_A_WAY,
-                 STEPS_A_STATEMENT_IS_READ_IN,
+                 ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
                  WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,

@@ -70,12 +70,29 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * then one nothing has shown to reach nothing, and is not looked along again.
      *
      * <p>{@code tries} is how many more parts the looking may take in alone along this path, across
-     * every time it looks ({@link CompositionBudget#PARTS_A_PATH_LOOKS_THROUGH_FOR_A_WAY}).
+     * every time it looks ({@link #PARTS_A_PATH_LOOKS_THROUGH}).
      */
     record Choices(ChoiceLine held, Known wayIn, int tries) {
 
-        static final Choices NONE = new Choices(null, null,
-                CompositionBudget.PARTS_A_PATH_LOOKS_THROUGH_FOR_A_WAY.maximum());
+        /**
+         * How many parts of the choices a path holds are taken in alone along one path, looking
+         * for a way through them where the way kept dies.
+         *
+         * <p>Counted for the path and not per look: a way that dies at one guard after another is
+         * looked for at each, and a count kept per look would have the path pay the whole of it
+         * again every time. Set by what a part read costs here, which is a reading of the domain of
+         * every value on the path, and not by how many parts a reading of a condition's meaning
+         * takes alone ({@link CompositionBudget#ALTERNATIVES_A_PATH_TRIES}),
+         * whose parts are read against far less.
+         *
+         * <p>A figure of this check's and not of the composing stage: reaching it stops no search
+         * a report says anything about. The path is then one nothing has shown to reach nothing,
+         * which is what it is taken to be without the looking, and no construction on it is judged
+         * differently from one on a path that holds no choice.
+         */
+        static final int PARTS_A_PATH_LOOKS_THROUGH = 64;
+
+        static final Choices NONE = new Choices(null, null, PARTS_A_PATH_LOOKS_THROUGH);
 
         int count() {
             return held == null ? 0 : held.count();
