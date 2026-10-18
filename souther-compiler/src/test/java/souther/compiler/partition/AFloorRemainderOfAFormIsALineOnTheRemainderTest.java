@@ -337,11 +337,11 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
      */
     @Test
     void aDivisorARowWritesIsNamedAsSuch() {
-        assertEquals(List.of(), bordersOf("e: Int, p: Int", "Int.floorMod(e, p) == 0"));
-        assertTrue(reasonsOf("e: Int, p: Int", "Int.floorMod(e, p) == 0").stream()
+        assertEquals(List.of(), bordersOf("e: Int, p: Int", "Int.floorMod(e + 1, p) == 0"));
+        assertTrue(reasonsOf("e: Int, p: Int", "Int.floorMod(e + 1, p) == 0").stream()
                         .allMatch(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR::equals),
-                reasonsOf("e: Int, p: Int", "Int.floorMod(e, p) == 0").toString());
-        assertFalse(reasonsOf("e: Int, p: Int", "Int.floorMod(e, p) == 0").isEmpty());
+                reasonsOf("e: Int, p: Int", "Int.floorMod(e + 1, p) == 0").toString());
+        assertFalse(reasonsOf("e: Int, p: Int", "Int.floorMod(e + 1, p) == 0").isEmpty());
     }
 
     /**

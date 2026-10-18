@@ -252,6 +252,7 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
                             + " on " + apart.on() + ", " + apart.against();
             case BorderQuantity.HowMany count -> count.left();
             case BorderQuantity.RemainderOfAForm remainder -> remainder.left();
+            case BorderQuantity.RemainderOfAPair remainder -> remainder.left();
             case BorderQuantity.ProductOfAPair product -> product.left();
         };
     }

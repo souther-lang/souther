@@ -5213,6 +5213,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     case A_REMAINDER_OF_A_FORM ->
                                             "what a division leaves of a form of several"
                                                     + " numbers";
+                                    case A_REMAINDER_BY_AN_INPUT ->
+                                            "what one number leaves of another divided by it";
                                     case A_PRODUCT_OF_TWO_NUMBERS ->
                                             "what two numbers come to multiplied";
                                     case TWO_SUBJECTS_ONE_VALUE -> "two values being one";

@@ -32,6 +32,37 @@ import java.util.Set;
 public sealed interface Standing {
 
     /**
+     * What one whole number of a row leaves of another divided by it, at a remainder or in a run of
+     * them.
+     *
+     * <p>A row at a remainder is a divisor that can leave it and a dividend that is that remainder
+     * more than a whole number of turns of the divisor: the divisor is fixed first, at a value
+     * whose size is above the remainder's and whose sign is the remainder's where it has one, and
+     * the dividend is then held to a class of values, a constraint the search already answers.
+     * Which divisors are tried is the search's walk over those the rules leave; the remainder is
+     * the item.
+     *
+     * @param dividend the number divided
+     * @param divisor  the number it is divided by
+     * @param on       the order each number stands on
+     * @param levels   the remainders it can leave, which is what the criterion is about
+     */
+    record OfARemainderByAnInput(NumericTerm.FromOnePosition dividend,
+                                 NumericTerm.FromOnePosition divisor, Map<NumericTerm, Carrier> on,
+                                 LevelSpace levels, Criterion where) implements Standing {
+
+        public OfARemainderByAnInput {
+            on = Map.copyOf(on);
+            if (dividend == null || divisor == null || dividend.equals(divisor)
+                    || !on.keySet().equals(Set.of(dividend, divisor))) {
+                throw new IllegalArgumentException("a remainder by an input is of two numbers,"
+                        + " each on one order: " + dividend + " by " + divisor + " against "
+                        + on.keySet());
+            }
+        }
+    }
+
+    /**
      * What two whole numbers of a row come to multiplied, at a value of the product or in a run of
      * them.
      *

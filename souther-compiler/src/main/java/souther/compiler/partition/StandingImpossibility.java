@@ -204,6 +204,9 @@ final class StandingImpossibility {
             // Nor of a product: the region's relations are forms of the factors, and which pairs
             // multiply to a level is the walk of its divisors' ({@link LevelRealizer}).
             case Standing.OfAProduct _ -> null;
+            // Nor of a remainder by an input's number: the divisors that leave a remainder are the
+            // walk of them ({@link LevelRealizer}).
+            case Standing.OfARemainderByAnInput _ -> null;
         };
     }
 }

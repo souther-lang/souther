@@ -146,6 +146,7 @@ final class AStatementAtARow {
                 case Relation.Affine affine ->
                         WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null
                         || productIn(affine) != null
+                        || remainderByAnInputIn(affine) != null
                         || (countIn(affine) instanceof Quantity.HowManyMeet count
                                 && askable(count.ofTheElement()));
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
@@ -164,6 +165,14 @@ final class AStatementAtARow {
         return affine.form().coefs().size() == 1
                 && affine.form().coefs().keySet().iterator().next()
                         instanceof Quantity.HowManyMeet count ? count : null;
+    }
+
+    /** The one remainder by an input's number {@code affine} weighs where it weighs one and
+     *  nothing else, or null. */
+    static Quantity.RemainderByAnInput remainderByAnInputIn(Relation.Affine affine) {
+        return affine.form().coefs().size() == 1
+                && affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.RemainderByAnInput remainder ? remainder : null;
     }
 
     /** The one product {@code affine} weighs where it weighs one and nothing else, or null. */
@@ -273,6 +282,9 @@ final class AStatementAtARow {
                             into.addAll(form.coefs().keySet());
                         } else if (productIn(affine) instanceof Quantity.ProductOfTwo product) {
                             into.addAll(product.factors());
+                        } else if (remainderByAnInputIn(affine)
+                                instanceof Quantity.RemainderByAnInput remainder) {
+                            into.addAll(remainder.operands());
                         }
                     }
                     case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _,
@@ -330,6 +342,11 @@ final class AStatementAtARow {
             if (each instanceof OneRelation.OnAProduct product && product.terms().stream()
                     .noneMatch(term -> under(term.subjectPath(), taken))) {
                 product.factors().lookAt(row);
+            }
+            if (each instanceof OneRelation.OnARemainderByAnInput remainder
+                    && remainder.terms().stream()
+                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                remainder.numbers().lookAt(row);
             }
         }
         for (TermPath each : positions) {
@@ -517,6 +534,7 @@ final class AStatementAtARow {
                     heldAs(compared.holds(), switch (relations.get(compared.relation())) {
                         case OneRelation.OnAQuantity read -> heldAt(read, row);
                         case OneRelation.OnAProduct product -> product.at(row);
+                        case OneRelation.OnARemainderByAnInput remainder -> remainder.at(row);
                         case OneRelation.NoQuantity unread -> unread.at();
                     });
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
@@ -1138,6 +1156,13 @@ final class AStatementAtARow {
                         out.add(past);
                     }
                 }
+                // What one number leaves of another turns at no place of either: the values it
+                // holds of come round at a distance the other sets.
+                case OneRelation.OnARemainderByAnInput remainder -> {
+                    if (remainder.terms().contains(term)) {
+                        return null;
+                    }
+                }
                 // A relation no row is read at turns wherever it does, which is not known.
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
                     if (form.coefs().containsKey(term)) {
@@ -1184,6 +1209,11 @@ final class AStatementAtARow {
                 }
                 case OneRelation.OnAProduct product -> {
                     if (product.terms().contains(term)) {
+                        return null;
+                    }
+                }
+                case OneRelation.OnARemainderByAnInput remainder -> {
+                    if (remainder.terms().contains(term)) {
                         return null;
                     }
                 }
@@ -1263,6 +1293,57 @@ final class AStatementAtARow {
         }
 
         /**
+         * What one whole number of the input leaves of another divided by it, weighed and with a
+         * constant added, against nought.
+         *
+         * <p>The two numbers are read as a form of them, each weighed by one, which is what reads a
+         * row's numbers; the remainder is worked out of them the way a line on it reads a row
+         * ({@link OrderedAffineBoundary#remainderByAnInputAt}).
+         *
+         * @param numbers  the two numbers, read at a row
+         * @param weight   what the remainder is weighed by
+         * @param constant what is added to it
+         */
+        record OnARemainderByAnInput(LinearQuantity numbers, NumericTerm dividend,
+                                     NumericTerm divisor, ExactRatio weight, ExactRatio constant,
+                                     Rel rel) implements OneRelation {
+
+            @Override
+            public List<NumericTerm> terms() {
+                return numbers.terms();
+            }
+
+            /**
+             * What the relation is at {@code row}: nothing there where the row holds no value at a
+             * number, and where the divisor is nought — the run stops before it divides anything,
+             * and the row is on neither side.
+             */
+            Said at(BorderQuantity.Observation row) {
+                return switch (numbers.valuesOf(numbers.read(row))) {
+                    case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                            switch (OrderedAffineBoundary.remainderByAnInputAt(dividend, divisor,
+                                    values)) {
+                                case ExactAnswer.Held<Optional<ExactRatio>>(var left)
+                                        when left.isEmpty() -> Said.NOTHING_THERE;
+                                case ExactAnswer.Held<Optional<ExactRatio>>(var left) ->
+                                        switch (weight.times(left.get())
+                                                .flatMap(weighed -> weighed.plus(constant))) {
+                                            case ExactAnswer.Held<ExactRatio>(ExactRatio sum) ->
+                                                    new Said.Is(rel.holds(sum.signum()));
+                                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                                                    new Said.NotRead(Set.of(
+                                                            ReadingGap.of(unheld.why())));
+                                        };
+                                case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
+                                        new Said.NotRead(Set.of(ReadingGap.of(unheld.why())));
+                            };
+                    case ValuesAtARow.CouldNotTell(var why) -> new Said.NotRead(why);
+                    case ValuesAtARow.NoneHere _ -> Said.NOTHING_THERE;
+                };
+            }
+        }
+
+        /**
          * What two whole numbers of the input come to multiplied, weighed and with a constant
          * added, against nought.
          *
@@ -1315,6 +1396,9 @@ final class AStatementAtARow {
             return switch (relation) {
                 case Relation.Affine affine when productIn(affine) != null ->
                         ofAProduct(affine, productIn(affine), behavior, quantities);
+                case Relation.Affine affine when remainderByAnInputIn(affine) != null ->
+                        ofARemainderByAnInput(affine, remainderByAnInputIn(affine), behavior,
+                                quantities);
                 case Relation.Affine affine -> {
                     LinearForm<NumericTerm> form =
                             WhatTheDeclarationsLeave.ofTheInput(affine.form());
@@ -1333,6 +1417,17 @@ final class AStatementAtARow {
                 case Relation.Ordered ordered -> throw new IllegalStateException("a relation put"
                         + " to rows is over the input's own numbers: " + ordered);
             };
+        }
+
+        /** A relation over {@code remainder}, read at the two numbers. */
+        private static OneRelation ofARemainderByAnInput(Relation.Affine affine,
+                Quantity.RemainderByAnInput remainder, String behavior, Quantities quantities) {
+            Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
+            remainder.operands().forEach(number -> each.put(number, ExactRatio.ONE));
+            return new OnARemainderByAnInput(Cutting.readAt(behavior,
+                    new LinearForm<>(ExactRatio.ZERO, each), quantities), remainder.dividend(),
+                    remainder.divisor(), affine.form().coefs().get(remainder),
+                    affine.form().constant(), affine.proposition());
         }
 
         /** A relation over {@code product}, read at the two factors. */
@@ -1373,6 +1468,9 @@ final class AStatementAtARow {
             }
             if (each instanceof OneRelation.OnAProduct product) {
                 out.add(product.factors());
+            }
+            if (each instanceof OneRelation.OnARemainderByAnInput remainder) {
+                out.add(remainder.numbers());
             }
         }
         return List.copyOf(out);

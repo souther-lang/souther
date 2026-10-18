@@ -218,8 +218,8 @@ public final class Conclusion {
             case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                  DecisionAtom.TakenOfAnAnswer _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,
-                 Quantity.RemainderOfADividend _, Quantity.ProductOfTwo _,
-                 Quantity.HowManyCarried _ -> 0;
+                 Quantity.RemainderOfADividend _, Quantity.RemainderByAnInput _,
+                 Quantity.ProductOfTwo _, Quantity.HowManyCarried _ -> 0;
         };
     }
 

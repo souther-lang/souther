@@ -90,9 +90,9 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
      */
     @Test
     void aDivisorThatIsNoConstantIsARuleAboutAValueMadeOfThePosition() {
-        assertEquals(List.of(), bordersOf("x: Int, y: Int", "Int.floorMod(x, y) == 0"));
+        assertEquals(List.of(), bordersOf("x: Int, y: Int", "Int.floorMod(x + 1, y) == 0"));
         assertEquals(List.of(), bordersOf("x: Int", "Int.floorMod(x, 0) == 0"));
-        assertFalse(reasonsOf("x: Int, y: Int", "Int.floorMod(x, y) == 0").isEmpty());
+        assertFalse(reasonsOf("x: Int, y: Int", "Int.floorMod(x + 1, y) == 0").isEmpty());
         assertFalse(reasonsOf("x: Int", "Int.floorMod(x, 0) == 0").isEmpty());
     }
 

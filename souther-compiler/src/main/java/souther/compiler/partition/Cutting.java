@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NonAffineOperation;
@@ -339,12 +340,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // number does: the line is drawn on the number itself, and the relation weighs it by its
         // coefficient.
         if (of instanceof BorderQuantity.HowMany || of instanceof BorderQuantity.RemainderOfAForm
+                || of instanceof BorderQuantity.RemainderOfAPair
                 || of instanceof BorderQuantity.ProductOfAPair) {
             for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
                 if ((each.getKey() instanceof Quantity.HowManyMeet
                         && of instanceof BorderQuantity.HowMany)
                         || (each.getKey() instanceof Quantity.RemainderOfADividend
                                 && of instanceof BorderQuantity.RemainderOfAForm)
+                        || (each.getKey() instanceof Quantity.RemainderByAnInput
+                                && of instanceof BorderQuantity.RemainderOfAPair)
                         || (each.getKey() instanceof Quantity.ProductOfTwo
                                 && of instanceof BorderQuantity.ProductOfAPair)) {
                     return each.getValue().signum() == 0 ? Optional.empty()
@@ -679,6 +683,45 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 new LinearForm<>(ExactRatio.ZERO, Map.of(term, ExactRatio.ONE)), at,
                 ComparisonClaim.stating(relation)), quantities)
                 instanceof Read.Cuts(Cutting cutting, AuthoredPointMapping _) ? cutting : null;
+    }
+
+    /**
+     * The line a relation over what one whole number of the input leaves of another divided by it
+     * draws — or null where the relation is no such thing: the remainder alone against a number.
+     *
+     * <p>A line on the remainder and on neither number: which pair leaves it turns on both, so what
+     * a row is at is the remainder its two numbers leave.
+     */
+    private static Read onARemainderByAnInput(String behavior, Relation.Affine affine,
+                                              boolean holds, InputReading read) {
+        Quantity.RemainderByAnInput remainder = AStatementAtARow.remainderByAnInputIn(affine);
+        if (remainder == null) {
+            return null;
+        }
+        ExactRatio weight = affine.form().coefs().get(remainder);
+        if (!(affine.form().constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+            return null;
+        }
+        Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
+        Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
+        for (NumericTerm number : remainder.operands()) {
+            TermOrders orders = read.quantities().ordersOf(number);
+            if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
+                return null;
+            }
+            on.put(number, orders);
+            each.put(number, ExactRatio.ONE);
+        }
+        // Over the remainder's weight, which turns the relation round where it is below nought.
+        ComparisonClaim claim = ComparisonClaim.stating(
+                holds ? affine.proposition() : affine.proposition().denied());
+        BorderQuantity.RemainderOfAPair of = new BorderQuantity.RemainderOfAPair(behavior,
+                new BorderQuantity.OverAForm(behavior, new LinearForm<>(ExactRatio.ZERO, each),
+                        on), remainder.dividend(), remainder.divisor());
+        Cutting drawn = made(of, new Level.OfTheQuantity(level),
+                weight.signum() < 0 ? claim.turned() : claim, read.quantities());
+        return drawn == null ? null : cutsOrRefused(drawn);
     }
 
     /**
@@ -1052,6 +1095,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(stops::add);
                 case Quantity.ProductOfTwo _ ->
                         beyondTheForm.add(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
+                case Quantity.RemainderByAnInput _ ->
+                        beyondTheForm.add(NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE);
                 case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                      DecisionAtom.TakenOfAnAnswer _, Quantity.HowManyMeet _,
                      Quantity.HowManyHold _, Quantity.HowManyDifferent _, Quantity.SumOver _,
@@ -1737,7 +1782,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                                  boolean holds, InputReading read) {
         return firstDrawn(onACount(behavior, affine, holds, read),
                 () -> firstDrawn(onARemainder(behavior, affine, holds, read),
-                        () -> onAProduct(behavior, affine, holds, read)));
+                        () -> firstDrawn(onARemainderByAnInput(behavior, affine, holds, read),
+                                () -> onAProduct(behavior, affine, holds, read))));
     }
 
     /**

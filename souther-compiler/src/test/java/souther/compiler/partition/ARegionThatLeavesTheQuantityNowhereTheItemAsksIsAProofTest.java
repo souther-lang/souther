@@ -266,6 +266,67 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 "and minus two times minus three");
     }
 
+    /**
+     * And what {@code x} leaves divided by {@code y}: where the region holds the divisor at three,
+     * a remainder of five is one no pair gives, since a remainder is below its divisor in size, and
+     * is out of reach; a remainder of two is not.
+     */
+    @Test
+    void aRemainderTheRegionLeavesNoDivisorForIsOutOfReach() {
+        SearchRegion atThree = region().assuming(form(0, 1, -3), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class, realize(remainderByAnInputAt(5), atThree),
+                "the divisor stands at three, which no remainder of five is below");
+        assertFalse(realize(remainderByAnInputAt(2), atThree) instanceof Realization.Impossible,
+                "and two is below three");
+    }
+
+    /**
+     * A remainder is below its divisor in size, and the divisors are numbers of the type: nothing
+     * leaves the greatest {@code Int} or the least, since each would need a divisor one past an
+     * end, and a divisor at the least {@code Int} leaves the remainder one above it.
+     */
+    @Test
+    void aRemainderNoDivisorOfTheTypeLeavesIsOutOfReach() {
+        SearchRegion free = region();
+
+        assertInstanceOf(Realization.Impossible.class,
+                realize(remainderByAnInputAt(Long.MAX_VALUE), free),
+                "the divisor would be one past the greatest Int");
+        assertInstanceOf(Realization.Impossible.class,
+                realize(remainderByAnInputAt(Long.MIN_VALUE), free),
+                "and the least needs one below the least");
+        assertFalse(realize(remainderByAnInputAt(Long.MIN_VALUE + 1), free)
+                instanceof Realization.Impossible, "the least Int itself leaves the next one up");
+        assertFalse(realize(remainderByAnInputAt(Long.MAX_VALUE - 1), free)
+                instanceof Realization.Impossible, "and the greatest leaves one below it");
+    }
+
+    /**
+     * Where the divisors tried are all there is room for and the rules still refuse every one, the
+     * item is left open and not proved out of reach: the divisors past the figure were not asked.
+     * With the dividend held at nought nothing is a remainder of one but a divisor of one, which
+     * is none above one.
+     */
+    @Test
+    void aSearchThatRanOutOfDivisorsProvesNothing() {
+        SearchRegion atNought = region().assuming(form(1, 0, 0), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Unknown.class,
+                realize(remainderByAnInputAt(1), atNought),
+                "no divisor tried leaves one, and the ones past the figure were not tried");
+    }
+
+    /** What {@code x} leaves divided by {@code y}, at one of the remainders. */
+    private static Standing remainderByAnInputAt(long remainder) {
+        Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
+        on.put(term("x"), Carrier.WHOLE);
+        on.put(term("y"), Carrier.WHOLE);
+        return new Standing.OfARemainderByAnInput(term("x"), term("y"), on,
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(remainder)));
+    }
+
     /** What {@code x} and {@code y} come to multiplied, at one of the products. */
     private static Standing productAt(long product) {
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();

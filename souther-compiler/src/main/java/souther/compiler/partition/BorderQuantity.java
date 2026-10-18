@@ -60,7 +60,7 @@ import java.util.stream.Collectors;
  */
 public sealed interface BorderQuantity
         permits LinearQuantity, BorderQuantity.HowMany, BorderQuantity.RemainderOfAForm,
-        BorderQuantity.ProductOfAPair {
+        BorderQuantity.RemainderOfAPair, BorderQuantity.ProductOfAPair {
 
     /**
      * The number one position holds, which is the position's own values.
@@ -1408,6 +1408,151 @@ public sealed interface BorderQuantity
         }
     }
 
+    /**
+     * What one whole number of a row leaves of another divided by it: the eaches left over when a
+     * delivery is packed in the pack size a product carries.
+     *
+     * <p>No form over the row's numbers and no line on either of them. A row at a remainder is a
+     * pair whose divisor is above it (below it, for a negative remainder) and whose dividend is
+     * that remainder more than a whole number of turns of the divisor: which pair that is turns on
+     * both, and a divisor of nought has no remainder at all. So a border on it says what the
+     * remainder is and nothing of where either number is.
+     *
+     * <p>The two numbers are read as a form of them, each weighed by one, which is what reads a
+     * row's numbers; the quantity is what the first leaves divided by the second.
+     *
+     * @param both     the two numbers, each weighed by one and on an order of whole numbers
+     * @param dividend the number divided, one of the two
+     * @param divisor  the number it is divided by, the other
+     */
+    record RemainderOfAPair(String behavior, OverAForm both, NumericTerm dividend,
+                            NumericTerm divisor) implements BorderQuantity {
+
+        public RemainderOfAPair {
+            if (behavior == null || both == null || dividend == null || divisor == null
+                    || dividend.equals(divisor) || both.form().coefs().size() != 2
+                    || !both.form().coefs().keySet().equals(Set.of(dividend, divisor))
+                    || !both.form().coefs().values().stream()
+                            .allMatch(weight -> weight.compareTo(ExactRatio.ONE) == 0)) {
+                throw new IllegalArgumentException("a remainder by an input is of two numbers,"
+                        + " each read as itself: " + both + " with " + dividend + " by " + divisor);
+            }
+            for (TermOrders each : both.on().values()) {
+                if (!(each.answered() instanceof Carrier.Whole)) {
+                    throw new IllegalArgumentException("a remainder read here is of whole numbers,"
+                            + " and this order is not one of them: " + each.answered());
+                }
+            }
+        }
+
+        /** The two numbers, in the order of the terms. */
+        List<NumericTerm> terms() {
+            return both.terms();
+        }
+
+        /** The divisor as a form of itself alone. */
+        LinearForm<NumericTerm> divisorAlone() {
+            return new LinearForm<>(ExactRatio.ZERO, Map.of(divisor, ExactRatio.ONE));
+        }
+
+        /**
+         * A run holding every remainder by a divisor in {@code divisors}, each end inclusive and
+         * open where the divisors have no end: nought to one below a divisor above nought, and one
+         * above a divisor below nought to nought.
+         */
+        static NumericDomain.Bounds across(NumericDomain.Bounds divisors) {
+            ExactRatio least = divisors.min() != null && divisors.min().at() instanceof Count count
+                    ? count.exactly() : null;
+            ExactRatio most = divisors.max() != null && divisors.max().at() instanceof Count count
+                    ? count.exactly() : null;
+            if ((divisors.min() != null && least == null)
+                    || (divisors.max() != null && most == null)) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            BigInteger below = least == null ? null : least.floor().orNull();
+            BigInteger above = most == null ? null : most.ceiling().orNull();
+            if ((least != null && below == null) || (most != null && above == null)) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            return new NumericDomain.Bounds(
+                    below == null ? null : endAt(below.add(BigInteger.ONE).min(BigInteger.ZERO)),
+                    above == null ? null : endAt(above.subtract(BigInteger.ONE)
+                            .max(BigInteger.ZERO)));
+        }
+
+        private static Endpoint endAt(BigInteger whole) {
+            return Endpoint.inclusive(Count.of(new BigDecimal(whole)));
+        }
+
+        /** Every whole number, each a remainder by some divisor. */
+        @Override
+        public LevelSpace levels() {
+            return LevelSpace.steppingBy(ExactRatio.ONE);
+        }
+
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            return switch (both.valuesOf(both.read(row))) {
+                case ValuesAtARow.NoneHere _ -> Stands.NO;
+                case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
+                case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                        switch (OrderedAffineBoundary.remainderByAnInputAt(dividend, divisor,
+                                values)) {
+                            case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
+                                    Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                            // A row with a divisor of nought has no remainder, and stands on
+                            // neither side of a line on it.
+                            case ExactAnswer.Held<Optional<ExactRatio>>(
+                                    Optional<ExactRatio> left) -> left.isPresent()
+                                    && where.holds(new Level.OfTheQuantity(left.get()))
+                                    ? Stands.YES : Stands.NO;
+                        };
+            };
+        }
+
+        @Override
+        public void lookAt(Observation row) {
+            both.lookAt(row);
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            return new Standing.OfARemainderByAnInput(dividend.atOnePosition(),
+                    divisor.atOnePosition(), LinearQuantity.answeredOn(both.on()), levels(),
+                    where);
+        }
+
+        @Override
+        public String behavior() {
+            return behavior;
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /** The call as an author would write it. */
+        @Override
+        public String left() {
+            return "Int.floorMod(" + dividend + ", " + divisor + ")";
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity remainder)) {
+                throw new IllegalStateException(
+                        "a remainder was asked to write a level that is not a number: " + level);
+            }
+            return remainder.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.REMAINDER_BY_AN_INPUT;
+        }
+    }
+
     /** How this quantity's own values are ordered, and which of them it can take. */
     LevelSpace levels();
 
@@ -1432,6 +1577,12 @@ public sealed interface BorderQuantity
             case ProductOfAPair product -> at instanceof Level.OfTheQuantity(ExactRatio level)
                     ? UndividedByARelation.ofAProduct(product.terms().get(0).atOnePosition(),
                             product.terms().get(1).atOnePosition(), level, relation)
+                    : UndividedByARelation.SHOWING_NOTHING;
+            // The remainder held against nought, which is a number dividing the other.
+            case RemainderOfAPair remainder -> at instanceof Level.OfTheQuantity(
+                    ExactRatio level) && level.signum() == 0
+                    ? UndividedByARelation.ofADivisibility(remainder.dividend.atOnePosition(),
+                            remainder.divisor.atOnePosition(), relation)
                     : UndividedByARelation.SHOWING_NOTHING;
             case HowMany _, RemainderOfAForm _ -> UndividedByARelation.SHOWING_NOTHING;
         };
@@ -1459,6 +1610,8 @@ public sealed interface BorderQuantity
             case RemainderOfAForm _ -> false;
             // And a product between what its factors' ranges multiply to.
             case ProductOfAPair _ -> false;
+            // And a remainder by an input's number between what the divisors' range allows.
+            case RemainderOfAPair _ -> false;
         };
     }
 
@@ -1483,7 +1636,8 @@ public sealed interface BorderQuantity
     default NumbersAskedFor asksOfEachTerm(Criterion where) {
         return switch (this) {
             case OfACoordinate _ -> NumbersAskedFor.of(where.region());
-            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _, ProductOfAPair _ ->
+            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
+                 ProductOfAPair _ ->
                     NumbersAskedFor.onlyTogether(new QuantityInRegion(this, where.region()));
         };
     }
@@ -1525,6 +1679,7 @@ public sealed interface BorderQuantity
             }
             case HowMany count -> count.left();
             case RemainderOfAForm remainder -> remainder.left();
+            case RemainderOfAPair remainder -> remainder.left();
             case ProductOfAPair product -> product.left();
         };
     }
@@ -1536,7 +1691,8 @@ public sealed interface BorderQuantity
     default ExactRatio per() {
         return switch (this) {
             case LinearQuantity form -> QuantityKey.per(form.direction());
-            case HowMany _, RemainderOfAForm _, ProductOfAPair _ -> ExactRatio.ONE;
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ ->
+                    ExactRatio.ONE;
         };
     }
 
@@ -1552,6 +1708,7 @@ public sealed interface BorderQuantity
             case LinearQuantity form -> form.terms();
             case HowMany count -> count.allNumbers();
             case RemainderOfAForm remainder -> remainder.dividend().terms();
+            case RemainderOfAPair remainder -> remainder.terms();
             case ProductOfAPair product -> product.terms();
         };
     }
@@ -1563,6 +1720,8 @@ public sealed interface BorderQuantity
             case LinearQuantity form -> quantities.runsBetween(form.direction());
             case HowMany count -> count.runs();
             case RemainderOfAForm remainder -> remainder.runs();
+            case RemainderOfAPair remainder -> RemainderOfAPair.across(
+                    quantities.runsBetween(remainder.divisorAlone()));
             case ProductOfAPair product -> ProductOfAPair.across(
                     quantities.runsBetween(product.alone(0)),
                     quantities.runsBetween(product.alone(1)));
@@ -1583,6 +1742,21 @@ public sealed interface BorderQuantity
             // Whatever the rules leave the form, a remainder stays below its divisor.
             case RemainderOfAForm remainder ->
                     new NumericDomain.FormProjection.Within(remainder.runs());
+            // What the region leaves the divisor, and nothing where it leaves the dividend none.
+            case RemainderOfAPair remainder -> {
+                NumericDomain.FormProjection dividend = region.projectionOf(remainder.dividend);
+                if (dividend instanceof NumericDomain.FormProjection.NothingIsLeft nothing) {
+                    yield nothing;
+                }
+                yield switch (region.projectionOf(remainder.divisor)) {
+                    case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                            new NumericDomain.FormProjection.Within(RemainderOfAPair.across(
+                                    held == null ? NumericDomain.Bounds.OPEN : held));
+                    case NumericDomain.FormProjection.NothingIsLeft nothing -> nothing;
+                    case null -> new NumericDomain.FormProjection.Within(
+                            NumericDomain.Bounds.OPEN);
+                };
+            }
             // What the region leaves each factor, multiplied: nothing where it leaves either none.
             case ProductOfAPair product -> {
                 NumericDomain.Bounds[] each = new NumericDomain.Bounds[2];
@@ -1625,6 +1799,9 @@ public sealed interface BorderQuantity
             case RemainderOfAForm remainder -> HeldValues.OfAForm.of(region,
                     remainder.dividend().terms(), values -> OrderedAffineBoundary.remainderAt(
                             remainder.wholeDividend(), remainder.divisor(), values));
+            case RemainderOfAPair remainder -> HeldValues.OfAForm.of(region, remainder.terms(),
+                    values -> OrderedAffineBoundary.remainderByAnInputAt(remainder.dividend,
+                            remainder.divisor, values));
             case ProductOfAPair product -> HeldValues.OfAForm.of(region, product.terms(),
                     values -> OrderedAffineBoundary.productAt(product.terms(), values));
             case HowMany _ -> HeldValues.NONE;
@@ -1638,7 +1815,7 @@ public sealed interface BorderQuantity
     default List<FilingCoordinate> filedAt() {
         return switch (this) {
             case LinearQuantity form -> AffineReading.filedAt(form.direction().coefs().keySet());
-            case HowMany _, RemainderOfAForm _, ProductOfAPair _ ->
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ ->
                     AffineReading.filedAt(numbers());
         };
     }
@@ -1660,7 +1837,8 @@ public sealed interface BorderQuantity
         return switch (this) {
             case Apart apart -> apart.counts();
             case OfACoordinate coordinate -> coordinate.of().answered().counts();
-            case OverAForm _, HowMany _, RemainderOfAForm _, ProductOfAPair _ -> true;
+            case OverAForm _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
+                 ProductOfAPair _ -> true;
         };
     }
 
@@ -1677,6 +1855,8 @@ public sealed interface BorderQuantity
             case RemainderOfAForm _ -> new BlockReason.ComparisonOnARemainder();
             // Two numbers of the input multiplied, which relates the two.
             case ProductOfAPair _ -> new BlockReason.ComparisonRelatingTwoValues();
+            // And what one leaves of another divided by it.
+            case RemainderOfAPair _ -> new BlockReason.ComparisonRelatingTwoValues();
             case LinearQuantity _, HowMany _ -> readOverARun()
                     ? new BlockReason.ComparisonOverARun()
                     : new BlockReason.ComparisonRelatingTwoValues();
@@ -1692,7 +1872,7 @@ public sealed interface BorderQuantity
             case HowMany _ -> true;
             case RemainderOfAForm remainder -> remainder.dividend().direction().coefs().keySet()
                     .stream().anyMatch(term -> term.atOnePosition() == null);
-            case ProductOfAPair _ -> false;
+            case ProductOfAPair _, RemainderOfAPair _ -> false;
         };
     }
 
@@ -1704,7 +1884,7 @@ public sealed interface BorderQuantity
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().size() == 1
                     ? form.carrierOf(form.direction().coefs().keySet().iterator().next()) : null;
-            case HowMany _, RemainderOfAForm _, ProductOfAPair _ -> null;
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ -> null;
         };
     }
 
@@ -1800,6 +1980,8 @@ public sealed interface BorderQuantity
             case RemainderOfAForm _ -> true;
             // What two numbers come to multiplied, which is the product's and not a position's.
             case ProductOfAPair _ -> true;
+            // What one number leaves of another, which is the call's and not a position's.
+            case RemainderOfAPair _ -> true;
         };
     }
 
