@@ -100,98 +100,174 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
     private record Filing(Core key, Filed filed) {}
 
     /**
-     * What {@code container} is the answer of, where it is a map built so, or null where it is
-     * not.
+     * What {@code container}, read in {@code at}, is the answer of, where it is a map built so, or
+     * null where it is not.
      *
+     * <p>Every part of the step is read where the reader reads names
+     * ({@link TheSignOfAnOrder.Sides#standing}): what the step answers, which operation files and
+     * into what, whether the key reads the answer so far, and what the closure keeps of two values.
+     * So a step is the same filing however what it answers is named. The key and the value filed
+     * are kept as they are written, since a reader of them reads them as numbers of the element
+     * the step is handed, which is a name the reading of names would follow past.
+     *
+     * @param sides   what the reader answers about where it reads
      * @param blockOf the block a closure argument stands for, where the call stands
+     * @param <E>     what the reader reads a name in
      */
-    public static KeyedAccumulation of(Core container, Function<Core, Core.Block> blockOf) {
+    public static <E> KeyedAccumulation of(Core container, E at, TheSignOfAnOrder.Sides<E> sides,
+                                           Function<Core, Core.Block> blockOf) {
         if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
             return null;
         }
         Reductions.Reducing walk = Reductions.reducing(call, blockOf);
-        if (walk == null || !(AnOperationApplied.of(walk.seed()) instanceof AnOperationApplied seed)
+        if (walk == null || !(AnOperationApplied.of(sides.standing(walk.seed(), at).value())
+                instanceof AnOperationApplied seed)
                 || !seed.operation().equals(EMPTY) || walk.element() == null
                 || walk.element().binding() == null || walk.accumulator() == null
                 || walk.accumulator().binding() == null) {
             return null;
         }
-        BindingId accumulator = walk.accumulator().binding();
-        Filing filing = filedByAnOperation(walk.step().body(), accumulator, blockOf);
+        AStep<E> step = new AStep<>(walk.accumulator().binding(), sides, blockOf);
+        ValueStanding.ReadThrough<E> body = sides.standing(walk.step().body(), at);
+        Filing filing = step.byAnOperation(body);
         if (filing == null) {
-            filing = filedAfterALookup(walk.step().body(), accumulator);
+            filing = step.afterALookup(body);
         }
         return filing == null ? null : new KeyedAccumulation(walk.container(), walk.element(),
                 filing.key(), filing.filed());
     }
 
-    /** The filing {@code body} is, where it applies an operation that files under a key. */
-    private static Filing filedByAnOperation(Core body, BindingId accumulator,
-                                             Function<Core, Core.Block> blockOf) {
-        if (!(AnOperationApplied.of(body) instanceof AnOperationApplied filing)
-                || !(filing.operation() instanceof ValueName.Stdlib.Operation named)) {
-            return null;
-        }
-        KeyedUpdates.Update update = Derived.UPDATES.get(named);
-        if (update == null) {
-            return null;
-        }
-        List<Core> args = filing.args();
-        Core key = args.get(update.keyArg());
-        Core.Block closure = blockOf.apply(args.get(update.closureArg()));
-        if (!isThe(args.get(update.mapArg()), accumulator) || WhatABodyReads.binding(key, accumulator)
-                || closure == null || closure.params().size() != 1
-                || closure.params().getFirst().binding() == null) {
-            return null;
-        }
-        Filed filed = filedOf(args.get(update.absentArg()), closure.body(),
-                closure.params().getFirst().binding(), accumulator);
-        return filed == null ? null : new Filing(key, filed);
-    }
-
     /**
-     * The filing {@code body} is, where it looks the key up in the answer so far and files under
-     * the key what it worked out of what it found, or a figure where it found nothing.
+     * A step of the walk, read where the reader reads names.
+     *
+     * @param accumulator the step's parameter the answer so far arrives on
+     * @param sides       what the reader answers about where it reads
+     * @param blockOf     the block a closure argument stands for
      */
-    private static Filing filedAfterALookup(Core body, BindingId accumulator) {
-        if (!(Core.withoutStanding(body) instanceof Core.Match match)
-                || match.cases().size() != 2
-                || !(AnOperationApplied.of(match.scrutinee()) instanceof AnOperationApplied looked)
-                || !looked.operation().equals(GET) || looked.args().size() != 2
-                || !isThe(looked.args().get(1), accumulator)) {
-            return null;
-        }
-        Core key = looked.args().get(0);
-        Core.Case found = armOf(match, true);
-        Core.Case missing = armOf(match, false);
-        if (found == null || missing == null || found.binder() == null
-                || found.binder().binding() == null || WhatABodyReads.binding(key, accumulator)) {
-            return null;
-        }
-        Core first = filedUnder(missing.body(), key, accumulator);
-        Core moved = filedUnder(found.body(), key, accumulator);
-        Filed filed = first == null || moved == null ? null
-                : filedOf(first, moved, found.binder().binding(), accumulator);
-        return filed == null ? null : new Filing(key, filed);
-    }
+    private record AStep<E>(BindingId accumulator, TheSignOfAnOrder.Sides<E> sides,
+                            Function<Core, Core.Block> blockOf) {
 
-    /**
-     * What the map holds under a key where an element finding nothing there files {@code first},
-     * and one finding {@code found} there files {@code moved} — or null where that is neither a
-     * counter nor an end kept.
-     */
-    private static Filed filedOf(Core first, Core moved, BindingId found, BindingId accumulator) {
-        ExactRatio figure = constant(first);
-        ExactRatio step = figure == null ? null : stepOf(moved, found);
-        if (step != null) {
-            return new Filed.Counted(figure, step);
+        /** What {@code e}, read in {@code at}, was given: past every name it was given. */
+        Core valueOf(Core e, E at) {
+            return sides.standing(e, at).value();
         }
-        if (WhatABodyReads.binding(first, accumulator)) {
+
+        /** The filing {@code body} is, where it applies an operation that files under a key. */
+        Filing byAnOperation(ValueStanding.ReadThrough<E> body) {
+            if (!(AnOperationApplied.of(body.value()) instanceof AnOperationApplied filing)
+                    || !(filing.operation() instanceof ValueName.Stdlib.Operation named)) {
+                return null;
+            }
+            KeyedUpdates.Update update = Derived.UPDATES.get(named);
+            if (update == null) {
+                return null;
+            }
+            List<Core> args = filing.args();
+            Core key = args.get(update.keyArg());
+            Core.Block closure = blockOf.apply(args.get(update.closureArg()));
+            if (!isThe(valueOf(args.get(update.mapArg()), body.at()), accumulator)
+                    || WhatABodyReads.binding(valueOf(key, body.at()), accumulator)
+                    || closure == null || closure.params().size() != 1
+                    || closure.params().getFirst().binding() == null) {
+                return null;
+            }
+            Filed filed = filedOf(args.get(update.absentArg()), body.at(),
+                    sides.standing(closure.body(), body.at()),
+                    closure.params().getFirst().binding());
+            return filed == null ? null : new Filing(key, filed);
+        }
+
+        /**
+         * The filing {@code body} is, where it looks the key up in the answer so far and files
+         * under the key what it worked out of what it found, or a figure where it found nothing.
+         */
+        Filing afterALookup(ValueStanding.ReadThrough<E> body) {
+            if (!(Core.withoutStanding(body.value()) instanceof Core.Match match)
+                    || match.cases().size() != 2
+                    || !(AnOperationApplied.of(valueOf(match.scrutinee(), body.at()))
+                    instanceof AnOperationApplied looked)
+                    || !looked.operation().equals(GET) || looked.args().size() != 2
+                    || !isThe(valueOf(looked.args().get(1), body.at()), accumulator)) {
+                return null;
+            }
+            Core key = looked.args().get(0);
+            Core keyRead = valueOf(key, body.at());
+            Core.Case found = armOf(match, true);
+            Core.Case missing = armOf(match, false);
+            if (found == null || missing == null || found.binder() == null
+                    || found.binder().binding() == null
+                    || WhatABodyReads.binding(keyRead, accumulator)) {
+                return null;
+            }
+            ValueStanding.ReadThrough<E> first =
+                    filedUnder(sides.standing(missing.body(), body.at()), keyRead);
+            ValueStanding.ReadThrough<E> moved =
+                    filedUnder(sides.standing(found.body(), body.at()), keyRead);
+            Filed filed = first == null || moved == null ? null
+                    : filedOf(first.value(), first.at(), moved, found.binder().binding());
+            return filed == null ? null : new Filing(key, filed);
+        }
+
+        /**
+         * What the map holds under a key where an element finding nothing there files
+         * {@code first}, read in {@code firstAt}, and one finding {@code found} there files
+         * {@code moved} — or null where that is neither a counter nor an end kept.
+         */
+        Filed filedOf(Core first, E firstAt, ValueStanding.ReadThrough<E> moved,
+                      BindingId found) {
+            Core firstRead = valueOf(first, firstAt);
+            ExactRatio figure = constant(firstRead);
+            ExactRatio step = figure == null ? null : stepOf(moved, found);
+            if (step != null) {
+                return new Filed.Counted(figure, step);
+            }
+            if (WhatABodyReads.binding(firstRead, accumulator)) {
+                return null;
+            }
+            Core filed = Extreme.comparedAs(first, firstAt, sides).value();
+            Extreme extreme = Extreme.keptBy(Extreme.casesOf(moved.value(), moved.at(), sides),
+                    e -> isThe(Extreme.comparedAs(e, moved.at(), sides).value(), found),
+                    e -> Core.sameValue(Extreme.comparedAs(e, moved.at(), sides).value(), filed));
+            return extreme == null ? null : new Filed.Kept(first, extreme);
+        }
+
+        /** The value {@code body} files under the key read as {@code key} in the answer so far, as
+         *  written and where it is written — or null where it does anything else or files under
+         *  another key. */
+        ValueStanding.ReadThrough<E> filedUnder(ValueStanding.ReadThrough<E> body, Core key) {
+            return AnOperationApplied.of(body.value()) instanceof AnOperationApplied filing
+                    && filing.operation().equals(INSERT) && filing.args().size() == 3
+                    && Core.sameValue(valueOf(filing.args().get(0), body.at()), key)
+                    && isThe(valueOf(filing.args().get(2), body.at()), accumulator)
+                    ? new ValueStanding.ReadThrough<>(filing.args().get(1), body.at()) : null;
+        }
+
+        /**
+         * What {@code moved} adds to the value {@code value} it is handed, where that is a
+         * constant: {@code n}, {@code n + c}, {@code c + n} and {@code n - c}.
+         */
+        ExactRatio stepOf(ValueStanding.ReadThrough<E> moved, BindingId value) {
+            Core written = Core.withoutStanding(moved.value());
+            if (isThe(written, value)) {
+                return ExactRatio.ZERO;
+            }
+            if (!(written instanceof Core.Binary(BinOp op, Core l, Core r, var _, var _, var _,
+                    var _, var _))) {
+                return null;
+            }
+            Core left = valueOf(l, moved.at());
+            Core right = valueOf(r, moved.at());
+            if (op == BinOp.ADD && isThe(left, value) && constant(right) != null) {
+                return constant(right);
+            }
+            if (op == BinOp.ADD && isThe(right, value) && constant(left) != null) {
+                return constant(left);
+            }
+            if (op == BinOp.SUB && isThe(left, value) && constant(right) != null) {
+                return constant(right).negated();
+            }
             return null;
         }
-        Extreme extreme = Extreme.keptBy(moved,
-                e -> isThe(e, found), e -> Core.sameValue(e, first));
-        return extreme == null ? null : new Filed.Kept(first, extreme);
     }
 
     /** The arm taking an optional that holds a value, or the one taking an optional that holds
@@ -208,44 +284,10 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         return null;
     }
 
-    /** The value {@code body} files under {@code key} in the answer so far, or null where it does
-     *  anything else or files under another key. */
-    private static Core filedUnder(Core body, Core key, BindingId accumulator) {
-        return AnOperationApplied.of(body) instanceof AnOperationApplied filing
-                && filing.operation().equals(INSERT) && filing.args().size() == 3
-                && Core.sameValue(filing.args().get(0), key)
-                && isThe(filing.args().get(2), accumulator) ? filing.args().get(1) : null;
-    }
-
     /** The whole number {@code e} is written as, or null where it is no such constant. */
     private static ExactRatio constant(Core e) {
         return Core.withoutStanding(e) instanceof Core.Int written
                 ? ExactRatio.of(written.value()) : null;
-    }
-
-    /**
-     * What {@code body} adds to the value {@code value} it is handed, where that is a constant:
-     * {@code n}, {@code n + c}, {@code c + n} and {@code n - c}.
-     */
-    private static ExactRatio stepOf(Core body, BindingId value) {
-        Core written = Core.withoutStanding(body);
-        if (isThe(written, value)) {
-            return ExactRatio.ZERO;
-        }
-        if (!(written instanceof Core.Binary(BinOp op, Core left, Core right, var _, var _, var _,
-                var _, var _))) {
-            return null;
-        }
-        if (op == BinOp.ADD && isThe(left, value) && constant(right) != null) {
-            return constant(right);
-        }
-        if (op == BinOp.ADD && isThe(right, value) && constant(left) != null) {
-            return constant(left);
-        }
-        if (op == BinOp.SUB && isThe(left, value) && constant(right) != null) {
-            return constant(right).negated();
-        }
-        return null;
     }
 
     private static boolean isThe(Core e, BindingId binding) {

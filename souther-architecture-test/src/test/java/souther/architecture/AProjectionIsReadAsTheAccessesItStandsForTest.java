@@ -367,8 +367,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
         row(out, c + "check/Predicates$Reads", "chain", "(" + core + ")Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "check/SeededWalk", "opened",
-                "(" + core + "L" + c + "check/DeclarationNewtypes;)" + core, Reading.NAMES,
+        row(out, c + "check/Extreme", "comparedAs",
+                "(" + core + "Ljava/lang/Object;L" + c + "check/TheSignOfAnOrder$Sides;)L" + c
+                        + "check/ValueStanding$ReadThrough;", Reading.NAMES,
                 "asks whether the last name read is the value a newtype wears, which goes"
                         + " nowhere, and answers what it is read off");
         row(out, c + "check/StatedByClauses$Reading", "gather",

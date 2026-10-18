@@ -46,15 +46,15 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                 data Within
                 data Needs
 
-                behavior approval : (lines: List<Line>) -> Within | Needs
+                behavior approval : (base: Int, lines: List<Line>) -> Within | Needs
 
-                let approval (lines) =
+                let approval (base, lines) =
                     if %s then Within else Needs
                 """.formatted(decided);
     }
 
-    private static String folded(String step, int seed, String compared) {
-        return model("List.fold((w, l) -> %s, %d, lines) %s".formatted(step, seed, compared));
+    private static String folded(String step, Object seed, String compared) {
+        return model("List.fold((w, l) -> %s, %s, lines) %s".formatted(step, seed, compared));
     }
 
     /** At or below a number, the greatest is every element there, and the seed. */
@@ -95,7 +95,9 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                 "if l.discount >= w then l.discount else w",
                 "Int.max(w, l.discount)",
                 "Int.max(l.discount, w)",
-                "{ let d = l.discount  if d > w then d else w }")) {
+                "{ let d = l.discount  if d > w then d else w }",
+                "{ let next = if l.discount > w then l.discount else w  next }",
+                "{ let d = l.discount  let next = if d > w then d else w  next }")) {
             assertReadAs(plain, folded(step, 0, "<= 10"));
         }
     }
@@ -111,16 +113,32 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
         assertFalse(report.contains("List.sum"), report);
     }
 
-    /** An equality is the end at or below and at or above, and a difference either side of it;
-     *  both are read. */
+    /** An equality is the end at or below and at or above, which is every element at or below and
+     *  some at or above; a difference is some element above or every one below. */
     @Test
-    void anEqualityAndADifferenceAreRead() {
-        for (String compared : List.of("== 10", "/= 10")) {
-            String report = report(folded(GREATER, 0, compared));
-            assertTrue(report.contains("read as approval/lines[*].discount: = 10"),
-                    () -> compared + ": " + report);
-            assertFalse(report.contains(MADE_FROM_IT), () -> compared + ": " + report);
-        }
+    void anEqualityAndADifferenceAreEveryAndSomeElementTogether() {
+        assertReadAs(model("List.all(l -> l.discount <= 10, lines)"
+                        + " && List.any(l -> l.discount >= 10, lines)"),
+                folded(GREATER, 0, "== 10"));
+        assertReadAs(model("List.any(l -> l.discount > 10, lines)"
+                        + " || List.all(l -> l.discount < 10, lines)"),
+                folded(GREATER, 0, "/= 10"));
+    }
+
+    /**
+     * A seed the input holds is one more value the end is taken of, read beside every element or
+     * some element as the comparison of it: the same lines, each owed the same points.
+     *
+     * <p>The rows are not the same, and are not meant to be. One comparison drawing two lines is
+     * owed each point once, met on either line, as {@code Int.max(a, b) <= g} is; two comparisons
+     * drawing one line each are owed each point twice.
+     */
+    @Test
+    void aSeedTheInputHoldsIsComparedBesideTheElements() {
+        assertDrawsThePointsOf(model("base <= 10 && List.all(l -> l.discount <= 10, lines)"),
+                folded(GREATER, "base", "<= 10"));
+        assertDrawsThePointsOf(model("base >= 10 || List.any(l -> l.discount >= 10, lines)"),
+                folded(GREATER, "base", ">= 10"));
     }
 
     /**
@@ -211,44 +229,22 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
         assertFalse(report.contains(MADE_FROM_IT), report);
     }
 
-    /**
-     * A seed the input holds is one more value the end is taken of: the line on it and the line on
-     * every element are both drawn, where the comparison stands alone and inside a conjunction.
-     */
+    /** Inside a conjunction, the comparison of the end is read as it is alone. */
     @Test
-    void aSeedTheInputHoldsAndEveryElementEachDrawALine() {
-        for (String decided : List.of(
-                "List.fold((w, l) -> %s, base, lines) <= 10".formatted(GREATER),
-                "List.fold((w, l) -> %s, base, lines) >= 10".formatted(GREATER),
-                "List.fold((w, l) -> %s, base, lines) <= 10 && base > 3".formatted(GREATER))) {
-            String report = report("""
-                    module example.worst
-
-                    data Line = { discount: Int }
-
-                    data Within
-                    data Needs
-
-                    behavior approval : (base: Int, lines: List<Line>) -> Within | Needs
-
-                    let approval (base, lines) =
-                        if %s then Within else Needs
-                    """.formatted(decided));
-            assertTrue(report.contains("read as approval/base: = 10"), () -> decided + ": "
-                    + report);
-            assertTrue(report.contains("read as approval/lines[*].discount: = 10"),
-                    () -> decided + ": " + report);
-            assertFalse(report.contains(MADE_FROM_IT), () -> decided + ": " + report);
-        }
+    void theEndComparedInsideAConjunctionIsReadAsItIsAlone() {
+        assertReadAs(model("List.all(l -> l.discount <= 10, lines) && base > 3"),
+                model("List.fold((w, l) -> %s, 0, lines) <= 10 && base > 3".formatted(GREATER)));
     }
 
-    /** An equality is every element at or below the number and some at or above it, and the line
-     *  is drawn for both: the point above it is owed as well as the one below. */
+    /**
+     * A comparison stating that no element meets a relation draws the relation's line, whatever it
+     * is a comparison of: here a truth that some element meets it, compared with false.
+     */
     @Test
-    void anEqualityOwesThePointsOnEitherSide() {
-        String report = report(folded(GREATER, 0, "== 10"));
-        assertTrue(report.contains("read as approval/lines[*].discount: = 11"), report);
-        assertTrue(report.contains("read as approval/lines[*].discount: = 9"), report);
+    void noElementMeetingARelationDrawsItsLine() {
+        Drawn none = drawn(model("List.any(l -> l.discount > 10, lines) == false"));
+        assertTrue(none.points().contains("ON approval/lines[*].discount: = 11"), none::report);
+        assertTrue(none.points().contains("OFF approval/lines[*].discount: = 10"), none::report);
     }
 
     /** A step choosing by the sign of an order compared with a number written anywhere is
@@ -312,11 +308,22 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     private static void assertReadAs(Drawn expected, String read) {
+        Drawn drawn = assertDrawsThePointsOf(expected, read);
+        assertEquals(expected.rows(), drawn.rows(), () -> read + "\n" + drawn.report());
+    }
+
+    /** {@code read} draws the points {@code expected} draws, at the same values. */
+    private static void assertDrawsThePointsOf(String expected, String read) {
+        assertDrawsThePointsOf(drawn(expected), read);
+    }
+
+    private static Drawn assertDrawsThePointsOf(Drawn expected, String read) {
         assertFalse(expected.points().isEmpty(), () -> "the form it is held to draws points: "
                 + expected.report());
         Drawn drawn = drawn(read);
         assertEquals(expected.points(), drawn.points(), () -> read + "\n" + drawn.report());
-        assertEquals(expected.rows(), drawn.rows(), () -> read + "\n" + drawn.report());
+        assertFalse(drawn.rows().isEmpty(), () -> read + "\n" + drawn.report());
+        return drawn;
     }
 
     /**
@@ -331,28 +338,51 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
         return new Drawn(report, pointsOf(report), rowsOf(compilation));
     }
 
-    /** Each point the report says a row is owed at, and what it is read as, in order. */
+    /**
+     * Each point the report says a row is owed at, once for each place it is read as, in order: a
+     * comparison drawing two lines owes each point on both, as two comparisons drawing one each do.
+     */
     private static List<String> pointsOf(String report) {
-        Pattern point = Pattern.compile(
-                "row is at the (ON|OFF|IN|OUT) point \\([^)]*\\)[^\\n]*\\n\\s+· read as ([^\\n]+)");
+        Pattern point = Pattern.compile("row is at the (ON|OFF|IN|OUT) point \\(");
+        Pattern readAs = Pattern.compile("^\\s+· read as (.+)$");
         List<String> out = new ArrayList<>();
-        Matcher found = point.matcher(report);
-        while (found.find()) {
-            out.add(found.group(1) + " " + found.group(2));
+        String owed = null;
+        for (String line : report.split("\n")) {
+            Matcher header = point.matcher(line);
+            Matcher place = readAs.matcher(line);
+            if (header.find()) {
+                owed = header.group(1);
+            } else if (owed != null && place.matches()) {
+                out.add(owed + " " + place.group(1));
+            } else {
+                owed = null;
+            }
         }
         out.sort(null);
         return out;
     }
 
-    /** The values of each row written for what nothing covers, in order. */
+    /**
+     * Each row written for what nothing covers, whole however many lines its value takes, in
+     * order. What a row is said to fill is left out: it names where the comparison is written.
+     */
     private static List<String> rowsOf(Compilation compilation) {
         String rows = GeneratedRows.of(compilation, null, null,
                 SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
         List<String> out = new ArrayList<>();
+        StringBuilder row = null;
         for (String line : rows.split("\n")) {
             if (line.startsWith("    | ")) {
-                out.add(line.replaceAll("\\s+", " ").trim());
+                if (row != null) {
+                    out.add(row.toString().replaceAll("\\s+", " ").trim());
+                }
+                row = new StringBuilder(line);
+            } else if (row != null && !line.startsWith("//") && !line.isBlank()) {
+                row.append(' ').append(line);
             }
+        }
+        if (row != null) {
+            out.add(row.toString().replaceAll("\\s+", " ").trim());
         }
         out.sort(null);
         return out;

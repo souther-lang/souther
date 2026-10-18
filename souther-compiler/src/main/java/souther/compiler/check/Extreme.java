@@ -8,7 +8,6 @@ import souther.compiler.numeric.Rel;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
 
 /**
  * Which end of two values a choice between them keeps: the lesser or the greater.
@@ -36,22 +35,18 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
     Extreme GREATEST = new Greatest();
 
     /**
-     * The end {@code e} keeps of two values, or null where it is no choice between those two that
-     * keeps one end.
+     * The end a choice read in {@code cases} ({@link #casesOf}) keeps of two values, or null where
+     * it is no choice between those two that keeps one end.
      *
      * <p>Each case answers one of the two and is reached where they stand in some relations; a case
      * is the lesser where each of those relations puts what it answers below or level with the
      * other, and the greater the other way about. Every case the same, and both values answered by
      * some case, is a choice keeping that end whichever way the two stand.
      *
-     * @param isOne   whether an expression is the one value
-     * @param isOther whether an expression is the other
+     * @param isOne   whether an expression, as it is compared ({@link #comparedAs}), is the one
+     *                value
+     * @param isOther whether one is the other
      */
-    static Extreme keptBy(Core e, Predicate<Core> isOne, Predicate<Core> isOther) {
-        return keptBy(casesOf(e, UnaryOperator.identity()), isOne, isOther);
-    }
-
-    /** The same, of the cases a choice was read in ({@link #casesOf}). */
     static Extreme keptBy(List<Choice.ADefinitionCase> cases, Predicate<Core> isOne,
                           Predicate<Core> isOther) {
         Extreme kept = null;
@@ -86,15 +81,17 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
      * <p>Those of a call the library defines by them ({@link Choice#casesOf}), or the two arms of
      * an {@code if} whose condition is one comparison: the arm taken where it holds is reached
      * under the relation it states, and the other under its denial. {@code Int.max(a, b)},
-     * {@code if b > a then b else a} and {@code if a >= b then a else b} are one choice.
+     * {@code if b > a then b else a} and {@code if a >= b then a else b} are one choice. A
+     * condition comparing the sign of an order is read as a comparison of a sign is read anywhere
+     * ({@link TheSignOfAnOrder#read}), so {@code Decimal.compare(a, b) > 0} chooses by the order of
+     * {@code a} and {@code b}.
      *
-     * @param ofTheArguments the comparison a condition states, as the comparison of the values it
-     *                       holds exactly where: the condition itself, or — for a reader that can
-     *                       read a number where the condition stands — the comparison of the
-     *                       arguments of an order whose sign it compares ({@link TheSignOfAnOrder})
+     * @param at    where {@code e} stands
+     * @param sides what the reader answers about where it reads
+     * @param <E>   what the reader reads a name in
      */
-    static List<Choice.ADefinitionCase> casesOf(Core e,
-                                                UnaryOperator<StatedComparison> ofTheArguments) {
+    static <E> List<Choice.ADefinitionCase> casesOf(Core e, E at,
+                                                    TheSignOfAnOrder.Sides<E> sides) {
         Core chosen = Core.withoutStanding(e);
         if (chosen instanceof Core.PreservedCall call) {
             return Choice.casesOf(call);
@@ -102,10 +99,38 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
         if (chosen instanceof Core.If iff
                 && Core.withoutStanding(iff.cond()) instanceof Core.Binary cond
                 && StatedComparison.of(cond, true) instanceof StatedComparison written) {
-            StatedComparison stated = ofTheArguments.apply(written);
+            StatedComparison stated = TheSignOfAnOrder.read(written, at, sides)
+                    instanceof TheSignOfAnOrder.Read.OfTheArguments<E> ordered
+                    && ordered.isTheCondition() ? ordered.arguments() : written;
             return List.of(armOf(iff.then(), stated, true), armOf(iff.els(), stated, false));
         }
         return List.of();
+    }
+
+    /**
+     * What {@code e}, read in {@code at}, is compared as: past every name and every binding whose
+     * body is the value ({@link TheSignOfAnOrder.Sides#standing}), and past the value a newtype
+     * wears, which orders as what wears it ({@link Location#isStep}). So a choice is read the same
+     * however its values are named: {@code w.value} is compared as {@code w}, and a name given
+     * {@code l.discount} as {@code l.discount}.
+     *
+     * @param <E> what the reader reads a name in
+     */
+    static <E> ValueStanding.ReadThrough<E> comparedAs(Core e, E at,
+                                                      TheSignOfAnOrder.Sides<E> sides) {
+        ValueStanding.ReadThrough<E> read = sides.standing(e, at);
+        while (true) {
+            Core.FieldAccess last = switch (Core.withoutStanding(read.value())) {
+                case Core.FieldAccess access -> access;
+                case Core.FieldProjection projection -> projection.lastAccess();
+                default -> null;
+            };
+            if (last == null || Location.isStep(last.target().type(), last.field(),
+                    sides.newtypes())) {
+                return read;
+            }
+            read = sides.standing(last.target(), read.at());
+        }
     }
 
     /** The one value {@code each} answers, or null where it answers arithmetic. */

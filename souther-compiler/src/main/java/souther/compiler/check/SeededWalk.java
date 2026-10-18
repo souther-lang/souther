@@ -4,10 +4,8 @@ import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.types.BindingId;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
-import java.util.function.UnaryOperator;
 
 /**
  * A call of an operation that walks a container from a seed ({@link Reductions}), with the parts a
@@ -48,9 +46,11 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
      * The end the step keeps of the answer so far and one value it reads of the element alone.
      *
      * @param extreme which end of the two the step answers
-     * @param value   the other of the two, which reads nothing of the answer so far
+     * @param value   the other of the two, which reads nothing of the answer so far, where it is
+     *                read: past every name it was given
+     * @param <E>     what a reader reads a name in
      */
-    public record AnEndKept(Extreme extreme, Core value) {}
+    public record AnEndKept<E>(Extreme extreme, ValueStanding.ReadThrough<E> value) {}
 
     /**
      * The end this walk's step keeps, where the step answers the answer so far or one value of the
@@ -63,87 +63,51 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
      * {@code Int.max(w, l.discount)} keep the greater of {@code w} and {@code l.discount}; a step
      * that adds to what it chose, or chooses by anything but how the two stand, keeps neither.
      *
-     * <p>A newtype's value read off either of the two is that one where the step compares them
-     * ({@link #opened}), so a step comparing {@code l.rate.value} with {@code w.value} and
-     * answering {@code l.rate} or {@code w} keeps an end of {@code w} and {@code l.rate}.
+     * <p>What the step answers is read where the reader reads names
+     * ({@link TheSignOfAnOrder.Sides#standing}), and the values its choice reads as they are
+     * compared there ({@link Extreme#comparedAs}). So the choice is the same however it is named:
+     * {@code { let next = if l.discount > w then l.discount else w  next }},
+     * {@code { let d = l.discount  if d > w then d else w }} and the step written out keep one end
+     * of {@code w} and {@code l.discount}, and a step comparing {@code l.rate.value} with
+     * {@code w.value} and answering {@code l.rate} or {@code w} keeps an end of {@code w} and
+     * {@code l.rate}.
      *
-     * <p>The choice may stand under names the step gives values that read nothing of the answer so
-     * far ({@link #within}): {@code { let d = l.discount  if d > w then d else w }} keeps the
-     * greater of {@code w} and {@code d}, which is {@code l.discount} read under that name.
-     *
-     * @param ofTheArguments the comparison a condition of the step states, as the comparison of
-     *                       the values it holds exactly where ({@link Extreme#casesOf}), read
-     *                       under the names the choice stands under
+     * @param at    where the walk stands
+     * @param sides what the reader answers about where it reads
+     * @param <E>   what the reader reads a name in
      */
-    public AnEndKept endKept(DeclarationNewtypes newtypes,
-                             UnaryOperator<StatedComparison> ofTheArguments) {
+    public <E> AnEndKept<E> endKept(E at, TheSignOfAnOrder.Sides<E> sides) {
         BindingId carried = accumulator.binding();
-        List<Core.LetIn> names = within();
-        Core chosen = names.isEmpty() ? step.body() : names.getLast().body();
-        List<Choice.ADefinitionCase> cases = Extreme.casesOf(chosen, ofTheArguments);
-        Core value = null;
+        ValueStanding.ReadThrough<E> answered = sides.standing(step.body(), at);
+        E chosenAt = answered.at();
+        List<Choice.ADefinitionCase> cases = Extreme.casesOf(answered.value(), chosenAt, sides);
+        ValueStanding.ReadThrough<E> value = null;
         for (Choice.ADefinitionCase each : cases) {
             Core answers = Extreme.answeredBy(each);
             if (answers == null) {
                 return null;
             }
-            if (isTheCarried(answers, carried)) {
+            ValueStanding.ReadThrough<E> read = Extreme.comparedAs(answers, chosenAt, sides);
+            if (isTheCarried(read.value(), carried)) {
                 continue;
             }
-            if (value != null && !Core.sameValue(value, answers)) {
+            if (value != null && !Core.sameValue(value.value(), read.value())) {
                 return null;
             }
-            value = answers;
+            value = read;
         }
-        if (value == null || WhatABodyReads.binding(value, carried)) {
+        if (value == null || WhatABodyReads.binding(value.value(), carried)) {
             return null;
         }
-        Core other = value;
+        Core other = value.value();
         Extreme extreme = Extreme.keptBy(cases,
-                e -> isTheCarried(opened(e, newtypes), carried),
-                e -> Core.sameValue(opened(e, newtypes), other));
-        return extreme == null ? null : new AnEndKept(extreme, value);
-    }
-
-    /**
-     * The names the step gives values before it chooses, outermost first, as far as each value
-     * reads nothing of the answer so far: what a value the choice reads is read under. A name
-     * given something of the answer so far ends them, since a value read under it may be that.
-     */
-    public List<Core.LetIn> within() {
-        BindingId carried = accumulator.binding();
-        List<Core.LetIn> out = new ArrayList<>();
-        Core at = Core.withoutStanding(step.body());
-        while (at instanceof Core.LetIn let && !WhatABodyReads.binding(let.value(), carried)) {
-            out.add(let);
-            at = Core.withoutStanding(let.body());
-        }
-        return out;
+                e -> isTheCarried(Extreme.comparedAs(e, chosenAt, sides).value(), carried),
+                e -> Core.sameValue(Extreme.comparedAs(e, chosenAt, sides).value(), other));
+        return extreme == null ? null : new AnEndKept<>(extreme, value);
     }
 
     private static boolean isTheCarried(Core e, BindingId carried) {
         return Core.withoutStanding(e) instanceof Core.Read read
                 && carried.equals(read.binding());
-    }
-
-    /**
-     * The value {@code e} reads the value a newtype wears off, through every newtype it reads one
-     * off; {@code e} itself where it reads none. Reading the value a newtype wears goes nowhere
-     * ({@link Location#isStep}), and the two are ordered alike. A projection is asked of its last
-     * name, as the access it stands for is.
-     */
-    public static Core opened(Core e, DeclarationNewtypes newtypes) {
-        Core at = e;
-        while (true) {
-            Core.FieldAccess last = switch (Core.withoutStanding(at)) {
-                case Core.FieldAccess access -> access;
-                case Core.FieldProjection projection -> projection.lastAccess();
-                default -> null;
-            };
-            if (last == null || Location.isStep(last.target().type(), last.field(), newtypes)) {
-                return at;
-            }
-            at = last.target();
-        }
     }
 }
