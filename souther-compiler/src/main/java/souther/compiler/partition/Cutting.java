@@ -1496,6 +1496,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<WhyUnread> stops = new ArrayList<>();
         Set<NonAffineOperation> beyondTheForm = EnumSet.noneOf(NonAffineOperation.class);
         for (WhereEachLineDecides.Decides each : lines) {
+            if (undrawn) {
+                whyPastAnUndrawnOne(behavior, each.line(), written, read, reads, stops,
+                        beyondTheForm);
+                continue;
+            }
             Read line = lineOf(behavior, each.line(), written, read, reads);
             PlaceOfALine alone = new PlaceOfALine(THE_COMPARISON, each.line().key());
             if (line == null) {
@@ -1508,15 +1513,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 if (against == null) {
                     undrawn = true;
                     whyNoLine(each.line(), stops, beyondTheForm);
-                } else if (!undrawn) {
+                } else {
                     parts.add(new Read.Several.Part(alone, against(against, each.line()),
                             List.of()));
                 }
-                continue;
-            }
-            // Past a relation that leaves the statement undrawn, the rest are asked only what
-            // stopped under them.
-            if (undrawn) {
                 continue;
             }
             // The line is the input's, and where it decides turns on a relation to a value no
@@ -1551,6 +1551,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         boolean allLines = parts.stream().allMatch(part -> Read.Several.Part.isALine(part.line()));
         return drawn || allLines ? new TheParts.Drawn(new Read.Several(parts))
                 : TheParts.READ_TO_THE_END;
+    }
+
+    /**
+     * Why {@code relation}, past one that has already left the statement undrawn, is no line, added
+     * to the rest only where it is none.
+     *
+     * <p>Its reasons are asked before it is drawn. A relation with none adds nothing whether or not
+     * it is a line, so only one with some is drawn, to see whether it is one. A relation with a
+     * reason relates the input to no other value ({@link #heldAgainstAnotherValue}), so drawing it
+     * is all there is to ask.
+     */
+    private static void whyPastAnUndrawnOne(String behavior, Proposition.Compared relation,
+                                            Core written, InputReading read, InputReads reads,
+                                            List<WhyUnread> stops,
+                                            Set<NonAffineOperation> beyondTheForm) {
+        List<WhyUnread> stopped = new ArrayList<>();
+        Set<NonAffineOperation> beyond = EnumSet.noneOf(NonAffineOperation.class);
+        whyNoLine(relation, stopped, beyond);
+        if ((stopped.isEmpty() && beyond.isEmpty())
+                || lineOf(behavior, relation, written, read, reads) != null) {
+            return;
+        }
+        stops.addAll(stopped);
+        beyondTheForm.addAll(beyond);
     }
 
     /**
