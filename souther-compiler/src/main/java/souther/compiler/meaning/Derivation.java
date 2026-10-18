@@ -524,15 +524,47 @@ public sealed interface Derivation {
         return out;
     }
 
-    /** Whether no value both {@code one} and {@code other} select can be, by the cases of one
-     *  subject each holds it to. */
+    /**
+     * Whether no value both {@code one} and {@code other} select can be: by the cases of one
+     * subject each holds it to, or by where each puts one number against nought — {@code x < 0}
+     * and {@code x == 0} are never both met, as the cases of a comparison the library writes are
+     * not. The arm before is then no arm the second could have been taken in place of, and its
+     * denial says nothing the second does not.
+     */
     private static boolean apart(Proposition one, Proposition other) {
-        return one instanceof Proposition.InCases(
-                DecisionSubject of, CasesLeft cases, boolean holds, String _)
-                && holds
-                && other instanceof Proposition.InCases(
-                        DecisionSubject same, CasesLeft chosen, boolean chosenHolds, String _)
-                && chosenHolds && of.equals(same) && cases.meet(chosen) == null;
+        if (one instanceof Proposition.InCases(
+                DecisionSubject of, CasesLeft cases, boolean holds, String _)) {
+            return holds && other instanceof Proposition.InCases(
+                    DecisionSubject same, CasesLeft chosen, boolean chosenHolds, String _)
+                    && chosenHolds && of.equals(same) && cases.meet(chosen) == null;
+        }
+        return one instanceof Proposition.Compared(
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, String _)
+                && other instanceof Proposition.Compared(
+                        Relation.Affine(LinearForm<Quantity> otherForm, Rel otherRel),
+                        boolean otherHolds, String _)
+                && apart(form, holds ? rel : rel.denied(), otherForm,
+                        otherHolds ? otherRel : otherRel.denied());
+    }
+
+    /** Whether {@code form rel 0} and {@code otherForm otherRel 0} are met on no sign the one
+     *  number they are both of may have, where they are of one number either way round. */
+    private static boolean apart(LinearForm<Quantity> form, Rel rel, LinearForm<Quantity> otherForm,
+                                 Rel otherRel) {
+        Rel against;
+        if (form.equals(otherForm)) {
+            against = otherRel;
+        } else if (form.negate().equals(otherForm)) {
+            against = otherRel.turned();
+        } else {
+            return false;
+        }
+        for (int sign = -1; sign <= 1; sign++) {
+            if (rel.holds(sign) && against.holds(sign)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -983,6 +1015,10 @@ public sealed interface Derivation {
                         yield holds && ofEach.stream()
                                 .allMatch(each -> within.reads(some.ofTheElement(), each));
                     }
+                    // Settled by the elements written out, the same on every run (LawAtACall): a
+                    // container written out stands at no position, so there is none to hold the
+                    // reading to.
+                    case WrittenOut _ -> positionOf(some.container()) == null;
                     default -> {
                         List<Derivation> oneOf = read.oneOf();
                         yield oneOf != null && !oneOf.isEmpty()

@@ -698,6 +698,31 @@ final class DerivedNumericFacts {
                         case NO -> Shown.YES;
                         case UNSETTLED -> Shown.UNSETTLED;
                     };
+            case Derivation.HoldsSomethingWhere.Holding.Stands(
+                    LinearForm<FactSubject> form, Rel rel) -> {
+                Bounds lies = boundsOf(form, base, terms, done, deriving, copies);
+                Bounds where = whereItStands(rel, true);
+                Bounds whereNot = whereItStands(rel, false);
+                yield !lies.meet(whereNot).holdsAValue() ? Shown.YES
+                        : !lies.meet(where).holdsAValue() ? Shown.NO : Shown.UNSETTLED;
+            }
+        };
+    }
+
+    /**
+     * Where a number stands against nought as {@code rel} says, or as it does not where
+     * {@code holds} is false — as one range, which a number other than nought is not: that one is
+     * the whole line, and so says nothing it does not hold at nought.
+     */
+    private static Bounds whereItStands(Rel rel, boolean holds) {
+        Rel asked = holds ? rel : rel.denied();
+        return switch (asked) {
+            case GE -> AT_OR_ABOVE_NOUGHT;
+            case GT -> new Bounds(Endpoint.exclusive(Count.ZERO), null);
+            case LE -> AT_OR_BELOW_NOUGHT;
+            case LT -> new Bounds(null, Endpoint.exclusive(Count.ZERO));
+            case EQ -> AT_NOUGHT;
+            case NE -> Bounds.OPEN;
         };
     }
 

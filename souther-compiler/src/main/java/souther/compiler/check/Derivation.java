@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -365,6 +366,10 @@ sealed interface Derivation {
 
             /** {@code denied} does not hold. */
             record Not(Holding denied) implements Holding {}
+
+            /** {@code form}, over some counts and numbers, stands against nought as {@code rel}
+             *  says. */
+            record Stands(LinearForm<FactSubject> form, Rel rel) implements Holding {}
         }
 
         @Override
@@ -390,6 +395,7 @@ sealed interface Derivation {
                 case Holding.AnyOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
                 case Holding.AllOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
                 case Holding.Not(Holding denied) -> counts(denied, out);
+                case Holding.Stands(LinearForm<FactSubject> form, Rel _) -> out.add(form);
             }
         }
 
@@ -403,6 +409,9 @@ sealed interface Derivation {
                         b instanceof Holding.AllOf it && same(ways, it.ways(), same);
                 case Holding.Not(Holding denied) ->
                         b instanceof Holding.Not it && same(denied, it.denied(), same);
+                case Holding.Stands(LinearForm<FactSubject> form, Rel rel) ->
+                        b instanceof Holding.Stands it && rel == it.rel()
+                                && same.forms(form, it.form());
             };
         }
 

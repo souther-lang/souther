@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementsWrittenOut;
+import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -94,6 +95,13 @@ public final class WrittenOutElements {
                                       DeclarationNewtypes newtypes) {
         return ElementsWrittenOut.sizeOf(new ElementsWrittenOut.Stood<>(container.value(),
                 container.at()), new Names(symbols, newtypes, Set.of()));
+    }
+
+    /** How a walk of the elements of a container reads names here, for a reading that walks them
+     *  itself ({@link LawAtACall}). */
+    public static ElementsWrittenOut.Reading<InputReads> reading(Symbols symbols,
+                                                                 DeclarationNewtypes newtypes) {
+        return new Names(symbols, newtypes, Set.of());
     }
 
     private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {

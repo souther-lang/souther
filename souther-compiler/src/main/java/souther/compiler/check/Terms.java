@@ -927,6 +927,11 @@ final class Terms {
         return counted.isPresent() ? BigDecimal.valueOf(counted.getAsLong()) : null;
     }
 
+    /** How a walk of the elements of a container ({@link ElementsWrittenOut}) reads names here. */
+    ElementsWrittenOut.Reading<Denotations> elementsReading() {
+        return elements;
+    }
+
     /** An expression a value is written at, and the environment that expression is read in — which
      * travel together, since following a name into a binding is what makes them differ. */
     record Given(Core value, Denotations at) {}
@@ -1173,7 +1178,14 @@ final class Terms {
             // by whichever reader happened to get furthest. That is the same order the arithmetic is
             // in — a meaning with no recipe stops rather than falling through — and it is why the
             // question asked of a call is whether it is a walk rather than whether one was recorded.
-            made = chosen(Choice.of(asOperator(e)), at);
+            //
+            // A call whose operation the library defines in cases that are no choice between its
+            // values answers what the case reached computes, and is one of those answers in the
+            // same way.
+            Core operator = asOperator(e);
+            Choice choice = Choice.of(operator);
+            made = choice != null ? chosen(choice, at)
+                    : operator instanceof Core.PreservedCall call ? definedByCases(call, at) : null;
         }
         if (made == null) {
             return;
@@ -1687,6 +1699,61 @@ final class Terms {
             arms.add(new Derivation.Chosen.Arm(form, settledBy(arm.decidedBy(), at, chose)));
         }
         return new Derivation.Chosen(arms);
+    }
+
+    /**
+     * The recipe {@code call} is where its operation is defined in cases, one arm for each: what
+     * the case answers, settled by how the values it was given stand there — or null where it is
+     * defined in none, or a case names a value this cannot read.
+     *
+     * <p>The cases are {@link Choice#casesOf}'s, the one reading of the library's definitions in the
+     * values a call was given, which the reading of an input reads them through as well. So
+     * {@code Int.abs(-48)} is the 48 its first case answers, its second case asking a value below
+     * nought to stand at or above it.
+     *
+     * <p>Every case or none, for the reason {@link #chosen} gives.
+     */
+    private Derivation definedByCases(Core.PreservedCall call, Denotations at) {
+        List<Choice.ADefinitionCase> cases = Choice.casesOf(call);
+        if (cases.isEmpty()) {
+            return null;
+        }
+        List<Derivation.Chosen.Arm> arms = new ArrayList<>();
+        for (Choice.ADefinitionCase each : cases) {
+            LinearForm<FactSubject> answer = formOver(each.answers(), at);
+            if (answer == null) {
+                return null;
+            }
+            List<NumericConstraint> settles = new ArrayList<>();
+            for (Choice.FormsStand stands : each.given()) {
+                LinearForm<FactSubject> left = formOver(stands.left(), at);
+                LinearForm<FactSubject> right = formOver(stands.right(), at);
+                LinearForm<FactSubject> apart = left == null || right == null ? null
+                        : left.minus(right).orNull();
+                if (apart == null) {
+                    return null;
+                }
+                settles.add(new NumericConstraint(apart, stands.rel()));
+            }
+            arms.add(new Derivation.Chosen.Arm(answer, settles));
+        }
+        return new Derivation.Chosen(arms);
+    }
+
+    /** {@code form}, each value it is written over read as the form it is in {@code at} — or null
+     *  where one of them reads as none, or the sum has no representation. */
+    private LinearForm<FactSubject> formOver(LinearForm<Core> form, Denotations at) {
+        LinearForm<FactSubject> out = LinearForm.constant(form.constant());
+        for (Map.Entry<Core, ExactRatio> each : form.coefs().entrySet()) {
+            LinearForm<FactSubject> value = affineOf(each.getKey(), at);
+            LinearForm<FactSubject> before = out;
+            out = value == null ? null
+                    : value.times(each.getValue()).flatMap(before::plus).orNull();
+            if (out == null) {
+                return null;
+            }
+        }
+        return out;
     }
 
     /**
