@@ -693,42 +693,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Quantity.KeptSoFar kept = side.kept();
         boolean greatest = kept.extreme() instanceof Extreme.Greatest;
         SearchRegion declared = read.quantities().region();
-        // Where the seed lies, and what it is shown to take.
-        NumericDomain.Bounds seed;
-        NumericDomain.Bounds seedTakes;
-        switch (kept.seed()) {
-            case Quantity.KeptSoFar.Seed.Written(ExactRatio number) -> {
-                if (!(Count.written(number) instanceof ExactAnswer.Held<Optional<Count>>(
-                        Optional<Count> written)) || written.isEmpty()) {
-                    return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
-                            NumericDomain.Bounds.OPEN, null, null, false);
-                }
-                Endpoint at = Endpoint.inclusive(written.get());
-                seed = new NumericDomain.Bounds(at, at);
-                seedTakes = seed;
-            }
-            case Quantity.KeptSoFar.Seed.OfTheInput(NumericTerm.FromOnePosition number) -> {
-                seed = region.projectionOf(number)
-                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
-                        ? within : NumericDomain.Bounds.OPEN;
-                Source source = sourceOf(number, read);
-                Way way = !heldWhole || source == null ? Way.TIES
-                        : wayOf(number, source.named()
-                                ? statingAnythingOfItsParameter(number, conditions)
-                                : statingAnythingOf(number, conditions));
-                seedTakes = way == Way.TIES ? null : realized(number, source, region, way);
-            }
-            // The first element of a key files its own value, so what is kept is the end of the
-            // earlier elements' numbers alone: it lies where the number does, and only a key two
-            // elements share has one.
-            case Quantity.KeptSoFar.Seed.OfTheKey _ -> {
-                seed = declared.projectionOf(kept.ofEach())
-                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
-                        ? within : NumericDomain.Bounds.OPEN;
-                seedTakes = null;
-            }
+        Start start = startOf(kept, side, region, read, conditions, heldWhole);
+        if (start == null) {
+            return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
+                    NumericDomain.Bounds.OPEN, null, null, false);
         }
-        boolean ofAKey = kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheKey;
+        NumericDomain.Bounds seed = start.lies();
+        NumericDomain.Bounds seedTakes = start.takes();
         NumericDomain.Bounds twoOrMore =
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(2)), null);
         // Where the element's number lies past the least the seed may be, on any element before.
@@ -746,20 +717,75 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds several = kept.howMany() == null ? null
                 : region.wholeRunOf(kept.howMany());
         boolean untouched = heldWhole && wayOf(kept.ofEach(), stating) == Way.UNTOUCHED
-                && (!(kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheKey(var key, var _))
-                        || statingAnythingOf(new NumericTerm.ValueOf(key), conditions).isEmpty());
-        NumericDomain.Bounds taken = (seedTakes == null && !ofAKey) || ofEach == null
+                && !theWayStatesTheKey(kept.seed(), conditions);
+        // A seed whose values are not shown leaves nothing for the elements after it to be
+        // beside.
+        NumericDomain.Bounds taken = (start.seeded() && seedTakes == null) || ofEach == null
                 || !untouched || several == null || !several.meet(twoOrMore).holdsAValue() ? null
                 : realized(kept.ofEach(), ofEach, declared, Way.UNTOUCHED);
         NumericDomain.Bounds above = taken == null ? null
-                : ofAKey ? taken : taken.meet(pastOf(seedTakes, greatest));
+                : start.seeded() ? taken.meet(pastOf(seedTakes, greatest)) : taken;
         if (above != null && above.holdsAValue()) {
-            realizes = ofAKey || !joined(seedTakes, above, greatest, carrier) ? above
-                    : NumericDomain.Bounds.spanning(seedTakes, above);
+            realizes = start.seeded() && joined(seedTakes, above, greatest, carrier)
+                    ? NumericDomain.Bounds.spanning(seedTakes, above) : above;
         }
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
                 asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
                 false);
+    }
+
+    /**
+     * Where what a walk keeps an end of starts.
+     *
+     * @param lies   where the end may lie before any element past the first is counted: the seed,
+     *               or, where there is none, wherever the element's number lies
+     * @param takes  what the first element's end is shown to take, or null where nothing is shown
+     * @param seeded whether the walk starts from a value, so that the end is that value on the
+     *               first element; a walk filing under a key starts from none, since the first
+     *               element of a key files its own value and is compared with nothing
+     */
+    private record Start(NumericDomain.Bounds lies, NumericDomain.Bounds takes, boolean seeded) {}
+
+    /** Where the walk {@code kept} describes starts, or null where its seed is a number this
+     *  reading does not count with. */
+    private static Start startOf(Quantity.KeptSoFar kept, Side side, SearchRegion region,
+                                 InputReading read, List<OnAWay> conditions, boolean heldWhole) {
+        return switch (kept.seed()) {
+            case Quantity.KeptSoFar.Seed.Written(ExactRatio number) -> {
+                if (!(Count.written(number) instanceof ExactAnswer.Held<Optional<Count>>(
+                        Optional<Count> written)) || written.isEmpty()) {
+                    yield null;
+                }
+                Endpoint at = Endpoint.inclusive(written.get());
+                NumericDomain.Bounds seed = new NumericDomain.Bounds(at, at);
+                yield new Start(seed, seed, true);
+            }
+            case Quantity.KeptSoFar.Seed.OfTheInput(NumericTerm.FromOnePosition number) -> {
+                NumericDomain.Bounds seed = region.projectionOf(number)
+                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
+                        ? within : NumericDomain.Bounds.OPEN;
+                Source source = sourceOf(number, read);
+                Way way = !heldWhole || source == null ? Way.TIES
+                        : wayOf(number, source.named()
+                                ? statingAnythingOfItsParameter(number, conditions)
+                                : statingAnythingOf(number, conditions));
+                yield new Start(seed, way == Way.TIES ? null
+                        : realized(number, source, region, way), true);
+            }
+            case Quantity.KeptSoFar.Seed.OfTheKey _ -> new Start(
+                    read.quantities().region().projectionOf(kept.ofEach())
+                            instanceof NumericDomain.FormProjection.Within(
+                                    NumericDomain.Bounds within)
+                            ? within : NumericDomain.Bounds.OPEN, null, false);
+        };
+    }
+
+    /** Whether the way states anything of the key {@code seed} files under, which may keep the
+     *  elements of one key apart or together. */
+    private static boolean theWayStatesTheKey(Quantity.KeptSoFar.Seed seed,
+                                              List<OnAWay> conditions) {
+        return seed instanceof Quantity.KeptSoFar.Seed.OfTheKey(var key, var _)
+                && !statingAnythingOf(new NumericTerm.ValueOf(key), conditions).isEmpty();
     }
 
     /** Every value at or past the least of {@code run} toward the end kept — at or above it for
@@ -1258,24 +1284,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * lies between: named only where a rule of the container, or of a value it sits in, reads a
      * place inside its elements. That is where a rule relating one element to another is written.
      * A rule of the element is about that one element, and what was kept is the number on the
-     * others. And named where a seed the input holds is: what was kept is that seed too. Where
-     * what was kept is of the elements sharing a key, named where a rule of a value the key sits
-     * in reads the key: it may tie the key to the number, so that the elements of one key are
-     * left fewer values than the elements are, and the elements of the key whose number is being
-     * compared are left what that number is.
+     * others. And named where a seed the input holds is: what was kept is that seed too.
      */
     private static Source keptSource(Quantity.KeptSoFar kept, InputReading read) {
         Source each = sourceOf(kept.ofEach(), read);
         if (each == null) {
             return null;
         }
-        boolean seedNamed = switch (kept.seed()) {
-            case Quantity.KeptSoFar.Seed.Written _ -> false;
-            case Quantity.KeptSoFar.Seed.OfTheInput(var from) ->
-                    sourceOf(from, read) == null || sourceOf(from, read).named();
-            case Quantity.KeptSoFar.Seed.OfTheKey(TermPath key, var _) ->
-                    namedDownTo(key, key.steps().size() - 1, read) != Named.NOT;
-        };
+        boolean seedNamed = kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)
+                && (sourceOf(from, read) == null || sourceOf(from, read).named());
         return new Source(each.takes(), each.onlyItsEnds(), seedNamed
                 || namedDownTo(kept.ofEach().subjectPath(), kept.container().steps().size(), read)
                         != Named.NOT);

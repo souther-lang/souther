@@ -1210,7 +1210,10 @@ public final class InputReads {
                 || !(arm.binding() instanceof Core.ArmBinding.Payload)) {
             return inside;
         }
-        Core lookup = standing(scrutinee, symbols, newtypes).value();
+        // A call is the lookup itself; only a name for one is followed to it.
+        Core written = Core.withoutStanding(scrutinee);
+        Core lookup = written instanceof Core.Read
+                ? standing(scrutinee, symbols, newtypes).value() : written;
         return AnOperationApplied.of(lookup) instanceof AnOperationApplied looked
                 && GET.equals(looked.operation())
                 ? new InputReads(inside.names.opening(arm.binder().binding(),

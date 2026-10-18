@@ -4726,26 +4726,54 @@ final class Pullback {
             return whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
                     instanceof PathResolution.At ? LinearForm.constant(counted.first()) : null;
         }
+        WhereFiled where = whereFiled(whole, filed);
+        if (where == null) {
+            return null;
+        }
+        return switch (filed.filed()) {
+            case KeyedAccumulation.Filed.Counted counted ->
+                    counted(where.container(), where.key(), counted);
+            case KeyedAccumulation.Filed.Kept kept -> {
+                NumericTerm.ExtremeOfItsKey extreme = where.value() == null ? null
+                        : NumericTerm.ExtremeOfItsKey.of(where.container(), where.key(),
+                                where.value(), kept.extreme());
+                yield readOnAnOrder(extreme)
+                        ? LinearForm.atom(new DecisionAtom.OfTheInput(extreme)) : null;
+            }
+        };
+    }
+
+    /**
+     * Where a fold that files under the key of each element of a list stands in the container of
+     * the input the list walked holds one value for each element of.
+     *
+     * @param container the container
+     * @param key       where the key stands, among the places of its elements
+     * @param value     where the value an end is kept of stands, or null where the fold keeps no
+     *                  end or the value is not the element's own: a value wearing a newtype keeps
+     *                  which values are equal and nothing about their order
+     */
+    private record WhereFiled(TermPath container, TermPath key, TermPath value) {}
+
+    /** Where {@code filed}, read where {@code whole} stands, files — or null where the list is no
+     *  container of the input holding one value for each element, or the key is no place of it. */
+    private WhereFiled whereFiled(Denotation whole, KeyedAccumulation filed) {
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
         OnePerElement walked = whole.at().onePerElementOf(filed.walked(), symbols, newtypes);
         OnePerElement.Answered key = walked == null ? null
                 : whole.at().answeredOf(filed.key(), filed.element().binding(), newtypes);
         if (key == null) {
             return null;
         }
-        TermPath held = walked.container();
-        TermPath place = walked.placeOf(key.at());
-        return switch (filed.filed()) {
-            case KeyedAccumulation.Filed.Counted counted -> counted(held, place, counted);
-            case KeyedAccumulation.Filed.Kept kept -> {
-                OnePerElement.Answered value = walked.wrapped() ? null
-                        : whole.at().answeredOf(kept.value(), filed.element().binding(), newtypes);
-                NumericTerm.ExtremeOfItsKey extreme = value == null || value.wrapped() ? null
-                        : NumericTerm.ExtremeOfItsKey.of(held, place, walked.placeOf(value.at()),
-                                kept.extreme());
-                yield readOnAnOrder(extreme)
-                        ? LinearForm.atom(new DecisionAtom.OfTheInput(extreme)) : null;
-            }
-        };
+        TermPath value = null;
+        if (filed.filed() instanceof KeyedAccumulation.Filed.Kept kept && !walked.wrapped()) {
+            OnePerElement.Answered answered = whole.at().answeredOf(kept.value(),
+                    filed.element().binding(), newtypes);
+            value = answered == null || answered.wrapped() ? null
+                    : walked.placeOf(answered.at());
+        }
+        return new WhereFiled(walked.container(), walked.placeOf(key.at()), value);
     }
 
     /**
@@ -4895,21 +4923,13 @@ final class Pullback {
                 || !name.binding().equals(kept.found())) {
             return Optional.empty();
         }
-        OnePerElement walked = whole.at().onePerElementOf(filed.walked(), symbols, newtypes);
-        if (walked == null || walked.wrapped()) {
+        WhereFiled where = whereFiled(whole, filed);
+        if (where == null || where.value() == null) {
             return Optional.empty();
         }
-        OnePerElement.Answered key = whole.at().answeredOf(filed.key(),
-                filed.element().binding(), newtypes);
-        OnePerElement.Answered value = whole.at().answeredOf(kept.value(),
-                filed.element().binding(), newtypes);
-        if (key == null || value == null || value.wrapped()) {
-            return Optional.empty();
-        }
-        NumericTerm.FromOnePosition each = new NumericTerm.ValueOf(walked.placeOf(value.at()));
-        TermPath keyPlace = walked.placeOf(key.at());
+        NumericTerm.FromOnePosition each = new NumericTerm.ValueOf(where.value());
         if (!readOnAnOrder(each)
-                || Quantity.KeptSoFar.Seed.OfTheKey.holdsTheNumber(keyPlace, each)) {
+                || Quantity.KeptSoFar.Seed.OfTheKey.holdsTheNumber(where.key(), each)) {
             return Optional.empty();
         }
         NumericTerm.FromOnePosition howMany = sizeOf(filed.walked(), whole.at())
@@ -4917,9 +4937,9 @@ final class Pullback {
                 && soleQuantity(size) instanceof DecisionAtom.OfTheInput(
                         NumericTerm.FromOnePosition count) ? count : null;
         return Optional.of(new Quantity.KeptSoFar(kept.extreme(),
-                new Quantity.KeptSoFar.Seed.OfTheKey(keyPlace, opened == null ? Optional.empty()
-                        : Optional.of(opened.entered())),
-                walked.container(), each, howMany));
+                new Quantity.KeptSoFar.Seed.OfTheKey(where.key(), opened == null
+                        ? Optional.empty() : Optional.of(opened.entered())),
+                where.container(), each, howMany));
     }
 
     /** What a walk starting from {@code seed} starts from: a number written out, or one number

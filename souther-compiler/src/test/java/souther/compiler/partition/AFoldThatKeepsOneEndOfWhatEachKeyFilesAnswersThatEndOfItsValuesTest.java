@@ -419,8 +419,8 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 let stale (quote, staleAfter) =
                     Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
                 """.formatted(COMPARED_WITH_WHAT_WAS_FOUND)));
-        assertFalse(report.contains("rather than dividing the values here, about"
-                + " `quote.touches[*].days`"), report);
+        assertTrue(report.contains("it relates the value here to another value not shown to"
+                + " reach every value here"), report);
     }
 
     @Test
@@ -452,6 +452,17 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 WITHIN_A_HUNDRED + " && (account /= \"a\" || days <= 10)",
                 COMPARED_WITH_WHAT_WAS_FOUND));
         assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
+    /** A rule of the element that reads only the key leaves the numbers of the elements of one key
+     *  as free as it leaves every number, so it is no reason to leave the comparison unread. */
+    @Test
+    void aRuleOfTheElementReadingOnlyTheKeyLeavesTheComparisonRead() {
+        for (String step : List.of(COMPARED_WITH_WHAT_WAS_FOUND, LOOKUP_AND_FILING)) {
+            String report = report(measured(modelWith(
+                    WITHIN_A_HUNDRED + " && String.length(account) > 0", step)));
+            assertFalse(report.contains("not read"), report);
+        }
     }
 
     /** Elements the list's own rule keeps from sharing a key have no earlier element of their key
