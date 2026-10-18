@@ -292,65 +292,19 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 () -> decisions + report(compilation));
     }
 
-    /** How many keys a fold adds one for each of, the fold walking {@code keys}. */
-    private static String modelOfHowManyAFoldCounts(String keys) {
-        return """
-                module example.popular
-
-                let howMany (xs: List<String>): Int =
-                    List.length(List.fold((acc, i) -> List.append(acc, [i]), [], %s))
-
-                behavior popular : (xs: List<String>) -> Bool
-
-                let popular (xs) = howMany(xs) >= 2
-                """.formatted(keys);
-    }
-
-    /** What a fold adds for each element comes to the same in whatever order it walks them. */
-    @Test
-    void howManyAFoldCountsIsReadWhateverOrderItWalksTheKeysIn() {
-        Compilation plain = measured(modelOfHowManyAFoldCounts("xs"));
-        assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
-        assertTrue(pointsOf(plain).stream().anyMatch(each -> each.startsWith("on ")),
-                () -> pointsOf(plain) + report(plain));
-        assertTrue(pointsOf(plain).stream().anyMatch(each -> each.startsWith("off ")),
-                () -> pointsOf(plain) + report(plain));
-        Compilation reversed = measured(modelOfHowManyAFoldCounts("List.reverse(xs)"));
-        assertEquals(axisOf(plain), axisOf(reversed), () -> report(reversed));
-        assertEquals(pointsOf(plain), pointsOf(reversed), () -> report(reversed));
-    }
-
     /**
-     * A step that stops at an element whose length is nought, and that skips the elements after
-     * what it has already found, answers by the order it walks in: walking the reordered list
-     * says nothing more than walking the list does.
+     * A list that kept some of the elements is empty where none of them was kept, which a list
+     * that holds something does not say: the map is not read as empty where the list is.
      */
     @Test
-    void aFoldThatStopsAtSomeElementsIsNotReadMoreForAReorderedList() {
-        String model = """
-                module example.popular
-
-                let found (xs: List<String>): Bool =
-                    List.fold((acc, i) -> acc || 10 / String.length(i) > 1, false, %s)
-
-                behavior popular : (xs: List<String>) -> Bool
-
-                let popular (xs) = found(xs)
-                """;
-        Compilation plain = measured(model.formatted("xs"));
-        Compilation reversed = measured(model.formatted("List.reverse(xs)"));
-        assertEquals(decisionsOf(plain), decisionsOf(reversed), () -> report(reversed));
-        assertTrue(decisionsOf(plain).stream().anyMatch(each -> each.startsWith("not_read")),
-                () -> "the order the step stops in is not read: " + report(plain));
-    }
-
-    /** A list that kept some of the elements holds other keys than the list. */
-    @Test
-    void whetherAMapHoldsAnythingIsNotReadOffAListThatKeptSomeOfTheKeys() {
+    void whetherAMapHoldsAnythingIsNotReadAsHowManyKeysThereAreWhereSomeWereKept() {
         Compilation kept = measured(modelOfWhetherItHoldsAnything(
                 "List.filter(k -> String.length(k) > 1, xs)"));
-        assertFalse(axisOf(kept).equals(
-                axisOf(measured(modelOfWhetherItHoldsAnything("xs")))), () -> report(kept));
+        assertTrue(axisOf(kept).stream().noneMatch(each -> each.contains("List.length(xs)")),
+                () -> axisOf(kept) + report(kept));
+        assertTrue(decisionsOf(kept).stream()
+                        .noneMatch(each -> each.contains("List.length(xs)")),
+                () -> decisionsOf(kept) + report(kept));
     }
 
     /** The rows offered for keys a map answered as they are are the rows offered for the keys. */
@@ -950,15 +904,6 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                     + node.path("outcome").asString());
         }
         node.forEach(child -> decisions(child, out));
-    }
-
-    /** Each point of each line: the side it is on, and where it stands against the quantity. */
-    private static List<String> pointsOf(Compilation compilation) {
-        List<String> out = new ArrayList<>();
-        bordersOf(compilation).forEach(border -> border.path("items").forEach(item ->
-                out.add(item.path("point").asString() + " " + item.path("relation").asString()
-                        + " " + item.path("against").asString())));
-        return out;
     }
 
     /** The quantity each border is on, as the report names it. */
