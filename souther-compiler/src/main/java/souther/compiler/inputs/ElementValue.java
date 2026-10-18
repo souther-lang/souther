@@ -277,14 +277,14 @@ public sealed interface ElementValue {
 
         @Override
         public String toString() {
-            List<String> arms = new ArrayList<>();
-            for (Arm arm : this.arms) {
-                arms.add("when " + arm.taken() + " then " + arm.value());
+            List<String> said = new ArrayList<>();
+            for (Arm arm : arms) {
+                said.add("when " + arm.taken() + " then " + arm.value());
             }
             if (rest != null) {
-                arms.add("otherwise " + rest);
+                said.add("otherwise " + rest);
             }
-            return String.join(" ", arms);
+            return String.join(" ", said);
         }
     }
 

@@ -278,9 +278,10 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                 + " when @B then 1·@B.fee + 0 | deductions[*]}) = 5` in `decide`: the search left"
                 + " something untried"), rows);
         String report = report(model);
-        assertTrue(report.contains("= 5 — this compiler stopped at how many elements a total is"
-                + " spread over, and writes some of the elements whose computed number is made of"
-                + " several fields, chosen by a flag or chosen by their case"), report);
+        assertTrue(report.lines().anyMatch(line -> line.contains("= 5 — ")
+                && line.contains("the elements whose computed number is made of several fields,"
+                        + " chosen by a flag or chosen by their case rather than all of them")),
+                report);
     }
 
     private static final String FEES = """
