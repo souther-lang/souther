@@ -404,7 +404,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // — a condition inside a helper spliced in from elsewhere is still one this reading met.
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior,
-                        ConditionOccurrence.Reading.DIVIDING, ArmsMet.of(read));
+                        ConditionOccurrence.Reading.DIVIDING);
         StatedHere stated = new StatedHere(behavior);
         WhatConditionsState conditions = WhatConditionsState.of(read);
         // Whether a node answers a value is asked of the tree it stands in: the body, or the

@@ -287,7 +287,7 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
         // The conditions of this body take their names here, and one register serves every scope: a
         // condition met under a binding and the same condition met outside it are one condition.
         ConditionNumbering numbering = new ConditionNumbering(read.symbols().module(), behavior,
-                ConditionOccurrence.Reading.DECIDING, ArmsMet.of(read));
+                ConditionOccurrence.Reading.DECIDING);
         // What a build of a value comes to is what its template does: a value that never answers
         // leaves nothing after its build reached. What is inside the template is not counted as a
         // way of this body — a value takes no input, so it is no rule a row can be written for.

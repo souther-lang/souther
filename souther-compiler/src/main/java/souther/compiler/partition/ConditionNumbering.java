@@ -87,8 +87,6 @@ final class ConditionNumbering {
      *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
     private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
     private final Map<ConditionOccurrence, Citation> metAt;
-    /** Which arm each name that enters one is, shared with every place this reading reads. */
-    private final ArmsMet armsMet;
     /** The copies each entry this reading put on a way was read off, by the entry itself, shared
      *  with every place this reading reads. Two equal entries are two entries here, each read off
      *  its own copies. */
@@ -100,21 +98,14 @@ final class ConditionNumbering {
     private final Map<CallContext, ConditionNumbering> within;
 
     ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading) {
-        this(module, behavior, reading, new ArmsMet());
-    }
-
-    /** The same, filing the arm each condition that enters one is in {@code armsMet}. */
-    ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
-                       ArmsMet armsMet) {
         this(module, behavior, reading, new LinkedHashMap<>(), new IdentityHashMap<>(),
-                new int[1], new HashMap<>(), armsMet);
+                new int[1], new HashMap<>());
     }
 
     private ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
                                Map<ConditionOccurrence, Citation> metAt,
                                Map<OnTheWay, ModelOccurrences> madeBy, int[] next,
-                               Map<CallContext, ConditionNumbering> within, ArmsMet armsMet) {
-        this.armsMet = armsMet;
+                               Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
         this.reading = reading;
@@ -136,7 +127,7 @@ final class ConditionNumbering {
         return context.equals(CallContext.OF_THE_BODY) ? this
                 : within.computeIfAbsent(context,
                         _ -> new ConditionNumbering(module, behavior, reading, metAt, madeBy,
-                                next, within, armsMet));
+                                next, within));
     }
 
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
@@ -173,11 +164,7 @@ final class ConditionNumbering {
             throw new IllegalStateException(
                     "this reading has already named arm " + part + " of a fork: " + already);
         }
-        ConditionOccurrence met = named.get(part);
-        if (Core.withoutStanding(fork) instanceof Core.Match match) {
-            armsMet.met(met, match.cases().get(part));
-        }
-        return met;
+        return named.get(part);
     }
 
     /**

@@ -2,7 +2,6 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
-import souther.compiler.core.Core;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
@@ -12,6 +11,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -609,6 +609,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException("a key is read off the elements: " + key
                         + " of " + container);
             }
+            if (seed instanceof Seed.OfTheKey(var key, var _) && Seed.OfTheKey.holdsTheNumber(
+                    key, ofEach)) {
+                throw new IllegalArgumentException("the elements of one key hold one number,"
+                        + " and what was kept of them is no other value: " + key + " and "
+                        + ofEach);
+            }
         }
 
         /** What a walk keeping an end starts from: a number written out, one number of the
@@ -628,15 +634,28 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
              * element has is compared with nothing.
              *
              * @param key       where the key stands in an element
-             * @param reachedBy the arm of a match on a lookup of the key that is entered only where
-             *                  an earlier element has the key, where the walk looks the key up and
-             *                  does not hand a closure the value found
+             * @param reachedBy the arm of the match on a lookup of the key that finds the end,
+             *                  which is entered only where an earlier element has the key — or
+             *                  none where the walk hands a closure the value found, or the source
+             *                  wrote no such match
              */
-            record OfTheKey(TermPath key, Optional<Core.Case> reachedBy) implements Seed {
+            record OfTheKey(TermPath key, Optional<WrittenCondition.ForkArm> reachedBy)
+                    implements Seed {
 
                 public OfTheKey {
                     Objects.requireNonNull(key, "a key stands somewhere in an element");
                     Objects.requireNonNull(reachedBy, "an arm, or none");
+                }
+
+                /**
+                 * Whether the key and the number are one place, or one holds the other. Elements
+                 * with the same key then hold the same number, so the end kept of the earlier ones
+                 * is the number of the one compared and no value beside it.
+                 */
+                public static boolean holdsTheNumber(TermPath key,
+                                                     NumericTerm.FromOnePosition number) {
+                    return number.placesReadOff().stream()
+                            .anyMatch(place -> place.isAtOrUnder(key) || key.isAtOrUnder(place));
                 }
             }
         }

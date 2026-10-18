@@ -6,11 +6,14 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.sites.WrittenCondition;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A value that is one of several: which several, and what decides each one.
@@ -126,8 +129,17 @@ public record Choice(Kind kind, List<Arm> arms) {
         }
 
         /** The scrutinee is one of the cases this arm names. The scrutinee travels with it: what an
-         * arm binds is the value already there, refined to the case. */
-        record ACase(Core.Case arm, Core scrutinee) implements Decides {}
+         * arm binds is the value already there, refined to the case.
+         *
+         * @param entered which arm of which written match this is, where the source wrote it: the
+         *                name a condition on the way to the arm is reported under */
+        record ACase(Core.Case arm, Core scrutinee, Optional<WrittenCondition.ForkArm> entered)
+                implements Decides {
+
+            public ACase {
+                Objects.requireNonNull(entered, "an arm of a match the source wrote, or of none");
+            }
+        }
 
         /** The attempt's invariant held, so the value was built and its {@code as} name stands for
          * it. */
@@ -168,7 +180,15 @@ public record Choice(Kind kind, List<Arm> arms) {
          *  scrutinee, so that an arm is never paired with a node other than the one it stands
          *  in. */
         static ACase ofCase(Core.Match match, Core.Case arm) {
-            return new ACase(arm, match.scrutinee());
+            int part = 0;
+            while (part < match.cases().size() && match.cases().get(part) != arm) {
+                part++;
+            }
+            boolean written = part < match.cases().size() && match.origin() != null
+                    && match.origin().isWritten();
+            return new ACase(arm, match.scrutinee(), written
+                    ? Optional.of(new WrittenCondition.ForkArm(match.origin(), part))
+                    : Optional.empty());
         }
 
         /** What decides the success arm of {@code attempt}. */

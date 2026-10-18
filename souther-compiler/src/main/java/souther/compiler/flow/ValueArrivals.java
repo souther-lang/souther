@@ -470,7 +470,7 @@ public final class ValueArrivals<P> {
             case ScopeStep.Let(Core.LetIn let) -> with(bound, let.binder(),
                     settle(let.value(), naming, comparisons, bound), let.value());
             case ScopeStep.Chosen(Choice.Decides decidedBy) -> switch (decidedBy) {
-                case Choice.Decides.ACase(Core.Case arm, Core _) ->
+                case Choice.Decides.ACase(Core.Case arm, Core _, var _) ->
                         with(bound, arm.binder(), oneWay(), null);
                 case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) ->
                         with(bound, attempt.binder(), oneWay(), null);

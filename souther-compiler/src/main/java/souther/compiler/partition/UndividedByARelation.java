@@ -343,7 +343,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
             WhatItLeaves along = leftAlong(read, sources, carriers, each.region(),
-                    conditionsOf(each), declinedOnlyAKeyFound(each, read));
+                    conditionsOf(each), declinedOnlyAKeyFound(each));
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
@@ -360,15 +360,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * values beside that, so it is explained here and left declined for every other reader of the
      * way. An arm of any other match, or of another lookup, is not.
      */
-    private boolean declinedOnlyAKeyFound(Reachability.Reaching way, InputReading read) {
+    private boolean declinedOnlyAKeyFound(Reachability.Reaching way) {
         if (way.declined().isEmpty()) {
             return true;
         }
-        ArmsMet arms = ArmsMet.of(read);
         return way.declined().stream().allMatch(declined -> sides.stream().anyMatch(side ->
                 side.kept() != null && side.kept().seed()
                         instanceof Quantity.KeptSoFar.Seed.OfTheKey(var _, var arm)
-                        && arm.isPresent() && arms.isTheArm(declined.condition(), arm.get())));
+                        && declined.anchor() instanceof ConditionReportAnchor.WhereItIsWritten(
+                                var written) && arm.isPresent() && arm.get().equals(written)));
     }
 
     /**

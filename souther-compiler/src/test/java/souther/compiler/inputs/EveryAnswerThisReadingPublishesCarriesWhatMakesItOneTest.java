@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -187,9 +188,8 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == BindingId.class) {
             return new BindingId(new BindingOwner.OfValue("example", "f"), 0);
         }
-        if (type == Core.Case.class) {
-            return new Core.Case(null, new Core.ArmBinding.Unbound(), SOMETHING,
-                    new SourcePos(0, 0));
+        if (type == Optional.class) {
+            return Optional.empty();
         }
         if (type == InputReads.ContainerOf.class) {
             return new InputReads.ContainerOf.AtAPosition(TermPath.of("x"));

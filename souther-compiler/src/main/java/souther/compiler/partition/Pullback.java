@@ -4907,7 +4907,9 @@ final class Pullback {
             return Optional.empty();
         }
         NumericTerm.FromOnePosition each = new NumericTerm.ValueOf(walked.placeOf(value.at()));
-        if (!readOnAnOrder(each)) {
+        TermPath keyPlace = walked.placeOf(key.at());
+        if (!readOnAnOrder(each)
+                || Quantity.KeptSoFar.Seed.OfTheKey.holdsTheNumber(keyPlace, each)) {
             return Optional.empty();
         }
         NumericTerm.FromOnePosition howMany = sizeOf(filed.walked(), whole.at())
@@ -4915,8 +4917,8 @@ final class Pullback {
                 && soleQuantity(size) instanceof DecisionAtom.OfTheInput(
                         NumericTerm.FromOnePosition count) ? count : null;
         return Optional.of(new Quantity.KeptSoFar(kept.extreme(),
-                new Quantity.KeptSoFar.Seed.OfTheKey(walked.placeOf(key.at()),
-                        Optional.ofNullable(opened).map(InputReads.LookupOpened::arm)),
+                new Quantity.KeptSoFar.Seed.OfTheKey(keyPlace, opened == null ? Optional.empty()
+                        : opened.entered()),
                 walked.container(), each, howMany));
     }
 

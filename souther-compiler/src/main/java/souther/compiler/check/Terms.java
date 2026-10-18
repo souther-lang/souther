@@ -1444,7 +1444,7 @@ final class Terms {
             case Choice.Decides.ACondition _ -> new Chose(at, null);
             // A departure is taken where nothing was built, so it has nothing to enter.
             case Choice.Decides.ItDeparted _ -> new Chose(at, null);
-            case Choice.Decides.ACase(Core.Case arm, Core scrutinee) ->
+            case Choice.Decides.ACase(Core.Case arm, Core scrutinee, var _) ->
                     new Chose(opening(arm, scrutinee, at), openedByArm(arm));
             case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) -> {
                 Core.Read root = read(ic.binder(), ic.construct().type(), ic.pos());

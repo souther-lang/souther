@@ -341,6 +341,88 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
 
     /** A key worked out of the value is no place two elements share, and nothing is said of what
      *  was found under it. */
+    private static final String LOOKUP_AND_FILING = """
+            match Map.get(t.account, acc) with
+                    | None -> Map.insert(t.account, t.days, acc)
+                    | Some seen -> Map.insert(t.account,
+                          if t.days < seen then t.days else seen, acc)""";
+
+    /**
+     * What was found is the least of the earlier values of the key, which no value above the top of
+     * the range can be below: the comparison is false for a value at the top, and may come out
+     * either way for every one under it. So it draws one line, at the top, and no value under is
+     * divided by it. The same line, and nothing else, however the step is written.
+     */
+    @Test
+    void theComparisonDrawsItsLineAtTheTopOfTheRangeAndNowhereUnderIt() {
+        for (String step : List.of(COMPARED_WITH_WHAT_WAS_FOUND, LOOKUP_AND_FILING)) {
+            String report = report(measured(modelWith(WITHIN_A_HUNDRED, step)));
+            assertTrue(report.contains(
+                    "no IN point is owed at touches[*].days = 100 (comparison@"), report);
+            assertFalse(report.contains("touches[*].days = 0 (comparison@"), report);
+            assertFalse(report.contains("not read"), report);
+        }
+    }
+
+    /**
+     * Elements of one key hold the number the key is, so what was found is the number of the one
+     * compared and no other value: the comparison is false for every value, which the range over
+     * every element does not say. Left unread, written either way, whether or not a rule of the
+     * element names the key.
+     */
+    @Test
+    void aKeyThatIsTheValueLeavesTheComparisonUnread() {
+        for (String rule : List.of("other >= 0", "days >= 0", "days >= 0 && days <= 100")) {
+            for (String step : List.of(
+                    "Map.updateOrInsert(t.days, t.days,"
+                            + " seen -> if t.days < seen then t.days else seen, acc)",
+                    """
+                    match Map.get(t.days, acc) with
+                            | None -> Map.insert(t.days, t.days, acc)
+                            | Some seen -> Map.insert(t.days,
+                                  if t.days < seen then t.days else seen, acc)""")) {
+                String report = report(measured("""
+                        module example.stale
+
+                        data Touch = { days: Int, other: Int }
+                            invariant %s
+
+                        let sinceOf (touches: List<Touch>): Map<Int, Int> =
+                            List.fold((acc, t) -> %s, Map.empty, touches)
+
+                        behavior stale : (touches: List<Touch>) -> List<Int>
+
+                        let stale (touches) = Map.keys(sinceOf(touches))
+                        """.formatted(rule, step)));
+                assertTrue(report.contains("not read"), () -> rule + "\n" + step + "\n" + report);
+            }
+        }
+    }
+
+    /** With at most one element there is no earlier one to have found anything. */
+    @Test
+    void aListOfOneAtMostHasNoEarlierElementToHaveFoundAValue() {
+        String report = report(measured("""
+                module example.stale
+
+                data Touch = { account: String, days: Int }
+                    invariant days >= 0 && days <= 100
+
+                data Quote = { touches: List<Touch> }
+                    invariant List.length(touches) <= 1
+
+                let sinceOf (touches: List<Touch>): Map<String, Int> =
+                    List.fold((acc, t) -> %s, Map.empty, touches)
+
+                behavior stale : (quote: Quote, staleAfter: Int) -> Map<String, Int>
+
+                let stale (quote, staleAfter) =
+                    Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
+                """.formatted(COMPARED_WITH_WHAT_WAS_FOUND)));
+        assertFalse(report.contains("rather than dividing the values here, about"
+                + " `quote.touches[*].days`"), report);
+    }
+
     @Test
     void theComparisonAfterALookupOfTheKeyIsReadAsTheOneInsideTheClosure() {
         String lookup = """

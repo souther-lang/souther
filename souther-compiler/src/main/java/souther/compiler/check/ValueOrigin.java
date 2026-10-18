@@ -743,7 +743,7 @@ public sealed interface ValueOrigin<K> {
     private static List<Core> decidedBy(Choice.Decides decidedBy) {
         return switch (decidedBy) {
             case Choice.Decides.ACondition(Core.If fork, boolean _) -> List.of(fork.cond());
-            case Choice.Decides.ACase(Core.Case _, Core scrutinee) -> List.of(scrutinee);
+            case Choice.Decides.ACase(Core.Case _, Core scrutinee, var _) -> List.of(scrutinee);
             // What the attempt tried to build is what its invariant was tested on, whichever way
             // the test went.
             case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) ->
