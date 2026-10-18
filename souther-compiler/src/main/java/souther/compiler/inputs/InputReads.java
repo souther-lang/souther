@@ -515,10 +515,16 @@ public final class InputReads {
     public ClosureUses usesOf(Core.Block block) {
         for (Core.Binder param : block.params()) {
             if (param != null && param.binding() != null) {
-                return names.usesOf(param.binding());
+                return usesOfTheClosureTaking(param.binding());
             }
         }
         return null;
+    }
+
+    /** Every use of the closure {@code param} is a parameter of, or null where no operation
+     *  applies it ({@link #usesOf}). */
+    public ClosureUses usesOfTheClosureTaking(BindingId param) {
+        return names.usesOf(param);
     }
 
     /**

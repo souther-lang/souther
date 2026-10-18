@@ -37,15 +37,18 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
      *                  where the call is inside the body of something expanded where they did
      * @param container what the operation walks
      * @param applied   how far the operation goes applying the closure
+     * @param call      the call that applies it, which a reader of the closure's parameters asks
+     *                  what else the operation hands the closure ({@link SeededWalk#of})
      */
     public record Application(ValueName operation, OccurrenceLineage lineage, Core container,
-                              HowAClosureIsApplied applied) {
+                              HowAClosureIsApplied applied, Core call) {
 
         public Application {
             Objects.requireNonNull(operation, "an application is some operation's");
             Objects.requireNonNull(lineage, "a call stands in some copy of a body");
             Objects.requireNonNull(container, "an operation walks some container");
             Objects.requireNonNull(applied, "and applies the closure some way");
+            Objects.requireNonNull(call, "by some call");
         }
     }
 

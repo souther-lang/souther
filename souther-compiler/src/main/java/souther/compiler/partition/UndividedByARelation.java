@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.Extreme;
 import souther.compiler.check.PublishedRules;
 import souther.compiler.check.Shape;
 import souther.compiler.inputs.FilingCoordinate;
@@ -19,6 +20,7 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -195,12 +197,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param weight what it is weighed by
      * @param term   the number of the input it is, or null where it is anything made of one or no
      *               position's
+     * @param kept   where it is what a walk keeping an end carried into its step, the end kept so
+     *               far, which says where it lies; null otherwise
      */
     record Side(List<FilingCoordinate> madeOf, ExactRatio weight,
-                NumericTerm.FromOnePosition term) {
+                NumericTerm.FromOnePosition term, Quantity.KeptSoFar kept) {
 
         Side {
             madeOf = List.copyOf(madeOf);
+            if (kept != null && (term != null || !madeOf.isEmpty())) {
+                throw new IllegalArgumentException("what a walk carried is at no position: "
+                        + kept);
+            }
+        }
+
+        /** The number of the input what this side may be is read off — the order it stands on,
+         *  what the declarations and a way say of it: its own, or the element's a walk kept an end
+         *  of. */
+        NumericTerm.FromOnePosition readOff() {
+            return term != null ? term : kept != null ? kept.ofEach() : null;
         }
     }
 
@@ -213,8 +228,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         each.getValue());
                 case Quantity.WhatAnOperationAnswers answers -> new Side(
                         answers.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
-                        each.getValue(), null);
-                default -> new Side(List.of(), each.getValue(), null);
+                        each.getValue(), null, null);
+                case Quantity.OfABinding bound -> new Side(List.of(), each.getValue(), null,
+                        bound.kept().orElse(null));
+                default -> new Side(List.of(), each.getValue(), null, null);
             });
         }
         return new UndividedByARelation(sides, form.constant(), relation, List.of(), false);
@@ -236,15 +253,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     static UndividedByARelation ofTwoPositions(TermPath one, TermPath other) {
         return new UndividedByARelation(List.of(
                 new Side(List.of(FilingCoordinate.at(one)), ExactRatio.ONE,
-                        new NumericTerm.ValueOf(one)),
+                        new NumericTerm.ValueOf(one), null),
                 new Side(List.of(FilingCoordinate.at(other)), ExactRatio.ONE.negated(),
-                        new NumericTerm.ValueOf(other))), ExactRatio.ZERO, Rel.EQ, List.of(),
-                false);
+                        new NumericTerm.ValueOf(other), null)), ExactRatio.ZERO, Rel.EQ,
+                List.of(), false);
     }
 
     private static Side ofTheInput(NumericTerm term, ExactRatio weight) {
         return new Side(List.of(FilingCoordinate.of(term)), weight,
-                term instanceof NumericTerm.FromOnePosition one ? one : null);
+                term instanceof NumericTerm.FromOnePosition one ? one : null, null);
     }
 
     /** The places shown undivided over what the declarations leave. */
@@ -279,21 +296,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatItLeaves nothingShown = new WhatItLeaves(new LinkedHashSet<>(amongThemselves),
                 Map.of());
         // What the declarations leave each side, which no way changes: asked once for all of them.
+        // A side a walk kept an end of is asked of the element's number, which is what the end
+        // lies between.
         List<Source> sources = new ArrayList<>();
         for (Side each : sides) {
-            sources.add(switch (each.term()) {
-                case null -> null;
-                case NumericTerm.ValueOf value -> takes(value, read);
-                case NumericTerm.TakenOf taken ->
-                        takes(new NumericTerm.ValueOf(taken.position()), read);
-                case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> null;
-            });
+            sources.add(each.kept() == null ? sourceOf(each.term(), read)
+                    : keptSource(each.kept(), read));
         }
         // And the order each side's values are counted on, which says where its type ends.
         List<Carrier> carriers = new ArrayList<>();
         for (Side each : sides) {
-            TermOrders orders = each.term() == null ? null
-                    : read.quantities().ordersOf(each.term());
+            TermOrders orders = each.readOff() == null ? null
+                    : read.quantities().ordersOf(each.readOff());
             carriers.add(orders == null ? null : orders.answered());
         }
         // Where each side stands is compared with where the others do, which says something only
@@ -567,10 +581,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Side each = sides.get(i);
             // A value a rule names moves with the places the rule names beside it, so what the
             // way states of any place of its parameter is stated of it.
-            out.add(each.term() == null || !heldWhole ? List.of()
+            out.add(each.readOff() == null || !heldWhole ? List.of()
                     : sources.get(i) != null && sources.get(i).named()
-                    ? statingAnythingOfItsParameter(each.term(), conditions)
-                    : statingAnythingOf(each.term(), conditions));
+                    ? statingAnythingOfItsParameter(each.readOff(), conditions)
+                    : statingAnythingOf(each.readOff(), conditions));
         }
         return out;
     }
@@ -585,6 +599,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
+            if (each.kept() != null) {
+                terms.add(keptAlong(each, sources.get(i), carriers.get(i), region,
+                        stating.get(i), heldWhole));
+                continue;
+            }
             NumericDomain.Bounds holds = asARelationReadsIt(each.term() != null
                     && region.projectionOf(each.term())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
@@ -604,10 +623,78 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * A side that is what a walk keeping an end carried into its step, as a term over the rows in
+     * {@code region}.
+     *
+     * <p>On the first element it is the seed, and on a later one the end kept of the seed and the
+     * element's number on every element before. So it lies between the seed and the furthest the
+     * number may lie past it, and only at the seed where the container holds one element at most.
+     * It takes the seed. Past the seed it takes every value the number is shown to take there,
+     * where some row of the container holds two elements or more: an earlier element at the value
+     * and none before it further out. Nothing is said of which values it takes by equality, which
+     * are no values of the element's place.
+     *
+     * @param ofEach   what the declarations leave the element's number
+     * @param carrier  the order the element's number is counted on
+     * @param stating  what the way states of the element's number
+     */
+    private static WhatARelationLeavesUndivided.Term<FilingCoordinate> keptAlong(
+            Side side, Source ofEach, Carrier carrier, SearchRegion region,
+            List<OnAWay> stating, boolean heldWhole) {
+        Quantity.KeptSoFar kept = side.kept();
+        if (!(Count.written(kept.seed()) instanceof ExactAnswer.Held<Optional<Count>>(
+                Optional<Count> written)) || written.isEmpty()) {
+            return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
+                    NumericDomain.Bounds.OPEN, null, null, false);
+        }
+        Endpoint at = Endpoint.inclusive(written.get());
+        NumericDomain.Bounds seed = new NumericDomain.Bounds(at, at);
+        NumericDomain.Bounds past = kept.extreme() instanceof Extreme.Greatest
+                ? new NumericDomain.Bounds(at, null) : new NumericDomain.Bounds(null, at);
+        NumericDomain.Bounds twoOrMore =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(2)), null);
+        // Where the element's number lies past the seed, on any element before.
+        NumericDomain.Bounds lies = (region.projectionOf(kept.ofEach())
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
+                ? within : NumericDomain.Bounds.OPEN).meet(past);
+        boolean atMostOne = kept.howMany() != null && region.projectionOf(kept.howMany())
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds count)
+                && !count.meet(twoOrMore).holdsAValue();
+        NumericDomain.Bounds holds = atMostOne || !lies.holdsAValue() ? seed
+                : NumericDomain.Bounds.spanning(seed, lies);
+        // What it is shown to take past the seed: what the element's number is shown to take, on
+        // a row some earlier element is at.
+        NumericDomain.Bounds realizes = seed;
+        NumericDomain.Bounds several = kept.howMany() == null ? null
+                : region.wholeRunOf(kept.howMany());
+        Way way = heldWhole ? wayOf(kept.ofEach(), stating) : Way.TIES;
+        NumericDomain.Bounds taken = ofEach == null || way == Way.TIES || several == null
+                || !several.meet(twoOrMore).holdsAValue() ? null
+                : realized(kept.ofEach(), ofEach, region, way);
+        if (taken != null && taken.meet(past).holdsAValue()) {
+            // One run with the seed where nothing lies between them: the seed is taken, or on
+            // whole numbers the one next to it past it is.
+            ExactAnswer<ExactRatio> next = kept.extreme() instanceof Extreme.Greatest
+                    ? kept.seed().plus(ExactRatio.ONE) : kept.seed().minus(ExactRatio.ONE);
+            boolean adjoins = taken.admits(kept.seed()) || (carrier instanceof Carrier.Whole
+                    && next instanceof ExactAnswer.Held<ExactRatio>(ExactRatio beside)
+                    && taken.admits(beside));
+            realizes = adjoins ? NumericDomain.Bounds.spanning(seed, taken.meet(past))
+                    : taken.meet(past);
+        }
+        return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
+                asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
+                false);
+    }
+
+    /**
      * Whether nothing the declarations say ties where the side at {@code one} lies to where the
      * side at {@code other} does: one of them is a value no rule of a value it sits in names, or
      * the two are in different parameters, which no declaration relates. A side nothing is worked
      * out of may be named by anything.
+     *
+     * <p>A side a walk kept an end of is the element's number on other elements, which a rule of
+     * the container may relate to any element: it is asked as that number, at its place.
      *
      * @param sources what the declarations leave each side, in the order of the sides
      */
@@ -615,8 +702,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!mayBeNamed(one, sources) || !mayBeNamed(other, sources)) {
             return true;
         }
-        List<FilingCoordinate> first = sides.get(one).madeOf();
-        List<FilingCoordinate> second = sides.get(other).madeOf();
+        List<FilingCoordinate> first = placesAsked(sides.get(one));
+        List<FilingCoordinate> second = placesAsked(sides.get(other));
         if (first.isEmpty() || second.isEmpty()) {
             return false;
         }
@@ -633,7 +720,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** Whether a rule of a value the side at {@code at} sits in may name it. */
     private boolean mayBeNamed(int at, List<Source> sources) {
         Source source = sources.get(at);
-        return sides.get(at).term() == null || source == null || source.named();
+        return sides.get(at).readOff() == null || source == null || source.named();
+    }
+
+    /** The places what the declarations and a way say of {@code side} are asked at: its own, or
+     *  the place of the element's number a walk kept an end of. */
+    private static List<FilingCoordinate> placesAsked(Side side) {
+        return side.kept() == null ? side.madeOf()
+                : List.of(FilingCoordinate.of(side.kept().ofEach()));
     }
 
     /**
@@ -836,17 +930,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Side side = sides.get(at);
         Set<Object> out = new HashSet<>();
         for (OnAWay each : conditions) {
-            boolean about = side.term() == null
+            boolean about = side.readOff() == null
                     ? side.madeOf().stream().anyMatch(place -> each.positions().stream()
                             .anyMatch(that -> overlap(place.path(), that)))
-                    : touches(side.term(), each.positions()) && !saysNothingOfTheValuesOf(
-                            side.term(), each, mayBeNamed(at, sources));
+                    : touches(side.readOff(), each.positions()) && !saysNothingOfTheValuesOf(
+                            side.readOff(), each, mayBeNamed(at, sources));
             if (about) {
                 out.add(tied.classOf(each.positions().iterator().next()));
             }
         }
         if (mayBeNamed(at, sources)) {
-            side.madeOf().forEach(place -> out.add(tied.classOf(
+            placesAsked(side).forEach(place -> out.add(tied.classOf(
                     new TiedOnTheWay.Parameter(place.path().head()))));
         }
         return out;
@@ -1028,6 +1122,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static final class Left {
 
         private final Map<TermPath, Optional<Source>> byPosition = new ConcurrentHashMap<>();
+    }
+
+    /** What the declarations leave the value {@code term} is, or is taken of — or null where it is
+     *  no such number, or nothing is shown ({@link #takes}). */
+    private static Source sourceOf(NumericTerm.FromOnePosition term, InputReading read) {
+        return switch (term) {
+            case null -> null;
+            case NumericTerm.ValueOf value -> takes(value, read);
+            case NumericTerm.TakenOf taken ->
+                    takes(new NumericTerm.ValueOf(taken.position()), read);
+            case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> null;
+        };
+    }
+
+    /**
+     * What the declarations leave the element's number a walk kept an end of, as what the end
+     * lies between: named only where a rule of the container, or of a value it sits in, reads a
+     * place inside its elements. That is where a rule relating one element to another is written.
+     * A rule of the element is about that one element, and what was kept is the number on the
+     * others.
+     */
+    private static Source keptSource(Quantity.KeptSoFar kept, InputReading read) {
+        Source each = sourceOf(kept.ofEach(), read);
+        return each == null ? null : new Source(each.takes(), each.onlyItsEnds(),
+                namedDownTo(kept.ofEach().subjectPath(), kept.container().steps().size(), read)
+                        != Named.NOT);
     }
 
     /**
@@ -1227,9 +1347,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** {@link #namedByTheDeclarations}, worked out. */
     private static Named namedByTheDeclarationsWorkedOut(TermPath path, InputReading read) {
+        return namedDownTo(path, path.steps().size() - 1, read);
+    }
+
+    /**
+     * What the rules of the values {@code path} sits in say of it, of those {@code deepest} steps
+     * down from the parameter or fewer ({@link #namedByTheDeclarations}).
+     */
+    private static Named namedDownTo(TermPath path, int deepest, InputReading read) {
         List<TermPath.Step> steps = path.steps();
         Named out = Named.NOT;
-        for (int length = 0; length < steps.size(); length++) {
+        for (int length = 0; length <= deepest && length < steps.size(); length++) {
             TermPath here = new TermPath(path.head(), steps.subList(0, length));
             Position around = read.domain().at(here.position());
             // Where the rules leave no value of it, nothing stands beside the rest of it either.

@@ -16,6 +16,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ConstantComparison;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
@@ -4671,6 +4672,48 @@ final class Pullback {
     }
 
     /**
+     * The end a walk has kept by the element its step is applied to, where {@code name} is what the
+     * walk carries into the step and the step keeps an end of it and a number of the element
+     * ({@link SeededWalk#endKept}) — or empty where it is anything else.
+     *
+     * <p>Only one operation may apply the step, and the walk has to start from a number written
+     * out and walk a container of the input whose elements the number is read off: what is kept is
+     * then that end of the seed and of the number on the elements before, which is what the range
+     * of the carried value is worked out from. A seed the input holds would tie the carried value
+     * to it, and nothing here says how.
+     */
+    private Optional<Quantity.KeptSoFar> keptSoFar(Core.Read name, InputReads at) {
+        ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
+        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+            return Optional.empty();
+        }
+        Denotation call = new Denotation(uses.applications().getFirst().call(), at);
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        if (walk == null || !name.binding().equals(walk.accumulator().binding())) {
+            return Optional.empty();
+        }
+        SeededWalk.AnEndKept<InputReads> kept = walk.endKept(at, sides());
+        ExactRatio seed = kept == null ? null : sides().constant(walk.seed(), at);
+        if (seed == null || !(AffineForms.outcome(kept.value().value(), kept.value().at(),
+                quantities()) instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> value))
+                || !(soleQuantity(value) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition each))
+                || !(subjectOf(walk.container(), at) instanceof DecisionSubject.AnInput(
+                        TermPath container))
+                || !each.placesReadOff().stream()
+                        .allMatch(place -> place.isAtOrUnder(container.element()))) {
+            return Optional.empty();
+        }
+        NumericTerm.FromOnePosition howMany = sizeOf(walk.container(), at)
+                instanceof Sized.AsAForm(LinearForm<Quantity> size)
+                && soleQuantity(size) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition count) ? count : null;
+        return Optional.of(new Quantity.KeptSoFar(kept.extreme(), seed, container, each,
+                howMany));
+    }
+
+    /**
      * What this reading calls an atom of a number: a number of the input where the expression is
      * one, what a division by a written number leaves of a form of them, a number a dependency
      * answered where the call is written, and otherwise a number of a
@@ -4801,9 +4844,13 @@ final class Pullback {
                     // of the input's goes with it.
                     case ReadMeaning.Through _ -> LinearForm.atom(new Quantity.OfABinding(
                             name.binding(), steps, node.type(),
-                            Optional.ofNullable(inside).map(Pullback.this::noFormOf)));
+                            Optional.ofNullable(inside).map(Pullback.this::noFormOf),
+                            Optional.empty()));
+                    // A name nothing is bound to here may still be what a walk carries into its
+                    // step, which says where its value lies.
                     case ReadMeaning.Unknown _ -> LinearForm.atom(new Quantity.OfABinding(
-                            name.binding(), steps, node.type(), Optional.empty()));
+                            name.binding(), steps, node.type(), Optional.empty(),
+                            steps.isEmpty() ? keptSoFar(name, at) : Optional.empty()));
                 };
             }
 

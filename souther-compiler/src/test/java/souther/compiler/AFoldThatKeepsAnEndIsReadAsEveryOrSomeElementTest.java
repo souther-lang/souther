@@ -30,6 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is written the rows those forms are, however the step is spelled, that the least is the other way
  * round, that a seed settling the comparison leaves nothing to draw, and that a step keeping no end
  * of the two is not read as one.
+ *
+ * <p>The comparison the step makes is read as well: the element against the end kept of the seed
+ * and the elements before it. Where the seed is past every value a discount takes, it divides no
+ * discount, so the walks below start there and what they draw is the comparison of the end alone.
+ * Where it is not, it parts the discounts at the seed
+ * ({@link #theComparisonInsideTheStepPartsTheDiscountsAtTheSeed}).
  */
 class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
 
@@ -37,11 +43,22 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
 
     private static final String LESSER = "if l.discount < w then l.discount else w";
 
+    /** Below every discount, so the greatest is kept from it with nothing the step parts. */
+    private static final int BELOW = -1;
+
+    /** Above every discount, the same for the least. */
+    private static final int ABOVE = 101;
+
     private static String model(String decided) {
+        return model("invariant discount >= 0 && discount <= 100", decided);
+    }
+
+    private static String model(String ofALine, String decided) {
         return """
                 module example.worst
 
                 data Line = { discount: Int }
+                    %s
 
                 data Within
                 data Needs
@@ -50,7 +67,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
 
                 let approval (base, lines) =
                     if %s then Within else Needs
-                """.formatted(decided);
+                """.formatted(ofALine, decided);
     }
 
     private static String folded(String step, Object seed, String compared) {
@@ -61,34 +78,42 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     @Test
     void theGreatestAtOrBelowANumberIsEveryElementThere() {
         assertReadAs(model("List.all(l -> l.discount <= 10, lines)"),
-                folded(GREATER, 0, "<= 10"));
+                folded(GREATER, BELOW, "<= 10"));
         assertReadAs(model("List.all(l -> l.discount < 10, lines)"),
-                folded(GREATER, 0, "< 10"));
+                folded(GREATER, BELOW, "< 10"));
     }
 
     /** At or above a number, the greatest is some element there, or the seed. */
     @Test
     void theGreatestAtOrAboveANumberIsSomeElementThere() {
         assertReadAs(model("List.any(l -> l.discount >= 10, lines)"),
-                folded(GREATER, 0, ">= 10"));
+                folded(GREATER, BELOW, ">= 10"));
         assertReadAs(model("List.any(l -> l.discount > 10, lines)"),
-                folded(GREATER, 0, "> 10"));
+                folded(GREATER, BELOW, "> 10"));
     }
 
     /** The least is the other way round: some element below a number, and every one above it. */
     @Test
     void theLeastIsTheOtherWayRound() {
         assertReadAs(model("List.any(l -> l.discount < 10, lines)"),
-                folded(LESSER, 100, "< 10"));
+                folded(LESSER, ABOVE, "< 10"));
         assertReadAs(model("List.all(l -> l.discount >= 10, lines)"),
-                folded(LESSER, 100, ">= 10"));
+                folded(LESSER, ABOVE, ">= 10"));
     }
 
-    /** The step keeps the greater whichever way round it compares, and as a call of the library's
-     *  own maximum, and the walk ends with the same number. */
+    /**
+     * The step keeps the greater whichever way round it compares, and as a call of the library's
+     * own maximum, and the walk ends with the same number.
+     *
+     * <p>Over discounts with no greatest, since what the step's own comparison parts turns on how
+     * it is written: kept by {@code l.discount >= w}, the greatest discount there is would pass
+     * every end kept, and that comparison would part it from the rest.
+     */
     @Test
     void theStepKeepsTheSameEndHoweverItIsWritten() {
-        Drawn plain = drawn(folded(GREATER, 0, "<= 10"));
+        String unbounded = "invariant discount >= 0";
+        Drawn plain = drawn(model(unbounded, "List.fold((w, l) -> %s, %d, lines) <= 10"
+                .formatted(GREATER, BELOW)));
         for (String step : List.of(
                 "if w < l.discount then l.discount else w",
                 "if l.discount <= w then w else l.discount",
@@ -98,7 +123,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                 "{ let d = l.discount  if d > w then d else w }",
                 "{ let next = if l.discount > w then l.discount else w  next }",
                 "{ let d = l.discount  let next = if d > w then d else w  next }")) {
-            assertReadAs(plain, folded(step, 0, "<= 10"));
+            assertReadAs(plain, model(unbounded, "List.fold((w, l) -> %s, %d, lines) <= 10"
+                    .formatted(step, BELOW)));
         }
     }
 
@@ -106,7 +132,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
      *  it is a total. */
     @Test
     void theComparisonDrawsTheLineOnTheElement() {
-        String report = report(folded(GREATER, 0, "<= 10"));
+        String report = report(folded(GREATER, BELOW, "<= 10"));
         assertTrue(report.contains("read as approval/lines[*].discount: = 10"), report);
         assertTrue(report.contains("read as approval/lines[*].discount: = 11"), report);
         assertFalse(report.contains(MADE_FROM_IT), report);
@@ -119,10 +145,10 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     void anEqualityAndADifferenceAreEveryAndSomeElementTogether() {
         assertReadAs(model("List.all(l -> l.discount <= 10, lines)"
                         + " && List.any(l -> l.discount >= 10, lines)"),
-                folded(GREATER, 0, "== 10"));
+                folded(GREATER, BELOW, "== 10"));
         assertReadAs(model("List.any(l -> l.discount > 10, lines)"
                         + " || List.all(l -> l.discount < 10, lines)"),
-                folded(GREATER, 0, "/= 10"));
+                folded(GREATER, BELOW, "/= 10"));
     }
 
     /**
@@ -152,21 +178,94 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
             String report = report(folded(GREATER, 11, compared));
             assertTrue(report.contains("it was read to the end and cuts nothing"),
                     () -> compared + ": " + report);
-            assertFalse(report.contains("ON point"), () -> compared + ": " + report);
+            assertFalse(report.contains("row is at the ON point (comparison@"),
+                    () -> compared + ": " + report);
             assertFalse(report.contains(MADE_FROM_IT), () -> compared + ": " + report);
         }
     }
 
     /**
-     * What the step compares inside it is the element against the greatest of the seed and the
-     * elements before it, which no value of the element settles on its own above the seed. That is
-     * still said of it: reading the walk's end says nothing of that comparison.
+     * What the step compares is the element against the end kept of the seed and the elements
+     * before it, which lies between the seed and the furthest discount past it and takes every
+     * value there. With the seed past every discount, each discount has that end on both sides of
+     * it on some list, so the comparison divides no discount; and a rule of the element's own,
+     * which is about one element, ties it to none of the others the end was kept of.
      */
     @Test
-    void theComparisonInsideTheStepIsStillSaidToRelateTwoValues() {
-        String report = report(folded(GREATER, 0, "<= 10"));
-        assertTrue(report.contains("relates the value here to another value not shown to reach"
-                + " every value here"), report);
+    void theComparisonInsideTheStepDividesNoDiscountWhereTheSeedIsPastThemAll() {
+        for (String walk : List.of(folded(GREATER, BELOW, "<= 10"),
+                folded(LESSER, ABOVE, ">= 10"))) {
+            String report = report(walk);
+            assertTrue(report.contains(RELATES_ANOTHER_VALUE), () -> walk + "\n" + report);
+            assertFalse(report.contains(NOT_SHOWN_TO_REACH), () -> walk + "\n" + report);
+        }
+    }
+
+    /**
+     * Where the seed is a value a discount takes, a discount at or below it never passes what was
+     * kept, which is the seed or more, and one above it may or may not: the comparison parts the
+     * discounts at the seed, as a line of no comparison the author wrote. So does a seed below
+     * every discount where nothing bounds them, and one where the list holds one element at most,
+     * which the end is then the seed alone against.
+     */
+    @Test
+    void theComparisonInsideTheStepPartsTheDiscountsAtTheSeed() {
+        Drawn fromNought = drawn(folded(GREATER, 0, "<= 10"));
+        assertFalse(fromNought.report().contains(NOT_SHOWN_TO_REACH), fromNought::report);
+        assertTrue(fromNought.report().contains(
+                "no IN point is owed at lines[*].discount = 0 (comparison@"),
+                fromNought::report);
+        Drawn unbounded = drawn(model("", "List.fold((w, l) -> %s, 0, lines) <= 10"
+                .formatted(GREATER)));
+        assertFalse(unbounded.report().contains(NOT_SHOWN_TO_REACH), unbounded::report);
+        assertTrue(unbounded.rows().stream()
+                        .anyMatch(row -> row.startsWith("| \"lines[*].discount=x <= 0\"")),
+                () -> unbounded.report() + "\n" + unbounded.rows());
+        String alone = report("""
+                module example.worst
+
+                data Line = { discount: Int }
+                    invariant discount >= 0 && discount <= 100
+                data Quote = { lines: List<Line> }
+                    invariant List.length(lines) <= 1
+
+                data Within
+                data Needs
+
+                behavior approval : (quote: Quote) -> Within | Needs
+
+                let approval (quote) =
+                    if List.fold((w, l) -> %s, 0, quote.lines) <= 10 then Within else Needs
+                """.formatted(GREATER));
+        assertFalse(alone.contains(NOT_SHOWN_TO_REACH), alone);
+        assertTrue(alone.contains("no IN point is owed at quote.lines[*].discount = 0"), alone);
+    }
+
+    /**
+     * A seed the input holds ties the end kept to it, which nothing here works out, and a rule of
+     * the list that reads its elements may tie one element to another: the comparison inside the
+     * step is said not to be worked out.
+     */
+    @Test
+    void theComparisonInsideTheStepIsNotReadWhereTheEndIsTiedToSomethingElse() {
+        String fromTheInput = report(folded(GREATER, "base", "<= 10"));
+        assertTrue(fromTheInput.contains(NOT_SHOWN_TO_REACH), fromTheInput);
+        String related = report("""
+                module example.worst
+
+                data Line = { discount: Int }
+                data Quote = { lines: List<Line> }
+                    invariant List.all(l -> l.discount <= 50, lines)
+
+                data Within
+                data Needs
+
+                behavior approval : (quote: Quote) -> Within | Needs
+
+                let approval (quote) =
+                    if List.fold((w, l) -> %s, 0, quote.lines) <= 10 then Within else Needs
+                """.formatted(GREATER));
+        assertTrue(related.contains(NOT_SHOWN_TO_REACH), related);
     }
 
     /**
@@ -233,7 +332,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     @Test
     void theEndComparedInsideAConjunctionIsReadAsItIsAlone() {
         assertReadAs(model("List.all(l -> l.discount <= 10, lines) && base > 3"),
-                model("List.fold((w, l) -> %s, 0, lines) <= 10 && base > 3".formatted(GREATER)));
+                model("List.fold((w, l) -> %s, %d, lines) <= 10 && base > 3"
+                        .formatted(GREATER, BELOW)));
     }
 
     /**
@@ -300,6 +400,14 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     private static final String MADE_FROM_IT =
             "it is about a value made from this one, and what it says about the values here is not"
                     + " worked out";
+
+    /** What it says of a relation to another value shown to divide none of the values here. */
+    private static final String RELATES_ANOTHER_VALUE =
+            "it relates the value here to another value rather than dividing the values here";
+
+    /** And of one the other value is not shown to reach every value here for. */
+    private static final String NOT_SHOWN_TO_REACH =
+            "relates the value here to another value not shown to reach every value here";
 
     /** {@code read} draws the points {@code expected} draws, at the same values, and is written
      *  the same rows. */
