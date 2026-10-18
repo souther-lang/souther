@@ -336,28 +336,46 @@ final class AStatementAtARow {
      * How many of the elements of {@code container} the row wrote meet this statement: the least
      * it can be, and how many more it may be where an element could not be read.
      *
+     * <p>Counted once for every reading of the row that chose alike in every other container:
+     * the elements counted are all of them whichever a reading chose, and a row read once per
+     * element of another container would otherwise count them once per reading.
+     *
      * @return null where the walk could not reach the container
      */
     HowManyAtARow howManyMeetIn(TermPath container, BorderQuantity.Observation row) {
-        if (!(row.eachElementOf(container)
-                instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
-            return null;
+        return row.keptOf(new HowManyMeet(this, container));
+    }
+
+    /** How many elements of a container meet one statement, by the statement and the container. */
+    private record HowManyMeet(AStatementAtARow statement, TermPath container)
+            implements BorderQuantity.ReadAlike<HowManyAtARow> {
+
+        @Override
+        public boolean turnsOn(TermPath each) {
+            return !each.equals(container);
         }
-        List<BorderQuantity.Observation> each = reached.value();
-        int meet = 0;
-        int unread = 0;
-        Set<ReadingGap> why = new LinkedHashSet<>();
-        for (BorderQuantity.Observation element : each) {
-            switch (at(element)) {
-                case Answer.Holds _ -> meet++;
-                case Answer.Fails _ -> { }
-                case Answer.CouldNotTell(var stopped) -> {
-                    unread++;
-                    why.addAll(stopped);
+
+        @Override
+        public HowManyAtARow readAt(BorderQuantity.Observation row) {
+            if (!(row.eachElementOf(container)
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+                return null;
+            }
+            int meet = 0;
+            int unread = 0;
+            Set<ReadingGap> why = new LinkedHashSet<>();
+            for (BorderQuantity.Observation element : reached.value()) {
+                switch (statement.at(element)) {
+                    case Answer.Holds _ -> meet++;
+                    case Answer.Fails _ -> { }
+                    case Answer.CouldNotTell(var stopped) -> {
+                        unread++;
+                        why.addAll(stopped);
+                    }
                 }
             }
+            return new HowManyAtARow(meet, unread, why);
         }
-        return new HowManyAtARow(meet, unread, why);
     }
 
     /**

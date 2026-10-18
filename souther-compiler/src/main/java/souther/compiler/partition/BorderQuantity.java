@@ -1684,11 +1684,25 @@ public sealed interface BorderQuantity
          *
          * <p>Of the reading and not of the row, as {@link #lastToHold} is; a walk that cannot
          * tell the elements of the container apart could not walk to an answer. Nothing is read
-         * of the elements here: every reading of a row asks this, and a reader keeps what the
-         * elements of one occurrence came to by what this answers ({@link #elementsOf}).
+         * of the elements here: every reading of a row asks this, and what the elements of one
+         * occurrence came to is kept by {@link #keptOf}.
          */
         default WalkResult<Among> among(TermPath container) {
             return WalkResult.couldNotWalk();
+        }
+
+        /**
+         * What {@code asked} reads at this reading, read once for every reading of the row that
+         * chose alike in each container the answer turns on.
+         *
+         * <p>For a number, a count or a prefix of the elements of one occurrence of a container:
+         * every reading of the row that chose an element of that occurrence would otherwise read
+         * all of them again, and a row has a reading per element. Kept by the walk over the row
+         * and for as long as the row is read, so nothing read of one row answers another; a walk
+         * that keeps nothing reads it afresh, which is the same answer.
+         */
+        default <T> T keptOf(ReadAlike<T> asked) {
+            return asked.readAt(this);
         }
 
         /**
@@ -1710,25 +1724,28 @@ public sealed interface BorderQuantity
     }
 
     /**
-     * Which occurrence of one container a reading of a row is read in, and which element of it the
-     * reading chose.
+     * Something read of a row that every reading of the row answers alike wherever they chose
+     * alike in the containers it turns on.
      *
-     * @param walk   what every reading of the row shares, by identity: what tells two readings of
-     *               one row from readings of two rows that wrote the same values, which a reader
-     *               keeping what it worked out of a row's elements keys on
-     * @param beside what the reading chose of every other container, which says which occurrence
-     *               of the container this is — the items of the second order and not of the first
+     * <p>Two of these are one question where they are equal, so what they are equal by is what
+     * the answer is of.
+     */
+    interface ReadAlike<T> {
+
+        /** Whether what this reads turns on the element a reading chose in {@code container}. */
+        boolean turnsOn(TermPath container);
+
+        /** What this reads at {@code reading}. */
+        T readAt(Observation reading);
+    }
+
+    /**
+     * Which element of the occurrence of one container a reading of a row is read in the reading
+     * chose.
+     *
      * @param chosen the element the reading chose, or null where it chose none
      */
-    record Among(Object walk, Map<TermPath, Integer> beside, Integer chosen) {
-
-        public Among {
-            beside = Map.copyOf(beside);
-            if (walk == null) {
-                throw new IllegalArgumentException("an occurrence is of some row's walk");
-            }
-        }
-    }
+    record Among(Integer chosen) {}
 
     /**
      * One element of a container a row wrote, and the row read with it chosen.

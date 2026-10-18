@@ -85,20 +85,21 @@ final class ElementValues {
             throw new IllegalStateException("a row holding `" + container + "` alone holds the"
                     + " parameter it is, and it is inside one");
         }
-        return new StandingAtAPoint.DiscoveringRow(
+        return new StandingAtAPoint.DiscoveringRow(new StandingAtAPoint.RowWalk(
                 new BehaviorInputs(List.of(container.head()), List.of(type), reading.source(),
                         reading.policy()),
                 new ObservedInputs(List.of(new ObservedValue.Sequence(values)),
-                        new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered()));
+                        new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered())));
     }
 
     /** The element alone, holding {@code value}. */
     BorderQuantity.Observation alone(ObservedValue value) {
         return new Alone(container.element(), new StandingAtAPoint.DiscoveringRow(
-                new BehaviorInputs(List.of(ALONE), List.of(element), reading.source(),
-                        reading.policy()),
-                new ObservedInputs(List.of(value), new Generator.Watched.NoAccount(),
-                        new AnswerObservation.NotAnswered())));
+                new StandingAtAPoint.RowWalk(
+                        new BehaviorInputs(List.of(ALONE), List.of(element), reading.source(),
+                                reading.policy()),
+                        new ObservedInputs(List.of(value), new Generator.Watched.NoAccount(),
+                                new AnswerObservation.NotAnswered()))));
     }
 
     /**

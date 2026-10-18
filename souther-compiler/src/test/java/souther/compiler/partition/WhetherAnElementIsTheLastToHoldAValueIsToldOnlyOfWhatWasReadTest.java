@@ -176,6 +176,15 @@ class WhetherAnElementIsTheLastToHoldAValueIsToldOnlyOfWhatWasReadTest {
                 lastness(0, A, UNREADABLE));
     }
 
+    /** Of several keys after it that were not read, the first is what it is told. */
+    @Test
+    void theFirstKeyAfterItThatWasNotReadIsWhatItIsTold() {
+        assertEquals(couldNotTell(Incompleteness.Code.VALUE_TRUNCATED),
+                lastness(0, A, TRUNCATED, UNREADABLE));
+        assertEquals(couldNotTell(Incompleteness.Code.VALUE_UNREADABLE),
+                lastness(0, A, UNREADABLE, TRUNCATED));
+    }
+
     /** A later element that was read and is equal settles that it is not, whatever else was not. */
     @Test
     void anEqualKeyAfterItThatWasReadSettlesItWhateverElseWasNotRead() {

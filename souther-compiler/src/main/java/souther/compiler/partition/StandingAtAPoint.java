@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.TypeView;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.inputs.TermPath;
@@ -8,17 +9,22 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.BorderQuantity.Lastness;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Whether a tuple of values stands at one point of a border.
@@ -508,32 +514,20 @@ public final class StandingAtAPoint {
     abstract static sealed class WalkOfARow implements BorderQuantity.Observation
             permits DiscoveringRow, OneReadingOfARow {
 
-        private final BehaviorInputs where;
-        private final ObservedInputs observedInputs;
+        /** The row, as every walk over it has it. */
+        private final RowWalk walk;
 
         /** What this walk found at each path it was asked about, so that a row read once is read
          *  once however many quantities and items ask it. */
         private final Map<TermPath, WalkResult<ObservationAtPoint>> found = new HashMap<>();
 
-        /**
-         * The values the row wrote at each path, with the elements taken to reach each — shared by
-         * every reading of the row, since which values a row wrote does not turn on which element
-         * a reading chose. Walked once per path for the row, and not once per path for each of its
-         * readings: a row of many elements has as many readings, and each walks the whole row.
-         */
-        private final Map<TermPath, WalkResult<List<BehaviorInputs.Occurrence>>> occurrences;
-
-        WalkOfARow(BehaviorInputs where, ObservedInputs observedInputs,
-                   Map<TermPath, WalkResult<List<BehaviorInputs.Occurrence>>> occurrences) {
-            this.where = where;
-            this.observedInputs = observedInputs;
-            this.occurrences = occurrences;
+        WalkOfARow(RowWalk walk) {
+            this.walk = walk;
         }
 
-        /** The values the row wrote at {@code path}, as every reading of the row has them. */
-        private WalkResult<List<BehaviorInputs.Occurrence>> occurrencesAt(TermPath path) {
-            return occurrences.computeIfAbsent(path,
-                    each -> where.occurrencesAt(observedInputs.inputs(), each));
+        /** The walk over the row this is one of. */
+        final RowWalk walk() {
+            return walk;
         }
 
         @Override
@@ -542,9 +536,10 @@ public final class StandingAtAPoint {
         }
 
         private WalkResult<ObservationAtPoint> walkedTo(TermPath path) {
+            Written written = walk.at(path);
             // Over the arms, so that a walk coming to answer a third way is one this has to be
             // taught about rather than one quietly read as a walk that could not be made.
-            return switch (occurrencesAt(path)) {
+            return switch (written.found()) {
                 // The walk and the type disagree, which is the quantity's to report.
                 case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
                         WalkResult.couldNotWalk();
@@ -554,22 +549,19 @@ public final class StandingAtAPoint {
                 // is reading.
                 case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
                         WalkResult.reached(values.isEmpty()
-                                ? ObservationAtPoint.WROTE_NOTHING : standingAmong(values));
+                                ? ObservationAtPoint.WROTE_NOTHING : standingAmong(written));
             };
         }
 
         /**
          * What this walk makes of the elements the row wrote at a position it arrived at.
          *
-         * @param values what the row wrote there, never none of it
+         * @param written what the row wrote there, never none of it
          */
-        abstract ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values);
+        abstract ObservationAtPoint standingAmong(Written written);
 
         /** The element this walk chose in each container, none where it chose nothing. */
         abstract Map<TermPath, Integer> chosen();
-
-        /** Whether {@code each} was reached through the elements this walk chose. */
-        abstract boolean agrees(BehaviorInputs.Occurrence each);
 
         /**
          * Every element the row wrote in {@code container}, each read as this walk with that
@@ -588,27 +580,17 @@ public final class StandingAtAPoint {
             if (at(container) instanceof WalkResult.CouldNotWalk<ObservationAtPoint>) {
                 return WalkResult.couldNotWalk();
             }
-            return switch (occurrencesAt(container.element())) {
-                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
-                        WalkResult.couldNotWalk();
-                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
-                    Set<Integer> elements = new TreeSet<>();
-                    for (BehaviorInputs.Occurrence each : values) {
-                        Integer taken = each.at().elementAt(container);
-                        if (taken != null && agreesBeside(container, each)) {
-                            elements.add(taken);
-                        }
-                    }
-                    List<BorderQuantity.Observation> out = new ArrayList<>();
-                    for (int element : elements) {
-                        Map<TermPath, Integer> choosing = new LinkedHashMap<>(chosen());
-                        choosing.put(container, element);
-                        out.add(new OneReadingOfARow(where, observedInputs, choosing,
-                                occurrences));
-                    }
-                    yield WalkResult.reached(List.copyOf(out));
-                }
-            };
+            Written elements = walk.at(container.element());
+            if (!elements.walked()) {
+                return WalkResult.couldNotWalk();
+            }
+            List<BorderQuantity.Observation> out = new ArrayList<>();
+            for (int element : elements.elementsBeside(container, chosen())) {
+                Map<TermPath, Integer> choosing = new LinkedHashMap<>(chosen());
+                choosing.put(container, element);
+                out.add(new OneReadingOfARow(walk, choosing));
+            }
+            return WalkResult.reached(List.copyOf(out));
         }
 
         /**
@@ -623,6 +605,9 @@ public final class StandingAtAPoint {
          * value to be equal or unequal to another: it shows that the element is not the last only
          * by another after it that was read whole and is equal, and shows that it is by nothing.
          * What stopped it is said ({@link ReadingGap#ofAComparisonOf}).
+         *
+         * <p>Worked out for every element of the occurrence at once, and kept for every reading
+         * that chose alike beside the container.
          */
         @Override
         public final Lastness lastToHold(TermPath container, TermPath position) {
@@ -630,43 +615,63 @@ public final class StandingAtAPoint {
             if (mine == null) {
                 return new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
             }
-            return switch (occurrencesAt(position)) {
-                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
-                        new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
-                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
-                    ObservedValue held = null;
-                    for (BehaviorInputs.Occurrence each : values) {
-                        if (agreesBeside(container, each)
-                                && mine.equals(each.at().elementAt(container))) {
-                            held = each.value();
-                        }
-                    }
-                    if (held == null) {
-                        yield new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
-                    }
-                    ReadingGap ownNotRead = ReadingGap.ofAComparisonOf(held);
-                    if (ownNotRead != null) {
-                        yield new Lastness.CouldNotTell(ownNotRead);
-                    }
-                    ReadingGap notTold = null;
-                    for (BehaviorInputs.Occurrence each : values) {
-                        Integer taken = each.at().elementAt(container);
-                        if (!agreesBeside(container, each) || taken == null || taken <= mine) {
-                            continue;
-                        }
-                        ReadingGap laterNotRead = ReadingGap.ofAComparisonOf(each.value());
-                        if (laterNotRead != null) {
-                            notTold = notTold != null ? notTold : laterNotRead;
-                        } else if (held.equals(each.value())) {
-                            // One that was read and is equal settles it, whatever else was not.
-                            yield new Lastness.NotLast();
-                        }
-                    }
-                    yield notTold != null ? new Lastness.CouldNotTell(notTold)
-                            : new Lastness.Last();
-                }
-            };
+            Map<Integer, Lastness> each = walk.kept(new LastOfItsValue(container, position),
+                    other -> !other.equals(container), chosen(),
+                    () -> lastnessOfEach(container, position));
+            Lastness answer = each.get(mine);
+            return answer != null ? answer : new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
         }
+
+        /**
+         * Whether each element of the occurrence of {@code container} this reading is in is the
+         * last to hold the value it holds at {@code position}, by the element; none for an element
+         * that holds nothing there, or for every element where the walk could not be made.
+         *
+         * <p>From the last element to the first, carrying what the elements after each hold: the
+         * values read whole, and the first in order that was not.
+         */
+        private Map<Integer, Lastness> lastnessOfEach(TermPath container, TermPath position) {
+            Written written = walk.at(position);
+            if (!written.walked()) {
+                return Map.of();
+            }
+            TreeMap<Integer, List<ObservedValue>> byElement = new TreeMap<>();
+            for (BehaviorInputs.Occurrence each : written.besideOf(container, chosen())) {
+                Integer taken = each.at().elementAt(container);
+                if (taken != null) {
+                    byElement.computeIfAbsent(taken, _ -> new ArrayList<>()).add(each.value());
+                }
+            }
+            Map<Integer, Lastness> out = new HashMap<>();
+            Set<ObservedValue> readAfter = new HashSet<>();
+            ReadingGap firstNotReadAfter = null;
+            for (Map.Entry<Integer, List<ObservedValue>> element
+                    : byElement.descendingMap().entrySet()) {
+                ObservedValue held = element.getValue().getLast();
+                ReadingGap ownNotRead = ReadingGap.ofAComparisonOf(held);
+                // One after it that was read and is equal settles it, whatever else was not.
+                out.put(element.getKey(), ownNotRead != null ? new Lastness.CouldNotTell(ownNotRead)
+                        : readAfter.contains(held) ? new Lastness.NotLast()
+                        : firstNotReadAfter != null ? new Lastness.CouldNotTell(firstNotReadAfter)
+                        : new Lastness.Last());
+                ReadingGap firstNotReadHere = null;
+                for (ObservedValue value : element.getValue()) {
+                    ReadingGap notRead = ReadingGap.ofAComparisonOf(value);
+                    if (notRead == null) {
+                        readAfter.add(value);
+                    } else if (firstNotReadHere == null) {
+                        firstNotReadHere = notRead;
+                    }
+                }
+                if (firstNotReadHere != null) {
+                    firstNotReadAfter = firstNotReadHere;
+                }
+            }
+            return out;
+        }
+
+        /** Whether each element of an occurrence is the last to hold its value at a position. */
+        private record LastOfItsValue(TermPath container, TermPath position) {}
 
         /**
          * The occurrence of {@code container} this reading is in — what it chose of every other
@@ -676,14 +681,10 @@ public final class StandingAtAPoint {
         @Override
         public final WalkResult<BorderQuantity.Among> among(TermPath container) {
             if (at(container) instanceof WalkResult.CouldNotWalk<ObservationAtPoint>
-                    || occurrencesAt(container.element())
-                            instanceof WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>>) {
+                    || !walk.at(container.element()).walked()) {
                 return WalkResult.couldNotWalk();
             }
-            Map<TermPath, Integer> beside = new LinkedHashMap<>(chosen());
-            beside.remove(container);
-            return WalkResult.reached(new BorderQuantity.Among(occurrences, beside,
-                    chosen().get(container)));
+            return WalkResult.reached(new BorderQuantity.Among(chosen().get(container)));
         }
 
         @Override
@@ -695,44 +696,25 @@ public final class StandingAtAPoint {
          *  every other container, each read with it chosen. */
         @Override
         public final WalkResult<List<BorderQuantity.AnElement>> elementsOf(TermPath container) {
-            return switch (occurrencesAt(container.element())) {
-                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
-                        WalkResult.couldNotWalk();
-                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
-                    Set<Integer> elements = new TreeSet<>();
-                    for (BehaviorInputs.Occurrence each : values) {
-                        Integer taken = each.at().elementAt(container);
-                        if (taken != null && agreesBeside(container, each)) {
-                            elements.add(taken);
-                        }
-                    }
-                    Map<TermPath, Integer> beside = new LinkedHashMap<>(chosen());
-                    beside.remove(container);
-                    List<BorderQuantity.AnElement> out = new ArrayList<>();
-                    for (int element : elements) {
-                        Map<TermPath, Integer> choosing = new LinkedHashMap<>(beside);
-                        choosing.put(container, element);
-                        out.add(new BorderQuantity.AnElement(element, new OneReadingOfARow(where,
-                                observedInputs, choosing, occurrences)));
-                    }
-                    yield WalkResult.reached(List.copyOf(out));
-                }
-            };
+            Written elements = walk.at(container.element());
+            if (!elements.walked()) {
+                return WalkResult.couldNotWalk();
+            }
+            Map<TermPath, Integer> beside = new LinkedHashMap<>(chosen());
+            beside.remove(container);
+            List<BorderQuantity.AnElement> out = new ArrayList<>();
+            for (int element : elements.elementsBeside(container, chosen())) {
+                Map<TermPath, Integer> choosing = new LinkedHashMap<>(beside);
+                choosing.put(container, element);
+                out.add(new BorderQuantity.AnElement(element,
+                        new OneReadingOfARow(walk, choosing)));
+            }
+            return WalkResult.reached(List.copyOf(out));
         }
 
-        /** Whether {@code each} was reached through the elements this walk chose in every
-         *  container but {@code container}, whose elements are what is being told apart. */
-        private boolean agreesBeside(TermPath container, BehaviorInputs.Occurrence each) {
-            for (Map.Entry<TermPath, Integer> picked : chosen().entrySet()) {
-                if (picked.getKey().equals(container)) {
-                    continue;
-                }
-                Integer taken = each.at().elementAt(picked.getKey());
-                if (taken != null && !taken.equals(picked.getValue())) {
-                    return false;
-                }
-            }
-            return true;
+        @Override
+        public final <T> T keptOf(BorderQuantity.ReadAlike<T> asked) {
+            return walk.kept(asked, asked::turnsOn, chosen(), () -> asked.readAt(this));
         }
 
         /**
@@ -750,7 +732,13 @@ public final class StandingAtAPoint {
         public final WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
             // The walk's own answer handed on, which is the quantity's to report where it could not
             // be taken, as it is for the one value a place holds.
-            return where.valuesAt(observedInputs.inputs(), path);
+            return switch (walk.at(path).found()) {
+                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
+                        WalkResult.reached(values.stream().map(BehaviorInputs.Occurrence::value)
+                                .toList());
+            };
         }
     }
 
@@ -773,18 +761,13 @@ public final class StandingAtAPoint {
          *  which is the order the readings are taken in. */
         private final Map<TermPath, Integer> containers = new LinkedHashMap<>();
 
-        DiscoveringRow(BehaviorInputs where, ObservedInputs observedInputs) {
-            super(where, observedInputs, new HashMap<>());
-        }
-
-        /** What the row wrote at each path this walk was asked about, for the readings made of it
-         *  to take rather than walk again. */
-        Map<TermPath, WalkResult<List<BehaviorInputs.Occurrence>>> occurrencesWalked() {
-            return super.occurrences;
+        DiscoveringRow(RowWalk walk) {
+            super(walk);
         }
 
         @Override
-        ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
+        ObservationAtPoint standingAmong(Written written) {
+            List<BehaviorInputs.Occurrence> values = written.values();
             // Each occurrence's containers outermost first, so that the order the containers are
             // first met in is the order they nest in and the readings built over them are tried in
             // one order.
@@ -803,11 +786,6 @@ public final class StandingAtAPoint {
         @Override
         Map<TermPath, Integer> chosen() {
             return Map.of();
-        }
-
-        @Override
-        boolean agrees(BehaviorInputs.Occurrence each) {
-            return true;
         }
 
         /** What the containers hold, as of a walk that is over. */
@@ -836,33 +814,300 @@ public final class StandingAtAPoint {
         /** The element chosen in each container, for this reading. */
         private final Map<TermPath, Integer> chosen;
 
-        OneReadingOfARow(BehaviorInputs where, ObservedInputs observedInputs,
-                         Map<TermPath, Integer> chosen,
-                         Map<TermPath, WalkResult<List<BehaviorInputs.Occurrence>>> occurrences) {
-            super(where, observedInputs, occurrences);
+        OneReadingOfARow(RowWalk walk, Map<TermPath, Integer> chosen) {
+            super(walk);
             this.chosen = chosen;
         }
 
         @Override
-        ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
-            for (BehaviorInputs.Occurrence each : values) {
-                if (agrees(each)) {
-                    return new ObservationAtPoint.Value(each.value());
-                }
-            }
-            // No value here under this reading. Not a stop: the reading names an element this
+        ObservationAtPoint standingAmong(Written written) {
+            ObservedValue value = written.under(chosen);
+            // None here under this reading is not a stop: the reading names an element this
             // position does not have, and another reading is where its values are.
-            return ObservationAtPoint.ANOTHER_READING;
+            return value != null ? new ObservationAtPoint.Value(value)
+                    : ObservationAtPoint.ANOTHER_READING;
         }
 
         @Override
         Map<TermPath, Integer> chosen() {
             return chosen;
         }
+    }
 
-        @Override
-        boolean agrees(BehaviorInputs.Occurrence each) {
+    /**
+     * One row, as every walk over it reads it: what it wrote at each path, walked once, and what
+     * was read of its elements together, for every reading of it.
+     *
+     * <p>Shared by the walk that finds the readings and every reading made of it, since what a row
+     * wrote does not turn on which element a reading chose. Made for one row and dropped with it:
+     * nothing here is asked of another row, and what a line is read with lives longer than any one
+     * of the rows it is read on.
+     */
+    static final class RowWalk {
+
+        private final BehaviorInputs where;
+        private final ObservedInputs observed;
+
+        /** What each type is under the declarations, for every walk into the row. */
+        private final Map<Type, TypeView> views = new HashMap<>();
+
+        private final Map<TermPath, Written> written = new HashMap<>();
+
+        /** What was read of the row together, by the question and what a reading chose that its
+         *  answer turns on. */
+        private final Map<Kept, Object> kept = new HashMap<>();
+
+        /** How many times a value the row wrote was looked at or looked up, over every walk. */
+        private long lookedAt;
+
+        /** How many answers were read rather than taken from those kept. */
+        private long read;
+
+        RowWalk(BehaviorInputs where, ObservedInputs observed) {
+            this.where = where;
+            this.observed = observed;
+        }
+
+        /** What the row wrote at {@code path}. */
+        Written at(TermPath path) {
+            Written known = written.get(path);
+            if (known == null) {
+                known = new Written(this, where.occurrencesAt(observed.inputs(), path, views));
+                written.put(path, known);
+            }
+            return known;
+        }
+
+        /**
+         * What {@code read} answers for a reading that chose {@code chosen}, read once for every
+         * reading of the row that chose alike where {@code turnsOn} says the answer turns.
+         *
+         * <p>{@code question} is what the answer is of: two equal questions are asked alike, and
+         * what one answers is never taken for another's, so a question names one kind of answer.
+         */
+        @SuppressWarnings("unchecked")
+        <T> T kept(Object question, Predicate<TermPath> turnsOn, Map<TermPath, Integer> chosen,
+                   Supplier<T> read) {
+            Map<TermPath, Integer> turning = new HashMap<>();
+            chosen.forEach((container, element) -> {
+                if (turnsOn.test(container)) {
+                    turning.put(container, element);
+                }
+            });
+            Kept key = new Kept(question, turning);
+            // Asked and then put, never computed in place: reading the answer may ask the row for
+            // another one kept beside it.
+            if (kept.containsKey(key)) {
+                return (T) kept.get(key);
+            }
+            this.read++;
+            T answer = read.get();
+            kept.put(key, answer);
+            return answer;
+        }
+
+        /** How many times a value the row wrote was looked at or looked up, over every walk. */
+        long occurrencesLookedAt() {
+            return lookedAt;
+        }
+
+        /** How many answers kept for every reading of the row were read. */
+        long answersRead() {
+            return read;
+        }
+
+        private record Kept(Object question, Map<TermPath, Integer> turning) {
+
+            Kept {
+                turning = Map.copyOf(turning);
+            }
+        }
+    }
+
+    /**
+     * What a row wrote at one path, and the same found by the elements taken to reach each value.
+     *
+     * <p>A reading takes the value under the elements it chose, and a reader of an occurrence
+     * takes every value under what was chosen beside one container. Looked up rather than looked
+     * for, each is an index made once of every occurrence, so a row read once per element of a
+     * container does not look at every element for each.
+     *
+     * <p>Only where every value at the path was reached through the same containers, and where a
+     * reading chose an element in each of them: an occurrence inside fewer containers is reached
+     * under any element of the others, and is looked for among all of them.
+     */
+    static final class Written {
+
+        private final RowWalk walk;
+        private final WalkResult<List<BehaviorInputs.Occurrence>> found;
+
+        /** The containers every value here was reached through, outermost first, or null where
+         *  they were not the same for all; worked out when first asked. */
+        private List<TermPath> containers;
+        private boolean containersAsked;
+
+        /** The first value reached through each choice of the containers, in their order. */
+        private Map<List<Integer>, ObservedValue> byElements;
+
+        /** The values reached under each choice of every container but one, by that one. */
+        private final Map<TermPath, Map<List<Integer>, List<BehaviorInputs.Occurrence>>> beside =
+                new HashMap<>();
+
+        Written(RowWalk walk, WalkResult<List<BehaviorInputs.Occurrence>> found) {
+            this.walk = walk;
+            this.found = found;
+        }
+
+        /** What the walk to the path came to. */
+        WalkResult<List<BehaviorInputs.Occurrence>> found() {
+            return found;
+        }
+
+        /** Whether the walk reached the path. */
+        boolean walked() {
+            return found instanceof WalkResult.Reached<List<BehaviorInputs.Occurrence>>;
+        }
+
+        /** The values found, for a walk that reached the path. */
+        List<BehaviorInputs.Occurrence> values() {
+            return ((WalkResult.Reached<List<BehaviorInputs.Occurrence>>) found).value();
+        }
+
+        /** The first value reached through the elements {@code chosen} names, or null. */
+        ObservedValue under(Map<TermPath, Integer> chosen) {
+            List<Integer> key = choice(chosen, null);
+            if (key != null) {
+                if (byElements == null) {
+                    byElements = new HashMap<>();
+                    for (BehaviorInputs.Occurrence each : values()) {
+                        walk.lookedAt++;
+                        byElements.putIfAbsent(elementsOf(each, null), each.value());
+                    }
+                }
+                walk.lookedAt++;
+                return byElements.get(key);
+            }
+            for (BehaviorInputs.Occurrence each : values()) {
+                walk.lookedAt++;
+                if (agrees(each, chosen, null)) {
+                    return each.value();
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Every value reached under what {@code chosen} names of every container but
+         * {@code container}, in the order the row wrote them.
+         */
+        List<BehaviorInputs.Occurrence> besideOf(TermPath container,
+                                                 Map<TermPath, Integer> chosen) {
+            List<Integer> key = choice(chosen, container);
+            if (key != null) {
+                List<BehaviorInputs.Occurrence> found = beside.computeIfAbsent(container,
+                        this::indexedBeside).getOrDefault(key, List.of());
+                walk.lookedAt += found.size();
+                return found;
+            }
+            List<BehaviorInputs.Occurrence> out = new ArrayList<>();
+            for (BehaviorInputs.Occurrence each : values()) {
+                walk.lookedAt++;
+                if (agrees(each, chosen, container)) {
+                    out.add(each);
+                }
+            }
+            return out;
+        }
+
+        /** The elements of {@code container} reached under what {@code chosen} names of every
+         *  other container, in order. */
+        Set<Integer> elementsBeside(TermPath container, Map<TermPath, Integer> chosen) {
+            Set<Integer> elements = new TreeSet<>();
+            for (BehaviorInputs.Occurrence each : besideOf(container, chosen)) {
+                Integer taken = each.at().elementAt(container);
+                if (taken != null) {
+                    elements.add(taken);
+                }
+            }
+            return elements;
+        }
+
+        private Map<List<Integer>, List<BehaviorInputs.Occurrence>> indexedBeside(
+                TermPath container) {
+            Map<List<Integer>, List<BehaviorInputs.Occurrence>> out = new HashMap<>();
+            for (BehaviorInputs.Occurrence each : values()) {
+                walk.lookedAt++;
+                out.computeIfAbsent(elementsOf(each, container), _ -> new ArrayList<>()).add(each);
+            }
+            return out;
+        }
+
+        /**
+         * What {@code chosen} names of each container the values here were reached through but
+         * {@code apart}, in their order — or null where they were not reached through the same
+         * containers, or where {@code chosen} names no element of one of them.
+         */
+        private List<Integer> choice(Map<TermPath, Integer> chosen, TermPath apart) {
+            List<TermPath> through = containers();
+            if (through == null) {
+                return null;
+            }
+            List<Integer> out = new ArrayList<>(through.size());
+            for (TermPath container : through) {
+                if (container.equals(apart)) {
+                    continue;
+                }
+                Integer element = chosen.get(container);
+                if (element == null) {
+                    return null;
+                }
+                out.add(element);
+            }
+            return out;
+        }
+
+        private List<TermPath> containers() {
+            if (!containersAsked) {
+                containersAsked = true;
+                List<TermPath> first = null;
+                for (BehaviorInputs.Occurrence each : values()) {
+                    walk.lookedAt++;
+                    List<TermPath> these = new ArrayList<>();
+                    for (ElementsTaken.Taken taken : each.at().outermostFirst()) {
+                        these.add(taken.container());
+                    }
+                    if (first == null) {
+                        first = these;
+                    } else if (!first.equals(these)) {
+                        first = null;
+                        break;
+                    }
+                }
+                containers = first;
+            }
+            return containers;
+        }
+
+        /** The elements {@code each} was reached through, in the order of the containers, but
+         *  the one taken from {@code apart}. */
+        private static List<Integer> elementsOf(BehaviorInputs.Occurrence each, TermPath apart) {
+            List<Integer> out = new ArrayList<>();
+            for (ElementsTaken.Taken taken : each.at().outermostFirst()) {
+                if (!taken.container().equals(apart)) {
+                    out.add(taken.element());
+                }
+            }
+            return out;
+        }
+
+        /** Whether {@code each} was reached through what {@code chosen} names of every container
+         *  but {@code apart}. */
+        private static boolean agrees(BehaviorInputs.Occurrence each, Map<TermPath, Integer> chosen,
+                                      TermPath apart) {
             for (Map.Entry<TermPath, Integer> picked : chosen.entrySet()) {
+                if (picked.getKey().equals(apart)) {
+                    continue;
+                }
                 Integer taken = each.at().elementAt(picked.getKey());
                 if (taken != null && !taken.equals(picked.getValue())) {
                     return false;
@@ -899,7 +1144,8 @@ public final class StandingAtAPoint {
     private static Readings readings(BehaviorInputs where, ObservedInputs observed,
                                      BorderQuantity quantity,
                                      Optional<WhereAPartDecides.AskedOfRows> decides) {
-        DiscoveringRow discovering = new DiscoveringRow(where, observed);
+        RowWalk walk = new RowWalk(where, observed);
+        DiscoveringRow discovering = new DiscoveringRow(walk);
         quantity.lookAt(discovering);
         decides.ifPresent(asked -> asked.lookAt(discovering));
         Map<TermPath, Integer> containers = discovering.containers();
@@ -914,8 +1160,7 @@ public final class StandingAtAPoint {
             out.add(discovering);
         } else {
             for (Map<TermPath, Integer> choice : readingsOver(containers)) {
-                out.add(new OneReadingOfARow(where, observed, choice,
-                        discovering.occurrencesWalked()));
+                out.add(new OneReadingOfARow(walk, choice));
             }
         }
         // Said by the walk that stopped, which is the only thing that knows it stopped. Worked out

@@ -67,19 +67,15 @@ public sealed interface NumericTerm
      *
      * <p>One kind and not two terms each asked about separately, because what follows from being one
      * is the same for both: the number is read among the elements of the one occurrence of
-     * {@link #container()} the element is in, the elements are looked at only at
-     * {@link #fieldsRead()}, and nothing about it is read off one position. A reader asks it of this type rather than of
-     * the two, so a third number of the kind is one that reader already handles.
+     * {@link #container()} the element is in, the elements are looked at only at the fields its
+     * number reads, and nothing about it is read off one position. A reader asks it of this type
+     * rather than of the two, so a third number of the kind is one that reader already handles.
      */
     sealed interface OfAnElementsNeighbours extends NumericTerm
             permits Multiplicity, ExtremeOfItsKey {
 
         /** The container among whose elements the number is read. */
         TermPath container();
-
-        /** The ways from an element of {@link #container()} to every value its number is read
-         *  from, each of which an element of the shape the walk says holds. */
-        List<ElementProjection> fieldsRead();
     }
 
     /**
@@ -495,11 +491,6 @@ public sealed interface NumericTerm
             return fieldsTo(container, place);
         }
 
-        @Override
-        public List<ElementProjection> fieldsRead() {
-            return List.of(placeField());
-        }
-
         /** Where the value compared stands, which is where a reader is sent and no place the
          *  number stands at. */
         @Override
@@ -598,11 +589,6 @@ public sealed interface NumericTerm
         /** The way from an element of the container to {@link #value()}. */
         public ElementProjection valueField() {
             return fieldsTo(container, value);
-        }
-
-        @Override
-        public List<ElementProjection> fieldsRead() {
-            return List.of(keyField(), valueField());
         }
 
         /** The container whose elements are looked at. */

@@ -5,8 +5,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -129,17 +129,19 @@ final class MetOnARow {
         }
     }
 
-    /** One container stopped short in, and what its occurrences came to on the rows asked. */
-    private static final class Stopping implements Level {
+    /**
+     * One container stopped short in.
+     *
+     * <p>What one occurrence of it came to is the same for every reading that chose alike beside
+     * it, so it is read once for all of them ({@link #readAt}), and kept by the walk over the row
+     * rather than here: this lives as long as the line, and the rows it is asked of do not.
+     */
+    private static final class Stopping implements Level, BorderQuantity.ReadAlike<Prefix> {
 
         private final TermPath container;
 
         /** What stops the operation, put to rows. */
         private final AStatementAtARow stops;
-
-        /** Each occurrence of the container read, by the row and what was chosen beside it. */
-        private final Map<Object, Map<Map<TermPath, Integer>, Prefix>> read =
-                new IdentityHashMap<>();
 
         Stopping(TermPath container, AStatementAtARow stops) {
             this.container = container;
@@ -157,15 +159,19 @@ final class MetOnARow {
                     if (among.chosen() == null) {
                         yield AStatementAtARow.Answer.HOLDS;
                     }
-                    // The elements are read once for each occurrence and not for each reading of
-                    // one: there is a reading per element, and each reading them all is the
-                    // square of the container's length.
-                    yield read.computeIfAbsent(among.walk(), _ -> new HashMap<>())
-                            .computeIfAbsent(among.beside(), _ -> Prefix.of(stops,
-                                    reading.elementsOf(container)))
-                            .before(among.chosen());
+                    yield reading.keptOf(this).before(among.chosen());
                 }
             };
+        }
+
+        @Override
+        public boolean turnsOn(TermPath each) {
+            return !each.equals(container);
+        }
+
+        @Override
+        public Prefix readAt(BorderQuantity.Observation reading) {
+            return Prefix.of(stops, reading.elementsOf(container));
         }
     }
 
@@ -174,10 +180,19 @@ final class MetOnARow {
      * element it certainly stops at, and each element before that where whether it stops could
      * not be read.
      *
+     * <p>An element is told every reason met before it, in the order they were first met. So each
+     * reason is kept once, with the first element it was met at, and the elements between hold
+     * nothing of their own.
+     *
      * @param stopsAt the first element it stops at, or null where it stops at none
-     * @param unknown each element, in order, where it could not be read, with why
+     * @param firstAt each reason whether it stops could not be read for, in the order they were
+     *                first met, with the first element it was met at
      */
-    private record Prefix(Integer stopsAt, List<Map.Entry<Integer, Set<ReadingGap>>> unknown) {
+    private record Prefix(Integer stopsAt, Map<ReadingGap, Integer> firstAt) {
+
+        Prefix {
+            firstAt = Collections.unmodifiableMap(new LinkedHashMap<>(firstAt));
+        }
 
         static Prefix of(AStatementAtARow stops,
                          WalkResult<List<BorderQuantity.AnElement>> elements) {
@@ -185,21 +200,20 @@ final class MetOnARow {
                     List<BorderQuantity.AnElement> each))) {
                 // No element could be walked to, so whether any before one stopped the operation
                 // is not known of any of them.
-                return new Prefix(null, List.of(Map.entry(Integer.MIN_VALUE,
-                        Set.of(ReadingGap.COULD_NOT_WALK))));
+                return new Prefix(null, Map.of(ReadingGap.COULD_NOT_WALK, Integer.MIN_VALUE));
             }
-            List<Map.Entry<Integer, Set<ReadingGap>>> unknown = new ArrayList<>();
+            Map<ReadingGap, Integer> firstAt = new LinkedHashMap<>();
             for (BorderQuantity.AnElement one : each) {
                 switch (stops.at(one.reading())) {
                     case AStatementAtARow.Answer.Holds _ -> {
-                        return new Prefix(one.element(), List.copyOf(unknown));
+                        return new Prefix(one.element(), firstAt);
                     }
                     case AStatementAtARow.Answer.Fails _ -> { }
                     case AStatementAtARow.Answer.CouldNotTell(var why) ->
-                            unknown.add(Map.entry(one.element(), why));
+                            why.forEach(gap -> firstAt.putIfAbsent(gap, one.element()));
                 }
             }
-            return new Prefix(null, List.copyOf(unknown));
+            return new Prefix(null, firstAt);
         }
 
         /** Whether the operation got to {@code element}: no element before it stopped it. */
@@ -208,11 +222,11 @@ final class MetOnARow {
                 return AStatementAtARow.Answer.FAILS;
             }
             Set<ReadingGap> why = new LinkedHashSet<>();
-            for (Map.Entry<Integer, Set<ReadingGap>> each : unknown) {
-                if (each.getKey() < element) {
-                    why.addAll(each.getValue());
+            firstAt.forEach((gap, at) -> {
+                if (at < element) {
+                    why.add(gap);
                 }
-            }
+            });
             return why.isEmpty() ? AStatementAtARow.Answer.HOLDS
                     : new AStatementAtARow.Answer.CouldNotTell(why);
         }

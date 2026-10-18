@@ -7862,20 +7862,24 @@ public final class Generator {
                         case AnOccurrence.NotRead(Incompleteness.Code why) -> unread.add(why);
                         case AnOccurrence.OfAnotherShape _ -> ofAnotherShape = true;
                         case AnOccurrence.Read(List<ObservedValue> held) -> {
-                            List<NumericTerm.Reading> readings = readEachOf(on, held);
-                            if (readings == null) {
-                                ofAnotherShape = true;
-                                continue;
-                            }
-                            for (NumericTerm.Reading read : readings) {
-                                switch (read) {
-                                    case NumericTerm.Reading.Number number ->
-                                            any |= number.value().compareTo(at) == 0;
-                                    case NumericTerm.Reading.Missing missing ->
-                                            unread.add(missing.code());
-                                    case NumericTerm.Reading.NotNumber _ -> { }
-                                    case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
-                                            notWorkedOut.add(why);
+                            for (TermOrders.Neighbouring<AnOccurrence.OfAnotherShape> each
+                                    : readEachOf(on, held)) {
+                                switch (each) {
+                                    case TermOrders.Neighbouring.HeldNothing<
+                                            AnOccurrence.OfAnotherShape> _ -> ofAnotherShape = true;
+                                    case TermOrders.Neighbouring.Read<
+                                            AnOccurrence.OfAnotherShape>(
+                                            NumericTerm.Reading read) -> {
+                                        switch (read) {
+                                            case NumericTerm.Reading.Number number ->
+                                                    any |= number.value().compareTo(at) == 0;
+                                            case NumericTerm.Reading.Missing missing ->
+                                                    unread.add(missing.code());
+                                            case NumericTerm.Reading.NotNumber _ -> { }
+                                            case NumericTerm.Reading.NotWorkedOut(
+                                                    UnheldNumber why) -> notWorkedOut.add(why);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -7954,21 +7958,27 @@ public final class Generator {
 
     /**
      * What each of {@code held}, the elements of one container, reads as {@code on}'s number among
-     * them — or null where an element read whole holds nothing at a way the number is read from,
-     * which is an element of another shape than the walk's.
+     * them, by the one law a row's elements are read by: an element read whole that holds nothing
+     * at a way the number reads is an element of another shape than the walk's, and stops what
+     * its reading stops.
      */
-    private static List<NumericTerm.Reading> readEachOf(TermOrders on, List<ObservedValue> held) {
-        List<ElementProjection> read = on.amongItsNeighbours().fieldsRead();
-        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+    private static List<TermOrders.Neighbouring<AnOccurrence.OfAnotherShape>> readEachOf(
+            TermOrders on, List<ObservedValue> held) {
+        List<Function<ElementProjection, TermOrders.Holding<AnOccurrence.OfAnotherShape>>> each =
+                new ArrayList<>(held.size());
         for (ObservedValue element : held) {
-            for (ElementProjection field : read) {
-                if (field.in(element) == null) {
-                    return null;
-                }
-            }
-            each.add(field -> field.in(element));
+            each.add(field -> field.in(element) instanceof ObservedValue value
+                    ? new TermOrders.Holding.Value<>(value)
+                    : new TermOrders.Holding.Nothing<>(new AnOccurrence.OfAnotherShape()));
         }
-        return on.readEachInItsOccurrence(each);
+        TermOrders.ElementsTogether<AnOccurrence.OfAnotherShape> together = on.together(each);
+        List<TermOrders.Neighbouring<AnOccurrence.OfAnotherShape>> out =
+                new ArrayList<>(each.size());
+        for (Function<ElementProjection, TermOrders.Holding<AnOccurrence.OfAnotherShape>> one
+                : each) {
+            out.add(together.numberOf(one));
+        }
+        return out;
     }
 
     /**
