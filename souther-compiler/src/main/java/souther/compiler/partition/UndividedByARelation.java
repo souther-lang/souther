@@ -693,7 +693,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Quantity.KeptSoFar kept = side.kept();
         boolean greatest = kept.extreme() instanceof Extreme.Greatest;
         SearchRegion declared = read.quantities().region();
-        Start start = startOf(kept, side, region, read, conditions, heldWhole);
+        Start start = startOf(kept, region, read, conditions, heldWhole);
         if (start == null) {
             return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
                     NumericDomain.Bounds.OPEN, null, null, false);
@@ -748,8 +748,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** Where the walk {@code kept} describes starts, or null where its seed is a number this
      *  reading does not count with. */
-    private static Start startOf(Quantity.KeptSoFar kept, Side side, SearchRegion region,
-                                 InputReading read, List<OnAWay> conditions, boolean heldWhole) {
+    private static Start startOf(Quantity.KeptSoFar kept, SearchRegion region, InputReading read,
+                                 List<OnAWay> conditions, boolean heldWhole) {
         return switch (kept.seed()) {
             case Quantity.KeptSoFar.Seed.Written(ExactRatio number) -> {
                 if (!(Count.written(number) instanceof ExactAnswer.Held<Optional<Count>>(
