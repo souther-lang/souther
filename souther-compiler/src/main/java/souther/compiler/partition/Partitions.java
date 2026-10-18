@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
@@ -54,6 +55,8 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -1989,8 +1992,8 @@ public final class Partitions {
                 // values nothing here takes.
                 Proposals stands = Witnesses.firstWhatThePlaceAdmits(
                         field.getValue(), limits, reading, inside,
-                        () -> representativesHolding(field.getValue(), reading, limits.values(),
-                                limits.held(), inside)).firstOf(1);
+                        () -> representativesHolding(field.getValue(), reading, limits, inside))
+                        .firstOf(1);
                 met = met.and(stands.met());
                 if (stands.isEmpty()) {
                     return new FieldsChosen(null, met);
@@ -2155,26 +2158,36 @@ public final class Partitions {
      * with are what runs out.
      */
     static Proposals representativesHolding(Type type, RuleReadingContext reading,
-                                            NumericDomain.Bounds within, FieldDomains.Held held) {
-        return representativesHolding(type, reading, within, held, Set.of());
+                                            FieldDomains.ConstructionLimits limits) {
+        return representativesHolding(type, reading, limits, Set.of());
     }
 
     /** The same, of a position nothing here has read yet. */
     static Proposals representativesHolding(Type type, RuleReadingContext reading,
-                                            NumericDomain.Bounds within, FieldDomains.Held held,
+                                            FieldDomains.ConstructionLimits limits,
                                             Set<TypeSymbol> expanding) {
         return representativesHolding(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums()), reading,
-                within, held, expanding);
+                limits, expanding);
     }
 
     /** The same, with the names this is already inside the value of, for the same reason
      *  {@link #representativesOf} carries them. */
     static Proposals representativesHolding(TypeView view, RuleReadingContext reading,
-                                            NumericDomain.Bounds within, FieldDomains.Held held,
+                                            FieldDomains.ConstructionLimits limits,
                                             Set<TypeSymbol> expanding) {
+        NumericDomain.Bounds within = limits.values();
+        FieldDomains.Held held = limits.held();
         RuleReadingSource ruleSource = reading.source();
         Proposals.Gathering candidates = Proposals.Gathering.distinct();
+        // A member of the class the value is held to, first: the values offered below are read off
+        // where the value stops, and a value between the ends is of the class only by luck — the
+        // first of a month offered for a position held to the first of each, and not whatever date
+        // the order happens to start from.
+        FixtureTemplate member = aMemberOf(view, reading, limits);
+        if (member != null) {
+            candidates.add(member);
+        }
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
         // inside that newtype's own name.
@@ -2208,15 +2221,14 @@ public final class Partitions {
      * <p>With what building the ordinary offer met, which the second value does nothing to change.
      */
     static Proposals displacedRepresentativesOf(Type type, RuleReadingContext reading,
-                                                NumericDomain.Bounds within,
-                                                FieldDomains.Held held) {
+                                                FieldDomains.ConstructionLimits limits) {
         // The position, read once and handed to everything below: what it ordinarily offers, what it
         // holds back, where its rules leave a number, and the names any of those go under.
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
-        Proposals ordinarily = representativesHolding(view, reading, within, held,
-                Set.of());
+        NumericDomain.Bounds within = limits.values();
+        Proposals ordinarily = representativesHolding(view, reading, limits, Set.of());
         Proposals.Gathering base = Proposals.Gathering.distinct();
         base.addAll(ordinarily);
         // What a position holds back for the product search's second pass is on offer here from the
@@ -2243,6 +2255,37 @@ public final class Partitions {
             base.add(value);
         }
         return base.done();
+    }
+
+    /**
+     * The member of the class {@code limits} holds the position to nearest the lower end of where
+     * it stops — or, with no lower end, nearest the order's own start — that the values the rules
+     * admit there take in, written as the position writes it; or null where it is held to no class,
+     * its order counts none, or the run holds no such member.
+     *
+     * <p>The members looked at are as many as can all be values the admitted set keeps out, and one
+     * more: a set naming finitely many values it refuses refuses at most that many members, so one
+     * past them is a member it takes. Any other set refuses no member by a value it names, and the
+     * first member is the one.
+     */
+    private static FixtureTemplate aMemberOf(TypeView view, RuleReadingContext reading,
+                                             FieldDomains.ConstructionLimits limits) {
+        HeldClass held = limits.heldTo();
+        DeclaredBounds.Range declared = held instanceof HeldClass.None ? null
+                : countedOrder(view, reading);
+        if (declared == null || !held.countsOn(declared.carrier())) {
+            return null;
+        }
+        FieldDomains.ConstructionLimits.ValuesNamed named = limits.valuesNamed();
+        ValueSet admits = named.asASet();
+        for (BigInteger each : held.within(TypeBounds.admissible(declared, limits.values()),
+                null, named.keptOut() + 1).values()) {
+            Place at = new Count(new BigDecimal(each));
+            if (declared.carrier().admitted(admits, at)) {
+                return standing(view, declared.carrier(), at, reading.source());
+            }
+        }
+        return null;
     }
 
     /** A second count of a range, or null where the carrier has none to give. */

@@ -1,9 +1,7 @@
-package souther.compiler.partition;
+package souther.compiler.check;
 
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
@@ -15,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The members of a class of whole numbers that a run holds, in the order a search is to try them.
+ * The members of a class that a run holds, in the order a search is to try them.
  *
  * <p><b>Where a class is part of what is searched.</b> A value held to a class is a value of the
  * class, and every search that chooses one draws its candidates from the class and not from the run
@@ -23,18 +21,21 @@ import java.util.List;
  * search can hold on to: whatever else refuses it — a rule about another remainder, a place already
  * tried — leaves the next member of the class unreached by anything that walks the run.
  *
- * <p>Whole numbers only. A run with an end that is no whole number is cut inward to the whole numbers
- * it holds, and an end that cannot be read as one leaves the run as it was, which is wider and so
- * sound for a search.
+ * <p>Whole numbers, which is what a day is counted as too. A run with an end that is no whole number
+ * is cut inward to the whole numbers it holds, and an end that cannot be read as one leaves the run
+ * as it was, which is wider and so sound for a search.
  *
  * @param values the members to try, nearest the end the search starts from first
  * @param stoppedShort whether the run holds members past the last of these
  */
-record ClassMembers(List<BigInteger> values, boolean stoppedShort) {
+public record ClassMembers(List<BigInteger> values, boolean stoppedShort) {
 
-    ClassMembers {
+    public ClassMembers {
         values = List.copyOf(values);
     }
+
+    /** No member, and none left: what a run holding none of the class answers. */
+    static final ClassMembers NONE = new ClassMembers(List.of(), false);
 
     /**
      * The members of {@code members} inside {@code run}, at most {@code most} of them, from the end
@@ -46,10 +47,10 @@ record ClassMembers(List<BigInteger> values, boolean stoppedShort) {
      *
      * @param away which side of its line the run lies on, or null where no end is the near one
      */
-    static ClassMembers within(Congruences members, NumericDomain.Bounds run, Towards away,
-                               int most) {
-        BigInteger low = run.min() == null ? null : wholeEnd(run.min(), true);
-        BigInteger high = run.max() == null ? null : wholeEnd(run.max(), false);
+    public static ClassMembers within(Congruences members, NumericDomain.Bounds run, Towards away,
+                                      int most) {
+        BigInteger low = run.min() == null ? null : run.min().wholeAdmitted(true);
+        BigInteger high = run.max() == null ? null : run.max().wholeAdmitted(false);
         List<BigInteger> out = new ArrayList<>();
         BigInteger step = members.modulus();
         if (low == null && high == null) {
@@ -82,7 +83,7 @@ record ClassMembers(List<BigInteger> values, boolean stoppedShort) {
     }
 
     /** The places among these that none of {@code apart} is, as places of a carrier's own. */
-    List<Place> notApart(PlacesApart apart) {
+    public List<Place> notApart(PlacesApart apart) {
         List<Place> out = new ArrayList<>();
         for (BigInteger each : values) {
             Place place = new Count(new BigDecimal(each));
@@ -91,23 +92,5 @@ record ClassMembers(List<BigInteger> values, boolean stoppedShort) {
             }
         }
         return out;
-    }
-
-    /**
-     * The whole number an end admits: the end itself where it is a whole number it includes, one
-     * inside it where it is a whole number it excludes, and the next whole number inward where it is
-     * between two. Null where the end names no number this reads.
-     */
-    private static BigInteger wholeEnd(Endpoint end, boolean lower) {
-        if (!(end.at() instanceof Count count)) {
-            return null;
-        }
-        ExactAnswer<BigInteger> whole = lower ? count.exactly().ceiling() : count.exactly().floor();
-        if (!(whole instanceof ExactAnswer.Held<BigInteger> held)) {
-            return null;
-        }
-        boolean excluded = count.exactly().isWhole() && !end.inclusive();
-        return excluded ? held.value().add(lower ? BigInteger.ONE : BigInteger.ONE.negate())
-                : held.value();
     }
 }

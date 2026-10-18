@@ -1,11 +1,11 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.HeldClass;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadingsOfEachValue;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
-import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
@@ -74,7 +74,7 @@ public sealed interface HeldValues {
             return OfAPosition.NONE;
         }
         OfAPosition held = new OfAPosition(orders.answered(),
-                one instanceof NumericTerm.ValueOf value ? region.valueClassAt(value) : null,
+                one instanceof NumericTerm.ValueOf value ? region.classAt(value) : HeldClass.NONE,
                 region.heldAt(one));
         return held.holdsAnything() ? held : OfAPosition.NONE;
     }
@@ -88,20 +88,20 @@ public sealed interface HeldValues {
      */
     final class OfAPosition implements HeldValues {
 
-        static final OfAPosition NONE = new OfAPosition(null, null, ValueSet.ANY);
+        static final OfAPosition NONE = new OfAPosition(null, HeldClass.NONE, ValueSet.ANY);
 
         private final Carrier on;
-        private final Congruences class_;
+        private final HeldClass class_;
         private final ValueSet named;
 
         /**
          * @param on the order the number is answered on, or null where it is read of no one
          *           position's value and nothing here applies
-         * @param class_ the class of whole numbers every value is of, or null where none is known
+         * @param class_ the class every value is of, which is none where none is known
          * @param named the values the position's rules admit, or the numbers those come to where
          *              the number is taken of the position's value
          */
-        OfAPosition(Carrier on, Congruences class_, ValueSet named) {
+        OfAPosition(Carrier on, HeldClass class_, ValueSet named) {
             this.on = on;
             this.class_ = class_;
             this.named = named;
@@ -129,9 +129,9 @@ public sealed interface HeldValues {
                 return true;
             }
             ExactRatio number = level.asANumber();
-            return class_ != null && number != null && number.isWhole()
+            return class_.countsOn(on) && number != null && number.isWhole()
                     && number.floor() instanceof ExactAnswer.Held<BigInteger> whole
-                    && !whole.value().mod(class_.modulus()).equals(class_.residue());
+                    && !class_.holds(whole.value());
         }
 
         /**
@@ -160,13 +160,13 @@ public sealed interface HeldValues {
             if (on.admitsNothingIn(named, run)) {
                 return true;
             }
-            return class_ != null && on instanceof Carrier.Whole
-                    && ClassMembers.within(class_, new NumericDomain.Bounds(run.low(), run.high()),
-                            null, 1).values().isEmpty();
+            return !(class_ instanceof HeldClass.None) && class_.countsOn(on)
+                    && class_.within(new NumericDomain.Bounds(run.low(), run.high()))
+                            instanceof HeldClass.NoValue;
         }
 
         private boolean holdsAnything() {
-            return class_ != null || !named.isAny();
+            return !(class_ instanceof HeldClass.None) || !named.isAny();
         }
     }
 
