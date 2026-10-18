@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.collect.AppendOnly;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -72,7 +73,11 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * <p>{@code tries} is how many more parts the looking may take in alone along this path, across
      * every time it looks ({@link #PARTS_A_PATH_LOOKS_THROUGH}).
      */
-    record Choices(ChoiceLine held, Known wayIn, int tries) {
+    record Choices(ChoiceLine held, Known wayIn, int tries, List<Declined> declined) {
+
+        Choices {
+            declined = List.copyOf(declined);
+        }
 
         /**
          * How many parts of the choices a path holds are taken in alone along one path, looking
@@ -92,10 +97,38 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
          */
         static final int PARTS_A_PATH_LOOKS_THROUGH = 64;
 
-        static final Choices NONE = new Choices(null, null, PARTS_A_PATH_LOOKS_THROUGH);
+        /** How many choices read by their meaning a path keeps undecided at once; past it the
+         *  oldest is let go, which leaves the path knowing less and nothing wrong. */
+        static final int DECLINED_A_PATH_KEEPS = 16;
+
+        static final Choices NONE = new Choices(null, null, PARTS_A_PATH_LOOKS_THROUGH, List.of());
 
         int count() {
             return held == null ? 0 : held.count();
+        }
+    }
+
+    /**
+     * A choice read by its meaning that more than one of its parts was left to when it was taken in,
+     * and the bindings and places it was read under ({@link MeaningAssumptions}).
+     *
+     * <p>Not one of the parts holding: which part holds is no fact of the path. What the path comes
+     * to know afterwards may rule parts out, and the choice is then taken in as the part left, or
+     * as nothing reached where none is. The bindings are the ones where the choice stands, as for
+     * {@link OneOf}.
+     *
+     * <p>Equal only to itself, for the reason {@link OneOf} is.
+     */
+    record Declined(Proposition.Any any, Denotations at, MeaningAssumptions.InputPlaces places) {
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
         }
     }
 
@@ -361,7 +394,21 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     Known holdingOneOf(OneOf condition) {
         return new Known(constraints, quantified, spoken, unguarded, cases,
                 new Choices(new ChoiceLine(condition, oneOf.held(), oneOf.count() + 1),
-                        oneOf.wayIn(), oneOf.tries()));
+                        oneOf.wayIn(), oneOf.tries(), oneOf.declined()));
+    }
+
+    /** The choices read by their meaning that no part has yet been settled for, oldest first. */
+    List<Declined> declinedChoices() {
+        return oneOf.declined();
+    }
+
+    /** This, with {@code declined} as the choices read by their meaning left undecided. */
+    Known leavingUndecided(List<Declined> declined) {
+        List<Declined> kept = declined.size() > Choices.DECLINED_A_PATH_KEEPS
+                ? declined.subList(declined.size() - Choices.DECLINED_A_PATH_KEEPS, declined.size())
+                : declined;
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                new Choices(oneOf.held(), oneOf.wayIn(), oneOf.tries(), kept));
     }
 
     /** The conditions held here as one of their parts, in the order they were taken in. */
@@ -406,7 +453,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      *  was given up — and {@code tries} left to look with ({@link Choices}). */
     Known throughWay(Known way, int tries) {
         return new Known(constraints, quantified, spoken, unguarded, cases,
-                new Choices(oneOf.held(), way, tries));
+                new Choices(oneOf.held(), way, tries, oneOf.declined()));
     }
 
     /**

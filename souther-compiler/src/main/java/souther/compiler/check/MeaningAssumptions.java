@@ -141,6 +141,8 @@ final class MeaningAssumptions {
     private final Denotations at;
     private Known known;
     private boolean taken;
+    /** Whether the choice this was last asked to take in was left between several parts. */
+    private boolean leftUndecided;
     /** Why each part of what was stated that a path does not hold was not taken in; empty where
      *  every part is one a path holds. */
     private final List<WhyNotTaken> notTaken = new ArrayList<>();
@@ -193,10 +195,40 @@ final class MeaningAssumptions {
             case CountsWrittenOut.PastAFigure(var figure) ->
                     taking.notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure));
         }
+        taking.settleWhatWasLeftUndecided();
         // Read to the end only where every part was taken in: a part a path cannot hold leaves an
         // arm under it unsettled for this reader's reach, which is not a fact about the model.
         return new Predicates.Assumed(taking.known, taking.taken, taking.notTaken.isEmpty(),
                 taking.notTaken);
+    }
+
+    /**
+     * Each choice a path left undecided, taken again over what is known now, until none of them
+     * comes to a part: what a later condition makes known may leave a choice one part, or none.
+     *
+     * <p>A choice still between several parts stays as it was, and nothing it was read as is kept.
+     * Every pass that goes on settles one choice, so the passes end.
+     */
+    private void settleWhatWasLeftUndecided() {
+        boolean settled = true;
+        while (settled && !known.reachesNothing()) {
+            settled = false;
+            List<Known.Declined> pending = known.declinedChoices();
+            for (Known.Declined choice : pending) {
+                List<Known.Declined> others = new ArrayList<>(pending);
+                others.remove(choice);
+                MeaningAssumptions again = new MeaningAssumptions(terms, choice.places(),
+                        choice.at(), known.leavingUndecided(others), tries);
+                again.takingOneOf(choice.any());
+                if (!again.leftUndecided) {
+                    known = again.known;
+                    taken |= again.taken;
+                    again.notTaken.forEach(this::notTaken);
+                    settled = true;
+                    break;
+                }
+            }
+        }
     }
 
     private void notTaken(WhyNotTaken why) {
@@ -648,6 +680,7 @@ final class MeaningAssumptions {
             if (!tries.another()) {
                 WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
                         .forEach(this::notTaken);
+                leftUndecided = true;
                 return;
             }
             MeaningAssumptions alone = new MeaningAssumptions(terms, places, at, known, tries);
@@ -673,6 +706,12 @@ final class MeaningAssumptions {
             default -> {
                 boolean cutShort = left.stream().anyMatch(each -> each.notTaken.contains(
                         new WhyNotTaken.MoreAlternativesThanAreTried()));
+                leftUndecided = true;
+                if (!cutShort) {
+                    List<Known.Declined> kept = new ArrayList<>(known.declinedChoices());
+                    kept.add(new Known.Declined(any, at, places));
+                    known = known.leavingUndecided(kept);
+                }
                 WhyNotTaken.declinedWhole(cutShort ? new WhyNotTaken.MoreAlternativesThanAreTried()
                         : new WhyNotTaken.OutsideDomain(
                                 WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), any)

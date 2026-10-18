@@ -651,6 +651,58 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 """), "charge"), "under six hundred million is not all under five hundred million");
     }
 
+    /**
+     * What a path rules out does not turn on the order its choices are written in, nor on whether
+     * they are written as one condition: with {@code b} at seven or more, the last guard leaves
+     * {@code a > 3}, and then neither part of the choice before it holds.
+     */
+    @Test
+    void whatTheChoicesOfAPathRuleOutDoesNotTurnOnTheirOrder() {
+        List<String> spellings = List.of("""
+                guard b.value >= 7 else Free
+                guard a.value < 4 || a.value + b.value == 10 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                guard a.value < 4 || a.value + b.value == 10 else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard (a.value + b.value == 3 || a.value > 3) && (a.value < 4 || a.value + b.value == 10) else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard (a.value < 4 || a.value + b.value == 10) && (a.value + b.value == 3 || a.value > 3) else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard Int.floorMod(3 - a.value, 7) /= b.value else Free
+                """);
+        for (String guards : spellings) {
+            assertFalse(provenIn(charging2(guards), "charge").isEmpty(),
+                    () -> "something is proven unreachable:\n" + guards);
+        }
+        assertEquals(List.of(), provenIn(charging2("""
+                guard b.value >= 6 else Free
+                guard a.value < 4 || a.value + b.value == 10 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                """), "charge"), "a of four and b of six reaches the charge");
+    }
+
+    private static String charging2(String guards) {
+        return """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount, b: Amount) -> Free | Charged
+                    constructs Charged
+                let charge (a, b) = {
+                %s    Charged { yen = 1 }
+                }
+                """.formatted(guards.indent(4));
+    }
+
     /** A behavior charging an amount past {@code guards}, which may name {@code a}. */
     private static String charging(String guards) {
         return """
