@@ -335,6 +335,27 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * Where what {@code of} states answers at all, which every row answers: where each operation
+     * it is read through answers ({@link Proposition#whereItAnswersAtAll}), and everywhere where none of
+     * them may answer nothing.
+     *
+     * <p>For a number made of statements — how many of them hold — which is a number only where
+     * every one of them answered, and is compared where that is said of the comparison.
+     */
+    record WhereItIsAnswered(Derivation of) implements Derivation {
+
+        public WhereItIsAnswered {
+            Objects.requireNonNull(of, "something is answered somewhere");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition answers = Proposition.whereItAnswersAtAll(numbering.of(of));
+            return answers == null ? new Proposition.Always(true) : answers;
+        }
+    }
+
     /** An {@code if}: its arm under its condition, and its other arm under the denial of it — or
      *  what both state, where they state one thing. */
     record IfThenElse(Derivation condition, Derivation then, Derivation otherwise)
@@ -968,7 +989,7 @@ public sealed interface Derivation {
                     case EveryElementMeetsIt(var part, Derivation ofTheElement, var _, var _) ->
                             part.equals(some) && reads(some.ofTheElement(), ofTheElement);
                     case SomeElementMeeting(DecisionSubject container, Derivation ofTheElement,
-                                            boolean holds, var _) ->
+                                            boolean holds, var _, var _) ->
                             holds && standsAt(some.container(), container)
                                     && reads(some.ofTheElement(), ofTheElement);
                     // The pieces of a string are the elements of a container an operation made,
@@ -976,7 +997,7 @@ public sealed interface Derivation {
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
-                    case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) -> {
+                    case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds, var _) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
                         inside.add(some.container());
                         Standing within = new Standing(call, inside);
@@ -1533,11 +1554,22 @@ public sealed interface Derivation {
      * Some element of a container written out making a closure answer some way: some one of what
      * the closure's body states of each element, read on the application that hands it that
      * element — and nothing where none is written.
+     *
+     * <p>Where what is stated of one may answer nothing on some rows, what the operation answers is
+     * read as {@code asked} says it goes through them ({@link HowTheElementsAreAsked}). Asking every
+     * one, it answers where each does. Asking each in turn until one meets the statement, it is the
+     * statement of the first, and past it, where that answered and failed, the statement of the
+     * rest: the order they were written in is the one a run goes in, so this is what every run
+     * comes to, and not a reading of one order among others.
+     *
+     * @param ofEach what is stated of each, in the order the elements were written
      */
-    record OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) implements Derivation {
+    record OverElementsWrittenOut(List<Derivation> ofEach, boolean holds,
+                                  HowTheElementsAreAsked asked) implements Derivation {
 
         public OverElementsWrittenOut {
             ofEach = List.copyOf(ofEach);
+            Objects.requireNonNull(asked, "the elements are gone through some way, or an unsaid one");
         }
 
         @Override
@@ -1547,7 +1579,32 @@ public sealed interface Derivation {
                 Proposition answered = numbering.of(one);
                 each.add(holds ? answered : answered.denied());
             }
-            return Proposition.any(each);
+            if (each.stream().noneMatch(Proposition::mayAnswerNothing)) {
+                return Proposition.any(each);
+            }
+            return switch (asked) {
+                case EVERY_ONE -> {
+                    List<Proposition> answering = new ArrayList<>();
+                    for (Proposition one : each) {
+                        Proposition answers = Proposition.whereItAnswersAtAll(one);
+                        if (answers != null) {
+                            answering.add(answers);
+                        }
+                    }
+                    yield Proposition.whereItAnswers(Proposition.all(answering), Proposition.any(
+                            each.stream().map(Proposition::whereItHolds).toList()));
+                }
+                case UNTIL_ONE_MEETS_IT, UNTIL_ONE_MEETS_IT_IN_AN_ORDER_OF_THE_ROWS -> {
+                    Proposition rest = each.getLast();
+                    for (int at = each.size() - 2; at >= 0; at--) {
+                        Proposition first = each.get(at);
+                        rest = Proposition.afterIt(first, Proposition.any(List.of(first, rest)));
+                    }
+                    yield rest;
+                }
+                case NOT_SAID -> numbering.unread(
+                        new Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+            };
         }
     }
 
@@ -1586,24 +1643,39 @@ public sealed interface Derivation {
      * inside, whether the container holds anything would be something the proposition turns on that
      * none of its parts names, and a reader of the parts would hand nobody the container.
      *
+     * <p>Where what is stated of one element answers nothing on some rows, some element meeting it
+     * is what the operation answers only as far as {@code asked} says, and on the rows it says the
+     * operation answers on ({@link HowTheElementsAreAsked}). The quantifier itself is of where the
+     * statement holds, and of where it answers, which every row answers.
+     *
      * @param holdsSomething that the container holds something, held only where the conclusion
      *                       has it as a part ({@link #asksWhetherItHoldsAnything})
+     * @param asked          how the operation goes through the elements, as far as that decides
+     *                       what it answers where what is stated of one may answer nothing
      */
     record SomeElementMeeting(DecisionSubject container, Derivation ofTheElement, boolean holds,
-                              Optional<Derivation> holdsSomething) implements Derivation {
+                              Optional<Derivation> holdsSomething, HowTheElementsAreAsked asked)
+            implements Derivation {
 
         public SomeElementMeeting {
             Objects.requireNonNull(container, "an element is of a container");
             Objects.requireNonNull(ofTheElement, "an element meets something");
             Objects.requireNonNull(holdsSomething, "whether it holds anything is read or not asked");
+            Objects.requireNonNull(asked, "the elements are gone through some way, or an unsaid one");
         }
 
         /**
          * Whether some element meeting {@code ofTheElement} has the container's holding anything as
-         * a part.
+         * a part — of where it holds or of where it answers, where it answers nothing on some rows.
          */
         public static boolean asksWhetherItHoldsAnything(DecisionSubject container,
                                                          Proposition ofTheElement) {
+            Proposition answers = Proposition.whereItAnswersAtAll(ofTheElement);
+            if (answers != null) {
+                return asksWhetherItHoldsAnything(container,
+                        Proposition.whereItHolds(ofTheElement))
+                        || asksWhetherItHoldsAnything(container, answers.denied());
+            }
             if (!ofTheElement.mayTurnOnAnElementOf(container)) {
                 return !(ofTheElement instanceof Proposition.Always(boolean holds) && !holds);
             }
@@ -1620,7 +1692,26 @@ public sealed interface Derivation {
         public Proposition conclusion(Conclusion numbering) {
             Proposition answered = numbering.of(ofTheElement);
             Proposition element = holds ? answered : answered.denied();
-            return meeting(element, numbering);
+            Proposition answers = Proposition.whereItAnswersAtAll(element);
+            if (answers == null) {
+                return meeting(element, numbering);
+            }
+            // Some element meeting it, and every element answering, each of them a statement every
+            // row answers; what the operation answers is the first, on the rows asked says.
+            Proposition some = meeting(Proposition.whereItHolds(element), numbering);
+            Proposition every = meeting(answers.denied(), numbering).denied();
+            boolean alike = !answers.mayTurnOnAnElementOf(container);
+            return switch (asked) {
+                case EVERY_ONE -> Proposition.whereItAnswers(every, some);
+                case UNTIL_ONE_MEETS_IT -> alike ? Proposition.whereItAnswers(every, some)
+                        : numbering.unread(
+                                new Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+                case UNTIL_ONE_MEETS_IT_IN_AN_ORDER_OF_THE_ROWS -> alike
+                        ? Proposition.whereItAnswers(every, some)
+                        : Proposition.whereItAnswers(Proposition.any(List.of(some, every)), some);
+                case NOT_SAID -> numbering.unread(
+                        new Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+            };
         }
 
         private Proposition meeting(Proposition element, Conclusion numbering) {
@@ -1753,6 +1844,14 @@ public sealed interface Derivation {
             Proposition read = numbering.of(atANode);
             Optional<Proposition> noneBelow = below.map(each -> Proposition.all(each.stream()
                     .map(one -> numbering.of(one).denied()).toList()));
+            // A node whose statement answers nothing on some rows stops the search where it is
+            // reached, and a node is reached after every node above it: which nodes those are is
+            // the tree's, and no order a row chooses.
+            if (Proposition.mayAnswerNothing(read)
+                    || noneBelow.filter(Proposition::mayAnswerNothing).isPresent()) {
+                return numbering.unread(
+                        new Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
+            }
             return searchFrom(node, node, through, read, noneBelow, how);
         }
 
@@ -1768,6 +1867,10 @@ public sealed interface Derivation {
          */
         public static boolean unfoldsOnce(Proposition unfolded, Proposition atANode, TermPath node,
                                           List<String> through, ConditionJoin how) {
+            // A search is of a statement answering on every node ({@link #conclusion}).
+            if (Proposition.mayAnswerNothing(atANode)) {
+                return false;
+            }
             List<Proposition> parts = new ArrayList<>();
             parts.add(atANode);
             for (String field : through) {
@@ -1813,7 +1916,11 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return searchFrom(at, from, through, numbering.of(atANode), Optional.empty(), how);
+            Proposition read = numbering.of(atANode);
+            // As where the search is read from ({@link ATreeSearched#conclusion}).
+            return Proposition.mayAnswerNothing(read)
+                    ? numbering.unread(new Stopped(new WhyUnread.WhichElementARunStopsAt(), false))
+                    : searchFrom(at, from, through, read, Optional.empty(), how);
         }
     }
 
@@ -2739,9 +2846,11 @@ public sealed interface Derivation {
                 Objects.requireNonNull(ofTheElement, "of the elements meeting something");
             }
 
-            /** The count this reads. */
+            /** The count this reads: of the elements it holds on, which on a row every element
+             *  answers on is how many meet it ({@link Derivation.WhereItIsAnswered}). */
             public Quantity.HowManyMeet counted(Conclusion numbering) {
-                return new Quantity.HowManyMeet(container, numbering.of(ofTheElement));
+                return new Quantity.HowManyMeet(container,
+                        Proposition.whereItHolds(numbering.of(ofTheElement)));
             }
         }
     }

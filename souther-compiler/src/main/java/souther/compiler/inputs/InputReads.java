@@ -11,6 +11,7 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
+import souther.compiler.check.OrderOfElements;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueStanding;
@@ -445,6 +446,15 @@ public final class InputReads {
         Core.forEachChild(e, child -> found[0] = found[0]
                 || readsAnApplied(child, symbols, newtypes, met));
         return found[0];
+    }
+
+    /**
+     * Whether an operation over a list that stops at the first element meeting a statement that may
+     * answer nothing is read in an order the rows choose: the bodies read here read no list's order
+     * besides, and hold no second such operation ({@link OrderOfElements#leftToTheRows}).
+     */
+    public boolean orderLeftToTheRows() {
+        return names.order().leftToTheRows();
     }
 
     /** How many readings of one condition reading it here is one of ({@link Applied#readings}). */

@@ -524,6 +524,13 @@ public sealed interface Proposition {
                         + " says of its element another quantifier over it, which would read two"
                         + " elements as one: " + ofTheElement);
             }
+            // Some element meeting a statement that answers nothing on some elements is no
+            // statement of what an operation over them answers: that turns on which element a run
+            // reaches first, which is said where the operation is read.
+            if (holdsAnAnswering(ofTheElement)) {
+                throw new IllegalArgumentException("a quantifier over " + container + " is of a"
+                        + " statement answering on every element: " + ofTheElement);
+            }
             key = (holds ? "some " : "no ") + container + " [" + ofTheElement.key() + "]";
         }
 
@@ -724,6 +731,11 @@ public sealed interface Proposition {
             if (through.isEmpty()) {
                 throw new IllegalArgumentException("a search goes below a node through something");
             }
+            if (holdsAnAnswering(atANode)
+                    || noneBelow.filter(Proposition::holdsAnAnswering).isPresent()) {
+                throw new IllegalArgumentException("a search is of a statement answering on every"
+                        + " node: " + atANode);
+            }
             key = (holds ? "reachable " : "unreachable ") + at + " from " + writtenAt + " through "
                     + through + " [" + atANode.key() + "]"
                     + noneBelow.map(none -> " none below [" + none.key() + "]").orElse("");
@@ -915,6 +927,10 @@ public sealed interface Proposition {
             if (statements.isEmpty() || statements.size() != weights.size()) {
                 throw new IllegalArgumentException("a count is of some statements, each weighed: "
                         + statements + " " + weights);
+            }
+            if (statements.stream().anyMatch(Proposition::holdsAnAnswering)) {
+                throw new IllegalArgumentException("a count is of statements answering on every"
+                        + " row: " + statements);
             }
             for (int at = 1; at < statements.size(); at++) {
                 if (statements.get(at - 1).key().compareTo(statements.get(at).key()) >= 0) {
@@ -1299,6 +1315,64 @@ public sealed interface Proposition {
             return inside == null ? answers : all(List.of(answers, inside));
         }
         return any(List.of(stated, stated.denied()));
+    }
+
+    /**
+     * Whether {@code stated} answers nothing on some rows: some part of it is read through an
+     * operation that answers only on some ({@link WhereItAnswers}).
+     */
+    public static boolean mayAnswerNothing(Proposition stated) {
+        return holdsAnAnswering(stated);
+    }
+
+    /**
+     * The rows {@code stated} answers on, as a statement holding or failing on every row — or null
+     * where it answers on every row ({@link #answeredWhere}, said with nothing in it that answers
+     * nothing anywhere).
+     *
+     * <p>What a quantifier, a count or the way to an application is made of: each of those is of
+     * statements every row answers, and {@link #answeredWhere} keeps a statement and its denial side
+     * by side where the part that may answer nothing stands inside it.
+     */
+    public static Proposition whereItAnswersAtAll(Proposition stated) {
+        if (!holdsAnAnswering(stated)) {
+            return null;
+        }
+        // Where it answers may be written as a part and its denial side by side, which holds
+        // where the part answers either way.
+        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, String _)) {
+            Proposition inside = whereItAnswersAtAll(states);
+            return inside == null ? whereItHolds(answers)
+                    : all(List.of(whereItHolds(answers), inside));
+        }
+        return any(List.of(whereItHolds(stated), whereItHolds(stated.denied())));
+    }
+
+    /**
+     * Where {@code stated} holds, as a statement holding or failing on every row: on the rows it
+     * answers on and comes out holding, and on no other. A part read through an operation that
+     * answers nothing on some rows holds where the operation answers and the part holds there.
+     *
+     * <p>The rows it fails on are {@code whereItHolds(stated.denied())}, and the two together are
+     * the rows it answers on — never every row, where something in it answers nothing.
+     */
+    public static Proposition whereItHolds(Proposition stated) {
+        if (!holdsAnAnswering(stated)) {
+            return stated;
+        }
+        return switch (stated) {
+            case WhereItAnswers(Proposition answers, Proposition states, String _) ->
+                    all(List.of(whereItHolds(answers), whereItHolds(states)));
+            case All all -> all(all.parts().stream().map(Proposition::whereItHolds).toList());
+            case Any any -> any(any.parts().stream().map(Proposition::whereItHolds).toList());
+            case OnAnApplication applied -> onAnApplication(applied.each().stream()
+                    .map(Proposition::whereItHolds).toList());
+            // What one of these holds of is read on every row, by its constructor.
+            case SoManyHold _, Some _, SomeReachable _ -> throw new IllegalStateException(
+                    "a count or a quantifier is of statements answering on every row: " + stated);
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
+                 Carried _, Unread _ -> stated;
+        };
     }
 
     /** Whether some part of {@code stated} answers only where an operation does. */

@@ -63,11 +63,13 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
+import souther.compiler.meaning.HowTheElementsAreAsked;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.TruthTable;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhichCase;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenOfANode;
@@ -85,6 +87,7 @@ import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.semantics.LawArguments;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -280,6 +283,13 @@ final class Pullback {
      * comparison.
      */
     private List<Derivation.AComparisonRead.Counted> alike;
+    /**
+     * Where each count the comparison being read needed is a number at all, as they are read
+     * ({@link Derivation.WhereItIsAnswered}): a count of statements some of which answer nothing on
+     * some rows counts only where every one of them answers, and the comparison is read there — or
+     * null where what is read is no comparison of numbers, and such a count is not read there.
+     */
+    private List<Derivation> answering;
     /**
      * The elements of the containers the comparison being read is read of, which name stands for
      * each — held to one name for each container ({@link ElementsMet}). Nothing where what is read
@@ -2380,7 +2390,62 @@ final class Pullback {
                                 askedAt != null ? askedAt : new Denotation(e, reads))
                         : unread(over, in, new WhyUnread.NoMeasureOfItsSize()));
             }
-            return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething);
+            HowTheElementsAreAsked asked = !Proposition.mayAnswerNothing(element)
+                    ? HowTheElementsAreAsked.NOT_SAID
+                    : howItAsks(some.ofTheElement(), !located.kept().isEmpty(), beneath == null
+                            && located.held() instanceof DecisionSubject.AnInput(TermPath list)
+                            && read.domain().holdsItsElementsInTheOrderWritten(list, read.rules())
+                            && located.each() instanceof ElementAt.AtASubject
+                            && reads.orderLeftToTheRows());
+            return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething, asked);
+        }
+
+        /**
+         * How the operation read here goes through the elements a statement about each of them,
+         * {@code ofTheElement}, is about — some one of them meeting it, or how many do — as far as
+         * that decides what it answers where what is stated of one may answer nothing
+         * ({@link HowTheElementsAreAsked}).
+         *
+         * <p>Read off how the operation applies the closure the statement is of: to every element,
+         * or to each in turn until it answers the way the statement says. In turn, the order is the
+         * rows' only where {@code inTheRowsOrder}: the container is a list a row writes, each
+         * element the one standing there, and nothing else in the bodies read reads the order a
+         * list holds its elements in ({@link InputReads#orderLeftToTheRows}). A statement of
+         * something besides what the closure answers, or about elements an operation kept
+         * ({@code kept}), which it worked out of every element first, is not said.
+         */
+        private HowTheElementsAreAsked howItAsks(LawProposition<DeclaredArgument> ofTheElement,
+                                                 boolean kept, boolean inTheRowsOrder) {
+            if (kept
+                    || !(ofTheElement instanceof LawProposition.Observed<DeclaredArgument>(
+                            LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
+                                    DeclaredArgument named),
+                            SideAnswered side))
+                    || side.aspect() != AnswerAspect.TRUTH) {
+                return HowTheElementsAreAsked.NOT_SAID;
+            }
+            Denotation closure = reads.denotes(applied.argument(named), read.rules().symbols(),
+                    read.rules().newtypes());
+            if (closure == null
+                    || !(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
+                return HowTheElementsAreAsked.NOT_SAID;
+            }
+            List<HowAClosureIsApplied> applying = closure.at().howItIsApplied(block);
+            if (applying.size() != 1) {
+                return HowTheElementsAreAsked.NOT_SAID;
+            }
+            return switch (applying.getFirst()) {
+                case TO_EVERY_ELEMENT -> HowTheElementsAreAsked.EVERY_ONE;
+                // In turn until the closure answers the way the statement is of: true for some
+                // element holding it, false for some element failing it.
+                case UNTIL_ONE_HOLDS, UNTIL_ONE_FAILS ->
+                        (applying.getFirst() == HowAClosureIsApplied.UNTIL_ONE_HOLDS)
+                                != side.holds() ? HowTheElementsAreAsked.NOT_SAID
+                        : inTheRowsOrder
+                                ? HowTheElementsAreAsked.UNTIL_ONE_MEETS_IT_IN_AN_ORDER_OF_THE_ROWS
+                        : HowTheElementsAreAsked.UNTIL_ONE_MEETS_IT;
+                case AT_MOST_ONE, TO_SOME -> HowTheElementsAreAsked.NOT_SAID;
+            };
         }
 
         /**
@@ -2589,8 +2654,12 @@ final class Pullback {
         private Derivation someOf(LawProposition.SomeElement<DeclaredArgument> some,
                                   List<ReadMeaning.Occurrence> occurrences) {
             return switch (ofEachWrittenOut(some.container(), occurrences, some.ofTheElement())) {
+                // In the order they were written, which is the one the operation goes in.
                 case WrittenOutRead.Each(List<Derivation> each) ->
-                        new Derivation.OverElementsWrittenOut(each, true);
+                        new Derivation.OverElementsWrittenOut(each, true, howItAsks(
+                                some.ofTheElement(),
+                                occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty()),
+                                false));
                 case WrittenOutRead.Stops(WhyUnread why) -> unread(e, reads, why);
             };
         }
@@ -3072,19 +3141,23 @@ final class Pullback {
             }
             Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
             List<Derivation.AComparisonRead.Counted> outerAlike = alike;
+            List<Derivation> outerAnswering = answering;
             counting = new LinkedHashMap<>();
             alike = new ArrayList<>();
+            answering = new ArrayList<>();
             try {
                 return switch (numbers(form)) {
                     case Numbers.NotRead(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
                     case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) ->
-                            leaf(Derivation.ALawComparison.of(compared, each, counting, alike),
-                                    e, reads);
+                            whereItsCountsAnswer(leaf(
+                                    Derivation.ALawComparison.of(compared, each, counting, alike),
+                                    e, reads));
                 };
             } finally {
                 counting = outer;
                 alike = outerAlike;
+                answering = outerAnswering;
             }
         }
 
@@ -3799,17 +3872,32 @@ final class Pullback {
                     case WrittenOutRead.Each(List<Derivation> each) -> {
                         long meeting = 0;
                         List<Proposition> unsettled = new ArrayList<>();
+                        List<Derivation> answers = new ArrayList<>();
                         for (Derivation one : each) {
                             Proposition stated = trying.of(one);
                             WhyUnread stopped = Proposition.firstStopIn(stated);
                             if (stopped != null) {
                                 yield new Sized.NotSized(stopped);
                             }
+                            // Counted where it holds, on the rows every one of them answers on.
+                            if (Proposition.mayAnswerNothing(stated)) {
+                                answers.add(new Derivation.WhereItIsAnswered(one));
+                                stated = Proposition.whereItHolds(stated);
+                            }
                             if (stated instanceof Proposition.Always(boolean holds)) {
                                 meeting += holds ? 1 : 0;
                             } else {
                                 unsettled.add(stated);
                             }
+                        }
+                        if (!answers.isEmpty()) {
+                            if (answering == null || howItAsks(counted.ofTheElement(),
+                                    occurrences.stream()
+                                            .anyMatch(one -> !one.keptWhere().isEmpty()), false)
+                                    != HowTheElementsAreAsked.EVERY_ONE) {
+                                yield new Sized.NotSized(new WhyUnread.WhichElementARunStopsAt());
+                            }
+                            answering.addAll(answers);
                         }
                         LinearForm<Quantity> settled = LinearForm.constant(ExactRatio.of(meeting));
                         if (unsettled.isEmpty()) {
@@ -3855,7 +3943,28 @@ final class Pullback {
                 }
                 return new Sized.NotSized(new WhyUnread.NotArithmetic());
             }
-            Quantity.HowManyMeet count = new Quantity.HowManyMeet(heldAt, element);
+            // Counted where it holds, on the rows every element answers on: an operation counting
+            // them works each of them out.
+            if (Proposition.mayAnswerNothing(element)) {
+                if (answering == null || howItAsks(counted.ofTheElement(),
+                        !located.kept().isEmpty(), false) != HowTheElementsAreAsked.EVERY_ONE) {
+                    return new Sized.NotSized(new WhyUnread.WhichElementARunStopsAt());
+                }
+                Optional<Derivation> holdsSomething = Optional.empty();
+                if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(heldAt, element)) {
+                    DecisionAtom size = sizeOfSubject(heldAt, located.heldType());
+                    if (size == null) {
+                        return new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize());
+                    }
+                    holdsSomething = Optional.of(leaf(new Derivation.SizeAboveNought(size),
+                            askedAt != null ? askedAt : new Denotation(e, reads)));
+                }
+                answering.add(new Derivation.WhereItIsAnswered(new Derivation.SomeElementMeeting(
+                        heldAt, answered, true, holdsSomething,
+                        HowTheElementsAreAsked.EVERY_ONE)));
+            }
+            Quantity.HowManyMeet count =
+                    new Quantity.HowManyMeet(heldAt, Proposition.whereItHolds(element));
             counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(heldAt, answered));
             return new Sized.AsAForm(LinearForm.atom(count));
         }
@@ -4055,17 +4164,36 @@ final class Pullback {
     private Derivation overQuantities(Denotation left, Denotation right, Rel states) {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
         List<Derivation.AComparisonRead.Counted> outerAlike = alike;
+        List<Derivation> outerAnswering = answering;
         ElementsMet outerElements = elementsMet;
         counting = new LinkedHashMap<>();
         alike = null;
+        answering = new ArrayList<>();
         elementsMet = new ElementsMet();
         try {
-            return overQuantitiesCounting(left, right, states);
+            return whereItsCountsAnswer(overQuantitiesCounting(left, right, states));
         } finally {
             counting = outer;
             alike = outerAlike;
+            answering = outerAnswering;
             elementsMet = outerElements;
         }
+    }
+
+    /**
+     * {@code stated}, read where every count it was read over is a number ({@link #answering}):
+     * past that, a statement counted something that answered nothing, and comes out no way.
+     */
+    private Derivation whereItsCountsAnswer(Derivation stated) {
+        if (stated == null || stated instanceof Derivation.Stopped || answering.isEmpty()) {
+            return stated;
+        }
+        Derivation answered = null;
+        for (Derivation one : answering) {
+            answered = answered == null ? one
+                    : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
+        }
+        return new Derivation.WhereItAnswers(answered, stated);
     }
 
     /** The numbers of the input {@code forms} are over, the ones what an operation answers is
@@ -5704,9 +5832,14 @@ final class Pullback {
                             askedAt != null ? askedAt : new Denotation(e, reads))
                     : unread(walked, reads, new WhyUnread.NoMeasureOfItsSize()));
         }
+        // Past the first element meeting the step's statement the step keeps what it carried
+        // without working the statement out, so the walk asks each element in turn until one meets
+        // it — in the walk's order, which a fold over a list reads.
+        HowTheElementsAreAsked asked = Proposition.mayAnswerNothing(element)
+                ? HowTheElementsAreAsked.UNTIL_ONE_MEETS_IT : HowTheElementsAreAsked.NOT_SAID;
         return new Derivation.AcrossAWalk(start,
-                new Derivation.SomeElementMeeting(container, meets, holds, holdsSomething), keeps,
-                how);
+                new Derivation.SomeElementMeeting(container, meets, holds, holdsSomething, asked),
+                keeps, how);
     }
 
     /** {@code walk}'s step coming out on {@code aspect}, with what it was carried standing as
@@ -5886,26 +6019,24 @@ final class Pullback {
      * path or the declarations rule out is a side no row reaches. The divisor's sign is read once
      * and denied for the other side, which is the one atom both sides turn on.
      *
-     * <p>Only a comparison asked for itself ({@link Asked.OnASide#whole}): a condition, through the
-     * denials, joins, choices and bodies it is made of, where a run that stops dividing stops what
-     * is being read, and which part is worked out first is said where the parts are joined
-     * ({@link Proposition#afterIt}). One asked of each element of a container, or of each step of a
-     * walk or a recursion, is not: which element a run stops at first is in no statement of one,
-     * and it is left unread.
+     * <p>Which part is worked out first is said where the parts are joined
+     * ({@link Proposition#afterIt}), and which element or application first is said where what is
+     * stated of each is read as a statement about them all: where a quantifier is read
+     * ({@link Derivation.SomeElementMeeting}), where values written out are gone through
+     * ({@link Derivation.OverElementsWrittenOut}), and where each application is reached
+     * ({@link WhereAnApplicationIsMade#reached}). A count, a quantifier or a search is of statements
+     * answering on every row, so one reading this where nothing says which first leaves it unread.
      *
-     * <p>Nor one whose divisor is another value on each application of a closure it stands in
-     * ({@link #variesByApplication}). Each application is read where the run makes it, and an
-     * application before it that stopped dividing is a run that never makes this one — which no
-     * reading of an application says where the closure is applied to every element, or read once
-     * for all of them. A divisor the same on every application stops the first application where it
-     * stops any, and the one being read says so of itself.
+     * <p>Not one whose divisor is a value written out read once for every application of a closure
+     * it stands in ({@link #readOnceForEveryValue}): which of the values a run is on is no part of
+     * that reading, and neither is whether one before it stopped the run.
      */
     private Derivation ofAQuotientByAValue(StatedComparison stated, Denotation at, boolean whole,
                                            boolean fixed, InputReads reads) {
-        QuotientByAValue.Read<InputReads> quotient = !whole ? null
-                : QuotientByAValue.read(stated, reads, sides(), read.rules().symbols());
+        QuotientByAValue.Read<InputReads> quotient =
+                QuotientByAValue.read(stated, reads, sides(), read.rules().symbols());
         if (quotient == null
-                || variesByApplication(quotient.divisor(), quotient.at(), new HashSet<>())) {
+                || readOnceForEveryValue(quotient.divisor(), quotient.at(), new HashSet<>())) {
             return null;
         }
         Derivation answers = restated(quotient.answers(), at, whole, fixed, quotient.at());
@@ -5921,29 +6052,25 @@ final class Pullback {
     }
 
     /**
-     * Whether {@code e}, read in {@code at}, is one value on one application of a closure and
-     * another on the next: it reads a name an application handed one of the values written out, or
-     * a name standing for an element of a container, itself or through the names it was given.
+     * Whether {@code e}, read in {@code at}, reads one of the values a container was written with
+     * as any of them at once — a closure's parameter where its applications are not each read —
+     * itself or through the names it was given.
      */
-    private boolean variesByApplication(Core e, InputReads at, Set<BindingId> met) {
+    private boolean readOnceForEveryValue(Core e, InputReads at, Set<BindingId> met) {
         if (Core.withoutStanding(e) instanceof Core.Read name) {
-            if (at.turnsOnAnApplication(name, read.rules().symbols(), read.rules().newtypes())) {
-                return true;
-            }
             if (!met.add(name.binding())) {
                 return false;
             }
             return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
-                case ReadMeaning.Position(TermPath path) -> path.insideAContainer();
                 case ReadMeaning.Through(Denotation denotes) ->
-                        variesByApplication(denotes.value(), denotes.at(), met);
-                case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
+                        readOnceForEveryValue(denotes.value(), denotes.at(), met);
+                case ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
                      ReadMeaning.MoreThanAreWrittenOut _ -> true;
-                case ReadMeaning.Unknown _ -> false;
+                case ReadMeaning.Position _, ReadMeaning.Element _, ReadMeaning.Unknown _ -> false;
             };
         }
         boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] = found[0] || variesByApplication(child, at, met));
+        Core.forEachChild(e, child -> found[0] = found[0] || readOnceForEveryValue(child, at, met));
         return found[0];
     }
 

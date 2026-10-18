@@ -13,6 +13,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -69,6 +70,34 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
                 "the first element fails, and the second is never compared");
         assertTrue(hitAt(MODEL, guard, "([2, 1])", "1"),
                 "the first holds, so the second is compared");
+    }
+
+    /**
+     * A run that divides by nought stops there and answers nothing, so it met no line: not the
+     * one through the element it stopped at, and not the one through an element after it, whether
+     * the operation stops at the first holding, at the first failing, or goes on through all.
+     */
+    @Test
+    void aRunThatStoppedDividingMetNoLine() {
+        for (String guard : List.of("List.any(x -> 100 / x >= 1, xs)",
+                "List.all(x -> 100 / x >= 1, xs)",
+                "List.length(List.filter(x -> 100 / x >= 1, xs)) >= 1")) {
+            assertFalse(hitAt(MODEL, guard, "([0, 100])", "100"), guard);
+        }
+    }
+
+    /**
+     * An element at the line is met through where the run compared it, as it is of a closure that
+     * answers on every element: {@code [100, 0]} answers at the first and never divides by the
+     * second, as {@code [100, 7]} answers at the first and never asks the second. A point is where
+     * the comparison on that element turns, and not where the operation does.
+     */
+    @Test
+    void anElementTheRunComparedIsMetWhateverComesAfterIt() {
+        assertTrue(hitAt(MODEL, "List.any(x -> 100 / x >= 1, xs)", "([100, 0])", "100"),
+                "compared first, and the run answered there");
+        assertTrue(hitAt(MODEL, "List.any(x -> x <= 100, xs)", "([100, 7])", "100"),
+                "the same of a closure that answers on every element");
     }
 
     /** The control: the same comparison handed to an operation that applies it to every element. */
