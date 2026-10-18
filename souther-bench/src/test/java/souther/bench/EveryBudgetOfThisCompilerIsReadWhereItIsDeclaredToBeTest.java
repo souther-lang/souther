@@ -570,11 +570,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the line, as one where it decides"
                             + " in those cases was not worked out"),
-            Map.entry("souther.compiler.partition.ComparisonAssessment#aRelationPartNarrowed("
+            Map.entry("souther.compiler.partition.ComparisonAssessment#partsOfARelation("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;"
-                            + "Ljava/util/function/Function;"
-                            + "Ljava/util/List;Lsouther/compiler/inputs/InputReading;)"
+                            + "Ljava/util/function/Function;)"
                             + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the relation, as one where it"
                             + " decides in those cases was not worked out"),

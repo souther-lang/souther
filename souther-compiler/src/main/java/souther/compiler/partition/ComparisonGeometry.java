@@ -108,6 +108,8 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
                  ComparisonAssessment.CutsNothing _, ComparisonAssessment.OutsideTheDomain _,
                  ComparisonAssessment.NothingArrivesAtItsLine _,
                  ComparisonAssessment.TurnsNothing _,
+                 ComparisonAssessment.NothingArrivesAtItsRelation _,
+                 ComparisonAssessment.RelationTurnsNothing _,
                  ComparisonAssessment.NoFeasibleInput _, ComparisonAssessment.Unread _ -> NONE;
         };
     }

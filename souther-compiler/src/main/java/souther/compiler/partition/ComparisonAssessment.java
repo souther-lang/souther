@@ -471,6 +471,36 @@ sealed interface ComparisonAssessment {
     }
 
     /**
+     * Read in full, a relation to another value — and no row that arrives at the comparison takes
+     * the way to it.
+     *
+     * <p>{@link NothingArrivesAtItsLine} for a reading that has no line to be about: what refuses
+     * the rows is what holds on the way, and a place told it was left without a line for want of
+     * a proof would look for one that is not in the rule. Only a proof lands here.
+     */
+    record NothingArrivesAtItsRelation(List<FilingCoordinate> filedAt)
+            implements ComparisonAssessment {
+
+        public NothingArrivesAtItsRelation {
+            filedAt = List.copyOf(filedAt);
+        }
+    }
+
+    /**
+     * Read in full, a relation to another value as a part of a statement of several — and no row
+     * takes the way to any case where it decides.
+     *
+     * <p>{@link TurnsNothing} for a reading that has no line to be about. Rows do arrive at the
+     * comparison; the cases the relation would turn the statement in are ones none of them is in.
+     */
+    record RelationTurnsNothing(List<FilingCoordinate> filedAt) implements ComparisonAssessment {
+
+        public RelationTurnsNothing {
+            filedAt = List.copyOf(filedAt);
+        }
+    }
+
+    /**
      * Read in full, and several relations held together: one rule with a line for each, and where
      * each of them decides.
      *
@@ -556,7 +586,7 @@ sealed interface ComparisonAssessment {
                     case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
                          CutsNothing _, AgainstAnotherValue _, OutsideTheDomain _,
                          NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _, Unread _,
-                         Several _ -> false;
+                         NothingArrivesAtItsRelation _, RelationTurnsNothing _, Several _ -> false;
                 };
             }
 
@@ -622,7 +652,8 @@ sealed interface ComparisonAssessment {
                         new Unread(atEachOf(cuttingOf(line).over(),
                                 new BlockReason.SeveralLinesInOneRule()));
                 case AgainstAnotherValue _, AnswerDependent _, OnADependencysAnswer _,
-                     StatesNoRelation _, NoInput _, CutsNothing _ -> null;
+                     StatesNoRelation _, NoInput _, CutsNothing _,
+                     NothingArrivesAtItsRelation _, RelationTurnsNothing _ -> null;
                 case Several _ -> throw new IllegalStateException(
                         "a line of a statement is what one line comes to: " + line);
             };
@@ -945,6 +976,11 @@ sealed interface ComparisonAssessment {
         // that is still one here. With no way arriving it is what the declarations leave, which
         // the reading already holds.
         List<Reachability.Reaching> arriving = waysArrivedBy(way, arrivals);
+        // A relation to another value has no line to drop, and is dropped the same way: by the
+        // proof that no row takes the way to it, which is no case's.
+        if (arriving.isEmpty() && read instanceof AgainstAnotherValue against) {
+            return new NothingArrivesAtItsRelation(against.filedAt());
+        }
         return arriving.isEmpty() ? read : switch (read) {
             case AcrossPositions across -> across.whereRowsArrive(reading, arriving);
             case AgainstAnotherValue against -> against.whereRowsArrive(reading, arriving);
@@ -1165,7 +1201,12 @@ sealed interface ComparisonAssessment {
      * What a relation to another value parts in one case: the lines that turn the statement in it,
      * and whether any row takes the way to it.
      */
-    record InACase(boolean reachable, List<AtAPosition> lines) {}
+    record InACase(boolean reachable, List<AtAPosition> lines) {
+
+        public InACase {
+            lines = List.copyOf(lines);
+        }
+    }
 
     /**
      * A relation to another value as a part of a statement of several, on the way and then in each
@@ -1199,6 +1240,15 @@ sealed interface ComparisonAssessment {
                                             arrivals, line.cutting().keptTo(condition, reading)))
                                     .toList());
                 });
+        return partsOfARelation(part, against, inCase);
+    }
+
+    /**
+     * The parts a relation to another value comes to, given what it parts in each case:
+     * {@code inCase} is asked of every condition a case is taken apart into.
+     */
+    static List<Several.Part> partsOfARelation(Several.Part part, AgainstAnotherValue against,
+                                               Function<Proposition, InACase> inCase) {
         // Each case is taken apart to the end and asked by itself: the lines of a narrower case
         // are not the lines of a wider one, so no case is given up or said for several before
         // its own lines are known. Cases are said for several only past that, where they part the
@@ -1229,6 +1279,12 @@ sealed interface ComparisonAssessment {
                 casesOf.get(at).add(DecidingCase.alone(atom.condition()));
             }
         }
+        // Cases that were all worked out and none of them reached: the relation turns the
+        // statement nowhere a row is, which is not a relation left without a line.
+        if (partedBy.isEmpty() && !someCaseLeftUndrawn && stoppedAt.isEmpty()) {
+            return List.of(new Several.Part(part.id(),
+                    new RelationTurnsNothing(against.filedAt()), List.of()));
+        }
         someCaseLeftUndrawn |= partedBy.isEmpty();
         List<Several.Part> out = new ArrayList<>();
         for (int i = 0; i < partedBy.size(); i++) {
@@ -1258,7 +1314,8 @@ sealed interface ComparisonAssessment {
             case TurnsNothing turns -> turns.cutting();
             case NoFeasibleInput none -> none.cutting();
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
-                 CutsNothing _, Unread _, AgainstAnotherValue _, Several _ ->
+                 CutsNothing _, Unread _, AgainstAnotherValue _, Several _,
+                 NothingArrivesAtItsRelation _, RelationTurnsNothing _ ->
                     throw new IllegalArgumentException(
                          "a reading that drew no line is about none: " + line);
         };
@@ -1442,6 +1499,8 @@ sealed interface ComparisonAssessment {
             case NoFeasibleInput none -> none.cutting().over();
             case Unread unread -> List.copyOf(unread.why().keySet());
             case CutsNothing cuts -> cuts.filedAt();
+            case NothingArrivesAtItsRelation unarrived -> unarrived.filedAt();
+            case RelationTurnsNothing turns -> turns.filedAt();
             case AgainstAnotherValue against -> against.filedAt();
             // Where each of its lines is filed, each place once: one rule, and its lines are what
             // it is about.
@@ -1526,6 +1585,11 @@ sealed interface ComparisonAssessment {
             // Nor that one: rows arrive at this line, and the statement it is a line of comes out
             // the same either side of it wherever they do.
             case TurnsNothing _ ->
+                    sameAtEachPlace(new BlockReason.ComparisonLineTurningNothing());
+            // The same two words for a relation, which has no line to be about.
+            case NothingArrivesAtItsRelation _ ->
+                    sameAtEachPlace(new BlockReason.ComparisonNothingArrivesAtItsLine());
+            case RelationTurnsNothing _ ->
                     sameAtEachPlace(new BlockReason.ComparisonLineTurningNothing());
             // What each of its lines leaves, each in its own words — and, of what a line read to
             // the end leaves, nothing at a position another of its lines divides, since the rule
@@ -1627,7 +1691,8 @@ sealed interface ComparisonAssessment {
                     .anyMatch(part -> part.line().drawsABorder());
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
                  CutsNothing _, AgainstAnotherValue _, OutsideTheDomain _, TurnsNothing _,
-                 NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _ -> false;
+                 NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _,
+                 NothingArrivesAtItsRelation _, RelationTurnsNothing _ -> false;
         };
     }
 

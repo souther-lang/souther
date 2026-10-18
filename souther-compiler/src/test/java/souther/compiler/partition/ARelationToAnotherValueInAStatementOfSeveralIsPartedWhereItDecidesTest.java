@@ -89,28 +89,9 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
      */
     @Test
     void theLineIsDrawnInTheFinalPartition() {
-        Compilation compilation = Compilation.ofSource("""
-                module demo
-
-                data Item = { n: Int }
-                    invariant n >= 0 && n <= 100
-                data Order = { items: List<Item>, open: Bool }
-
-                data Within
-                data Needs
-
-                behavior approval : (o: Order) -> Within | Needs
-
-                let approval (o) =
-                    if List.fold((w, i) -> if i.n > (if o.open then w else 5) then i.n else w,
-                                 0, o.items) <= 50 then Within else Needs
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList());
-        String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        String report = reportOf("""
+                List.fold((w, i) -> if i.n > (if o.open then w else 5) then i.n else w,
+                          0, o.items) <= 50""");
         assertTrue(report.contains("no IN point is owed at o.items[*].n = 0 (comparison@"),
                 report);
         assertFalse(report.contains("relates the value here to another value not shown to reach"),
@@ -133,6 +114,42 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
                 assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, read,
                         read::toString);
         assertFalse(relation.settling().isEmpty(), read::toString);
+    }
+
+    /**
+     * Nothing arrives at a relation behind a guard the declarations rule out, which is not a
+     * relation no line was shown for: the place says what it says of a line nothing arrives at.
+     */
+    @Test
+    void aRelationNothingArrivesAtIsNotOneNotShownToReachTheValues() {
+        String report = reportOf("""
+                if o.q < 0 then
+                    List.fold((w, i) -> if i.n > (if o.open then w else 5) then i.n else w,
+                              0, o.items) <= 50
+                else true""");
+        assertFalse(report.contains("relates the value here to another value not shown to reach"),
+                report);
+        assertTrue(report.contains("no row that arrives at it holds a value at its line"), report);
+    }
+
+    /** The adequacy report of a behavior that asks {@code condition} of an order. */
+    private static String reportOf(String condition) {
+        Compilation compilation = Compilation.ofSource(DECLARATIONS + """
+
+                data Within
+                data Needs
+
+                behavior approval : (o: Order) -> Within | Needs
+
+                let approval (o) =
+                    if (%s) then Within else Needs
+                """.formatted(condition.indent(8).strip()), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code().toString()).toList());
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static ComparisonAssessment.Several.Part relationPart(
