@@ -317,16 +317,14 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
 
     /**
      * {@code x + y < 0} with {@code y} between nought and one, both left out, holds at minus one
-     * and fails at nought. Between them {@code y} is on both sides of {@code -x} whatever {@code x}
-     * is, though it takes neither end, because a dense term takes values as near an end as asked
-     * of.
+     * and fails at nought. Between them a decimal {@code y} is on both sides of {@code -x} except
+     * at the one step from an end: at minus a step, the least decimal above nought is not below
+     * {@code -x}, so the relation fails there whatever {@code y} is, and nothing is shown.
      */
     @Test
-    void aDenseTermTakingAnOpenRunReachesTheValuesInsideItFromBothSides() {
+    void anOpenEndTheOtherTermTakesNoValueAtIsNoEndItReachesFromBothSides() {
         NumericDomain.Bounds open = dense("0", false, "1", false);
-        Leaves leaves = denseLeavesOf(NumericDomain.Bounds.OPEN, open, open, 1, Rel.LT);
-        assertEquals(List.of(line(Rel.LE, -1), line(Rel.GE, 0)),
-                ((Leaves.Settled) leaves).lines());
+        assertNull(denseLeavesOf(NumericDomain.Bounds.OPEN, open, open, 1, Rel.LT));
     }
 
     /** A term that is not dense has no value between an end it leaves out and the next, so the
@@ -415,34 +413,53 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
-     * Two numbers a step of the finest scale or less apart may have no value between them, so a
-     * run that narrow is neither reached nor said to be empty: {@code x > y} with both above
-     * nought and up to a step is false at every value there is, the one step, and taking the
-     * runs for dense would have {@code y} below {@code x} wherever {@code x} is.
+     * {@code x > y} with both above nought and up to one: at the least decimal above nought,
+     * {@code y} has no value below {@code x}, so the relation fails there and {@code x} is not
+     * left either way for being a dense term whose run is open at nought. Closed at nought, the
+     * run holds a value below any {@code x} above it, and the line is at nought.
      */
     @Test
-    void aRunNoWiderThanAStepOfTheFinestScaleIsNothingIsClaimedOf() {
-        NumericDomain.Bounds aboveNoughtToAStep = dense("0", false, "1E-2147483647", true);
-        WhatARelationLeavesUndivided.Term<String> x = denseTerm("x", 1, aboveNoughtToAStep,
-                aboveNoughtToAStep);
-        WhatARelationLeavesUndivided.Term<String> y = denseTerm("y", -1, aboveNoughtToAStep,
-                aboveNoughtToAStep);
-        assertEquals(Set.of(), undivided(x, y, Rel.GT));
-        assertNull(denseLeavesOf(x, y, Rel.GT));
-    }
-
-    /** The same asked at the least end of the run alone: {@code x > y} for {@code y} above nought
-     *  up to one, and the values of {@code x} above nought, are reached below by a dense
-     *  {@code y} that takes no nought and not by one that is whole. */
-    @Test
-    void theLeastEndOfAnOpenRunIsReachedByADenseTermAlone() {
+    void aRunOpenAtTheEndTheOtherTermIsHeldToIsNotReachedBeyondIt() {
         NumericDomain.Bounds unit = dense("0", true, "1", true);
         NumericDomain.Bounds aboveNought = dense("0", false, "1", true);
-        Leaves leaves = denseLeavesOf(denseTerm("x", 1, unit, unit),
-                denseTerm("y", -1, aboveNought, aboveNought), Rel.GT);
-        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) leaves).lines());
+        assertEquals(Set.of(), undivided(denseTerm("x", 1, aboveNought, aboveNought),
+                denseTerm("y", -1, aboveNought, aboveNought), Rel.GT));
         assertNull(denseLeavesOf(denseTerm("x", 1, unit, unit),
-                term("y", -1, aboveNought, aboveNought), Rel.GT));
+                denseTerm("y", -1, aboveNought, aboveNought), Rel.GT));
+        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) denseLeavesOf(
+                denseTerm("x", 1, unit, unit), denseTerm("y", -1, unit, unit), Rel.GT)).lines());
+    }
+
+    /** {@code x > 0} for {@code x} from the least decimal there is to twice it holds at every
+     *  value, whatever the width of the run: nothing is parted. */
+    @Test
+    void aRunOfTheFinestScaleIsSettledAsAnyOtherIs() {
+        NumericDomain.Bounds oneStepToTwo = dense("1E-2147483647", true, "2E-2147483647", true);
+        NumericDomain.Bounds nought = dense("0", true, "0", true);
+        Leaves.Settled settled = (Leaves.Settled) denseLeavesOf(
+                denseTerm("x", 1, oneStepToTwo, oneStepToTwo), denseTerm("y", -1, nought, nought),
+                Rel.GT);
+        assertEquals(1, settled.runs().size());
+        assertEquals(true, settled.runs().getFirst().holds());
+        assertEquals(List.of(), settled.lines());
+    }
+
+    /**
+     * A decimal of a half is a value a whole term cannot take, and a decimal of one is: with
+     * {@code x} held to the one decimal and {@code y} whole from nought to one, {@code x == y}
+     * is false at a half whatever {@code y} is, and at one it is left either way.
+     */
+    @Test
+    void aWholeTermTakesTheOneDecimalOnlyWhereItIsWhole() {
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        NumericDomain.Bounds half = dense("0.5", true, "0.5", true);
+        NumericDomain.Bounds one = dense("1", true, "1", true);
+        for (Rel relation : List.of(Rel.EQ, Rel.NE)) {
+            assertEquals(false, undivided(denseTerm("x", 1, half, half),
+                    term("y", -1, unit, unit), relation).contains("x"), relation.toString());
+            assertEquals(true, undivided(denseTerm("x", 1, one, one),
+                    term("y", -1, unit, unit), relation).contains("x"), relation.toString());
+        }
     }
 
     /**

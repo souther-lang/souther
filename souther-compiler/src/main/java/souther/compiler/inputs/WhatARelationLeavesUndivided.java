@@ -13,7 +13,6 @@ import souther.compiler.numeric.Rel;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -254,8 +253,9 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
-     * Whether a value lies between a run ending at {@code to} and one starting at {@code from}:
-     * for whole values, a whole number; otherwise any value, which a point both leave out is.
+     * Whether a value lies between a run ending at {@code to} and one starting at {@code from}: a
+     * whole number, or a decimal, as the term is spaced. Where that cannot be worked out there is
+     * taken to be one, which keeps a line the runs would otherwise lose.
      */
     private static boolean gapBetween(ExactCut to, ExactCut from, boolean whole) {
         if (whole) {
@@ -263,49 +263,18 @@ public final class WhatARelationLeavesUndivided {
             return next == null || from.at().compareTo(next) > 0;
         }
         int order = from.at().compareTo(to.at());
-        return order > 0
-                || (order == 0 && !to.inclusive() && !from.inclusive() && isAValue(to.at()));
-    }
-
-    /** Whether a dense term can stand at the number {@code at}: only the decimals a model can
-     *  write are its values, and a third is none. */
-    private static boolean isAValue(ExactRatio at) {
-        return at.fitsWrittenDecimal();
-    }
-
-    /** The distance between two decimals of the finest scale there is. */
-    private static final ExactRatio STEP = ExactRatio.of(new BigDecimal(BigInteger.ONE,
-            Integer.MAX_VALUE));
-
-    /**
-     * Whether the numbers {@code low} and {@code high}, which differ, are no further apart than a
-     * step of the finest scale.
-     *
-     * <p>A dense term is read as one with a value between any two it is asked of, and that is how
-     * far the reading goes. Between two numbers a step or less apart there may be none, so no
-     * claim is made of a run that narrow, whichever way it would fall: a reading that has to
-     * decide whether a value lies in it, or reach one near its end, gives nothing instead. A value
-     * within a step of the end of a wider run is idealised the same way, and is no value anyone
-     * asks a line to part.
-     */
-    private static boolean isNoWiderThanAStep(ExactRatio low, ExactRatio high) {
-        ExactRatio width = high.minus(low).orNull();
-        return width != null && width.signum() > 0 && width.compareTo(STEP) <= 0;
-    }
-
-    /** Whether the dense term {@code term} takes a run too narrow to reason with. */
-    private static <P> boolean takesANarrowRun(Term<P> term) {
-        if (term.spacing() != Granularity.DENSE) {
+        if (order < 0) {
             return false;
         }
-        for (NumericDomain.Bounds bounds : Arrays.asList(term.holds(), term.realizes())) {
-            Interval run = bounds == null ? null : Interval.of(bounds);
-            if (run != null && run.low() != null && run.high() != null
-                    && isNoWiderThanAStep(run.low(), run.high())) {
-                return true;
-            }
+        if (order == 0) {
+            return !to.inclusive() && !from.inclusive()
+                    && Lattice.holds(Granularity.DENSE, to.at());
         }
-        return false;
+        Lattice.Point after = Lattice.least(Granularity.DENSE,
+                new ExactCut(to.at(), !to.inclusive()));
+        Lattice.Point before = Lattice.greatest(Granularity.DENSE,
+                new ExactCut(from.at(), !from.inclusive()));
+        return after == null || before == null || Lattice.compare(after, before) <= 0;
     }
 
     /**
@@ -808,7 +777,8 @@ public final class WhatARelationLeavesUndivided {
                                               int sign, ExactRatio level, Rel relation) {
         if (relation == Rel.EQ || relation == Rel.NE) {
             OfNumbers nought = new OfNumbers(ExactRatio.ZERO, ExactRatio.ZERO);
-            return nought.within(realized) && (realized.min() == null || realized.max() == null
+            return nought.within(realized, Spacings.UNKNOWN)
+                    && (realized.min() == null || realized.max() == null
                     || !(realized.min().at() instanceof Count low)
                     || !(realized.max().at() instanceof Count high)
                     || low.exactly().signum() < 0 || high.exactly().signum() > 0);
@@ -821,7 +791,7 @@ public final class WhatARelationLeavesUndivided {
         }
         Run needed = one.compareTo(two) <= 0 ? new OfNumbers(one, two) : new OfNumbers(two, one);
         return needed.around(realized, strictlyBelow(relation, ExactRatio.of(sign)),
-                Granularity.DISCRETE);
+                Spacings.UNKNOWN);
     }
 
     /** {@code level} over {@code end}, nought where there is no end, or null where it could not
@@ -885,7 +855,7 @@ public final class WhatARelationLeavesUndivided {
                                                  Independence independent, Interval rest) {
         Term<P> it = terms.get(at);
         Span held = Span.ofTheValues(it.holds());
-        if (held == null || terms.stream().anyMatch(WhatARelationLeavesUndivided::takesANarrowRun)) {
+        if (held == null) {
             return null;
         }
         List<SettledRun> runs = new ArrayList<>();
@@ -894,7 +864,7 @@ public final class WhatARelationLeavesUndivided {
             Rel asked = holds ? relation : relation.denied();
             for (OnTheDifference statement : settledBy(it.weight(), rest, asked)) {
                 Span settling = Span.where(statement);
-                if (settling == null || !settling.holdsAValue()) {
+                if (settling == null || settling.isEmpty()) {
                     continue;
                 }
                 List<Span> left = new ArrayList<>();
@@ -903,10 +873,7 @@ public final class WhatARelationLeavesUndivided {
                 }
                 between = left;
                 Span here = settling.meet(held);
-                if (here.isNarrowerThanAStep()) {
-                    return null;
-                }
-                if (here.holdsAValue()) {
+                if (!here.isEmpty()) {
                     runs.add(new SettledRun(here.lower(), here.upper(), holds));
                 }
             }
@@ -915,8 +882,7 @@ public final class WhatARelationLeavesUndivided {
             return null;
         }
         for (Span each : between) {
-            if (each.isNarrowerThanAStep() || !reachedBySome(terms, at,
-                    new Interval(each.lower(), each.upper()), constant,
+            if (!reachedBySome(terms, at, new Interval(each.lower(), each.upper()), constant,
                     relation, overlap, independent)) {
                 return null;
             }
@@ -974,11 +940,6 @@ public final class WhatARelationLeavesUndivided {
                                              ExactRatio constant, Rel relation,
                                              BiPredicate<P, P> overlap,
                                              Independence independent) {
-        if (terms.stream().anyMatch(WhatARelationLeavesUndivided::takesANarrowRun)
-                || (within != null && within.low() != null && within.high() != null
-                        && isNoWiderThanAStep(within.low(), within.high()))) {
-            return false;
-        }
         for (int other = 0; other < terms.size(); other++) {
             if (other != at && apart(terms, other, overlap) && untied(terms, other, independent)
                     && reaches(terms, other, at, within, constant, relation)) {
@@ -1113,37 +1074,60 @@ public final class WhatARelationLeavesUndivided {
         if (needed == null) {
             return false;
         }
+        Spacings spacings = new Spacings(reaching.spacing(), neededSpacing(terms, by, constant));
         // An end of the type moved by a constant or a weight is needed past the end.
         if ((needed.runsDown() || needed.runsUp()) && !itsValue) {
             return false;
         }
         if (exactly) {
-            return needed.within(reaching.realizes())
-                    && !(coversADenserRun(terms, by) && !needed.holdsOneValue());
+            return needed.within(reaching.realizes(), spacings);
         }
         boolean strictlyBelow = strictlyBelow(relation, reaching.weight());
         if ((strictlyBelow ? needed.runsDown() : needed.runsUp())
                 && !othersAreTheirPlaces(terms, by)) {
             return false;
         }
-        return needed.around(reaching.realizes(), strictlyBelow, reaching.spacing());
+        return needed.around(reaching.realizes(), strictlyBelow, spacings);
     }
 
     /**
-     * Whether the term at {@code by} takes whole numbers only while a term beside it takes the
-     * values between them too, so that a run of the others is one it cannot take every value of
-     * for having the same ends.
+     * How the values the term at {@code by} has to stand at are spaced, or null where that is not
+     * said.
+     *
+     * <p>They are what the others come to, over its weight and turned, and are on the finest grid
+     * any of the others is on: whole only where every other term is, with whole weights, a whole
+     * constant, and a weight of one or minus one for the term itself. Any finer grid is a superset
+     * of the points there are, and a run of more points is the harder to reach.
      */
-    private static <P> boolean coversADenserRun(List<Term<P>> terms, int by) {
-        if (terms.get(by).spacing() != Granularity.DISCRETE) {
-            return false;
-        }
+    private static <P> Granularity neededSpacing(List<Term<P>> terms, int by,
+                                                 ExactRatio constant) {
+        boolean whole = terms.get(by).weight().abs().equals(ExactRatio.ONE)
+                && (constant == null || constant.isWhole());
         for (int i = 0; i < terms.size(); i++) {
-            if (i != by && terms.get(i).spacing() == Granularity.DENSE) {
-                return true;
+            if (i == by) {
+                continue;
             }
+            Granularity spacing = terms.get(i).spacing();
+            if (spacing == null) {
+                return null;
+            }
+            whole &= spacing == Granularity.DISCRETE && terms.get(i).weight().isWhole();
         }
-        return false;
+        return whole ? Granularity.DISCRETE : Granularity.DENSE;
+    }
+
+    /**
+     * How the values of the reaching term and the values it has to be at are spaced, each null
+     * where that is not said, and then the run is compared as the numbers it ends at.
+     */
+    private record Spacings(Granularity reaching, Granularity needed) {
+
+        /** Neither said: the run is compared as the places it ends at and no more. */
+        static final Spacings UNKNOWN = new Spacings(null, null);
+
+        boolean areKnown() {
+            return reaching != null && needed != null;
+        }
     }
 
     /**
@@ -1291,20 +1275,17 @@ public final class WhatARelationLeavesUndivided {
 
         boolean runsUp();
 
-        /** Whether this run leaves out its least value, so that a value at it is below every value
-         *  of the run. */
-        boolean leastIsOpen();
+        /** The least end of this run as the number it is, or null where it has none or it is no
+         *  number. */
+        ExactCut lowerCut();
 
-        /** Whether this run leaves out its greatest value. */
-        boolean greatestIsOpen();
-
-        /** Whether this run is the one value, both its ends. */
-        boolean holdsOneValue();
+        /** The greatest end of this run as the number it is, or null where it has none or it is no
+         *  number. */
+        ExactCut upperCut();
 
         /** Whether {@code realized} holds every value of this run. */
-        default boolean within(NumericDomain.Bounds realized) {
-            return lowFrom(realized.min(), Reach.EVERY_VALUE, false)
-                    && highTo(realized.max(), Reach.EVERY_VALUE, false);
+        default boolean within(NumericDomain.Bounds realized, Spacings spacings) {
+            return reaches(realized, Reach.EVERY_VALUE, Reach.EVERY_VALUE, spacings);
         }
 
         /**
@@ -1313,12 +1294,10 @@ public final class WhatARelationLeavesUndivided {
          * {@code strictlyBelow}, one strictly above it and one at it or below.
          */
         default boolean around(NumericDomain.Bounds realized, boolean strictlyBelow,
-                               Granularity spacing) {
-            boolean dense = spacing == Granularity.DENSE;
-            return lowFrom(realized.min(),
-                            strictlyBelow ? Reach.STRICTLY_BEYOND : Reach.AT_OR_BEYOND, dense)
-                    && highTo(realized.max(),
-                            strictlyBelow ? Reach.AT_OR_BEYOND : Reach.STRICTLY_BEYOND, dense);
+                               Spacings spacings) {
+            return reaches(realized,
+                    strictlyBelow ? Reach.STRICTLY_BEYOND : Reach.AT_OR_BEYOND,
+                    strictlyBelow ? Reach.AT_OR_BEYOND : Reach.STRICTLY_BEYOND, spacings);
         }
 
         /** What a value of the run asks of the values a term takes on the side of an end. */
@@ -1332,50 +1311,97 @@ public final class WhatARelationLeavesUndivided {
         }
 
         /**
-         * Whether a term taking the run that stops at {@code end} takes what {@code reach} asks
-         * at the least value of this run, for each value of it.
+         * Whether a term taking {@code realized} takes what {@code atLeast} asks beside the least
+         * value of this run and {@code atMost} beside its greatest, for each value of it.
          *
-         * <p>Where the two stop at one value, it depends on which of them leaves the value out.
-         * A run that leaves it out asks nothing of the value itself, only of values past it, and
-         * those a dense term takes as near the value as asked of whether or not it takes the value.
-         * A run that holds it asks for a value short of it, which a term that stops there has none
-         * of.
+         * <p>Where the spacing of the term and of the values it has to be at are known and every
+         * end is a number, this is asked of the points of the grid the values lie on
+         * ({@link Lattice}): the least point of this run, and the least point the term takes, and
+         * whether one is below the other. That a run leaves an end out, or that two runs stop at one
+         * number, then decides nothing by itself. Otherwise only an end the term takes is reached,
+         * and one short of the value asked of is not.
          */
-        private boolean lowFrom(Endpoint end, Reach reach, boolean dense) {
-            if (end == null) {
-                return true;
-            }
-            if (runsDown()) {
+        private boolean reaches(NumericDomain.Bounds realized, Reach atLeast, Reach atMost,
+                                Spacings spacings) {
+            Endpoint least = realized.min();
+            Endpoint greatest = realized.max();
+            if ((least != null && runsDown()) || (greatest != null && runsUp())) {
                 return false;
             }
-            Integer order = againstTheLeast(end.at());
-            if (order == null || order > 0) {
-                return false;
+            if (spacings.areKnown() && onTheGrid(least) && onTheGrid(greatest)) {
+                return onTheLattice(realized, atLeast, atMost, spacings);
             }
-            return order < 0 || switch (reach) {
-                case EVERY_VALUE -> end.inclusive() || leastIsOpen();
-                case STRICTLY_BEYOND -> leastIsOpen() && (end.inclusive() || dense);
-                case AT_OR_BEYOND -> end.inclusive() || (leastIsOpen() && dense);
-            };
+            return (least == null || lowFrom(least, atLeast))
+                    && (greatest == null || highTo(greatest, atMost));
         }
 
-        /** The same at the greatest value of this run. */
-        private boolean highTo(Endpoint end, Reach reach, boolean dense) {
-            if (end == null) {
-                return true;
-            }
-            if (runsUp()) {
+        private static boolean onTheGrid(Endpoint end) {
+            return end == null || end.at() instanceof Count;
+        }
+
+        private boolean onTheLattice(NumericDomain.Bounds realized, Reach atLeast, Reach atMost,
+                                     Spacings spacings) {
+            ExactCut start = lowerCut();
+            ExactCut stop = upperCut();
+            if (spacings.needed() == Granularity.DENSE && spacings.reaching() == Granularity.DISCRETE
+                    && atLeast == Reach.EVERY_VALUE && !isOneWholeValue(start, stop)) {
                 return false;
             }
+            return (realized.min() == null || start != null && reachesFrom(
+                    atLeast, start, cutOf(realized.min()), spacings))
+                    && (realized.max() == null || stop != null && reachesTo(
+                    atMost, stop, cutOf(realized.max()), spacings));
+        }
+
+        /** Whether the run is the one value, and a whole number: all the whole term can be at. */
+        private static boolean isOneWholeValue(ExactCut start, ExactCut stop) {
+            return start != null && stop != null && start.inclusive() && stop.inclusive()
+                    && start.at().compareTo(stop.at()) == 0 && start.at().isWhole();
+        }
+
+        private static ExactCut cutOf(Endpoint end) {
+            return new ExactCut(((Count) end.at()).exactly(), end.inclusive());
+        }
+
+        /** Whether the term, taking points from {@code taken}, has beside the least point of
+         *  this run, at {@code start}, what {@code reach} asks. */
+        private static boolean reachesFrom(Reach reach, ExactCut start, ExactCut taken,
+                                           Spacings spacings) {
+            Lattice.Point asked = Lattice.least(spacings.needed(), start);
+            Lattice.Point takes = Lattice.least(
+                    reach == Reach.EVERY_VALUE ? spacings.needed() : spacings.reaching(), taken);
+            if (asked == null || takes == null) {
+                return false;
+            }
+            int order = Lattice.compare(takes, asked);
+            return reach == Reach.STRICTLY_BEYOND ? order < 0 : order <= 0;
+        }
+
+        /** The same beside the greatest point of this run, at {@code stop}. */
+        private static boolean reachesTo(Reach reach, ExactCut stop, ExactCut taken,
+                                         Spacings spacings) {
+            Lattice.Point asked = Lattice.greatest(spacings.needed(), stop);
+            Lattice.Point takes = Lattice.greatest(
+                    reach == Reach.EVERY_VALUE ? spacings.needed() : spacings.reaching(), taken);
+            if (asked == null || takes == null) {
+                return false;
+            }
+            int order = Lattice.compare(takes, asked);
+            return reach == Reach.STRICTLY_BEYOND ? order > 0 : order >= 0;
+        }
+
+        /** An end of the term below the least value asked of is reached, and one at it only where
+         *  the term takes it and the value asked of is not short of it. */
+        private boolean lowFrom(Endpoint end, Reach reach) {
+            Integer order = againstTheLeast(end.at());
+            return order != null && (order < 0
+                    || (order == 0 && reach != Reach.STRICTLY_BEYOND && end.inclusive()));
+        }
+
+        private boolean highTo(Endpoint end, Reach reach) {
             Integer order = againstTheGreatest(end.at());
-            if (order == null || order < 0) {
-                return false;
-            }
-            return order > 0 || switch (reach) {
-                case EVERY_VALUE -> end.inclusive() || greatestIsOpen();
-                case STRICTLY_BEYOND -> greatestIsOpen() && (end.inclusive() || dense);
-                case AT_OR_BEYOND -> end.inclusive() || (greatestIsOpen() && dense);
-            };
+            return order != null && (order > 0
+                    || (order == 0 && reach != Reach.STRICTLY_BEYOND && end.inclusive()));
         }
     }
 
@@ -1385,19 +1411,13 @@ public final class WhatARelationLeavesUndivided {
             implements Run {
 
         @Override
-        public boolean leastIsOpen() {
-            return openBelow;
+        public ExactCut lowerCut() {
+            return min instanceof Count count ? new ExactCut(count.exactly(), !openBelow) : null;
         }
 
         @Override
-        public boolean greatestIsOpen() {
-            return openAbove;
-        }
-
-        @Override
-        public boolean holdsOneValue() {
-            return min != null && max != null && !openBelow && !openAbove
-                    && min.compareTo(max) == 0;
+        public ExactCut upperCut() {
+            return max instanceof Count count ? new ExactCut(count.exactly(), !openAbove) : null;
         }
 
         @Override
@@ -1430,19 +1450,13 @@ public final class WhatARelationLeavesUndivided {
         }
 
         @Override
-        public boolean leastIsOpen() {
-            return openBelow;
+        public ExactCut lowerCut() {
+            return min == null ? null : new ExactCut(min, !openBelow);
         }
 
         @Override
-        public boolean greatestIsOpen() {
-            return openAbove;
-        }
-
-        @Override
-        public boolean holdsOneValue() {
-            return min != null && max != null && !openBelow && !openAbove
-                    && min.compareTo(max) == 0;
+        public ExactCut upperCut() {
+            return max == null ? null : new ExactCut(max, !openAbove);
         }
 
         @Override
@@ -1674,12 +1688,10 @@ public final class WhatARelationLeavesUndivided {
      * values are worked out as: a run ends open or closed, and a difference of two such runs is
      * runs again.
      *
-     * <p>The ends are exact numbers and the values are decimals, and the two differ at one point
-     * only. A run between two ends that differ holds a value: a decimal's scale is an exponent of
-     * thirty-two bits, which no two numbers a model can reason with lie closer than, and the
-     * search for a value of a run takes the same view ({@code CandidateDomain}). A run of equal
-     * ends is one number, a third for instance, and holds a value only where a decimal is that
-     * number ({@link #isAValue}).
+     * <p>The ends are exact numbers and the values are the decimals, the points of a grid a step
+     * apart ({@link Lattice}). Whether a run holds a value is where the grid's points fall in it:
+     * a run open at both ends of a number and the next point holds none, and one a third wide holds
+     * none where its ends are one number no decimal is.
      */
     private record Span(ExactCut lower, ExactCut upper) {
 
@@ -1712,27 +1724,24 @@ public final class WhatARelationLeavesUndivided {
                     ExactCut.tighterUpper(upper, other.upper));
         }
 
-        /** Whether some value of a dense term may lie in this run: not where it is empty. */
-        boolean holdsAValue() {
-            return !isEmpty();
-        }
-
-        /** Whether no value lies in this run, which {@link #isAValue} decides for the one point a
-         *  run of equal ends is. */
+        /**
+         * Whether no decimal lies in this run: the least one in it is past the greatest. Where an
+         * end is no decimal there is no telling by that, and the run is taken to hold one unless
+         * its ends are one number, which is a value only where a decimal is that number.
+         */
         boolean isEmpty() {
             if (lower == null || upper == null) {
                 return false;
             }
             int order = lower.at().compareTo(upper.at());
-            return order > 0
-                    || (order == 0 && !(lower.inclusive() && upper.inclusive()
-                            && isAValue(lower.at())));
-        }
-
-        /** Whether this run is too narrow for a value to be said to lie in it or not, being no
-         *  wider than a step of the scale a decimal has. */
-        boolean isNarrowerThanAStep() {
-            return lower != null && upper != null && isNoWiderThanAStep(lower.at(), upper.at());
+            if (order != 0) {
+                Lattice.Point least = Lattice.least(Granularity.DENSE, lower);
+                Lattice.Point greatest = Lattice.greatest(Granularity.DENSE, upper);
+                return order > 0 || (least != null && greatest != null
+                        && Lattice.compare(least, greatest) > 0);
+            }
+            return !(lower.inclusive() && upper.inclusive()
+                    && Lattice.holds(Granularity.DENSE, lower.at()));
         }
 
         /** What is left of this run with {@code taken} out of it: up to two runs. */
@@ -1741,14 +1750,14 @@ public final class WhatARelationLeavesUndivided {
             if (taken.lower != null) {
                 Span below = meet(new Span(null, new ExactCut(taken.lower.at(),
                         !taken.lower.inclusive())));
-                if (below.holdsAValue()) {
+                if (!below.isEmpty()) {
                     out.add(below);
                 }
             }
             if (taken.upper != null) {
                 Span above = meet(new Span(new ExactCut(taken.upper.at(),
                         !taken.upper.inclusive()), null));
-                if (above.holdsAValue()) {
+                if (!above.isEmpty()) {
                     out.add(above);
                 }
             }
