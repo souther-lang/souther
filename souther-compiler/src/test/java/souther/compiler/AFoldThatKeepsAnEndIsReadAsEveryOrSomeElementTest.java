@@ -88,13 +88,14 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
      *  own maximum, and the walk ends with the same number. */
     @Test
     void theStepKeepsTheSameEndHoweverItIsWritten() {
-        String plain = folded(GREATER, 0, "<= 10");
+        Drawn plain = drawn(folded(GREATER, 0, "<= 10"));
         for (String step : List.of(
                 "if w < l.discount then l.discount else w",
                 "if l.discount <= w then w else l.discount",
                 "if l.discount >= w then l.discount else w",
                 "Int.max(w, l.discount)",
-                "Int.max(l.discount, w)")) {
+                "Int.max(l.discount, w)",
+                "{ let d = l.discount  if d > w then d else w }")) {
             assertReadAs(plain, folded(step, 0, "<= 10"));
         }
     }
@@ -162,7 +163,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                 "if l.discount > 5 then l.discount else w",
                 "if l.discount > w then l.discount else 0",
                 "if l.discount > w then w else l.discount + 1",
-                "Int.max(w, l.discount) + 1")) {
+                "Int.max(w, l.discount) + 1",
+                "{ let d = w + 1  if l.discount > d then l.discount else d }")) {
             String report = report(folded(step, 0, "<= 10"));
             assertTrue(report.contains(MADE_FROM_IT), () -> step + ": " + report);
         }
@@ -178,9 +180,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     /**
-     * The model the fold was first missed in, as it was written: a rate wearing a name, compared
-     * through its value by the library's order of decimals, the walk in a helper and the tiers
-     * against it in the caller.
+     * A quote's worst discount: a rate wearing a name, compared through its value by the library's
+     * order of decimals, the walk in a helper and the tier against it in the caller.
      */
     @Test
     void theWorstDiscountOfAQuoteIsRead() {
@@ -210,6 +211,95 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
         assertFalse(report.contains(MADE_FROM_IT), report);
     }
 
+    /**
+     * A seed the input holds is one more value the end is taken of: the line on it and the line on
+     * every element are both drawn, where the comparison stands alone and inside a conjunction.
+     */
+    @Test
+    void aSeedTheInputHoldsAndEveryElementEachDrawALine() {
+        for (String decided : List.of(
+                "List.fold((w, l) -> %s, base, lines) <= 10".formatted(GREATER),
+                "List.fold((w, l) -> %s, base, lines) >= 10".formatted(GREATER),
+                "List.fold((w, l) -> %s, base, lines) <= 10 && base > 3".formatted(GREATER))) {
+            String report = report("""
+                    module example.worst
+
+                    data Line = { discount: Int }
+
+                    data Within
+                    data Needs
+
+                    behavior approval : (base: Int, lines: List<Line>) -> Within | Needs
+
+                    let approval (base, lines) =
+                        if %s then Within else Needs
+                    """.formatted(decided));
+            assertTrue(report.contains("read as approval/base: = 10"), () -> decided + ": "
+                    + report);
+            assertTrue(report.contains("read as approval/lines[*].discount: = 10"),
+                    () -> decided + ": " + report);
+            assertFalse(report.contains(MADE_FROM_IT), () -> decided + ": " + report);
+        }
+    }
+
+    /** An equality is every element at or below the number and some at or above it, and the line
+     *  is drawn for both: the point above it is owed as well as the one below. */
+    @Test
+    void anEqualityOwesThePointsOnEitherSide() {
+        String report = report(folded(GREATER, 0, "== 10"));
+        assertTrue(report.contains("read as approval/lines[*].discount: = 11"), report);
+        assertTrue(report.contains("read as approval/lines[*].discount: = 9"), report);
+    }
+
+    /** A step choosing by the sign of an order compared with a number written anywhere is
+     *  choosing by the order of its arguments. */
+    @Test
+    void theSignOfAnOrderComparedWithANamedNumberChoosesByTheOrder() {
+        String report = report("""
+                module example.worst
+
+                data Line = { d: Decimal }
+
+                data Within
+                data Needs
+
+                behavior approval : (lines: List<Line>) -> Within | Needs
+
+                let zero = 0
+
+                let approval (lines) =
+                    if List.fold((w, l) -> if Decimal.compare(l.d, w) > zero then l.d else w,
+                                 0.0m, lines) <= 0.5m
+                    then Within else Needs
+                """);
+        assertTrue(report.contains("read as approval/lines[*].d: = 0.5"), report);
+        assertFalse(report.contains(MADE_FROM_IT), report);
+    }
+
+    /** A value wearing two names is compared through both, and is still the value. */
+    @Test
+    void aValueWearingTwoNamesIsComparedThroughBoth() {
+        String report = report("""
+                module example.worst
+
+                data Inner = Int
+                data Code = Inner
+                data Line = { c: Code }
+
+                data Within
+                data Needs
+
+                behavior approval : (lines: List<Line>) -> Within | Needs
+
+                let approval (lines) =
+                    if List.fold((w, l) -> if l.c.value.value > w.value.value then l.c else w,
+                                 Code(Inner(0)), lines).value.value <= 3
+                    then Within else Needs
+                """);
+        assertTrue(report.contains("read as approval/lines[*].c: = 3"), report);
+        assertFalse(report.contains(MADE_FROM_IT), report);
+    }
+
     /** What the report says of a comparison of a value made from a position and not worked out. */
     private static final String MADE_FROM_IT =
             "it is about a value made from this one, and what it says about the values here is not"
@@ -218,13 +308,27 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     /** {@code read} draws the points {@code expected} draws, at the same values, and is written
      *  the same rows. */
     private static void assertReadAs(String expected, String read) {
-        String expectedReport = report(expected);
-        String readReport = report(read);
-        List<String> points = pointsOf(expectedReport);
-        assertFalse(points.isEmpty(), () -> "the form it is held to draws points: "
-                + expectedReport);
-        assertEquals(points, pointsOf(readReport), () -> read + "\n" + readReport);
-        assertEquals(rowsOf(expected), rowsOf(read), () -> read + "\n" + readReport);
+        assertReadAs(drawn(expected), read);
+    }
+
+    private static void assertReadAs(Drawn expected, String read) {
+        assertFalse(expected.points().isEmpty(), () -> "the form it is held to draws points: "
+                + expected.report());
+        Drawn drawn = drawn(read);
+        assertEquals(expected.points(), drawn.points(), () -> read + "\n" + drawn.report());
+        assertEquals(expected.rows(), drawn.rows(), () -> read + "\n" + drawn.report());
+    }
+
+    /**
+     * What one compilation of a model reports, the points it owes rows at and the rows written for
+     * what nothing covers.
+     */
+    private record Drawn(String report, List<String> points, List<String> rows) {}
+
+    private static Drawn drawn(String model) {
+        Compilation compilation = compiled(model);
+        String report = reportOf(compilation);
+        return new Drawn(report, pointsOf(report), rowsOf(compilation));
     }
 
     /** Each point the report says a row is owed at, and what it is read as, in order. */
@@ -241,8 +345,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     /** The values of each row written for what nothing covers, in order. */
-    private static List<String> rowsOf(String model) {
-        String rows = GeneratedRows.of(compiled(model), null, null,
+    private static List<String> rowsOf(Compilation compilation) {
+        String rows = GeneratedRows.of(compilation, null, null,
                 SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
         List<String> out = new ArrayList<>();
         for (String line : rows.split("\n")) {
@@ -255,7 +359,10 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     private static String report(String model) {
-        Compilation compilation = compiled(model);
+        return reportOf(compiled(model));
+    }
+
+    private static String reportOf(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }

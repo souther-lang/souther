@@ -2,14 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.types.Type;
 
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 /**
  * Which end of two values a choice between them keeps: the lesser or the greater.
@@ -45,16 +44,16 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
      * other, and the greater the other way about. Every case the same, and both values answered by
      * some case, is a choice keeping that end whichever way the two stand.
      *
-     * <p>The cases are those of a call the library defines by them ({@link Choice#casesOf}), or the
-     * two arms of an {@code if} whose condition is one comparison: the arm taken where it holds is
-     * reached under the relation it states, and the other under its denial. {@code Int.max(a, b)},
-     * {@code if b > a then b else a} and {@code if a >= b then a else b} are one choice.
-     *
      * @param isOne   whether an expression is the one value
      * @param isOther whether an expression is the other
      */
     static Extreme keptBy(Core e, Predicate<Core> isOne, Predicate<Core> isOther) {
-        List<Choice.ADefinitionCase> cases = casesOf(e);
+        return keptBy(casesOf(e, UnaryOperator.identity()), isOne, isOther);
+    }
+
+    /** The same, of the cases a choice was read in ({@link #casesOf}). */
+    static Extreme keptBy(List<Choice.ADefinitionCase> cases, Predicate<Core> isOne,
+                          Predicate<Core> isOther) {
         Extreme kept = null;
         boolean answersOne = false;
         boolean answersOther = false;
@@ -83,8 +82,19 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
     /**
      * The cases {@code e} is chosen in, each answering a value and reached where values stand in
      * relations — or none where it is no choice of the two kinds read here.
+     *
+     * <p>Those of a call the library defines by them ({@link Choice#casesOf}), or the two arms of
+     * an {@code if} whose condition is one comparison: the arm taken where it holds is reached
+     * under the relation it states, and the other under its denial. {@code Int.max(a, b)},
+     * {@code if b > a then b else a} and {@code if a >= b then a else b} are one choice.
+     *
+     * @param ofTheArguments the comparison a condition states, as the comparison of the values it
+     *                       holds exactly where: the condition itself, or — for a reader that can
+     *                       read a number where the condition stands — the comparison of the
+     *                       arguments of an order whose sign it compares ({@link TheSignOfAnOrder})
      */
-    private static List<Choice.ADefinitionCase> casesOf(Core e) {
+    static List<Choice.ADefinitionCase> casesOf(Core e,
+                                                UnaryOperator<StatedComparison> ofTheArguments) {
         Core chosen = Core.withoutStanding(e);
         if (chosen instanceof Core.PreservedCall call) {
             return Choice.casesOf(call);
@@ -92,38 +102,15 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
         if (chosen instanceof Core.If iff
                 && Core.withoutStanding(iff.cond()) instanceof Core.Binary cond
                 && StatedComparison.of(cond, true) instanceof StatedComparison written) {
-            StatedComparison stated = ofTheArguments(written);
+            StatedComparison stated = ofTheArguments.apply(written);
             return List.of(armOf(iff.then(), stated, true), armOf(iff.els(), stated, false));
         }
         return List.of();
     }
 
-    /**
-     * {@code written}, where it compares the sign an operation answers the order of two arguments
-     * by with a whole number, as the comparison of those arguments it holds exactly where
-     * ({@link TheSignOfAnOrder#betweenTheArguments}); {@code written} itself otherwise.
-     * {@code Decimal.compare(a, b) > 0} is {@code a > b}.
-     */
-    private static StatedComparison ofTheArguments(StatedComparison written) {
-        StatedComparison.Numbered<Core.PreservedCall> sign = written.at(side ->
-                Core.withoutStanding(side) instanceof Core.PreservedCall call
-                        && Type.INT.equals(call.type())
-                        && TheSignOfAnOrder.orderedArguments(call.operation()).size() == 2
-                        ? call : null);
-        if (sign == null || !(Core.withoutStanding(sign.other()) instanceof Core.Int against)) {
-            return written;
-        }
-        Rel between = TheSignOfAnOrder.betweenTheArguments(sign.number().operation(),
-                Granularity.DISCRETE, sign.claim().statedRelation(),
-                ExactRatio.of(against.value()));
-        if (between == null) {
-            return written;
-        }
-        List<DeclaredArgument> ordered = TheSignOfAnOrder.orderedArguments(
-                sign.number().operation());
-        return new StatedComparison(ComparisonClaim.stating(between),
-                CallArguments.of(ordered.get(0), sign.number()),
-                CallArguments.of(ordered.get(1), sign.number()), Core.BinaryReading.AS_THEY_STAND);
+    /** The one value {@code each} answers, or null where it answers arithmetic. */
+    static Core answeredBy(Choice.ADefinitionCase each) {
+        return onlyValueOf(each.answers());
     }
 
     /** The arm answering {@code answers}, reached where {@code condition} comes out

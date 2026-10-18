@@ -192,7 +192,10 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
      */
     @Test
     void aStepThatIsNotAnAdditionIsNotReadAsOne() {
+        // Read as the greatest, its line is on what one element holds and on no total.
         String chosen = report(model("if a.q > acc then a.q else acc", "0", 4));
+        assertTrue(chosen.contains("read as decide/xs[*].q: = 4"), chosen);
+        assertTrue(chosen.contains("read as decide/xs[*].q: = 3"), chosen);
         assertFalse(chosen.contains("List.sum"), chosen);
         for (String step : List.of(
                 "acc * 2 + a.q",

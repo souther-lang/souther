@@ -75,8 +75,11 @@ final class Reductions {
      */
     static Reducing reducing(Core.PreservedCall call, Function<Core, Core.Block> blockOf) {
         Reduction rule = of(call.operation());
+        if (rule == null) {
+            return null;
+        }
         Combinators.Handed handed = Combinators.handedTo(call, blockOf);
-        if (rule == null || handed == null
+        if (handed == null
                 || rule.accumulatorParam() >= handed.step().params().size()) {
             return null;
         }

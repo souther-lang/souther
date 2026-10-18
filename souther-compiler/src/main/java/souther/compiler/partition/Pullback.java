@@ -6377,9 +6377,22 @@ final class Pullback {
                     : written.at().standing(opened, read.rules().symbols(),
                             read.rules().newtypes());
             SeededWalk walk = SeededWalk.of(stands.value(), blocksAt(stands));
-            SeededWalk.AnEndKept kept = walk == null ? null
-                    : walk.endKept(read.rules().newtypes());
-            return kept == null ? null : new AWalkKeepingAnEnd(stands, walk, kept);
+            if (walk == null) {
+                return null;
+            }
+            // What the step chooses is read under the names it gave values first.
+            InputReads inTheStep = stands.at();
+            for (Core.LetIn named : walk.within()) {
+                inTheStep = inTheStep.and(named.binder(), named.value());
+            }
+            InputReads chosenIn = inTheStep;
+            // A step choosing by the sign of an order is choosing by the order of its arguments,
+            // read as a comparison of that sign is read anywhere ({@link #ofItsArguments}).
+            SeededWalk.AnEndKept kept = walk.endKept(read.rules().newtypes(), condition ->
+                    TheSignOfAnOrder.read(condition, chosenIn, sides())
+                            instanceof TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
+                            && ordered.isTheCondition() ? ordered.arguments() : condition);
+            return kept == null ? null : new AWalkKeepingAnEnd(stands, walk, kept, chosenIn);
         });
         if (numbered == null) {
             return null;
@@ -6392,15 +6405,15 @@ final class Pullback {
             return null;
         }
         Denotation other = new Denotation(numbered.other(), reads);
-        Denotation value = new Denotation(kept.value(), ends.at());
+        Denotation seed = new Denotation(walk.seed(), ends.at());
+        Denotation value = new Denotation(kept.value(), numbered.number().chosenIn());
         Rel states = numbered.claim().statedRelation();
         // The seed and the value are each compared with the other side, once for each end an
         // equality or a difference is read as.
         long most = READINGS.maximum();
         long readAs = states == Rel.EQ || states == Rel.NE ? 2 : 1;
-        WhyUnread past = splitInto(reads, readAs * (readingsOf(new Denotation(walk.seed(),
-                ends.at()), most, true) + readingsOf(value, most, true))
-                * readingsOf(other, most, true));
+        WhyUnread past = splitInto(reads, readAs * (readingsOf(seed, most, true)
+                + readingsOf(value, most, true)) * readingsOf(other, most, true));
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, false));
         }
@@ -6410,8 +6423,7 @@ final class Pullback {
             ConditionJoin how = every ? ConditionJoin.BOTH : ConditionJoin.EITHER;
             // Past the elements that decide it, the step answers the side of what it carried.
             ACarriedValue carried = ACarriedValue.made();
-            return acrossTheElements(
-                    comparedCase(new Denotation(walk.seed(), ends.at()), other, rel, at),
+            return acrossTheElements(comparedCase(seed, other, rel, at),
                     container, walk.container(), comparedCase(value, other, rel, at),
                     new Derivation.Supposing(new Derivation.WhatAWalkCarried(carried), carried,
                             !every),
@@ -6429,12 +6441,14 @@ final class Pullback {
     /**
      * A side of a comparison that is what a walk keeping an end ends with.
      *
-     * @param ends the walk's call, where it stands
-     * @param walk the walk the call is
-     * @param kept the end its step keeps
+     * @param ends     the walk's call, where it stands
+     * @param walk     the walk the call is
+     * @param kept     the end its step keeps
+     * @param chosenIn where the step's choice stands: where the walk does, with the names the step
+     *                 gave values before it chose ({@link SeededWalk#within})
      */
     private record AWalkKeepingAnEnd(Denotation ends, SeededWalk walk,
-                                     SeededWalk.AnEndKept kept) {}
+                                     SeededWalk.AnEndKept kept, InputReads chosenIn) {}
 
     /**
      * {@code left states right}, each side split into its cases where it is chosen by them, and

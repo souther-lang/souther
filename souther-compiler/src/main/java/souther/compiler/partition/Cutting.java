@@ -896,15 +896,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // Some element meeting several parts, which is the parts read of that element: a
             // lookup's answer compared as a whole is its entry under the key meeting the
             // comparison, and the line is the comparison's on the entry. Inside an either-or it is
-            // the same parts, read there.
-            //
-            // And no element meeting them, which is every element failing them: a statement and
-            // its denial turn at the same lines and in the same cases, so the lines are read off
-            // some element meeting them. The greatest of some values at or below a number is no
-            // value above it, and its line is the line on a value.
+            // the same parts, read there. No element meeting them is the same parts as well, each
+            // turning what is said of an element either way round: the greatest of some values at
+            // or below a number is no value above it, and its line is the line on a value.
             case Proposition.Some some when !Proposition.leavesSomethingUnread(some) ->
-                    asLines(behavior, comparison, some.holds() ? some : some.denied(),
-                            onTheInput.arithmetic(), read, reads, answering, lines.get());
+                    asLines(behavior, comparison, some, onTheInput.arithmetic(), read, reads,
+                            answering, lines.get());
             default -> noLine(comparison, stated.proposition(),
                     Proposition.stopsIn(stated.proposition()), Set.of(), onTheInput.arithmetic(),
                     read, reads, answering);
@@ -1674,7 +1671,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Any any -> any.parts().stream().anyMatch(Cutting::holdsARelation);
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().anyMatch(Cutting::holdsARelation);
-            case Proposition.Some some -> some.holds() && holdsARelation(some.ofTheElement());
+            // Some element meeting it or none: the relation turns what is said of an element
+            // either way round.
+            case Proposition.Some some -> holdsARelation(some.ofTheElement());
             // Where it answers is no line of it.
             case Proposition.WhereItAnswers where -> holdsARelation(where.states());
             default -> false;
