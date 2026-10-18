@@ -17,11 +17,13 @@ import java.util.function.Function;
  * step. Which end of two values the step keeps is read here ({@link #endKept}), because it is a
  * question about the step alone.
  *
- * <p>A reader concluding something of every element — that the walk ends with a total of what
- * each adds, with the end kept of every one, or that each was asked what the step asks — takes a
- * walk that applies its step to every element ({@link #overEveryElement}). That is a fact about
- * the operation proved of its body ({@link HowAClosureIsApplied}), and not one a walk from a seed
- * is by being one.
+ * <p>A walk is made only of an operation that applies its step to every element ({@link #of}), so
+ * a reader concluding something of every element — that the walk ends with a total of what each
+ * adds, with the end kept of every one, or that each was asked what the step asks — holds one
+ * that licenses it. That is a fact about the operation proved of its body
+ * ({@link HowAClosureIsApplied}), and not one a walk from a seed is by being one. A reader that
+ * concludes nothing of which elements the step is applied to, only how a run enters it, asks for
+ * a walk however far it applies its step ({@link #enteredHoweverFar}).
  *
  * @param seed        what the walk starts from
  * @param container   what the walk walks
@@ -35,11 +37,26 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
 
     /**
      * What {@code node} is, where it is a call of a walk from a seed whose step is a block with both
-     * its parameters named, or null where it is anything else — however far it applies the step.
+     * its parameters named and is applied to every element of the container, each in turn whatever
+     * an application answers — or null where it is anything else, or a walk that may stop short or
+     * pass some by.
      *
      * @param blockOf the block a closure argument stands for, where the call stands
      */
     public static SeededWalk of(Core node, Function<Core, Core.Block> blockOf) {
+        SeededWalk walk = enteredHoweverFar(node, blockOf);
+        return walk != null && walk.applied() == HowAClosureIsApplied.TO_EVERY_ELEMENT
+                ? walk : null;
+    }
+
+    /**
+     * The same, however far the walk applies its step: for a reader of how a run enters the step,
+     * which is with the seed carried into the first application whichever elements are applied
+     * to, and that concludes nothing of the elements from it.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static SeededWalk enteredHoweverFar(Core node, Function<Core, Core.Block> blockOf) {
         if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)) {
             return null;
         }
@@ -48,19 +65,6 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
                 || walk.accumulator() == null || walk.accumulator().binding() == null
                 ? null : new SeededWalk(walk.seed(), walk.container(), walk.step(),
                         walk.accumulator(), walk.element(), walk.applied());
-    }
-
-    /**
-     * The same, where the walk applies its step to every element of the container, each in turn
-     * whatever an application answers — or null where it is no walk, or one that may stop short
-     * or pass some by.
-     *
-     * @param blockOf the block a closure argument stands for, where the call stands
-     */
-    public static SeededWalk overEveryElement(Core node, Function<Core, Core.Block> blockOf) {
-        SeededWalk walk = of(node, blockOf);
-        return walk != null && walk.applied() == HowAClosureIsApplied.TO_EVERY_ELEMENT
-                ? walk : null;
     }
 
     /**
@@ -80,8 +84,8 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
      *
      * <p>Such a step answers the greater or the lesser of what it was carried and that value, so by
      * induction over the walk what the walk ends with is that end of the seed and the value on
-     * every element the step was applied to — every element of the container, of a walk over
-     * every element ({@link #overEveryElement}). {@code if l.discount > w then l.discount else w}
+     * every element the step was applied to, which for a walk made by {@link #of} is every element
+     * of the container. {@code if l.discount > w then l.discount else w}
      * and {@code Int.max(w, l.discount)} keep the greater of {@code w} and {@code l.discount}; a step
      * that adds to what it chose, or chooses by anything but how the two stand, keeps neither.
      *

@@ -485,8 +485,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                    List<OnAWay> conditions, boolean heldWhole) {
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
-                termsAlong(sources, carriers, region, read.quantities().region(), stating,
-                        heldWhole);
+                termsAlong(read, sources, carriers, region, conditions, stating, heldWhole);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -594,18 +593,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Each side as a term of the relation over the rows in {@code region}: where it may lie, what
      * it is shown to take there, and what it takes compared by equality.
      *
-     * @param declared what the declarations alone leave, which is what elements other than the
-     *                 ones a way reads are left ({@link #keptAlong})
+     * @param read       the reading of the input, whose declarations alone are what elements
+     *                   other than the ones a way reads are left ({@link #keptAlong})
+     * @param conditions what the way states
      */
     private List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> termsAlong(
-            List<Source> sources, List<Carrier> carriers, SearchRegion region,
-            SearchRegion declared, List<List<OnAWay>> stating, boolean heldWhole) {
+            InputReading read, List<Source> sources, List<Carrier> carriers, SearchRegion region,
+            List<OnAWay> conditions, List<List<OnAWay>> stating, boolean heldWhole) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
             if (each.kept() != null) {
-                terms.add(keptAlong(each, sources.get(i), carriers.get(i), region, declared,
-                        stating.get(i), heldWhole));
+                terms.add(keptAlong(each, sources.get(i), carriers.get(i), region, read,
+                        conditions, stating.get(i), heldWhole));
                 continue;
             }
             NumericDomain.Bounds holds = asARelationReadsIt(each.term() != null
@@ -644,61 +644,106 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * which an end above it may have been kept of. So where the earlier elements lie is what the
      * declarations alone leave the number ({@code declared}), and they are shown to take its
      * values only where the way states nothing of it. How many the container holds is one value
-     * of the run, and is read where the comparison is.
+     * of the run, and is read where the comparison is; so is a seed the input holds, which the
+     * way leaves what it leaves it and which takes what it is shown to take there.
      *
-     * @param ofEach   what the declarations leave the element's number
-     * @param carrier  the order the element's number is counted on
-     * @param region   the rows the way to the comparison lets through
-     * @param declared what the declarations alone leave
-     * @param stating  what the way states of the element's number
+     * @param ofEach     what the declarations leave the element's number
+     * @param carrier    the order the element's number is counted on
+     * @param region     the rows the way to the comparison lets through
+     * @param read       the reading of the input, whose declarations alone are what the earlier
+     *                   elements are left
+     * @param conditions what the way states
+     * @param stating    what the way states of the element's number
      */
     private static WhatARelationLeavesUndivided.Term<FilingCoordinate> keptAlong(
-            Side side, Source ofEach, Carrier carrier, SearchRegion region, SearchRegion declared,
-            List<OnAWay> stating, boolean heldWhole) {
+            Side side, Source ofEach, Carrier carrier, SearchRegion region, InputReading read,
+            List<OnAWay> conditions, List<OnAWay> stating, boolean heldWhole) {
         Quantity.KeptSoFar kept = side.kept();
-        if (!(Count.written(kept.seed()) instanceof ExactAnswer.Held<Optional<Count>>(
-                Optional<Count> written)) || written.isEmpty()) {
-            return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
-                    NumericDomain.Bounds.OPEN, null, null, false);
+        boolean greatest = kept.extreme() instanceof Extreme.Greatest;
+        SearchRegion declared = read.quantities().region();
+        // Where the seed lies, and what it is shown to take.
+        NumericDomain.Bounds seed;
+        NumericDomain.Bounds seedTakes;
+        switch (kept.seed()) {
+            case Quantity.KeptSoFar.Seed.Written(ExactRatio number) -> {
+                if (!(Count.written(number) instanceof ExactAnswer.Held<Optional<Count>>(
+                        Optional<Count> written)) || written.isEmpty()) {
+                    return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
+                            NumericDomain.Bounds.OPEN, null, null, false);
+                }
+                Endpoint at = Endpoint.inclusive(written.get());
+                seed = new NumericDomain.Bounds(at, at);
+                seedTakes = seed;
+            }
+            case Quantity.KeptSoFar.Seed.OfTheInput(NumericTerm.FromOnePosition number) -> {
+                seed = region.projectionOf(number)
+                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
+                        ? within : NumericDomain.Bounds.OPEN;
+                Source source = sourceOf(number, read);
+                Way way = !heldWhole || source == null ? Way.TIES
+                        : wayOf(number, source.named()
+                                ? statingAnythingOfItsParameter(number, conditions)
+                                : statingAnythingOf(number, conditions));
+                seedTakes = way == Way.TIES ? null : realized(number, source, region, way);
+            }
         }
-        Endpoint at = Endpoint.inclusive(written.get());
-        NumericDomain.Bounds seed = new NumericDomain.Bounds(at, at);
-        NumericDomain.Bounds past = kept.extreme() instanceof Extreme.Greatest
-                ? new NumericDomain.Bounds(at, null) : new NumericDomain.Bounds(null, at);
         NumericDomain.Bounds twoOrMore =
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(2)), null);
-        // Where the element's number lies past the seed, on any element before.
+        // Where the element's number lies past the least the seed may be, on any element before.
         NumericDomain.Bounds lies = (declared.projectionOf(kept.ofEach())
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
-                ? within : NumericDomain.Bounds.OPEN).meet(past);
+                ? within : NumericDomain.Bounds.OPEN).meet(pastOf(seed, greatest));
         boolean atMostOne = kept.howMany() != null && region.projectionOf(kept.howMany())
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds count)
                 && !count.meet(twoOrMore).holdsAValue();
         NumericDomain.Bounds holds = atMostOne || !lies.holdsAValue() ? seed
                 : NumericDomain.Bounds.spanning(seed, lies);
-        // What it is shown to take past the seed: what the element's number is shown to take, on
-        // a row some earlier element is at.
-        NumericDomain.Bounds realizes = seed;
+        // What it is shown to take: the seed's values, on the first element; and past them what
+        // the element's number is shown to take, on a row some earlier element is at.
+        NumericDomain.Bounds realizes = seedTakes;
         NumericDomain.Bounds several = kept.howMany() == null ? null
                 : region.wholeRunOf(kept.howMany());
         boolean untouched = heldWhole && wayOf(kept.ofEach(), stating) == Way.UNTOUCHED;
-        NumericDomain.Bounds taken = ofEach == null || !untouched || several == null
-                || !several.meet(twoOrMore).holdsAValue() ? null
+        NumericDomain.Bounds taken = seedTakes == null || ofEach == null || !untouched
+                || several == null || !several.meet(twoOrMore).holdsAValue() ? null
                 : realized(kept.ofEach(), ofEach, declared, Way.UNTOUCHED);
-        if (taken != null && taken.meet(past).holdsAValue()) {
-            // One run with the seed where nothing lies between them: the seed is taken, or on
-            // whole numbers the one next to it past it is.
-            ExactAnswer<ExactRatio> next = kept.extreme() instanceof Extreme.Greatest
-                    ? kept.seed().plus(ExactRatio.ONE) : kept.seed().minus(ExactRatio.ONE);
-            boolean adjoins = taken.admits(kept.seed()) || (carrier instanceof Carrier.Whole
-                    && next instanceof ExactAnswer.Held<ExactRatio>(ExactRatio beside)
-                    && taken.admits(beside));
-            realizes = adjoins ? NumericDomain.Bounds.spanning(seed, taken.meet(past))
-                    : taken.meet(past);
+        NumericDomain.Bounds above = taken == null ? null
+                : taken.meet(pastOf(seedTakes, greatest));
+        if (above != null && above.holdsAValue()) {
+            realizes = joined(seedTakes, above, greatest, carrier)
+                    ? NumericDomain.Bounds.spanning(seedTakes, above) : above;
         }
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
                 asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
                 false);
+    }
+
+    /** Every value at or past the least of {@code run} toward the end kept — at or above it for
+     *  the greatest, at or below its greatest for the least. */
+    private static NumericDomain.Bounds pastOf(NumericDomain.Bounds run, boolean greatest) {
+        return greatest ? new NumericDomain.Bounds(run.min(), null)
+                : new NumericDomain.Bounds(null, run.max());
+    }
+
+    /**
+     * Whether {@code seed} and {@code above}, past it toward the end kept, are one run with
+     * nothing between them: they share a value, or on whole numbers the one next to the seed's
+     * last value is the first of the other.
+     */
+    private static boolean joined(NumericDomain.Bounds seed, NumericDomain.Bounds above,
+                                  boolean greatest, Carrier carrier) {
+        if (seed.meet(above).holdsAValue()) {
+            return true;
+        }
+        Endpoint last = greatest ? seed.max() : seed.min();
+        if (!(carrier instanceof Carrier.Whole) || last == null || !last.inclusive()
+                || !(last.at() instanceof Count count)) {
+            return false;
+        }
+        ExactAnswer<ExactRatio> next = greatest ? count.exactly().plus(ExactRatio.ONE)
+                : count.exactly().minus(ExactRatio.ONE);
+        return next instanceof ExactAnswer.Held<ExactRatio>(ExactRatio beside)
+                && above.admits(beside);
     }
 
     /**
@@ -738,10 +783,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** The places what the declarations and a way say of {@code side} are asked at: its own, or
-     *  the place of the element's number a walk kept an end of. */
+     *  the place of the element's number a walk kept an end of and of a seed the input holds. */
     private static List<FilingCoordinate> placesAsked(Side side) {
-        return side.kept() == null ? side.madeOf()
-                : List.of(FilingCoordinate.of(side.kept().ofEach()));
+        if (side.kept() == null) {
+            return side.madeOf();
+        }
+        List<FilingCoordinate> out = new ArrayList<>();
+        out.add(FilingCoordinate.of(side.kept().ofEach()));
+        if (side.kept().seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
+            out.add(FilingCoordinate.of(from));
+        }
+        return out;
     }
 
     /**
@@ -949,6 +1001,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             .anyMatch(that -> overlap(place.path(), that)))
                     : touches(side.readOff(), each.positions()) && !saysNothingOfTheValuesOf(
                             side.readOff(), each, mayBeNamed(at, sources));
+            // What was kept of a seed the input holds is tied by what the way states of the seed.
+            if (side.kept() != null
+                    && side.kept().seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)
+                    && touches(from, each.positions())
+                    && !saysNothingOfTheValuesOf(from, each, mayBeNamed(at, sources))) {
+                about = true;
+            }
             if (about) {
                 out.add(tied.classOf(each.positions().iterator().next()));
             }
@@ -1155,12 +1214,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * lies between: named only where a rule of the container, or of a value it sits in, reads a
      * place inside its elements. That is where a rule relating one element to another is written.
      * A rule of the element is about that one element, and what was kept is the number on the
-     * others.
+     * others. And named where a seed the input holds is: what was kept is that seed too.
      */
     private static Source keptSource(Quantity.KeptSoFar kept, InputReading read) {
         Source each = sourceOf(kept.ofEach(), read);
-        return each == null ? null : new Source(each.takes(), each.onlyItsEnds(),
-                namedDownTo(kept.ofEach().subjectPath(), kept.container().steps().size(), read)
+        if (each == null) {
+            return null;
+        }
+        boolean seedNamed = kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)
+                && (sourceOf(from, read) == null || sourceOf(from, read).named());
+        return new Source(each.takes(), each.onlyItsEnds(), seedNamed
+                || namedDownTo(kept.ofEach().subjectPath(), kept.container().steps().size(), read)
                         != Named.NOT);
     }
 

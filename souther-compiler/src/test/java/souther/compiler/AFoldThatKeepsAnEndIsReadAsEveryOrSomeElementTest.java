@@ -121,6 +121,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                 "Int.max(w, l.discount)",
                 "Int.max(l.discount, w)",
                 "{ let d = l.discount  if d > w then d else w }",
+                "{ let d = l.discount  if l.discount > w then d else w }",
                 "{ let next = if l.discount > w then l.discount else w  next }",
                 "{ let d = l.discount  let next = if d > w then d else w  next }")) {
             assertReadAs(plain, model(unbounded, "List.fold((w, l) -> %s, %d, lines) <= 10"
@@ -247,6 +248,10 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
      * the end nor the comparison inside it is read as one; and under a condition on another
      * element of the same list, the end may still have been kept of a discount above it, so the
      * greatest discount there is is what passes every end, at a hundred and not at five.
+     *
+     * <p>The second holds today whatever the end kept is read over, since what that condition
+     * states does not reach the region the comparison inside the step is read in. It is here for
+     * the day it does: the end is kept of elements the condition says nothing of.
      */
     @Test
     void whatHoldsOfOneElementIsNotTakenOfTheOnesTheEndWasKeptOf() {
@@ -263,14 +268,30 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     /**
-     * A seed the input holds ties the end kept to it, which nothing here works out, and a rule of
-     * the list that reads its elements may tie one element to another: the comparison inside the
-     * step is said not to be worked out.
+     * A seed the input holds is one value of the run, which the end is kept of as of a seed
+     * written out: what it may be is where the end starts. Taking every value, it is on both sides
+     * of every discount on some run, and the comparison inside the step divides none; held at
+     * fifty or more on the way, it is never passed by a discount at or below fifty, which parts
+     * the discounts a row is owed at below eighty there.
      */
     @Test
-    void theComparisonInsideTheStepIsNotReadWhereTheEndIsTiedToSomethingElse() {
-        String fromTheInput = report(folded(GREATER, "base", "<= 10"));
-        assertTrue(fromTheInput.contains(NOT_SHOWN_TO_REACH), fromTheInput);
+    void theComparisonInsideTheStepReadsASeedTheInputHoldsAsWhereTheEndStarts() {
+        String free = report(folded(GREATER, "base", "<= 10"));
+        assertTrue(free.contains(RELATES_ANOTHER_VALUE), free);
+        assertFalse(free.contains(NOT_SHOWN_TO_REACH), free);
+        String held = report(model("base >= 50 && List.fold((w, l) -> %s, base, lines) <= 80"
+                .formatted(GREATER)));
+        assertFalse(held.contains(NOT_SHOWN_TO_REACH), held);
+        assertTrue(held.contains("read as approval/lines[*].discount: in 50 < lines[*].discount"
+                + " < 80"), held);
+    }
+
+    /**
+     * A rule of the list that reads its elements may tie one element to another: the comparison
+     * inside the step is said not to be worked out.
+     */
+    @Test
+    void theComparisonInsideTheStepIsNotReadWhereTheElementsMayBeTied() {
         String related = report("""
                 module example.worst
 

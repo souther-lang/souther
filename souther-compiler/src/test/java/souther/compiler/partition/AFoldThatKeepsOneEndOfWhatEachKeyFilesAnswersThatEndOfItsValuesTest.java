@@ -213,6 +213,10 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                         + " seen -> if t.days < seen then t.days else seen, acc)",
                 "{ let next = Map.updateOrInsert(t.account, t.days,"
                         + " seen -> Int.min(seen, t.days), acc)  next }",
+                "Map.updateOrInsert(t.account, t.days,"
+                        + " seen -> { let d = t.days  Int.min(seen, d) }, acc)",
+                "Map.updateOrInsert(t.account, t.days,"
+                        + " seen -> { let kept = Int.min(seen, t.days)  kept }, acc)",
                 """
                 match Map.get(t.account, acc) with
                         | None -> Map.insert(t.account, t.days, acc)

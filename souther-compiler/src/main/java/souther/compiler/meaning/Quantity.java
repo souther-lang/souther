@@ -571,13 +571,13 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
     /**
      * What a walk whose step keeps one end of what it carried and a value of the element
-     * ({@code SeededWalk.endKept}) carries into the step on an element: that end of a seed written
-     * out and of the value on every element before it.
+     * ({@code SeededWalk.endKept}) carries into the step on an element: that end of its seed and
+     * of the value on every element before it.
      *
      * <p>So it lies between the seed and the furthest value an element may hold past it, and is
      * the seed on the first element. It is no value of the element the step is applied to, which
      * is why it is apart from that element's numbers where nothing ties the elements of the
-     * container to one another.
+     * container to one another, nor the seed to them.
      *
      * @param extreme   which end the step keeps
      * @param seed      what the walk starts from
@@ -585,7 +585,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param ofEach    the number of the element the step keeps an end of
      * @param howMany   how many the container holds, or null where that is no number read
      */
-    record KeptSoFar(Extreme extreme, ExactRatio seed, TermPath container,
+    record KeptSoFar(Extreme extreme, Seed seed, TermPath container,
                      NumericTerm.FromOnePosition ofEach, NumericTerm.FromOnePosition howMany) {
 
         public KeptSoFar {
@@ -598,6 +598,22 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException("what is kept is read off the elements: "
                         + ofEach + " of " + container);
             }
+            if (seed instanceof Seed.OfTheInput(var at) && at.placesReadOff().stream()
+                    .anyMatch(place -> place.isAtOrUnder(container))) {
+                throw new IllegalArgumentException("a seed is one value of the run, and no"
+                        + " element of what is walked: " + at + " of " + container);
+            }
+        }
+
+        /** What a walk keeping an end starts from: a number written out, or one number of the
+         *  input, which is one value on a run whatever the elements are. */
+        public sealed interface Seed {
+
+            /** A number written out. */
+            record Written(ExactRatio number) implements Seed {}
+
+            /** A number of the input outside what is walked. */
+            record OfTheInput(NumericTerm.FromOnePosition number) implements Seed {}
         }
     }
 

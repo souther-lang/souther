@@ -1583,7 +1583,7 @@ final class Pullback {
      * ({@link #addedUpOver}).
      */
     private Sized sizeOfAWalk(Core e, InputReads reads) {
-        SeededWalk walk = SeededWalk.overEveryElement(e, blocksAt(new Denotation(e, reads)));
+        SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
         if (walk == null || !(subjectOf(walk.container(), reads)
                 instanceof DecisionSubject.AnInput held)) {
             return null;
@@ -4677,10 +4677,10 @@ final class Pullback {
      * ({@link SeededWalk#endKept}) — or empty where it is anything else.
      *
      * <p>Only one operation may apply the step, and the walk has to start from a number written
-     * out and walk a container of the input whose elements the number is read off: what is kept is
-     * then that end of the seed and of the number on the elements before, which is what the range
-     * of the carried value is worked out from. A seed the input holds would tie the carried value
-     * to it, and nothing here says how.
+     * out or one number of the input outside what it walks, and walk a container of the input
+     * whose elements the number is read off: what is kept is then that end of the seed and of the
+     * number on the elements before, which is what the range of the carried value is worked out
+     * from.
      */
     private Optional<Quantity.KeptSoFar> keptSoFar(Core.Read name, InputReads at) {
         ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
@@ -4688,12 +4688,12 @@ final class Pullback {
             return Optional.empty();
         }
         Denotation call = new Denotation(uses.applications().getFirst().call(), at);
-        SeededWalk walk = SeededWalk.overEveryElement(call.value(), blocksAt(call));
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
         if (walk == null || !name.binding().equals(walk.accumulator().binding())) {
             return Optional.empty();
         }
         SeededWalk.AnEndKept<InputReads> kept = walk.endKept(at, sides());
-        ExactRatio seed = kept == null ? null : sides().constant(walk.seed(), at);
+        Quantity.KeptSoFar.Seed seed = kept == null ? null : seedOf(walk.seed(), at);
         if (seed == null || !(AffineForms.outcome(kept.value().value(), kept.value().at(),
                 quantities()) instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                         LinearForm<Quantity> value))
@@ -4702,7 +4702,10 @@ final class Pullback {
                 || !(subjectOf(walk.container(), at) instanceof DecisionSubject.AnInput(
                         TermPath container))
                 || !each.placesReadOff().stream()
-                        .allMatch(place -> place.isAtOrUnder(container.element()))) {
+                        .allMatch(place -> place.isAtOrUnder(container.element()))
+                || (seed instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)
+                        && from.placesReadOff().stream()
+                                .anyMatch(place -> place.isAtOrUnder(container)))) {
             return Optional.empty();
         }
         NumericTerm.FromOnePosition howMany = sizeOf(walk.container(), at)
@@ -4711,6 +4714,21 @@ final class Pullback {
                         NumericTerm.FromOnePosition count) ? count : null;
         return Optional.of(new Quantity.KeptSoFar(kept.extreme(), seed, container, each,
                 howMany));
+    }
+
+    /** What a walk starting from {@code seed} starts from: a number written out, or one number
+     *  of the input — or null where it is anything else. */
+    private Quantity.KeptSoFar.Seed seedOf(Core seed, InputReads at) {
+        ExactRatio written = sides().constant(seed, at);
+        if (written != null) {
+            return new Quantity.KeptSoFar.Seed.Written(written);
+        }
+        return AffineForms.outcome(seed, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form)
+                && soleQuantity(form) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition number)
+                ? new Quantity.KeptSoFar.Seed.OfTheInput(number) : null;
     }
 
     /**
@@ -5459,7 +5477,7 @@ final class Pullback {
      * however deep the walks go.
      */
     private Derivation acrossAWalk(Core e, AnswerAspect aspect, InputReads reads) {
-        SeededWalk walk = SeededWalk.overEveryElement(e, blocksAt(new Denotation(e, reads)));
+        SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
         DecisionSubject container = walk == null ? null : subjectOf(walk.container(), reads);
         if (container == null || !quantifying.add(container)) {
             return null;
@@ -6437,7 +6455,7 @@ final class Pullback {
             ValueStanding.ReadThrough<InputReads> resolved =
                     Extreme.comparedAs(side, reads, sides());
             Denotation stands = new Denotation(resolved.value(), resolved.at());
-            SeededWalk walk = SeededWalk.overEveryElement(stands.value(), blocksAt(stands));
+            SeededWalk walk = SeededWalk.of(stands.value(), blocksAt(stands));
             SeededWalk.AnEndKept<InputReads> kept = walk == null ? null
                     : walk.endKept(stands.at(), sides());
             return kept == null ? null : new AWalkKeepingAnEnd(stands, walk, kept);
@@ -6950,10 +6968,20 @@ final class Pullback {
     private TheSignOfAnOrder.Sides<InputReads> sides() {
         return new TheSignOfAnOrder.Sides<>() {
 
+            // A name the body gave a value is that value however it is read, so one standing at a
+            // position is followed to what it was given as well: a step choosing between `d` and
+            // `w` under `let d = l.discount` chooses between `l.discount` and `w`.
             @Override
             public ValueStanding.ReadThrough<InputReads> standing(Core e, InputReads at) {
+                Set<BindingId> met = new HashSet<>();
                 Denotation stands = at.standing(e, read.rules().symbols(),
                         read.rules().newtypes());
+                while (Core.withoutStanding(stands.value()) instanceof Core.Read name
+                        && met.add(name.binding())
+                        && stands.at().givenTo(name) instanceof Denotation given) {
+                    stands = given.at().standing(given.value(), read.rules().symbols(),
+                            read.rules().newtypes());
+                }
                 return new ValueStanding.ReadThrough<>(stands.value(), stands.at());
             }
 
