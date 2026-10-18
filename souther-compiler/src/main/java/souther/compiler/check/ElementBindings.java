@@ -55,7 +55,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               Map<BindingId, ElementProjection> projected,
                               ValueTemplates templates,
                               Map<BindingId, ElementAnswer> answers,
-                              Map<BindingId, ClosureUses> uses) {
+                              Map<BindingId, ClosureUses> uses,
+                              OrderOfElements order) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -71,6 +72,21 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
             throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
                     + " none");
         }
+        if (order == null) {
+            throw new IllegalArgumentException("a body reads the order of its lists or not, or is"
+                    + " not known to");
+        }
+    }
+
+    /** Of a body whose order of elements nothing read. */
+    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
+                           ElementProvenance provenance,
+                           Map<BindingId, ElementProjection> projected,
+                           ValueTemplates templates,
+                           Map<BindingId, ElementAnswer> answers,
+                           Map<BindingId, ClosureUses> uses) {
+        this(containers, held, provenance, projected, templates, answers, uses,
+                OrderOfElements.NOT_KNOWN);
     }
 
     /** Of a body whose closures are asked for no more than what they answered. */
@@ -122,7 +138,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         joinedEntries.putAll(other.uses);
         return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
                 joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers,
-                joinedEntries);
+                joinedEntries, order.and(other.order));
     }
 
     /**
@@ -268,7 +284,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ClosureUses> entered = ClosureEntries.of(roots, held);
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
                 : new ElementBindings(found, held, provenance, projected, values, closures,
-                        entered);
+                        entered, OrderOfElements.of(roots, held));
     }
 
     /**
@@ -648,7 +664,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      * compiler builds, and reading it as a closure nobody wrote would file the rule inside it
      * nowhere and say nothing about having done so.
      */
-    private static Core.Block blockOf(Core closure, Map<BindingId, Core> held) {
+    static Core.Block blockOf(Core closure, Map<BindingId, Core> held) {
         Core at = Core.withoutStanding(closure);
         Set<BindingId> met = new HashSet<>();
         while (at instanceof Core.Read read) {

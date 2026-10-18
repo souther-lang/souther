@@ -1168,7 +1168,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
                  WhyUnread.CodePointsOfWhatAnOperationAnswers _,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
-                 WhyUnread.NoMeasureOfItsSize _ -> true;
+                 WhyUnread.NoMeasureOfItsSize _, WhyUnread.WhichElementARunStopsAt _ -> true;
             case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreTotalReadingsThanAreMade _,
                  WhyUnread.MorePartsThanAreConcluded _,
                  WhyUnread.MoreElementsThanAreWrittenOut _, WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,

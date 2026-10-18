@@ -207,7 +207,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 (LawProposition.SomeElement<?>) lawOf(LIST_ANY, AnswerAspect.TRUTH);
         Derivation meeting = new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.OnTheSideALawNames(
                 (LawProposition.Observed<?>) some.ofTheElement(), truthAt(XS.element())), true,
-                Optional.empty());
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         Proposition someElement = new Proposition.Some(new DecisionSubject.AnInput(XS), truth(XS.element()), true);
         assertEquals(some.holds() ? someElement : someElement.denied(),
                 concluded(new Derivation.ByALaw(callOf(LIST_ANY, some.container(), XS),
@@ -228,13 +228,13 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Derivation.TheCall call = callOf(LIST_ANY, some.container(), XS);
         Derivation overOtherElements = new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(YS),
                 new Derivation.OnTheSideALawNames(observed, truthAt(YS.element())), true,
-                Optional.empty());
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
                 AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some, overOtherElements)));
         // The call's own container, and an argument that stands at no position, are readings.
         new Derivation.ByALaw(call, AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some,
                 new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.OnTheSideALawNames(observed,
-                        truthAt(XS.element())), true, Optional.empty())));
+                        truthAt(XS.element())), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         new Derivation.ByALaw(new Derivation.TheCall(LIST_ANY, Map.of()), AnswerAspect.TRUTH,
                 new Derivation.ALawQuantifies(some, overOtherElements));
     }
@@ -322,7 +322,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
                     AnswerAspect.TRUTH, new Derivation.ALawQuantifies(contains,
                             new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.TheSameValue(same,
-                                    read[0], read[1]), true, Optional.empty()))));
+                                    read[0], read[1]), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID))));
         }
     }
 
@@ -402,10 +402,10 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                         !closureTrue.side().holds()));
         Derivation readAsTheOtherSide = new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS),
                 new Derivation.OnTheSideALawNames(closureFalse, truthAt(XS.element())), true,
-                Optional.empty());
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         Derivation readAsTheLawsSide = new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS),
                 new Derivation.OnTheSideALawNames(closureTrue, truthAt(XS.element())), true,
-                Optional.empty());
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         for (Derivation notOfIt : List.of(
                 new Derivation.ALawQuantifies(theOtherWay(any), readAsTheLawsSide),
                 new Derivation.ALawQuantifies(contains, readAsTheOtherSide),
@@ -424,11 +424,11 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 AnswerAspect.TRUTH, new Derivation.ALawQuantifies(contains,
                         new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.TheSameValue(notSame,
                                 new DecisionSubject.AnInput(XS.element()),
-                                new DecisionSubject.AnInput(A)), true, Optional.empty()))));
+                                new DecisionSubject.AnInput(A)), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID))));
         new Derivation.ByALaw(containsXs, AnswerAspect.TRUTH, new Derivation.ALawQuantifies(
                 contains, new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.TheSameValue(same,
                         new DecisionSubject.AnInput(XS.element()), new DecisionSubject.AnInput(A)),
-                        true, Optional.empty())));
+                        true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         new Derivation.ByALaw(callOf(LIST_ANY, any.container(), XS), AnswerAspect.TRUTH,
                 new Derivation.ALawQuantifies(any,
                         new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
@@ -779,9 +779,9 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 truthAt(A));
         assertEquals(Proposition.all(List.of(truth(A),
                         new Proposition.Some(new DecisionSubject.AnInput(XS), truth(XS.element()), true))),
-                concluded(new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), both, true, Optional.empty())));
+                concluded(new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), both, true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         assertEquals(truth(A), concluded(new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), truthAt(A), true,
-                Optional.of(size))));
+                Optional.of(size), HowTheElementsAreAsked.NOT_SAID)));
         assertEquals(true, Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(new DecisionSubject.AnInput(XS), truth(A)));
         assertEquals(false, Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(new DecisionSubject.AnInput(XS),
                 Proposition.all(List.of(truth(A), truth(XS.element())))));
@@ -797,9 +797,9 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     void anArmAboutTwoEntriesOfOneContainerIsReadOfNeither() {
         DecisionSubject xs = new DecisionSubject.AnInput(XS);
         Derivation filed = new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("k")),
-                true, Optional.empty());
+                true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         Derivation another = new Derivation.SomeElementMeeting(xs,
-                truthAt(XS.element().then("j")), true, Optional.empty());
+                truthAt(XS.element().then("j")), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         Proposition stated = concluded(new Derivation.MatchArms(List.of(
                 new Derivation.MatchArms.Arm(filed, another, true),
                 new Derivation.MatchArms.Arm(new Derivation.WrittenOut(true), truthAt(A)))));
@@ -810,7 +810,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 Proposition.all(List.of(some.denied(), truth(A))))), stated);
 
         Derivation ofAnother = new Derivation.SomeElementMeeting(
-                new DecisionSubject.AnInput(YS), truthAt(YS.element()), true, Optional.empty());
+                new DecisionSubject.AnInput(YS), truthAt(YS.element()), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         Proposition read = concluded(new Derivation.MatchArms(List.of(
                 new Derivation.MatchArms.Arm(filed, ofAnother, true),
                 new Derivation.MatchArms.Arm(new Derivation.WrittenOut(true), truthAt(A)))));
@@ -832,17 +832,17 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     void aStatementAboutAnEntryPickedOutThatQuantifiesItsContainerIsReadOfNeither() {
         DecisionSubject xs = new DecisionSubject.AnInput(XS);
         Derivation picked = new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("k")),
-                true, Optional.empty());
+                true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         Proposition stated = concluded(new Derivation.OfTheEntryUnderTheKey(picked,
                 new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("j")), true,
-                        Optional.empty())));
+                        Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         assertEquals(new Proposition.Unread(Optional.empty(), 0,
                 new WhyUnread.TwoElementsOfOneContainer(), false, true), stated);
 
         DecisionSubject ys = new DecisionSubject.AnInput(YS);
         Proposition read = concluded(new Derivation.OfTheEntryUnderTheKey(picked,
                 new Derivation.SomeElementMeeting(ys, truthAt(YS.element()), true,
-                        Optional.empty())));
+                        Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         assertEquals(Proposition.all(List.of(new Proposition.Some(ys, truth(YS.element()), true),
                 truth(XS.element().then("k")))), read);
     }
@@ -917,7 +917,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     @Test
     void aPartTheConclusionHasMustHaveBeenRead() {
         assertThrows(IllegalStateException.class, () -> concluded(
-                new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), truthAt(A), true, Optional.empty())));
+                new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), truthAt(A), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
     }
 
     /**
