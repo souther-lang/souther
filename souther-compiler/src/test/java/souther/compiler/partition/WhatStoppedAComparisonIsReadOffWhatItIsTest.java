@@ -62,7 +62,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void aRemainderByAValueARowWritesIsNamedForItsDivisor() {
-        PartitionEvidence measured = guard("a: Int, b: Int", "Int.floorMod(a, b) > 10");
+        PartitionEvidence measured = guard("a: Int, b: Int", "Int.floorMod(a + 1, b) > 10");
 
         assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
                 whyAt(measured, "a"));
@@ -98,7 +98,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void bothArgumentsOfAnOperationAreNamed() {
         PartitionEvidence measured =
-                guard("a: Int, b: Int", "Int.floorMod(b, a) > 10");
+                guard("a: Int, b: Int", "Int.floorMod(b + 1, a) > 10");
 
         assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
                 whyAt(measured, "a"));
@@ -235,7 +235,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void arithmeticRoundAnOperationDoesNotChangeWhatStoppedTheReading() {
-        for (String condition : List.of("Int.floorMod(a, b) <= 30",
+        for (String condition : List.of("Int.floorMod(a + 1, b) <= 30",
                 "Int.add(Int.floorMod(a, b), 1) <= 30",
                 "Int.add(1, Int.floorMod(a, b)) <= 30")) {
             assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),

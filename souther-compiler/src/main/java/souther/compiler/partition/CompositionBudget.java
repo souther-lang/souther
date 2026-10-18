@@ -175,6 +175,11 @@ public enum CompositionBudget {
      *  figure. */
     DIVISORS_OF_A_PRODUCT_TRIED(4096),
 
+    /** How many values of the divisor are tried for a remainder an input's number leaves of
+     *  another's, nearest nought first. The dividends of the divisors not tried are not asked, and
+     *  the walk is carried out with the figure. */
+    DIVISORS_OF_A_REMAINDER_TRIED(1024),
+
     /**
      * How often a walk re-reads the rules with the positions it has fixed.
      *
@@ -617,6 +622,8 @@ public enum CompositionBudget {
             case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
             case DIVISORS_OF_A_PRODUCT_TRIED ->
                     "how many numbers are tried as a divisor of a level of a product";
+            case DIVISORS_OF_A_REMAINDER_TRIED ->
+                    "how many values are tried as the divisor of a remainder an input leaves";
             case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
             case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
                     "how many values a position on the way is tried at";
@@ -704,7 +711,7 @@ public enum CompositionBudget {
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                  LEVELS_A_SIDE_IS_ASKED_AT, DIVISORS_OF_A_PRODUCT_TRIED,
-                 TIMES_THE_RULES_ARE_ASKED_AGAIN,
+                 DIVISORS_OF_A_REMAINDER_TRIED, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,

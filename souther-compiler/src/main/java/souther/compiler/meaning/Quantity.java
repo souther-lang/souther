@@ -37,8 +37,9 @@ import java.util.function.Predicate;
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
-        Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend, Quantity.ProductOfTwo,
-        Quantity.WhatAnOperationAnswers, Quantity.HowManyCarried {
+        Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
+        Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
+        Quantity.HowManyCarried {
 
     /**
      * How many what a recursion carries holds, whatever that is: what a walk carried into the step
@@ -66,7 +67,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 case HowManyCarried other -> equals(other);
                 case DecisionAtom.OfTheInput _, DecisionAtom.TakenOfAnAnswer _,
                      DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
-                     RemainderOfADividend _, ProductOfTwo _, HowManyDifferent _ -> false;
+                     RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
+                     HowManyDifferent _ -> false;
                 case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
                 case SumOver sum -> isIn(sum.ofTheElement());
                 case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
@@ -238,6 +240,54 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 out.append(" + ").append(dividend.constant().spelled());
             }
             return out.append(", ").append(divisor).append(')').toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * What a division of one whole number of the input by another leaves: the remainder of the
+     * eaches in a delivery by the pack size a product carries.
+     *
+     * <p>A number of its own and no form over the two. Fixing the divisor leaves a remainder by a
+     * constant of the dividend, whose period is that divisor's, so a rule about the remainder
+     * relates the two positions and draws no line on either: where the divisor stands, the
+     * dividend that divides by it comes round at a distance it sets. Which values of a position
+     * still leave the rule both ways is asked of what the other reaches
+     * ({@link souther.compiler.inputs.WhatARelationLeavesUndivided}).
+     *
+     * <p>The dividend and the divisor are told apart, and two of one position are no relation
+     * between two. A divisor of nought stops the run, so no row has a remainder there.
+     *
+     * @param operation the library's floor remainder that answers it
+     * @param dividend  the number divided
+     * @param divisor   the number it is divided by
+     */
+    record RemainderByAnInput(ValueName operation, NumericTerm.FromOnePosition dividend,
+                              NumericTerm.FromOnePosition divisor) implements Quantity {
+
+        public RemainderByAnInput {
+            if (operation == null || dividend == null || divisor == null
+                    || dividend.position().equals(divisor.position())
+                    || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
+                            .isEmpty()) {
+                throw new IllegalArgumentException("a remainder by an input is a floor remainder"
+                        + " of one number of the input by another of a different position: "
+                        + operation + " of " + dividend + " by " + divisor);
+            }
+        }
+
+        /** Both numbers, the dividend first. */
+        public List<NumericTerm.FromOnePosition> operands() {
+            return List.of(dividend, divisor);
+        }
+
+        @Override
+        public String spelled() {
+            return "floorMod(" + dividend + ", " + divisor + ")";
         }
 
         @Override

@@ -442,6 +442,112 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
+     * What a remainder of {@code dividend} by {@code divisor} held equal or unequal to nought leaves
+     * the values of one of them — or null where neither is shown.
+     *
+     * <p>Equal to nought it is {@code divisor | dividend}, with a divisor of nought outside what
+     * any row stands at: the run stops there. Without a period to draw, which values settle it on
+     * their own is what the other may hold, and it is shown only where that is a run.
+     *
+     * <p>A dividend settles it at nought, which every divisor divides, and at the values smaller in
+     * size than every divisor, which none divides. That the divisors are every size from some one
+     * up, and that the divisor reaches every size from there up on one side, is what shows every
+     * other dividend leaves it either way: the divisor at its own size divides it, and one past its
+     * size does not. A divisor settles it at one and minus one, which divide every dividend; the
+     * rest leave it either way where the dividend may be nought or has no end, and two dividends
+     * side by side are shown, one of which a divisor of any other size leaves undivided.
+     *
+     * @param askDividend whether the answer is about the dividend, or the divisor
+     * @param apart       whether the other is apart from the one asked and tied to it by nothing
+     */
+    public static <P> Leaves leavesOfADivisibility(Term<P> dividend, Term<P> divisor,
+                                                   boolean askDividend, Rel relation,
+                                                   boolean apart) {
+        if (!apart || (relation != Rel.EQ && relation != Rel.NE)) {
+            return null;
+        }
+        boolean holdsWhenDivides = relation == Rel.EQ;
+        List<SettledRun> runs = new ArrayList<>();
+        WholeRun held;
+        if (askDividend) {
+            held = WholeRun.ofTheValues(dividend.holds());
+            WholeRun sizes = WholeRun.ofTheValues(divisor.holds());
+            BigInteger least = held == null || sizes == null ? null : leastSizeFromWhichEvery(sizes);
+            if (least == null || !reachesEverySizeFrom(divisor.realizes(), least)) {
+                return null;
+            }
+            WholeRun nought = new WholeRun(BigInteger.ZERO, BigInteger.ZERO).meet(held);
+            if (nought.holdsAWholeNumber()) {
+                runs.add(new SettledRun(BigInteger.ZERO, BigInteger.ZERO, holdsWhenDivides));
+            }
+            if (least.compareTo(BigInteger.ONE) > 0) {
+                BigInteger below = least.subtract(BigInteger.ONE);
+                for (WholeRun side : List.of(new WholeRun(below.negate(), BigInteger.ONE.negate()),
+                        new WholeRun(BigInteger.ONE, below))) {
+                    WholeRun here = side.meet(held);
+                    if (here.holdsAWholeNumber()) {
+                        runs.add(new SettledRun(here.low, here.high, !holdsWhenDivides));
+                    }
+                }
+            }
+        } else {
+            held = WholeRun.ofTheValues(divisor.holds());
+            WholeRun values = WholeRun.ofTheValues(dividend.holds());
+            if (held == null || values == null || !twoInARow(values)
+                    || !(containsNought(values) || values.low == null || values.high == null)
+                    || dividend.realizes() == null) {
+                return null;
+            }
+            WholeRun seen = WholeRun.ofTheValues(dividend.realizes());
+            if (seen == null || !twoInARow(seen)
+                    || !(containsNought(seen) || seen.low == null || seen.high == null)) {
+                return null;
+            }
+            for (BigInteger one : List.of(BigInteger.ONE.negate(), BigInteger.ONE)) {
+                if (new WholeRun(one, one).meet(held).holdsAWholeNumber()) {
+                    runs.add(new SettledRun(one, one, holdsWhenDivides));
+                }
+            }
+        }
+        return runs.isEmpty() ? new Leaves.Undivided()
+                : new Leaves.Settled(inOrder(runs), held.low, held.high);
+    }
+
+    /** The least size such that the divisors held in {@code divisors}, nought aside, are every
+     *  whole number of that size or more on at least one sign — or null where they are not. */
+    private static BigInteger leastSizeFromWhichEvery(WholeRun divisors) {
+        if (divisors.high == null) {
+            return divisors.low == null || divisors.low.signum() <= 0 ? BigInteger.ONE
+                    : divisors.low;
+        }
+        if (divisors.low == null) {
+            return divisors.high.signum() >= 0 ? BigInteger.ONE : divisors.high.negate();
+        }
+        return null;
+    }
+
+    /** Whether a term taking every value of {@code realizes} takes, on one sign, every size from
+     *  {@code least} up. */
+    private static boolean reachesEverySizeFrom(NumericDomain.Bounds realizes, BigInteger least) {
+        WholeRun seen = realizes == null ? null : WholeRun.ofTheValues(realizes);
+        if (seen == null) {
+            return false;
+        }
+        return (seen.high == null && (seen.low == null || seen.low.compareTo(least) <= 0))
+                || (seen.low == null && (seen.high == null
+                        || seen.high.compareTo(least.negate()) >= 0));
+    }
+
+    private static boolean twoInARow(WholeRun run) {
+        return run.low == null || run.high == null || run.high.compareTo(run.low) > 0;
+    }
+
+    private static boolean containsNought(WholeRun run) {
+        return (run.low == null || run.low.signum() <= 0)
+                && (run.high == null || run.high.signum() >= 0);
+    }
+
+    /**
      * The values a factor of {@code sign} settles {@code relation} of the product at, as a run of
      * that sign's values — every one of them, or none, or those past a value — or null where none
      * do.

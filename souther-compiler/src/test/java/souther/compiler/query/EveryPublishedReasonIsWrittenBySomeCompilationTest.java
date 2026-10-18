@@ -399,7 +399,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
-                let f (a, b) = if Int.floorMod(a, b) > 10 then Yes else No
+                let f (a, b) = if Int.floorMod(a + 1, b) > 10 then Yes else No
                 """.formatted(ANSWER)));
         // A line on what a division by a written number leaves of a number made of two positions:
         // the border is drawn on the remainder and neither position is divided by it.

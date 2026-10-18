@@ -266,6 +266,31 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 "and minus two times minus three");
     }
 
+    /**
+     * And what {@code x} leaves divided by {@code y}: where the region holds the divisor at three,
+     * a remainder of five is one no pair gives, since a remainder is below its divisor in size, and
+     * is out of reach; a remainder of two is not.
+     */
+    @Test
+    void aRemainderTheRegionLeavesNoDivisorForIsOutOfReach() {
+        SearchRegion atThree = region().assuming(form(0, 1, -3), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class, realize(remainderByAnInputAt(5), atThree),
+                "the divisor stands at three, which no remainder of five is below");
+        assertFalse(realize(remainderByAnInputAt(2), atThree) instanceof Realization.Impossible,
+                "and two is below three");
+    }
+
+    /** What {@code x} leaves divided by {@code y}, at one of the remainders. */
+    private static Standing remainderByAnInputAt(long remainder) {
+        Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
+        on.put(term("x"), Carrier.WHOLE);
+        on.put(term("y"), Carrier.WHOLE);
+        return new Standing.OfARemainderByAnInput(term("x"), term("y"), on,
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(remainder)));
+    }
+
     /** What {@code x} and {@code y} come to multiplied, at one of the products. */
     private static Standing productAt(long product) {
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();

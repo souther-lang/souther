@@ -4940,6 +4940,11 @@ final class Pullback {
                 if (product != null) {
                     return product;
                 }
+                // And what one of them leaves of another divided by it, likewise.
+                LinearForm<Quantity> byAnInput = remainderByAnInputAt(node, at, inside);
+                if (byAnInput != null) {
+                    return byAnInput;
+                }
                 List<TermPath.Step> steps = new ArrayList<>();
                 Core under = Core.withoutStanding(node);
                 while (true) {
@@ -6430,6 +6435,47 @@ final class Pullback {
             return null;
         }
         return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
+    }
+
+    /**
+     * {@code node} as what one number of the input leaves of another divided by it — or null where
+     * it is no such remainder.
+     *
+     * <p>Only where the arithmetic stopped at {@code node} for being a floor remainder by a value
+     * that is not a constant, {@code node} is the whole of a side of the comparison being read
+     * ({@link #sideAsWritten}), and the dividend and the divisor are each a number of one position
+     * as it is written, with no arithmetic of its own. {@code Int.floorMod(n + 1, p)} adds before it
+     * divides, in the type, and the remainder it leaves at {@code n} the greatest {@code Int} is not
+     * the one a remainder of {@code n} says; a divisor {@code p + 1} is no number of one position
+     * either. For each of those the stop stands.
+     *
+     * <p>And only of two whole numbers, which are the numbers a remainder is worked out of at a row
+     * ({@link OrderedAffineBoundary#remainderByAnInputAt}).
+     */
+    private LinearForm<Quantity> remainderByAnInputAt(Core node, InputReads at,
+            AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
+        if (inside == null
+                || !(Core.withoutStanding(node) instanceof Core.PreservedCall written)
+                || inside.node() != written || written != sideAsWritten
+                || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
+                        NonAffineOperation operation))
+                || operation != NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE) {
+            return null;
+        }
+        OptionalInt divides =
+                DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(written.operation());
+        if (divides.isEmpty() || written.args().size() != 2) {
+            return null;
+        }
+        NumericTerm.FromOnePosition divisor = aFactor(written.args().get(divides.getAsInt()), at);
+        NumericTerm.FromOnePosition dividend =
+                aFactor(written.args().get(1 - divides.getAsInt()), at);
+        if (dividend == null || divisor == null || dividend.position().equals(divisor.position())
+                || !countsWhole(dividend) || !countsWhole(divisor)) {
+            return null;
+        }
+        return LinearForm.atom(
+                new Quantity.RemainderByAnInput(written.operation(), dividend, divisor));
     }
 
     /** Whether the reading counts {@code term} in whole numbers. */

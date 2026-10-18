@@ -189,6 +189,35 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
     }
 
     /**
+     * What {@code dividend} leaves by {@code divisor} at a row, both whole numbers: the dividend
+     * less every whole turn of the divisor, taking the divisor's sign — none where the divisor is
+     * nought, which stops the run before a remainder is worked out — or which way the exact
+     * arithmetic could not hold either number.
+     *
+     * <p>The one place a remainder by an input's number is worked out of the numbers a row holds,
+     * so a row read against a border on it, a value read for what it comes to and a row a search
+     * composed are read alike. Both numbers are values of their type, and the remainder of two
+     * values of a type lies between them and nought, so it is one too.
+     */
+    static ExactAnswer<Optional<ExactRatio>> remainderByAnInputAt(NumericTerm dividend,
+            NumericTerm divisor, Map<NumericTerm, Place> values) {
+        ExactRatio number = Count.number(values.get(dividend)).exactly();
+        ExactRatio by = Count.number(values.get(divisor)).exactly();
+        if (!number.isWhole() || !by.isWhole()
+                || !(number.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                || !(by.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger turn))) {
+            return ExactAnswer.held(Optional.empty());
+        }
+        if (turn.signum() == 0) {
+            return ExactAnswer.held(Optional.empty());
+        }
+        // The remainder by the divisor's size, moved down to the divisor's side where it has one.
+        BigInteger left = whole.mod(turn.abs());
+        return ExactAnswer.held(Optional.of(ExactRatio.of(
+                turn.signum() < 0 && left.signum() != 0 ? left.add(turn) : left)));
+    }
+
+    /**
      * What the two whole numbers {@code factors} come to multiplied at a row — none where the
      * product passes where their type stops — or which way the exact arithmetic could not hold it.
      *

@@ -332,6 +332,7 @@ public final class PublicationOrders {
                     CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT,
                     // Beside it, as what one level is then tried at.
                     CompositionBudget.DIVISORS_OF_A_PRODUCT_TRIED,
+                    CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
                     CompositionBudget.STEPS_A_SEARCH_MAY_TAKE,

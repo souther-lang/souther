@@ -115,29 +115,52 @@ import java.util.concurrent.ConcurrentHashMap;
  * @param relation        how the terms are held against it
  * @param amongThemselves the places whose values it holds against other values of the same place,
  *                        and nothing else
- * @param multiplied      whether the two sides are the factors of a product, and the relation is
- *                        the product and the constant held against nought
+ * @param kind            what the sides are: the terms of a form, the factors of a product held
+ *                        against a number, or the dividend and the divisor of a remainder held
+ *                        against nought
  */
 record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
-                            List<FilingCoordinate> amongThemselves, boolean multiplied) {
+                            List<FilingCoordinate> amongThemselves, Kind kind) {
 
     /** A relation that shows no place undivided: one nothing here takes apart. */
     static final UndividedByARelation SHOWING_NOTHING =
-            new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ, List.of(), false);
+            new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ, List.of(), Kind.AFFINE);
 
     UndividedByARelation {
         sides = List.copyOf(sides);
         amongThemselves = List.copyOf(amongThemselves);
-        if (multiplied && (sides.size() != 2 || constant == null)) {
-            throw new IllegalArgumentException("a product is of two factors, held against a"
-                    + " number: " + sides);
+        if (kind != Kind.AFFINE && (sides.size() != 2 || constant == null)) {
+            throw new IllegalArgumentException("a product or a remainder is of two numbers, held"
+                    + " against a number: " + sides);
         }
+    }
+
+    /** What the sides of a relation are. */
+    enum Kind {
+        /** Terms of a form, weighed and added. */
+        AFFINE,
+        /** The two factors of a product. */
+        PRODUCT,
+        /** The dividend then the divisor of a remainder, held equal or unequal to nought. */
+        DIVISIBILITY
+    }
+
+    /** What {@code dividend} leaves divided by {@code divisor}, held equal or unequal to nought;
+     *  against any other level or order it shows nothing. */
+    static UndividedByARelation ofADivisibility(NumericTerm.FromOnePosition dividend,
+                                                NumericTerm.FromOnePosition divisor,
+                                                Rel relation) {
+        return relation == Rel.EQ || relation == Rel.NE
+                ? new UndividedByARelation(List.of(ofTheInput(dividend, ExactRatio.ONE),
+                        ofTheInput(divisor, ExactRatio.ONE)), ExactRatio.ZERO, relation,
+                        List.of(), Kind.DIVISIBILITY)
+                : SHOWING_NOTHING;
     }
 
     /** The values at {@code at} held against other values at {@code at}. */
     static UndividedByARelation amongTheValuesAt(TermPath at) {
         return new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ,
-                List.of(FilingCoordinate.at(at)), false);
+                List.of(FilingCoordinate.at(at)), Kind.AFFINE);
     }
 
     /** What {@code one} and {@code other} come to multiplied, held against {@code level} as
@@ -146,7 +169,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                            NumericTerm.FromOnePosition other, ExactRatio level,
                                            Rel relation) {
         return new UndividedByARelation(List.of(ofTheInput(one, ExactRatio.ONE),
-                ofTheInput(other, ExactRatio.ONE)), level.negated(), relation, List.of(), true);
+                ofTheInput(other, ExactRatio.ONE)), level.negated(), relation, List.of(), Kind.PRODUCT);
     }
 
     /**
@@ -234,7 +257,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 default -> new Side(List.of(), each.getValue(), null, null);
             });
         }
-        return new UndividedByARelation(sides, form.constant(), relation, List.of(), false);
+        return new UndividedByARelation(sides, form.constant(), relation, List.of(), Kind.AFFINE);
     }
 
     /**
@@ -246,7 +269,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                   ExactRatio constant, Rel relation) {
         List<Side> sides = new ArrayList<>();
         form.coefs().forEach((term, weight) -> sides.add(ofTheInput(term, weight)));
-        return new UndividedByARelation(sides, constant, relation, List.of(), false);
+        return new UndividedByARelation(sides, constant, relation, List.of(), Kind.AFFINE);
     }
 
     /** The values at two positions held as one value, or not. */
@@ -256,7 +279,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         new NumericTerm.ValueOf(one), null),
                 new Side(List.of(FilingCoordinate.at(other)), ExactRatio.ONE.negated(),
                         new NumericTerm.ValueOf(other), null)), ExactRatio.ZERO, Rel.EQ,
-                List.of(), false);
+                List.of(), Kind.AFFINE);
     }
 
     private static Side ofTheInput(NumericTerm term, ExactRatio weight) {
@@ -499,7 +522,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatARelationLeavesUndivided.Independence independent =
                 (one, other) -> apartByTheDeclarations(one, other, sources)
                         && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
-        if (multiplied) {
+        if (kind == Kind.PRODUCT) {
             for (int at = 0; at < 2; at++) {
                 int other = 1 - at;
                 boolean apart = !overlapping(sides.get(at), sides.get(other))
@@ -507,6 +530,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 putDown(at, WhatARelationLeavesUndivided.leavesOfAProduct(terms.get(at),
                         terms.get(other), constant.negated(), relation, apart,
                         greatestOf(carriers.get(at))), out, settled);
+            }
+            return new WhatItLeaves(out, settled);
+        }
+        if (kind == Kind.DIVISIBILITY) {
+            boolean apart = !overlapping(sides.get(0), sides.get(1))
+                    && independent.between(0, 1);
+            for (int at = 0; at < 2; at++) {
+                putDown(at, WhatARelationLeavesUndivided.leavesOfADivisibility(terms.get(0),
+                        terms.get(1), at == 0, relation, apart), out, settled);
             }
             return new WhatItLeaves(out, settled);
         }

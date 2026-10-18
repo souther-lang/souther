@@ -150,6 +150,8 @@ public final class LevelRealizer {
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
             case Standing.OfARemainder remainder -> ofARemainder(remainder, within, runs, tried);
             case Standing.OfAProduct product -> ofAProduct(product, within, runs, tried);
+            case Standing.OfARemainderByAnInput remainder ->
+                    ofARemainderByAnInput(remainder, within, runs, tried);
             case Standing.OfACount count -> ofACount(count, within, looking, tried);
             case Standing.OfACountAndAForm both ->
                     ofACountAndAForm(both, within, runs, looking, tried);
@@ -335,6 +337,7 @@ public final class LevelRealizer {
             case Standing.OfARemainder over ->
                     NumericTerms.inOrder(over.dividend().coefs().keySet());
             case Standing.OfAProduct over -> List.of(over.one(), over.other());
+            case Standing.OfARemainderByAnInput over -> List.of(over.dividend(), over.divisor());
             case Standing.OfACount count -> count.numbers().stream()
                     .filter(term -> !term.subjectPath().insideAContainer()).toList();
             case Standing.OfACountAndAForm both -> {
@@ -1060,6 +1063,147 @@ public final class LevelRealizer {
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 stoppedBy, Set.of(), Set.of());
+    }
+
+    /**
+     * One whole number divided by another, whose remainder the item asks for, held at a pair that
+     * leaves it.
+     *
+     * <p>The remainders the criterion offers are walked as any quantity's are, and each is reached
+     * by a divisor that can leave it — one above it in size, and of its sign where it has one —
+     * with the dividend a class of values: the remainder more than a whole number of turns of the
+     * divisor. The divisors are tried nearest nought first, and for each the dividends the rules
+     * leave beside it are the members of the class that lie inside the run they leave. The first
+     * pair the declarations do not refuse is the answer.
+     *
+     * <p>A point is out of reach only where every pair was asked and refused: every divisor the run
+     * leaves was tried and every member of its class that the run leaves the dividend was
+     * refused. A side, as for any quantity, is never settled by looking.
+     *
+     * @param runs where the region leaves each number
+     */
+    private Realization ofARemainderByAnInput(Standing.OfARemainderByAnInput over,
+                                              SearchRegion within,
+                                              Map<NumericTerm, NumericDomain.Bounds> runs,
+                                              ValuesTried tried) {
+        List<NumericTerm> both = List.of(over.dividend(), over.divisor());
+        Realization named = amongTheValuesNamed(both,
+                values -> OrderedAffineBoundary.remainderByAnInputAt(over.dividend(),
+                        over.divisor(), values),
+                over.where(), within, tried);
+        if (named != null) {
+            return named;
+        }
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        boolean bounded = true;
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), over.levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        for (Level level : offered.levels()) {
+            ExactRatio asked = level.asAnExactNumber();
+            if (asked == null || !asked.isWhole()
+                    || !(asked.floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger remainder))) {
+                // A level no whole number leaves.
+                continue;
+            }
+            DivisorsLeaving divisors = DivisorsLeaving.of(remainder, runs.get(over.divisor()));
+            if (!divisors.everyOne()) {
+                stoppedBy.add(CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED);
+                bounded = false;
+            }
+            for (BigInteger divisor : divisors.each()) {
+                Place divisorAt = Count.of(new BigDecimal(divisor));
+                NumericDomain.Bounds dividends = switch (within
+                        .given(Map.<NumericTerm, Place>of(over.divisor(), divisorAt))
+                        .projectionOf(over.dividend())) {
+                    case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                            held == null ? NumericDomain.Bounds.OPEN : held;
+                    // A divisor the rules leave the dividend nowhere beside is refused by a proof.
+                    case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+                    case null -> NumericDomain.Bounds.OPEN;
+                };
+                if (dividends == null) {
+                    continue;
+                }
+                ClassMembers members = ClassMembers.within(
+                        new Congruences(remainder, divisor.abs()), dividends, null,
+                        VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+                if (members.stoppedShort()) {
+                    stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+                    bounded = false;
+                }
+                for (BigInteger dividend : members.values()) {
+                    Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+                    fixing.put(RealizationTarget.of(over.dividend()),
+                            Count.of(new BigDecimal(dividend)));
+                    fixing.put(RealizationTarget.of(over.divisor()), divisorAt);
+                    // A pair tried before proves nothing either way.
+                    if (tried.holds(fixing)) {
+                        bounded = false;
+                        continue;
+                    }
+                    Realization made = found(fixing, within, tried);
+                    if (made instanceof Realization.Found) {
+                        return made;
+                    }
+                }
+            }
+        }
+        if (bounded && over.where() instanceof Criterion.AtTheLevel) {
+            return new Realization.Impossible();
+        }
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), Set.of());
+    }
+
+    /**
+     * The values a divisor can have to leave one remainder, nearest nought first, and whether they
+     * are every such value the run holds.
+     *
+     * <p>A remainder is below its divisor in size and has its sign: nought is left by any divisor
+     * but nought, a remainder above nought by a divisor above it, and one below nought by a divisor
+     * below it. The divisors of the two signs are taken in turn by their size, the positive one
+     * first where two stand as far from nought.
+     *
+     * @param each     the divisors, in the order they are tried
+     * @param everyOne whether every divisor the run holds is among them
+     */
+    private record DivisorsLeaving(List<BigInteger> each, boolean everyOne) {
+
+        static DivisorsLeaving of(BigInteger remainder, NumericDomain.Bounds run) {
+            BigInteger low = run.min() == null ? null : run.min().wholeAdmitted(true);
+            BigInteger high = run.max() == null ? null : run.max().wholeAdmitted(false);
+            // The nearest divisor of each sign that can leave it.
+            BigInteger above = remainder.signum() >= 0 ? remainder.add(BigInteger.ONE) : null;
+            BigInteger below = remainder.signum() <= 0 ? remainder.subtract(BigInteger.ONE) : null;
+            BigInteger positive = above == null ? null
+                    : low != null && low.compareTo(above) > 0 ? low : above;
+            BigInteger negative = below == null ? null
+                    : high != null && high.compareTo(below) < 0 ? high : below;
+            List<BigInteger> out = new ArrayList<>();
+            int most = CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED.maximum();
+            while (out.size() < most) {
+                boolean hasPositive = positive != null && (high == null
+                        || positive.compareTo(high) <= 0);
+                boolean hasNegative = negative != null && (low == null
+                        || negative.compareTo(low) >= 0);
+                if (!hasPositive && !hasNegative) {
+                    return new DivisorsLeaving(out, true);
+                }
+                if (hasPositive && (!hasNegative || positive.compareTo(negative.negate()) <= 0)) {
+                    out.add(positive);
+                    positive = positive.add(BigInteger.ONE);
+                } else {
+                    out.add(negative);
+                    negative = negative.subtract(BigInteger.ONE);
+                }
+            }
+            return new DivisorsLeaving(out, false);
+        }
     }
 
     /**

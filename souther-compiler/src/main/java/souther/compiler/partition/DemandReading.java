@@ -1666,6 +1666,7 @@ final class DemandReading {
         boolean counted = false;
         boolean overElements = false;
         boolean remainder = false;
+        boolean remainderByAnInput = false;
         boolean product = false;
         boolean answered = false;
         List<WhyUnread> past = new ArrayList<>();
@@ -1678,6 +1679,7 @@ final class DemandReading {
                 case Quantity.HowManyDifferent _, Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _ -> overElements = true;
                 case Quantity.RemainderOfADividend _ -> remainder = true;
+                case Quantity.RemainderByAnInput _ -> remainderByAnInput = true;
                 case Quantity.ProductOfTwo _ -> product = true;
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(past::add);
                 case Quantity.WhatAnOperationAnswers _ -> answered = true;
@@ -1693,6 +1695,9 @@ final class DemandReading {
         }
         if (remainder) {
             return forTheRun(compared, RowDemand.NoComposer.A_REMAINDER_OF_A_FORM);
+        }
+        if (remainderByAnInput) {
+            return forTheRun(compared, RowDemand.NoComposer.A_REMAINDER_BY_AN_INPUT);
         }
         if (product) {
             return forTheRun(compared, RowDemand.NoComposer.A_PRODUCT_OF_TWO_NUMBERS);
