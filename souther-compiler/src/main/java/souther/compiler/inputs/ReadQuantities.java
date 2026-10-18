@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.ConstraintState;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
@@ -1505,7 +1506,7 @@ final class ReadQuantities implements Quantities {
     }
 
     /** The same, where the class the declarations hold a value to is or is not what its ends are
-     *  held to ({@link #residuesFixedAt}). */
+     *  held to ({@link #classFixedAt}). */
     private NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form,
                                                       boolean andTheDeclared) {
         if (form.coefs().isEmpty()) {
@@ -1594,7 +1595,7 @@ final class ReadQuantities implements Quantities {
         // class — so the ends are cut inward to the members, the same as the ends of the term's own
         // run are, and a search that names an end names a number of the class. Where the class has
         // no member in what is left there is nothing left.
-        NumericDomain.Bounds held = withinTheResiduesFixedOf(only,
+        NumericDomain.Bounds held = withinTheClassOf(only,
                 meeting(projected, whereOneTermRuns(only, andTheDeclared)), andTheDeclared);
         return held.holdsAValue() ? new NumericDomain.FormProjection.Within(held)
                 : new NumericDomain.FormProjection.NothingIsLeft();
@@ -1724,6 +1725,16 @@ final class ReadQuantities implements Quantities {
                 && runs.min().at().sameAs(at) && runs.max().at().sameAs(at);
     }
 
+    /**
+     * Whether {@code at} is of the class the value at {@code value} is held to ({@link #classAt}). A
+     * place that is no whole number is no member of a class and is not asked.
+     */
+    private boolean ofItsClass(NumericTerm.ValueOf value, Place at) {
+        return !(at instanceof Count count) || !count.exactly().isWhole()
+                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole)
+                || classAt(value).holds(whole.value());
+    }
+
     /** {@link #emptiness}, worked out. */
     private Optional<EmptyInput> whyNothingIsLeft() {
         List<Map.Entry<NumericTerm, Fixed>> inOrder = inOrder();
@@ -1780,6 +1791,18 @@ final class ReadQuantities implements Quantities {
                     it.why().at(), it.why().one(), it.why().other()));
         }
         StructuralContext under = ((StructuralContext.Merge.Together) merged).context();
+        // And a value fixed outside the class its position is held to, which is a place a rule on
+        // the way holds it away from as a hole is. The class is read beside the arithmetic and not
+        // in it — a remainder and a part of a date are numbers of their own there, and nothing ties
+        // them back to the value — so the rules said together below would leave the fifteenth of a
+        // month to a value held to the first of each.
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
+            if (each.getKey() instanceof NumericTerm.ValueOf value && each.getValue().isOne()
+                    && !ofItsClass(value, each.getValue().least())) {
+                return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(value,
+                        each.getValue().least()));
+            }
+        }
         // And what the rules leave once they are all said together, which is the one thing that
         // answers it. Every parameter's reading is in here, renamed, so there is nothing a
         // per-parameter reading could add — and a contradiction between two parameters, or between a
@@ -2071,46 +2094,40 @@ final class ReadQuantities implements Quantities {
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a
         // caller that has not asked.
-        return withinTheResiduesFixedOf(term, fixedAt == null ? runs
+        return withinTheClassOf(term, fixedAt == null ? runs
                 : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt.least()),
                         Endpoint.inclusive(fixedAt.most()))), andTheDeclared);
     }
 
     /**
-     * {@code runs}, of a number of a position, once a remainder of the value there has been fixed.
+     * {@code runs}, of a number of a position, once the class the number is held to is met with it.
      *
      * <p>A remainder fixed at a residue leaves the value the numbers of that class and no others,
      * which is no run — so what is said of the value is the run between the first of them and the
-     * last the rules leave it ({@link ResidueHull}). A search that names a place at either end names
-     * a number of the class, and one that named an end of the run itself would name a number the
-     * remainder it was fixing refuses.
+     * last the rules leave it ({@link HeldClass#hull}). A search that names a place at either end
+     * names a member of the class, and one that named an end of the run itself would name a number
+     * the remainder it was fixing refuses. A date held to the first of each month is the same.
      *
      * <p>The same holds of a remainder of the value by another divisor, which is the value's own
      * class by that divisor and so is held to the residue the two divisors can agree on: one number
      * leaves one remainder by each, and a remainder chosen without asking is one no value leaves
      * beside the first.
-     *
-     * <p>Only a remainder held at one number, whether fixed there or taken in as equal to it, and
-     * only of a value counted by whole numbers. A remainder asked for as one of several, or left to
-     * the rules, says nothing of where a number of the place runs.
      */
-    private NumericDomain.Bounds withinTheResiduesFixedOf(NumericTerm term,
-                                                          NumericDomain.Bounds runs,
-                                                          boolean andTheDeclared) {
-        Congruences together = residuesFixedAt(term, andTheDeclared);
-        return together == null ? runs : ResidueHull.of(runs, together);
+    private NumericDomain.Bounds withinTheClassOf(NumericTerm term, NumericDomain.Bounds runs,
+                                                  boolean andTheDeclared) {
+        return classFixedAt(term, andTheDeclared).hull(runs);
     }
 
     /**
-     * The class of whole numbers the remainders fixed beside the value at {@code place} leave it in
-     * together — or null where none is fixed, or no number leaves them all.
+     * The class the value at {@code place} is held to: what the declarations hold it to, met with
+     * the remainders fixed beside it.
      *
      * <p>What a search that chooses the value is held to besides the run it is chosen in: the
      * run's ends are of the class, and a number of the run is of it only where it is looked for in
      * it.
      */
-    public Congruences valueClassAt(NumericTerm.ValueOf place) {
-        return residuesFixedAt(place, true);
+    public HeldClass classAt(NumericTerm.ValueOf place) {
+        return classFixedAt(place, true);
     }
 
     /**
@@ -2175,9 +2192,9 @@ final class ReadQuantities implements Quantities {
      * face a value is chosen from does, since a value named at an end is a value the rules refuse
      * where it is outside the class.
      */
-    private Congruences residuesFixedAt(NumericTerm term, boolean andTheDeclared) {
+    private HeldClass classFixedAt(NumericTerm term, boolean andTheDeclared) {
         if (!(term instanceof NumericTerm.FromOnePosition here)) {
-            return null;
+            return HeldClass.NONE;
         }
         // The divisor this term is a remainder by, or null where it is the value itself or any
         // other number of the place: the two are told apart because what each is held to is not the
@@ -2187,21 +2204,23 @@ final class ReadQuantities implements Quantities {
         if (term instanceof NumericTerm.TakenOf taken) {
             own = divisorOfARemainder(taken);
             if (own == null) {
-                return null;
+                return HeldClass.NONE;
             }
         } else if (!(term instanceof NumericTerm.ValueOf)) {
-            return null;
+            return HeldClass.NONE;
         }
         // The class every fixed remainder leaves the value in together: narrowing by each in turn
         // would name an end of the run that is of one class and not of the other.
-        Congruences together = null;
-        Congruences declared = andTheDeclared ? classDeclaredAt(here) : null;
-        if (declared != null) {
+        HeldClass together = HeldClass.NONE;
+        HeldClass declared = andTheDeclared ? classDeclaredAt(here) : HeldClass.NONE;
+        if (own == null || declared instanceof HeldClass.NoValue) {
+            together = declared;
+        } else if (declared instanceof HeldClass.OfResidues(Congruences ofTheValue)) {
             // The declared class is of the value, so a remainder by `own` is held to the class of it
             // the two divisors share.
-            BigInteger shared = own == null ? declared.modulus() : own.gcd(declared.modulus());
+            BigInteger shared = own.gcd(ofTheValue.modulus());
             if (shared.compareTo(BigInteger.ONE) > 0) {
-                together = new Congruences(declared.residue(), shared);
+                together = new HeldClass.OfResidues(new Congruences(ofTheValue.residue(), shared));
             }
         }
         for (Map.Entry<NumericTerm.TakenOf, BigInteger> each : remaindersPinned().entrySet()) {
@@ -2219,13 +2238,9 @@ final class ReadQuantities implements Quantities {
             // remainder theorem. Two divisors with nothing in common say nothing of each other.
             BigInteger shared = own == null ? size : own.gcd(size);
             if (shared.compareTo(BigInteger.ONE) > 0) {
-                Congruences leaves = new Congruences(left, shared);
-                together = together == null ? leaves : together.meet(leaves);
-                // Remainders that no number leaves together are a contradiction `emptiness` says,
-                // and nothing is claimed of the class here.
-                if (together == null) {
-                    return null;
-                }
+                // Remainders that no number leaves together leave the class no member, which is
+                // what the class says: the hull of it holds nothing, and so does the region.
+                together = together.and(new HeldClass.OfResidues(new Congruences(left, shared)));
             }
         }
         return together;
@@ -2266,23 +2281,24 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The class the declarations of the value at {@code here} hold it to, from the remainders they
-     * leave at one number each — or null where they hold none.
+     * The class the declarations of the value at {@code here} hold it to ({@link FieldDomains#classAt})
+     * — read under the context the term is asked in, so the clause that says it may be spelled any
+     * way the rules read, and none where no declarations reach the place or the term is asked in a
+     * context that does not hold where they were opened.
      *
-     * <p>Read off the value's own rules ({@link FieldDomains#valueClassAt}) under the context the
-     * term is asked in, so the clause that says it may be spelled any way the rules read.
+     * <p>The declarations' answer first, which is kept under the place and is none for almost every
+     * place there is: the context the term is asked in is put together only where there is a class
+     * for it to hold or not.
      */
-    private Congruences classDeclaredAt(NumericTerm.FromOnePosition here) {
+    private HeldClass classDeclaredAt(NumericTerm.FromOnePosition here) {
         UnderARoot at = rootOf(here.subjectPath());
-        if (at == null) {
-            return null;
-        }
-        OpenedRules opened = byRoot.get(at.root());
-        return opened == null
-                || !(asking(Set.of(here)) instanceof StructuralContext.Merge.Together(
-                        StructuralContext under))
-                || !under.holds(opened.opening()) ? null
-                : opened.rules().bounds().valueClassAt(at.named());
+        OpenedRules opened = at == null ? null : byRoot.get(at.root());
+        HeldClass declared = opened == null ? HeldClass.NONE
+                : opened.rules().bounds().classAt(at.named());
+        return !(declared instanceof HeldClass.None)
+                && asking(Set.of(here)) instanceof StructuralContext.Merge.Together(
+                        StructuralContext under)
+                && under.holds(opened.opening()) ? declared : HeldClass.NONE;
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no

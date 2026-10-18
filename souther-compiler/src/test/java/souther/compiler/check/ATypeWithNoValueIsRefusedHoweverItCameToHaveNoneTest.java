@@ -597,6 +597,99 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
     }
 
     /**
+     * Remainders no whole number leaves together are rules that cannot all hold, and the sentence
+     * names the position as it does for two ends that cross.
+     *
+     * <p>Each remainder is a number of its own to the reading of numeric constraints, so neither is
+     * held against the other there. What ties them to the value is the class it is held to, and two
+     * classes with no member in common are a value with none — beside two that share one, which is a
+     * value with plenty.
+     */
+    @Test
+    void remaindersNoNumberLeavesTogetherAreRefusedAndOnesThatShareOneAreNot() {
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+                module demo
+
+                data Odd = Int
+                    invariant both = Int.floorMod(value, 4) == 1 && Int.floorMod(value, 2) == 0
+                """));
+        admits("""
+                module demo
+
+                data Odd = Int
+                    invariant both = Int.floorMod(value, 4) == 1 && Int.floorMod(value, 2) == 1
+                """);
+    }
+
+    /**
+     * Parts of a date no day of the calendar has are rules that cannot all hold, and the calendar
+     * is what says so: the thirtieth of February is no date, the twenty-ninth is one every fourth
+     * year, and in a year that is not one of those it is none.
+     */
+    @Test
+    void partsOfADateNoDayHasAreRefusedAndOnesSomeDayHasAreNot() {
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+                module demo
+
+                data Day = Date
+                    invariant both = Date.month(value) == 2 && Date.day(value) == 30
+                """));
+        admits("""
+                module demo
+
+                data Day = Date
+                    invariant both = Date.month(value) == 2 && Date.day(value) == 29
+                """);
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+                module demo
+
+                data Day = Date
+                    invariant all = Date.year(value) == 2023 && Date.month(value) == 2
+                        && Date.day(value) == 29
+                """), "a year the twenty-ninth does not come round in");
+        admits("""
+                module demo
+
+                data Day = Date
+                    invariant all = Date.year(value) == 2024 && Date.month(value) == 2
+                        && Date.day(value) == 29
+                """);
+    }
+
+    /**
+     * A class with no member where the value runs, or among the values the rules name, is no value
+     * either: each rule is met by some value and no value meets both.
+     *
+     * <p>The class is read beside where the value runs and beside the values named, and met with
+     * them where it is read. Each model is beside the nearest one whose rules leave a value.
+     */
+    @Test
+    void aClassWithNoMemberWhereTheValueRunsIsRefusedAndOneWithAMemberIsNot() {
+        for (String[] each : List.of(
+                new String[] {"Int", "value == 1 && Int.floorMod(value, 2) == 0",
+                        "value == 2 && Int.floorMod(value, 2) == 0"},
+                new String[] {"Int", "(value == 1 || value == 3) && Int.floorMod(value, 2) == 0",
+                        "(value == 1 || value == 4) && Int.floorMod(value, 2) == 0"},
+                new String[] {"Date", "value == Date(\"2024-05-15\") && Date.day(value) == 1",
+                        "value == Date(\"2024-05-01\") && Date.day(value) == 1"},
+                new String[] {"Date", "value < Date(\"2024-01-01\") && Date.year(value) == 2025",
+                        "value < Date(\"2026-01-01\") && Date.year(value) == 2025"})) {
+            assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+                    module demo
+
+                    data V = %s
+                        invariant held = %s
+                    """.formatted(each[0], each[1])), each[1]);
+            admits("""
+                    module demo
+
+                    data V = %s
+                        invariant held = %s
+                    """.formatted(each[0], each[2]));
+        }
+    }
+
+    /**
      * A declaration whose equalities admit no value is told the same thing, and told it once.
      *
      * <p>The sentence is about the rules and not about the carrier, since neither is the count. Two

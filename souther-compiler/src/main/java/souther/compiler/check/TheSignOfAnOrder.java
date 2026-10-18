@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
  * A comparison of the number an operation answering the order of its two arguments answered, read
@@ -56,6 +57,11 @@ public final class TheSignOfAnOrder {
 
         /** The number {@code e} is on every run, or null where it is none. */
         ExactRatio constant(Core e, E at);
+
+        /** {@code e} as arithmetic over the calls {@code taken} names and numbers the same on
+         *  every run, read as this reader reads arithmetic ({@link AffineForms#overTheCalls}) —
+         *  or null where it is none. */
+        LinearForm<AffineForms.ACall<E>> overTheCalls(Core e, E at, Predicate<Core> taken);
 
         /** What a type is declared as, for how the values of the sign are spaced. */
         DeclarationAccess declarations();

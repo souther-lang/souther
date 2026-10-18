@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementsWrittenOut;
+import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -77,8 +78,13 @@ public final class WrittenOutElements {
     /** The same, inside a walk that has already met the names {@code met}. */
     static Walked of(Denotation container, Symbols symbols, DeclarationNewtypes newtypes,
                      Set<BindingId> met) {
-        return switch (ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container.value(),
-                container.at()), new Names(symbols, newtypes, met))) {
+        return from(ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, met)));
+    }
+
+    /** What a walk in this reading of names came to, as its occurrences. */
+    private static Walked from(ElementsWrittenOut.Walked<InputReads> walked) {
+        return switch (walked) {
             case ElementsWrittenOut.Walked.Each<InputReads>(var each) ->
                     new Walked.Each(each.stream().map(WrittenOutElements::occurrence).toList());
             case ElementsWrittenOut.Walked.PastTheFigure<InputReads> _ ->
@@ -94,6 +100,13 @@ public final class WrittenOutElements {
                                       DeclarationNewtypes newtypes) {
         return ElementsWrittenOut.sizeOf(new ElementsWrittenOut.Stood<>(container.value(),
                 container.at()), new Names(symbols, newtypes, Set.of()));
+    }
+
+    /** How a walk of the elements of a container reads names here, for a reading that walks them
+     *  itself ({@link LawAtACall}). */
+    public static ElementsWrittenOut.Reading<InputReads> reading(Symbols symbols,
+                                                                 DeclarationNewtypes newtypes) {
+        return new Names(symbols, newtypes, Set.of());
     }
 
     private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {

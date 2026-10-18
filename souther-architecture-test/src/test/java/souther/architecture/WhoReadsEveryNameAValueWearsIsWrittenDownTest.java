@@ -71,6 +71,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
 
     private static final String HELD = "L" + CHECK + "FieldDomains$Held;";
 
+    private static final String LIMITS = "L" + CHECK + "FieldDomains$ConstructionLimits;";
+
     private static final String ADMITTED = "Lsouther/compiler/values/AdmissibleSet;";
 
     private static final String REALIZATION = "L" + PARTITION + "TermRealizations$Realization;";
@@ -195,7 +197,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "admittedStrings",
                     "(" + TYPE + CONTEXT + "I)Ljava/util/List;", THE_POSITION),
             row(PARTITION + "Partitions", "displacedRepresentativesOf",
-                    "(" + TYPE + CONTEXT + BOUNDS + HELD + ")" + PROPOSALS, THE_POSITION),
+                    "(" + TYPE + CONTEXT + LIMITS + ")" + PROPOSALS, THE_POSITION),
             row(PARTITION + "Partitions", "inReserve",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/List;)Ljava/util/List;",
                     THE_POSITION),
@@ -211,7 +213,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + CONTEXT + ")L" + PARTITION + "StringOfferShortfall;",
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesHolding",
-                    "(" + TYPE + CONTEXT + BOUNDS + HELD + "Ljava/util/Set;)" + PROPOSALS,
+                    "(" + TYPE + CONTEXT + LIMITS + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,

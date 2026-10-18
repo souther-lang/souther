@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -331,7 +332,7 @@ sealed interface Derivation {
 
     /**
      * How many a container holds, where the law of the operation that answered it says whether it
-     * holds anything by whether its arguments do: {@code a ++ b} holds something exactly where
+     * holds anything by what its arguments are: {@code a ++ b} holds something exactly where
      * {@code a} or {@code b} does.
      *
      * <p>Not a relation between the sizes. Where text is put beside text its canonical form can be
@@ -339,11 +340,16 @@ sealed interface Derivation {
      * which side of nought each argument is on is where the path puts it. So what is recorded is the
      * law, over the counts it reads, and what it comes to is read under each domain.
      *
-     * @param holds when the answer holds something, as a statement over the counts of the arguments
+     * @param holds when the answer holds something, as a statement over the counts and numbers of
+     *              the arguments
      */
     record HoldsSomethingWhere(Holding holds) implements Derivation {
 
-        /** A statement about which of some counts are above nought. */
+        /**
+         * A statement over the counts and numbers of some arguments: which counts are above nought,
+         * and how forms over them stand against nought. A form a {@link Stands} holds may be over
+         * numbers that go below nought, so it is no count and nothing about counts is said of it.
+         */
         sealed interface Holding {
 
             /** The container {@code count} counts holds something. */
@@ -365,6 +371,10 @@ sealed interface Derivation {
 
             /** {@code denied} does not hold. */
             record Not(Holding denied) implements Holding {}
+
+            /** {@code form}, over some counts and numbers, stands against nought as {@code rel}
+             *  says. */
+            record Stands(LinearForm<FactSubject> form, Rel rel) implements Holding {}
         }
 
         @Override
@@ -390,6 +400,7 @@ sealed interface Derivation {
                 case Holding.AnyOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
                 case Holding.AllOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
                 case Holding.Not(Holding denied) -> counts(denied, out);
+                case Holding.Stands(LinearForm<FactSubject> form, Rel _) -> out.add(form);
             }
         }
 
@@ -403,6 +414,9 @@ sealed interface Derivation {
                         b instanceof Holding.AllOf it && same(ways, it.ways(), same);
                 case Holding.Not(Holding denied) ->
                         b instanceof Holding.Not it && same(denied, it.denied(), same);
+                case Holding.Stands(LinearForm<FactSubject> form, Rel rel) ->
+                        b instanceof Holding.Stands it && rel == it.rel()
+                                && same.forms(form, it.form());
             };
         }
 
@@ -416,6 +430,57 @@ sealed interface Derivation {
                 }
             }
             return true;
+        }
+    }
+
+    /**
+     * A value every one of {@code recipes} says something of, each on its own: it lies wherever all
+     * of them put it.
+     *
+     * <p>Where the library states two things of one answer — how many a container holds case by
+     * case, and when it holds anything — and neither says all the other does. Recorded as one
+     * recipe because a value is reached one way, and these are two accounts of that one way.
+     */
+    record Each(List<Derivation> recipes) implements Derivation {
+
+        public Each {
+            recipes = List.copyOf(recipes);
+            if (recipes.size() < 2) {
+                throw new IllegalArgumentException("a value is said of by every one of several"
+                        + " recipes, and was given " + recipes.size());
+            }
+        }
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            List<LinearForm<FactSubject>> out = new ArrayList<>();
+            recipes.forEach(each -> out.addAll(each.formsRead()));
+            return List.copyOf(out);
+        }
+
+        /** Recipe by recipe and in order. */
+        @Override
+        public boolean sameAs(Derivation other, Same same) {
+            if (!(other instanceof Each it) || recipes.size() != it.recipes().size()) {
+                return false;
+            }
+            for (int i = 0; i < recipes.size(); i++) {
+                if (!recipes.get(i).sameAs(it.recipes().get(i), same)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** What the first of them that divides divides by. */
+        @Override
+        public DivisorExtent divisorExtent() {
+            for (Derivation each : recipes) {
+                if (each.divisorExtent() != null) {
+                    return each.divisorExtent();
+                }
+            }
+            return null;
         }
     }
 }

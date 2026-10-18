@@ -20,7 +20,6 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -819,7 +818,7 @@ final class Predicates {
             // The same clause read as the cases of whatever chooses inside it. Both readings are
             // kept: a guard may name the call itself, which the clause as it stands is what
             // settles, and reading it case by case never takes that away.
-            piecewise = piecewiseOf(numeric, stated.left(), stated.right(), at);
+            piecewise = piecewiseOf(numeric);
         }
         return owing(inv, foldOf(folded), numeric, piecewise, Conditions.polar(stated, positive),
                 unnamed, at);
@@ -1384,40 +1383,46 @@ final class Predicates {
             return false;
         }
         Piecewise cases = piecewiseOf(
-                new NumericConstraint(between, stated.relationUnder(positive)),
-                stated.left(), stated.right(), at);
+                new NumericConstraint(between, stated.relationUnder(positive)));
         return cases != null && cases.refutedBy(k.numbers());
     }
 
     /**
-     * {@code owed} read as the cases of the one operation inside it that answers a value it was
-     * given, or null where there is no such operation, where there is more than one, or where a case
-     * could not be read.
+     * {@code owed} read as the cases of the one value inside it that is one of several, or null
+     * where there is no such value, where there is more than one, or where a case could not be read.
+     *
+     * <p>The cases are the arms of the recipe the value was recorded with ({@link Derivation.Chosen}):
+     * one of the values a call was given, what a case of a library operation's definition computes
+     * ({@code Int.abs}, {@code Int.compare}), how many a container holds case by case
+     * ({@code List.take}), or an arm of a choice the source wrote. One account of what each arm
+     * answers and what choosing it settles, so a value read case by case here and spanned over its
+     * arms there is read from the same arms.
      *
      * <p>The substitution is made in the form and not in the expression. What the clause reads may be
      * the call as written or a name that was given it, and both arrive here as the one atom the call
      * keys as — so replacing the atom answers both, where rewriting the expression would answer the
      * first and leave the second saying nothing.
      */
-    private Piecewise piecewiseOf(NumericConstraint owed, Core left, Core right, Denotations at) {
-        Map<FactSubject, Choice> choosing = new LinkedHashMap<>();
-        // One account of the names followed, over both sides: a name is the same value whichever
-        // side of the comparison read it, so following it again would put nothing new in the map.
-        Set<BindingId> following = new HashSet<>();
-        chosenCalls(left, at, choosing, following);
-        chosenCalls(right, at, choosing, following);
-        choosing.keySet().retainAll(owed.form().coefs().keySet());
-        if (choosing.size() != 1) {
+    private Piecewise piecewiseOf(NumericConstraint owed) {
+        FactSubject atom = null;
+        List<Derivation.Chosen.Arm> arms = null;
+        for (FactSubject each : owed.form().coefs().keySet()) {
+            List<Derivation.Chosen.Arm> its = armsOf(terms.knowledgeOf(each).computation());
+            if (its != null) {
+                if (atom != null) {
+                    return null;
+                }
+                atom = each;
+                arms = its;
+            }
+        }
+        if (atom == null) {
             return null;
         }
-        FactSubject atom = choosing.keySet().iterator().next();
         ExactRatio coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
-        for (Choice.Arm arm : choosing.get(atom).arms()) {
-            LinearForm<FactSubject> answered = terms.affineOf(arm.answers(), at);
-            if (answered == null) {
-                return null;
-            }
+        for (Derivation.Chosen.Arm arm : arms) {
+            LinearForm<FactSubject> answered = arm.answer();
             // The rule with the atom taken out and what this arm answers put in its place. A form
             // no ratio holds is a reading this does not make, and the clause keeps the reading it
             // has without the cases.
@@ -1442,7 +1447,7 @@ final class Predicates {
             }
             given.add(new NumericConstraint(answeredHere, Rel.EQ));
             kinds.putAll(terms.kindsOf(answeredHere));
-            for (NumericConstraint stands : Conditions.settledBy(terms, arm.decidedBy(), at)) {
+            for (NumericConstraint stands : arm.settles()) {
                 given.add(stands);
                 kinds.putAll(terms.kindsOf(stands.form()));
             }
@@ -1452,33 +1457,26 @@ final class Predicates {
         return new Piecewise(List.copyOf(cases));
     }
 
-    /** Every call inside {@code e} that answers one of the values it was given, as the choice it is,
-     * by the atom it keys as. A name is what it was given, as everywhere else a value is read.
-     *
-     * <p>Which calls those are is asked of {@link Choice} and not of the table it reads. A reader
-     * here that knew the table would be a second interpretation of it, and the two would come apart
-     * the day the library changed which argument a case answers. */
-    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Choice> out,
-                             Set<BindingId> following) {
-        if (e instanceof Core.Read r
-                && at.givenTo(r.binding()) instanceof ValueStanding.ReadThrough<Denotations>(
-                        Core given, Denotations readIn)) {
-            // A name followed once. What it was given is one value, so everything it holds is in
-            // the map after the first read of it; following it per occurrence walks what the names
-            // below it multiply out to, over a body that names them one more time.
-            if (following.add(r.binding())) {
-                chosenCalls(given, readIn, out, following);
-            }
-            return;
+    /** The arms of a value recorded as one of several, alone or beside another account of it
+     *  ({@link Derivation.Each}) — or null where it was recorded as no such value. */
+    private static List<Derivation.Chosen.Arm> armsOf(AtomKnowledge.Computation how) {
+        if (!(how instanceof AtomKnowledge.Computation.Derived(Derivation recipe))) {
+            return null;
         }
-        if (e instanceof Core.PreservedCall call) {
-            Choice choice = Choice.of(call);
-            FactSubject atom = choice == null ? null : terms.atomOf(call, at);
-            if (atom != null) {
-                out.put(atom, choice);
+        return switch (recipe) {
+            case Derivation.Chosen chosen -> chosen.arms();
+            case Derivation.Each each -> {
+                for (Derivation one : each.recipes()) {
+                    if (one instanceof Derivation.Chosen chosen) {
+                        yield chosen.arms();
+                    }
+                }
+                yield null;
             }
-        }
-        Core.forEachChild(e, child -> chosenCalls(child, at, out, following));
+            case Derivation.Product _, Derivation.TruncatingQuotient _,
+                 Derivation.TruncatingRemainder _, Derivation.RoundedQuotient _,
+                 Derivation.HoldsSomethingWhere _ -> null;
+        };
     }
 
 

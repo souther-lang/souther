@@ -14,6 +14,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * What a condition states, read off the condition and nothing else.
@@ -305,6 +306,12 @@ final class Conditions {
             public ExactRatio constant(Core e, Denotations at) {
                 LinearForm<FactSubject> read = terms.affineOf(e, at);
                 return read == null || !read.coefs().isEmpty() ? null : read.constant();
+            }
+
+            @Override
+            public LinearForm<AffineForms.ACall<Denotations>> overTheCalls(
+                    Core e, Denotations at, Predicate<Core> taken) {
+                return terms.overTheCalls(e, at, taken);
             }
 
             @Override
