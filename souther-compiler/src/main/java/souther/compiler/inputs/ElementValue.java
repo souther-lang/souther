@@ -1009,17 +1009,21 @@ public sealed interface ElementValue {
                  *  ({@link ElementValue#weighedBy}). */
                 @Override
                 public LinearForm<Atom> productOf(LinearForm<Atom> left, LinearForm<Atom> right) {
-                    ElementValue weighed = weighed(left, right);
+                    ElementValue one = valueOf(left);
+                    ElementValue other = one == null ? null : valueOf(right);
+                    if (other == null) {
+                        return null;
+                    }
+                    ElementValue weighed = weighed(one, other);
                     if (weighed == null) {
-                        weighed = weighed(right, left);
+                        weighed = weighed(other, one);
                     }
                     return weighed == null ? null : termsOf(weighed);
                 }
 
-                private ElementValue weighed(LinearForm<Atom> weight, LinearForm<Atom> by) {
-                    ElementValue chosen = valueOf(weight);
-                    return valueOf(by) instanceof Affine form && chosen != null
-                            && isAChoice(chosen) ? ElementValue.weighedBy(chosen, form) : null;
+                private ElementValue weighed(ElementValue weight, ElementValue by) {
+                    return by instanceof Affine form && isAChoice(weight)
+                            ? ElementValue.weighedBy(weight, form) : null;
                 }
             };
         }

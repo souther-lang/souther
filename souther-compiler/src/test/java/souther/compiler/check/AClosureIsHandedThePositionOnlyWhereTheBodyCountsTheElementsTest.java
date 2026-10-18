@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -65,7 +66,6 @@ class AClosureIsHandedThePositionOnlyWhereTheBodyCountsTheElementsTest {
     /** A count from one, a count by two and the next count handed are no position. */
     @Test
     void aBodyThatDoesNotCountFromNoughtOneByOneHandsNone() {
-        assertEquals(0, positionHandedBy(SHIPPED), "control: the body as shipped");
         assertEquals(Combinator.NO_POSITION,
                 positionHandedBy(SHIPPED.replace("(0, []),", "(1, []),")), "from one");
         assertEquals(Combinator.NO_POSITION,
@@ -113,11 +113,24 @@ class AClosureIsHandedThePositionOnlyWhereTheBodyCountsTheElementsTest {
         assertTrue(ran > 0, "the run is what is asked, so it has to have asked something");
     }
 
-    /** What the library's {@code mapIndexed}, with its step and seed written {@code as}, hands its
-     *  position on. */
+    /**
+     * What the library's {@code mapIndexed}, with its step and seed written {@code as}, hands its
+     * position on.
+     *
+     * <p>Only where the body as shipped was found and rewritten: a rewrite that found nothing
+     * would ask the shipped body again, and a variant answering what the shipped one does would
+     * say nothing.
+     */
     private static int positionHandedBy(String as) {
-        Stdlib stdlib = StdlibLoader.load(text -> text.contains(SHIPPED)
-                ? text.replace(SHIPPED, as) : text);
+        AtomicBoolean rewritten = new AtomicBoolean();
+        Stdlib stdlib = StdlibLoader.load(text -> {
+            if (!text.contains(SHIPPED)) {
+                return text;
+            }
+            rewritten.set(true);
+            return text.replace(SHIPPED, as);
+        });
+        assertTrue(rewritten.get(), "the library writes mapIndexed's step as this test does");
         Map<ValueName.Stdlib.Operation, Combinator> rules =
                 Combinators.read(stdlib, OperationFactBinder.bindAll(stdlib));
         return rules.get(MAP_INDEXED).positionParam();
