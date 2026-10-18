@@ -426,21 +426,46 @@ final class ReadQuantities implements Quantities {
                 fieldTypes.put(field, typeAt.apply(field.from(computed.elements())));
             }
             return TermOrdering.of(term, computed.each(), fieldTypes,
+                    onTheWay(computed.computation().reads(), computed.elements()),
                     ruleReading.source().symbols(), ruleReading.source().declarations());
         }
-        // The values are read on their own place's order, and which elements are of one key on
-        // the key's.
-        if (term instanceof NumericTerm.ExtremeOfItsKey extreme) {
+        if (term instanceof NumericTerm.OfAnElementsNeighbours among) {
+            Map<ElementProjection, Type> onTheWay =
+                    onTheWay(among.fieldsRead(), among.container().element());
+            // The values are read on their own place's order, and which elements are of one key on
+            // the key's.
             Map<ElementProjection, Type> keyType = new LinkedHashMap<>();
-            Type keyedOn = typeAt.apply(extreme.key());
-            if (keyedOn != null) {
-                keyType.put(extreme.keyField(), keyedOn);
+            if (among instanceof NumericTerm.ExtremeOfItsKey extreme) {
+                Type keyedOn = typeAt.apply(extreme.key());
+                if (keyedOn != null) {
+                    keyType.put(extreme.keyField(), keyedOn);
+                }
             }
-            return TermOrdering.of(term, typeAt.apply(extreme.value()), keyType,
+            return TermOrdering.of(term, typeAt.apply(term.subjectPath()), keyType, onTheWay,
                     ruleReading.source().symbols(), ruleReading.source().declarations());
         }
         return TermOrdering.of(term, typeAt.apply(term.subjectPath()),
                 ruleReading.source().symbols(), ruleReading.source().declarations());
+    }
+
+    /**
+     * What stands at every place on the way to each of {@code read}, from the element at
+     * {@code element}: what a value there is written inside of is the declaration's to say there.
+     */
+    private Map<ElementProjection, Type> onTheWay(Collection<ElementProjection> read,
+                                                  TermPath element) {
+        Map<ElementProjection, Type> out = new LinkedHashMap<>();
+        for (ElementProjection each : read) {
+            for (ElementProjection place : each.onTheWay()) {
+                if (!out.containsKey(place)) {
+                    Type there = typeAt.apply(place.from(element));
+                    if (there != null) {
+                        out.put(place, there);
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     @Override
@@ -1990,7 +2015,7 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.CodePointValueSum _ -> NumberAt.codePointSumOf(at.named());
             case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
             case NumericTerm.ExtremeOfItsKey extreme ->
-                    NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().steps());
+                    NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().fields());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenAsItStands(at.named(), over.operation());
         };

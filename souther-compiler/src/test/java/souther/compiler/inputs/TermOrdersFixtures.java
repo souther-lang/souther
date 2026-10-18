@@ -4,7 +4,9 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,7 +35,14 @@ public final class TermOrdersFixtures {
     /** A term over what a walk computed of each element, which also reads the fields it names. */
     public static TermOrders computed(NumericTerm term, Carrier observed, Carrier answered,
                                       Map<ElementProjection, Carrier> fields) {
-        return new TermOrders(term, observed, answered, fields);
+        return computed(term, observed, answered, fields, Map.of());
+    }
+
+    /** The same, with the names the declaration puts at places of an element. */
+    public static TermOrders computed(NumericTerm term, Carrier observed, Carrier answered,
+                                      Map<ElementProjection, Carrier> fields,
+                                      Map<ElementProjection, List<TypeSymbol>> worn) {
+        return new TermOrders(term, observed, answered, fields, worn);
     }
 
     /**

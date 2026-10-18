@@ -211,7 +211,7 @@ final class ObservedFixtures {
         }
         // Every name the position wears, or no value of the position: putting a name back on a
         // value that did not wear it would write a value the boundary did not build.
-        ObservedValue inside = Classifier.wearing(view.wrappers(), value);
+        ObservedValue inside = ObservedValue.wearing(view.wrappers(), value);
         if (inside == null) {
             return notOf();
         }

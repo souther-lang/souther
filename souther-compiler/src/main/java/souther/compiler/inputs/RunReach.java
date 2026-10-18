@@ -7,6 +7,7 @@ import souther.compiler.check.ValueGuarantees;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Induction;
 import souther.compiler.numeric.Intervals;
@@ -16,6 +17,7 @@ import souther.compiler.semantics.Accumulation;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -69,6 +71,9 @@ final class RunReach {
      *  so the order they are met in is nothing a reader may rely on and is not what this follows. */
     private static final CanonicalOrder<ElementProjection> BY_NAME =
             Comparator.<ElementProjection, String>comparing(ElementProjection::toString)::compare;
+
+    /** The parts of a sum of choices, in the order the sum gives them. */
+    private static final CanonicalOrder<Integer> BY_POSITION = Integer::compare;
 
     private static final LinearForm<Atom> ACCUMULATOR =
             LinearForm.atom(Atom.ACCUMULATOR);
@@ -172,7 +177,9 @@ final class RunReach {
      *
      * <p>What each field of the element guarantees of itself, put through the computation: a form
      * is read off the same domain every other arithmetic of this compiler is, with each field
-     * assumed at what it guarantees, and a choice is as wide as the two answers it chooses between.
+     * assumed at what it guarantees, and a choice is as wide as the answers it chooses between —
+     * the two a flag picks from, or every arm a case picks from, each arm's fields at what that
+     * case's own declaration guarantees.
      * No relation between fields of one element is assumed, so the range is the widest one the
      * fields allow and never a narrower one a relation among them would give.
      *
@@ -207,6 +214,51 @@ final class RunReach {
                 NumericDomain.Bounds no =
                         ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
                 return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
+            }
+            case ElementValue.OfItsCase choice -> {
+                NumericDomain.Bounds every = choice.rest() == null ? null
+                        : ofWhatWasComputed(choice.rest(), elements, orders, typeAt, reading);
+                if (choice.rest() != null && every == null) {
+                    return null;
+                }
+                for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
+                    NumericDomain.Bounds one =
+                            ofWhatWasComputed(arm.value(), elements, orders, typeAt, reading);
+                    if (one == null) {
+                        return null;
+                    }
+                    every = every == null ? one : NumericDomain.Bounds.spanning(every, one);
+                }
+                return every;
+            }
+            // Each part at what it can come to, and the sum read off the same domain a form is:
+            // the form beside the choices as one atom, and each choice as another, at its weight.
+            // No part is assumed to fall out with another, so this is the widest sum they allow.
+            case ElementValue.SumOfChoices sum -> {
+                Granularity spacing = spacingOf(orders.observed());
+                if (spacing == null) {
+                    return null;
+                }
+                List<ElementValue> parts = new ArrayList<>();
+                Map<Integer, ExactRatio> weights = new LinkedHashMap<>();
+                parts.add(sum.besides());
+                weights.put(0, ExactRatio.ONE);
+                sum.chosen().forEach((choice, weight) -> {
+                    weights.put(parts.size(), weight);
+                    parts.add(choice);
+                });
+                NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION);
+                Map<Integer, Granularity> kinds = new LinkedHashMap<>();
+                for (int i = 0; i < parts.size(); i++) {
+                    NumericDomain.Bounds one =
+                            ofWhatWasComputed(parts.get(i), elements, orders, typeAt, reading);
+                    if (one == null) {
+                        return null;
+                    }
+                    kinds.put(i, spacing);
+                    domain = domain.assuming(i, one, kinds);
+                }
+                return domain.boundsOf(new LinearForm<>(ExactRatio.ZERO, weights));
             }
         }
     }
