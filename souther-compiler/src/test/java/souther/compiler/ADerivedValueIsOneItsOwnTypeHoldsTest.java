@@ -23,7 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * nothing reaches.
  *
  * <p>What it comes to is that the divide answers nothing here, so nothing carries on from it and the
- * arms below it are entered by no run. Neither construction is judged, and which of them the author
+ * arms below it are entered by no run: they are reported as ones nothing reaches
+ * ({@link #NOTHING_REACHES}), and that is all that is said. Neither construction is judged, and
+ * which of them the author
  * wrote does not decide it — the arm reached over the quotient and the arm reached over anything
  * else are one arm, and a check that refused the first and owed the second was answering a question
  * about reachability with a reading of the values (#980).
@@ -33,6 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * read here is the machine's, which is true of every value that exists at all.
  */
 class ADerivedValueIsOneItsOwnTypeHoldsTest {
+
+    /** That nothing reaches an arm. */
+    private static final String NOTHING_REACHES = "E1327";
 
     private static List<String> reported(String model) {
         return Compiler.compileWithWarnings(model).warnings().stream()
@@ -48,7 +53,7 @@ class ADerivedValueIsOneItsOwnTypeHoldsTest {
      */
     @Test
     void aQuotientNoIntHoldsLeavesTheArmWithNoValue() {
-        assertEquals(List.of(), reported("""
+        assertEquals(List.of(NOTHING_REACHES), reported("""
                 module demo
 
                 data Negative = Int
@@ -78,7 +83,7 @@ class ADerivedValueIsOneItsOwnTypeHoldsTest {
      */
     @Test
     void aQuotientRunningOffOneEndOnlyLeavesNoValueEither() {
-        assertEquals(List.of(), reported("""
+        assertEquals(List.of(NOTHING_REACHES), reported("""
                 module demo
 
                 data Negative = Int

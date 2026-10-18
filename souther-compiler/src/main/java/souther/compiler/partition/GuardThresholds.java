@@ -45,6 +45,8 @@ import souther.compiler.types.ValueName;
 import souther.compiler.coverage.EmittedComparisonState;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.flow.ValueArrivals;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.types.ModelOccurrence;
@@ -873,18 +875,19 @@ public final class GuardThresholds {
      * <p>A place nothing arrives at is no way to the rule, and is left out the way it is where a
      * line is dropped for nothing arriving ({@link ComparisonAssessment#narrowedByWhatArrives}).
      */
-    static List<WhatMayStopARun> stopsBefore(List<EmittedComparisonState.Observation> watched) {
+    static CanonicalSelection<WhatMayStopARun> stopsBefore(
+            List<EmittedComparisonState.Observation> watched) {
         Set<WhatMayStopARun> out = new LinkedHashSet<>();
         for (EmittedComparisonState.Observation one : watched) {
             if (one.arrival() instanceof ComparisonArrival.NothingArrives) {
                 continue;
             }
             if (one.stopsBefore().isEmpty()) {
-                return List.of();
+                return LineOrigin.NOTHING_ON_THE_WAY;
             }
             out.addAll(one.stopsBefore());
         }
-        return List.copyOf(out);
+        return PublicationOrders.WHAT_MAY_STOP_A_RUN.keep(out);
     }
 
     /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */

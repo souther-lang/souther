@@ -368,14 +368,15 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
         InvariantChecker.WATCHING = said;
         InvariantChecker.GAVE_UP = gaveUp;
         try {
-            assertEquals(List.of(), warningsOf(TYPES + """
+            assertEquals(List.of("E1327"), warningsOf(TYPES + """
                     behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg
                     let part (x) = {
                         guard x >= 0
                             else Bad
                         NonNeg(商(x, 9223372036854775807 + 1))
                     }
-                    """));
+                    """), "the match the divide stands in is one no run gets to, and that is all"
+                    + " that is said");
         } finally {
             InvariantChecker.WATCHING = null;
             InvariantChecker.GAVE_UP = null;

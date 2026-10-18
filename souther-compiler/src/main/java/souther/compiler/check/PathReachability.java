@@ -803,7 +803,7 @@ public final class PathReachability {
                     // condition shuts where the fork stands is proven by the condition, as it is
                     // anywhere; the other by what the way to it answered nothing at. What is inside
                     // both is a place nothing arrives at.
-                    Optional<Proof> noRunPast = Optional.of(cond.whyNothingArrives());
+                    Optional<Proof> noRunPast = cond.whyNothingArrives();
                     enterArm(arms, 0, iff, iff.then(), here, noRunPast, at, reads, true);
                     enterArm(arms, 1, iff, iff.els(), here, noRunPast, at, reads, false);
                     yield cond;
@@ -840,7 +840,7 @@ public final class PathReachability {
                 // No run gets past the arguments where they leave nothing, and then why is theirs
                 // and not the ways'.
                 if (given.known().reachesNothing()) {
-                    noneEnters(plan.armsOf(ic), given.whyNothingArrives());
+                    given.whyNothingArrives().ifPresent(why -> noneEnters(plan.armsOf(ic), why));
                     yield given;
                 }
                 yield leaving(given, ways);
@@ -863,7 +863,8 @@ public final class PathReachability {
                     // the others by what the way to them answered nothing at. What is inside each
                     // is a place nothing arrives at.
                     cases(match, k, at, reads, here.decided(), false);
-                    noneEnters(plan.armsOf(match), scrutinee.whyNothingArrives());
+                    scrutinee.whyNothingArrives()
+                            .ifPresent(why -> noneEnters(plan.armsOf(match), why));
                     for (Core.Case arm : match.cases()) {
                         PathEngine.Entered in =
                                 engine.enteringArm(arm, match.scrutinee(), before, at);
@@ -912,14 +913,17 @@ public final class PathReachability {
                         reads.containersAppliedOver(block), reading);
                 Known inside = applied.isEmpty() ? k
                         : engine.holding(applied.get().holdingSomething(), k, at, places).known();
+                WhyNone why = WhyNone.BY_THE_WAY;
                 if (inside.reachesNothing()) {
-                    appliedToNothing(block.body(), Proof.itsClosureIsAppliedToNothing(
+                    Proof none = Proof.itsClosureIsAppliedToNothing(
                             applied.orElseThrow().containers().stream()
-                                    .map(TermPath::toString).toList(), here.decided()));
+                                    .map(TermPath::toString).toList(), here.decided());
+                    appliedToNothing(block.body(), none);
+                    why = new WhyNone.Because(none);
                 }
                 Walked body = walk(block.body(), new Walked(inside, here.decided(),
                                 here.mayStop(), here.nothingAbove() && applied.isEmpty(), true,
-                                Optional.empty(), inside.reachesNothing()), at,
+                                why, inside.reachesNothing()), at,
                         reads.entering(new ScopeStep.Block(block), symbols, newtypes));
                 // Making the function value runs nothing of its body, so nothing it holds is
                 // carried on. What stopped a run in it is: the call that applies it is worked out
@@ -963,8 +967,8 @@ public final class PathReachability {
             answered.add(PathDecision.ofAnAnswer(e.pos()));
         }
         // Some run reaching here may not get past it, so what follows has something above it.
-        return new Walked(past.known(), answered, past.mayStop(), false, false, Optional.empty(),
-                false);
+        return new Walked(past.known(), answered, past.mayStop(), false, false,
+                WhyNone.BY_THE_WAY, false);
     }
 
     /**
@@ -980,20 +984,19 @@ public final class PathReachability {
      *                     answered on some runs only, said or not. What a fork's ways leave is
      *                     read off it ({@link #leaving}), since each way begins with a fork above it
      *                     and so with {@code nothingAbove} false
-     * @param whyNoneLeft  why no run gets here, where every way out of a fork on the way left
-     *                     nothing; empty where {@code decided} says it ({@link #whyNothingArrives})
+     * @param whyNoneLeft  why no run gets here, where none does ({@link #whyNothingArrives})
      * @param filedAbove   where no run gets here, whether an arm on the way was filed as one
      *                     nothing enters — which is then the finding, and no arm below is filed
      *                     again. False where what left nothing was something worked out, which
      *                     files no arm, so the first fork past it is filed ({@link #noneEnters})
      */
     private record Walked(Known known, List<PathDecision> decided, List<WhatMayStopARun> mayStop,
-                          boolean nothingAbove, boolean noneStopped, Optional<Proof> whyNoneLeft,
+                          boolean nothingAbove, boolean noneStopped, WhyNone whyNoneLeft,
                           boolean filedAbove) {
 
         /** Where a body's walk begins: nothing decided and nothing worked out yet. */
         static Walked entering(Known known) {
-            return new Walked(known, List.of(), List.of(), true, true, Optional.empty(), false);
+            return new Walked(known, List.of(), List.of(), true, true, WhyNone.BY_THE_WAY, false);
         }
 
         /** The same way on, under {@code known} and with the steps {@code decided}. */
@@ -1007,7 +1010,7 @@ public final class PathReachability {
          * where {@code known} leaves nothing, the fork has filed the arm the way is.
          */
         Walked enteringAWay(Known known, List<PathDecision> decided) {
-            return new Walked(known, decided, mayStop, false, true, Optional.empty(),
+            return new Walked(known, decided, mayStop, false, true, WhyNone.BY_THE_WAY,
                     known.reachesNothing());
         }
 
@@ -1032,10 +1035,36 @@ public final class PathReachability {
                     filedAbove);
         }
 
-        /** Why no run gets here, where none does. */
-        Proof whyNothingArrives() {
-            return whyNoneLeft.orElseGet(() -> Proof.conditionsThatCannotAllHold(decided));
+        /**
+         * Why no run gets here, where none does and something here says why. Empty where nothing
+         * does — no step taken in on the way names what left nothing — and then nothing is filed
+         * on it.
+         */
+        Optional<Proof> whyNothingArrives() {
+            return switch (whyNoneLeft) {
+                case WhyNone.Because(Proof proof) -> Optional.of(proof);
+                case WhyNone.Unsaid _ -> Optional.empty();
+                case WhyNone.ByTheWay _ -> decided.isEmpty() ? Optional.empty()
+                        : Optional.of(Proof.conditionsThatCannotAllHold(decided));
+            };
         }
+    }
+
+    /** Why no run gets to where a walk stands, as far as anything here says it. */
+    private sealed interface WhyNone {
+
+        /** The steps taken in on the way, where they name anything. */
+        WhyNone BY_THE_WAY = new ByTheWay();
+
+        /** The steps taken in on the way. */
+        record ByTheWay() implements WhyNone {}
+
+        /** This, and not the steps on the way: every way out of a fork left nothing for its own
+         *  reason, or the closure the walk is in is applied to nothing. */
+        record Because(Proof proof) implements WhyNone {}
+
+        /** Every way out of a fork left nothing, and not every way says why. */
+        record Unsaid() implements WhyNone {}
     }
 
     /**
@@ -1053,16 +1082,22 @@ public final class PathReachability {
     private static Walked leaving(Walked fork, List<Walked> ways) {
         List<Walked> left = ways.stream().filter(way -> !way.known().reachesNothing()).toList();
         if (left.isEmpty()) {
+            List<Proof> each = new ArrayList<>();
+            for (Walked way : ways) {
+                way.whyNothingArrives().ifPresent(each::add);
+            }
+            WhyNone why = each.size() == ways.size()
+                    ? new WhyNone.Because(Proof.everyAlternativeRuledOut(each))
+                    : new WhyNone.Unsaid();
             return new Walked(fork.known().reachingNothing(), fork.decided(), fork.mayStop(),
-                    false, false, Optional.of(Proof.everyAlternativeRuledOut(
-                            ways.stream().map(Walked::whyNothingArrives).toList())), false);
+                    false, false, why, false);
         }
         Set<WhatMayStopARun> stops = new LinkedHashSet<>(fork.mayStop());
         left.forEach(way -> stops.addAll(way.mayStop()));
         boolean through = ways.stream().allMatch(Walked::noneStopped);
         return new Walked(fork.known(), fork.decided(), List.copyOf(stops),
-                fork.nothingAbove() && through, fork.noneStopped() && through, Optional.empty(),
-                false);
+                fork.nothingAbove() && through, fork.noneStopped() && through,
+                WhyNone.BY_THE_WAY, false);
     }
 
     /**
@@ -1130,8 +1165,9 @@ public final class PathReachability {
         answeredAt(e, here.known());
         Walked below = here;
         ControlPlace.Arm[] arms = plan.armsOf(e);
-        if (arms != null && !here.filedAbove()) {
-            noneEnters(arms, here.whyNothingArrives());
+        Optional<Proof> why = here.whyNothingArrives();
+        if (arms != null && !here.filedAbove() && why.isPresent()) {
+            noneEnters(arms, why.get());
             below = here.filed();
         }
         Walked under = below;
@@ -1184,9 +1220,10 @@ public final class PathReachability {
             if (where.isEmpty()) {
                 continue;
             }
-            if (k.reachesNothing()) {
+            Optional<Proof> none = k.reachesNothing() ? here.whyNothingArrives() : Optional.empty();
+            if (none.isPresent()) {
                 // Neither way is one a run comes out of, for the reason nothing arrives.
-                out.put(where.get(), new Reachability.Unreachable(here.whyNothingArrives()));
+                out.put(where.get(), new Reachability.Unreachable(none.get()));
                 continue;
             }
             Predicates.Assumed taken = assuming(comparison.occurrence(),

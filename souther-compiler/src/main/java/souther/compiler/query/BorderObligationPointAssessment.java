@@ -359,7 +359,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     private static List<WhatMayStopARun> stopsAt(List<BorderAssessment> readings) {
         Set<WhatMayStopARun> out = new LinkedHashSet<>();
         for (BorderAssessment reading : readings) {
-            List<WhatMayStopARun> here = reading.border().origin().stopsBefore();
+            List<WhatMayStopARun> here = reading.border().origin().stopsBefore().written();
             if (here.isEmpty()) {
                 return List.of();
             }

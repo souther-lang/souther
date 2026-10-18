@@ -355,7 +355,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "coverage/CoverageSites$Plan;Ljava/util/Map;Ljava/util/Map;)Ljava/util/Optional;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/PathReachability", "unreached",
-                "(" + core + "L" + c + "check/Known;" + at + reads + "Ljava/util/List;)V",
+                "(" + core + "L" + c + "check/PathReachability$Walked;" + at + reads + ")V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/PathReachability", "appliedToNothing",
                 "(" + core + "L" + c + "reach/Proof;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);

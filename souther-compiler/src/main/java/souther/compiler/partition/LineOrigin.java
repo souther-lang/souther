@@ -11,6 +11,8 @@ import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 import souther.compiler.reach.WhatMayStopARun;
@@ -231,16 +233,16 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
                            List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn,
-                           List<WhatMayStopARun> stopsBefore) {
+                           CanonicalSelection<WhatMayStopARun> stopsBefore) {
 
             public Read {
-                if (rule == null || states == null || anchor == null || metOn == null) {
+                if (rule == null || states == null || anchor == null || metOn == null
+                        || stopsBefore == null) {
                     throw new IllegalArgumentException(
                             "a rule read off a comparison names one, states it somewhere and cites"
                                     + " it");
                 }
                 recordedAt = List.copyOf(recordedAt);
-                stopsBefore = List.copyOf(stopsBefore);
                 if (recordedAt.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a rule a row is held to is one a run through is written down"
@@ -674,12 +676,16 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
      * nothing here says ({@link ComparisonOrigin.Read#stopsBefore}) — none for a rule meeting which
      * takes writing the value and no run, which is a declaration's and a clause's.
      */
-    default List<WhatMayStopARun> stopsBefore() {
+    default CanonicalSelection<WhatMayStopARun> stopsBefore() {
         return switch (this) {
             case ComparisonOrigin g -> g.read().stopsBefore();
             case NarrowedOrigin n -> n.bound().stopsBefore();
-            case InvariantOrigin _, EnsuresOrigin _ -> List.of();
+            case InvariantOrigin _, EnsuresOrigin _ -> NOTHING_ON_THE_WAY;
         };
     }
+
+    /** Nothing on the way to a rule that may stop a run for what nothing here says. */
+    CanonicalSelection<WhatMayStopARun> NOTHING_ON_THE_WAY =
+            PublicationOrders.WHAT_MAY_STOP_A_RUN.keep(List.of());
 
 }

@@ -56,22 +56,23 @@ class WhatMayStopARunBeforeALineIsReadOffTheCopiesARunGetsToTest {
     @Test
     void aCopyNothingGetsToShowsNothingOfTheWayToTheLine() {
         assertEquals(PAST_A_PRODUCT, GuardThresholds.stopsBefore(
-                List.of(arrivingPast(PAST_A_PRODUCT), nothingArriving())));
+                List.of(arrivingPast(PAST_A_PRODUCT), nothingArriving())).written());
         assertEquals(PAST_A_PRODUCT, GuardThresholds.stopsBefore(
-                List.of(nothingArriving(), arrivingPast(PAST_A_PRODUCT))));
+                List.of(nothingArriving(), arrivingPast(PAST_A_PRODUCT))).written());
     }
 
     @Test
     void aCopyARunGetsToWithEverythingOnTheWayReadIsAWayToTheLineThatIsAllRead() {
         assertEquals(List.of(), GuardThresholds.stopsBefore(
-                List.of(arrivingPast(PAST_A_PRODUCT), arrivingPast(List.of()))));
+                List.of(arrivingPast(PAST_A_PRODUCT), arrivingPast(List.of()))).written());
     }
 
+    /** Each kind once, in the order a report names them in. */
     @Test
     void whatMayStopOnTheWayToEachCopyIsEachSaidOnce() {
         assertEquals(List.of(new WhatMayStopARun.AnOperator(), new WhatMayStopARun.ACall()),
-                GuardThresholds.stopsBefore(List.of(arrivingPast(PAST_A_PRODUCT),
-                        arrivingPast(List.of(new WhatMayStopARun.ACall(),
-                                new WhatMayStopARun.AnOperator())))));
+                GuardThresholds.stopsBefore(List.of(
+                        arrivingPast(List.of(new WhatMayStopARun.ACall())),
+                        arrivingPast(PAST_A_PRODUCT))).written());
     }
 }
