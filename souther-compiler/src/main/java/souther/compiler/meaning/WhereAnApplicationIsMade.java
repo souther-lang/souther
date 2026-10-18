@@ -37,9 +37,17 @@ public final class WhereAnApplicationIsMade {
      * quotient by the value it was handed, at nought — stops the run there, however far the
      * operation would have gone.
      *
+     * <p><b>What this says has to hold, and not that a run gets there.</b> Where an application
+     * answers is what the reading of what it states says ({@link Proposition#whereItAnswersAtAll}),
+     * and where that says nothing apart — no part the reading read as answering only somewhere —
+     * nothing is added. That is no finding that the application always answers: a sum with no place
+     * or a division the reading reads in no comparison ends a run the reading does not say where, as
+     * anywhere else in a body. So every run making an application meets what this answers for it,
+     * and a row meeting it may still stop before.
+     *
      * @param answers what the closure answers on each application, in that order. Read where the
-     *                operation stops on an answer, or where an application may answer nothing, so
-     *                it may be null elsewhere
+     *                operation stops on an answer, or where the closure is a truth, so it may be
+     *                null where it is applied to every value and states none
      * @param keptBy  for each application, the truths each of which holds where the container
      *                holds the element it is handed — none where it holds it whatever the row is
      * @param how     how far the operation goes applying the closure

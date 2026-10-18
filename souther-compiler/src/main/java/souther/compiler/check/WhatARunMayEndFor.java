@@ -48,14 +48,6 @@ public final class WhatARunMayEndFor {
             return this instanceof Known(AbortSet kinds) && kinds.isEmpty();
         }
 
-        /** Whether it may end a run for {@code kind}: it is one of the reasons, or none is known. */
-        default boolean mayEndFor(AbortKind kind) {
-            return switch (this) {
-                case Known(AbortSet kinds) -> kinds.contains(kind);
-                case NotKnown _ -> true;
-            };
-        }
-
         /** What this and {@code other} may end a run for, worked out both. */
         default Endings and(Endings other) {
             return this instanceof Known(AbortSet mine) && other instanceof Known(AbortSet theirs)
