@@ -213,6 +213,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     }
 
     /**
+     * Held apart from nought, the difference is below it or above it. {@code a - b < 0} holds in the
+     * one and fails in the other, so it comes out either way; once the difference is also held at
+     * nought or less, only the run below is left and it holds everywhere.
+     */
+    @Test
+    void aDifferenceHeldApartFromOneValueComesOutAtTheRunsOnEitherSideOfIt() {
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), 0, Rel.LT, held(1, 0, Rel.NE)));
+        assertEquals(Set.of(), apart(pair(1, -1, A_DATE), 0, Rel.LT, held(1, 0, Rel.NE),
+                held(1, 0, Rel.LE)));
+    }
+
+    /**
      * {@code -(a - b) <= 0} holds the difference at nought or more, where {@code a - b + 1 <= 0}
      * never holds; {@code a - b <= 0} holds it at nought or less, where it holds at minus one and
      * fails at nought.
