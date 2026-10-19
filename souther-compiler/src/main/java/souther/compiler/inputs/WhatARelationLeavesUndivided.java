@@ -957,13 +957,15 @@ public final class WhatARelationLeavesUndivided {
                                              ExactRatio constant, Rel relation,
                                              BiPredicate<P, P> overlap,
                                              Independence independent) {
+        boolean[] free = new boolean[terms.size()];
         for (int other = 0; other < terms.size(); other++) {
-            if (other != at && apart(terms, other, overlap) && untied(terms, other, independent)
-                    && reaches(terms, other, at, within, constant, relation)) {
+            free[other] = other != at && apart(terms, other, overlap)
+                    && untied(terms, other, independent);
+            if (free[other] && reaches(terms, other, at, within, constant, relation)) {
                 return true;
             }
         }
-        return reachedTogether(terms, at, within, constant, relation, overlap, independent);
+        return reachedTogether(terms, at, within, constant, relation, free);
     }
 
     /**
@@ -977,8 +979,7 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> boolean reachedTogether(List<Term<P>> terms, int at, Interval within,
                                                ExactRatio constant, Rel relation,
-                                               BiPredicate<P, P> overlap,
-                                               Independence independent) {
+                                               boolean[] free) {
         if (terms.size() < 3 || constant == null || relation == Rel.EQ || relation == Rel.NE) {
             return false;
         }
@@ -991,8 +992,8 @@ public final class WhatARelationLeavesUndivided {
             }
             Term<P> each = terms.get(i);
             Interval taken = each.realizes() == null ? null : Interval.of(each.realizes());
-            if (taken == null || each.spacing() == null || !each.weight().isWhole()
-                    || !apart(terms, i, overlap) || !untied(terms, i, independent)) {
+            if (!free[i] || taken == null || each.spacing() == null
+                    || !each.weight().isWhole()) {
                 return false;
             }
             sum = sum.plus(taken.times(each.weight()));
