@@ -46,7 +46,6 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -144,8 +143,6 @@ final class MeaningAssumptions {
     private Known known;
     /** What was known when this reading began. */
     private final Known entry;
-    /** What was known just after each choice this reading left undecided was kept. */
-    private final Map<Known.Declined, Known> declinedAt = new HashMap<>();
     private boolean taken;
     /** Whether the choice this was last asked to take in was left between several parts. */
     private boolean leftUndecided;
@@ -177,7 +174,19 @@ final class MeaningAssumptions {
      */
     private static final class Tries {
 
-        private int left = CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum();
+        private int left;
+
+        Tries() {
+            this(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum());
+        }
+
+        Tries(int left) {
+            this.left = left;
+        }
+
+        int left() {
+            return left;
+        }
 
         /** Whether another part may be taken alone, counting it where it may. */
         boolean another() {
@@ -217,38 +226,54 @@ final class MeaningAssumptions {
      * <p>A choice still between several parts stays as it was, and nothing it was read as is kept.
      * Every pass that goes on settles one choice, so the passes end.
      *
-     * <p>A choice is read again only if what is known is not what it was read over. Where the count
-     * of parts a reading takes alone runs out first, the choice stays as it was and the reading
-     * says so, since what the path rules out then turns on how the conditions were ordered.
+     * <p>Read only if something has been taken in since they were last read
+     * ({@link Known#awaitsSettling}), whichever way it was taken in: asked of the state, so the
+     * conditions a reading takes in and the facts the walk adds on entering an arm or a built
+     * value are followed alike ({@link #settled}).
+     *
+     * <p>A choice is read over the state it is kept in, and taken out of it only once a part is
+     * taken in for it. The parts read are counted for the path ({@link Known.Choices#PARTS_A_PATH_SETTLES});
+     * where the count runs out the choices left stay undecided, as they were when they were kept.
+     * That is no fact about the condition being read, so it is said of none.
      */
     private void settleWhatWasLeftUndecided() {
-        boolean settled = known != entry;
-        while (settled && !known.reachesNothing()) {
+        Tries settling = new Tries(known.settlingLeft());
+        boolean settled = true;
+        while (settled && !known.reachesNothing() && known.awaitsSettling()
+                && settling.left() > 0) {
             settled = false;
-            List<Known.Declined> pending = known.declinedChoices();
-            for (Known.Declined choice : pending) {
-                // Read again only once something has been taken in since it was last read.
-                if (declinedAt.getOrDefault(choice, entry) == known) {
+            for (Known.Declined choice : known.declinedChoices()) {
+                MeaningAssumptions again = new MeaningAssumptions(terms, choice.places(),
+                        choice.at(), known, settling);
+                again.takingOneOf(choice.any());
+                if (again.leftUndecided) {
+                    if (again.notTaken.contains(new WhyNotTaken.MoreAlternativesThanAreTried())) {
+                        break;
+                    }
                     continue;
                 }
-                List<Known.Declined> others = new ArrayList<>(pending);
-                others.remove(choice);
-                MeaningAssumptions again = new MeaningAssumptions(terms, choice.places(),
-                        choice.at(), known.leavingUndecided(others), tries);
-                again.takingOneOf(choice.any());
-                if (!again.leftUndecided) {
-                    known = again.known;
-                    taken |= again.taken;
-                    again.notTaken.forEach(this::notTaken);
-                    settled = true;
-                    break;
-                }
-                if (again.notTaken.contains(new WhyNotTaken.MoreAlternativesThanAreTried())) {
-                    WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(),
-                            choice.any()).forEach(this::notTaken);
-                }
+                known = again.known.withoutDeclined(choice);
+                taken |= again.taken;
+                again.notTaken.forEach(this::notTaken);
+                settled = true;
+                break;
             }
         }
+        known = known.settledOverWhatIsKnown(settling.left());
+    }
+
+    /**
+     * {@code k} with the choices it leaves undecided taken again over what it knows, where a fact
+     * has been taken in since they were last read.
+     */
+    static Known settled(Known k, Terms terms) {
+        if (!k.awaitsSettling()) {
+            return k;
+        }
+        MeaningAssumptions settling = new MeaningAssumptions(terms, InputPlaces.NONE, null, k,
+                new Tries());
+        settling.settleWhatWasLeftUndecided();
+        return settling.known;
     }
 
     /** Why each choice this reading leaves undecided, and no earlier one, was not taken in — none
@@ -753,7 +778,6 @@ final class MeaningAssumptions {
                     // Said when the reading ends, and only if no later condition has settled it.
                     Known.Declined declined = new Known.Declined(any, at, places);
                     known = known.leavingUndecided(declined);
-                    declinedAt.put(declined, known);
                 }
             }
         }

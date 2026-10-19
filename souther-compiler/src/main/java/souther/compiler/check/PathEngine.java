@@ -248,7 +248,9 @@ final class PathEngine {
      * nothing could read and one read to no effect leave it identical.
      */
     Predicates.Assumed assuming(Core cond, Known k, Denotations at, boolean positive) {
-        return predicates.assumeCond(cond, k, at, positive);
+        Predicates.Assumed assumed = predicates.assumeCond(cond, k, at, positive);
+        return new Predicates.Assumed(settled(assumed.known()), assumed.taken(),
+                assumed.shapeRead(), assumed.notTaken());
     }
 
     /** The same, of a condition whose meaning was read already: what it states coming out
@@ -334,7 +336,16 @@ final class PathEngine {
     Known takingItsCases(Core.Case arm, Core scrutinee, Known k, Denotations at) {
         CasesLeft selected = arm.pattern() == null ? null : CasesLeft.selectedBy(arm.pattern());
         FactSubject value = selected == null ? null : terms.subjectOf(scrutinee, at);
-        return value == null ? k : k.inCases(value, selected);
+        return value == null ? k : settled(k.inCases(value, selected));
+    }
+
+    /**
+     * {@code k} with the choices it leaves undecided taken again over what it knows. Every act of
+     * this engine that takes a fact in ends here, since a choice a condition could not settle is
+     * settled by whatever the walk learns after it, not only by the next condition.
+     */
+    private Known settled(Known k) {
+        return MeaningAssumptions.settled(k, terms);
     }
 
     /**
@@ -587,7 +598,7 @@ final class PathEngine {
         Core.IfConstructed ic = built.attempt();
         Core.Read root = Terms.read(ic.binder(), ic.construct().type(), ic.pos());
         Denotations next = terms.choosing(built, at);
-        return new Entered(builtFrom(ic, root, seedAt(root, k, next), next), next);
+        return new Entered(settled(builtFrom(ic, root, seedAt(root, k, next), next)), next);
     }
 
     /**
@@ -671,8 +682,8 @@ final class PathEngine {
             seeded(e);
             out = seedAt(e, out, at);
         }
-        return assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
-                new Entered(out, at)).known();
+        return settled(assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
+                new Entered(out, at)).known());
     }
 
     /** Records an answer this read a guarantee off, where a test is reading them. */
@@ -714,9 +725,9 @@ final class PathEngine {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at) {
-        return seedAt(root, RuleKey.THE_VALUE, k, at,
+        return settled(seedAt(root, RuleKey.THE_VALUE, k, at,
                 new GuaranteeWalk.Extent.AsFarAs(GuaranteeWalk.FIELDS_SEEDED), null,
-                InvariantChecker.Reach.EVERYTHING);
+                InvariantChecker.Reach.EVERYTHING));
     }
 
     /**

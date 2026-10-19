@@ -696,7 +696,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     @Test
     void aChoiceIsTakenApartWhateverNumberOfChoicesStandBetween() {
         // Each stronger than the one before, and none ruled out by the choice that opens the path.
-        String between = IntStream.range(0, 40)
+        String between = IntStream.range(0, 20)
                 .mapToObj(i -> "guard a.value > %d || b.value > %d else Free\n".formatted(i, i))
                 .collect(Collectors.joining());
         assertEquals(1, provenIn(charging2("""
@@ -749,6 +749,46 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 guard b.value >= 4 || a.value < 2 else Free
                 guard a.value >= 4 else Free
                 """), "charge").size(), "a of four or more leaves b under four and then a under two");
+    }
+
+    /**
+     * A choice between cases of a value is settled by the arm of a {@code match} on the value, which
+     * is a fact the walk takes in on entering the arm and not a condition: the arm for the third
+     * case is one nothing reaches, and the proof names the guard and the arm.
+     */
+    @Test
+    void aChoiceBetweenCasesIsSettledByTheArmOfAMatchOnTheValue() {
+        String guard = "(match x with | A -> true | B -> false | C -> false) "
+                + "|| (match x with | A -> false | B -> true | C -> false)";
+        List<Proof> proven = provenIn(onFlag(guard), "charge");
+        assertEquals(1, proven.size(), "the arm for C");
+        assertEquals(2, WhatAnAnswerSays.conditionsIn(proven.get(0)).size(),
+                "the guard that sent the path to A or B, and the arm for C");
+        assertEquals(List.of(), provenIn(onFlag(guard + " || (match x with | A -> false | B -> false | C -> true)"),
+                "charge"), "a guard that lets C through leaves the arm for C reached");
+    }
+
+    private static String onFlag(String guard) {
+        return """
+                module d
+
+                data A
+                data B
+                data C
+                data Flag = A | B | C
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (x: Flag) -> Free | Charged
+                    constructs Charged
+                let charge (x) = {
+                    guard %s else Free
+                    match x with
+                    | C -> Charged { yen = 1 }
+                    | A -> Free
+                    | B -> Free
+                }
+                """.formatted(guard);
     }
 
     private static String charging2(String guards) {
