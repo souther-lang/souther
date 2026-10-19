@@ -18,19 +18,19 @@ import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationAccess;
+import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementsWrittenOut;
-import souther.compiler.check.ExpandedClauseResult;
-import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.KeyedAccumulation;
 import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Location;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.QuotientByAValue;
 import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.RecursionOverATree;
@@ -6015,12 +6015,15 @@ final class Pullback {
         };
     }
 
-    /** Whether no {@code invariant} clause is written for {@code type}: the construction of it
-     *  has no clause to be refused by. */
+    /**
+     * Whether a construction of {@code type} has no clause to be refused by: what the declaration
+     * publishes holds no {@code invariant} and spreads no declaration that might.
+     */
     private boolean holdsNoInvariant(TypeSymbol.AtModule type) {
-        return read.rules().invariants().of(type.key())
-                instanceof ExpandedClauseResult.Found(ExpandedClauses found)
-                && found.clauses().isEmpty();
+        return read.rules().declarations().published().of(type.key())
+                instanceof PublishedDeclarationResult.Found(
+                        DeclarationMeaning.Product product)
+                && product.clauses().isEmpty() && product.includes().isEmpty();
     }
 
     /** Whether {@code arm} is the name of what a walk carried. */
