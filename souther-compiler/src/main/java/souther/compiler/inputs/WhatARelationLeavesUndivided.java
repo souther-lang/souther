@@ -340,9 +340,24 @@ public final class WhatARelationLeavesUndivided {
                                       Rel relation, BiPredicate<P, P> overlap,
                                       Independence independent, Granularity granularity,
                                       BigInteger greatest) {
+        return leavesOf(terms, at, constant, relation, overlap, independent, granularity,
+                greatest, List.of());
+    }
+
+    /**
+     * The same, with {@code supports}: sets of terms read off one value, whose joint values are
+     * given and not taken from the terms one by one. They show a term undivided where the others
+     * could not, and say nothing of the values that settle it.
+     */
+    public static <P> Leaves leavesOf(List<Term<P>> terms, int at, ExactRatio constant,
+                                      Rel relation, BiPredicate<P, P> overlap,
+                                      Independence independent, Granularity granularity,
+                                      BigInteger greatest, List<JointSupport> supports) {
         Jointly jointly = granularity == Granularity.DISCRETE && greatest != null
                 ? new Jointly(greatest) : null;
-        if (reachedBySome(terms, at, constant, relation, overlap, independent, jointly)) {
+        if (reachedBySome(terms, at, constant, relation, overlap, independent, jointly)
+                || reachedAcrossGroups(terms, at, constant, relation, overlap, independent,
+                        supports, jointly)) {
             return new Leaves.Undivided();
         }
         Term<P> it = terms.get(at);
@@ -1043,6 +1058,210 @@ public final class WhatARelationLeavesUndivided {
         boolean strictAtLeast = relation == Rel.LT || relation == Rel.GE;
         return (strictAtLeast ? atLeast.signum() < 0 : atLeast.signum() <= 0)
                 && (strictAtLeast ? atMost.signum() >= 0 : atMost.signum() > 0);
+    }
+
+    /**
+     * The values several terms take together, because they are read off one value: the month and
+     * the day of one date are two numbers, and not every month goes with every day.
+     *
+     * <p>The claim is about the whole value and not about the tuples that were found. Each tuple is
+     * one the value gives, so a combination in it can be asked for as a witness; and none the value
+     * gives is missing, so a value of one term is reached by the combinations that go with it and
+     * by no others. A caller that cannot say both makes no support, and the terms are then left to
+     * be apart from one another or not asked together.
+     *
+     * @param terms  the indexes of the terms in the relation's terms, two or more, each once
+     * @param tuples the whole-number values of those terms together, in the order of {@code terms}
+     */
+    public record JointSupport(List<Integer> terms, List<List<ExactRatio>> tuples) {
+
+        public JointSupport {
+            terms = List.copyOf(terms);
+            tuples = tuples.stream().map(List::copyOf).toList();
+            if (terms.size() < 2 || Set.copyOf(terms).size() != terms.size() || tuples.isEmpty()) {
+                throw new IllegalArgumentException("a support is two terms or more, each once, with"
+                        + " a combination of their values at least: " + terms);
+            }
+            for (List<ExactRatio> each : tuples) {
+                if (each.size() != terms.size() || !each.stream().allMatch(ExactRatio::isWhole)) {
+                    throw new IllegalArgumentException(
+                            "a combination is a whole number for each term: " + each);
+                }
+            }
+        }
+    }
+
+    /** Terms asked together: one support's, or a term alone, whose combinations are its ends. */
+    private record Group(List<Integer> members, List<List<ExactRatio>> tuples) {}
+
+    /**
+     * Whether the term at {@code at} is reached on both sides of the relation at every value it
+     * takes, by terms that are apart from it and each other only as groups: a support's terms are
+     * tied to one another, and are asked by the combinations the support gives.
+     *
+     * <p>At a value of the term, its group's combinations that go with the value are the only ones
+     * it may be asked beside. The least and the greatest of the weighed sum there, with the least
+     * and the greatest of every other group, are two rows, and the order is monotone in the sum, so
+     * the relation comes out one way at the least and the other at the greatest. Each of those is
+     * a combination a value gives, or a term's end it is shown to take. The sums are computed, so
+     * each stays inside the type as in {@link #reachedTogether}.
+     *
+     * <p>No group but a support has more than one term, and a term alone is asked as there: held
+     * apart from every term of another group and tied to none.
+     */
+    private static <P> boolean reachedAcrossGroups(List<Term<P>> terms, int at,
+                                                   ExactRatio constant, Rel relation,
+                                                   BiPredicate<P, P> overlap,
+                                                   Independence independent,
+                                                   List<JointSupport> supports, Jointly jointly) {
+        if (supports.isEmpty() || jointly == null || constant == null || relation == Rel.EQ
+                || relation == Rel.NE) {
+            return false;
+        }
+        List<Group> groups = groupsOf(terms, at, supports);
+        if (groups == null || !groupsApart(terms, groups, overlap, independent)) {
+            return false;
+        }
+        ExactRatio size = constant.abs();
+        ExactRatio low = constant;
+        ExactRatio high = constant;
+        Group mine = null;
+        for (Group each : groups) {
+            if (each.members().contains(at)) {
+                mine = each;
+            }
+            ExactRatio farthest = null;
+            ExactRatio least = null;
+            ExactRatio greatest = null;
+            for (List<ExactRatio> tuple : each.tuples()) {
+                ExactRatio away = weighedSum(terms, each.members(), tuple, true);
+                ExactRatio sum = weighedSum(terms, each.members(), tuple, false);
+                if (away == null || sum == null) {
+                    return false;
+                }
+                farthest = farthest == null || away.compareTo(farthest) > 0 ? away : farthest;
+                least = least == null || sum.compareTo(least) < 0 ? sum : least;
+                greatest = greatest == null || sum.compareTo(greatest) > 0 ? sum : greatest;
+            }
+            size = size.plus(farthest).orNull();
+            if (size == null || size.compareTo(ExactRatio.of(jointly.greatest())) > 0) {
+                return false;
+            }
+            if (each != mine) {
+                low = low.plus(least).orNull();
+                high = high.plus(greatest).orNull();
+                if (low == null || high == null) {
+                    return false;
+                }
+            }
+        }
+        int column = mine.members().indexOf(at);
+        Set<ExactRatio> values = new LinkedHashSet<>();
+        for (List<ExactRatio> tuple : mine.tuples()) {
+            values.add(tuple.get(column));
+        }
+        boolean strictAtLeast = relation == Rel.LT || relation == Rel.GE;
+        for (ExactRatio value : values) {
+            ExactRatio least = null;
+            ExactRatio greatest = null;
+            for (List<ExactRatio> tuple : mine.tuples()) {
+                if (!tuple.get(column).equals(value)) {
+                    continue;
+                }
+                ExactRatio sum = weighedSum(terms, mine.members(), tuple, false);
+                least = least == null || sum.compareTo(least) < 0 ? sum : least;
+                greatest = greatest == null || sum.compareTo(greatest) > 0 ? sum : greatest;
+            }
+            ExactRatio atLeast = low.plus(least).orNull();
+            ExactRatio atMost = high.plus(greatest).orNull();
+            if (atLeast == null || atMost == null
+                    || !(strictAtLeast ? atLeast.signum() < 0 : atLeast.signum() <= 0)
+                    || !(strictAtLeast ? atMost.signum() >= 0 : atMost.signum() > 0)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The supports and, for every term they leave out, the term alone, or null where a support is
+     * not a set of distinct terms of the relation, or a term that is asked cannot be asked as its
+     * ends: the term at {@code at} by what it holds, the others by what they are shown to take,
+     * and all of them weighed by a whole number.
+     */
+    private static <P> List<Group> groupsOf(List<Term<P>> terms, int at,
+                                            List<JointSupport> supports) {
+        boolean[] covered = new boolean[terms.size()];
+        List<Group> out = new ArrayList<>();
+        for (JointSupport each : supports) {
+            for (int member : each.terms()) {
+                if (member < 0 || member >= terms.size() || covered[member]
+                        || !terms.get(member).weight().isWhole()) {
+                    return null;
+                }
+                covered[member] = true;
+            }
+            out.add(new Group(each.terms(), each.tuples()));
+        }
+        for (int i = 0; i < terms.size(); i++) {
+            if (covered[i]) {
+                continue;
+            }
+            Term<P> each = terms.get(i);
+            Interval run = i == at ? wholeRunOf(each.holds(), each.spacing())
+                    : each.realizes() == null ? null : wholeRunOf(each.realizes(), each.spacing());
+            if (run == null || !each.weight().isWhole()) {
+                return null;
+            }
+            out.add(new Group(List.of(i),
+                    List.of(List.of(run.low()), List.of(run.high()))));
+        }
+        return out;
+    }
+
+    /** Whether every term of a group is apart from every term of each other group, and tied to
+     *  none of them. */
+    private static <P> boolean groupsApart(List<Term<P>> terms, List<Group> groups,
+                                           BiPredicate<P, P> overlap, Independence independent) {
+        for (int a = 0; a < groups.size(); a++) {
+            for (int b = a + 1; b < groups.size(); b++) {
+                for (int one : groups.get(a).members()) {
+                    for (int other : groups.get(b).members()) {
+                        if (!independent.between(one, other)
+                                || !apartPlaces(terms.get(one), terms.get(other), overlap)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    private static <P> boolean apartPlaces(Term<P> one, Term<P> other, BiPredicate<P, P> overlap) {
+        for (P first : one.madeOf()) {
+            for (P second : other.madeOf()) {
+                if (overlap.test(first, second)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** The values of {@code tuple} weighed and added — or their sizes, for {@code absolute} — or
+     *  null where that is no number. */
+    private static <P> ExactRatio weighedSum(List<Term<P>> terms, List<Integer> members,
+                                             List<ExactRatio> tuple, boolean absolute) {
+        ExactRatio sum = ExactRatio.ZERO;
+        for (int k = 0; k < members.size() && sum != null; k++) {
+            ExactRatio weight = terms.get(members.get(k)).weight();
+            ExactRatio value = tuple.get(k);
+            ExactRatio part = (absolute ? value.abs().times(weight.abs())
+                    : value.times(weight)).orNull();
+            sum = part == null ? null : sum.plus(part).orNull();
+        }
+        return sum;
     }
 
     /**

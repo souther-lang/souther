@@ -585,10 +585,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // Each side asked once: whether another reaches it, and where it does not, which of its
         // values settle the relation.
         List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
+        List<WhatARelationLeavesUndivided.JointSupport> supports =
+                datePartsTogether(sources, stating, heldWhole);
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = WhatARelationLeavesUndivided.leavesOf(
                     terms, at, constant, relation, UndividedByARelation::overlap, independent,
-                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)));
+                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), supports);
             leaves.add(each);
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 out.addAll(sides.get(at).madeOf());
@@ -604,6 +606,41 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return new WhatItLeaves(out, settled);
+    }
+
+    /**
+     * The sides that are the month or the day of one date, as the combinations that date gives.
+     *
+     * <p>A date is asked only where the declarations leave it every date and the way says nothing
+     * of any part taken of it, so the combinations are the calendar's whole and not those a rule
+     * lets through. A date only one side is taken of has no combination to give.
+     */
+    private List<WhatARelationLeavesUndivided.JointSupport> datePartsTogether(
+            List<Source> sources, List<List<OnAWay>> stating, boolean heldWhole) {
+        if (!heldWhole) {
+            return List.of();
+        }
+        Map<TermPath, List<Integer>> ofOneDate = new LinkedHashMap<>();
+        for (int i = 0; i < sides.size(); i++) {
+            if (sides.get(i).term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.PartOfDate
+                    && sources.get(i) != null && sources.get(i).takes().every()
+                    && wayOf(taken, stating.get(i)) == Way.UNTOUCHED) {
+                ofOneDate.computeIfAbsent(taken.position(), _ -> new ArrayList<>()).add(i);
+            }
+        }
+        List<WhatARelationLeavesUndivided.JointSupport> out = new ArrayList<>();
+        for (List<Integer> members : ofOneDate.values()) {
+            if (members.size() < 2) {
+                continue;
+            }
+            List<List<ExactRatio>> together = MonthsAndDaysOfOneDate.of(members.stream()
+                    .map(i -> (NumericTerm.TakenOf) sides.get(i).term()).toList());
+            if (together != null) {
+                out.add(new WhatARelationLeavesUndivided.JointSupport(members, together));
+            }
+        }
+        return out;
     }
 
     /** What {@code leaves} says of the side at {@code at}, put where it goes. */
