@@ -1048,14 +1048,15 @@ public final class WhatARelationLeavesUndivided {
     /**
      * The whole numbers {@code bounds} is shown to hold, as a run that holds both its ends, so
      * that {@code 1 <= x < 32} and {@code 1 <= x <= 31} are one run — or null where the values
-     * are not whole or an end is none or no number.
+     * are not whole, the run holds none, or an end is none or no number.
      */
     private static Interval wholeRunOf(NumericDomain.Bounds bounds, Granularity spacing) {
         if (spacing != Granularity.DISCRETE) {
             return null;
         }
         WholeRun whole = WholeRun.ofTheValues(bounds);
-        if (whole == null || whole.low == null || whole.high == null) {
+        if (whole == null || !whole.holdsAWholeNumber() || whole.low == null
+                || whole.high == null) {
             return null;
         }
         return new Interval(ExactRatio.of(whole.low), ExactRatio.of(whole.high));

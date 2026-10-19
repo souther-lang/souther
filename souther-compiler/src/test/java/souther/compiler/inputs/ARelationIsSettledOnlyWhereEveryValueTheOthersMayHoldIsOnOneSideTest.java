@@ -198,6 +198,21 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
+     * A run whose ends have crossed holds no value, so a term shown to take it takes none and is
+     * no witness at either end: {@code a + b + c < 0} with {@code b} shown to take nothing says
+     * nothing of {@code a}. What {@code b} is shown to take is no part of what is said of
+     * {@code b}, which {@code a} and {@code c} reach both sides of.
+     */
+    @Test
+    void aTermShownToTakeNoValueIsNoWitness() {
+        var a = term("a", 1, run(-1L, 1L), run(-1L, 1L));
+        var c = term("c", 1, run(-3L, 3L), run(-3L, 3L));
+        var takesNone = term("b", 1, run(-3L, 3L), run(1L, 0L));
+        assertNull(leavesOf(List.of(a, takesNone, c), 0, 0, Rel.LT));
+        assertEquals(new Leaves.Undivided(), leavesOf(List.of(takesNone, a, c), 0, 0, Rel.LT));
+    }
+
+    /**
      * {@code a + c >= b} over the same runs is settled the other way, true from eleven on.
      */
     @Test
