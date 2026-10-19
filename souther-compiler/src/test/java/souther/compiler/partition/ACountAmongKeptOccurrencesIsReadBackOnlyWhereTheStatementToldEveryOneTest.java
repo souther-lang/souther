@@ -53,10 +53,11 @@ class ACountAmongKeptOccurrencesIsReadBackOnlyWhereTheStatementToldEveryOneTest 
 
     @Test
     void aCountIsNoneWhereTheStatementCouldNotBePutToAnOccurrence() {
-        assertInstanceOf(Generator.RealizationReadback.CouldNotTell.class,
-                Generator.readBack(keptWhereThereIsAValue(), List.of(
-                        new ObservedValue.Text("x"), new ObservedValue.Text("x"), CUT_SHORT),
-                        Count.of(2)),
+        assertInstanceOf(Generator.ReadbackGap.KeptNotTold.class,
+                assertInstanceOf(Generator.RealizationReadback.CouldNotTell.class,
+                        Generator.readBack(keptWhereThereIsAValue(), List.of(
+                                new ObservedValue.Text("x"), new ObservedValue.Text("x"),
+                                CUT_SHORT), Count.of(2))).why(),
                 "the one cut short may be a third x that is kept");
     }
 }

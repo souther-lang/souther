@@ -7951,7 +7951,7 @@ public final class Generator {
         // observation that came back short.
         boolean ofAnotherShape = false;
         // An occurrence the statement keeping some of them could not be put to.
-        boolean keptNotTold = false;
+        Set<ReadingGap> keptNotTold = new LinkedHashSet<>();
         boolean stands = switch (term) {
             // How often a value occurs, or the end of the values of a key, among the elements of
             // each container: a row stands at a point where some element's number comes to it.
@@ -8017,7 +8017,8 @@ public final class Generator {
                                 List.of(value)))) {
                             case AStatementAtARow.Answer.Holds _ -> counted.add(value);
                             case AStatementAtARow.Answer.Fails _ -> { }
-                            case AStatementAtARow.Answer.CouldNotTell _ -> keptNotTold = true;
+                            case AStatementAtARow.Answer.CouldNotTell(Set<ReadingGap> why) ->
+                                    keptNotTold.addAll(why);
                         }
                     }
                 }
@@ -8048,8 +8049,8 @@ public final class Generator {
         };
         // Before a stand is taken: the count that stands was made without an occurrence that may
         // have been counted.
-        if (keptNotTold) {
-            return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
+        if (!keptNotTold.isEmpty()) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.KeptNotTold(keptNotTold));
         }
         if (stands) {
             return new RealizationReadback.AtRequestedPlace();
@@ -8181,6 +8182,10 @@ public final class Generator {
 
         /** The row wrote no value at the position the term names. */
         record NoValueAtThePosition() implements ReadbackGap {}
+
+        /** The statement keeping some of the occurrences could not be put to one of them, and
+         *  that one may be among those counted. */
+        record KeptNotTold(Set<ReadingGap> causes) implements ReadbackGap {}
 
         /** The observation of the value did not come back whole. */
         record Observation(Set<Incompleteness.Code> causes) implements ReadbackGap {}
