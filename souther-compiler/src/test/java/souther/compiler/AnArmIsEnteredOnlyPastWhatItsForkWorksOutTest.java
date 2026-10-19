@@ -139,6 +139,21 @@ class AnArmIsEnteredOnlyPastWhatItsForkWorksOutTest {
                     if b > 0 && a + 1 > 0 then Ok else No""".formatted(BELOW_THE_GREATEST))));
     }
 
+    /**
+     * Where a nested short circuit gets {@code true} from nothing and {@code false} only to meet a
+     * right side that answers nothing, no run leaves the whole of it, and a fork past it is entered
+     * by none.
+     */
+    @Test
+    void aForkPastAShortCircuitNoValueLeavesIsEnteredByNoRun() {
+        List<Diagnostic> dead = deadBranches(body("""
+                    guard a == %s else No
+                    let ignored = (b > 0 && a + 1 > 0) || a + 1 > 0
+                    if b > 3 then Ok else No""".formatted(GREATEST)));
+        assertEquals(1, dead.size(), said(dead));
+        assertTrue(pointsAtAnAnswer(dead.getFirst()), said(dead));
+    }
+
     @Test
     void pastAQuotientItsDivisorIsNotNought() {
         List<Diagnostic> dead = deadBranches(body("""

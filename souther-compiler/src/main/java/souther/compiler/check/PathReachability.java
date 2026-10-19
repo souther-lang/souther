@@ -974,12 +974,21 @@ public final class PathReachability {
      * its own; any other condition leaves what it left whichever value it got.
      */
     private Exits exitsOf(Core e, Walked here, Denotations at, InputReads reads) {
-        if (here.known().reachesNothing()
-                || !(e instanceof Core.Binary binary)
-                || !binary.op().stopsWhenItsAnswerIsSettled()) {
+        if (here.known().reachesNothing()) {
             return Exits.of(walk(e, here, at, reads));
         }
-        Exits operands = shortCircuitOperands(binary, here, at, reads);
+        // A value standing as a wider type is the value it holds, with what the widening itself
+        // makes of it on top; the exits are the held value's.
+        Exits operands = switch (e) {
+            case Core.Widen widen -> exitsOf(widen.value(), here, at,
+                    reads.entering(ScopeStep.SAME, symbols, newtypes));
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
+                    shortCircuitOperands(binary, here, at, reads);
+            default -> null;
+        };
+        if (operands == null) {
+            return Exits.of(walk(e, here, at, reads));
+        }
         Walked past = pastOperands(e, operands.completed(), at, reads);
         return past == operands.completed() ? operands : Exits.of(past);
     }
@@ -1014,7 +1023,9 @@ public final class PathReachability {
         // Which the left settling holds is asked only where no run leaves having run the
         // right: otherwise a run leaving holds what held after the left either way, and
         // the left is what stands for that way.
-        Walked settled = left.completed();
+        // The left's own exit for that value and not what it left whichever value it got: where
+        // the left gets the value from no run, nothing settles it here either.
+        Walked settled = left.when(!reachedWhen);
         if (right.completed().known().reachesNothing()) {
             Predicates.Assumed settling = assuming(binary.occurrence(),
                     MeaningsOfABody.Part.Asked.LEFT, binary.left(), settled.known(), at,
@@ -1023,8 +1034,7 @@ public final class PathReachability {
                     with(settled.decided(), settling, binary.left().pos(), !reachedWhen));
         }
         Walked completed = leaving(left.completed(), List.of(right.completed(), settled));
-        Walked other = alternatives(left.completed(),
-                List.of(left.when(!reachedWhen), right.when(!reachedWhen)));
+        Walked other = alternatives(left.completed(), List.of(settled, right.when(!reachedWhen)));
         return reachedWhen
                 ? new Exits(completed, right.whenTrue(), other)
                 : new Exits(completed, other, right.whenFalse());

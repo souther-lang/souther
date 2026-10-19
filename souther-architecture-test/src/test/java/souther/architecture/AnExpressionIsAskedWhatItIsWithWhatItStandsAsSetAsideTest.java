@@ -560,7 +560,14 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "check/PathReachability", "walk",
                 "(" + core + "L" + c + "check/PathReachability$Walked;L" + c
                         + "check/Denotations;L" + c + "inputs/InputReads;)L" + c
-                        + "check/PathReachability$Walked;", 2, GOES_ON_INTO_IT);
+                        + "check/PathReachability$Walked;", 1, GOES_ON_INTO_IT);
+        row(out, c + "check/PathReachability", "pastOperands",
+                "(" + core + "L" + c + "check/PathReachability$Walked;L" + c
+                        + "check/Denotations;L" + c + "inputs/InputReads;)L" + c
+                        + "check/PathReachability$Walked;", 1,
+                "asked of the node PathReachability.walk stands at once its operands are walked,"
+                        + " which goes on into what a Widen holds: a Widen is no comparison, and"
+                        + " its own past is read by the same step as any other node's");
         row(out, c + "check/PathReachability", "mayStopBefore",
                 "(" + core + "L" + c + "check/PathReachability$Walked;)V", 1,
                 "asked of the node PathReachability.walk stands at once its parts are walked, which"
