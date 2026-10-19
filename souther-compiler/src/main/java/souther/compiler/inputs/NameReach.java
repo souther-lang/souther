@@ -344,6 +344,18 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
         private final java.util.Map<TermPath, BlockReason.RecursiveExpansion> closed =
                 new java.util.LinkedHashMap<>();
 
+        private final java.util.Map<souther.compiler.types.TypeSymbol, Boolean> stating =
+                new java.util.HashMap<>();
+
+        /**
+         * Whether {@code declaration} states a rule, asked of {@code asked} the first time and
+         * remembered: the answer is the declaration's, and every return to it asks the same.
+         */
+        boolean statesARule(souther.compiler.types.TypeSymbol declaration,
+                            java.util.function.BooleanSupplier asked) {
+            return stating.computeIfAbsent(declaration, _ -> asked.getAsBoolean());
+        }
+
         /** Say that the listing was closed at {@code at}, and where the declaration was opened. */
         void closedAt(TermPath at, BlockReason.RecursiveExpansion why) {
             closed.putIfAbsent(at, why);

@@ -1074,7 +1074,8 @@ public final class InputDomain {
         // applies to the value below, and nothing below is opened for it to be read at.
         boolean rulesReachBelow = already != null
                 && (reach.handedOn() && placed.handsTheRulesOnAt(path)
-                        || !PlacedRules.of(path, type, reading).placed().isEmpty());
+                        || observed.statesARule(unfolds,
+                                () -> !PlacedRules.of(path, type, reading).placed().isEmpty()));
         StructuralInspection structure;
         if (already == null) {
             structure = StructuralInspection.of(input.shape(), declared);
