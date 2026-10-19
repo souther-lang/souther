@@ -722,6 +722,9 @@ final class CardinalityComposer {
             return notChosen("where `" + kept.key() + "` turns over an element of `"
                     + container + "` could not be worked out");
         }
+        List<Place> beside = candidates.isEmpty() ? List.of()
+                : valuesBeside(candidates.getFirst(), candidates, kept, carrier, run, unheld,
+                        unnamed);
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> built = new ArrayList<>();
@@ -736,14 +739,14 @@ final class CardinalityComposer {
                 if (size != null && !size.holds(Count.of(total), Carrier.WHOLE)) {
                     continue;
                 }
-                if (total - often + 1 > candidates.size()) {
+                if (total - often > beside.size()) {
                     break;
                 }
                 List<Place> values = new ArrayList<>();
                 for (int i = 0; i < often; i++) {
                     values.add(candidates.getFirst());
                 }
-                values.addAll(candidates.subList(1, 1 + total - often));
+                values.addAll(beside.subList(0, total - often));
                 FixtureTemplate one = occursAsOften(values, wanted)
                         ? holdingThese(values, carrier, view, ofTheElement, ruleSource) : null;
                 if (one != null) {
@@ -838,6 +841,8 @@ final class CardinalityComposer {
             return none(kept == null ? "the rules leave no value at `" + place + "` to repeat"
                     : "no value at `" + place + "` to repeat that `" + kept.key() + "` keeps");
         }
+        List<Place> beside = valuesBeside(candidates.getFirst(), candidates, kept, carrier, run,
+                unheld, unnamed);
         NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
         List<FixtureTemplate> built = new ArrayList<>();
         CompositionShortfall rest = CompositionShortfall.NONE;
@@ -848,10 +853,10 @@ final class CardinalityComposer {
             }
             // The fewest leaves that give each container the room its count asks, and no more of
             // them than another value is left for.
-            for (int extra = 0; extra <= candidates.size() - 1 && often + extra <= MOST_ELEMENTS;
+            for (int extra = 0; extra <= beside.size() && often + extra <= MOST_ELEMENTS;
                     extra++) {
                 TermRealizations.Realization one = nested.alike(sourceType, keptApart,
-                        candidates.getFirst(), often, candidates.subList(1, 1 + extra), carrier,
+                        candidates.getFirst(), often, beside.subList(0, extra), carrier,
                         within, reading);
                 if (one instanceof TermRealizations.Realization.Built made) {
                     built.addAll(made.values());
@@ -894,6 +899,25 @@ final class CardinalityComposer {
         if (kept != null) {
             return keptValues(kept, own, container, place, carrier, run, unheld, unnamed);
         }
+        return valuesTheRulesLeave(carrier, run, unheld, unnamed);
+    }
+
+    /**
+     * The values that may stand beside the one counted: any the rules leave the place, kept by
+     * the statement or not, since a value other than the counted one adds nothing to its count.
+     */
+    private static List<Place> valuesBeside(Place counted, List<Place> toCount, KeptOccurrences kept,
+                                            Carrier carrier, NumericDomain.Bounds run,
+                                            Set<CompositionCapacity> unheld,
+                                            Set<CompositionRepertoire> unnamed) {
+        List<Place> pool = kept == null ? toCount
+                : valuesTheRulesLeave(carrier, run, unheld, unnamed);
+        return pool.stream().filter(each -> !each.sameAs(counted)).toList();
+    }
+
+    private static List<Place> valuesTheRulesLeave(Carrier carrier, NumericDomain.Bounds run,
+                                                   Set<CompositionCapacity> unheld,
+                                                   Set<CompositionRepertoire> unnamed) {
         return carrier.counts()
                 ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
                 : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);

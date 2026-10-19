@@ -33,9 +33,11 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
         return container.inputPosition();
     }
 
-    /** What this selects, spelled for a reader and for a coordinate; no identity. */
+    /** What this selects, spelled for a reader and for a coordinate; no identity. The position is
+     *  spelled with its narrowings, as a report spells a position, and the statement by its own
+     *  key, which is what holds two statements apart. */
     public String key() {
-        return position() + " meeting " + meeting.key();
+        return container.inputPosition().discriminated() + " meeting " + meeting.key();
     }
 
     /** Two of these are one where they keep the elements of the same container by the same

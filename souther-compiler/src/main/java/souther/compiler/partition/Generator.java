@@ -7950,6 +7950,8 @@ public final class Generator {
         // no reading of it is made, which is neither the value standing elsewhere nor an
         // observation that came back short.
         boolean ofAnotherShape = false;
+        // An occurrence the statement keeping some of them could not be put to.
+        boolean keptNotTold = false;
         boolean stands = switch (term) {
             // How often a value occurs, or the end of the values of a key, among the elements of
             // each container: a row stands at a point where some element's number comes to it.
@@ -8005,9 +8007,9 @@ public final class Generator {
                 List<souther.compiler.observe.ObservedValue> counted = values;
                 KeptOccurrences kept = occurrences.selection();
                 if (kept != null) {
-                    // Only the values the statement keeps are counted, and none a row cannot put
-                    // it to: a statement reading more than the value itself is not read back from
-                    // the values alone.
+                    // Only the values the statement keeps are counted. An occurrence the
+                    // statement cannot be put to may be one of them, so a count made without it
+                    // is a floor and no count: nothing is read back from the values alone.
                     counted = new ArrayList<>();
                     for (souther.compiler.observe.ObservedValue value : values) {
                         switch (kept.perElement().at(new CardinalityComposer.AnElementRead(
@@ -8015,7 +8017,7 @@ public final class Generator {
                                 List.of(value)))) {
                             case AStatementAtARow.Answer.Holds _ -> counted.add(value);
                             case AStatementAtARow.Answer.Fails _ -> { }
-                            case AStatementAtARow.Answer.CouldNotTell _ -> ofAnotherShape = true;
+                            case AStatementAtARow.Answer.CouldNotTell _ -> keptNotTold = true;
                         }
                     }
                 }
@@ -8044,6 +8046,11 @@ public final class Generator {
                 }
             };
         };
+        // Before a stand is taken: the count that stands was made without an occurrence that may
+        // have been counted.
+        if (keptNotTold) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
+        }
         if (stands) {
             return new RealizationReadback.AtRequestedPlace();
         }
