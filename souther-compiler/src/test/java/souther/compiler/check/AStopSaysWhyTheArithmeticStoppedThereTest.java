@@ -111,6 +111,27 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
         assertInstanceOf(AffineForms.Halt.NotLinear.class, stopped.why());
     }
 
+    /**
+     * A call the library states no form of is still where the reading stops, and a product handed to
+     * it is still what its argument stopped for. Handed nothing of the kind, it has no reason of
+     * its own to give.
+     */
+    @Test
+    void aCallWithNoStatedFormSaysWhatItsArgumentStoppedFor() {
+        Core product = binary(BinOp.MUL, X, Y, Type.INT);
+        Core around = call(product);
+        AffineForms.Outcome.StoppedAt<String, String> stopped = stopOf(around);
+        assertSame(around, stopped.node());
+        assertSame(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES,
+                stopped.why().nonAffineOperation().orElseThrow());
+        assertInstanceOf(AffineForms.Halt.NoRule.class, stopOf(call(X)).why());
+    }
+
+    private static Core call(Core argument) {
+        return new Core.Call(Core.Emitted.BUILD_LIST, List.of(argument),
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE, Type.INT, POS);
+    }
+
     /** Which arithmetic no form says is the rule's to name, a product or a quotient. */
     @Test
     void theOperationIsTheOneTheRuleMet() {

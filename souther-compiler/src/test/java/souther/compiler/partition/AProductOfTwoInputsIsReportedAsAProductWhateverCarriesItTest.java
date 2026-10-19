@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
 
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +15,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Arithmetic no form says is reported as the arithmetic it was, at the positions it is about,
@@ -222,6 +225,48 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 """;
         assertEquals(List.of("b.h: NON_AFFINE_PRODUCT", "b.w: NON_AFFINE_PRODUCT"),
                 reasonsOf(model));
+    }
+
+    /**
+     * A product in a clause under an operation the library states no form of is the product it is
+     * in what a report tells the author, and the operation around it takes nothing of the reason.
+     */
+    @Test
+    void aProductInAnInvariantUnderAnOperationWithNoStatedFormIsTheSameProduct() {
+        List<String> bare = accountedFor("net.value == price.value * disc.value");
+        assertTrue(bare.getFirst().contains("a product of two values that are not constants"),
+                bare.toString());
+        for (String clause : List.of("Decimal.compare(net.value, price.value * disc.value) == 0",
+                "Decimal.round(2, HALF_UP, price.value * disc.value) == net.value")) {
+            assertEquals(bare, accountedFor(clause), clause);
+        }
+    }
+
+    /** What the report says is not accounted for, one line to a place. */
+    private static List<String> accountedFor(String clause) {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Price = Decimal
+                    invariant value >= 0.0m
+                data Disc = Decimal
+                    invariant value >= 0.0m && value <= 0.5m
+                data Money = Decimal
+                    invariant value >= 0.0m
+                data Line = { qty: Int, price: Price, disc: Disc, net: Money }
+                    invariant %s
+
+                behavior pick : (l: Line) -> Int
+                let pick (l) = if l.qty > 3 then 1 else 0
+                """.formatted(clause), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .filter(line -> line.contains("not accounted for"))
+                .map(String::strip)
+                .sorted()
+                .toList();
     }
 
     /** Each position paired with the word a report is told, in a steady order. */
