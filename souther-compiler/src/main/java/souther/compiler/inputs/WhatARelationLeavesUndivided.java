@@ -1087,7 +1087,9 @@ public final class WhatARelationLeavesUndivided {
      * statements leave, and the relation is left to come out either way wherever one difference
      * they leave holds it and another fails it. Moved up to an end of the type, a value finds
      * no partner past it; that is where the representation stops and not a line the model draws,
-     * the same end the other reading passes over for two terms held against nought. A
+     * the same end the other reading passes over for two terms held against nought. A difference
+     * held apart from one value is the differences below it and the ones above it, two runs, and
+     * the relation comes out either way if it does in either run. A
      * statement that keeps the first from some values of its own is not about the difference, and
      * leaves the caller nothing to pass here.
      *
@@ -1117,23 +1119,49 @@ public final class WhatARelationLeavesUndivided {
                 || !moveTogether(terms.get(0), terms.get(1))) {
             return Set.of();
         }
-        WholeRun left = WholeRun.reachedFromTheMiddleOf(extent);
-        if (left == null) {
+        WholeRun middle = WholeRun.reachedFromTheMiddleOf(extent);
+        if (middle == null) {
             return Set.of();
         }
+        List<WholeRun> left = List.of(middle);
         for (OnTheDifference each : held) {
-            WholeRun where = WholeRun.where(each);
-            if (where == null) {
+            left = narrowedBy(left, each);
+            if (left == null || left.isEmpty()) {
                 return Set.of();
             }
-            left = left.meet(where);
         }
         OnTheDifference line = new OnTheDifference(terms.get(0).weight(), constant, relation);
-        if (!left.comesOut(line, true) || !left.comesOut(line, false)) {
+        if (left.stream().noneMatch(run -> run.comesOut(line, true))
+                || left.stream().noneMatch(run -> run.comesOut(line, false))) {
             return Set.of();
         }
         Set<P> out = new LinkedHashSet<>(terms.get(0).madeOf());
         out.addAll(terms.get(1).madeOf());
+        return out;
+    }
+
+    /**
+     * The runs of {@code left} that {@code statement} leaves, or null where it is no run. A
+     * difference held apart from one value leaves the differences below it and the ones above it,
+     * so the runs it leaves are each run met with either side.
+     */
+    private static List<WholeRun> narrowedBy(List<WholeRun> left, OnTheDifference statement) {
+        List<Rel> sides = statement.relation() == Rel.NE ? List.of(Rel.LT, Rel.GT)
+                : List.of(statement.relation());
+        List<WholeRun> out = new ArrayList<>();
+        for (Rel side : sides) {
+            WholeRun where = WholeRun.where(
+                    new OnTheDifference(statement.weight(), statement.constant(), side));
+            if (where == null) {
+                return null;
+            }
+            for (WholeRun run : left) {
+                WholeRun met = run.meet(where);
+                if (met.holdsAWholeNumber()) {
+                    out.add(met);
+                }
+            }
+        }
         return out;
     }
 
