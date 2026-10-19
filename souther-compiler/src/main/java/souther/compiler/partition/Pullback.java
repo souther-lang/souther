@@ -94,6 +94,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.ElementLineage;
@@ -3728,7 +3729,7 @@ final class Pullback {
                         : new Sized.NotSized(new WhyUnread.AtNoPosition(
                                 WhyUnread.AtNoPosition.Place.SUBJECT));
             }
-            return codePointsAt(at, counted);
+            return codePointsAt(at, counted, CaseMapping.NONE);
         }
 
         /**
@@ -3753,13 +3754,21 @@ final class Pullback {
          */
         private Sized codePointsOfTheValue(Core value, InputReads in, CodePointClass counted) {
             if (in.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
-                return codePointsAt(at, counted);
+                return codePointsAt(at, counted, CaseMapping.NONE);
             }
             Denotation standing = in.standing(value, read.rules().symbols(),
                     read.rules().newtypes());
             if (Core.withoutStanding(standing.value()) instanceof Core.Str written) {
                 return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(
                         written.value().codePoints().filter(counted::contains).count())));
+            }
+            // What a case conversion answers of the string at a position is counted as it is, by
+            // asking the answer: its code points are no image of the string's own code by code.
+            if (Core.withoutStanding(standing.value()) instanceof Core.PreservedCall call
+                    && CaseMapping.of(call.declared().operation()) instanceof CaseMapping through
+                    && standing.at().pathOf(call.args().getFirst(), read.rules().newtypes())
+                            instanceof PathResolution.At(TermPath at)) {
+                return codePointsAt(at, counted, through);
             }
             Pieces piece = pieceThatIs(value, in, false);
             if (piece != null) {
@@ -3772,11 +3781,13 @@ final class Pullback {
                     : new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
         }
 
-        /** How many of the code points of the string at {@code at} are in {@code counted}. */
-        private Sized codePointsAt(TermPath at, CodePointClass counted) {
+        /** How many of the code points of {@code through} of the string at {@code at} are in
+         *  {@code counted}. */
+        private Sized codePointsAt(TermPath at, CodePointClass counted, CaseMapping through) {
             Type type = read.domain().typeAt(at, read.rules());
             NumericTerm.CodePointClassCount term = type == null ? null
-                    : NumericTerm.CodePointClassCount.of(at, counted, type, read.rules().inners());
+                    : NumericTerm.CodePointClassCount.of(at, counted, through, type,
+                            read.rules().inners());
             return term == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                     : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(term)));
         }

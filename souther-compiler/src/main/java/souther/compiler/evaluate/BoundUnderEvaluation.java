@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+import souther.compiler.semantics.CaseMapping;
+import souther.runtime.ConstraintViolation;
 import souther.runtime.Lists;
 import souther.runtime.Maps;
 import souther.runtime.Representations;
@@ -43,6 +45,24 @@ public final class BoundUnderEvaluation {
      */
     public static String heldAs(String text) {
         return admission(text) instanceof TextAdmission.Admitted held ? held.text() : null;
+    }
+
+    /**
+     * What {@code mapping} makes of {@code text}, as the run time answers it, or null where the
+     * run time has no answer: the text would map to more code points than a string holds.
+     */
+    public static String mapped(CaseMapping mapping, String text) {
+        try {
+            return switch (mapping) {
+                case CaseMapping.None _ -> text;
+                case CaseMapping.Lowercase _ ->
+                        Strings.lowercase(text, EvaluationContext.checkpoint());
+                case CaseMapping.Uppercase _ ->
+                        Strings.uppercase(text, EvaluationContext.checkpoint());
+            };
+        } catch (ConstraintViolation _) {
+            return null;
+        }
     }
 
     public static String admit(String text) {

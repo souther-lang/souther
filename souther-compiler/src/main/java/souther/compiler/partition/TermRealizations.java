@@ -33,6 +33,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -362,6 +363,15 @@ final class TermRealizations {
                     return nothingSolvesAGroup();
                 }
                 case NumericTerm.ValueOf _ -> itself = target;
+                // The code points of what a case conversion answers are not counted kind by kind
+                // of the string's own, which is what the arm below writes a string by: a letter
+                // and the mark after it can be one code point of the answer. Beside another number
+                // of the string it is a group nothing writes a value for, and alone it is searched
+                // for by reading each candidate back ({@link #stringsHoldingThatManyOf}).
+                case NumericTerm.CodePointClassCount count
+                        when !count.through().equals(CaseMapping.NONE) -> {
+                    return nothingSolvesAGroup();
+                }
                 // Numbers of a string, which a string is chosen for and no container is built to
                 // have: what its code points come to is no total of elements composed one by one.
                 case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> {
@@ -1506,8 +1516,8 @@ final class TermRealizations {
                     reading, inside);
             case NumericTerm.CodePointClassCount counted -> {
                 nothingInside(inside);
-                yield holdingThatManyOfAClass(counted.counted(), sourceType, asked, orders,
-                        reading);
+                yield holdingThatManyOfAClass(counted.counted(), counted.through(), sourceType,
+                        asked, orders, reading);
             }
             // A string written for its code points alone, which is the search that writes one for
             // several numbers of a string, asked one.
@@ -2517,25 +2527,29 @@ final class TermRealizations {
      * written to, so there is a string for every number and what limits the walk is the figure the
      * counts are walked under.
      */
-    private static Realization holdingThatManyOfAClass(CodePointClass counted, Type sourceType,
+    private static Realization holdingThatManyOfAClass(CodePointClass counted,
+                                                       CaseMapping through, Type sourceType,
                                                        AskedAt asked, TermOrders orders,
                                                        RuleReadingContext reading) {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
-                count -> stringsHoldingThatManyOf(counted, sourceType, count, reading));
+                count -> stringsHoldingThatManyOf(counted, through, sourceType, count, reading));
     }
 
     /**
-     * Strings of the position holding exactly {@code answer} code points of {@code counted}, each
-     * of them read back before it is offered.
+     * Strings of the position holding exactly {@code answer} code points of {@code counted} in
+     * what {@code through} makes of them, each of them read back before it is offered.
      *
      * <p>What the type admits first and what is plainly written after, as a string of a length is
      * offered ({@link Witnesses}). What is offered is what reads back as the number asked for and
      * nothing else: a string the type admits that holds another number is a string for another
-     * number, and is left out rather than offered at this one.
+     * number, and is left out rather than offered at this one. Read back through the conversion,
+     * so a string written for a class is offered for it only where the run time's answer holds
+     * that many.
      */
-    private static Realization stringsHoldingThatManyOf(CodePointClass counted, Type sourceType,
+    private static Realization stringsHoldingThatManyOf(CodePointClass counted,
+                                                        CaseMapping through, Type sourceType,
                                                         Place answer, RuleReadingContext reading) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
@@ -2554,22 +2568,78 @@ final class TermRealizations {
         Set<String> candidates = new LinkedHashSet<>(
                 admittedStrings(holder, reading, lengthsFrom(many)));
         candidates.addAll(plainStringsHolding(counted, many));
-        Set<String> held = new LinkedHashSet<>();
-        for (String each : candidates) {
-            String text = asTheLanguageHoldsIt(each);
-            if (text != null && countIn(counted, text) == many) {
-                held.add(text);
-            }
+        Set<String> held = readBackAs(counted, through, many, candidates);
+        // The plain letters come first, and a conversion can make them into code points of no
+        // class that is asked for; the code points it leaves as they are are tried then.
+        if (held.isEmpty() && !through.equals(CaseMapping.NONE)) {
+            held = readBackAs(counted, through, many, leftAsTheyAre(counted, through, many));
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (String each : held) {
             out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
         }
         if (out.isEmpty()) {
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            // Written by the class's own code points, which a conversion can make into others,
+            // so the strings tried are some of the strings there are and not all of them.
+            return through.equals(CaseMapping.NONE)
+                    ? new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    : new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                            CompositionRepertoire.STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR)),
+                            null);
         }
         return Realization.Built.whole(out);
+    }
+
+    /** The candidates, as the language holds them, that hold {@code many} code points of
+     *  {@code counted} in what {@code through} makes of them. */
+    private static Set<String> readBackAs(CodePointClass counted, CaseMapping through, int many,
+                                          Collection<String> candidates) {
+        Set<String> held = new LinkedHashSet<>();
+        for (String each : candidates) {
+            String text = asTheLanguageHoldsIt(each);
+            if (text != null && countIn(counted, through, text) == many) {
+                held.add(text);
+            }
+        }
+        return held;
+    }
+
+    /**
+     * Strings of {@code many} ASCII code points of {@code counted} that {@code through} leaves as
+     * they are, one string for each such code point: the strings a conversion keeps the count of
+     * wherever the class is written with them, whichever of them the plain letters come first by.
+     */
+    private static List<String> leftAsTheyAre(CodePointClass counted, CaseMapping through,
+                                              int many) {
+        List<String> out = new ArrayList<>();
+        for (int member = 0x21; member < 0x7F; member++) {
+            String own = Character.toString(member);
+            if (counted.contains(member) && own.equals(BoundUnderEvaluation.mapped(through, own))) {
+                out.add(own.repeat(many));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether every whole number from nought up is how many code points of {@code counted}
+     * {@code through} makes of some string. As it stands, a string of that many of one of them is
+     * one. Converted, it is where one of the ASCII code points the class counts is left as it is,
+     * since a string of that many of it is made into itself: an ASCII code point is converted
+     * alone and composes with none beside it.
+     */
+    static boolean writesEveryCountOf(CodePointClass counted, CaseMapping through) {
+        if (through.equals(CaseMapping.NONE)) {
+            return true;
+        }
+        for (int member = 0; member <= 0x7F; member++) {
+            String own = Character.toString(member);
+            if (counted.contains(member) && own.equals(BoundUnderEvaluation.mapped(through, own))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -2749,6 +2819,13 @@ final class TermRealizations {
         return text.codePoints().filter(counted::contains).count();
     }
 
+    /** The same, of what {@code through} makes of {@code text}: -1 where the run time has no
+     *  answer for it, which is a count no string is offered for. */
+    private static long countIn(CodePointClass counted, CaseMapping through, String text) {
+        String made = BoundUnderEvaluation.mapped(through, text);
+        return made == null ? -1 : countIn(counted, made);
+    }
+
     /** One number of a string asked for, with where it may be: what the demand admits and what the
      *  rules leave of it on the way, and the ends of both together. */
     private record OfAString(NumberOfAString number, NumericDomain.Bounds lies,
@@ -2796,8 +2873,13 @@ final class TermRealizations {
             return switch (term) {
                 case NumericTerm.TakenOf taken
                         when taken.takenAs() instanceof TakenAs.HowManyItHolds -> new Length();
-                case NumericTerm.CodePointClassCount count -> new InAClass(count.counted());
+                case NumericTerm.CodePointClassCount count
+                        when count.through().equals(CaseMapping.NONE) ->
+                        new InAClass(count.counted());
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
+                case NumericTerm.CodePointClassCount _ -> throw new IllegalStateException(
+                        term + " is counted in what a conversion answers, which no group of a"
+                                + " string's numbers is written for");
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _ ->
                         throw new IllegalStateException(

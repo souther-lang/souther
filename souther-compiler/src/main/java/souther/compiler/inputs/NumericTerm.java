@@ -16,6 +16,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
@@ -383,35 +384,50 @@ public sealed interface NumericTerm
      * <p>Counted by what the run time counts by: in scalar values, against the one whitespace
      * alphabet the library's own operations scan with ({@link CodePointClass}).
      *
+     * <p>Of the string as it stands or of what a case conversion answers of it ({@link
+     * CaseMapping}). The second is a number of the string all the same: the conversion is the run
+     * time's, so the count is whatever the run time's answer holds, and it is worked out of that
+     * answer and never from the classes the code points of the string are in.
+     *
      * <p>Only of a string. The number a count of one string's code points comes to is bounded by
      * the string's own length, and where a rule is also drawn on that length the two are one
-     * string's numbers and are realized together.
+     * string's numbers and are realized together. A conversion can write more code points than it
+     * was given, so a count of what it answers has no such bound, and the numbers of one string
+     * are not added up code point by code point.
      */
     final class CodePointClassCount implements FromOnePosition {
 
         private final TermPath position;
         private final CodePointClass counted;
+        private final CaseMapping through;
 
-        private CodePointClassCount(TermPath position, CodePointClass counted) {
+        private CodePointClassCount(TermPath position, CodePointClass counted,
+                                    CaseMapping through) {
             this.position = Objects.requireNonNull(position, "counted of somewhere");
             this.counted = Objects.requireNonNull(counted, "and of some code points");
+            this.through = Objects.requireNonNull(through, "of the string or of what it maps to");
         }
 
         /**
-         * The count of the code points of the string at {@code position} that are in
-         * {@code counted}, or null where what stands there is no string.
+         * The count of the code points, in {@code counted}, of what {@code through} makes of the
+         * string at {@code position}, or null where what stands there is no string.
          *
          * <p>Asked of what the names wrap, as a taking is: a name around a string is still one.
          */
-        public static CodePointClassCount of(TermPath position, CodePointClass counted, Type at,
-                                             NewtypeInners inners) {
+        public static CodePointClassCount of(TermPath position, CodePointClass counted,
+                                             CaseMapping through, Type at, NewtypeInners inners) {
             return at != null && TypeOps.base(at, inners) == Type.STRING
-                    ? new CodePointClassCount(position, counted) : null;
+                    ? new CodePointClassCount(position, counted, through) : null;
         }
 
         /** The code points this counts. */
         public CodePointClass counted() {
             return counted;
+        }
+
+        /** What the string is made into before its code points are counted. */
+        public CaseMapping through() {
+            return through;
         }
 
         @Override
@@ -421,23 +437,24 @@ public sealed interface NumericTerm
 
         @Override
         public CodePointClassCount movedTo(UnaryOperator<TermPath> moved) {
-            return new CodePointClassCount(moved.apply(position), counted);
+            return new CodePointClassCount(moved.apply(position), counted, through);
         }
 
         @Override
         public boolean equals(Object other) {
             return other instanceof CodePointClassCount count
-                    && position.equals(count.position) && counted.equals(count.counted);
+                    && position.equals(count.position) && counted.equals(count.counted)
+                    && through.equals(count.through);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(position, counted);
+            return Objects.hash(position, counted, through);
         }
 
         @Override
         public String toString() {
-            return "#(" + counted + ")(" + position + ")";
+            return "#(" + counted + ")(" + through.writtenAround(position.toString()) + ")";
         }
     }
 
@@ -951,7 +968,7 @@ public sealed interface NumericTerm
                     new ObservationSource(other, taken.transformation()), taken.arguments(), at,
                     inners, symbols);
             case CodePointClassCount count ->
-                    CodePointClassCount.of(other, count.counted(), at, inners);
+                    CodePointClassCount.of(other, count.counted(), count.through(), at, inners);
             case CodePointValueSum _ -> CodePointValueSum.of(other, at, inners);
             // What moves here is where a number is taken, and a run is not taken anywhere: its
             // values come from a place inside a container, and the name that would move is the

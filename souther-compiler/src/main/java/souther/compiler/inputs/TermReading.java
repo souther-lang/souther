@@ -12,7 +12,9 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -89,7 +91,8 @@ final class TermReading {
             case NumericTerm.ValueOf _ -> asItStands(at, observed);
             case NumericTerm.TakenOf taken ->
                     taken(taken.takenAs(), taken.arguments(), taken.transformation(), at, on);
-            case NumericTerm.CodePointClassCount count -> codePointsOfAClass(count.counted(), at);
+            case NumericTerm.CodePointClassCount count ->
+                    codePointsOfAClass(count.counted(), count.through(), at);
             case NumericTerm.CodePointValueSum _ -> whatTheCodePointsComeTo(at);
         };
     }
@@ -364,13 +367,17 @@ final class TermReading {
      * <p>Counted in scalar values, as {@code String.length} counts, and against the one whitespace
      * alphabet the library's own operations scan with ({@link CodePointClass}). What is read is the
      * string as the row wrote it, so a count read here is the count the run time's own scan of that
-     * string comes to.
+     * string comes to — of what {@code through} makes of it, where the count is of that, which is
+     * the run time's answer and no number here can stand in for.
      */
-    private static Reading codePointsOfAClass(CodePointClass counted, ObservedValue at) {
-        return at instanceof ObservedValue.Text text
-                ? new Reading.Number(Count.of(text.value().codePoints()
-                        .filter(counted::contains).count()))
-                : new Reading.NotNumber();
+    private static Reading codePointsOfAClass(CodePointClass counted, CaseMapping through,
+                                              ObservedValue at) {
+        if (!(at instanceof ObservedValue.Text text)) {
+            return new Reading.NotNumber();
+        }
+        String made = BoundUnderEvaluation.mapped(through, text.value());
+        return made == null ? new Reading.NotNumber()
+                : new Reading.Number(Count.of(made.codePoints().filter(counted::contains).count()));
     }
 
     /**

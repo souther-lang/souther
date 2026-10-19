@@ -407,13 +407,18 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
      * Characters of a string lowercased are not characters of a string at a position: the case
      * mapping, and the composition after it, can take a letter the pattern accepts into one it
      * does not — {@code J} before a combining caron is {@code ǰ} once lowercased — so which code
-     * points of the string make one is not a class of them, and it is not read.
+     * points of the string make one is not a class of them. It is read as a count of the answer,
+     * a number of the string of its own that is worked out by asking the answer, and never as the
+     * count the string's own code points have.
      */
     @Test
     void charactersOfAStringLowercasedAreNotReadAsAClassOfTheString() {
         Proposition stated = stated("if List.any(c -> String.matches(\"[a-z0-9]\", c),"
                 + " String.characters(String.lowercase(b.s))) then 1 else 0");
-        assertTrue(Proposition.leavesSomethingUnread(stated), stated.toString());
+        assertNull(Proposition.firstStopIn(stated), stated.toString());
+        assertTrue(stated.toString().contains("String.lowercase(b.s)"), stated.toString());
+        assertNotEquals(stated, stated("if List.any(c -> String.matches(\"[a-z0-9]\", c),"
+                + " String.characters(b.s)) then 1 else 0"));
     }
 
     /**

@@ -5960,7 +5960,8 @@
                           "elements_chosen_for_a_count",
                           "elements_a_computed_total_is_solved_for",
                           "mixes_of_cases_a_total_is_spread_over",
-                          "trees_written_for_a_count"
+                          "trees_written_for_a_count",
+                          "strings_a_case_conversion_is_written_for"
                         ]
                       }
                     },

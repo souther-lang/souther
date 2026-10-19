@@ -5,6 +5,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
@@ -233,7 +234,11 @@ final class Intervals {
             case NumericTerm.ValueOf _ -> "value";
             // The class of code points counted, which the term says and the place does not.
             case NumericTerm.CodePointClassCount count -> "number of code points that are "
-                    + count.counted();
+                    + count.counted() + switch (count.through()) {
+                        case CaseMapping.None _ -> "";
+                        case CaseMapping.Lowercase _ -> " in the lowercase of the string";
+                        case CaseMapping.Uppercase _ -> " in the uppercase of the string";
+                    };
             case NumericTerm.CodePointValueSum _ -> "sum of the code points";
         };
     }

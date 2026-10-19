@@ -25,6 +25,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -76,7 +77,7 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
             ScopedDeclarations.wrapsOf(SYMBOLS));
 
     private static NumericTerm.CodePointClassCount counting(CodePointClass counted) {
-        return NumericTerm.CodePointClassCount.of(AT, counted, Type.STRING,
+        return NumericTerm.CodePointClassCount.of(AT, counted, CaseMapping.NONE, Type.STRING,
                 ScopedDeclarations.wrapsOf(SYMBOLS));
     }
 

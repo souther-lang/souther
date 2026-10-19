@@ -18,6 +18,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.AnswerAspect;
@@ -1194,6 +1195,7 @@ public sealed interface Derivation {
                                 NumericTerm term)
                                 && term instanceof NumericTerm.CodePointClassCount count
                                 && count.position().equals(at)
+                                && count.through().equals(CaseMapping.NONE)
                                 && count.counted().equals(counted));
                     }
                     case LawNumber.HowManyDifferent<DeclaredArgument>(var container, var each) -> {

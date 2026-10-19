@@ -1800,8 +1800,8 @@ public final class InputDomain {
                     NumericTerm.TakenOf.of(taken, new ObservationSource(path, answered.from()),
                             TakenArguments.NONE, type, source.inners(), source.symbols());
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
-                    NumericTerm.CodePointClassCount.of(path, count.counted(), type,
-                            source.inners());
+                    NumericTerm.CodePointClassCount.of(path, count.counted(), count.through(),
+                            type, source.inners());
             case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                     NumericTerm.CodePointValueSum.of(path, type, source.inners());
             // No clause of a declaration states how often a value occurs among the elements
@@ -1963,7 +1963,7 @@ public final class InputDomain {
                             new ObservationSource(path, answered.from()), type, source);
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count -> {
                 NumericTerm.CodePointClassCount counted = NumericTerm.CodePointClassCount.of(path,
-                        count.counted(), type, source.inners());
+                        count.counted(), count.through(), type, source.inners());
                 if (counted == null) {
                     throw new IllegalStateException("a count of the code points of `" + path
                             + "` was asked for, and what stands there is no string");

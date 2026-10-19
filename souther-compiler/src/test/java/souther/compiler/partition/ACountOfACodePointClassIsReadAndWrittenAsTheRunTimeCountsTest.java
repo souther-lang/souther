@@ -19,6 +19,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
 import souther.runtime.Strings;
@@ -60,7 +61,8 @@ class ACountOfACodePointClassIsReadAndWrittenAsTheRunTimeCountsTest {
 
     private static NumericTerm.CodePointClassCount counting(CodePointClass counted) {
         NumericTerm.CodePointClassCount made =
-                NumericTerm.CodePointClassCount.of(AT, counted, Type.STRING, INNERS);
+                NumericTerm.CodePointClassCount.of(AT, counted, CaseMapping.NONE, Type.STRING,
+                        INNERS);
         assertNotNull(made, "a string's code points are counted");
         return made;
     }
@@ -72,8 +74,9 @@ class ACountOfACodePointClassIsReadAndWrittenAsTheRunTimeCountsTest {
     /** Only a string has code points to count. */
     @Test
     void onlyAStringHasCodePointsToCount() {
-        assertNull(NumericTerm.CodePointClassCount.of(AT, NOT_WHITESPACE, Type.INT, INNERS));
-        assertNull(NumericTerm.CodePointClassCount.of(AT, NOT_WHITESPACE,
+        assertNull(NumericTerm.CodePointClassCount.of(AT, NOT_WHITESPACE, CaseMapping.NONE,
+                Type.INT, INNERS));
+        assertNull(NumericTerm.CodePointClassCount.of(AT, NOT_WHITESPACE, CaseMapping.NONE,
                 new Type.ListOf(Type.STRING), INNERS));
     }
 
