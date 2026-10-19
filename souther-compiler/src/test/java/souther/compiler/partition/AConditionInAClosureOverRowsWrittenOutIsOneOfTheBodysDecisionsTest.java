@@ -57,6 +57,26 @@ class AConditionInAClosureOverRowsWrittenOutIsOneOfTheBodysDecisionsTest {
                 Ok
             }
 
+            data Paid = { amount: Int }
+                invariant amount >= 0
+            let includingTheFloor: List<Row> =
+                [ Row { bound = 0 }, Row { bound = 100 }, Row { bound = 200 } ]
+
+            behavior anyBesideARowEveryValueMeets : (paid: Paid) -> Ok | No
+            let anyBesideARowEveryValueMeets (paid) = {
+                guard List.any(r -> r.bound <= paid.amount, [ Row { bound = 100 }, Row { bound = 0 } ])
+                        else No
+                Ok
+            }
+
+            behavior countBesideARowEveryValueMeets : (paid: Paid) -> Int
+            let countBesideARowEveryValueMeets (paid) =
+                List.length(List.filter(r -> r.bound <= paid.amount, includingTheFloor))
+
+            behavior byFold : (paid: Paid) -> Int
+            let byFold (paid) =
+                List.fold((acc, r) -> if r.bound <= paid.amount then acc + 1 else acc, 0, table)
+
             behavior byAFlagToo : (pay: Int, flag: Bool) -> Ok | No
             let byAFlagToo (pay, flag) = {
                 guard List.any(r -> r.bound <= pay && flag, table) else No
@@ -103,6 +123,31 @@ class AConditionInAClosureOverRowsWrittenOutIsOneOfTheBodysDecisionsTest {
     @Test
     void noRowsAreNoApplicationOfTheClosure() {
         assertEquals(Map.of(), toldApart("byNoRows"));
+    }
+
+    /**
+     * A row the comparison comes out the same on for every value draws no line, and is still a row:
+     * the statement it makes is not the one the others make, so what the lines drawn say of the
+     * rest is not what the body tells apart by.
+     */
+    @Test
+    void aRowEveryValueMeetsIsNotLeftOutOfWhatSomeRowMeetingTellsApartBy() {
+        assertInstanceOf(BodyDistinction.Unread.class,
+                toldApart("anyBesideARowEveryValueMeets").get("paid.amount"));
+    }
+
+    @Test
+    void aRowEveryValueMeetsIsNotLeftOutOfWhatACountOfTheRowsMeetingTellsApartBy() {
+        assertInstanceOf(BodyDistinction.Unread.class,
+                toldApart("countBesideARowEveryValueMeets").get("paid.amount"));
+    }
+
+    /** The step of a fold that keeps one side is a fork on the comparison, decided on each row. */
+    @Test
+    void aFoldKeepingOneSideTellsApartByEachLine() {
+        assertEquals(new BodyDistinction.Drawn(List.of(List.of("paid.amount/0 <= x < 100"),
+                        List.of("paid.amount/100 <= x < 200"), List.of("paid.amount/200 <= x"))),
+                toldApart("byFold").get("paid.amount"));
     }
 
     /** What the lines do not settle is left unread, as it was. */

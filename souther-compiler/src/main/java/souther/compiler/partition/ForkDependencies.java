@@ -5,6 +5,8 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -38,18 +40,39 @@ import java.util.Set;
  * @param byAnswer what the answer of each closure body, by the construct it answers with, reads
  * @param statedByFork the statement the condition of a fork the model wrote makes, where every
  *                 reading of it came to one statement
+ * @param applied  every application a run makes of the closure whose body is decided by the
+ *                 construct, in the order they were read: what each states and what it takes to
+ *                 make it. Absent for a closure whose applications are not all said
  */
 public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
                                Map<ModelOccurrence, Dependency> byAnswer,
-                               Map<ModelOccurrence, Proposition> statedByFork) {
+                               Map<ModelOccurrence, Proposition> statedByFork,
+                               Map<ModelOccurrence, List<Application>> applied) {
 
     public static final ForkDependencies NONE =
-            new ForkDependencies(Map.of(), Map.of(), Map.of());
+            new ForkDependencies(Map.of(), Map.of(), Map.of(), Map.of());
 
     public ForkDependencies {
         byFork = Map.copyOf(byFork);
         byAnswer = Map.copyOf(byAnswer);
         statedByFork = Map.copyOf(statedByFork);
+        Map<ModelOccurrence, List<Application>> copied = new LinkedHashMap<>();
+        applied.forEach((answers, each) -> copied.put(answers, List.copyOf(each)));
+        applied = Collections.unmodifiableMap(copied);
+    }
+
+    /**
+     * One application of a closure.
+     *
+     * @param stated  what the closure's body states on it
+     * @param reached what has to hold for a run to make it
+     */
+    public record Application(Proposition stated, Proposition reached) {}
+
+    /** Every application made of the closure the construct {@code answers} decides the body of,
+     *  or empty where they are not all said. */
+    public Optional<List<Application>> appliedAt(ModelOccurrence answers) {
+        return Optional.ofNullable(applied.get(answers));
     }
 
     /** What the condition of {@code fork} states, or empty where it was read to no one statement. */
@@ -87,6 +110,9 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
 
         private final Bounds forks = new Bounds(true);
         private final Bounds answers = new Bounds(false);
+        private final Map<ModelOccurrence, List<Application>> applications =
+                new LinkedHashMap<>();
+        private final Set<ModelOccurrence> applicationsNotSaid = new LinkedHashSet<>();
 
         /** That the condition of {@code fork} states {@code stated}, wherever else it was read. */
         void forkReads(ModelOccurrence fork, Proposition stated) {
@@ -101,10 +127,24 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
         /** That nothing bounds what the answer {@code answers} gives may turn on. */
         void answerUnbounded(ModelOccurrence answers) {
             this.answers.unknown.add(answers);
+            applicationsNotSaid.add(answers);
+        }
+
+        /** That the applications of the closure {@code answers} decides are not all said. */
+        void appliedNotSaid(ModelOccurrence answers) {
+            applicationsNotSaid.add(answers);
+        }
+
+        /** That the closure body decided by {@code answers} is applied once more, as this. */
+        void applied(ModelOccurrence answers, Proposition stated, Proposition reached) {
+            applications.computeIfAbsent(answers, _ -> new ArrayList<>())
+                    .add(new Application(stated, reached));
         }
 
         ForkDependencies read() {
-            return new ForkDependencies(forks.read(), answers.read(), forks.statements());
+            Map<ModelOccurrence, List<Application>> said = new LinkedHashMap<>(applications);
+            said.keySet().removeAll(applicationsNotSaid);
+            return new ForkDependencies(forks.read(), answers.read(), forks.statements(), said);
         }
     }
 

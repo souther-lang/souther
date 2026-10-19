@@ -5,8 +5,6 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
@@ -16,10 +14,7 @@ import souther.compiler.reading.Outcome;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -757,9 +752,8 @@ public final class InteractionCells {
                     return null;
                 }
                 Cut line = cutAt(axes.get(axis), states);
-                return line != null
-                        ? sideOf(axes, axis, line, guardOf(line, states), one.held())
-                        : amongTheApplications(axes, axis, states, one.held());
+                return line == null
+                        ? null : sideOf(axes, axis, line, guardOf(line, states), one.held());
             }
             // A fork this reading could not name a position for narrows nothing.
             case souther.compiler.reading.Condition.Arm _ -> {
@@ -856,7 +850,7 @@ public final class InteractionCells {
      * Which classes a comparison coming out {@code held} leaves, by the line {@code guard} drew at
      * {@code line}, or null where the line names no classes.
      */
-    private static Cell sideOf(List<Axis> axes, int axis, Cut line,
+    static Cell sideOf(List<Axis> axes, int axis, Cut line,
                                LineOrigin.ComparisonOrigin guard, boolean held) {
         int home = holding(axes.get(axis), line);
         if (home < 0) {
@@ -896,204 +890,6 @@ public final class InteractionCells {
             return null;
         }
         return wantedIsUp ? only(axes, axis, edge, last) : only(axes, axis, 0, edge);
-    }
-
-    /**
-     * Which classes a comparison stated once and drawn on each application of a closure leaves,
-     * where the decision was recorded at one of them and says nothing of which.
-     *
-     * <p>The classes any application's line leaves: a run took the way on some application, and
-     * each application's line is one of the lines the comparison drew. Null unless every line
-     * is a place of one line of the author's, decides wherever a row is, and names classes — a
-     * line of a statement of several, or one that decides only where something else holds, is
-     * not the side a row is on.
-     */
-    private static Cell amongTheApplications(List<Axis> axes, int axis, ModelOccurrence states,
-                                             boolean held) {
-        Cell union = null;
-        PartOfAComparison authored = null;
-        for (Cut cut : axes.get(axis).cuts()) {
-            for (LineOrigin origin : cut.origins()) {
-                if (!(origin instanceof LineOrigin.ComparisonOrigin guard)
-                        || !guard.read().states().equals(states)) {
-                    continue;
-                }
-                if (guard.part().isEmpty() || !guard.part().get().decides()
-                        .equals(WhereAnApplicationIsMade.nothingAsked())) {
-                    return null;
-                }
-                PartOfAComparison line = guard.part().get().part().line();
-                if (authored != null && !authored.equals(line)) {
-                    return null;
-                }
-                authored = line;
-                Cell cell = sideOf(axes, axis, cut, guard, held);
-                if (cell == null) {
-                    return null;
-                }
-                if (union == null) {
-                    union = cell;
-                } else {
-                    for (int c = 0; c < union.allowed()[axis].length; c++) {
-                        union.allowed()[axis][c] |= cell.allowed()[axis][c];
-                    }
-                }
-            }
-        }
-        return union;
-    }
-
-    /**
-     * The classes of the axis at which {@code stated} holds, and the comparisons of the model whose
-     * every line it accounts for.
-     *
-     * @param holds     for each class, whether the statement holds throughout it
-     * @param explained the comparisons every line of which, on this axis, a relation of the
-     *                  statement is
-     */
-    record Evaluated(boolean[] holds, Set<ModelOccurrence> explained) {}
-
-    /**
-     * Where {@code stated} holds among the classes of the axis, or null where it is not settled by
-     * the lines the axis was cut by.
-     *
-     * <p>Only a statement joining relations, each of which is a line some comparison drew on this
-     * axis: it holds on one side of each, so it holds or fails throughout a class that no line
-     * runs through. A relation no line was drawn for leaves it unsettled, unless
-     * {@code readToTheEnd}: every rule on the position was read through, so a relation without a
-     * line is one that turns the statement nowhere, and the statement is what the others say.
-     *
-     * @param readToTheEnd whether no rule on the position was left unread or refused
-     */
-    static Evaluated evaluate(Proposition stated, List<Axis> axes, int axis,
-                              boolean readToTheEnd) {
-        Set<String> used = new LinkedHashSet<>();
-        Settled settled = settledAmong(stated, axes, axis, used, readToTheEnd);
-        if (settled == null || settled == Settled.NOTHING) {
-            return null;
-        }
-        boolean[] holds = settled.yes();
-        for (int c = 0; c < holds.length; c++) {
-            if (!settled.yes()[c] && !settled.no()[c]) {
-                return null;
-            }
-        }
-        Map<ModelOccurrence, Boolean> every = new LinkedHashMap<>();
-        for (Cut cut : axes.get(axis).cuts()) {
-            for (LineOrigin origin : cut.origins()) {
-                if (origin instanceof LineOrigin.ComparisonOrigin guard) {
-                    boolean accounted = guard.part().isPresent()
-                            && used.contains(guard.part().get().part().relation());
-                    every.merge(guard.read().states(), accounted, Boolean::logicalAnd);
-                }
-            }
-        }
-        Set<ModelOccurrence> explained = new LinkedHashSet<>();
-        every.forEach((states, accounted) -> {
-            if (accounted) {
-                explained.add(states);
-            }
-        });
-        return new Evaluated(holds, explained);
-    }
-
-    /**
-     * For each class, whether a statement is known to hold throughout it and whether it is known
-     * to fail throughout it. A class that is neither is one the lines do not settle the statement
-     * on: a relation no line was drawn for, which a sibling joined with it may still decide.
-     */
-    private record Settled(boolean[] yes, boolean[] no) {
-
-        /** A relation no line was drawn for, which says nothing about any class. */
-        static final Settled NOTHING = new Settled(null, null);
-    }
-
-    private static Settled settledAmong(Proposition stated, List<Axis> axes, int axis,
-                                        Set<String> used, boolean readToTheEnd) {
-        int classes = axes.get(axis).classes().size();
-        switch (stated) {
-            case Proposition.Always(boolean holds) -> {
-                boolean[] yes = new boolean[classes];
-                boolean[] no = new boolean[classes];
-                Arrays.fill(holds ? yes : no, true);
-                return new Settled(yes, no);
-            }
-            case Proposition.Compared leaf -> {
-                for (Cut cut : axes.get(axis).cuts()) {
-                    for (LineOrigin origin : cut.origins()) {
-                        if (origin instanceof LineOrigin.ComparisonOrigin guard
-                                && guard.part().isPresent()
-                                && guard.part().get().part().relation().equals(leaf.heldKey())) {
-                            Cell cell = sideOf(axes, axis, cut, guard, true);
-                            if (cell == null) {
-                                return null;
-                            }
-                            used.add(leaf.heldKey());
-                            boolean[] yes = cell.allowed()[axis].clone();
-                            boolean[] no = new boolean[classes];
-                            for (int c = 0; c < classes; c++) {
-                                no[c] = !yes[c];
-                            }
-                            return leaf.holds() ? new Settled(yes, no) : new Settled(no, yes);
-                        }
-                    }
-                }
-                // Every comparison of the body read to its end and this relation is none of the
-                // lines drawn: turning on it turns the statement nowhere a line was asked for, so
-                // the statement is what the relations that were drawn say. Read in part, it may
-                // be a line that was never drawn, and nothing is said.
-                return readToTheEnd ? Settled.NOTHING : null;
-            }
-            case Proposition.All all -> {
-                boolean[] yes = filled(classes, true);
-                boolean[] no = filled(classes, false);
-                boolean any = false;
-                for (Proposition part : all.parts()) {
-                    Settled one = settledAmong(part, axes, axis, used, readToTheEnd);
-                    if (one == null) {
-                        return null;
-                    }
-                    if (one == Settled.NOTHING) {
-                        continue;
-                    }
-                    any = true;
-                    for (int c = 0; c < classes; c++) {
-                        yes[c] &= one.yes()[c];
-                        no[c] |= one.no()[c];
-                    }
-                }
-                return any ? new Settled(yes, no) : Settled.NOTHING;
-            }
-            case Proposition.Any some -> {
-                boolean[] yes = filled(classes, false);
-                boolean[] no = filled(classes, true);
-                boolean any = false;
-                for (Proposition part : some.parts()) {
-                    Settled one = settledAmong(part, axes, axis, used, readToTheEnd);
-                    if (one == null) {
-                        return null;
-                    }
-                    if (one == Settled.NOTHING) {
-                        continue;
-                    }
-                    any = true;
-                    for (int c = 0; c < classes; c++) {
-                        yes[c] |= one.yes()[c];
-                        no[c] &= one.no()[c];
-                    }
-                }
-                return any ? new Settled(yes, no) : Settled.NOTHING;
-            }
-            default -> {
-                return null;
-            }
-        }
-    }
-
-    private static boolean[] filled(int length, boolean value) {
-        boolean[] out = new boolean[length];
-        Arrays.fill(out, value);
-        return out;
     }
 
     /** The cut the rule stated at {@code states} drew, or null where it drew none. */

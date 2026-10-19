@@ -650,6 +650,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             in.dependencies().forkReads(fork, DemandReading.statedBy(condition,
                                     in.read(), in.conditions())));
                 }
+                appliedCondition(iff, applying, in);
                 Choice.Decides then = Choice.Decides.ofCondition(iff, true);
                 Choice.Decides els = Choice.Decides.ofCondition(iff, false);
                 walk(iff.then(), in, reads.choosing(then, symbols, in.newtypes()),
@@ -1219,6 +1220,30 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
 
     /**
+     * What the condition of {@code iff} states on every application of the closure around it,
+     * filed under the construct that decides it. A comparison written as the condition of an
+     * {@code if} in a closure is stated once and decided on each application; what a decision of
+     * it admits is asked of all of them ({@link ForkDependencies#appliedAt}).
+     */
+    private static void appliedCondition(Core.If iff, ClosureApplications applying, Body in) {
+        Optional<ModelOccurrence> decides = souther.compiler.reading.Condition.Arm
+                .decidingConstructOf(iff.cond())
+                .flatMap(at -> ModelOccurrence.statedAt(in.context().of(at)));
+        if (decides.isEmpty()) {
+            return;
+        }
+        switch (applying) {
+            case ClosureApplications.Each(var each) -> each.forEach(one ->
+                    in.dependencies().applied(decides.get(), in.conditions()
+                            .truth(iff.cond(), one.reads(), in.read()).proposition(),
+                            one.reached()));
+            case ClosureApplications.None _ -> { }
+            case ClosureApplications.Outside _, ClosureApplications.NotSaid _ ->
+                    in.dependencies().appliedNotSaid(decides.get());
+        }
+    }
+
+    /**
      * What the answer of {@code block}, applied as {@code applied} says, may turn on, filed under
      * the construct it answers with: where an operation's own body forks on what the closure
      * answers, that construct is what decides the fork ({@link ForkDependencies}).
@@ -1239,9 +1264,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return;
         }
         switch (applied) {
-            case ClosureApplications.Each(var each) -> each.forEach(one ->
-                    in.dependencies().answerReads(answers.get(), in.conditions()
-                            .truth(block.body(), one.reads(), in.read()).proposition()));
+            case ClosureApplications.Each(var each) -> each.forEach(one -> {
+                Proposition stated = in.conditions()
+                        .truth(block.body(), one.reads(), in.read()).proposition();
+                in.dependencies().answerReads(answers.get(), stated);
+                in.dependencies().applied(answers.get(), stated, one.reached());
+            });
             case ClosureApplications.None _ -> { }
             case ClosureApplications.Outside _, ClosureApplications.NotSaid _ ->
                     in.dependencies().answerUnbounded(answers.get());
