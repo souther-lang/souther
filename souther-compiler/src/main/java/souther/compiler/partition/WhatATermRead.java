@@ -190,6 +190,10 @@ sealed interface WhatATermRead {
      */
     static WhatATermRead amongEveryOccurrence(TermOrders on, BorderQuantity.Observation row,
                                               TermPath place) {
+        if (((NumericTerm.OccurrencesOfItsValue) on.term()).selection()
+                instanceof KeptOccurrences kept) {
+            return amongTheKept(on, row, place, kept);
+        }
         return switch (row.at(place)) {
             case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
                     new CameToNothing(ReadingGap.COULD_NOT_WALK);
@@ -203,6 +207,62 @@ sealed interface WhatATermRead {
                 case ObservationAtPoint.WroteNothing _,
                      ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
             };
+        };
+    }
+
+    /**
+     * The same among the occurrences the elements are kept for, in the one occurrence of the
+     * container the reading is in: the value this reading chose is counted among the values of
+     * the elements that meet the statement, and it is itself one of them or the reading has no
+     * number.
+     *
+     * <p>A reading that chose an element the statement drops is a reading of the row at which no
+     * entry stands, which is the row's own answer; one the statement could not be put to is a
+     * reading that could not be made.
+     */
+    private static WhatATermRead amongTheKept(TermOrders on, BorderQuantity.Observation row,
+                                              TermPath place, KeptOccurrences kept) {
+        if (!(row.at(place) instanceof WalkResult.Reached<ObservationAtPoint>(
+                ObservationAtPoint standing))) {
+            return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+        }
+        if (!(standing instanceof ObservationAtPoint.Value(ObservedValue own))) {
+            return new NothingWrittenThere();
+        }
+        WhatATermRead ownKept = keptOrNot(kept.perElement().at(row));
+        if (ownKept != null) {
+            return ownKept;
+        }
+        if (!(row.eachElementOf(kept.position()) instanceof WalkResult.Reached<
+                List<BorderQuantity.Observation>>(List<BorderQuantity.Observation> elements))) {
+            return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+        }
+        List<ObservedValue> values = new ArrayList<>();
+        for (BorderQuantity.Observation element : elements) {
+            AStatementAtARow.Answer answer = kept.perElement().at(element);
+            if (answer instanceof AStatementAtARow.Answer.CouldNotTell(var why)) {
+                return new CameToNothing(why.iterator().next());
+            }
+            if (!(answer instanceof AStatementAtARow.Answer.Holds)) {
+                continue;
+            }
+            if (!(element.at(place) instanceof WalkResult.Reached<ObservationAtPoint>(
+                    ObservationAtPoint.Value(ObservedValue value)))) {
+                return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            }
+            values.add(value);
+        }
+        return of(on.readAmong(own, values));
+    }
+
+    /** Null where the statement holds of the element, and what the reading comes to where it
+     *  does not or could not be put. */
+    private static WhatATermRead keptOrNot(AStatementAtARow.Answer answer) {
+        return switch (answer) {
+            case AStatementAtARow.Answer.Holds _ -> null;
+            case AStatementAtARow.Answer.Fails _ -> new NothingWrittenThere();
+            case AStatementAtARow.Answer.CouldNotTell(var why) ->
+                    new CameToNothing(why.iterator().next());
         };
     }
 

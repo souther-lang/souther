@@ -748,21 +748,43 @@ public sealed interface NumericTerm
      */
     final class OccurrencesOfItsValue implements NumericTerm {
 
-        private final RunSource.FlattenedOccurrences run;
+        private final RunSource run;
+        private final OccurrenceSelection selection;
 
-        private OccurrencesOfItsValue(RunSource.FlattenedOccurrences run) {
+        private OccurrencesOfItsValue(RunSource run, OccurrenceSelection selection) {
             this.run = Objects.requireNonNull(run, "counted among the values of a run");
+            this.selection = selection;
         }
 
         /** The number of times the value standing at a place of {@code run} occurs among all of
          *  them. */
         public static OccurrencesOfItsValue of(RunSource.FlattenedOccurrences run) {
-            return run == null ? null : new OccurrencesOfItsValue(run);
+            return run == null ? null : new OccurrencesOfItsValue(run, null);
+        }
+
+        /**
+         * The number of times the value standing at a place of {@code run} occurs among those of
+         * its occurrences {@code selection} keeps — or null where the run is neither the values
+         * of one container's elements nor of many containers'.
+         *
+         * <p>Only a value that is kept has a number: an occurrence the selection drops is no
+         * entry of the map a fold files, so it has no count to be compared with. Every kept
+         * occurrence counts at least itself.
+         */
+        public static OccurrencesOfItsValue of(RunSource run, OccurrenceSelection selection) {
+            return run instanceof RunSource.ProjectedOccurrences
+                    || run instanceof RunSource.FlattenedOccurrences
+                    ? new OccurrencesOfItsValue(run, selection) : null;
         }
 
         /** The run whose values are counted. */
-        public RunSource.FlattenedOccurrences run() {
+        public RunSource run() {
             return run;
+        }
+
+        /** Which of the occurrences are counted, or null where every one is. */
+        public OccurrenceSelection selection() {
+            return selection;
         }
 
         /** Where the values counted stand, which is where a reader is sent and no place the number
@@ -776,24 +798,34 @@ public sealed interface NumericTerm
          *  where that is no run of every occurrence. */
         @Override
         public OccurrencesOfItsValue movedTo(UnaryOperator<TermPath> moved) {
+            // A selection names places of the input it was read in, and moves with none of them.
+            if (selection != null) {
+                return null;
+            }
             RunSource at = run.movedTo(moved);
-            return at instanceof RunSource.FlattenedOccurrences flat ? new OccurrencesOfItsValue(flat)
-                    : null;
+            return at instanceof RunSource.FlattenedOccurrences flat
+                    ? new OccurrencesOfItsValue(flat, null) : null;
         }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof OccurrencesOfItsValue that && run.equals(that.run);
+            return other instanceof OccurrencesOfItsValue that && run.equals(that.run)
+                    && keyOf(selection).equals(keyOf(that.selection));
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(OccurrencesOfItsValue.class, run);
+            return Objects.hash(OccurrencesOfItsValue.class, run, keyOf(selection));
         }
 
         @Override
         public String toString() {
-            return "occurrences(" + run + ")";
+            return selection == null ? "occurrences(" + run + ")"
+                    : "occurrences(" + run + " kept by " + selection.key() + ")";
+        }
+
+        private static String keyOf(OccurrenceSelection selection) {
+            return selection == null ? "" : selection.key();
         }
     }
 

@@ -652,8 +652,22 @@ final class CardinalityComposer {
                                                      SequencedMap<RealizationTarget, AskedAt> demands,
                                                      Quantities measuring, SearchRegion within,
                                                      RuleReadingContext reading) {
-        NumericTerm.Multiplicity term = (NumericTerm.Multiplicity) alike.term();
-        TermPath container = term.container();
+        // Among the elements of one container, which is a count of the elements alike at a place;
+        // or among those of them a statement keeps, which is the same count with the statement
+        // put to every value chosen.
+        TermPath place;
+        KeptOccurrences kept = null;
+        switch (alike.term()) {
+            case NumericTerm.Multiplicity among -> place = among.place();
+            case NumericTerm.OccurrencesOfItsValue among -> {
+                place = among.subjectPath();
+                kept = (KeptOccurrences) among.selection();
+            }
+            default -> throw new IllegalStateException(alike.term() + " is no count of how often"
+                    + " an element's value occurs");
+        }
+        TermPath container = alike.term() instanceof NumericTerm.Multiplicity among
+                ? among.container() : place.containersHoldingIt().getFirst();
         RuleReadingSource ruleSource = reading.source();
         AskedAt asked = demands.get(alike);
         if (asked == null || asked.walking() == null) {
@@ -675,7 +689,7 @@ final class CardinalityComposer {
             return notChosen("`" + container + "` is no list or set written where it stands, to"
                     + " hold an element as often as asked (it stands as " + sourceType + ")");
         }
-        if (!term.place().equals(container.element())) {
+        if (!place.equals(container.element())) {
             return notChosen("an element of `" + container + "` is alike another at a place inside"
                     + " it, which is not one number the elements are chosen at");
         }
@@ -702,9 +716,20 @@ final class CardinalityComposer {
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        List<Place> candidates = carrier.counts()
-                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
-                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
+        List<Place> candidates;
+        if (kept == null) {
+            candidates = carrier.counts()
+                    ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
+                    : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
+        } else {
+            // The values near where the statement turns over, and of them the ones it keeps: a
+            // value chosen to be counted is one the container's elements are kept for.
+            candidates = keptValues(kept, own, container, place, carrier, run, unheld, unnamed);
+            if (candidates == null) {
+                return notChosen("where `" + kept.key() + "` turns over an element of `"
+                        + container + "` could not be worked out");
+            }
+        }
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> built = new ArrayList<>();
@@ -783,6 +808,12 @@ final class CardinalityComposer {
         }
         NumericSet wanted = asked.walking();
         List<TermPath> chain = place.containersHoldingIt();
+        // The elements of one container, the statement keeping some of them: composed as the
+        // count of the elements alike is.
+        if (chain.size() == 1 && term.selection() != null) {
+            return composeAlike(sourceType, keptApart, alike, null, demands, measuring, within,
+                    reading);
+        }
         if (chain.size() < 2 || !place.equals(chain.getLast().element())) {
             return notChosen("a value at `" + place + "` is not an element of the container it"
                     + " stands inside, so the elements are chosen at a place inside them");
@@ -850,6 +881,41 @@ final class CardinalityComposer {
         }
         return none("no containers of `" + place + "` this composed hold a value as often as"
                 + " asked");
+    }
+
+    /**
+     * The values near the places {@code kept}'s statement turns over at that the statement keeps,
+     * each put to it as the one element of {@code container}, or null where the places it turns
+     * over at could not be worked out.
+     */
+    private static List<Place> keptValues(KeptOccurrences kept, NumericTerm own,
+                                          TermPath container, TermPath place, Carrier carrier,
+                                          NumericDomain.Bounds run,
+                                          Set<CompositionCapacity> unheld,
+                                          Set<CompositionRepertoire> unnamed) {
+        List<Place> near;
+        if (carrier.counts()) {
+            List<ExactRatio> turns = kept.perElement().turnsAt(own, Map.of());
+            if (turns == null) {
+                return null;
+            }
+            near = valuesAlong(carrier, run, turns, MOST_ELEMENTS + 1, unheld, unnamed);
+        } else {
+            List<Place> turns = kept.perElement().placesTurnedAt(own, Map.of());
+            if (turns == null) {
+                return null;
+            }
+            near = valuesAlongAnOrder(carrier, run, turns, MOST_ELEMENTS + 1, unnamed);
+        }
+        List<Place> out = new ArrayList<>();
+        for (Place each : near) {
+            BorderQuantity.Observation row = new AnElementRead(container, place, Map.of(),
+                    List.of(carrier.valueOf(each)));
+            if (kept.perElement().at(row) instanceof AStatementAtARow.Answer.Holds) {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     /** Whether some value of {@code values} occurs as often as {@code wanted} holds. */
@@ -1673,7 +1739,7 @@ final class CardinalityComposer {
      * elements of another container — could not be walked, which a statement reads as not being
      * able to tell and never as failing.
      */
-    private record AnElementRead(TermPath container, TermPath element,
+    record AnElementRead(TermPath container, TermPath element,
                                  Map<TermPath, ObservedValue> written,
                                  List<ObservedValue> held) implements BorderQuantity.Observation {
 

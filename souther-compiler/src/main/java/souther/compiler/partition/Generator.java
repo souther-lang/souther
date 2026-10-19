@@ -8000,9 +8000,25 @@ public final class Generator {
                 yield any;
             }
             // A row stands at a point where some value's count among all of them comes to it.
-            case NumericTerm.OccurrencesOfItsValue _ -> {
+            case NumericTerm.OccurrencesOfItsValue occurrences -> {
                 boolean any = false;
-                for (NumericTerm.Reading read : on.readEachAmong(values)) {
+                List<souther.compiler.observe.ObservedValue> counted = values;
+                if (occurrences.selection() instanceof KeptOccurrences kept) {
+                    // Only the values the statement keeps are counted, and none a row cannot put
+                    // it to: a statement reading more than the value itself is not read back from
+                    // the values alone.
+                    counted = new ArrayList<>();
+                    for (souther.compiler.observe.ObservedValue value : values) {
+                        switch (kept.perElement().at(new CardinalityComposer.AnElementRead(
+                                kept.position(), occurrences.subjectPath(), Map.of(),
+                                List.of(value)))) {
+                            case AStatementAtARow.Answer.Holds _ -> counted.add(value);
+                            case AStatementAtARow.Answer.Fails _ -> { }
+                            case AStatementAtARow.Answer.CouldNotTell _ -> ofAnotherShape = true;
+                        }
+                    }
+                }
+                for (NumericTerm.Reading read : on.readEachAmong(counted)) {
                     switch (read) {
                         case NumericTerm.Reading.Number number ->
                                 any |= number.value().compareTo(at) == 0;

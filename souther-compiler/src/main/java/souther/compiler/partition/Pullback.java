@@ -55,6 +55,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.OccurrenceSelection;
 import souther.compiler.inputs.OnePerElement;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
@@ -4838,9 +4839,9 @@ final class Pullback {
         // A key read out of a component of a tuple the walk built of each element is the place the
         // walk gave that component, and no place inside it.
         int component = whole.at().tupleComponentRead(filed.key(), filed.element().binding());
-        TermPath elements = whole.at().everyOccurrenceKeyedAt(filed.walked(), component,
-                read.rules().symbols(), newtypes);
-        if (elements == null) {
+        InputReads.Occurrences every = whole.at().everyOccurrenceKeyedAt(filed.walked(), component,
+                this::theListAKeepingCallKeepsSomeOf, read.rules().symbols(), newtypes);
+        if (every == null) {
             return null;
         }
         OnePerElement.Answered key = component >= 0 ? OnePerElement.Answered.ITSELF
@@ -4848,15 +4849,58 @@ final class Pullback {
         if (key == null) {
             return null;
         }
-        TermPath place = key.at().from(elements);
+        TermPath place = key.at().from(every.keys());
         List<TermPath> holding = place.containersHoldingIt();
+        OccurrenceSelection selection = null;
+        if (!every.keptBy().isEmpty()) {
+            selection = every.keptBy().size() == 1
+                    ? keptByTheStatementOf(every.keptBy().getFirst(), whole.at()) : null;
+            if (selection == null) {
+                return null;
+            }
+        }
         return switch (holding.size()) {
             case 0 -> null;
-            case 1 -> NumericTerm.Multiplicity.of(holding.getFirst(), place);
+            case 1 -> selection == null ? NumericTerm.Multiplicity.of(holding.getFirst(), place)
+                    : NumericTerm.OccurrencesOfItsValue.of(
+                            RunSource.overTheOccurrencesAt(place), selection);
             default -> RunSource.overEveryOccurrenceAt(place)
-                    instanceof RunSource.FlattenedOccurrences every
-                    ? NumericTerm.OccurrencesOfItsValue.of(every) : null;
+                    instanceof RunSource.FlattenedOccurrences flat
+                    ? NumericTerm.OccurrencesOfItsValue.of(flat) : null;
         };
+    }
+
+    /**
+     * The list {@code call} keeps some of the elements of by a statement its answer meets, or
+     * null where it is any other call: an operation whose answer holds exactly the elements of an
+     * argument meeting something ({@link ALawRead#keepsWhatMeets}), and not one that drops
+     * repeats or cuts at a count.
+     */
+    private Core theListAKeepingCallKeepsSomeOf(Core call) {
+        if (!(Core.withoutStanding(call) instanceof Core.PreservedCall kept)) {
+            return null;
+        }
+        ValueName operation = kept.declared().operation();
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
+        return holds == null || built.permutesTheElementsOf() != null
+                || ALawRead.keepsWhatMeets(operation, holds) == null
+                || holds.position() >= kept.args().size() ? null
+                : kept.args().get(holds.position());
+    }
+
+    /** What {@code call}, which keeps some of the elements of a list, keeps them by, as the
+     *  statement about an element its size counts — or null where that was not read. */
+    private OccurrenceSelection keptByTheStatementOf(Core call, InputReads at) {
+        if (!(sizeOf(call, at) instanceof Sized.AsAForm(LinearForm<Quantity> size))
+                || !(soleQuantity(size) instanceof Quantity.HowManyMeet meeting)) {
+            return null;
+        }
+        // Put to rows under no behavior's name: the name labels the quantities a statement is
+        // read as, and nothing about a row turns on it.
+        return new KeptOccurrences(meeting.container(), meeting.ofTheElement(),
+                AStatementAtARow.of(meeting.ofTheElement(), "", read.quantities()));
     }
 
     /**

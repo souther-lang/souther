@@ -33,6 +33,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.function.Function;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -2201,26 +2202,47 @@ public final class InputReads {
      * closure answers is read down the same steps to a list at a place of the element it was
      * handed, and that element is one of every occurrence of the place the list flattened holds.
      *
+     * <p>A list some of whose elements an operation kept by a statement is crossed too, when
+     * {@code keeping} says so, and the call is handed back among {@code keptBy}: the key then
+     * counts only the occurrences the statement keeps. The statement is about the elements of the
+     * container the list was made from, so it is read only when nothing between it and that
+     * container made anything new of an element, and only for the elements of one container.
+     *
+     * @param keeping the list a call keeps some of the elements of by a statement, or null where
+     *                the call is no such operation
      * @return where the keys stand, among the places of the elements of the list: a place of an
      *         element, or of the value an element wears
      */
-    public TermPath everyOccurrenceKeyedAt(Core list, int component, Symbols symbols,
-                                           DeclarationNewtypes newtypes) {
+    public Occurrences everyOccurrenceKeyedAt(Core list, int component,
+                                              Function<Core, Core> keeping, Symbols symbols,
+                                              DeclarationNewtypes newtypes) {
         ElementProjection projected = new ElementProjection(List.of());
         Core asked = list;
         int pending = component;
+        List<Core> keptBy = new ArrayList<>();
+        // Whether anything new was made of an element beneath the first operation that kept some.
+        boolean madeNewBeneath = false;
         Set<BindingId> met = new HashSet<>();
         while (true) {
             Denotation standing = standing(asked, symbols, newtypes);
             if (standing.at().everyElementOf(standing.value(), newtypes)
                     instanceof PathResolution.At(TermPath elements)) {
-                return pending < 0 ? projected.from(elements) : null;
+                return pending >= 0
+                        || !keptBy.isEmpty() && (madeNewBeneath
+                                || elements.containersHoldingIt().size() != 1) ? null
+                        : new Occurrences(projected.from(elements), keptBy);
             }
             if (Core.withoutStanding(standing.value()) instanceof Core.Read name
                     && !met.add(name.binding())) {
                 return null;
             }
             InputReads where = standing.at();
+            Core beneathKept = keeping == null ? null : keeping.apply(standing.value());
+            if (beneathKept != null) {
+                keptBy.add(standing.value());
+                asked = beneathKept;
+                continue;
+            }
             if (pending >= 0) {
                 TupleStep tuple = throughATupleMap(standing.value(), pending, where, symbols,
                         newtypes);
@@ -2228,6 +2250,7 @@ public final class InputReads {
                     projected = tuple.component().then(projected);
                     asked = tuple.from();
                     pending = -1;
+                    madeNewBeneath |= !keptBy.isEmpty();
                     continue;
                 }
             }
@@ -2237,9 +2260,29 @@ public final class InputReads {
             if (step != null) {
                 projected = step.answered().at().then(projected);
                 asked = step.from();
+                madeNewBeneath |= !keptBy.isEmpty() && !step.answered().at().fields().isEmpty();
                 continue;
             }
-            return flattenedKeysAt(standing, projected, pending, symbols, newtypes);
+            if (!keptBy.isEmpty()) {
+                return null;
+            }
+            TermPath flattened = flattenedKeysAt(standing, projected, pending, symbols, newtypes);
+            return flattened == null ? null : new Occurrences(flattened, List.of());
+        }
+    }
+
+    /**
+     * Where the keys of a list stand, and the calls that kept some of its occurrences by a
+     * statement.
+     *
+     * @param keys   the place whose every occurrence the keys are one each of
+     * @param keptBy the calls whose statements the occurrences counted must meet, outermost first
+     */
+    public record Occurrences(TermPath keys, List<Core> keptBy) {
+
+        public Occurrences {
+            Objects.requireNonNull(keys, "an answer about where the keys stand says where");
+            keptBy = List.copyOf(keptBy);
         }
     }
 

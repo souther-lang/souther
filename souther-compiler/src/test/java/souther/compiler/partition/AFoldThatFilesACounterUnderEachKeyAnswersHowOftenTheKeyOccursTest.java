@@ -918,6 +918,99 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         }
     }
 
+    private static String modelOfKept(String keys, String more) {
+        return """
+                module example.popular
+
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc),
+                        Map.empty, %s)
+
+                behavior popular : (xs: List<String>) -> Map<String, Int>
+
+                let popular (xs) =
+                    Map.filterEntries((_, count) -> count >= 3, countsOf(xs))
+                %s""".formatted(keys, more);
+    }
+
+    /**
+     * A key a filter dropped has no entry, and one it kept is counted among the occurrences it
+     * kept: rows written by hand meet the points of the line where the kept keys occur as often,
+     * and a key dropped as often as the line asks is no entry at all.
+     */
+    @Test
+    void aKeyIsCountedAmongTheOccurrencesAFilterKeptAndHasNoEntryWhereItWasDropped() {
+        String examples = """
+
+                example popular
+                    | "on" : (["ab", "ab", "ab"]) -> [("ab", 3)]
+                    | "off" : (["ab", "ab", "a", "a", "a"]) -> []
+                    | "past" : (["ab", "ab", "ab", "ab"]) -> [("ab", 4)]
+                    | "short" : (["ab"]) -> []
+                    | "dropped" : (["a", "a", "a"]) -> []
+                """;
+        Compilation compilation = measured(modelOfKept(
+                "List.filter(k -> String.length(k) > 1, xs)", examples));
+        assertTrue(json(compilation).contains("occurrences(xs[*] kept by"),
+                () -> report(compilation));
+        assertEquals(List.of("in", "off", "on", "out"), pointsHitOnTheCount(compilation),
+                () -> report(compilation));
+
+        // The key the filter drops, as often as the line asks and nowhere else, is no row on it.
+        Compilation onlyDropped = measured(modelOfKept(
+                "List.filter(k -> String.length(k) > 1, xs)", """
+
+                example popular
+                    | "dropped" : (["a", "a", "a"]) -> []
+                    | "short" : (["ab"]) -> []
+                """));
+        assertEquals(List.of("out"), pointsHitOnTheCount(onlyDropped),
+                () -> report(onlyDropped));
+    }
+
+    /**
+     * What a filter keeps is decided by the element and not by the key: of the elements with one
+     * label, the ones past the weight are counted and the rest are not, so a label held twice
+     * among the kept is at the count two however often it is held in all.
+     */
+    @Test
+    void theElementsWithOneKeyAreCountedOnlyWhereTheFilterKeptThem() {
+        String model = """
+                module example.popular
+
+                data Item = { label: String, weight: Int }
+
+                let countsOf (xs: List<Item>): Map<String, Int> =
+                    List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty,
+                        List.map(i -> i.label, List.filter(i -> i.weight > 1, xs)))
+
+                behavior popular : (xs: List<Item>) -> Map<String, Int>
+
+                let popular (xs) =
+                    Map.filterEntries((_, count) -> count >= 3, countsOf(xs))
+
+                example popular
+                    | "on" : ([Item { label = "a", weight = 2 }, Item { label = "a", weight = 2 },
+                        Item { label = "a", weight = 2 }]) -> [("a", 3)]
+                    | "off" : ([Item { label = "a", weight = 2 }, Item { label = "a", weight = 2 },
+                        Item { label = "a", weight = 1 }, Item { label = "a", weight = 1 }]) -> []
+                """;
+        Compilation compilation = measured(model);
+        assertTrue(json(compilation).contains("occurrences(xs[*].label kept by"),
+                () -> report(compilation));
+        assertEquals(List.of("off", "on"), pointsHitOnTheCount(compilation),
+                () -> report(compilation));
+    }
+
+    /** The points of the line on how often a key occurs among those kept that some row is at. */
+    private static List<String> pointsHitOnTheCount(Compilation compilation) {
+        return bordersOf(compilation).stream()
+                .filter(border -> border.path("axis").asString().contains("occurrences"))
+                .flatMap(border -> border.path("items").valueStream())
+                .filter(item -> item.path("hit").asBoolean())
+                .map(item -> item.path("point").asString()).sorted().toList();
+    }
+
     private static int mostOften(List<List<String>> touches) {
         return occurrencesAcross(touches).values().stream().mapToInt(Integer::intValue).max()
                 .orElse(0);
