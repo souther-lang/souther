@@ -54,6 +54,24 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.TermRealizations.DAYS_THE_LONGEST_MONTH_HAS",
                     "how far the days run in the longest month, which is as far as a day runs"),
 
+            // The calendar's cycle and the stretch of years a proof about it is made over: what has
+            // to be looked at for an answer to hold of every year, not how far a search goes.
+            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.FIRST_YEAR",
+                    "where the four hundred years that stand for every year start"),
+            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.YEARS_OF_A_CYCLE",
+                    "how many years the calendar's pattern repeats over"),
+            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.LAST_DAY_IN_EVERY_MONTH",
+                    "the last day every month of every year has"),
+            Map.entry("souther.compiler.partition.EveryPatternOfYears.WIDTH",
+                    "how many years a stretch holds, which is two cycles of the calendar"),
+            Map.entry("souther.compiler.partition.EveryPatternOfYears.MARGIN",
+                    "how far inside the calendar's first and last years a stretch lies"),
+            // A statement of more dates than this is not asked, and nothing is then claimed of
+            // the years or the months and days it names; no search stops at it.
+            Map.entry("souther.compiler.partition.UndividedByARelation"
+                            + ".MOST_DATES_A_STATEMENT_IS_ASKED_OF",
+                    "how many dates a statement may name for its parts to be looked through"),
+
             // A place in a list rather than an amount of anything.
             Map.entry("souther.compiler.partition.Generator.NOT_HERE",
                     "no position, which is what an index that found none is"),

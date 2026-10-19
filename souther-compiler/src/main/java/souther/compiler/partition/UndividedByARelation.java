@@ -21,6 +21,7 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -487,9 +488,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   anything else
      * @param elementsOf the container it asks what some or every element of meets, or null where
      *                   it asks nothing of the elements of one
+     * @param leavesAlone which parts of the dates it names it says nothing of: the years where it
+     *                   states months and days and some month and day it lets through stands in
+     *                   every year alike, the months and days where it states years and holds
+     *                   over every year of the calendar's cycle together
      */
     private record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
-                          TermPath elementsOf) {
+                          TermPath elementsOf, PartsLeftAlone leavesAlone) {
+
+        /** The parts of a date a statement of the other parts says nothing of. */
+        enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
+
+        OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+               TermPath elementsOf) {
+            this(positions, whatStands, relation, elementsOf, PartsLeftAlone.NONE);
+        }
+
+        OnAWay leavingAlone(PartsLeftAlone parts) {
+            return new OnAWay(positions, whatStands, relation, elementsOf, parts);
+        }
+
+        /** Whether this says nothing of {@code term} because it is a part of a date this leaves
+         *  alone. */
+        boolean leavesAlone(NumericTerm.FromOnePosition term) {
+            return term instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
+                    && switch (leavesAlone) {
+                        case NONE -> false;
+                        case YEARS -> part == TakenAs.DatePart.YEAR;
+                        case MONTHS_AND_DAYS -> part != TakenAs.DatePart.YEAR;
+                    };
+        }
 
         /** What it states as a form of the input's numbers held against nought, or null where it
          *  states anything else. */
@@ -544,7 +573,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
                                    List<Carrier> carriers, SearchRegion region,
-                                   List<OnAWay> conditions, boolean heldWhole) {
+                                   List<OnAWay> stated, boolean heldWhole) {
+        List<OnAWay> conditions = leavingPartsAlone(stated, read);
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(read, sources, carriers, region, conditions, stating, heldWhole);
@@ -606,6 +636,127 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return new WhatItLeaves(out, settled);
+    }
+
+    /**
+     * {@code conditions}, with each statement of one kind of part of a date marked that leaves the
+     * other kind alone.
+     *
+     * <p>A statement of months and days leaves the years alone where some month and day it lets
+     * through stands in every year alike, for every date it names: a row at that month and day can
+     * be put in any years, and the statement holds there whatever they are. The years asked are
+     * those the sides take of the date, each after its own move, and a move that takes the date to
+     * another year in some years is one the month and day are not alike for.
+     *
+     * <p>A statement of years leaves the months and days alone where it holds over every pattern
+     * of the calendar's cycle together: the leap years and the shifts of one date from another
+     * repeat every four hundred years, so a row at any months and days can be put in years that
+     * hold the statement.
+     *
+     * <p>Both are asked of a date only where the declarations leave it every date and no rule names
+     * it, so that no rule ties its parts to a number of another place.
+     */
+    private List<OnAWay> leavingPartsAlone(List<OnAWay> conditions, InputReading read) {
+        List<OnAWay> out = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            out.add(leavesTheYears(each, read) ? each.leavingAlone(OnAWay.PartsLeftAlone.YEARS)
+                    : leavesTheMonthsAndDays(each, read)
+                    ? each.leavingAlone(OnAWay.PartsLeftAlone.MONTHS_AND_DAYS) : each);
+        }
+        return out;
+    }
+
+    private boolean leavesTheMonthsAndDays(OnAWay statement, InputReading read) {
+        TakenConstraint.Affine affine = statement.affine();
+        if (affine == null) {
+            return false;
+        }
+        Map<TermPath, Integer> dates = new LinkedHashMap<>();
+        List<EveryPatternOfYears.Year> years = new ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : affine.form().coefs().entrySet()) {
+            if (!(each.getKey() instanceof NumericTerm.TakenOf taken)
+                    || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
+                    || part != TakenAs.DatePart.YEAR) {
+                return false;
+            }
+            Source source = sourceOf(taken, read);
+            if (source == null || !source.takes().every() || source.named()) {
+                return false;
+            }
+            int date = dates.computeIfAbsent(taken.position(), _ -> dates.size());
+            years.add(new EveryPatternOfYears.Year(date, each.getValue(),
+                    taken.transformation().translation().offsetDays()));
+        }
+        return !years.isEmpty() && dates.size() <= MOST_DATES_A_STATEMENT_IS_ASKED_OF
+                && EveryPatternOfYears.heldBy(years, dates.size(), affine.form().constant(),
+                        affine.rel());
+    }
+
+    /** The dates a statement may be of for its months and days to be looked through one by one:
+     *  the choices multiply, each date having a few hundred. */
+    private static final int MOST_DATES_A_STATEMENT_IS_ASKED_OF = 2;
+
+    private boolean leavesTheYears(OnAWay statement, InputReading read) {
+        TakenConstraint.Affine affine = statement.affine();
+        if (affine == null) {
+            return false;
+        }
+        Map<TermPath, List<NumericTerm.TakenOf>> ofEachDate = new LinkedHashMap<>();
+        for (NumericTerm each : affine.form().coefs().keySet()) {
+            if (!(each instanceof NumericTerm.TakenOf taken)
+                    || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
+                    || part == TakenAs.DatePart.YEAR) {
+                return false;
+            }
+            Source source = sourceOf(taken, read);
+            if (source == null || !source.takes().every() || source.named()) {
+                return false;
+            }
+            ofEachDate.computeIfAbsent(taken.position(), _ -> new ArrayList<>()).add(taken);
+        }
+        if (ofEachDate.isEmpty() || ofEachDate.size() > MOST_DATES_A_STATEMENT_IS_ASKED_OF) {
+            return false;
+        }
+        List<List<Map<NumericTerm.TakenOf, ExactRatio>>> standing = new ArrayList<>();
+        for (Map.Entry<TermPath, List<NumericTerm.TakenOf>> date : ofEachDate.entrySet()) {
+            List<DateTranslation> yearShifts = new ArrayList<>();
+            for (Side side : sides) {
+                if (side.term() instanceof NumericTerm.TakenOf taken
+                        && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
+                        && part == TakenAs.DatePart.YEAR && taken.position().equals(date.getKey())) {
+                    yearShifts.add(taken.transformation().translation());
+                }
+            }
+            List<Map<NumericTerm.TakenOf, ExactRatio>> alike =
+                    DatesThatStandInEveryYear.of(date.getValue(), yearShifts);
+            if (alike.isEmpty()) {
+                return false;
+            }
+            standing.add(alike);
+        }
+        return someHolds(affine, standing, 0, affine.form().constant());
+    }
+
+    /** Whether the statement holds at some choice of one month and day for each date, the
+     *  dates before {@code date} having come to {@code sofar}. */
+    private static boolean someHolds(TakenConstraint.Affine affine,
+                                     List<List<Map<NumericTerm.TakenOf, ExactRatio>>> standing,
+                                     int date, ExactRatio sofar) {
+        if (date == standing.size()) {
+            return affine.rel().holds(sofar.signum());
+        }
+        for (Map<NumericTerm.TakenOf, ExactRatio> each : standing.get(date)) {
+            ExactRatio sum = sofar;
+            for (Map.Entry<NumericTerm.TakenOf, ExactRatio> part : each.entrySet()) {
+                ExactRatio weight = affine.form().coefs().get(part.getKey());
+                sum = weight == null || sum == null ? sum
+                        : part.getValue().times(weight).flatMap(sum::plus).orNull();
+            }
+            if (sum != null && someHolds(affine, standing, date + 1, sum)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -754,8 +905,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Way way = each.term() == null || !heldWhole ? Way.TIES
                     : wayOf(each.term(), stating.get(i));
             Source source = way == Way.TIES ? null : sources.get(i);
+            // A statement shown to leave a part alone is taken into the region, which then does not
+            // answer for that part: it is answered by what the declarations leave it.
+            SearchRegion answering = way == Way.UNTOUCHED && conditions.stream()
+                    .anyMatch(statement -> statement.leavesAlone(each.term()))
+                    ? read.quantities().region() : region;
             NumericDomain.Bounds realizes = source == null ? null
-                    : asARelationReadsIt(realized(each.term(), source, region, way),
+                    : asARelationReadsIt(realized(each.term(), source, answering, way),
                             carriers.get(i));
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.term() instanceof NumericTerm.ValueOf ? source.takes() : null;
@@ -1085,7 +1241,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean saysNothingOfTheValuesOf(NumericTerm.FromOnePosition term,
                                                     OnAWay statement, boolean named) {
-        return statement.saysOnlyWhatStandsAround(term)
+        return statement.saysOnlyWhatStandsAround(term) || statement.leavesAlone(term)
                 || (!named && statement.asksOnlyOtherPlacesOfTheElement(term));
     }
 
