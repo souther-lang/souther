@@ -35,21 +35,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AStopThisCompilerMadeIsSaidOnceTest {
 
     /**
-     * A sum one of whose cases holds the sum again.
+     * A list of a type that comes back to itself with no base.
      *
-     * <p>The walk cannot enter it, because its type comes back to itself with no base to read a
-     * shape from. The rules written about the position are why nothing under it took them: the
-     * stop is the one fact and they are the same fact said from the other end.
+     * <p>The walk cannot enter an element, because there is no shape to read under it. This is the
+     * stop at a position inside a container, which is where a handing over of rules would be owed
+     * if the declaration had any to hand on.
+     *
+     * <p>No model this compiler accepts leaves both facts: the stops that remain are a type with
+     * nothing to read, and such a type states no rules. The pair is held by the arithmetic over
+     * the arms below, which builds the residues it cannot compile.
      */
     private static final String A_TYPE_NO_SHAPE_CAN_BE_READ_FROM = """
             module probe.again
 
             data Ok
             data Cyclic = Cyclic
+            data Holder = { xs: List<Cyclic>, n: Int }
+                invariant n >= 0
 
-            behavior f : (c: Cyclic) -> Ok
+            behavior f : (h: Holder) -> Ok
                 constructs Ok
-            let f (c) = Ok
+            let f (h) = Ok
             """;
 
     /**
