@@ -81,6 +81,33 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
+     * {@code a + c < b} with {@code a} and {@code b} from one to twelve and {@code c} from one to
+     * thirty-one: {@code a} at eleven or twelve fails it whatever the others hold, and below that
+     * the other two together come to a sum {@code c - b} from minus eleven to thirty, which is
+     * either side of every level {@code a} would need. No one of them does alone, and the other
+     * terms count together only where each is shown to take its ends and none is tied to another.
+     */
+    @Test
+    void severalTermsTogetherLeaveTheRestEitherWayWhereNoOneOfThemDoes() {
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var c = term("c", 1, run(1L, 31L), run(1L, 31L));
+        var b = term("b", -1, run(1L, 12L), run(1L, 12L));
+        assertEquals(settledIn(1L, 12L, settled(11L, 12L, false)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.LT));
+        assertEquals(settledIn(1L, 31L, settled(11L, 31L, false)),
+                leavesOf(List.of(a, c, b), 1, 0, Rel.LT));
+        assertEquals(settledIn(1L, 12L, settled(1L, 2L, false)),
+                leavesOf(List.of(a, c, b), 2, 0, Rel.LT));
+
+        var unseenC = term("c", 1, run(1L, 31L), null);
+        assertNull(leavesOf(List.of(a, unseenC, b), 0, 0, Rel.LT));
+
+        assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(a, c, b), 0, ExactRatio.of(0),
+                Rel.LT, String::equals, (one, other) -> one + other != 1,
+                Granularity.DISCRETE, GREATEST_INT));
+    }
+
+    /**
      * {@code n - len <= 0}, {@code len} from nought on: every {@code n} at or below nought holds
      * it whatever {@code len} is, and from one on {@code len} is either side of it. Where
      * {@code len} may be anything, nothing is on one side, and {@code n} is undivided.
