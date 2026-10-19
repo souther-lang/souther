@@ -224,51 +224,45 @@ final class StatementsOnClasses {
     /** What is known of {@code stated} on each class, or null where it is not a statement of
      *  relations. */
     Settled settled(Proposition stated) {
-        switch (stated) {
-            case Proposition.Always(boolean holds) -> {
-                return new Settled(filled(holds), filled(!holds));
-            }
-            case Proposition.Compared leaf -> {
-                Settled of = known.get(leaf.heldKey());
-                if (of == null) {
-                    return new Settled(filled(false), filled(false));
-                }
-                return leaf.holds() ? of : new Settled(of.no(), of.yes());
-            }
-            case Proposition.All all -> {
-                boolean[] yes = filled(true);
-                boolean[] no = filled(false);
-                for (Proposition part : all.parts()) {
-                    Settled one = settled(part);
-                    if (one == null) {
-                        return null;
-                    }
-                    for (int c = 0; c < classes; c++) {
-                        yes[c] &= one.yes()[c];
-                        no[c] |= one.no()[c];
-                    }
-                }
-                return new Settled(yes, no);
-            }
-            case Proposition.Any any -> {
-                boolean[] yes = filled(false);
-                boolean[] no = filled(true);
-                for (Proposition part : any.parts()) {
-                    Settled one = settled(part);
-                    if (one == null) {
-                        return null;
-                    }
-                    for (int c = 0; c < classes; c++) {
-                        yes[c] |= one.yes()[c];
-                        no[c] &= one.no()[c];
-                    }
-                }
-                return new Settled(yes, no);
-            }
-            default -> {
+        return switch (stated) {
+            case Proposition.Always(boolean holds) ->
+                    new Settled(filled(holds), filled(!holds));
+            case Proposition.Compared leaf -> ofARelation(leaf);
+            case Proposition.All all -> joined(all.parts(), true);
+            case Proposition.Any any -> joined(any.parts(), false);
+            default -> null;
+        };
+    }
+
+    /** What is known of a relation: what was drawn or implied for it, and nothing where neither
+     *  was. */
+    private Settled ofARelation(Proposition.Compared leaf) {
+        Settled of = known.get(leaf.heldKey());
+        if (of == null) {
+            return new Settled(filled(false), filled(false));
+        }
+        return leaf.holds() ? of : new Settled(of.no(), of.yes());
+    }
+
+    /**
+     * What is known of statements joined: a conjunction holds where every part does and fails
+     * where any part does, and a disjunction the other way about. Null where a part is not a
+     * statement of relations.
+     */
+    private Settled joined(List<Proposition> parts, boolean conjunction) {
+        boolean[] yes = filled(conjunction);
+        boolean[] no = filled(!conjunction);
+        for (Proposition part : parts) {
+            Settled one = settled(part);
+            if (one == null) {
                 return null;
             }
+            for (int c = 0; c < classes; c++) {
+                yes[c] = conjunction ? yes[c] & one.yes()[c] : yes[c] | one.yes()[c];
+                no[c] = conjunction ? no[c] | one.no()[c] : no[c] & one.no()[c];
+            }
         }
+        return new Settled(yes, no);
     }
 
     /**
