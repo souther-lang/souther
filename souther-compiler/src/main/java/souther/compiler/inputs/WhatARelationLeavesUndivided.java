@@ -1003,27 +1003,27 @@ public final class WhatARelationLeavesUndivided {
                 || relation == Rel.NE) {
             return false;
         }
-        Interval over = within != null ? within : Interval.of(terms.get(at).holds());
-        Interval weighedOver = over == null ? null : over.times(terms.get(at).weight());
-        if (!isClosed(over) || weighedOver == null) {
+        Term<P> it = terms.get(at);
+        Interval over = within != null ? within : attained(it.holds(), it.spacing());
+        Interval weighedOver = over == null || over.lower() == null || over.upper() == null
+                ? null : over.times(it.weight());
+        if (weighedOver == null) {
             return false;
         }
         Interval sum = Interval.at(constant);
-        ExactRatio size = sizeOf(over, terms.get(at).weight(), constant.abs());
+        ExactRatio size = sizeOf(over, it.weight(), constant.abs());
         for (int i = 0; i < terms.size() && size != null; i++) {
             if (i == at) {
                 continue;
             }
             Term<P> each = terms.get(i);
-            Interval taken = each.realizes() == null ? null : Interval.of(each.realizes());
+            Interval taken = each.realizes() == null ? null
+                    : attained(each.realizes(), each.spacing());
             if (!free[i] || !isClosed(taken) || !each.weight().isWhole()) {
                 return false;
             }
             sum = sum.plus(taken.times(each.weight()));
-            size = sizeOf(taken, each.weight(), size);
-            if (sum == null) {
-                return false;
-            }
+            size = sum == null ? null : sizeOf(taken, each.weight(), size);
         }
         if (size == null || (jointly.greatest() != null
                 && size.compareTo(ExactRatio.of(jointly.greatest())) > 0)) {
@@ -1034,9 +1034,32 @@ public final class WhatARelationLeavesUndivided {
         if (atLeast == null || atMost == null) {
             return false;
         }
+        // A run the term leaves its end out of is never at that end, so a side that asks to be
+        // strictly past the level is asked only to reach it there.
         boolean strictAtLeast = relation == Rel.LT || relation == Rel.GE;
-        return (strictAtLeast ? atLeast.signum() < 0 : atLeast.signum() <= 0)
-                && (strictAtLeast ? atMost.signum() >= 0 : atMost.signum() > 0);
+        boolean farEndLeftOut = !weighedOver.upper().inclusive();
+        boolean nearEndLeftOut = !weighedOver.lower().inclusive();
+        return (strictAtLeast ? atLeast.signum() < 0 || (farEndLeftOut && atLeast.signum() == 0)
+                        : atLeast.signum() <= 0)
+                && (strictAtLeast ? atMost.signum() >= 0
+                        : atMost.signum() > 0 || (nearEndLeftOut && atMost.signum() == 0));
+    }
+
+    /**
+     * The run of values {@code bounds} is shown to hold, with an end it leaves out of a whole run
+     * moved in to the whole number it stops at, so that {@code 1 <= x < 32} and
+     * {@code 1 <= x <= 31} are one run — or null where an end is no number. Where the values are
+     * not whole an end left out stays left out.
+     */
+    private static Interval attained(NumericDomain.Bounds bounds, Granularity spacing) {
+        if (spacing != Granularity.DISCRETE) {
+            return Interval.of(bounds);
+        }
+        WholeRun whole = WholeRun.ofTheValues(bounds);
+        if (whole == null || whole.low == null || whole.high == null) {
+            return null;
+        }
+        return new Interval(ExactRatio.of(whole.low), ExactRatio.of(whole.high));
     }
 
     /** Whether {@code run} is a run of numbers that holds both its ends. */
@@ -1788,7 +1811,13 @@ public final class WhatARelationLeavesUndivided {
             return upper == null ? null : upper.at();
         }
 
+        /** The run of the sums of a value of this and a value of {@code other}, or null where an
+         *  end is no number — or {@code other} is none, which is what a product that held no
+         *  number is. */
         Interval plus(Interval other) {
+            if (other == null) {
+                return null;
+            }
             ExactCut least = lower == null || other.lower == null ? null
                     : ExactCut.meetingBoth(lower, other.lower).orNull();
             ExactCut most = upper == null || other.upper == null ? null

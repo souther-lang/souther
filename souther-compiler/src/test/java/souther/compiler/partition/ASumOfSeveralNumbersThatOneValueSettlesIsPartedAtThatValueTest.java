@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
@@ -55,6 +56,46 @@ class ASumOfSeveralNumbersThatOneValueSettlesIsPartedAtThatValueTest {
         String report = reportOf(NEAR_THE_GREATEST, "(a: A, b: B, c: Bit, d: Bit)",
                 "a.v < b.v + 3 * c.v + 4 * d.v");
         assertTrue(report.contains(NOT_SHOWN), report);
+    }
+
+    /** Each of the three is parted where the others, together, stop reaching both sides; the
+     *  fourth, in no comparison, is parted by nothing. */
+    @Test
+    void eachNumberIsPartedAtTheValueThatSettlesTheComparison() {
+        String parameters = "(a: M, b: M, c: D, d: D)";
+        String condition = "a.v + c.v < b.v";
+        assertEquals(List.of("a.v/1 <= x < 11", "a.v/11 <= x <= 12"),
+                classesAt(MONTHS_AND_DAYS, parameters, condition, "a.v"));
+        assertEquals(List.of("b.v/1 <= x <= 2", "b.v/2 < x <= 12"),
+                classesAt(MONTHS_AND_DAYS, parameters, condition, "b.v"));
+        assertEquals(List.of("c.v/1 <= x < 11", "c.v/11 <= x <= 31"),
+                classesAt(MONTHS_AND_DAYS, parameters, condition, "c.v"));
+    }
+
+    /** {@code v < 32} and {@code v <= 31} hold the same whole numbers, so they part the same. */
+    @Test
+    void aRunWhoseUpperEndIsLeftOutIsTheRunOfTheWholeNumbersBelowIt() {
+        String leftOut = MONTHS_AND_DAYS.replace("v <= 31", "v < 32");
+        assertEquals(List.of("a.v/1 <= x < 11", "a.v/11 <= x <= 12"),
+                classesAt(leftOut, "(a: M, b: M, c: D, d: D)", "a.v + c.v < b.v", "a.v"));
+    }
+
+    private static List<String> classesAt(String declarations, String parameters,
+                                          String condition, String path) {
+        Compilation compilation = Compilation.ofSource("module demo\n\n" + declarations + """
+
+                behavior f : %s -> Int
+
+                let f %s =
+                    if %s then 1 else 0
+                """.formatted(parameters, parameters.replaceAll(": [A-Za-z]+", ""), condition),
+                "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        PartitionEvidence evidence =
+                compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
+        return evidence.axes().stream().filter(axis -> axis.path().equals(path))
+                .flatMap(axis -> axis.classes().stream()).toList();
     }
 
     private static String reportOf(String declarations, String parameters, String condition) {

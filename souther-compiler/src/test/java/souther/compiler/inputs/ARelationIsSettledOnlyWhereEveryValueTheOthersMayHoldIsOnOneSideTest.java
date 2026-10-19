@@ -7,6 +7,7 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided.Line;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.SettledRun;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -15,6 +16,7 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -105,6 +107,84 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(a, c, b), 0, ExactRatio.of(0),
                 Rel.LT, String::equals, (one, other) -> one + other != 1,
                 Granularity.DISCRETE, GREATEST_INT));
+    }
+
+    /**
+     * {@code a + c <= b} fails from twelve on and {@code a + c > b} holds there: the side that
+     * asks to be strictly past the level is the other one than for {@code <}, and a run of one
+     * value is a class.
+     */
+    @Test
+    void theStrictSideOfTheLevelFollowsTheRelation() {
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var c = term("c", 1, run(1L, 31L), run(1L, 31L));
+        var b = term("b", -1, run(1L, 12L), run(1L, 12L));
+        assertEquals(settledIn(1L, 12L, settled(12L, 12L, false)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.LE));
+        assertEquals(settledIn(1L, 12L, settled(12L, 12L, true)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.GT));
+    }
+
+    /**
+     * The upper end of a run of whole numbers that is left out is the whole number below it, so
+     * {@code c} below thirty-two is {@code c} to thirty-one.
+     */
+    @Test
+    void aRunOfWholeNumbersLeavingItsUpperEndOutIsTheRunBelowIt() {
+        var leftOut = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1L)),
+                new Endpoint(Count.of(32L), false));
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var c = term("c", 1, leftOut, leftOut);
+        var b = term("b", -1, run(1L, 12L), run(1L, 12L));
+        assertEquals(settledIn(1L, 12L, settled(11L, 12L, false)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.LT));
+    }
+
+    /**
+     * {@code a < b + c} over decimals, {@code a} from nought to ten and the others to five: at ten
+     * the relation fails whatever they are, and below it {@code b} and {@code c} at nought fail it
+     * and at five hold it — although the values left, nought up to but not ten, end open.
+     */
+    @Test
+    void theValuesLeftBelowAnEndAValueSettlesAreAskedWithTheEndLeftOut() {
+        var a = denseTerm("a", 1, run(0L, 10L), run(0L, 10L));
+        var b = denseTerm("b", -1, run(0L, 5L), run(0L, 5L));
+        var c = denseTerm("c", -1, run(0L, 5L), run(0L, 5L));
+        Leaves.Settled out = (Leaves.Settled) WhatARelationLeavesUndivided.leavesOf(
+                List.of(a, b, c), 0, ExactRatio.of(0), Rel.LT, String::equals,
+                (one, other) -> true, Granularity.DENSE, null);
+        assertEquals(1, out.runs().size());
+        assertEquals(false, out.runs().get(0).holds());
+        assertEquals(0, out.runs().get(0).from().at().compareTo(ExactRatio.of(10)));
+    }
+
+    /**
+     * A product the arithmetic can not hold is no run, and the reading says nothing and does not
+     * throw: the weight is the greatest the exponent of an exact number allows beside an end that
+     * has none to spare.
+     */
+    @Test
+    void aProductNoNumberHoldsLeavesTheReadingUnsaid() {
+        ExactRatio end = ExactRatio.of(new BigDecimal(BigInteger.ONE, -Integer.MAX_VALUE));
+        List<ExactRatio> powers = new ArrayList<>(List.of(end));
+        while (powers.getLast().times(powers.getLast())
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio squared)) {
+            powers.add(squared);
+        }
+        ExactRatio weight = ExactRatio.ONE;
+        for (ExactRatio power : powers.reversed()) {
+            if (weight.times(power) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio product)) {
+                weight = product;
+            }
+        }
+        assertEquals(true, weight.times(end) instanceof ExactAnswer.Unheld<ExactRatio>);
+        NumericDomain.Bounds far = new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO),
+                Endpoint.inclusive(Count.of(new BigDecimal(BigInteger.ONE, -Integer.MAX_VALUE))));
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var b = new WhatARelationLeavesUndivided.Term<>(List.of("b"), weight, far, far, null,
+                true, Granularity.DENSE);
+        var c = term("c", -1, run(1L, 12L), run(1L, 12L));
+        assertNull(leavesOf(List.of(a, b, c), 0, 0, Rel.LT));
     }
 
     /**
