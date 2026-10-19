@@ -100,6 +100,58 @@ class ARuleTiesOnlyThePlacesItReadsTest {
                 """, "x.a > x.b")));
     }
 
+    @Test
+    void rulesOnSiblingFieldsBelowOnePlaceTieNeitherToTheOther() {
+        assertEquals(Map.of("x.a.id", RELATES), left(pair("""
+                data Inner = { id: Int, owner: Int }
+                data R = { a: Inner }
+                    invariant a.id >= 0
+                    invariant a.owner >= 0
+                """, "x.a.id < x.a.owner")));
+    }
+
+    private static final String INNER = "data Inner = { id: Int, owner: Int }\n";
+
+    @Test
+    void aRuleBetweenTwoFieldsBelowOnePlaceTiesThem() {
+        assertEquals(Map.of("x.a.id", NOT_READ, "x.a.owner", NOT_READ), left(pair(INNER + """
+                data R = { a: Inner }
+                    invariant a.id >= a.owner
+                """, "x.a.id > x.a.owner")));
+    }
+
+    @Test
+    void twoRulesMeetingAtAFieldBelowOnePlaceTieTheOtherTwo() {
+        assertEquals(Map.of("x.a.id", NOT_READ, "x.a.owner", NOT_READ), left(pair("""
+                data Inner = { id: Int, owner: Int, mid: Int }
+                data R = { a: Inner }
+                    invariant a.id >= a.mid
+                    invariant a.mid >= a.owner
+                """, "x.a.id > x.a.owner")));
+    }
+
+    private static final String SHARED = """
+            data Pair = { a: Int, b: Int }
+            data A = { ...Pair, left: Int }%s
+            data B = { ...Pair, right: Int }%s
+            data R = A | B
+            """;
+
+    /** A name the cases share stands under each of them, and the rule of a case is a rule around
+     *  it. */
+    @Test
+    void aRuleOfEachCaseOnFieldsTheyShareTiesThem() {
+        assertEquals(Map.of("x.a", NOT_READ, "x.b", NOT_READ), left(pair(SHARED.formatted(
+                "\n    invariant a >= b", "\n    invariant a >= b"), "x.a > x.b")));
+    }
+
+    /** A row holds one case, so a rule of either is one the shared fields may meet. */
+    @Test
+    void aRuleOfOneCaseOnFieldsTheyShareTiesThemForThatCase() {
+        assertEquals(Map.of("x.a", NOT_READ, "x.b", NOT_READ), left(pair(SHARED.formatted(
+                "\n    invariant a >= b", ""), "x.a > x.b")));
+    }
+
     private static final String WRAPPED = """
             data Contact = { id: Int, owner: Int }
             data Wrapped = Contact

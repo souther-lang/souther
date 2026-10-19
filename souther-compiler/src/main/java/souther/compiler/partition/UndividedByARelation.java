@@ -1200,7 +1200,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     continue;
                 }
                 Object first = null;
-                for (Object node : reachedByTheDeclarations(each.path(), read).ties()) {
+                for (Object node : reachedByTheDeclarations(each.path(), read).nodes().reads()) {
                     if (first == null) {
                         first = node;
                     } else {
@@ -1556,32 +1556,91 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * What the rules around a place say of it, and the rules they say it of.
      *
      * @param named what they say ({@link #namedByTheDeclarations})
-     * @param ties  one node per rule of a value around the place, for each clause that reads
-     *              something at, under or around it. Two places are tied by the declarations where
-     *              they share a node, and only then: a rule of a value relates places in that
-     *              value, so places the rules of no value around both read are in no way related
-     *              by them. Empty where {@code named} is {@link Named#NOT}.
+     * @param nodes the rules that say it
      */
-    private record Reached(Named named, Set<Object> ties) {}
+    private record Reached(Named named, Nodes nodes) {}
 
-    private static Reached reachedByTheDeclarations(TermPath path, InputReading read) {
-        return RulesRead.of(read).byPlace().computeIfAbsent(path, each -> {
-            Set<Object> ties = new LinkedHashSet<>();
-            return new Reached(namedDownTo(each, each.steps().size() - 1, read, ties), ties);
-        });
+    /**
+     * The rules around a place, one node per clause of a value around it.
+     *
+     * @param ties  the clauses that read something at, under, past or around the place. Two places
+     *              are tied by the declarations where their classes of these meet, and only then: a
+     *              rule of a value relates places in that value, so places the rules of no value
+     *              around both read are in no way related by them. Empty where the place is
+     *              {@link Named#NOT} named.
+     * @param reads the clauses that read the place itself, or a value it is a part of whole. Where
+     *              a place is read by two clauses, what each relates to it is related to what the
+     *              other does; a clause that reads only parts of the place is no such meeting
+     *              point, since two parts of a value are not one value.
+     */
+    private record Nodes(Set<Object> ties, Set<Object> reads) {
+
+        Nodes() {
+            this(new LinkedHashSet<>(), new LinkedHashSet<>());
+        }
+
+        /** A rule nothing says what it reads: it may relate anything under {@code node}'s place. */
+        void unread(Object node) {
+            ties.add(node);
+            reads.add(node);
+        }
     }
 
     /**
-     * The classes the rules around {@code path} are in ({@link Reached#ties}), where two rules are
-     * in one class if some place of the parameter is read by both. A place read by two rules holds
-     * a value that meets both, so what one rule relates to that place and what the other relates
-     * to it are related to each other.
+     * What the rules around {@code path} say of it, with the places a name the cases of a sum share
+     * stands at asked as {@link NameReach#standingOf} puts them. Not {@code computeIfAbsent}: the
+     * place a name stands at can itself be a name that crosses, which asks this again of the same
+     * map.
+     */
+    private static Reached reachedByTheDeclarations(TermPath path, InputReading read) {
+        Map<TermPath, Reached> known = RulesRead.of(read).byPlace();
+        Reached reached = known.get(path);
+        if (reached == null) {
+            reached = reachedWorkedOut(path, read);
+            known.put(path, reached);
+        }
+        return reached;
+    }
+
+    private static Reached reachedWorkedOut(TermPath path, InputReading read) {
+        if (read.domain().at(path.position()) == null) {
+            NameReach.Standing standing = read.domain().reach().standingOf(path);
+            boolean incomplete = standing instanceof NameReach.Standing.CasesIncomplete;
+            List<NameReach.CaseStanding> standings = switch (standing) {
+                case NameReach.Standing.UnderTheCases(var each) -> each;
+                case NameReach.Standing.CasesIncomplete(var each, var _) -> each;
+                default -> null;
+            };
+            if (standings != null) {
+                // A row holds one case, so the rules of every case the name stands under are the
+                // rules around it; a case the reading stopped in may hold any rule at all.
+                Named named = incomplete ? Named.UNSEEN : Named.NOT;
+                Nodes nodes = new Nodes();
+                if (incomplete) {
+                    nodes.unread(new TiedOnTheWay.Parameter(path.head()));
+                }
+                for (NameReach.CaseStanding each : standings) {
+                    Reached under = reachedByTheDeclarations(each.position(), read);
+                    named = named.and(under.named());
+                    nodes.ties().addAll(under.nodes().ties());
+                    nodes.reads().addAll(under.nodes().reads());
+                }
+                return new Reached(named, nodes);
+            }
+        }
+        Nodes nodes = new Nodes();
+        return new Reached(namedDownTo(path, path.steps().size() - 1, read, nodes), nodes);
+    }
+
+    /**
+     * The classes the rules around {@code path} are in ({@link Nodes#ties}), where two rules are in
+     * one class if some place of the parameter is read by both ({@link Nodes#reads}).
      */
     private static Set<Object> tiedByTheDeclarations(TermPath path, InputReading read) {
         TiedOnTheWay declared = RulesRead.of(read).declared().computeIfAbsent(path.head(),
                 head -> TiedOnTheWay.ofTheDeclarations(head, read));
         Set<Object> out = new LinkedHashSet<>();
-        for (Object node : reachedByTheDeclarations(path, read).ties()) {
+        for (Object node : reachedByTheDeclarations(path, read).nodes().ties()) {
             out.add(declared.classOf(node));
         }
         return out;
@@ -1641,11 +1700,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * What the rules of the values {@code path} sits in say of it, of those {@code deepest} steps
      * down from the parameter or fewer ({@link #namedByTheDeclarations}).
      *
-     * <p>Where {@code ties} is given, every rule is asked and the nodes of those that read
-     * something of the path are added to it; without it the answer stops at the first unseen.
+     * <p>Where {@code nodes} is given, every rule is asked and those that read something of the
+     * path are added to it; without it the answer stops at the first unseen.
      */
     private static Named namedDownTo(TermPath path, int deepest, InputReading read,
-                                     Set<Object> ties) {
+                                     Nodes nodes) {
         List<TermPath.Step> steps = path.steps();
         Named out = Named.NOT;
         for (int length = 0; length <= deepest && length < steps.size(); length++) {
@@ -1653,8 +1712,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Position around = read.domain().at(here.position());
             // Where the rules leave no value of it, nothing stands beside the rest of it either.
             if (around == null || around.nothingExists()) {
-                if (ties != null) {
-                    ties.add(new TiedOnTheWay.Parameter(path.head()));
+                if (nodes != null) {
+                    nodes.unread(new TiedOnTheWay.Parameter(path.head()));
                 }
                 return Named.UNSEEN;
             }
@@ -1666,8 +1725,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             List<TermPath.Step> rest = steps.subList(length, steps.size());
             for (TypeSymbol each : worn) {
-                out = out.and(namedBy(each, here, rest, read, ties));
-                if (out == Named.UNSEEN && ties == null) {
+                out = out.and(namedBy(each, here, rest, read, nodes));
+                if (out == Named.UNSEEN && nodes == null) {
                     return out;
                 }
             }
@@ -1680,15 +1739,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * where one was not reached or has no form to say what it reads.
      */
     private static Named namedBy(TypeSymbol worn, TermPath here, List<TermPath.Step> rest,
-                                 InputReading read, Set<Object> ties) {
+                                 InputReading read, Nodes nodes) {
         if (!(worn instanceof TypeSymbol.AtModule name)) {
             return Named.NOT;
         }
         PublishedRules rules = RulesRead.of(read).byName().computeIfAbsent(name,
                 each -> PublishedRules.governing(each, read.rules().published()));
         if (!rules.everyRuleReached()) {
-            if (ties != null) {
-                ties.add(new TiedOnTheWay.Rule(here, worn, -1));
+            if (nodes != null) {
+                nodes.unread(new TiedOnTheWay.Rule(here, worn, -1));
             }
             return Named.UNSEEN;
         }
@@ -1696,25 +1755,71 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<ClauseMeaning> reached = rules.reached();
         for (int clause = 0; clause < reached.size(); clause++) {
             if (!(reached.get(clause) instanceof ClauseMeaning.Stated stated)) {
-                if (ties == null) {
+                if (nodes == null) {
                     return Named.UNSEEN;
                 }
-                ties.add(new TiedOnTheWay.Rule(here, worn, -1));
+                nodes.unread(new TiedOnTheWay.Rule(here, worn, -1));
                 out = Named.UNSEEN;
                 continue;
             }
             for (ClauseRead reading : stated.reads()) {
                 Named says = namedBy(reading, here, rest, read);
                 out = out.and(says);
-                if (says != Named.NOT && ties != null) {
-                    ties.add(new TiedOnTheWay.Rule(here, worn, clause));
+                if (says != Named.NOT && nodes != null) {
+                    TiedOnTheWay.Rule rule = new TiedOnTheWay.Rule(here, worn, clause);
+                    nodes.ties().add(rule);
+                    if (readsThePlace(reading, rest)) {
+                        nodes.reads().add(rule);
+                    }
                 }
-                if (out == Named.UNSEEN && ties == null) {
+                if (out == Named.UNSEEN && nodes == null) {
                     return out;
                 }
             }
         }
         return out;
+    }
+
+    /**
+     * Whether {@code reading} reads the place at {@code rest} below its value, or a value that
+     * place is a part of whole; and not only parts of it, nor the places beside it.
+     *
+     * <p>The same comparison {@link #namedBy(ClauseRead, TermPath, List, InputReading)} makes, for
+     * the question of whether two rules meet at a place and not of what the rules leave it.
+     */
+    private static boolean readsThePlace(ClauseRead reading, List<TermPath.Step> rest) {
+        int fields = 0;
+        while (fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Field) {
+            fields++;
+        }
+        List<String> at = reading.at().steps();
+        for (int i = 0; i < at.size() && i < fields; i++) {
+            if (!at.get(i).equals(((TermPath.Step.Field) rest.get(i)).name())) {
+                return false;
+            }
+        }
+        return switch (reading.kind()) {
+            case ITS_VALUES -> at.size() <= fields;
+            case HOW_MANY_IT_HOLDS -> at.size() == fields && fields == rest.size();
+            case EACH_ELEMENTS_RUN -> at.size() == fields && fields < rest.size()
+                    && rest.get(fields) instanceof TermPath.Step.Element
+                    && startsWith(rest.subList(fields + 1, rest.size()), reading.run());
+        };
+    }
+
+    /** Whether {@code below} goes down the fields of {@code run}, and on past them if it is
+     *  longer. */
+    private static boolean startsWith(List<TermPath.Step> below, List<String> run) {
+        if (below.size() < run.size()) {
+            return false;
+        }
+        for (int i = 0; i < run.size(); i++) {
+            if (!(below.get(i) instanceof TermPath.Step.Field field)
+                    || !field.name().equals(run.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
