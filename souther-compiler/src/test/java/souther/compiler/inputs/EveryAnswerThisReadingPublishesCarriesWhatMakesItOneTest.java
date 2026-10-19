@@ -197,6 +197,10 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == InputReads.EntryLookedUp.class) {
             return new InputReads.EntryLookedUp(TermPath.of("x"), SOMETHING);
         }
+        if (type == InputReads.AnAnswerAt.class) {
+            return new InputReads.AnAnswerAt(Evaluations.of(new ValueName.Behavior("example", "f"),
+                    0), List.of(), NOWHERE, List.of());
+        }
         if (type == InputReads.WhatItHolds.class) {
             return new InputReads.WhatItHolds.Unsaid();
         }

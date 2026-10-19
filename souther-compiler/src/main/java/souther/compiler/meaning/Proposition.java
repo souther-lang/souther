@@ -98,8 +98,7 @@ public sealed interface Proposition {
             case Present present -> mayBeAnElementOf(present.of(), container);
             case SameValue same -> mayBeAnElementOf(same.one(), container)
                     || mayBeAnElementOf(same.other(), container);
-            case LastToHold last ->
-                    isAnElementOf(new DecisionSubject.AnInput(last.position()), container);
+            case LastToHold last -> isAnElementOf(last.position(), container);
             case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
                     somePartMayTurnOnAnElementOf(container);
             case Some some -> isAnElementOf(some.container(), container)
@@ -349,19 +348,22 @@ public sealed interface Proposition {
      * element it answers: the entry under a key is the last element of that key, and an earlier
      * one is in no entry.
      *
-     * @param position a position under the container's element, which an element is told apart
-     *                 from the others by
-     * @param key      spelled from the rest when it is made, whatever is handed in
+     * @param container where the container stands: a position of the input, whose elements the row
+     *                  writes, or a list a dependency answered, whose elements the answer is
+     *                  composed with
+     * @param position  a place under the container's element, which an element is told apart
+     *                  from the others by
+     * @param key       spelled from the rest when it is made, whatever is handed in
      */
-    record LastToHold(TermPath container, TermPath position, boolean holds, String key)
-            implements Proposition {
+    record LastToHold(DecisionSubject container, DecisionSubject position, boolean holds,
+                      String key) implements Proposition {
 
         @Override
         public int hashCode() {
             return key.hashCode();
         }
 
-        public LastToHold(TermPath container, TermPath position, boolean holds) {
+        public LastToHold(DecisionSubject container, DecisionSubject position, boolean holds) {
             this(container, position, holds, null);
         }
 
@@ -1144,7 +1146,8 @@ public sealed interface Proposition {
      */
     static boolean aboutAnAnswer(Proposition stated) {
         return switch (stated) {
-            case Always _, Unread _, LastToHold _, Carried _ -> false;
+            case Always _, Unread _, Carried _ -> false;
+            case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer;
             case Compared(Relation relation, boolean _, String _) -> switch (relation) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
                         .anyMatch(Proposition::anAnswerIn);
@@ -1160,6 +1163,68 @@ public sealed interface Proposition {
                     stated.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
                     || some.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
+        };
+    }
+
+    /**
+     * Whether {@code stated} is about what a dependency answered and names nothing of the input
+     * beside it: what it asks of the answer relates no number of the input to anything.
+     *
+     * <p>What a dependency answered is a value nothing relates to the input, so such a statement
+     * narrows which answer a row stands the dependency in with and leaves the input's values as
+     * they were. A statement that names an input position, in a relation or as the key an
+     * element is looked for under, is not that.
+     */
+    static boolean aboutAnAnswerAlone(Proposition stated) {
+        return aboutAnAnswer(stated) && namesNothingOfTheInput(stated);
+    }
+
+    /**
+     * Whether {@code stated} is proved to name nothing of the input.
+     *
+     * <p>Proved, and so false for what is not known: a part nothing read, or one carried from
+     * elsewhere, may name a position of the input for all that was said of it, and a search is
+     * from a position of the input whatever it asks along the way.
+     */
+    private static boolean namesNothingOfTheInput(Proposition stated) {
+        return switch (stated) {
+            case Always _ -> true;
+            case Unread _, Carried _, SomeReachable _ -> false;
+            case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer
+                    && last.position() instanceof DecisionSubject.AnAnswer;
+            case Compared(Relation relation, boolean _, String _) -> switch (relation) {
+                case Relation.Affine affine -> affine.form().coefs().keySet().stream()
+                        .allMatch(Proposition::namesNothingOfTheInput);
+                case Relation.Ordered ordered -> namesNothingOfTheInput(ordered.term());
+            };
+            case Truth truth -> truth.of() instanceof DecisionSubject.AnAnswer;
+            case InCases cases -> cases.of() instanceof DecisionSubject.AnAnswer;
+            case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
+            case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
+                    && same.other() instanceof DecisionSubject.AnAnswer;
+            case Some some -> some.container() instanceof DecisionSubject.AnAnswer
+                    && some.partsHeld().stream().allMatch(Proposition::namesNothingOfTheInput);
+            case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
+                    stated.partsHeld().stream().allMatch(Proposition::namesNothingOfTheInput);
+        };
+    }
+
+    private static boolean namesNothingOfTheInput(Quantity quantity) {
+        return switch (quantity) {
+            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
+            case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
+                 Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
+                 Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
+                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _ -> false;
+            case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
+                    && namesNothingOfTheInput(count.ofTheElement());
+            case Quantity.HowManyHold held -> held.each().stream()
+                    .allMatch(Proposition::namesNothingOfTheInput);
+            case Quantity.HowManyDifferent different ->
+                    different.container() instanceof DecisionSubject.AnAnswer
+                            && different.ofTheElement() instanceof DecisionSubject.AnAnswer;
+            case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
+                    && namesNothingOfTheInput(sum.ofTheElement());
         };
     }
 

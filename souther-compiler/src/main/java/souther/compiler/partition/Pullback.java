@@ -1496,11 +1496,12 @@ final class Pullback {
                 implements ElementAt {}
 
         /**
-         * An entry of a map filed from the list at {@code list}: the list's own element, under the
-         * key {@code key} makes of it. Of two elements of one key the later is the entry, so what
-         * a statement is about is the last element of its key.
+         * An entry of a map filed from the list at {@code list}, a position of the input or a list
+         * a dependency answered: the list's own element, under the key {@code key} makes of it.
+         * Of two elements of one key the later is the entry, so what a statement is about is the
+         * last element of its key.
          */
-        record AFiledElement(TermPath list, Core.Block key) implements ElementAt {
+        record AFiledElement(DecisionSubject list, Core.Block key) implements ElementAt {
 
             public AFiledElement {
                 Objects.requireNonNull(list, "an entry is an element of some list");
@@ -2271,9 +2272,8 @@ final class Pullback {
                                     observe(value, aspect, in);
                             case ElementAt.AtASubject(DecisionSubject container) ->
                                     observedAt(container.element(), aspect);
-                            case ElementAt.AFiledElement(TermPath list, Core.Block _) ->
-                                    observedAt(new DecisionSubject.AnInput(list.element()),
-                                            aspect);
+                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _) ->
+                                    observedAt(list.element(), aspect);
                             // Of an element known only by the side every element of an answer
                             // comes out on, that side is known and no other.
                             case ElementAt.OfAnAnswerEveryElementOfWhichIs(var operation,
@@ -2340,14 +2340,37 @@ final class Pullback {
                 case ElementAt.AtASubject(DecisionSubject map) -> map.key();
                 // The entry under a key is an element of the list, so the key it stands under is
                 // what the closure makes of that element.
-                case ElementAt.AFiledElement(TermPath list, Core.Block key) -> {
-                    TermPath filed =
-                            reads.keyOfTheElement(key, list.element(), read.rules().newtypes());
-                    yield filed == null ? null : new DecisionSubject.AnInput(filed);
-                }
+                case ElementAt.AFiledElement(DecisionSubject list, Core.Block key) ->
+                        keyOfTheFiledElement(list, key);
                 case ElementAt.AValue _, ElementAt.APiece _, ElementAt.AnEntry _,
                      ElementAt.OfAnAnswerEveryElementOfWhichIs _ -> null;
                 case null -> null;
+            };
+        }
+
+        /**
+         * Where the key {@code key} makes of an element of the list {@code list} stands, or null
+         * where it is no place of the element: a field of it, in the input's list or in the list
+         * a dependency answered.
+         */
+        private DecisionSubject keyOfTheFiledElement(DecisionSubject list, Core.Block key) {
+            return switch (list) {
+                case DecisionSubject.AnInput(TermPath held) -> {
+                    TermPath filed = reads.keyOfTheElement(key, held.element(),
+                            read.rules().newtypes());
+                    yield filed == null ? null : new DecisionSubject.AnInput(filed);
+                }
+                case DecisionSubject.AnAnswer answer -> {
+                    OnePerElement.Answered filed = reads.answeredOf(key.body(),
+                            key.params().getFirst().binding(), read.rules().newtypes());
+                    if (filed == null) {
+                        yield null;
+                    }
+                    List<TermPath.Step> steps = new ArrayList<>(answer.steps());
+                    steps.add(new TermPath.Step.Element());
+                    steps.addAll(filed.at().steps());
+                    yield new DecisionSubject.AnAnswer(answer.answered(), steps);
+                }
             };
         }
 
@@ -2364,8 +2387,8 @@ final class Pullback {
                         switch (elements.get(at)) {
                             case ElementAt.AtASubject(DecisionSubject container) ->
                                     container.element();
-                            case ElementAt.AFiledElement(TermPath list, Core.Block _) ->
-                                    new DecisionSubject.AnInput(list.element());
+                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _) ->
+                                    list.element();
                             case ElementAt.AValue(Core value, InputReads in) ->
                                     in.pathOf(value, read.rules().newtypes())
                                             instanceof PathResolution.At(TermPath held)
@@ -2469,9 +2492,9 @@ final class Pullback {
             }
             // The entry a map holds under a key is the last element the key was made of, so what
             // is stated of an entry is stated of the last element of its key.
-            if (located.each() instanceof ElementAt.AFiledElement(TermPath list, Core.Block key)) {
-                TermPath filedUnder = reads.keyOfTheElement(key, list.element(),
-                        read.rules().newtypes());
+            if (located.each() instanceof ElementAt.AFiledElement(DecisionSubject list,
+                                                                   Core.Block key)) {
+                DecisionSubject filedUnder = keyOfTheFiledElement(list, key);
                 if (filedUnder == null) {
                     return unread(e, reads, new WhyUnread.AtNoPosition(
                             WhyUnread.AtNoPosition.Place.SUBJECT));
@@ -3017,13 +3040,12 @@ final class Pullback {
             }
             Denotation walked = container.at().standing(indexed.walked(),
                     read.rules().symbols(), read.rules().newtypes());
-            if (!(walked.at().pathOf(walked.value(), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath held))) {
+            DecisionSubject heldAt = subjectOf(walked);
+            if (heldAt == null) {
                 return null;
             }
-            ElementAt each = new ElementAt.AFiledElement(held, indexed.key());
+            ElementAt each = new ElementAt.AFiledElement(heldAt, indexed.key());
             settle(pending, each, null, located);
-            DecisionSubject heldAt = new DecisionSubject.AnInput(held);
             return outerEach == null ? new Located(heldAt, null, each, null, located, null)
                     : new Located(heldAt, null, outerEach, outerHanded, located, null);
         }
@@ -3472,10 +3494,9 @@ final class Pullback {
                                                 sizeOf(value, in);
                                         case ElementAt.AtASubject(DecisionSubject container) ->
                                                 sizedAt(container.element());
-                                        case ElementAt.AFiledElement(TermPath list,
+                                        case ElementAt.AFiledElement(DecisionSubject list,
                                                                      Core.Block _) ->
-                                                sizedAt(new DecisionSubject.AnInput(
-                                                        list.element()));
+                                                sizedAt(list.element());
                                         case ElementAt.APiece _, ElementAt.AnEntry _,
                                              ElementAt.OfAnAnswerEveryElementOfWhichIs _ ->
                                                 new Sized.NotSized(new WhyUnread.AtNoPosition(
@@ -3661,7 +3682,9 @@ final class Pullback {
                     case ElementAt.AtASubject(DecisionSubject.AnInput(TermPath container)) ->
                             container.element();
                     case ElementAt.AtASubject(DecisionSubject.AnAnswer _) -> null;
-                    case ElementAt.AFiledElement(TermPath list, Core.Block _) -> list.element();
+                    case ElementAt.AFiledElement(DecisionSubject.AnInput(TermPath list),
+                                                 Core.Block _) -> list.element();
+                    case ElementAt.AFiledElement(DecisionSubject.AnAnswer _, Core.Block _) -> null;
                     case ElementAt.AValue(Core value, InputReads in) ->
                             in.pathOf(value, read.rules().newtypes())
                                     instanceof PathResolution.At(TermPath inside)
@@ -5197,9 +5220,17 @@ final class Pullback {
                         break;
                     }
                 }
-                DecisionAtom takenOfAnAnswer = subjects.takenOfAnAnswer(node, at);
-                if (takenOfAnAnswer != null) {
-                    return LinearForm.atom(takenOfAnAnswer);
+                NumericMeasures.Measured measured =
+                        subjects.measureWhereAnAnswerMayBeHeld(node, at);
+                if (measured != null) {
+                    DecisionAtom takenOfAnAnswer = subjects.takenOfAnAnswer(measured, at);
+                    if (takenOfAnAnswer != null) {
+                        return LinearForm.atom(takenOfAnAnswer);
+                    }
+                    LinearForm<Quantity> summed = sumOverTheElementsOfAnAnswer(measured, at);
+                    if (summed != null) {
+                        return summed;
+                    }
                 }
                 // A number a dependency answered, which a row stands in and so controls, named as
                 // the decision table names it: the evaluation of the call, whether it is written
@@ -5458,6 +5489,48 @@ final class Pullback {
      *  no such thing. */
     private DecisionSubject.AnAnswer answerAt(Core e, InputReads reads) {
         return subjects.anAnswer(e, reads);
+    }
+
+    /**
+     * What the sum {@code measured} takes over what a closure answers of each element of a list a
+     * dependency answered adds up to, or null where it is no such sum.
+     *
+     * <p>Read as the input's sums over a run are: the closure's answer on one element is a form of
+     * that element's numbers, and the sum is those numbers' sums over the elements and the constant
+     * times how many there are. Only a form of the element's own numbers is one: a number of the
+     * input beside them is added once for each element, which no sum of the answer says. And only
+     * the walk handed the answer's list itself, since one handed a list that kept some of its
+     * elements is a sum over those and over no element of the answer.
+     */
+    private LinearForm<Quantity> sumOverTheElementsOfAnAnswer(NumericMeasures.Measured measured,
+                                                              InputReads at) {
+        if (!measured.arguments().none()
+                || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                        instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation walk = at.standing(measured.of(), symbols, newtypes);
+        ElementBindings.StepOnEachElement step =
+                ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
+        if (step == null) {
+            return null;
+        }
+        Denotation walked = walk.at().standing(step.walked(), symbols, newtypes);
+        DecisionSubject.AnAnswer list = answerAt(walked.value(), walked.at());
+        if (list == null || !(AffineForms.outcome(step.step().body(), walk.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var each))) {
+            return null;
+        }
+        DecisionSubject element = list.element();
+        boolean ofTheElementsOwn = each.coefs().keySet().stream().allMatch(number ->
+                number instanceof DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer of)
+                        && of.isAtOrUnder(element));
+        DecisionAtom size = each.constant().signum() == 0 ? null
+                : sizeOfSubject(list, walked.value().type());
+        return !ofTheElementsOwn || (size == null && each.constant().signum() != 0) ? null
+                : Quantity.SumOver.over(list, each, size);
     }
 
     /**

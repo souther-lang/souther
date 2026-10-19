@@ -482,7 +482,8 @@ final class AStatementAtARow {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
             // holds at the position.
-            case Proposition.LastToHold(TermPath container, TermPath position, boolean holds,
+            case Proposition.LastToHold(DecisionSubject.AnInput(TermPath container),
+                                        DecisionSubject.AnInput(TermPath position), boolean holds,
                                         String _) -> heldAs(holds, switch (
                     row.lastToHold(container, position)) {
                 case BorderQuantity.Lastness.Last _ -> Said.TRUE;
@@ -539,7 +540,8 @@ final class AStatementAtARow {
                     });
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.SameValue _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> notAsked(part);
+                 Proposition.OnAnApplication _, Proposition.SomeReachable _,
+                 Proposition.LastToHold _ -> notAsked(part);
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }

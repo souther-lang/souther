@@ -168,8 +168,18 @@ final class DemandReading {
             }
         }
 
-        /** None, and everything that stopped it, each once. */
-        record Unread(List<WhyNotTaken> whys) implements Read {
+        /**
+         * None, and everything that stopped it, each once.
+         *
+         * @param ofAnAnswerAlone whether the condition names nothing but what a dependency
+         *                        answered, so that what it asks of the answer relates no number of
+         *                        the input to anything
+         */
+        record Unread(List<WhyNotTaken> whys, boolean ofAnAnswerAlone) implements Read {
+
+            Unread(List<WhyNotTaken> whys) {
+                this(whys, false);
+            }
 
             Unread(WhyNotTaken why) {
                 this(List.of(why));
@@ -195,10 +205,15 @@ final class DemandReading {
         return new Read.Demands(new RowDemand.ForTheRun(stated, why, past));
     }
 
-    /** What a dependency answered, which a row stands in rather than writes. */
-    private static Read.Unread anAnswerARowStandsIn() {
-        return new Read.Unread(new WhyNotTaken.OutsideDomain(
-                WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN));
+    /**
+     * What a dependency answered that {@code stated} asks, which a row stands in rather than
+     * writes. Told whether it names nothing of the input beside the answer
+     * ({@link Proposition#aboutAnAnswerAlone}).
+     */
+    private static Read.Unread anAnswerARowStandsIn(Proposition stated) {
+        return new Read.Unread(List.of(new WhyNotTaken.OutsideDomain(
+                WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN)),
+                Proposition.aboutAnAnswerAlone(stated));
     }
 
     /**
@@ -811,14 +826,14 @@ final class DemandReading {
             // relation weighs: a count over an answer's list is no number of the answer itself,
             // and asked by the kind it would be read as a count a row composes.
             case Proposition.Compared compared when Proposition.aboutAnAnswer(compared) ->
-                    List.of(anAnswerARowStandsIn());
+                    List.of(anAnswerARowStandsIn(compared));
             case Proposition.Compared compared -> List.of(ofARelation(compared, read));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
-                    List.of(anAnswerARowStandsIn());
+                    List.of(anAnswerARowStandsIn(stated));
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
                                      boolean holds, var _) ->
                     List.of(holds ? new Read.Narrows(at, cases) : notOfItsCases(at, cases, read));
@@ -892,7 +907,7 @@ final class DemandReading {
             // dependency in with and writes no value at, as the answer's own numbers are.
             case Proposition.Some some
                     when some.container() instanceof DecisionSubject.AnAnswer ->
-                    List.of(anAnswerARowStandsIn());
+                    List.of(anAnswerARowStandsIn(stated));
             case Proposition.Some some -> {
                 List<Read> had = met.get(some.key());
                 if (had == null) {
@@ -1673,7 +1688,7 @@ final class DemandReading {
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
                 case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> {
-                    return anAnswerARowStandsIn();
+                    return anAnswerARowStandsIn(compared);
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;
                 case Quantity.HowManyDifferent _, Quantity.SumOver _,

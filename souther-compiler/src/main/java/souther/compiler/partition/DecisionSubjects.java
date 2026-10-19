@@ -89,9 +89,10 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
      */
     DecisionSubject.AnAnswer anAnswer(Core e, InputReads at) {
         InputReads.AnAnswerAt found = at.answerAt(e, symbols, newtypes);
-        if (found == null) {
-            return null;
-        }
+        return found == null ? null : subjectOf(found);
+    }
+
+    private DecisionSubject.AnAnswer subjectOf(InputReads.AnAnswerAt found) {
         // What a report names the answer by is what it was asked about.
         List<DecisionArgument> arguments = new ArrayList<>();
         for (Core argument : found.arguments()) {
@@ -102,23 +103,26 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     }
 
     /**
-     * The number an operation takes of what a dependency answered that {@code e} is, or null where
-     * it is no such number.
+     * The number {@code e} takes of one value, or null where it takes none or no answer is held
+     * where it is read.
      *
-     * <p>Which calls take a number of a value is {@link NumericMeasures#takenIn}'s answer, the one
-     * the input's numbers are read by, so a count of a list is one wherever the list stands. What
-     * this adds is only whose value it is taken of.
+     * <p>Asked of every number a comparison names, so a body with no answer in it is not asked
+     * what an operation takes of one. Which calls take a number of a value is
+     * {@link NumericMeasures#takenIn}'s answer, the one the input's numbers are read by, so a
+     * count of a list is one wherever the list stands.
      */
-    DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(Core e, InputReads at) {
-        // Asked of every number a comparison names, so a body with no answer in it is not asked
-        // what an operation takes of one.
-        if (!at.mayHoldAnAnswer()) {
-            return null;
-        }
-        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
-                each -> at.folded(each, symbols, newtypes));
-        if (measured == null || !(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer
-                answer)) {
+    NumericMeasures.Measured measureWhereAnAnswerMayBeHeld(Core e, InputReads at) {
+        return at.mayHoldAnAnswer() ? NumericMeasures.takenIn(e, symbols,
+                each -> at.folded(each, symbols, newtypes)) : null;
+    }
+
+    /**
+     * The number {@code measured} takes of what a dependency answered, or null where the value it
+     * is taken of is no answer. What this adds to the measure is only whose value it is taken of.
+     */
+    DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(NumericMeasures.Measured measured,
+                                                 InputReads at) {
+        if (!(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer answer)) {
             return null;
         }
         return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),

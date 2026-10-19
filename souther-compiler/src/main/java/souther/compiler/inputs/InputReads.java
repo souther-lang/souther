@@ -1083,6 +1083,12 @@ public final class InputReads {
                 under = field.target();
                 continue;
             }
+            // A name given the entry a lookup picked out of a map filed from an answer's list stands
+            // at the element of that list, under the places the answer is.
+            if (under instanceof Core.Read name && name.binding() != null
+                    && reads.names.placeInAnAnswer(name.binding()) instanceof AnAnswerAt place) {
+                return place.inside(steps);
+            }
             if (under instanceof Core.Read name
                     && reads.meaningOf(name, symbols, newtypes) instanceof ReadMeaning.Through through) {
                 under = through.denotes().value();
@@ -1097,11 +1103,10 @@ public final class InputReads {
                 if (container == null) {
                     return null;
                 }
-                List<TermPath.Step> inside = new ArrayList<>(container.steps());
+                List<TermPath.Step> inside = new ArrayList<>();
                 inside.add(new TermPath.Step.Element());
                 inside.addAll(steps);
-                return new AnAnswerAt(container.evaluation(), container.arguments(),
-                        container.at(), inside);
+                return container.inside(inside);
             }
             break;
         }
@@ -1175,6 +1180,13 @@ public final class InputReads {
             }
             arguments = List.copyOf(arguments);
             steps = List.copyOf(steps);
+        }
+
+        /** The same answer, at the place {@code further} leads to from this one. */
+        public AnAnswerAt inside(List<TermPath.Step> further) {
+            List<TermPath.Step> all = new ArrayList<>(steps);
+            all.addAll(further);
+            return new AnAnswerAt(evaluation, arguments, at, all);
         }
     }
 
@@ -1341,6 +1353,17 @@ public final class InputReads {
     }
 
     /**
+     * Whether what {@code option} holds is an entry that a lookup answered in a map filed from the
+     * list a dependency answered ({@link WhatItHolds.AnEntryOfAnAnswer}): whether the option holds
+     * one is a fact about what the dependency answered.
+     */
+    public boolean holdsAnEntryOfAnAnswer(Core option, Symbols symbols,
+                                          DeclarationNewtypes newtypes) {
+        return mayHoldAnAnswer()
+                && whatItHolds(option, symbols, newtypes) instanceof WhatItHolds.AnEntryOfAnAnswer;
+    }
+
+    /**
      * What a value an option holds is, said so that a name in any reading can be bound to it.
      *
      * <p>Worked out in the reading the option stands in, which is not this one wherever the option
@@ -1364,6 +1387,20 @@ public final class InputReads {
             @Override
             public EntryLookedUp madeOf() {
                 return entry;
+            }
+        }
+
+        /** The value of the entry under the key in a map filed from the list a dependency
+         *  answered: the list's element, at its place inside the answer. */
+        record AnEntryOfAnAnswer(AnAnswerAt place) implements WhatItHolds {
+
+            public AnEntryOfAnAnswer {
+                Objects.requireNonNull(place, "some place inside an answer");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return null;
             }
         }
 
@@ -1498,11 +1535,17 @@ public final class InputReads {
                                      AnOperationApplied applied) {
             InputReads at = option.at();
             if (applied != null) {
-                EntryLookedUp entry = GET.equals(applied.operation()) && applied.args().size() == 2
-                        ? at.entryLookedUp(new Denotation(option.value(), at), applied.args(),
-                                symbols, newtypes)
-                        : null;
-                return entry == null ? unsaid() : new WhatItHolds.AnEntry(entry);
+                if (!GET.equals(applied.operation()) || applied.args().size() != 2) {
+                    return unsaid();
+                }
+                EntryLookedUp entry = at.entryLookedUp(new Denotation(option.value(), at),
+                        applied.args(), symbols, newtypes);
+                if (entry != null) {
+                    return new WhatItHolds.AnEntry(entry);
+                }
+                AnAnswerAt held = at.mayHoldAnAnswer()
+                        ? at.entryOfAnAnswer(applied.args(), symbols, newtypes) : null;
+                return held == null ? unsaid() : new WhatItHolds.AnEntryOfAnAnswer(held);
             }
             // An optional at a position holds what stands there narrowed to its present case.
             if (!(at.forkedOn(option.value(), newtypes)
@@ -1540,6 +1583,9 @@ public final class InputReads {
                     declared, dependencies, applied);
             case WhatItHolds.AtAPosition(TermPath at) -> new InputReads(names.naming(name, at),
                     alternatives, declared, dependencies, applied);
+            case WhatItHolds.AnEntryOfAnAnswer(AnAnswerAt place) -> new InputReads(
+                    names.namingAPlaceInAnAnswer(name, place), alternatives, declared, dependencies,
+                    applied);
             case WhatItHolds.MadeByAClosure(Denotation answered, var _) ->
                     standingFor(name, answered, newtypes);
             case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
@@ -1578,7 +1624,8 @@ public final class InputReads {
                                           DeclarationNewtypes newtypes) {
         WhatItHolds held = whatItHolds(option, symbols, newtypes);
         return switch (held) {
-            case WhatItHolds.AnEntry _, WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _ ->
+            case WhatItHolds.AnEntry _, WhatItHolds.AnEntryOfAnAnswer _,
+                 WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _ ->
                     holding(name.binding(), held, newtypes);
             case WhatItHolds.AtAPosition _, WhatItHolds.Unsaid _ -> null;
         };
@@ -1622,6 +1669,30 @@ public final class InputReads {
     }
 
     /**
+     * Where the entry a lookup in a map filed from the list a dependency answered picks out
+     * stands: the list's element, inside the answer — or null where the map is none.
+     *
+     * <p>The list itself, as it stands in the answer: a list the map was filed from through steps
+     * that keep only some of its elements holds entries the answer's list does not.
+     */
+    private AnAnswerAt entryOfAnAnswer(List<Core> args, Symbols symbols,
+                                       DeclarationNewtypes newtypes) {
+        Denotation held = standing(args.get(1), symbols, newtypes);
+        AnIndexedMap indexed = AnIndexedMap.of(held.value(), closure ->
+                Core.withoutStanding(held.at().standing(closure, symbols, newtypes).value())
+                        instanceof Core.Block block ? block : null);
+        if (indexed == null) {
+            return null;
+        }
+        Denotation walked = held.at().standing(indexed.walked(), symbols, newtypes);
+        AnAnswerAt list = walked.at().answerAt(walked.value(), symbols, newtypes);
+        if (list == null) {
+            return null;
+        }
+        return list.inside(List.of(new TermPath.Step.Element()));
+    }
+
+    /**
      * Which part of which container a name is the element of, and the name that was given it.
      *
      * @param name      the binding that was handed the element, which is not an alias of another
@@ -1658,6 +1729,17 @@ public final class InputReads {
                 Objects.requireNonNull(expression, "a container made is made of something");
             }
         }
+
+        /** One a dependency answered, told from another by the evaluation that answered it and
+         *  the places inside the answer it stands at. */
+        record InAnAnswer(AnEvaluation evaluation, List<TermPath.Step> at)
+                implements ContainerOf {
+
+            public InAnAnswer {
+                Objects.requireNonNull(evaluation, "an answer is the answer of some evaluation");
+                at = List.copyOf(at);
+            }
+        }
     }
 
     /**
@@ -1688,6 +1770,14 @@ public final class InputReads {
 
     /** The element {@code name} is a name for, through the names it was only given. */
     private ElementStood elementStoodBy(BindingId name, DeclarationNewtypes newtypes, int depth) {
+        // The entry a lookup picked out of a map filed from an answer's list is an element of that
+        // list, as the entry of a map filed from the input's is.
+        AnAnswerAt entry = names.placeInAnAnswer(name);
+        if (entry != null && !entry.steps().isEmpty()
+                && entry.steps().getLast() instanceof TermPath.Step.Element) {
+            return new ElementStood(name, new ContainerOf.InAnAnswer(entry.evaluation(),
+                    entry.steps().subList(0, entry.steps().size() - 1)), HeldIn.Part.ELEMENT);
+        }
         return switch (names.roleOf(name)) {
             case BindingRole.Element(HeldIn held) -> new ElementStood(name,
                     pathOf(held.container(), newtypes) instanceof PathResolution.At(TermPath at)
