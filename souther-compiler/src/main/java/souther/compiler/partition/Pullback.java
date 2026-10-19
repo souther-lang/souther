@@ -39,6 +39,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
@@ -5711,7 +5712,7 @@ final class Pullback {
                                     && name.binding().equals(carried) ? before
                                     : again.apply(on -> on.taking(walk, arm, candidates))));
                 }
-                yield new Derivation.AComparisonOfAChoice(ending);
+                yield applications.isEmpty() ? ending : new Derivation.AComparisonOfAChoice(ending);
             }
             case Inside.OneOfTheValues(Core.Read name, List<Denotation> values) -> {
                 WhyUnread past = splitInto(reads, values.size());
@@ -5923,14 +5924,17 @@ final class Pullback {
     }
 
     /**
-     * {@code value}, where it is a walk from a seed over a container the body wrote out, whose
-     * accumulator is no number and whose step is an {@code if} keeping what it carried on one side
-     * and answering a value of the element on the other — or null where it is anything else.
+     * {@code value}, where it is a walk from a seed over a container the body wrote out, whose step
+     * is an {@code if} keeping what it carried on one side and answering a value of the element on
+     * the other — or null where it is anything else.
      *
      * <p>Such a walk ends with the answer of the last application whose condition holds, and with
-     * the seed where none does, whatever the earlier applications answered. That holds only where
-     * the applications cannot stop a run: the condition and the value it selects read the element
-     * and the inputs, work out nothing that can abort, and read nothing the walk carried.
+     * the seed where none does, whatever the earlier applications answered; over no element it
+     * ends with the seed. That holds only where no application can stop a run, which is what
+     * {@link WhatARunMayEndFor} answers of the condition and of the value it selects, and where
+     * neither reads what the walk carried. Whether the accumulator is a number is no part of it: a
+     * walk the arithmetic reads is not offered here, because this is asked only where the
+     * arithmetic stopped.
      */
     private Inside.AFiniteSelection intoAFiniteSelection(Denotation value) {
         // Asked of every value a reading goes into, so the ones a walk cannot be are turned away
@@ -5943,16 +5947,15 @@ final class Pullback {
                 read.rules().newtypes());
         SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
         if (walk == null || !walk.inTheContainersOrder()
-                || !(Core.withoutStanding(walk.step().body()) instanceof Core.If step)
-                || AffineForms.outcome(walk.seed(), call.at(), quantities())
-                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>) {
+                || !(Core.withoutStanding(walk.step().body()) instanceof Core.If step)) {
             return null;
         }
         BindingId carried = walk.accumulator().binding();
         boolean keptThen = keeps(step.then(), carried);
         boolean keptElse = keeps(step.els(), carried);
         Core selected = keptThen ? step.els() : step.then();
-        if (keptThen == keptElse || !cannotStopARun(step.cond()) || !cannotStopARun(selected)
+        if (keptThen == keptElse || !WhatARunMayEndFor.of(step.cond()).endsNone()
+                || !WhatARunMayEndFor.of(selected).endsNone()
                 || ComparisonAssessment.readsAnswer(step.cond(), carried)
                 || ComparisonAssessment.readsAnswer(selected, carried)) {
             return null;
@@ -5964,8 +5967,7 @@ final class Pullback {
             return null;
         }
         List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
-        if (occurrences.isEmpty()
-                || occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+        if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
             return null;
         }
         List<InputReads> applications = new ArrayList<>();
@@ -5985,25 +5987,6 @@ final class Pullback {
     private static boolean keeps(Core arm, BindingId carried) {
         return Core.withoutStanding(arm) instanceof Core.Read name
                 && name.binding().equals(carried);
-    }
-
-    /**
-     * Whether working out {@code e} cannot abort a run: names, fields and written numbers, and the
-     * arithmetic and comparisons over them that never divide.
-     */
-    private static boolean cannotStopARun(Core e) {
-        Core stands = Core.withoutStanding(e);
-        boolean[] stops = {false};
-        switch (stands) {
-            case Core.Read _, Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _ -> { }
-            case Core.FieldAccess _, Core.FieldProjection _ -> { }
-            case Core.Binary binary -> stops[0] = binary.op() == BinOp.DIV;
-            default -> stops[0] = true;
-        }
-        if (!stops[0]) {
-            Core.forEachChild(stands, child -> stops[0] |= !cannotStopARun(child));
-        }
-        return !stops[0];
     }
 
     /**

@@ -296,9 +296,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ElementsApart", "bindingUnder",
                 "(" + core + ")L" + c + "types/BindingId;", Reading.STRUCTURE,
                 "asks which binding a run of fields is read off, which is the base");
-        row(out, c + "partition/Pullback", "cannotStopARun", "(" + core + ")Z",
-                Reading.STRUCTURE, "asks whether working a value out can abort a run, which a"
-                        + " projection read off a base cannot more than its base can");
         row(out, c + "check/AnalysisBody", "visit", "(" + core + "L" + c
                 + "check/ValueTemplates;Ljava/util/Set;Ljava/util/List;)V",
                 Reading.STRUCTURE, "finds the builds of values, which no name read is");

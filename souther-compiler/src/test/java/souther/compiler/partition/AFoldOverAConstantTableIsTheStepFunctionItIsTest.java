@@ -12,14 +12,15 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A fold over a constant table that keeps the last row whose bound is met answers the step function
  * the table draws, so a comparison over what it answers is read at the bounds the table draws.
  *
  * <p>The step is one {@code if} in the source, applied once per row, so what is asserted is that
- * each application is read as its own: the classes of the input are the ones the bounds draw, and
- * which row is the last one met follows the order the rows are written in.
+ * each application is read as its own. The same table written out as a chain of {@code if}s is the
+ * reading to compare with: the classes of the input are the ones that chain draws.
  */
 class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
 
@@ -27,14 +28,17 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
             [ Row { grade = 1, lowerBound = 100 }, Row { grade = 2, lowerBound = 200 },
               Row { grade = 3, lowerBound = 300 } ]""";
 
+    private static final String BY_HAND = """
+            if pay >= 300 then 3 else if pay >= 200 then 2 else if pay >= 100 then 1 else 0""";
+
     @Test
     void whateverIsDoneWithTheGradeIsReadAtEveryBoundOfTheTable() {
         for (String condition : List.of("computed < 2", "computed - cur < 2",
                 "Int.abs(computed - cur) < 2")) {
-            PartitionEvidence measured = measured(ASCENDING, "r.lowerBound <= monthly", condition);
-            assertEquals(List.of(), notRead(measured), condition);
-            assertEquals(List.of("pay/x < 100", "pay/100 <= x < 200", "pay/200 <= x < 300",
-                    "pay/300 <= x"), classesOf(measured, "pay"), condition);
+            PartitionEvidence folded = measured(ASCENDING, "r.lowerBound <= monthly", condition);
+            assertEquals(List.of(), notRead(folded), condition);
+            assertEquals(classesOf(measuredByHand(BY_HAND, condition), "pay"),
+                    classesOf(folded, "pay"), condition);
         }
     }
 
@@ -50,11 +54,68 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                 classesOf(measured, "pay"));
     }
 
-    /** A step that can divide may stop a run, so a later row is not what the walk ends with. */
+    /** A walk over no row ends with its seed, and over one row it draws that row's bound. */
     @Test
-    void aStepThatCanStopARunIsNotReadAsAChoice() {
-        assertFalse(notRead(measured(ASCENDING, "r.lowerBound / monthly <= 1", "computed < 2"))
-                .isEmpty());
+    void aTableOfNoRowIsItsSeedAndOfOneRowIsOneBound() {
+        PartitionEvidence none = measured("[]", "r.lowerBound <= monthly", "computed < 2");
+        assertEquals(List.of(), notRead(none));
+        PartitionEvidence one = measured("[ Row { grade = 1, lowerBound = 100 } ]",
+                "r.lowerBound <= monthly", "computed < 1");
+        assertEquals(List.of(), notRead(one));
+        assertEquals(List.of("pay/x < 100", "pay/100 <= x"), classesOf(one, "pay"));
+    }
+
+    /** What the step selects may be a number as well as a row. */
+    @Test
+    void aWalkThatSelectsANumberIsReadAsOneThatSelectsARow() {
+        PartitionEvidence measured = measure(Compilation.ofSource("""
+                module demo
+
+                data Row = { grade: Int, lowerBound: Int }
+                data Ok
+                data No
+                let table: List<Row> = %s
+                behavior f : (pay: Int) -> Ok | No
+                let f (pay) = {
+                    let computed = List.fold((acc, r) -> if r.lowerBound <= pay then r.grade else acc,
+                        0, table)
+                    guard computed < 2 else No
+                    Ok
+                }
+                """.formatted(ASCENDING), "Main"), "f");
+        assertEquals(List.of(), notRead(measured));
+        assertEquals(List.of("pay/x < 100", "pay/100 <= x < 200", "pay/200 <= x < 300",
+                "pay/300 <= x"), classesOf(measured, "pay"));
+    }
+
+    /** A step that can end a run for any reason is not one whose earlier applications are dropped. */
+    @Test
+    void aStepThatMayEndARunIsNotReadAsAChoice() {
+        for (String selects : List.of("r.lowerBound / monthly <= 1",
+                "r.lowerBound + monthly >= 0", "r.lowerBound * monthly >= 0")) {
+            assertFalse(notRead(measured(ASCENDING, selects, "computed < 2")).isEmpty(), selects);
+        }
+    }
+
+    /** A seed no form says keeps the reason it has. */
+    @Test
+    void aSeedNoFormSaysKeepsItsReason() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Row = { grade: Int, lowerBound: Int }
+                data Ok
+                data No
+                let table: List<Row> = %s
+                behavior f : (cur: Int, pay: Int) -> Ok | No
+                let f (cur, pay) = {
+                    let computed = List.fold((acc, r) -> if r.lowerBound <= pay then r.grade else acc,
+                        cur * pay, table)
+                    guard computed < 2 else No
+                    Ok
+                }
+                """.formatted(ASCENDING), "Main");
+        assertTrue(notRead(measure(compilation, "f")).toString().contains("NON_AFFINE_PRODUCT"));
     }
 
     /** A table an input decides is no step function written down. */
@@ -74,7 +135,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                     Ok
                 }
                 """, "Main");
-        assertFalse(notRead(measure(compilation)).isEmpty());
+        assertFalse(notRead(measure(compilation, "f")).isEmpty());
     }
 
     private static PartitionEvidence measured(String table, String selects, String condition) {
@@ -94,13 +155,28 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                     guard %s else No
                     Ok
                 }
-                """.formatted(table, selects, condition), "Main"));
+                """.formatted(table, selects, condition), "Main"), "f");
     }
 
-    private static PartitionEvidence measure(Compilation compilation) {
+    private static PartitionEvidence measuredByHand(String grade, String condition) {
+        return measure(Compilation.ofSource("""
+                module demo
+
+                data Ok
+                data No
+                behavior f : (cur: Int, pay: Int) -> Ok | No
+                let f (cur, pay) = {
+                    let computed = %s
+                    guard %s else No
+                    Ok
+                }
+                """.formatted(grade, condition), "Main"), "f");
+    }
+
+    private static PartitionEvidence measure(Compilation compilation, String behavior) {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
+        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get(behavior);
     }
 
     private static List<String> notRead(PartitionEvidence measured) {
