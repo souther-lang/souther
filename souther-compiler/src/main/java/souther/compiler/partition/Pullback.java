@@ -5930,9 +5930,10 @@ final class Pullback {
      *
      * <p>Such a walk ends with the answer of the last application whose condition holds, and with
      * the seed where none does, whatever the earlier applications answered; over no element it
-     * ends with the seed. That holds only where no application can stop a run, which is what
-     * {@link WhatARunMayEndFor} answers of the condition and of the value it selects, and where
-     * neither reads what the walk carried. Whether the accumulator is a number is no part of it: a
+     * ends with the seed. That holds only where nothing the walk works out can stop a run: no
+     * application, which is what {@link WhatARunMayEndFor} answers of the condition and of the
+     * value it selects, and neither the seed nor the container ({@link #endsNoRun}); and where
+     * neither the condition nor the value it selects reads what the walk carried. Whether the accumulator is a number is no part of it: a
      * walk the arithmetic reads is not offered here, because this is asked only where the
      * arithmetic stopped.
      */
@@ -5962,8 +5963,11 @@ final class Pullback {
         }
         Denotation container = call.at().standing(walk.container(), read.rules().symbols(),
                 read.rules().newtypes());
-        if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
-                instanceof WrittenOutElements.Walked.Each each)) {
+        // The seed and the container are worked out before any application, and a candidate takes
+        // the whole walk as a value: a run one of them ends is a run with no answer to compare.
+        if (!endsNoRun(new Denotation(walk.seed(), call.at())) || !endsNoRun(container)
+                || !(WrittenOutElements.of(container, read.rules().symbols(),
+                        read.rules().newtypes()) instanceof WrittenOutElements.Walked.Each each)) {
             return null;
         }
         List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
@@ -5981,6 +5985,18 @@ final class Pullback {
         }
         return new Inside.AFiniteSelection(Core.withoutStanding(call.value()),
                 new Denotation(walk.seed(), call.at()), step, carried, applications);
+    }
+
+    /**
+     * Whether working out {@code value} ends no run that reaches it: it is written out all the way
+     * down, so it is the same value on every run and a run it ends is no row's to avoid, or it is
+     * something {@link WhatARunMayEndFor} knows ends none.
+     */
+    private boolean endsNoRun(Denotation value) {
+        Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        return stands.at().writtenOutAsOneValue(stands.value(), read.rules().symbols(),
+                read.rules().newtypes()) || WhatARunMayEndFor.of(stands.value()).endsNone();
     }
 
     /** Whether {@code arm} is the name of what a walk carried. */

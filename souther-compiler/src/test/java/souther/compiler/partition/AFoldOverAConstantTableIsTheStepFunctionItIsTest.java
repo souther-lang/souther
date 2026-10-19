@@ -1,6 +1,15 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.core.Core;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.PartitionEvidence;
@@ -8,10 +17,12 @@ import souther.compiler.query.PartitionEvidence;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -97,6 +108,71 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
         }
     }
 
+    /**
+     * The seed and the rows are worked out before any application, so a walk whose seed or rows a
+     * run can end on is not the answer of its last application: an input at the least {@code Int}
+     * ends the run in {@code Int.abs} before the table is walked.
+     */
+    @Test
+    void aSeedOrARowThatMayEndARunIsNotSkippedOver() {
+        for (String walked : List.of("""
+                List.fold((acc, r) -> if r.lowerBound <= pay then r.grade else acc,
+                    Int.abs(cur), %s)""".formatted(ASCENDING), """
+                List.fold((acc, r) -> if r.lowerBound <= pay then r.grade else acc, 0,
+                    [ Row { grade = Int.abs(cur), lowerBound = 100 },
+                      Row { grade = 2, lowerBound = 200 } ])""")) {
+            Compilation compilation = Compilation.ofSource("""
+                    module demo
+
+                    data Row = { grade: Int, lowerBound: Int }
+                    data Ok
+                    data No
+                    behavior f : (cur: Int, pay: Int) -> Ok | No
+                    let f (cur, pay) = {
+                        let computed = %s
+                        guard computed < 2 else No
+                        Ok
+                    }
+                    """.formatted(walked), "Main");
+            assertFalse(notRead(measure(compilation, "f")).isEmpty(), walked);
+        }
+    }
+
+    /**
+     * What the fold states is what the same table written as a chain of {@code if}s states: the
+     * same proposition, so that which grade a bound selects is held and not only where the bounds
+     * fall.
+     */
+    @Test
+    void theFoldStatesWhatTheChainOfIfsStates() {
+        for (String condition : List.of("computed < 2", "computed - cur < 2",
+                "Int.abs(computed - cur) < 2")) {
+            Proposition folded = stated("""
+                    let computed = List.fold((acc, r) -> if r.lowerBound <= pay then r else acc,
+                        Row { grade = 0, lowerBound = 0 }, %s).grade
+                    if %s then 1 else 0""".formatted(ASCENDING, condition));
+            assertEquals(stated("""
+                    let computed = %s
+                    if %s then 1 else 0""".formatted(BY_HAND, condition)), folded, condition);
+            assertFalse(Proposition.leavesSomethingUnread(folded), condition);
+        }
+    }
+
+    /** The rows in the order they are written: the last one met is the one kept. */
+    @Test
+    void theLastRowMetIsTheOneTheFoldStates() {
+        assertEquals(stated("""
+                        let computed = if pay >= 200 then 3 else if pay >= 100 then 2 else 0
+                        if computed < 3 then 1 else 0"""),
+                stated("""
+                        let computed = List.fold(
+                            (acc, r) -> if r.lowerBound <= pay then r else acc,
+                            Row { grade = 0, lowerBound = 0 },
+                            [ Row { grade = 1, lowerBound = 200 }, Row { grade = 2, lowerBound = 100 },
+                              Row { grade = 3, lowerBound = 200 } ]).grade
+                        if computed < 3 then 1 else 0"""));
+    }
+
     /** A seed no form says keeps the reason it has. */
     @Test
     void aSeedNoFormSaysKeepsItsReason() {
@@ -171,6 +247,37 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                     Ok
                 }
                 """.formatted(grade, condition), "Main"), "f");
+    }
+
+    /** What the condition of the one fork that ends a body written {@code body} states. */
+    private static Proposition stated(String body) {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Row = { grade: Int, lowerBound: Int }
+
+                behavior f : (cur: Int, pay: Int) -> Int
+                let f (cur, pay) = {
+                %s
+                }
+                """.formatted(body.indent(4).stripTrailing()), "Main");
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+        AnalysisBody analysis = checked.analysisBodies().get("f");
+        RuleReadingSource rules = RuleReadings.of(compilation, "demo");
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");
+        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                inputs.dependencies());
+        Core e = Core.withoutStanding(analysis.core());
+        while (e instanceof Core.LetIn let) {
+            reads = reads.and(let.binder(), let.value());
+            e = Core.withoutStanding(let.body());
+        }
+        Core.If fork = assertInstanceOf(Core.If.class, e, "the body ends in one fork");
+        return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty())
+                .proposition();
     }
 
     private static PartitionEvidence measure(Compilation compilation, String behavior) {
