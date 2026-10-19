@@ -326,6 +326,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes what a moved remainder is on a stretch of the place's remainder as the"
                             + " place's moved by a number, so that its comparison with another"
                             + " value is read where any comparison of a sum is"),
+            new Held("souther.compiler.partition.Pullback.cannotStopARun",
+                    "asks whether an operator divides, because a division can abort a run, and a"
+                            + " walk's earlier applications are left out of what it ends with only"
+                            + " where none of them can"),
             new Held("souther.compiler.partition.Pullback.productAt",
                     "asks whether the expression the arithmetic stopped at is the product it"
                             + " stopped for, so the two numbers multiplied are read as one"),

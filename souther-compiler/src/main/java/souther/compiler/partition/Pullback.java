@@ -5613,6 +5613,15 @@ final class Pullback {
         record ACall(Core call, ValueName.Behavior behavior, Denotation body) implements Inside {}
 
         /**
+         * A walk from {@code seed} over elements written out whose step is {@code step}, an
+         * {@code if} that keeps what the walk carried on one side and answers a value of the
+         * element on the other. {@code carried} is the step's name for what was carried, and
+         * {@code applications} are the step's applications in the order the elements are written.
+         */
+        record AFiniteSelection(Core walk, Denotation seed, Core.If step, BindingId carried,
+                                List<InputReads> applications) implements Inside {}
+
+        /**
          * A name standing for one of the values a container was written with, read where no
          * application hands it one: {@code values} are what it can be handed.
          */
@@ -5680,6 +5689,30 @@ final class Pullback {
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,
                             again.apply(on -> on.taking(call, body, 1)));
+            // The walk ends with the value of the last application whose condition holds, or with
+            // the seed where none does. Read from the seed out: what the walk ends with after an
+            // element is this step's answer for it where the condition selects it, and what it
+            // ended with before the element where it does not, which is a reading made already.
+            // Each candidate is the walk taken as one value, so no node stands for two of them.
+            case Inside.AFiniteSelection(Core walk, Denotation seed, Core.If step,
+                                         BindingId carried, List<InputReads> applications) -> {
+                int candidates = applications.size() + 1;
+                WhyUnread past = splitInto(reads, candidates);
+                if (past != null) {
+                    yield partOf(at, new Derivation.Stopped(past, fixed));
+                }
+                Derivation ending = again.apply(on -> on.taking(walk, seed, candidates));
+                for (InputReads application : applications) {
+                    Derivation before = ending;
+                    Derivation condition = observe(step.cond(), AnswerAspect.TRUTH, application);
+                    ArmsLeft left = armsLeftBy(condition);
+                    ending = madeBy(step, armsOf(step, application, condition, left, arm ->
+                            Core.withoutStanding(arm.value()) instanceof Core.Read name
+                                    && name.binding().equals(carried) ? before
+                                    : again.apply(on -> on.taking(walk, arm, candidates))));
+                }
+                yield new Derivation.AComparisonOfAChoice(ending);
+            }
             case Inside.OneOfTheValues(Core.Read name, List<Denotation> values) -> {
                 WhyUnread past = splitInto(reads, values.size());
                 if (past != null) {
@@ -5760,6 +5793,8 @@ final class Pullback {
                     case Inside.AChoice(Denotation chosen) ->
                             number.at().taken(chosen.value()) != null;
                     case Inside.ACall(Core call, var _, var _) -> number.at().taken(call) != null;
+                    case Inside.AFiniteSelection(Core walk, var _, var _, var _, var _) ->
+                            number.at().taken(walk) != null;
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
                             number.at().isTaken(call);
                     // A name an application handed a value is that one value, and stops nothing.
@@ -5816,6 +5851,10 @@ final class Pullback {
         Inside.ACall called = intoACall(value);
         if (called != null) {
             return called;
+        }
+        Inside.AFiniteSelection selected = intoAFiniteSelection(value);
+        if (selected != null) {
+            return selected;
         }
         Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
@@ -5881,6 +5920,84 @@ final class Pullback {
                 applied.args(), read.rules().newtypes());
         return inside == null ? null
                 : new Inside.ACall(e, behavior, new Denotation(body.get().body(), inside));
+    }
+
+    /**
+     * {@code value}, where it is a walk from a seed over a container the body wrote out, whose
+     * accumulator is no number and whose step is an {@code if} keeping what it carried on one side
+     * and answering a value of the element on the other — or null where it is anything else.
+     *
+     * <p>Such a walk ends with the answer of the last application whose condition holds, and with
+     * the seed where none does, whatever the earlier applications answered. That holds only where
+     * the applications cannot stop a run: the condition and the value it selects read the element
+     * and the inputs, work out nothing that can abort, and read nothing the walk carried.
+     */
+    private Inside.AFiniteSelection intoAFiniteSelection(Denotation value) {
+        Denotation call = value.at().standing(value.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        if (walk == null || !walk.inTheContainersOrder()
+                || !(Core.withoutStanding(walk.step().body()) instanceof Core.If step)
+                || AffineForms.outcome(walk.seed(), call.at(), quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>) {
+            return null;
+        }
+        BindingId carried = walk.accumulator().binding();
+        boolean keptThen = keeps(step.then(), carried);
+        boolean keptElse = keeps(step.els(), carried);
+        Core selected = keptThen ? step.els() : step.then();
+        if (keptThen == keptElse || !cannotStopARun(step.cond()) || !cannotStopARun(selected)
+                || ComparisonAssessment.readsAnswer(step.cond(), carried)
+                || ComparisonAssessment.readsAnswer(selected, carried)) {
+            return null;
+        }
+        Denotation container = call.at().standing(walk.container(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each)) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
+        if (occurrences.isEmpty()
+                || occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+            return null;
+        }
+        List<InputReads> applications = new ArrayList<>();
+        for (ReadMeaning.Occurrence occurrence : occurrences) {
+            InputReads handing = call.at().handingTheElement(walk.step(), walk.container(),
+                    occurrence.value(), read.rules().newtypes());
+            if (handing == null) {
+                return null;
+            }
+            applications.add(handing);
+        }
+        return new Inside.AFiniteSelection(Core.withoutStanding(call.value()),
+                new Denotation(walk.seed(), call.at()), step, carried, applications);
+    }
+
+    /** Whether {@code arm} is the name of what a walk carried. */
+    private static boolean keeps(Core arm, BindingId carried) {
+        return Core.withoutStanding(arm) instanceof Core.Read name
+                && name.binding().equals(carried);
+    }
+
+    /**
+     * Whether working out {@code e} cannot abort a run: names, fields and written numbers, and the
+     * arithmetic and comparisons over them that never divide.
+     */
+    private static boolean cannotStopARun(Core e) {
+        Core stands = Core.withoutStanding(e);
+        boolean[] stops = {false};
+        switch (stands) {
+            case Core.Read _, Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _ -> { }
+            case Core.FieldAccess _, Core.FieldProjection _ -> { }
+            case Core.Binary binary -> stops[0] = binary.op() == BinOp.DIV;
+            default -> stops[0] = true;
+        }
+        if (!stops[0]) {
+            Core.forEachChild(stands, child -> stops[0] |= !cannotStopARun(child));
+        }
+        return !stops[0];
     }
 
     /**
