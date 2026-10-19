@@ -12,10 +12,12 @@ import net.unit8.notation199x.pattern.PatternRead;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -58,6 +60,21 @@ class AnOutputReadsWhatAClauseIsAsConstraintsTest {
 
             data Handle = { id: String }
                 invariant String.length(id) >= 3
+
+            data Cap = Decimal
+                invariant value <= 5.0m
+
+            data CapBySign = Decimal
+                invariant Decimal.compare(value, 5.0m) <= 0
+
+            data CapBySignOnTheLeft = Decimal
+                invariant 0 >= Decimal.compare(value, 5.0m)
+
+            data CapByDeniedSign = Decimal
+                invariant Bool.not(Decimal.compare(value, 5.0m) > 0)
+
+            data CapBySignSlack = Decimal
+                invariant Decimal.compare(value, 5.0m) <= 1
             """;
 
     /** Checked once: every test reads a different declaration of the same module. */
@@ -132,6 +149,26 @@ class AnOutputReadsWhatAClauseIsAsConstraintsTest {
         assertEquals(List.of(new ConstraintProjection(
                         List.of(new BoundaryConstraint.MapNonEmpty()), true)),
                 projectionOf("Tally"));
+    }
+
+    /**
+     * The sign of an order against nought is the order of its arguments, so a bound written that
+     * way is the bound written directly, in whichever way the comparison and its denial are spelled.
+     */
+    @Test
+    void aBoundWrittenAsTheSignOfAnOrderIsTheBoundWrittenDirectly() {
+        assertEquals(List.of(new ConstraintProjection(
+                        List.of(new BoundaryConstraint.DecimalMax(new BigDecimal("5.0"))), true)),
+                projectionOf("Cap"));
+        assertEquals(projectionOf("Cap"), projectionOf("CapBySign"));
+        assertEquals(projectionOf("Cap"), projectionOf("CapBySignOnTheLeft"));
+        assertEquals(projectionOf("Cap"), projectionOf("CapByDeniedSign"));
+    }
+
+    /** A sign below one holds of more values than the order does, so it is not the bound. */
+    @Test
+    void aSignAgainstAnyOtherNumberThanNoughtIsNotTheBound() {
+        assertNotEquals(projectionOf("Cap"), projectionOf("CapBySignSlack"));
     }
 
     /** A data of more than one field has no one field for a constraint to be about. */

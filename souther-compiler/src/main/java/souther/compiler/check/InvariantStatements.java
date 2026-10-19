@@ -31,19 +31,37 @@ import java.util.Map;
  */
 public final class InvariantStatements {
 
+    private final Terms terms;
     private final Clauses clauses;
     /** One answer per declaration, because a conjunct is asked about once per consumer and the
      *  clauses of a declaration are read to answer for any of them. */
     private final Map<TypeSymbol.AtModule, Map<PartId<RuleRef.Invariant>, List<InvariantStatement>>>
             read = new LinkedHashMap<>();
 
-    private InvariantStatements(Clauses clauses) {
+    private InvariantStatements(Terms terms, Clauses clauses) {
+        this.terms = terms;
         this.clauses = clauses;
     }
 
-    /** The statements of the declarations {@code source} reads. */
-    public static InvariantStatements of(RuleReadingSource source) {
-        return new InvariantStatements(new Clauses(source));
+    /**
+     * The calls a conjunct states, for a consumer that reads nothing else of it. Its comparisons
+     * are as the clause wrote them: reading the order a sign stands for takes a reading of the
+     * declarations ({@link #of(RuleReadingContext)}), and a consumer of calls has no budget to
+     * read under.
+     */
+    public static InvariantStatements ofTheCalls(RuleReadingSource source) {
+        return new InvariantStatements(null, new Clauses(source));
+    }
+
+    /**
+     * The statements of the declarations {@code reading} reads.
+     *
+     * <p>Over a reading and not a source alone: a comparison of the sign of an order states the
+     * order of its arguments only where the values can be named, which is {@link Terms}' to say.
+     */
+    public static InvariantStatements of(RuleReadingContext reading) {
+        Terms terms = new Terms(Terms.Of.THE_DISCHARGE_TREE, reading);
+        return new InvariantStatements(terms, terms.clauses());
     }
 
     /**
@@ -62,6 +80,8 @@ public final class InvariantStatements {
             TypeSymbol.AtModule declaration) {
         return read.computeIfAbsent(declaration, named -> {
             Map<PartId<RuleRef.Invariant>, List<InvariantStatement>> out = new LinkedHashMap<>();
+            Denotations at = terms == null ? Denotations.none() : Denotations.none().locations(
+                    clauses.bindingsOf(named).values(), terms::placeSubject, terms::placeTerm);
             for (ClauseMeaning clause : clauses.declared(named)) {
                 Clauses.AsStated stated = clauses.stated(clause);
                 if (stated == null) {
@@ -71,22 +91,27 @@ public final class InvariantStatements {
                 // reader of a declaration's rules reads them. Read into a shape here, this would be
                 // a second answer to what the clause's author wrote.
                 for (Clauses.StatedPart part : clauses.partsOf(stated)) {
-                    out.put(part.id(), statementsOf(part));
+                    out.put(part.id(), statementsOf(part, at));
                 }
             }
             return Map.copyOf(out);
         });
     }
 
-    private static List<InvariantStatement> statementsOf(Clauses.StatedPart part) {
+    private List<InvariantStatement> statementsOf(Clauses.StatedPart part, Denotations at) {
         List<InvariantStatement> out = new ArrayList<>();
         for (ConjunctStatements.Reached each : ConjunctStatements.of(part.of(), part.id())) {
-            out.add(states(each));
+            out.add(states(each, at));
         }
         return List.copyOf(out);
     }
 
-    private static InvariantStatement states(ConjunctStatements.Reached reached) {
+    private static boolean isASignOfAnOrder(Core side) {
+        return Core.withoutStanding(side) instanceof Core.PreservedCall call
+                && !TheSignOfAnOrder.orderedArguments(call.declared().operation()).isEmpty();
+    }
+
+    private InvariantStatement states(ConjunctStatements.Reached reached, Denotations at) {
         // What the names under the bindings mean, which is what entering them comes to here. A
         // consumer handed the bindings instead reads a rule about the helper's parameter and has to
         // work out which of the declaration's values that parameter stands for — which is the
@@ -97,13 +122,22 @@ public final class InvariantStatements {
             given.put(binding.binder().binding(), Clauses.substituted(binding.value(), given));
         }
         // Of the part and its polarity together, so what comes back is the comparison the clause
-        // states rather than the one its author spelled.
-        StatedComparison compares = StatedComparison.of(reached.said());
-        if (compares != null) {
-            return new InvariantStatement.Compares(reached.statement(),
-                    new StatedComparison(compares.claim(),
-                            Clauses.substituted(compares.left(), given),
-                            Clauses.substituted(compares.right(), given), compares.reading()));
+        // states rather than the one its author spelled — the order of the arguments where it
+        // compares the sign of an order, read once the bindings are spent so that a sign bound by a
+        // helper is read as the sign it is.
+        if (Core.withoutStanding(Clauses.substituted(reached.said().of(), given))
+                instanceof Core.Binary binary) {
+            StatedComparison compares = StatedComparison.of(binary, reached.said().positive());
+            // Only a side that is a call of an operation answering an order can be the sign of one.
+            // Asking the others what they come to reads them through, and a value named twice in a
+            // chain of names is a tree that doubles at every link.
+            if (terms != null && compares != null && (isASignOfAnOrder(compares.left())
+                    || isASignOfAnOrder(compares.right()))) {
+                compares = Conditions.statedBy(terms, binary, reached.said().positive(), at);
+            }
+            if (compares != null) {
+                return new InvariantStatement.Compares(reached.statement(), compares);
+            }
         }
         // What the part states with the denials above it taken off, which is the operation itself
         // where one was kept standing. Stated only: what holds where an operation does not is not

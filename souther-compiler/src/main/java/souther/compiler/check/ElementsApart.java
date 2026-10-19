@@ -82,7 +82,7 @@ public final class ElementsApart {
         for (DeclaredClauses.OnAName written : DeclaredClauses.of(List.of(named), source)) {
             for (DeclaredClauses.Conjunct each : written.conjuncts()) {
                 if (statements == null) {
-                    statements = InvariantStatements.of(source);
+                    statements = InvariantStatements.ofTheCalls(source);
                 }
                 List<InvariantStatement> states = statements.of(each.part());
                 if (states == null) {
