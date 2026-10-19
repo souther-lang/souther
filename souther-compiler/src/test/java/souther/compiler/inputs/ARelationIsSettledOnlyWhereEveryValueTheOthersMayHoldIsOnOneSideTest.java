@@ -141,21 +141,31 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
-     * {@code a < b + c} over decimals, {@code a} from nought to ten and the others to five: at ten
-     * the relation fails whatever they are, and below it {@code b} and {@code c} at nought fail it
-     * and at five hold it — although the values left, nought up to but not ten, end open.
+     * {@code a < b + c} over decimals is not read from the others together: a decimal sum or
+     * product stops for the scale of its factors and not only for the size of the number, so the
+     * ends of the others are no witness whatever their size. With {@code c} and {@code d} between
+     * minus and plus the least decimal there is, every product with a written {@code 1.0} stops,
+     * and the two rows the others' ends give are rows nothing computes.
      */
     @Test
-    void theValuesLeftBelowAnEndAValueSettlesAreAskedWithTheEndLeftOut() {
+    void decimalsAreNotReadTogetherForTheirArithmeticStopsForMoreThanTheirSize() {
         var a = denseTerm("a", 1, run(0L, 10L), run(0L, 10L));
         var b = denseTerm("b", -1, run(0L, 5L), run(0L, 5L));
         var c = denseTerm("c", -1, run(0L, 5L), run(0L, 5L));
-        Leaves.Settled out = (Leaves.Settled) WhatARelationLeavesUndivided.leavesOf(
-                List.of(a, b, c), 0, ExactRatio.of(0), Rel.LT, String::equals,
-                (one, other) -> true, Granularity.DENSE, null);
-        assertEquals(1, out.runs().size());
-        assertEquals(false, out.runs().get(0).holds());
-        assertEquals(0, out.runs().get(0).from().at().compareTo(ExactRatio.of(10)));
+        assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(a, b, c), 0, ExactRatio.of(0),
+                Rel.LT, String::equals, (one, other) -> true, Granularity.DENSE, null));
+
+        NumericDomain.Bounds tiny = new NumericDomain.Bounds(
+                Endpoint.inclusive(new Count(new BigDecimal(BigInteger.ONE.negate(),
+                        Integer.MAX_VALUE))),
+                Endpoint.inclusive(new Count(new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE))));
+        var nought = denseTerm("a", 1, run(0L, 0L), run(0L, 0L));
+        var beside = denseTerm("b", -1, run(0L, 0L), run(0L, 0L));
+        var plus = denseTerm("c", -1, tiny, tiny);
+        var more = denseTerm("d", -1, tiny, tiny);
+        assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(nought, beside, plus, more), 0,
+                ExactRatio.of(0), Rel.LT, String::equals, (one, other) -> true,
+                Granularity.DENSE, null));
     }
 
     /**

@@ -340,7 +340,8 @@ public final class WhatARelationLeavesUndivided {
                                       Rel relation, BiPredicate<P, P> overlap,
                                       Independence independent, Granularity granularity,
                                       BigInteger greatest) {
-        Jointly jointly = new Jointly(greatest);
+        Jointly jointly = granularity == Granularity.DISCRETE && greatest != null
+                ? new Jointly(greatest) : null;
         if (reachedBySome(terms, at, constant, relation, overlap, independent, jointly)) {
             return new Leaves.Undivided();
         }
@@ -367,8 +368,7 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         if (granularity == Granularity.DENSE) {
-            return leavesOfADenseTerm(terms, at, constant, relation, overlap, independent, rest,
-                    jointly);
+            return leavesOfADenseTerm(terms, at, constant, relation, overlap, independent, rest);
         }
         List<SettledRun> runs = new ArrayList<>();
         WholeRun between = held;
@@ -855,8 +855,7 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> Leaves leavesOfADenseTerm(List<Term<P>> terms, int at, ExactRatio constant,
                                                  Rel relation, BiPredicate<P, P> overlap,
-                                                 Independence independent, Interval rest,
-                                                 Jointly jointly) {
+                                                 Independence independent, Interval rest) {
         Term<P> it = terms.get(at);
         Span held = Span.ofTheValues(it.holds());
         if (held == null) {
@@ -902,7 +901,7 @@ public final class WhatARelationLeavesUndivided {
         }
         for (Span each : between) {
             if (!reachedBySome(terms, at, new Interval(each.lower(), each.upper()), constant,
-                    relation, overlap, independent, jointly)) {
+                    relation, overlap, independent, null)) {
                 return null;
             }
         }
@@ -967,15 +966,23 @@ public final class WhatARelationLeavesUndivided {
                 return true;
             }
         }
-        return reachedTogether(terms, at, within, constant, relation, free, jointly);
+        return within == null && reachedTogether(terms, at, constant, relation, free, jointly);
     }
 
     /**
-     * What the type of a relation's terms limits the others to being asked together: the greatest
-     * value it holds, or null where it holds none. A caller that does not know the type passes no
-     * {@code Jointly} at all, and the others are then asked one at a time only.
+     * What lets the others be asked together: the type of the relation's terms is whole numbers
+     * and the arithmetic on them stops only past {@code greatest}, so a sum inside it is computed.
+     * A type whose arithmetic stops for other reasons than the size of a number — a decimal's
+     * scale — has no such greatest, and a caller that has none passes no {@code Jointly}, so the
+     * others are then asked one at a time only.
      */
     private record Jointly(BigInteger greatest) {
+
+        private Jointly {
+            if (greatest == null) {
+                throw new IllegalArgumentException("a bound the arithmetic stops past is a number");
+            }
+        }
     }
 
     /**
@@ -994,19 +1001,19 @@ public final class WhatARelationLeavesUndivided {
      *
      * <p>A witness is a row that is computed, so every sum along the way has to stay inside the
      * type: the constant and the weighed size of each term at its farthest value, added, are held
-     * to the greatest value of the type, which no order of adding passes.
+     * to the greatest value of the type, which no order of adding passes. That is asked of whole
+     * numbers only, where this is all that stops the arithmetic; the values of a term that is not
+     * whole are never the ends of a witness.
      */
-    private static <P> boolean reachedTogether(List<Term<P>> terms, int at, Interval within,
-                                               ExactRatio constant, Rel relation,
-                                               boolean[] free, Jointly jointly) {
+    private static <P> boolean reachedTogether(List<Term<P>> terms, int at, ExactRatio constant,
+                                               Rel relation, boolean[] free, Jointly jointly) {
         if (jointly == null || terms.size() < 3 || constant == null || relation == Rel.EQ
                 || relation == Rel.NE) {
             return false;
         }
         Term<P> it = terms.get(at);
-        Interval over = within != null ? within : attained(it.holds(), it.spacing());
-        Interval weighedOver = over == null || over.lower() == null || over.upper() == null
-                ? null : over.times(it.weight());
+        Interval over = wholeRunOf(it.holds(), it.spacing());
+        Interval weighedOver = over == null ? null : over.times(it.weight());
         if (weighedOver == null) {
             return false;
         }
@@ -1018,15 +1025,14 @@ public final class WhatARelationLeavesUndivided {
             }
             Term<P> each = terms.get(i);
             Interval taken = each.realizes() == null ? null
-                    : attained(each.realizes(), each.spacing());
-            if (!free[i] || !isClosed(taken) || !each.weight().isWhole()) {
+                    : wholeRunOf(each.realizes(), each.spacing());
+            if (!free[i] || taken == null || !each.weight().isWhole()) {
                 return false;
             }
             sum = sum.plus(taken.times(each.weight()));
             size = sum == null ? null : sizeOf(taken, each.weight(), size);
         }
-        if (size == null || (jointly.greatest() != null
-                && size.compareTo(ExactRatio.of(jointly.greatest())) > 0)) {
+        if (size == null || size.compareTo(ExactRatio.of(jointly.greatest())) > 0) {
             return false;
         }
         ExactRatio atLeast = weighedOver.high().plus(sum.low()).orNull();
@@ -1034,38 +1040,25 @@ public final class WhatARelationLeavesUndivided {
         if (atLeast == null || atMost == null) {
             return false;
         }
-        // A run the term leaves its end out of is never at that end, so a side that asks to be
-        // strictly past the level is asked only to reach it there.
         boolean strictAtLeast = relation == Rel.LT || relation == Rel.GE;
-        boolean farEndLeftOut = !weighedOver.upper().inclusive();
-        boolean nearEndLeftOut = !weighedOver.lower().inclusive();
-        return (strictAtLeast ? atLeast.signum() < 0 || (farEndLeftOut && atLeast.signum() == 0)
-                        : atLeast.signum() <= 0)
-                && (strictAtLeast ? atMost.signum() >= 0
-                        : atMost.signum() > 0 || (nearEndLeftOut && atMost.signum() == 0));
+        return (strictAtLeast ? atLeast.signum() < 0 : atLeast.signum() <= 0)
+                && (strictAtLeast ? atMost.signum() >= 0 : atMost.signum() > 0);
     }
 
     /**
-     * The run of values {@code bounds} is shown to hold, with an end it leaves out of a whole run
-     * moved in to the whole number it stops at, so that {@code 1 <= x < 32} and
-     * {@code 1 <= x <= 31} are one run — or null where an end is no number. Where the values are
-     * not whole an end left out stays left out.
+     * The whole numbers {@code bounds} is shown to hold, as a run that holds both its ends, so
+     * that {@code 1 <= x < 32} and {@code 1 <= x <= 31} are one run — or null where the values
+     * are not whole or an end is none or no number.
      */
-    private static Interval attained(NumericDomain.Bounds bounds, Granularity spacing) {
+    private static Interval wholeRunOf(NumericDomain.Bounds bounds, Granularity spacing) {
         if (spacing != Granularity.DISCRETE) {
-            return Interval.of(bounds);
+            return null;
         }
         WholeRun whole = WholeRun.ofTheValues(bounds);
         if (whole == null || whole.low == null || whole.high == null) {
             return null;
         }
         return new Interval(ExactRatio.of(whole.low), ExactRatio.of(whole.high));
-    }
-
-    /** Whether {@code run} is a run of numbers that holds both its ends. */
-    private static boolean isClosed(Interval run) {
-        return run != null && run.lower() != null && run.upper() != null
-                && run.lower().inclusive() && run.upper().inclusive();
     }
 
     /** {@code sofar} and the weighed size of {@code run}'s farthest value from nought, or null
