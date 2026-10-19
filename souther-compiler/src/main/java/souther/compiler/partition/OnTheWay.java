@@ -320,19 +320,27 @@ public sealed interface OnTheWay {
      *                  it, or none where it is no arm's. Beside the name and not in place of it: a
      *                  reader asking whether a condition is the entering of one particular arm
      *                  asks here, and the name is what tells the conditions apart
+     * @param ofAnAnswerAlone whether the condition names nothing but what a dependency answered.
+     *                  An answer is an unknown value no number of the input is related to, so such
+     *                  a condition narrows the way without relating any numbers of the input
      */
     record Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
-                    List<WhyNotTaken> whys, Optional<EnteredArm> arm)
+                    List<WhyNotTaken> whys, Optional<EnteredArm> arm, boolean ofAnAnswerAlone)
             implements OnTheWay {
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         WhyNotTaken why) {
-            this(condition, anchor, List.of(why), Optional.empty());
+            this(condition, anchor, List.of(why), Optional.empty(), false);
         }
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         List<WhyNotTaken> whys) {
-            this(condition, anchor, whys, Optional.empty());
+            this(condition, anchor, whys, Optional.empty(), false);
+        }
+
+        public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                        List<WhyNotTaken> whys, Optional<EnteredArm> arm) {
+            this(condition, anchor, whys, arm, false);
         }
 
         public Declined {

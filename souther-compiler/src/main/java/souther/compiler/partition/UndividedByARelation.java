@@ -383,13 +383,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * only where the container may hold two elements of one key. It says nothing of the input's
      * values beside that, so it is explained here and left declined for every other reader of the
      * way. An arm of any other match, or of another lookup, is not.
+     *
+     * <p>A condition on what a dependency answered alone is not declined for anything bearing on
+     * the relation either. The answer is a value nothing relates to the input, so the condition
+     * narrows which answer the row stands the dependency in with and no number of the input.
      */
     private boolean declinedOnlyAKeyFound(Reachability.Reaching way) {
         if (way.declined().isEmpty()) {
             return true;
         }
-        return way.declined().stream().allMatch(declined -> sides.stream().anyMatch(side ->
-                side.kept() != null && findsTheEndOf(declined, side.kept().seed())));
+        return way.declined().stream().allMatch(declined -> declined.ofAnAnswerAlone()
+                || sides.stream().anyMatch(side ->
+                        side.kept() != null && findsTheEndOf(declined, side.kept().seed())));
     }
 
     /**

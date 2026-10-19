@@ -480,7 +480,7 @@ public final class AnAnswerComposed {
                     return stoppedBy.isEmpty() ? new Ways.Unwritable()
                             : new Ways.Stopped(stoppedBy);
                 }
-            } else if (each instanceof DemandReading.Read.Unread(var whys)
+            } else if (each instanceof DemandReading.Read.Unread(var whys, var _)
                     && whys.stream().allMatch(why -> stoppedAt(why) != null)) {
                 // Only where a figure is every reason: a part also left for a reason more
                 // reading does not change is one no value is written toward either way.

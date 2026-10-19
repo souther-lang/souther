@@ -5,6 +5,7 @@ import souther.compiler.cst.CstLexer;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.ExactRatio;
@@ -21,6 +22,8 @@ import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -89,9 +92,10 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
      */
     DecisionSubject.AnAnswer anAnswer(Core e, InputReads at) {
         InputReads.AnAnswerAt found = at.answerAt(e, symbols, newtypes);
-        if (found == null) {
-            return null;
-        }
+        return found == null ? null : subjectOf(found);
+    }
+
+    private DecisionSubject.AnAnswer subjectOf(InputReads.AnAnswerAt found) {
         // What a report names the answer by is what it was asked about.
         List<DecisionArgument> arguments = new ArrayList<>();
         for (Core argument : found.arguments()) {
@@ -99,6 +103,36 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         }
         return new DecisionSubject.AnAnswer(new InjectedAnswer(found.evaluation(), arguments),
                 found.steps());
+    }
+
+    /**
+     * What a sum {@code e} takes over the elements of a container a dependency answered adds up
+     * to, or null where it is no such sum.
+     *
+     * <p>A number of the answer and of no place of the input, as a number taken of an answer's
+     * list is ({@link #takenOfAnAnswer}); what is added up here is a number of each element the
+     * walk handed to it, one for each, so the sum is of the container's elements as they stand in
+     * the answer.
+     */
+    Quantity.SumOver sumOverAnAnswersElements(Core e, InputReads at) {
+        if (!at.mayHoldAnAnswer()) {
+            return null;
+        }
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
+                each -> at.folded(each, symbols, newtypes));
+        if (measured == null || !measured.arguments().none()
+                || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                        instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        InputReads.ElementsOfAnAnswer elements =
+                at.answerHoldingOneForEachElementOf(measured.of(), symbols, newtypes);
+        if (elements == null) {
+            return null;
+        }
+        InputReads.AnAnswerAt container = elements.container();
+        return new Quantity.SumOver(subjectOf(container), new DecisionAtom.OfAnAnswer(
+                subjectOf(container.inside(elements.each()))));
     }
 
     /**

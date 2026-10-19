@@ -808,8 +808,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                             .map(one -> onTheWay(condition, at, one, input, readOff, by, entered))
                             .toList()).toList(),
                     oneOf.stated());
-            case DemandReading.Read.Unread(var whys) ->
-                    new OnTheWay.Declined(condition, at, whys, entered);
+            case DemandReading.Read.Unread(var whys, boolean alone) ->
+                    new OnTheWay.Declined(condition, at, whys, entered, alone);
         };
         SaidOnTheWay.filedAlone(made, readOff.of(read), by);
         return made;
