@@ -180,6 +180,142 @@ sealed interface WhatATermRead {
         return row.keptOf(new ARun(on, subject));
     }
 
+    /**
+     * What {@code on} reads of the value this reading chose at {@code place}, among every value
+     * the row wrote there: how often that value occurs in all the containers the place stands in.
+     *
+     * <p>The value is the reading's own and the values it is counted among are every occurrence's,
+     * whichever a reading chose, so a row that wrote nothing at the place has no value for the
+     * number and a place the walk could not reach has none to read.
+     */
+    static WhatATermRead amongEveryOccurrence(TermOrders on, BorderQuantity.Observation row,
+                                              TermPath place) {
+        KeptOccurrences kept = ((NumericTerm.OccurrencesOfItsValue) on.term()).selection();
+        if (kept != null) {
+            return amongTheKept(on, row, place, kept);
+        }
+        return switch (row.at(place)) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue own) -> switch (
+                        row.keptOf(new EveryValue(place))) {
+                    case WalkResult.CouldNotWalk<List<ObservedValue>> _ ->
+                            new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                    case WalkResult.Reached(List<ObservedValue> values) ->
+                            of(on.readAmong(own, values));
+                };
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
+            };
+        };
+    }
+
+    /**
+     * The same among the occurrences the elements are kept for, in the one occurrence of the
+     * container the reading is in: the value this reading chose is counted among the values of
+     * the elements that meet the statement, and it is itself one of them or the reading has no
+     * number.
+     *
+     * <p>A reading that chose an element the statement drops is a reading of the row at which no
+     * entry stands, which is the row's own answer; one the statement could not be put to is a
+     * reading that could not be made.
+     */
+    private static WhatATermRead amongTheKept(TermOrders on, BorderQuantity.Observation row,
+                                              TermPath place, KeptOccurrences kept) {
+        if (!(row.at(place) instanceof WalkResult.Reached<ObservationAtPoint>(
+                ObservationAtPoint standing))) {
+            return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+        }
+        if (!(standing instanceof ObservationAtPoint.Value(ObservedValue own))) {
+            return new NothingWrittenThere();
+        }
+        WhatATermRead ownKept = keptOrNot(kept.perElement().at(row));
+        if (ownKept != null) {
+            return ownKept;
+        }
+        TheKept theKept = row.keptOf(new TheKeptValues(kept, place));
+        return theKept.stopped() != null ? theKept.stopped()
+                : of(on.readAmong(own, theKept.values()));
+    }
+
+    /** Every value the row wrote at {@code place}, which no reading's choice turns. */
+    record EveryValue(TermPath place)
+            implements BorderQuantity.ReadAlike<WalkResult<List<ObservedValue>>> {
+
+        @Override
+        public WalkResult<List<ObservedValue>> readAt(BorderQuantity.Observation row) {
+            return row.everyValueAt(place);
+        }
+    }
+
+    /**
+     * The values at {@code place} of the occurrences {@code kept} keeps, or what stopped them
+     * being read.
+     *
+     * @param values  the kept occurrences' values, in the order the row wrote them
+     * @param stopped why they could not be read, or null where they were
+     */
+    record TheKept(List<ObservedValue> values, WhatATermRead stopped) {}
+
+    /**
+     * The kept occurrences' values, which no reading's choice turns: every reading of a row asks
+     * them of the same occurrences, and a row has a reading per element.
+     */
+    record TheKeptValues(KeptOccurrences kept, TermPath place)
+            implements BorderQuantity.ReadAlike<TheKept> {
+
+        @Override
+        public TheKept readAt(BorderQuantity.Observation row) {
+            // Each container the place stands in, the outer one first, is read under each element
+            // of the one outside it: the occurrences are those of every one of them.
+            List<BorderQuantity.Observation> elements = List.of(row);
+            for (TermPath container : place.containersHoldingIt()) {
+                List<BorderQuantity.Observation> inside = new ArrayList<>();
+                for (BorderQuantity.Observation outer : elements) {
+                    if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
+                            List<BorderQuantity.Observation>>(
+                                    List<BorderQuantity.Observation> each))) {
+                        return stoppedAt(ReadingGap.COULD_NOT_WALK);
+                    }
+                    inside.addAll(each);
+                }
+                elements = inside;
+            }
+            List<ObservedValue> values = new ArrayList<>();
+            for (BorderQuantity.Observation element : elements) {
+                AStatementAtARow.Answer answer = kept.perElement().at(element);
+                if (answer instanceof AStatementAtARow.Answer.CouldNotTell(var why)) {
+                    return stoppedAt(why.iterator().next());
+                }
+                if (!(answer instanceof AStatementAtARow.Answer.Holds)) {
+                    continue;
+                }
+                if (!(element.at(place) instanceof WalkResult.Reached<ObservationAtPoint>(
+                        ObservationAtPoint.Value(ObservedValue value)))) {
+                    return stoppedAt(ReadingGap.COULD_NOT_WALK);
+                }
+                values.add(value);
+            }
+            return new TheKept(values, null);
+        }
+
+        private static TheKept stoppedAt(ReadingGap gap) {
+            return new TheKept(List.of(), new CameToNothing(gap));
+        }
+    }
+
+    /** Null where the statement holds of the element, and what the reading comes to where it
+     *  does not or could not be put. */
+    private static WhatATermRead keptOrNot(AStatementAtARow.Answer answer) {
+        return switch (answer) {
+            case AStatementAtARow.Answer.Holds _ -> null;
+            case AStatementAtARow.Answer.Fails _ -> new NothingWrittenThere();
+            case AStatementAtARow.Answer.CouldNotTell(var why) ->
+                    new CameToNothing(why.iterator().next());
+        };
+    }
+
     /** A run read of every value at {@code subject}, which no reading's choice turns. */
     record ARun(TermOrders on, TermPath subject)
             implements BorderQuantity.ReadAlike<WhatATermRead> {

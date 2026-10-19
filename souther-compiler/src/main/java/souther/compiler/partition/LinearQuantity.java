@@ -130,6 +130,9 @@ public sealed interface LinearQuantity extends BorderQuantity
                         WhatATermRead.inItsOccurrence(orders, observation);
                 case NumericTerm.FromOnePosition one ->
                         WhatATermRead.at(orders, observation.at(one.position()));
+                case NumericTerm.OccurrencesOfItsValue among ->
+                        WhatATermRead.amongEveryOccurrence(orders, observation,
+                                among.subjectPath());
                 case NumericTerm.TakenOver over -> switch (over.source()) {
                     // The nodes of a tree are found below its root, which is where they are read
                     // from ({@code TermReading}).

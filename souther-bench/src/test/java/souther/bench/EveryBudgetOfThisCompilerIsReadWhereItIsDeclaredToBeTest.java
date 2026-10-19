@@ -208,6 +208,26 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the containers offered and at the most elements a container is"
                             + " composed with, and hands the figure over in the shortfall it"
                             + " comes back with"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#composeAcrossContainers("
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
+                            + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at the containers offered and at the most elements a container is"
+                            + " composed with, and hands the figure over in the shortfall it"
+                            + " comes back with"),
+            Map.entry("souther.compiler.partition.NestedContainersAddingUp#alike("
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Lsouther/compiler/numeric/Place;ILjava/util/List;"
+                            + "Lsouther/compiler/check/Carrier;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "has no room for a grouping of the leaves past as many elements as a row"
+                            + " carries, and hands the figure over in the shortfall it comes"
+                            + " back with"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
                             + "Lsouther/compiler/partition/Standing$OfACount;"
                             + "Lsouther/compiler/inputs/SearchRegion;"

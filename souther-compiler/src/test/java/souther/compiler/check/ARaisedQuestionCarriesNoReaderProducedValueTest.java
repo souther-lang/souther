@@ -111,6 +111,9 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * elements beside it, which carries nothing: the place says which value, and the container it
      * stands inside says which elements are counted.
      *
+     * <p>{@code OfItsOccurrencesInEveryContainer} is the same for the lists of an outer list put
+     * end to end, and carries nothing for the same reason.
+     *
      * <p>{@code OfTheExtremeOfItsKey} and {@code Extreme} belong to the least or greatest of the
      * values the elements of a key hold: which end and which field of the element the key is are
      * what make it one number of the place, and both are what the author's fold wrote — the end
@@ -128,6 +131,7 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/NumberAt$OfWhatNumber$OfHowManyCodePointsAreIn",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatItsCodePointsComeTo",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsMultiplicity",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOccurrencesInEveryContainer",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfTheExtremeOfItsKey",
             "souther/compiler/check/Extreme",
             "souther/compiler/check/Extreme$Least",

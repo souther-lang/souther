@@ -2037,6 +2037,9 @@ final class ReadQuantities implements Quantities {
                     NumberAt.countOf(at.named(), count.counted());
             case NumericTerm.CodePointValueSum _ -> NumberAt.codePointSumOf(at.named());
             case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
+            case NumericTerm.OccurrencesOfItsValue occurrences ->
+                    NumberAt.occurrencesOf(at.named(), occurrences.selection() == null ? null
+                            : occurrences.selection().key());
             case NumericTerm.ExtremeOfItsKey extreme ->
                     NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().fields());
             case NumericTerm.TakenOver over ->
@@ -2383,7 +2386,7 @@ final class ReadQuantities implements Quantities {
                     RunReach.of(over, ordersOf(over), typeAt, ruleReading);
             // Nothing the rules of the elements say bounds how often one of them occurs besides
             // the term's own floor, which every term is read with.
-            case NumericTerm.Multiplicity _ -> null;
+            case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _ -> null;
             // The end of a key's values is one of the values the place holds, so it is wherever
             // what the place was read to hold is.
             case NumericTerm.ExtremeOfItsKey extreme ->
