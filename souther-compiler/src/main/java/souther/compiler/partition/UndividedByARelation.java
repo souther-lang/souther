@@ -1189,6 +1189,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         private final Map<Object, Object> parent = new HashMap<>();
 
+        /**
+         * The rules of the parameter {@code head}, in classes: the rules every place of it is read
+         * by are joined, so that rules chaining from one place to another are in one class.
+         */
+        static TiedOnTheWay ofTheDeclarations(String head, InputReading read) {
+            TiedOnTheWay out = new TiedOnTheWay();
+            for (Position each : read.domain().positions()) {
+                if (!each.path().head().equals(head)) {
+                    continue;
+                }
+                Object first = null;
+                for (Object node : reachedByTheDeclarations(each.path(), read).ties()) {
+                    if (first == null) {
+                        first = node;
+                    } else {
+                        out.join(first, node);
+                    }
+                }
+            }
+            return out;
+        }
+
         static TiedOnTheWay of(List<OnAWay> conditions, InputReading read) {
             TiedOnTheWay out = new TiedOnTheWay();
             Set<TermPath> places = new LinkedHashSet<>();
@@ -1520,11 +1542,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * places its statements are about.
      */
     private record RulesRead(Map<TypeSymbol.AtModule, PublishedRules> byName,
-                             Map<TermPath, Reached> byPlace) {
+                             Map<TermPath, Reached> byPlace,
+                             Map<String, TiedOnTheWay> declared) {
 
         static RulesRead of(InputReading read) {
-            return read.derived(RulesRead.class,
-                    _ -> new RulesRead(new ConcurrentHashMap<>(), new ConcurrentHashMap<>()));
+            return read.derived(RulesRead.class, _ -> new RulesRead(
+                    new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+                    new ConcurrentHashMap<>()));
         }
     }
 
@@ -1547,9 +1571,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         });
     }
 
-    /** The nodes {@link Reached#ties} names for {@code path}. */
+    /**
+     * The classes the rules around {@code path} are in ({@link Reached#ties}), where two rules are
+     * in one class if some place of the parameter is read by both. A place read by two rules holds
+     * a value that meets both, so what one rule relates to that place and what the other relates
+     * to it are related to each other.
+     */
     private static Set<Object> tiedByTheDeclarations(TermPath path, InputReading read) {
-        return reachedByTheDeclarations(path, read).ties();
+        TiedOnTheWay declared = RulesRead.of(read).declared().computeIfAbsent(path.head(),
+                head -> TiedOnTheWay.ofTheDeclarations(head, read));
+        Set<Object> out = new LinkedHashSet<>();
+        for (Object node : reachedByTheDeclarations(path, read).ties()) {
+            out.add(declared.classOf(node));
+        }
+        return out;
     }
 
     /**

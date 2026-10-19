@@ -454,7 +454,7 @@ final class Clauses {
                 return;
             }
             Core.PreservedCall call = e instanceof Core.PreservedCall preserved ? preserved : null;
-            ElementsApart.Stated apart = call == null ? null : ElementsApart.stated(call);
+            ElementsApart.Stated apart = call == null ? null : ElementsApart.stated(call, newtypes);
             Location container = apart == null ? null : locationOf(apart.container());
             if (container != null) {
                 read(container, ClauseRead.Kind.EACH_ELEMENTS_RUN, apart.run());
