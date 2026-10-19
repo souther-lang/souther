@@ -8,6 +8,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,6 +65,19 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     }
 
     @Test
+    void aRangeOfWrittenBoundsIsTheListOfItsNumbers() {
+        String report = measured("List.sum(List.map(n -> a.pay + n, List.rangeInclusive(1, 3)))");
+        assertFalse(report.contains("states no law"), report);
+        assertEquals(measured("List.sum(List.map(n -> a.pay + n, [1, 2, 3]))"), report);
+    }
+
+    @Test
+    void aRangeWhoseStartIsPastItsEndHoldsNothing() {
+        String report = measured("a.pay + List.sum(List.rangeInclusive(3, 1))");
+        assertEquals(measured("a.pay"), report);
+    }
+
+    @Test
     void aTotalOfAnElementWrittenTwiceCountsItTwice() {
         String report = measured("List.sum([a.pay, a.pay, b.pay])");
         assertEquals(measured("a.pay + a.pay + b.pay"), report);
@@ -81,11 +96,26 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     }
 
     @Test
-    void aTotalOverWhatAFilterKeepsOnTheRowIsNotTheSumOfAll() {
+    void aTotalOverWhatAFilterKeepsOnTheRowIsTheSumOfWhatEachWayOfKeepingKeeps() {
         String report = measured(
-                "List.sum(List.filter(p -> p >= 100, List.map(m -> m.pay, [a, b, c])))");
+                "List.sum(List.map(m -> m.pay, List.filter(m -> m.days >= 17, [a, b])))");
+        assertEquals(linesOnPay(measured("(if a.days >= 17 then a.pay else 0)"
+                + " + (if b.days >= 17 then b.pay else 0)")), linesOnPay(report));
+        assertNotEquals(linesOnPay(measured("a.pay + b.pay")), linesOnPay(report));
+    }
+
+    /** The lines the report draws on a number of pay, each once. */
+    private static Set<String> linesOnPay(String report) {
+        return report.lines().filter(line -> line.contains("read as") && line.contains("pay"))
+                .map(String::strip).collect(Collectors.toSet());
+    }
+
+    @Test
+    void anElementThatIsNoFormStopsOnlyTheWaysThatKeepIt() {
+        String report = measured("List.sum(List.map(m -> m.pay * m.days,"
+                + " List.filter(m -> m.days >= 17, [a, b])))");
         assertTrue(report.contains("not read"), report);
-        assertNotEquals(measured(SUM), report);
+        assertFalse(report.contains("states no law"), report);
     }
 
     @Test

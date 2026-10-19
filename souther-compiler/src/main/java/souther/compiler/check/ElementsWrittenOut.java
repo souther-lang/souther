@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import net.unit8.notation199x.ScalarValues;
@@ -295,6 +296,12 @@ public final class ElementsWrittenOut {
                 && args.size() == 1) {
             return codePointsOf(reading.standing(args.getFirst(), at), value, enough, walked);
         }
+        if (AnOperationApplied.of(value) instanceof AnOperationApplied(
+                ValueName.Stdlib.Operation operation, List<Core> args)
+                && reading.symbols().kernelOf(operation) == Kernel.LIST_RANGE_INCLUSIVE
+                && args.size() == 2) {
+            return rangeOf(args, value, at, reading, enough, walked);
+        }
         // Each block the call's closures stand as, with where it was written: the step's body is
         // read there, under the element it is handed, and not where the call stands.
         Map<Core.Block, E> written = new IdentityHashMap<>();
@@ -385,6 +392,33 @@ public final class ElementsWrittenOut {
                 return inside;
             }
             made.forEach(one -> out.add(one.keptAlsoWhere(List.of(taken))));
+        }
+        return new Walked.Each<>(out);
+    }
+
+    /**
+     * The numbers {@code List.rangeInclusive(from, to)} holds, from {@code from} up to and
+     * including {@code to}, where both stand as numbers written down — none where {@code from} is
+     * past {@code to}, and nothing written out where either turns on the run.
+     */
+    private static <E> Walked<E> rangeOf(List<Core> bounds, Core call, E at, Reading<E> reading,
+                                         int enough, int[] walked) {
+        if (!(reading.folded(reading.standing(bounds.get(0), at)).orElse(null) instanceof Long from)
+                || !(reading.folded(reading.standing(bounds.get(1), at)).orElse(null)
+                        instanceof Long to)) {
+            return new Walked.NotWrittenOut<>();
+        }
+        List<Occurrence<E>> out = new ArrayList<>();
+        // The span is never subtracted, so one no long holds stops at the figure and not at an
+        // overflow.
+        for (long each = from; each <= to && out.size() < enough; each++) {
+            if (++walked[0] > MOST_WALKED) {
+                return new Walked.PastTheFigure<>();
+            }
+            out.add(Occurrence.always(new Stood<>(new Core.Int(each, Type.INT, call.pos()), at)));
+            if (each == Long.MAX_VALUE) {
+                break;
+            }
         }
         return new Walked.Each<>(out);
     }

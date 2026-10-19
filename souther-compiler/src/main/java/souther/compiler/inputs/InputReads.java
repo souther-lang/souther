@@ -2249,7 +2249,7 @@ public final class InputReads {
 
     /** What the walk handing {@code binding} its element answered, as the closure, where a licence
      *  says it answered one value per element ({@link ElementAnswer}). */
-    ElementAnswer answerAt(BindingId binding) {
+    public ElementAnswer answerAt(BindingId binding) {
         return names.answerAt(binding);
     }
 
