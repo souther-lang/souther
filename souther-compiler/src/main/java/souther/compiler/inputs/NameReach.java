@@ -24,12 +24,26 @@ import java.util.List;
  * owed would be a rule somebody failed to file.
  */
 public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branchesNotEntered,
-                        List<NotStanding> notStanding) {
+                        List<NotStanding> notStanding,
+                        java.util.Map<TermPath, TermPath> listingsClosed) {
 
     public NameReach {
         crossings = List.copyOf(crossings);
         branchesNotEntered = List.copyOf(branchesNotEntered);
         notStanding = List.copyOf(notStanding);
+        listingsClosed = java.util.Map.copyOf(listingsClosed);
+    }
+
+    /**
+     * Where the path that closed the listing at {@code at} had opened the declaration, or null
+     * where the listing was not closed there.
+     *
+     * <p>The listing of positions a type has ends where the input returns to a declaration already
+     * opened on the path. The position there is read like any other, so it says nothing about the
+     * end; a name followed past it is told by this.
+     */
+    public TermPath listingClosedAt(TermPath at) {
+        return listingsClosed.get(at);
     }
 
     /**
@@ -142,7 +156,8 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
     }
 
     /** Nothing observed: an input with no sum whose cases share a spread. */
-    public static final NameReach NONE = new NameReach(List.of(), List.of(), List.of());
+    public static final NameReach NONE =
+            new NameReach(List.of(), List.of(), List.of(), java.util.Map.of());
 
     /**
      * Where a name written at a sum stands once the value is one of its cases, and what a row has
@@ -348,11 +363,6 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
             closed.putIfAbsent(at, openedAt);
         }
 
-        /** Every position the listing was closed at, with where its declaration was opened. */
-        java.util.Map<TermPath, TermPath> closed() {
-            return java.util.Map.copyOf(closed);
-        }
-
         /** Say that {@code field}, written at the sum standing at {@code at}, stands at {@code to}
          *  once the value there is the case {@code branch} names. */
         void crosses(TermPath at, String field, Refinement branch, TermPath to) {
@@ -393,8 +403,9 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
                     case CaseOutcome.Opened _, CaseOutcome.NotWalked _ -> { }
                 }
             }));
-            return crossings.isEmpty() && notEntered.isEmpty() && notStanding.isEmpty() ? NONE
-                    : new NameReach(crossings, notEntered, notStanding);
+            return crossings.isEmpty() && notEntered.isEmpty() && notStanding.isEmpty()
+                    && closed.isEmpty() ? NONE
+                    : new NameReach(crossings, notEntered, notStanding, closed);
         }
     }
 }

@@ -46,14 +46,14 @@ class WhatTheWaysUnderTheCasesComeToTest {
             crossings.add(crossing(field, ONE));
             crossings.add(crossing(field, OTHER));
         }
-        return new NameReach(crossings, List.of(), List.of());
+        return new NameReach(crossings, List.of(), List.of(), Map.of());
     }
 
     /** The name read under one case and stopped under the other. */
     private static NameReach stoppedUnderTheOther(String field) {
         return new NameReach(List.of(crossing(field, ONE)), List.of(),
                 List.of(new NameReach.NotStanding(LEAD, field, OTHER,
-                        new BlockReason.TypeUnresolved())));
+                        new BlockReason.TypeUnresolved())), Map.of());
     }
 
     private static ContentsAsked holding(String container, String value) {
@@ -250,6 +250,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
                     false, Optional.empty()));
         }
         return new ContentsAsked(asked, List.of()).underTheCases(
-                new NameReach(crossings, List.of(), List.of()), Requirements.NONE, Set.of());
+                new NameReach(crossings, List.of(), List.of(), Map.of()), Requirements.NONE,
+                Set.of());
     }
 }

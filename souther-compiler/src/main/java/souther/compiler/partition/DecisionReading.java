@@ -218,15 +218,7 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
      * a statement saying some element is the last of those holding a value.
      */
     public boolean consultsWhichElementOfAKeyIsLast() {
-        for (Ruled each : found) {
-            for (DecisionCondition condition : each.rule().consulted().keySet()) {
-                if (condition instanceof DecisionCondition.AStatement(var statement)
-                        && Proposition.saysTheLastToHold(statement)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return consultsAStatement(Proposition::saysTheLastToHold);
     }
 
     /**
@@ -235,10 +227,15 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
      * what a node further down settles is not one a row is written toward.
      */
     public boolean consultsASearchBelowTheNodesARowWrites() {
+        return consultsAStatement(Proposition::saysASearchReachesBelow);
+    }
+
+    /** Whether some rule of the decision consults a statement that {@code says}. */
+    private boolean consultsAStatement(java.util.function.Predicate<Proposition> says) {
         for (Ruled each : found) {
             for (DecisionCondition condition : each.rule().consulted().keySet()) {
                 if (condition instanceof DecisionCondition.AStatement(var statement)
-                        && Proposition.saysASearchReachesBelow(statement)) {
+                        && says.test(statement)) {
                     return true;
                 }
             }

@@ -177,27 +177,26 @@ class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
     }
 
     /**
-     * A rule that names a path below the return is the one thing left unread there.
-     *
-     * <p>The pair differs in nothing but where the rule points: at the node it is written on, which
-     * the first position of the input reads, or at what its children hold, which nothing lists.
+     * A rule the type states about its own fields does not make the return unread, whatever the
+     * rule relates: one position, two positions, or the length of the list that comes back.
      */
     @Test
-    void aRuleNamingAPathBelowTheReturnLeavesTheMeasureShort() {
+    void aRuleOfTheTypeAboutItsOwnFieldsDoesNotMakeTheReturnUnread() {
         String node = """
                 module m
                 data Yes
                 data No
-                data Node = { lo: Int, kids: List<Node> }
+                data Node = { lo: Int, hi: Int, kids: List<Node> }
                 """;
         String body = """
                 behavior f : (n: Node) -> Yes | No
                 let f (n) = if n.lo > 3 then Yes else No
                 """;
-        assertFalse(weakening(behavior(node + "    invariant lo >= 0\n" + body))
-                .contains("question_unanswered"));
-        assertTrue(weakening(behavior(node + "    invariant List.all(k -> k.lo <= lo, kids)\n" + body))
-                .contains("question_unanswered"));
+        for (String rule : List.of("lo >= 0", "lo <= hi", "List.length(kids) <= 3")) {
+            JsonNode f = behavior(node + "    invariant " + rule + "\n" + body);
+            assertEquals("complete", f.get("status").asString(), () -> rule + ": " + weakening(f));
+            assertFalse(weakening(f).contains("position_not_read"), rule);
+        }
     }
 
     private static List<String> notRead(JsonNode f) {

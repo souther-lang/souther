@@ -143,11 +143,6 @@ public final class InputDomain {
      * name one step down. Made by the walk that made the positions, so that what a name reaches and
      * what the reading produced are one answer. */
     private final NameReach reach;
-    /** The positions where the listing of what a type has was closed because the input returned to
-     * a declaration already opened on the path, each with where the path opened it. A name that is
-     * followed to one of them and goes further is told so, which the position itself does not say:
-     * it is read like any other. */
-    private final Map<TermPath, TermPath> closed;
     /** Everything the rules of the values this reading opened placed, in the words each of them was
      * written in. What became of each is {@link #placements()}. */
     private final List<PlacementSeed> placed;
@@ -207,7 +202,7 @@ public final class InputDomain {
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
-                        NameReach reach, Map<TermPath, TermPath> closed,
+                        NameReach reach,
                         List<PlacementSeed> placed,
                         List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases,
                         DeclarationReadings machines,
@@ -228,7 +223,6 @@ public final class InputDomain {
         // whatever the walk found.
         this.policy = Objects.requireNonNull(policy, "a reading is made under a policy");
         this.reach = Objects.requireNonNull(reach, "a reading says what its names reach");
-        this.closed = Map.copyOf(closed);
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
         // readings under one path would be the position answering differently depending on which
@@ -258,7 +252,6 @@ public final class InputDomain {
                 && roots.equals(that.roots)
                 && java.util.Objects.equals(policy, that.policy)
                 && reach.equals(that.reach)
-                && closed.equals(that.closed)
                 && placed.equals(that.placed)
                 && dependencies.equals(that.dependencies);
     }
@@ -267,7 +260,7 @@ public final class InputDomain {
     public int hashCode() {
         int known = hash;
         if (known == 0) {
-            known = Objects.hash(positions, read, parameters, roots, policy, reach, closed, placed,
+            known = Objects.hash(positions, read, parameters, roots, policy, reach, placed,
                     dependencies);
             hash = known;
         }
@@ -387,7 +380,7 @@ public final class InputDomain {
         // it reached. Answered with a value standing for no reading at all, an input nobody could
         // read would be the same value as an input there was nothing to read.
         return new InputDomain(settled, read, parameters, roots, reading.policy(), observed.reach(),
-                observed.closed(), account.placed(), account.clauses(), observed.cases(), reading.retainedReadings(),
+                account.placed(), account.clauses(), observed.cases(), reading.retainedReadings(),
                 dependencies);
     }
 
@@ -739,7 +732,7 @@ public final class InputDomain {
             return new PlacementOutcome.Reason.TheReadingStoppedThere(
                     new PositionId(at), blocked.why());
         }
-        TermPath openedAt = closed.get(at);
+        TermPath openedAt = reach.listingClosedAt(at);
         return openedAt == null ? null
                 : new PlacementOutcome.Reason.TheListingWasClosedThere(new PositionId(at), openedAt);
     }
