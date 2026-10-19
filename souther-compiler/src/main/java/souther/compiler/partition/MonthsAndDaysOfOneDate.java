@@ -54,12 +54,6 @@ final class MonthsAndDaysOfOneDate {
     private static final Map<List<DatesThatStandInEveryYear.Part>, Combinations> EVERY_YEAR =
             new ConcurrentHashMap<>();
 
-    private record AskedOfAYear(List<DatesThatStandInEveryYear.Part> parts, int year,
-                                List<DateTranslation> yearShifts) {}
-
-    private static final Map<AskedOfAYear, List<List<ExactRatio>>> OF_A_YEAR =
-            new ConcurrentHashMap<>();
-
     private static List<List<ExactRatio>> workedOverTheCycle(
             List<DatesThatStandInEveryYear.Part> parts) {
         Set<List<ExactRatio>> out = new LinkedHashSet<>();
@@ -84,14 +78,6 @@ final class MonthsAndDaysOfOneDate {
      */
     static List<List<ExactRatio>> inYear(List<DatesThatStandInEveryYear.Part> parts, int year,
                                          List<DateTranslation> yearShifts) {
-        return OF_A_YEAR.computeIfAbsent(
-                new AskedOfAYear(List.copyOf(parts), year, List.copyOf(yearShifts)),
-                asked -> workedInYear(asked.parts(), asked.year(), asked.yearShifts()));
-    }
-
-    private static List<List<ExactRatio>> workedInYear(
-            List<DatesThatStandInEveryYear.Part> parts, int year,
-            List<DateTranslation> yearShifts) {
         Set<List<ExactRatio>> out = new LinkedHashSet<>();
         long first = LocalDate.of(year, 1, 1).toEpochDay();
         long last = LocalDate.of(year, 12, 31).toEpochDay();
@@ -104,6 +90,50 @@ final class MonthsAndDaysOfOneDate {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether the date in {@code year} gives every number each of {@code parts} can be, at the
+     * days {@link #inYear} would keep: a month from one to twelve and a day from one to
+     * thirty-one all appear, and some day is kept.
+     *
+     * <p>The same question as {@link #coversEveryValue} asked of {@link #inYear}, and answered
+     * without building the combinations: a year is looked at to see which numbers appear, not what
+     * goes with what.
+     */
+    static boolean coversEveryValueInYear(List<DatesThatStandInEveryYear.Part> parts, int year,
+                                          List<DateTranslation> yearShifts) {
+        long[] seen = new long[parts.size()];
+        boolean kept = false;
+        long first = LocalDate.of(year, 1, 1).toEpochDay();
+        long last = LocalDate.of(year, 12, 31).toEpochDay();
+        for (long day = first; day <= last; day++) {
+            if (!staysInTheYear(yearShifts, day, year)) {
+                continue;
+            }
+            boolean defined = true;
+            for (DatesThatStandInEveryYear.Part part : parts) {
+                defined &= part.moved().definedAt(day);
+            }
+            if (!defined) {
+                continue;
+            }
+            kept = true;
+            for (int i = 0; i < seen.length; i++) {
+                DatesThatStandInEveryYear.Part part = parts.get(i);
+                LocalDate date = LocalDate.ofEpochDay(day + part.moved().offsetDays());
+                seen[i] |= 1L << (part.which() == TakenAs.DatePart.MONTH
+                        ? date.getMonthValue() : date.getDayOfMonth());
+            }
+        }
+        for (int i = 0; i < seen.length; i++) {
+            long every = parts.get(i).which() == TakenAs.DatePart.MONTH
+                    ? (1L << 13) - 2 : (1L << 32) - 2;
+            if (seen[i] != every) {
+                return false;
+            }
+        }
+        return kept;
     }
 
     /** Whether every one of {@code combinations} is the number each of {@code parts} can be: a

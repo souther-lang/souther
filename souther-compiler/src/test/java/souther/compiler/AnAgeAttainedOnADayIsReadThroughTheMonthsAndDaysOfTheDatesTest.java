@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -109,6 +110,48 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
 
         assertTrue(ages.contains(59) && ages.contains(60), ages + "\n" + offered);
         assertTrue(sixtyYearsApartBefore && sixtyYearsApartOnOrAfter, offered);
+    }
+
+    /**
+     * What each row offered is answered, worked out apart from the reading and put to the program.
+     *
+     * <p>The rows come with the answer the calendar gives for the age, and are written as the
+     * examples of the behavior: the program is run on each and an answer that is not the one
+     * written is an error. So a row the reading placed wrongly, at a date where the age is not
+     * what the line was drawn at, shows as an answer that differs, and what is offered is
+     * covered by what was written, with no point left without a row.
+     */
+    @Test
+    void theRowsOfferedAreAnsweredAsTheCalendarWorksTheAgeOut() {
+        String behavior = AGE + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n";
+        Compilation offering = compiled(behavior);
+        String offered = GeneratedRows.of(
+                Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
+                Map.of(), SourceRendering.namedByIdentity(offering.texts()), offering.db())
+                .text();
+
+        StringBuilder examples = new StringBuilder();
+        int rows = 0;
+        for (String line : offered.lines().filter(each -> each.contains("Date(\"")).toList()) {
+            List<LocalDate> dates = new ArrayList<>();
+            int at = 0;
+            while ((at = line.indexOf("Date(\"", at)) >= 0) {
+                int end = line.indexOf('"', at + 6);
+                dates.add(LocalDate.parse(line.substring(at + 6, end)));
+                at = end;
+            }
+            examples.append("    | (Date(\"").append(dates.get(0)).append("\"), Date(\"")
+                    .append(dates.get(1)).append("\")) -> ")
+                    .append(ageAttained(dates.get(0), dates.get(1)) >= 60).append('\n');
+            rows++;
+        }
+        assertTrue(rows > 0, offered);
+
+        Compilation answered = compiled(behavior + "\nexample f\n" + examples);
+        String report = report(behavior + "\nexample f\n" + examples);
+
+        assertEquals(0, answered.errors().size(), report + "\n" + examples);
+        assertFalse(report.contains("no row is at"), report);
     }
 
     /**

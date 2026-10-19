@@ -85,12 +85,45 @@ class AStatementOfOnePartOfADateLeavesTheOtherPartsToTheCalendarTest {
         assertEquals(60, years[0] - years[1]);
     }
 
-    /** A year before the years asked is not one the dates are put in. */
+    /**
+     * Five years of one date, each moved by a different number of days and weighed so that the
+     * weights add past the greatest whole number the type holds and come back round to one. Each
+     * year weighed alone is past it already, so no year is one the program can work the sum at,
+     * whatever the sum comes to.
+     */
     @Test
-    void aYearOutsideTheYearsAskedChoosesNone() {
-        var early = statement(-1990, Rel.LE, year(0, 1, NOT_MOVED));
+    void weightsThatAddPastTheTypeAreNotTakenForTheirRemainder() {
+        long nearlyHalfTheTypesRange = (1L << 62) - 1;
+        var five = statement(-1, Rel.GE,
+                year(0, nearlyHalfTheTypesRange, NOT_MOVED),
+                year(0, nearlyHalfTheTypesRange, NOT_MOVED.thenAddDays(1)),
+                year(0, nearlyHalfTheTypesRange, NOT_MOVED.thenAddDays(2)),
+                year(0, nearlyHalfTheTypesRange, NOT_MOVED.thenAddDays(3)),
+                year(0, 5, NOT_MOVED.thenAddDays(4)));
 
-        assertNull(YearsAWayAllows.choose(List.of(early), A_MONTH_AND_A_DAY));
+        assertNull(YearsAWayAllows.choose(List.of(five), A_MONTH_AND_A_DAY));
+    }
+
+    /** A year held to be far from the years of the calendar's middle: the years are looked for
+     *  where the statements put them, and not among a fixed few. */
+    @Test
+    void aYearFarFromTheMiddleOfTheCalendarIsChosenWhereTheStatementPutsIt() {
+        var early = statement(-1990, Rel.LE, year(0, 1, NOT_MOVED));
+        int[] years = YearsAWayAllows.choose(List.of(early), A_MONTH_AND_A_DAY);
+        assertTrue(years != null && years[0] <= 1990);
+
+        var apart = statement(1000, Rel.LE, year(0, -1, NOT_MOVED), year(1, 1, NOT_MOVED));
+        int[] pair = YearsAWayAllows.choose(List.of(apart),
+                List.of(List.of(MONTH, DAY), List.of(MONTH, DAY)));
+        assertTrue(pair != null && pair[0] - pair[1] >= 1000);
+    }
+
+    /** A year past the last the calendar has room to move a date in is no year. */
+    @Test
+    void aYearBeyondTheCalendarChoosesNone() {
+        var last = statement(-999_999_999, Rel.GE, year(0, 1, NOT_MOVED));
+
+        assertNull(YearsAWayAllows.choose(List.of(last), A_MONTH_AND_A_DAY));
     }
 
     /** A move defined only at dates in the early years takes no date in the years asked. */

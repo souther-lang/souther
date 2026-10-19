@@ -143,7 +143,7 @@ final class WhatStatementsOfDatePartsLeaveAlone {
             List<List<DatesThatStandInEveryYear.Origin>> standing) {
         long[] constants = new long[statements.size()];
         for (int i = 0; i < constants.length; i++) {
-            Long constant = YearsAWayAllows.asLong(statements.get(i).form().constant());
+            Long constant = YearsAWayAllows.asLongOrNull(statements.get(i).form().constant());
             if (constant == null) {
                 return false;
             }
@@ -177,8 +177,8 @@ final class WhatStatementsOfDatePartsLeaveAlone {
                 if (weight == null) {
                     continue;
                 }
-                Long weighed = YearsAWayAllows.asLong(weight);
-                Long part = YearsAWayAllows.asLong(origin.parts().get(j));
+                Long weighed = YearsAWayAllows.asLongOrNull(weight);
+                Long part = YearsAWayAllows.asLongOrNull(origin.parts().get(j));
                 if (weighed == null || part == null) {
                     return null;
                 }
