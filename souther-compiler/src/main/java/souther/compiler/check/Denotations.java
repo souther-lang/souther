@@ -193,6 +193,29 @@ record Denotations(Map<BindingId, Means> bound) {
         return with(binding, new Means(value, subject, location, term, numeric, readIn));
     }
 
+    /**
+     * Whether {@code other} holds the same bindings meaning the same things, so that a name read in
+     * either is read the same.
+     *
+     * <p>The same entry and not an equal one: a binding entered again replaces what it meant, and
+     * the two entries may read equal by shape while one of them is read where the other is not.
+     * The keys alone say which names exist and nothing of what they mean.
+     */
+    boolean meansWhatItMeansIn(Denotations other) {
+        if (bound == other.bound) {
+            return true;
+        }
+        if (bound.size() != other.bound.size()) {
+            return false;
+        }
+        for (Map.Entry<BindingId, Means> each : bound.entrySet()) {
+            if (other.bound.get(each.getKey()) != each.getValue()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private Denotations with(BindingId binding, Means means) {
         return new Denotations(BindingMap.from(bound).with(binding, means));
     }

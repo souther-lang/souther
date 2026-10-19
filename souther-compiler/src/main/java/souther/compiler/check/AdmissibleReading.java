@@ -23,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The clauses reaching a value, read for which values each of its positions may hold.
@@ -142,12 +143,12 @@ final class AdmissibleReading {
     PlannedValues<FactSubject> leaf(ClauseExpr.Part part, Denotations at) {
         Core e = part.of();
         boolean positive = part.positive();
-        if (Core.withoutStanding(e) instanceof Core.Binary b
-                && Comparison.of(b).map(Comparison::claim).orElse(null)
-                        instanceof ComparisonClaim.Singled singled) {
-            // Which of the two it states, once the denials above have been counted: what the
-            // comparison holds at the value it names, turned over by each denial it stands under.
-            return comparison(part, b, singled.holdsAtTheValue() == positive, at);
+        // The comparison the clause states, with the denials above it counted and a sign of an
+        // order read as the order: the same one every other reader of the clause is handed.
+        StatedComparison stated = Conditions.statedBy(terms, part, at);
+        if (stated != null && stated.claim() instanceof ComparisonClaim.Singled singled) {
+            // Which of the two it states: what the comparison holds at the value it names.
+            return comparison(part, stated, singled.holdsAtTheValue(), at);
         }
         PlannedValues<FactSubject> truth = truthValued(e, positive, at);
         if (truth != null) {
@@ -219,15 +220,15 @@ final class AdmissibleReading {
      * Given up on instead, the two stayed two answers with a rule between them that reached
      * neither, and a declaration whose positions cannot hold one value together was admitted.
      */
-    private PlannedValues<FactSubject> comparison(ClauseExpr.Part part, Core.Binary b,
+    private PlannedValues<FactSubject> comparison(ClauseExpr.Part part, StatedComparison stated,
                                                   boolean states, Denotations at) {
-        PlannedValues<FactSubject> read = sided(b.left(), b.right(), states, at);
+        PlannedValues<FactSubject> read = sided(stated.left(), stated.right(), states, at);
         if (read == null) {
             // `"A" == value` says what `value == "A"` says.
-            read = sided(b.right(), b.left(), states, at);
+            read = sided(stated.right(), stated.left(), states, at);
         }
         if (read == null) {
-            read = relating(b, states, at);
+            read = relating(stated, states, at);
         }
         return read != null ? read : unreadable(part, at);
     }
@@ -249,9 +250,10 @@ final class AdmissibleReading {
      * position and is left where every rule this does not read is left, and a comparison naming one
      * position and something this could not read is not a rule about a pair either.
      */
-    private PlannedValues<FactSubject> relating(Core.Binary b, boolean states, Denotations at) {
-        FactSubject here = positionIn(b.left(), at);
-        FactSubject there = positionIn(b.right(), at);
+    private PlannedValues<FactSubject> relating(StatedComparison stated, boolean states,
+                                                Denotations at) {
+        FactSubject here = positionIn(stated.left(), at);
+        FactSubject there = positionIn(stated.right(), at);
         if (here == null || there == null || here.equals(there)) {
             return null;
         }
@@ -278,7 +280,7 @@ final class AdmissibleReading {
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
         Core e = part.of();
         UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER
-                : relatesTwoPositions(e, at) ? UnreadReason.RELATES_TWO_POSITIONS
+                : relatesTwoPositions(part, at) ? UnreadReason.RELATES_TWO_POSITIONS
                 : UnreadReason.FORM_NOT_READ;
         return shortOf(part, names(e, at), why);
     }
@@ -459,8 +461,11 @@ final class AdmissibleReading {
      * there tells an author two different things about one clause. What stays here is how this
      * reading looks a position up.
      */
-    private boolean relatesTwoPositions(Core e, Denotations at) {
-        return Relates.twoPositions(e, part -> positionIn(part, at));
+    private boolean relatesTwoPositions(ClauseExpr.Part part, Denotations at) {
+        Function<Core, Object> position = side -> positionIn(side, at);
+        StatedComparison stated = Conditions.statedBy(terms, part, at);
+        return stated == null ? Relates.twoPositions(part.of(), position)
+                : Relates.twoPositions(stated, position);
     }
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null

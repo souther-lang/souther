@@ -766,7 +766,7 @@ final class Predicates {
                        boolean positive, boolean decidesFalse, Discharge discharge) {
         // What is owed is the clause, so only the readings that are it: one that only follows from
         // it, established, would discharge a clause that asks more.
-        List<StatedComparison> readings =
+        List<ComparisonReadings.Reading> readings =
                 Conditions.comparisonsStatedBy(terms, inv, at).theCondition();
         if (readings.isEmpty()) {
             return owedBy(inv, at, unnamed, positive, decidesFalse);
@@ -775,8 +775,9 @@ final class Predicates {
         // the reading order is for. Reading a predicate never takes a reading away, so a reading
         // that came to nothing leaves the next one to answer rather than answering for it.
         Owed answer = null;
-        for (StatedComparison stated : readings) {
-            answer = owedBy(stated, inv, at, unnamed, positive, decidesFalse, discharge);
+        for (ComparisonReadings.Reading read : readings) {
+            answer = owedBy(read.stated(), inv, read.at(), unnamed, positive, decidesFalse,
+                    discharge);
             if (!answer.unreadable()) {
                 return answer;
             }
@@ -1334,14 +1335,14 @@ final class Predicates {
             return join.how() != ConditionJoin.EITHER || whole.known().reachesNothing() ? whole
                     : takingOneOf(new Known.OneOf(join, at), whole);
         }
-        List<StatedComparison> readings =
+        List<ComparisonReadings.Reading> readings =
                 Conditions.comparisonsStatedBy(terms, cond, at).holdingWhere(positive);
         if (readings.isEmpty()) {
             return taking(cond, List.of(), k, at, positive);
         }
         Assumed so = new Assumed(k, false, false);
-        for (StatedComparison stated : readings) {
-            Assumed one = taking(stated, so.known(), at, positive);
+        for (ComparisonReadings.Reading read : readings) {
+            Assumed one = taking(read.stated(), so.known(), read.at(), positive);
             so = one.alsoRead(so.taken(), so.shapeRead());
         }
         return so;
