@@ -661,7 +661,7 @@ final class CardinalityComposer {
             case NumericTerm.Multiplicity among -> place = among.place();
             case NumericTerm.OccurrencesOfItsValue among -> {
                 place = among.subjectPath();
-                kept = (KeptOccurrences) among.selection();
+                kept = among.selection();
             }
             default -> throw new IllegalStateException(alike.term() + " is no count of how often"
                     + " an element's value occurs");
@@ -827,7 +827,7 @@ final class CardinalityComposer {
         }
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        KeptOccurrences kept = (KeptOccurrences) term.selection();
+        KeptOccurrences kept = term.selection();
         List<Place> candidates = valuesToCount(kept, own, chain.getLast(), place, carrier, run,
                 unheld, unnamed);
         if (candidates == null) {

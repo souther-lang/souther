@@ -16,6 +16,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.KeptOccurrences;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
@@ -749,9 +750,9 @@ public sealed interface NumericTerm
     final class OccurrencesOfItsValue implements NumericTerm {
 
         private final RunSource run;
-        private final OccurrenceSelection selection;
+        private final KeptOccurrences selection;
 
-        private OccurrencesOfItsValue(RunSource run, OccurrenceSelection selection) {
+        private OccurrencesOfItsValue(RunSource run, KeptOccurrences selection) {
             this.run = Objects.requireNonNull(run, "counted among the values of a run");
             this.selection = selection;
         }
@@ -771,7 +772,7 @@ public sealed interface NumericTerm
          * entry of the map a fold files, so it has no count to be compared with. Every kept
          * occurrence counts at least itself.
          */
-        public static OccurrencesOfItsValue of(RunSource run, OccurrenceSelection selection) {
+        public static OccurrencesOfItsValue of(RunSource run, KeptOccurrences selection) {
             return run instanceof RunSource.ProjectedOccurrences
                     || run instanceof RunSource.FlattenedOccurrences
                     ? new OccurrencesOfItsValue(run, selection) : null;
@@ -783,7 +784,7 @@ public sealed interface NumericTerm
         }
 
         /** Which of the occurrences are counted, or null where every one is. */
-        public OccurrenceSelection selection() {
+        public KeptOccurrences selection() {
             return selection;
         }
 

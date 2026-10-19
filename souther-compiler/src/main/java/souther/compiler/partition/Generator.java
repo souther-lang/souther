@@ -8003,7 +8003,8 @@ public final class Generator {
             case NumericTerm.OccurrencesOfItsValue occurrences -> {
                 boolean any = false;
                 List<souther.compiler.observe.ObservedValue> counted = values;
-                if (occurrences.selection() instanceof KeptOccurrences kept) {
+                KeptOccurrences kept = occurrences.selection();
+                if (kept != null) {
                     // Only the values the statement keeps are counted, and none a row cannot put
                     // it to: a statement reading more than the value itself is not read back from
                     // the values alone.

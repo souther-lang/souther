@@ -190,8 +190,8 @@ sealed interface WhatATermRead {
      */
     static WhatATermRead amongEveryOccurrence(TermOrders on, BorderQuantity.Observation row,
                                               TermPath place) {
-        if (((NumericTerm.OccurrencesOfItsValue) on.term()).selection()
-                instanceof KeptOccurrences kept) {
+        KeptOccurrences kept = ((NumericTerm.OccurrencesOfItsValue) on.term()).selection();
+        if (kept != null) {
             return amongTheKept(on, row, place, kept);
         }
         return switch (row.at(place)) {

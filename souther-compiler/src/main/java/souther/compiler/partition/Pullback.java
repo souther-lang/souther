@@ -55,7 +55,6 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.OccurrenceSelection;
 import souther.compiler.inputs.OnePerElement;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
@@ -4878,7 +4877,7 @@ final class Pullback {
         }
         TermPath place = key.at().from(every.keys());
         List<TermPath> holding = place.containersHoldingIt();
-        OccurrenceSelection selection = null;
+        KeptOccurrences selection = null;
         if (!every.keptBy().isEmpty()) {
             selection = every.keptBy().size() == 1
                     ? keptByTheStatementOf(every.keptBy().getFirst(), whole.at()) : null;
@@ -4920,7 +4919,7 @@ final class Pullback {
 
     /** What {@code call}, which keeps some of the elements of a list, keeps them by, as the
      *  statement about an element its size counts — or null where that was not read. */
-    private OccurrenceSelection keptByTheStatementOf(Core call, InputReads at) {
+    private KeptOccurrences keptByTheStatementOf(Core call, InputReads at) {
         Sized sized;
         inTheListsOfAFlattening = true;
         try {

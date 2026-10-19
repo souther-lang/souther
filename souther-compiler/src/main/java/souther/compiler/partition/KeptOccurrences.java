@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.OccurrenceSelection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -20,10 +19,10 @@ import java.util.Objects;
  * @param meeting    what an element is kept for meeting
  * @param perElement {@code meeting} put to rows, which is what an element is asked
  */
-record KeptOccurrences(DecisionSubject container, Proposition meeting,
-                       AStatementAtARow perElement) implements OccurrenceSelection {
+public record KeptOccurrences(DecisionSubject container, Proposition meeting,
+                              AStatementAtARow perElement) {
 
-    KeptOccurrences {
+    public KeptOccurrences {
         Objects.requireNonNull(container, "kept among the elements of a container");
         Objects.requireNonNull(meeting, "by a statement about an element");
         Objects.requireNonNull(perElement, "put to rows as an element is");
@@ -34,7 +33,7 @@ record KeptOccurrences(DecisionSubject container, Proposition meeting,
         return container.inputPosition();
     }
 
-    @Override
+    /** What this selects, spelled for a reader and for a coordinate; no identity. */
     public String key() {
         return position() + " meeting " + meeting.key();
     }
