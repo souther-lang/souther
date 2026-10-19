@@ -35,7 +35,7 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
 
     /** The days of one cycle of the Gregorian calendar, which repeats every four hundred years: a
      *  walk that went this far and met no date has met every combination of parts there is. */
-    private static final long DAYS_OF_A_CYCLE = 146_097;
+    public static final long DAYS_OF_A_CYCLE = 146_097;
 
     /** The first and last days the calendar has. */
     public static final long FIRST_DAY = LocalDate.MIN.toEpochDay();
