@@ -144,9 +144,10 @@ public final class InputDomain {
      * what the reading produced are one answer. */
     private final NameReach reach;
     /** The positions where the listing of what a type has was closed because the input returned to
-     * a declaration already opened on the path. A name that is followed to one of them and goes
-     * further is told so, which the position itself does not say: it is read like any other. */
-    private final Map<TermPath, BlockReason.RecursiveExpansion> closed;
+     * a declaration already opened on the path, each with where the path opened it. A name that is
+     * followed to one of them and goes further is told so, which the position itself does not say:
+     * it is read like any other. */
+    private final Map<TermPath, TermPath> closed;
     /** Everything the rules of the values this reading opened placed, in the words each of them was
      * written in. What became of each is {@link #placements()}. */
     private final List<PlacementSeed> placed;
@@ -206,7 +207,7 @@ public final class InputDomain {
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
-                        NameReach reach, Map<TermPath, BlockReason.RecursiveExpansion> closed,
+                        NameReach reach, Map<TermPath, TermPath> closed,
                         List<PlacementSeed> placed,
                         List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases,
                         DeclarationReadings machines,
@@ -738,9 +739,9 @@ public final class InputDomain {
             return new PlacementOutcome.Reason.TheReadingStoppedThere(
                     new PositionId(at), blocked.why());
         }
-        BlockReason.RecursiveExpansion returned = closed.get(at);
-        return returned == null ? null
-                : new PlacementOutcome.Reason.TheReadingStoppedThere(new PositionId(at), returned);
+        TermPath openedAt = closed.get(at);
+        return openedAt == null ? null
+                : new PlacementOutcome.Reason.TheListingWasClosedThere(new PositionId(at), openedAt);
     }
 
     /**
@@ -1069,25 +1070,14 @@ public final class InputDomain {
         // for a bound and needs no other, which is why the same walk answers both questions and
         // stops for only one of them.
         TermPath already = reach.enumerating() ? ancestry.openedAt(unfolds) : null;
-        // Closing the listing here is a bound this walk puts on itself, and says nothing about what
-        // is under the position until the declaration it returns to states a rule: that rule
-        // applies to the value below, and nothing below is opened for it to be read at.
-        boolean rulesReachBelow = already != null
-                && (reach.handedOn() && placed.handsTheRulesOnAt(path)
-                        || observed.statesARule(unfolds,
-                                () -> !PlacedRules.of(path, type, reading).placed().isEmpty()));
-        StructuralInspection structure;
-        if (already == null) {
-            structure = StructuralInspection.of(input.shape(), declared);
-        } else {
-            BlockReason.RecursiveExpansion returned =
-                    new BlockReason.RecursiveExpansion(unfolds, already);
-            if (rulesReachBelow) {
-                structure = StructuralInspection.stoppedAt(returned);
-            } else {
-                structure = StructuralInspection.of(input.shape(), declared);
-                observed.closedAt(path, returned);
-            }
+        // Closing the listing here is a bound this walk puts on itself. The position is read like
+        // any other, and what stands under it is what stood under the declaration where it was
+        // first opened, whose rules were handed on there. What can still be left unread is a rule
+        // that names a path below this one, and that is the rules' own accounting: a name followed
+        // to a closed position is told the listing ended there.
+        StructuralInspection structure = StructuralInspection.of(input.shape(), declared);
+        if (already != null) {
+            observed.closedAt(path, already);
         }
         Position here = read(input, path, reading, counted, placed, structure, declared);
         // Passing through an occurrence is not finding a position. A reading following a path the
@@ -1100,20 +1090,17 @@ public final class InputDomain {
         }
         // Said as the position is read and before anything under it is walked, so that a descent
         // that never happens leaves the obligation standing rather than never making one.
-        if (reach.handedOn() && placed.handsTheRulesOnAt(path)) {
+        if (already == null && reach.handedOn() && placed.handsTheRulesOnAt(path)) {
             handoffs.owes(placed.root(), path);
         }
         // Handed down and never back up, so that two fields declared as one type are two positions
         // and both are read. Shared between them, the second would come back as a path returning to
         // where it had been, which is a different fact entirely.
         ExpansionTrace deeper = ancestry.opening(unfolds, path);
-        // What the descent may take, which is what the shape has. This reading having stopped is an
-        // answer about the reading — it decides what the position reports and where the enumeration
-        // goes next — and it does not change what stands under the type, so a path the measurement
-        // named goes on through here while its siblings do not.
-        StructuralInspection descent = rulesReachBelow
-                ? StructuralInspection.of(input.shape(), declared) : structure;
-        switch (descent) {
+        // What the descent may take, which is what the shape has. The listing having closed decides
+        // where the enumeration goes next and does not change what stands under the type, so a path
+        // the measurement named goes on through here while its siblings do not.
+        switch (structure) {
             case StructuralInspection.Decomposed decomposed -> {
                 for (Map.Entry<String, Type> field : decomposed.under().entrySet()) {
                     Reach on = reach.into(path.then(field.getKey()), already != null);

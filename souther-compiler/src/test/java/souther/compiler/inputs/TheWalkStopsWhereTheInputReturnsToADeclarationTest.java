@@ -169,18 +169,19 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
             """;
 
     /**
-     * A return with a rule owed under it is a stop, and one without is not.
+     * A return is the end of the listing whether or not the declaration states a rule.
      *
-     * <p>The rule of a link is handed on to the position the chain comes back at, and nothing is
-     * opened there for it to be read at. That is a position the walk could not go into, where the
-     * same return with no rule to hand on is only the end of the listing.
+     * <p>What the declaration states was handed on where it was first opened, and the value that
+     * comes back is read like any other: its sum still divides into its cases, and nothing is owed
+     * under it that the position above it was not owed.
      */
     @Test
-    void aReturnWithARuleOwedUnderItIsWhereTheWalkStopped() {
+    void aReturnIsNotAStopWhateverTheDeclarationStates() {
         InputDomain read = reading(WITH_A_RULE_OWED, "read");
         TermPath back = pathOf(read, "c@Link.rest");
 
-        assertNotNull(BlockedDescent.of(read.at(back).structure()), () -> spelled(read));
+        assertNull(BlockedDescent.of(read.at(back).structure()), () -> spelled(read));
+        assertEquals(2, read.at(back).obligationCases().size());
     }
 
     /**
@@ -200,7 +201,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
                 "the sum there divides into its cases whichever time round it is");
     }
 
-    /** The return closes the listing and leaves nothing unread: no rule is handed on below it. */
+    /** The return closes the listing and leaves nothing unread: it is a position like the rest. */
     private static void assertNotStopped(InputDomain read, TermPath path) {
         assertNull(BlockedDescent.of(read.at(path).structure()),
                 () -> path + " is where the path returns, and nothing is owed under it");

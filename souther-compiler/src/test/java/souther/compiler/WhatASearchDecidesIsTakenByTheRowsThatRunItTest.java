@@ -26,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>What a decision rule is, is the search as a whole: whether some node at any depth meets the
  * statement. Which rule a row takes is what the row comes to when it is run, so a row that only a
  * grandchild settles takes the rule a row settled at the top does. And what the measures over the
- * input's positions read is as deep as a row is written and no deeper: the nodes under the top are
- * a place nothing read, said as such, so a search read whole is never what makes a behavior's
- * measurement complete.
+ * input's positions read is as deep as a row is written and no deeper: no row is written toward the
+ * nodes under the top, said as a weakening of the decision's measure and not as a position nobody
+ * read, so a search read whole is never what makes a behavior's measurement complete.
  */
 class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
 
@@ -151,6 +151,53 @@ class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
         assertFalse(weakening(f).contains("position_not_read"), () -> "weakened by " + weakening(f));
         assertFalse(weakening(f).contains("reachable_node_cases_unmeasured"),
                 () -> "weakened by " + weakening(f));
+    }
+
+    /** A body that folds over what a node holds, with no search statement in the decision. */
+    @Test
+    void aFoldOverTheNodesBelowDoesNotMakeTheInputUnread() {
+        JsonNode f = behavior("""
+                module m
+                import List ( fold )
+
+                data Node = { id: Int, kids: List<Node> }
+
+                behavior count : (n: Node) -> Int
+
+                let walk (n: Node): Int = 1 + fold((acc, k) -> acc + walk(k), 0, n.kids)
+
+                let count (n) = walk(n)
+
+                example count
+                    | "leaf" : (Node { id = 1, kids = [] }) -> 1
+                    | "pair" : (Node { id = 1, kids = [Node { id = 2, kids = [] }] }) -> 2
+                """);
+        assertEquals(List.of(), notRead(f));
+        assertFalse(weakening(f).contains("position_not_read"), () -> "weakened by " + weakening(f));
+    }
+
+    /**
+     * A rule that names a path below the return is the one thing left unread there.
+     *
+     * <p>The pair differs in nothing but where the rule points: at the node it is written on, which
+     * the first position of the input reads, or at what its children hold, which nothing lists.
+     */
+    @Test
+    void aRuleNamingAPathBelowTheReturnLeavesTheMeasureShort() {
+        String node = """
+                module m
+                data Yes
+                data No
+                data Node = { lo: Int, kids: List<Node> }
+                """;
+        String body = """
+                behavior f : (n: Node) -> Yes | No
+                let f (n) = if n.lo > 3 then Yes else No
+                """;
+        assertFalse(weakening(behavior(node + "    invariant lo >= 0\n" + body))
+                .contains("question_unanswered"));
+        assertTrue(weakening(behavior(node + "    invariant List.all(k -> k.lo <= lo, kids)\n" + body))
+                .contains("question_unanswered"));
     }
 
     private static List<String> notRead(JsonNode f) {

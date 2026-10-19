@@ -51,14 +51,6 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             let inAConjunction (r) =
                 if r.cost >= 0 && r.cost <= 100000 then Auto else Manual
 
-            data Bottom
-            data Deep = { note: String, size: Int, more: Under }
-                invariant size >= 0
-            data Under = Bottom | Deep
-            data Outer = { deep: Deep }
-
-            behavior returnsToItself : (o: Outer) -> Auto | Manual
-            let returnsToItself (o) = if o.deep.note == "x" then Auto else Manual
 
             behavior byEquality : (r: Request) -> Auto | Manual
             let byEquality (r) = if r.cost == 3 then Auto else Manual
@@ -170,18 +162,32 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     /**
      * A position the walk stopped at, which is not one it looked at and found undivided.
      *
-     * <p>Where the input returns to a declaration already open on the path, what is under the
-     * position is what is under the one above and is not read again. A row still carries a value
-     * there, so this is a position nothing measured rather than a position the model divides no way
-     * — and the two sentences send a reader to different work.
+     * <p>Where the type of the input comes back to itself with no base, there is no shape to read
+     * under the position. A row still carries a value there, so this is a position nothing measured
+     * rather than a position the model divides no way — and the two sentences send a reader to
+     * different work.
      */
     @Test
     void aPositionTheWalkStoppedAtSaysSo() {
-        String block = blockOf("returnsToItself");
+        // Its own model: a type that comes back to itself with no base takes the module's bodies
+        // out of evaluation, so it cannot stand among the behaviors the rest of this class reads.
+        Compilation compilation = Compilation.ofSource("""
+                module example.cyclic
 
-        assertFalse(block.contains("divided no way: o.deep.more"), block);
-        assertTrue(block.contains("the input returns here to a declaration already read above it"),
-                block);
+                data Auto
+                data Manual
+                data Cyclic = Cyclic
+
+                behavior returnsToItself : (c: Cyclic) -> Auto | Manual
+                let returnsToItself (c) = Auto
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String human = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertFalse(human.contains("divided no way: c"), human);
+        assertTrue(human.contains("its type could not be worked out here"), human);
     }
 
     /** An equality divides the position, so it is not one nothing was established about. */

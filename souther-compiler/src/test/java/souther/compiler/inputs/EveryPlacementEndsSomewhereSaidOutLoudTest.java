@@ -120,13 +120,11 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
                 "the sum was not entered at all, so there is one stop and it is the sum's");
         PlacementOutcome.Unresolved first =
                 assertInstanceOf(PlacementOutcome.Unresolved.class, filing.outcomes().getFirst());
-        PlacementOutcome.Reason.TheReadingStoppedThere stopped = assertInstanceOf(
-                PlacementOutcome.Reason.TheReadingStoppedThere.class, first.why(),
-                "the reading stopped, and it is the position it stopped at that says so");
-        assertEquals("c@Cons.tail", stopped.at().toString());
-        BlockReason.RecursiveExpansion why =
-                assertInstanceOf(BlockReason.RecursiveExpansion.class, stopped.why());
-        assertEquals("c", why.openedAt().toString(),
+        PlacementOutcome.Reason.TheListingWasClosedThere closed = assertInstanceOf(
+                PlacementOutcome.Reason.TheListingWasClosedThere.class, first.why(),
+                "the listing was closed, and it is the position it closed at that says so");
+        assertEquals("c@Cons.tail", closed.at().toString());
+        assertEquals("c", closed.openedAt().toString(),
                 "and it says where the path had already opened `Chain`");
     }
 

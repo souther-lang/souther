@@ -257,8 +257,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     private static Map<String, String> theStopsAtAPosition() {
         Map<String, String> table = new LinkedHashMap<>();
         table.put("TypeUnresolved", "TYPE_UNRESOLVED/UNAFFECTED");
-        table.put("RecursiveExpansion",
-                "RETURNS_TO_A_DECLARATION_ALREADY_READ/UNAFFECTED");
         table.put("ValueRulesNotReached", "RULES_NOT_READ_AT_ALL/UNAFFECTED");
         // The two rows this pair is for. One word out there and two reasons in here: a document
         // promises a reader the hole under the position and not which figure this compiler stopped
@@ -541,10 +539,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.PredicateTellingNothingApart(),
                 new BlockReason.ClassesNotComposed(),
                 new BlockReason.TypeUnresolved(),
-                new BlockReason.RecursiveExpansion(
-                        souther.compiler.types.TypeSymbols.declared(
-                                new souther.compiler.types.TypeKey("g", "Chain")),
-                        TermPath.of("c")),
                 new BlockReason.ValueRulesNotReached(),
                 new BlockReason.ValueRulesNotReachedPastDepthLimit()));
         // One of each reason a statement is no line for, which a row is written for apiece.
@@ -595,10 +589,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         java.util.Set<String> aPosition = new java.util.LinkedHashSet<>(
                 projected(everyRuleWithoutALine()));
         aPosition.addAll(projected(everyStopAtAPosition()));
-        // The walk stopping after a count of steps, which nothing writes any more. A word of this
-        // surface and of no other: documents of this version carry it where a position's reading
-        // ran out, and the question's vocabulary is new in this version and never carried it.
+        // The walk stopping after a count of steps, and the input returning to a declaration
+        // already read, which nothing writes any more. Words of this surface and of no other:
+        // documents of this version carry them where a position's reading ran out, and the
+        // question's vocabulary is new in this version and never carried them.
         aPosition.add("depth_limit");
+        aPosition.add("returns_to_a_declaration_already_read");
 
         assertEquals(aPosition, words(schema, "notReadReason"),
                 "an entry about a position admits what a position's readings can be short of");

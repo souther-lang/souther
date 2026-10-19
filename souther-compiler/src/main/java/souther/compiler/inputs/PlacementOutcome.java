@@ -67,13 +67,35 @@ public sealed interface PlacementOutcome {
     /**
      * Why a name reached no position.
      *
-     * <p>One, and one is the whole of it. A rule names a location only where the language reads one
-     * there, and wherever the language reads one this reading has a position or a crossing — so the
-     * only way a name reaches nowhere is that the reading stopped before it got there. A name the
-     * reading has no position for and did not stop at is this compiler disagreeing with itself, and
-     * it is refused where it arises rather than carried as a second answer for a reader to weigh.
+     * <p>Two, and they are the whole of it. A rule names a location only where the language reads
+     * one there, and wherever the language reads one this reading has a position or a crossing — so
+     * the only ways a name reaches nowhere are that the reading stopped before it got there, or that
+     * the listing of positions was closed there. A name the reading has no position for and did not
+     * stop or close at is this compiler disagreeing with itself, and it is refused where it arises
+     * rather than carried as a second answer for a reader to weigh.
      */
     sealed interface Reason {
+
+        /**
+         * The listing of the positions a type has was closed at the position the name was being
+         * followed from, because the input returns there to a declaration the path had opened.
+         *
+         * <p>Not a position the reading failed to enter: what stands under it is what stands under
+         * the declaration where it was first opened, and a name that goes further than the
+         * listing is a name below a position nobody enumerated.
+         *
+         * @param at       the last position the name was followed to
+         * @param openedAt where the path opened the declaration the first time
+         */
+        record TheListingWasClosedThere(PositionId at, TermPath openedAt) implements Reason {
+
+            public TheListingWasClosedThere {
+                if (at == null || openedAt == null) {
+                    throw new IllegalArgumentException("a listing closed somewhere, on a path that"
+                            + " had been there before");
+                }
+            }
+        }
 
         /**
          * The reading stopped at the position the name was being followed from, and said so there.

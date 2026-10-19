@@ -341,28 +341,15 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
          * Where the walk closed its listing of the positions a type has, because the input returned
          * to a declaration the path had opened.
          */
-        private final java.util.Map<TermPath, BlockReason.RecursiveExpansion> closed =
-                new java.util.LinkedHashMap<>();
-
-        private final java.util.Map<souther.compiler.types.TypeSymbol, Boolean> stating =
-                new java.util.HashMap<>();
-
-        /**
-         * Whether {@code declaration} states a rule, asked of {@code asked} the first time and
-         * remembered: the answer is the declaration's, and every return to it asks the same.
-         */
-        boolean statesARule(souther.compiler.types.TypeSymbol declaration,
-                            java.util.function.BooleanSupplier asked) {
-            return stating.computeIfAbsent(declaration, _ -> asked.getAsBoolean());
-        }
+        private final java.util.Map<TermPath, TermPath> closed = new java.util.LinkedHashMap<>();
 
         /** Say that the listing was closed at {@code at}, and where the declaration was opened. */
-        void closedAt(TermPath at, BlockReason.RecursiveExpansion why) {
-            closed.putIfAbsent(at, why);
+        void closedAt(TermPath at, TermPath openedAt) {
+            closed.putIfAbsent(at, openedAt);
         }
 
-        /** Every position the listing was closed at. */
-        java.util.Map<TermPath, BlockReason.RecursiveExpansion> closed() {
+        /** Every position the listing was closed at, with where its declaration was opened. */
+        java.util.Map<TermPath, TermPath> closed() {
             return java.util.Map.copyOf(closed);
         }
 

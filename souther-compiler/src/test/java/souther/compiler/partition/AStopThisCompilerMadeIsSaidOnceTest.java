@@ -37,21 +37,17 @@ class AStopThisCompilerMadeIsSaidOnceTest {
     /**
      * A sum one of whose cases holds the sum again.
      *
-     * <p>The walk stops at the tail, because that is a return to the declaration it has already
-     * opened. A sum states nothing about every value of it and hands its rules on to its cases, so
-     * the tail is a position rules were handed on at — and the stop is why nothing took them.
+     * <p>The walk cannot enter it, because its type comes back to itself with no base to read a
+     * shape from. The rules written about the position are why nothing under it took them: the
+     * stop is the one fact and they are the same fact said from the other end.
      */
-    private static final String A_RETURN_TO_A_SUM = """
+    private static final String A_TYPE_NO_SHAPE_CAN_BE_READ_FROM = """
             module probe.again
 
             data Ok
-            data Amount = Int
-                invariant ranged = value >= 0 && value <= 100
-            data Nil
-            data Cons = { head: Amount, tail: Chain }
-            data Chain = Nil | Cons
+            data Cyclic = Cyclic
 
-            behavior f : (c: Chain) -> Ok
+            behavior f : (c: Cyclic) -> Ok
                 constructs Ok
             let f (c) = Ok
             """;
@@ -70,7 +66,7 @@ class AStopThisCompilerMadeIsSaidOnceTest {
      */
     @Test
     void aPositionTheWalkCouldNotEnterIsOneFinding() {
-        List<Weakening> said = weakeningOf(A_RETURN_TO_A_SUM, "f");
+        List<Weakening> said = weakeningOf(A_TYPE_NO_SHAPE_CAN_BE_READ_FROM, "f");
 
         List<Weakening> stops = said.stream()
                 .filter(each -> each instanceof Weakening.ModelReadingIncomplete(
@@ -79,7 +75,7 @@ class AStopThisCompilerMadeIsSaidOnceTest {
         assertEquals(1, stops.size(), () -> "one stop, one finding: " + said);
         assertTrue(stops.getFirst() instanceof Weakening.ModelReadingIncomplete(
                         ClosureGap.PositionNotReachedInto gap)
-                        && gap.why() instanceof BlockReason.RecursiveExpansion,
+                        && gap.why() instanceof BlockReason.TypeUnresolved,
                 () -> "and it is the stop itself: " + said);
         assertTrue(said.stream().noneMatch(each -> each instanceof Weakening.ModelReadingIncomplete(
                         ClosureGap.RulesNotReached _)),
