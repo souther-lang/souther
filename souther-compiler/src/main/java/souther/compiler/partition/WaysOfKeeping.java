@@ -17,6 +17,12 @@ import java.util.List;
  * no stop of that way. The ways are therefore a tree in which a truth is a node only below the
  * decisions that let an occurrence reach it, and not every combination of truths.
  *
+ * <p>The order the truths are evaluated in, which is the order of the fold a filter is written as,
+ * is not what the tree carries. A way is a run that gets to the comparison, so every truth it
+ * evaluated came to an answer; the truths evaluated are those the decisions reach, whichever came
+ * first. A run that stops in a step is no way of reading a value, and is the business of whoever
+ * reads what stops a run.
+ *
  * <p>One truth shared by occurrences (an element kept by the same outer filter after several inner
  * ones) is one truth, decided once.
  */
@@ -99,26 +105,38 @@ final class WaysOfKeeping {
         return true;
     }
 
-    /** How many leaves the tree has, or {@code limit} where it has that many or more. */
-    long leaves(long limit) {
-        return leaves(undecided(), limit);
+    /**
+     * How many elements the tree reads in all, or {@code limit} where it reads that many or more:
+     * at each leaf the elements that are there, and one for a leaf that has none.
+     *
+     * <p>The reading a leaf makes is one of each element there, as the sum of the elements of a
+     * container that is not kept by anything is. Counted only to {@code limit}, because what a
+     * caller asks is whether the work is within a budget, and a tree of independent truths has as
+     * many leaves as there are combinations of them.
+     */
+    long work(long limit) {
+        return work(undecided(), limit);
     }
 
-    private long leaves(Boolean[] decided, long limit) {
+    private long work(Boolean[] decided, long limit) {
         int next = nextEvaluated(decided);
         if (next < 0) {
-            return 1;
+            long there = 0;
+            for (int i = 0; i < keptBy.length; i++) {
+                there += isThere(i, decided) ? 1 : 0;
+            }
+            return Math.min(limit, Math.max(1, there));
         }
-        long count = 0;
+        long total = 0;
         for (boolean holds : new boolean[] {true, false}) {
             decided[next] = holds;
-            count += leaves(decided, limit - count);
+            total += work(decided, limit - total);
             decided[next] = null;
-            if (count >= limit) {
+            if (total >= limit) {
                 return limit;
             }
         }
-        return count;
+        return total;
     }
 
     private static ReadMeaning.Occurrence.Kept.ATruth truthOf(ReadMeaning.Occurrence.Kept kept) {

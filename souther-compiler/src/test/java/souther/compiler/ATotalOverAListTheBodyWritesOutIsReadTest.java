@@ -71,6 +71,29 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
         assertEquals(measured("List.sum(List.map(n -> a.pay + n, [1, 2, 3]))"), report);
     }
 
+    /** A closure that never reads the element it is handed leaves that element a place no form
+     *  names, which is no reason for a measure to stop with an error. */
+    @Test
+    void aClosureThatIgnoresItsElementIsATotalOfWhatItAnswersEachTime() {
+        assertEquals(measured("a.pay + a.pay"),
+                measured("List.sum(List.map(n -> a.pay, [1, 2]))"));
+    }
+
+    /** The span is never subtracted: a range ending at the largest whole number is written out. */
+    @Test
+    void aRangeAtTheEdgeOfTheWholeNumbersIsWrittenOutWithoutOverflowing() {
+        String report = measured("List.sum(List.map(n -> a.pay,"
+                + " List.rangeInclusive(9223372036854775806, 9223372036854775807)))");
+        assertEquals(measured("a.pay + a.pay"), report);
+    }
+
+    @Test
+    void aRangeOfMoreThanAreWrittenOutIsNotReadAndEndsAtTheFigure() {
+        String report = measured("List.sum(List.map(n -> a.pay, List.rangeInclusive(1, 1025)))");
+        assertTrue(report.contains("not read"), report);
+        assertNotEquals(measured("a.pay"), report);
+    }
+
     @Test
     void aRangeWhoseStartIsPastItsEndHoldsNothing() {
         String report = measured("a.pay + List.sum(List.rangeInclusive(3, 1))");

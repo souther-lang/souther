@@ -7,12 +7,15 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -99,6 +102,44 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
         String report = report(guarded("List.sum(List.map(r -> r.pay, " + list + ")) >= 900"));
         assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
         assertTrue(report.contains("read as f/p.x.pay"), report);
+    }
+
+    /**
+     * Independent truths are as many ways as there are combinations of them, and the budget says
+     * so before they are counted out: asked to count them all, this would not come back.
+     */
+    @Test
+    void manyIndependentTruthsAreStoppedByTheBudgetBeforeTheyAreCountedOut() {
+        int elements = 30;
+        StringBuilder fields = new StringBuilder();
+        StringBuilder list = new StringBuilder();
+        for (int i = 1; i <= elements; i++) {
+            fields.append(i > 1 ? ", " : "").append("m").append(i).append(": Month");
+            list.append(i > 1 ? ", " : "").append("w.m").append(i);
+        }
+        String body = "data Win = { " + fields + " }\n"
+                + "behavior g : (w: Win) -> Ok | No\n"
+                + "let g (w) = {\n"
+                + "    guard List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ "
+                + list + " ]))) >= 900 else No\n"
+                + "    Ok\n}\n";
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(30), () -> report(body));
+        assertFalse(report.contains("read as g/w.m1.pay"), report);
+    }
+
+    /**
+     * The elements a way reads are charged as the elements of a total that nothing keeps are: a
+     * list too long to read element by element is too long whether or not a filter is over it.
+     */
+    @Test
+    void aListTooLongToBeReadElementByElementIsTooLongKeptOrNot() {
+        String list = IntStream.range(0, 300).mapToObj(i -> "p.x")
+                .collect(Collectors.joining(", ", "[ ", " ]"));
+        String plain = report(guarded("List.sum(List.map(r -> r.pay, " + list + ")) >= 900"));
+        String filtered = report(guarded("List.sum(List.map(r -> r.pay, List.filter("
+                + "r -> r.days >= 17, " + list + "))) >= 900"));
+        assertFalse(plain.contains("read as f/p.x.pay"), plain);
+        assertFalse(filtered.contains("read as f/p.x.pay"), filtered);
     }
 
     /**

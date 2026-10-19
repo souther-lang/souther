@@ -138,6 +138,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -1083,6 +1084,23 @@ final class Pullback {
             return new WhyUnread.MoreReadingsThanAreMade();
         }
         return made(more);
+    }
+
+    /**
+     * The same, of a split whose readings are worked out by counting {@code count}, which is asked
+     * to count no further than the figures can tell.
+     *
+     * <p>That is one more than the larger of what either figure leaves: past it the split is
+     * refused whatever the rest comes to, so a count that reaches it has said all there is to say.
+     * Left to run on, a count of every combination of independent conditions is a work that no
+     * figure bounds, done to find out that a figure was passed.
+     *
+     * @param count the readings the split makes, or the limit it was asked to count to where they
+     *              are that many or more
+     */
+    private WhyUnread splitInto(InputReads reads, LongUnaryOperator count) {
+        long mostAsked = Math.max(READINGS.maximum() / reads.readings(), readingsLeft) + 1;
+        return splitInto(reads, count.applyAsLong(mostAsked));
     }
 
     /** Why {@code more} readings are not made in all — or null where they are, taken from what is
@@ -4965,9 +4983,9 @@ final class Pullback {
                                  boolean fixed,
                                  Function<UnaryOperator<InputReads>, Derivation> again) {
         WaysOfKeeping ways = new WaysOfKeeping(total.occurrences());
-        // The leaves of the tree, which are the readings it makes: a truth is a node only where an
-        // occurrence is handed to it, so a chain of filters is as many ways as it has filters.
-        WhyUnread past = splitInto(reads, ways.leaves(Long.MAX_VALUE >> 1));
+        // The elements the leaves of the tree read, as a total of elements kept by nothing reads
+        // them ({@link #sumOfWrittenOut}).
+        WhyUnread past = splitInto(reads, ways::work);
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, fixed));
         }
