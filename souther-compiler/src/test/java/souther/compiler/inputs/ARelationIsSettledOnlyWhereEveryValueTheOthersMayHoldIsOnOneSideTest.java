@@ -7,6 +7,7 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided.Line;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.SettledRun;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -15,6 +16,7 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -78,6 +80,164 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
 
     private static Line line(Rel relation, long at) {
         return new Line(relation, ExactRatio.of(at));
+    }
+
+    /**
+     * {@code a + c < b} with {@code a} and {@code b} from one to twelve and {@code c} from one to
+     * thirty-one: {@code a} at eleven or twelve fails it whatever the others hold, and below that
+     * the other two together come to a sum {@code c - b} from minus eleven to thirty, which is
+     * either side of every level {@code a} would need. No one of them does alone, and the other
+     * terms count together only where each is shown to take its ends and none is tied to another.
+     */
+    @Test
+    void severalTermsTogetherLeaveTheRestEitherWayWhereNoOneOfThemDoes() {
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var c = term("c", 1, run(1L, 31L), run(1L, 31L));
+        var b = term("b", -1, run(1L, 12L), run(1L, 12L));
+        assertEquals(settledIn(1L, 12L, settled(11L, 12L, false)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.LT));
+        assertEquals(settledIn(1L, 31L, settled(11L, 31L, false)),
+                leavesOf(List.of(a, c, b), 1, 0, Rel.LT));
+        assertEquals(settledIn(1L, 12L, settled(1L, 2L, false)),
+                leavesOf(List.of(a, c, b), 2, 0, Rel.LT));
+
+        var unseenC = term("c", 1, run(1L, 31L), null);
+        assertNull(leavesOf(List.of(a, unseenC, b), 0, 0, Rel.LT));
+
+        assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(a, c, b), 0, ExactRatio.of(0),
+                Rel.LT, String::equals, (one, other) -> one + other != 1,
+                Granularity.DISCRETE, GREATEST_INT));
+    }
+
+    /**
+     * {@code a + c <= b} fails from twelve on and {@code a + c > b} holds there: the side that
+     * asks to be strictly past the level is the other one than for {@code <}, and a run of one
+     * value is a class.
+     */
+    @Test
+    void theStrictSideOfTheLevelFollowsTheRelation() {
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var c = term("c", 1, run(1L, 31L), run(1L, 31L));
+        var b = term("b", -1, run(1L, 12L), run(1L, 12L));
+        assertEquals(settledIn(1L, 12L, settled(12L, 12L, false)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.LE));
+        assertEquals(settledIn(1L, 12L, settled(12L, 12L, true)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.GT));
+    }
+
+    /**
+     * The upper end of a run of whole numbers that is left out is the whole number below it, so
+     * {@code c} below thirty-two is {@code c} to thirty-one.
+     */
+    @Test
+    void aRunOfWholeNumbersLeavingItsUpperEndOutIsTheRunBelowIt() {
+        var leftOut = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1L)),
+                new Endpoint(Count.of(32L), false));
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var c = term("c", 1, leftOut, leftOut);
+        var b = term("b", -1, run(1L, 12L), run(1L, 12L));
+        assertEquals(settledIn(1L, 12L, settled(11L, 12L, false)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.LT));
+    }
+
+    /**
+     * {@code a < b + c} over decimals is not read from the others together: a decimal sum or
+     * product stops for the scale of its factors and not only for the size of the number, so the
+     * ends of the others are no witness whatever their size. With {@code c} and {@code d} between
+     * minus and plus the least decimal there is, every product with a written {@code 1.0} stops,
+     * and the two rows the others' ends give are rows nothing computes.
+     */
+    @Test
+    void decimalsAreNotReadTogetherForTheirArithmeticStopsForMoreThanTheirSize() {
+        var a = denseTerm("a", 1, run(0L, 10L), run(0L, 10L));
+        var b = denseTerm("b", -1, run(0L, 5L), run(0L, 5L));
+        var c = denseTerm("c", -1, run(0L, 5L), run(0L, 5L));
+        assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(a, b, c), 0, ExactRatio.of(0),
+                Rel.LT, String::equals, (one, other) -> true, Granularity.DENSE, null));
+
+        NumericDomain.Bounds tiny = new NumericDomain.Bounds(
+                Endpoint.inclusive(new Count(new BigDecimal(BigInteger.ONE.negate(),
+                        Integer.MAX_VALUE))),
+                Endpoint.inclusive(new Count(new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE))));
+        var nought = denseTerm("a", 1, run(0L, 0L), run(0L, 0L));
+        var beside = denseTerm("b", -1, run(0L, 0L), run(0L, 0L));
+        var plus = denseTerm("c", -1, tiny, tiny);
+        var more = denseTerm("d", -1, tiny, tiny);
+        assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(nought, beside, plus, more), 0,
+                ExactRatio.of(0), Rel.LT, String::equals, (one, other) -> true,
+                Granularity.DENSE, null));
+    }
+
+    /**
+     * A product the arithmetic can not hold is no run, and the reading says nothing and does not
+     * throw: the weight is the greatest the exponent of an exact number allows beside an end that
+     * has none to spare.
+     */
+    @Test
+    void aProductNoNumberHoldsLeavesTheReadingUnsaid() {
+        ExactRatio end = ExactRatio.of(new BigDecimal(BigInteger.ONE, -Integer.MAX_VALUE));
+        List<ExactRatio> powers = new ArrayList<>(List.of(end));
+        while (powers.getLast().times(powers.getLast())
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio squared)) {
+            powers.add(squared);
+        }
+        ExactRatio weight = ExactRatio.ONE;
+        for (ExactRatio power : powers.reversed()) {
+            if (weight.times(power) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio product)) {
+                weight = product;
+            }
+        }
+        assertEquals(true, weight.times(end) instanceof ExactAnswer.Unheld<ExactRatio>);
+        NumericDomain.Bounds far = new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO),
+                Endpoint.inclusive(Count.of(new BigDecimal(BigInteger.ONE, -Integer.MAX_VALUE))));
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var b = new WhatARelationLeavesUndivided.Term<>(List.of("b"), weight, far, far, null,
+                true, Granularity.DENSE);
+        var c = term("c", -1, run(1L, 12L), run(1L, 12L));
+        assertNull(leavesOf(List.of(a, b, c), 0, 0, Rel.LT));
+    }
+
+    /**
+     * A run whose ends have crossed holds no value, so a term shown to take it takes none and is
+     * no witness at either end: {@code a + b + c < 0} with {@code b} shown to take nothing says
+     * nothing of {@code a}. What {@code b} is shown to take is no part of what is said of
+     * {@code b}, which {@code a} and {@code c} reach both sides of.
+     */
+    @Test
+    void aTermShownToTakeNoValueIsNoWitness() {
+        var a = term("a", 1, run(-1L, 1L), run(-1L, 1L));
+        var c = term("c", 1, run(-3L, 3L), run(-3L, 3L));
+        var takesNone = term("b", 1, run(-3L, 3L), run(1L, 0L));
+        assertNull(leavesOf(List.of(a, takesNone, c), 0, 0, Rel.LT));
+        assertEquals(new Leaves.Undivided(), leavesOf(List.of(takesNone, a, c), 0, 0, Rel.LT));
+    }
+
+    /**
+     * {@code a + c >= b} over the same runs is settled the other way, true from eleven on.
+     */
+    @Test
+    void theSameTermsHeldTheOtherWayAreSettledTheOtherWay() {
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var c = term("c", 1, run(1L, 31L), run(1L, 31L));
+        var b = term("b", -1, run(1L, 12L), run(1L, 12L));
+        assertEquals(settledIn(1L, 12L, settled(11L, 12L, true)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.GE));
+    }
+
+    /**
+     * {@code a < b + 3 * c + 4 * d} with {@code a} at one below the greatest {@code Int}, {@code b}
+     * at two below, and {@code c} and {@code d} nought or one: the sum of the others at its
+     * greatest passes where the type stops, so it is no row that is computed, and the others
+     * together are not a witness for the true side.
+     */
+    @Test
+    void theOthersAreNotAWitnessWhereTheirSumPassesWhereTheTypeStops() {
+        long max = Long.MAX_VALUE;
+        var a = term("a", 1, run(max - 1, max - 1), run(max - 1, max - 1));
+        var b = term("b", -1, run(max - 2, max - 2), run(max - 2, max - 2));
+        var c = term("c", -3, run(0L, 1L), run(0L, 1L));
+        var d = term("d", -4, run(0L, 1L), run(0L, 1L));
+        assertNull(leavesOf(List.of(a, b, c, d), 0, 0, Rel.LT));
     }
 
     /**
