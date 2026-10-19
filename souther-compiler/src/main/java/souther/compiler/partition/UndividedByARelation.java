@@ -582,6 +582,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
+        if (theWayLeavesNothingToDivide(conditions)) {
+            out.addAll(places());
+            return new WhatItLeaves(out, settled);
+        }
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
         TiedOnTheWay tied = TiedOnTheWay.of(conditions, read);
@@ -678,6 +682,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? each.leavingAlone(OnAWay.PartsLeftAlone.MONTHS_AND_DAYS) : each);
         }
         return new LeftToTheCalendar(out, years);
+    }
+
+    /**
+     * Whether the statements of {@code conditions} that weigh some terms alike leave no row along
+     * the way, or come out one way for this relation at every row they leave
+     * ({@link WhatStatementsOfOneFormDecide}). Either way no value of a place divides anything
+     * along it.
+     */
+    private boolean theWayLeavesNothingToDivide(List<OnAWay> conditions) {
+        Map<NumericTerm, ExactRatio> asked = null;
+        if (kind == Kind.AFFINE && constant != null && !sides.isEmpty()) {
+            asked = new LinkedHashMap<>();
+            for (Side each : sides) {
+                if (each.term() == null || each.kept() != null
+                        || asked.merge(each.term(), each.weight(),
+                                (one, other) -> one.plus(other).orNull()) == null) {
+                    asked = null;
+                    break;
+                }
+            }
+        }
+        WhatStatementsOfOneFormDecide.Verdict verdict = WhatStatementsOfOneFormDecide.of(
+                conditions.stream().map(OnAWay::affine).toList(), asked, constant, relation);
+        return verdict.noRowArrives() || verdict.relationIsDecided();
     }
 
     /** The conditions of a way, marked, and the years its statements of years put the dates in,
