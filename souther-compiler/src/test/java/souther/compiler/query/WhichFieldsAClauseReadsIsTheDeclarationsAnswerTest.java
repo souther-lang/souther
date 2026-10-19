@@ -155,7 +155,7 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                     invariant List.allDistinctBy(i -> i.id, items)
                 """);
         assertEquals(List.of(Set.of(new ClauseRead(new RuleKey(List.of("items")),
-                        ClauseRead.Kind.EACH_ELEMENTS_RUN, List.of("id")))),
+                        ClauseRead.Kind.EACH_ELEMENTS_RUN, RuleKey.of("id")))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
     }
 
@@ -177,12 +177,13 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
     }
 
     private static ClauseRead values(String... steps) {
-        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.ITS_VALUES, List.of());
+        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.ITS_VALUES,
+                RuleKey.THE_VALUE);
     }
 
     private static ClauseRead howMany(String... steps) {
         return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.HOW_MANY_IT_HOLDS,
-                List.of());
+                RuleKey.THE_VALUE);
     }
 
     /** What each clause of {@code Range} says it reads, in the order the declaration writes them. */

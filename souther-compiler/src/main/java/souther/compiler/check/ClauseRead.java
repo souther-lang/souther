@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -18,16 +17,16 @@ import java.util.Objects;
  *
  * @param at   where it reads, as the rules of the value call a place in it
  * @param kind what it reads there
- * @param run  for {@link Kind#EACH_ELEMENTS_RUN}, the fields of an element it reads, one after
- *             another; empty for every other kind
+ * @param run  for {@link Kind#EACH_ELEMENTS_RUN}, what it reads of an element, as the rules of the
+ *             element call a place in it; the element itself for every other kind
  */
-public record ClauseRead(RuleKey at, Kind kind, List<String> run) {
+public record ClauseRead(RuleKey at, Kind kind, RuleKey run) {
 
     public ClauseRead {
         Objects.requireNonNull(at, "a clause reads somewhere");
         Objects.requireNonNull(kind, "a clause reads something of where it reads");
-        run = List.copyOf(run);
-        if (kind != Kind.EACH_ELEMENTS_RUN && !run.isEmpty()) {
+        Objects.requireNonNull(run, "a clause reads a place of an element, or the element");
+        if (kind != Kind.EACH_ELEMENTS_RUN && !run.isTheValueItself()) {
             throw new IllegalArgumentException("only a read of elements goes down a run: " + kind);
         }
     }

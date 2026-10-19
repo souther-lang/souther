@@ -450,14 +450,14 @@ final class Clauses {
         void walk(Core e) {
             Location at = locationOf(e);
             if (at != null) {
-                read(at, ClauseRead.Kind.ITS_VALUES, List.of());
+                read(at, ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE);
                 return;
             }
             Core.PreservedCall call = e instanceof Core.PreservedCall preserved ? preserved : null;
             ElementsApart.Stated apart = call == null ? null : ElementsApart.stated(call, newtypes);
             Location container = apart == null ? null : locationOf(apart.container());
             if (container != null) {
-                read(container, ClauseRead.Kind.EACH_ELEMENTS_RUN, apart.run());
+                read(container, ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(apart.run()));
                 return;
             }
             if (e instanceof Core.Read r) {
@@ -466,14 +466,14 @@ final class Clauses {
             Core counted = call == null ? null : countedArgument(call);
             Core.forEachChild(e, child -> {
                 if (child == counted) {
-                    read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, List.of());
+                    read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, RuleKey.THE_VALUE);
                 } else {
                     walk(child);
                 }
             });
         }
 
-        private void read(Location at, ClauseRead.Kind kind, List<String> run) {
+        private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
             bindings.add(at.root());
             List<String> steps = new ArrayList<>();
             if (!wraps) {

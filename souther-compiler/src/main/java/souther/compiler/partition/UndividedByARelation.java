@@ -6,7 +6,6 @@ import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.PublishedRules;
-import souther.compiler.check.RuleKey;
 import souther.compiler.check.Shape;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
@@ -1766,7 +1765,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             for (ClauseRead reading : stated.reads()) {
-                Named says = namedBy(reading, here, rest, read);
+                Named says = namedBy(reading, here, place, rest, read);
                 out = out.and(says);
                 if (says != Named.NOT && nodes != null) {
                     TiedOnTheWay.Rule rule = new TiedOnTheWay.Rule(here, worn, clause);
@@ -1794,18 +1793,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean readsThePlace(ClauseRead reading, TermPath here, TermPath place,
                                          InputReading read) {
-        List<TermPath> reached = RulesRead.of(read).placed().computeIfAbsent(
-                new Written(here, reading.at()),
-                each -> read.domain().positionsNamed(each.root(), each.key()));
+        List<TermPath> reached = placesRead(reading, here, read);
         if (reached.isEmpty()) {
             return true;
         }
         for (TermPath each : reached) {
-            boolean reads = switch (reading.kind()) {
-                case ITS_VALUES -> place.isAtOrUnder(each);
-                case HOW_MANY_IT_HOLDS -> place.equals(each);
-                case EACH_ELEMENTS_RUN -> place.isAtOrUnder(runOfEachElement(each, reading.run()));
-            };
+            boolean reads = reading.kind() == ClauseRead.Kind.HOW_MANY_IT_HOLDS
+                    ? place.equals(each) : place.isAtOrUnder(each);
             if (reads) {
                 return true;
             }
@@ -1813,18 +1807,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return false;
     }
 
-    /** The place the fields of {@code run} lead to in each element of the container at
-     *  {@code container}. */
-    private static TermPath runOfEachElement(TermPath container, List<String> run) {
-        TermPath out = container.element();
-        for (String field : run) {
-            out = out.then(field);
-        }
-        return out;
+    /**
+     * The positions {@code reading}, written in the rules of the value at {@code here}, reads: where
+     * its name stands, and for the fields of each element, where those stand in each element. The
+     * one place a reading is put at positions, so that what a rule leaves a place and what a rule
+     * relates it to are asked of the same positions.
+     *
+     * <p>Empty where some name stands nowhere this reading put a position at.
+     */
+    private static List<TermPath> placesRead(ClauseRead reading, TermPath here, InputReading read) {
+        return RulesRead.of(read).placed().computeIfAbsent(new Written(here, reading), each -> {
+            List<TermPath> named = read.domain().positionsNamed(here, reading.at());
+            if (reading.kind() != ClauseRead.Kind.EACH_ELEMENTS_RUN) {
+                return named;
+            }
+            List<TermPath> out = new ArrayList<>();
+            for (TermPath container : named) {
+                List<TermPath> run = read.domain().positionsNamed(container.element(),
+                        reading.run());
+                if (run.isEmpty()) {
+                    return List.of();
+                }
+                out.addAll(run);
+            }
+            return out;
+        });
     }
 
-    /** A name written in the rules of the value at {@code root}. */
-    private record Written(TermPath root, RuleKey key) {}
+    /** A reading written in the rules of the value at {@code root}. */
+    private record Written(TermPath root, ClauseRead reading) {}
 
     /**
      * What a clause reading {@code reading} says of what stands at {@code rest} below
@@ -1839,8 +1850,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * everything there, unless what it reads is how many a container holds and the path goes on
      * into the elements.
      */
-    private static Named namedBy(ClauseRead reading, TermPath here, List<TermPath.Step> rest,
-                                 InputReading read) {
+    private static Named namedBy(ClauseRead reading, TermPath here, TermPath place,
+                                 List<TermPath.Step> rest, InputReading read) {
         int fields = 0;
         while (fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Field) {
             fields++;
@@ -1855,9 +1866,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 && reading.kind() == ClauseRead.Kind.ITS_VALUES) {
             return Named.BY_A_RULE;
         }
-        if (reading.kind() == ClauseRead.Kind.EACH_ELEMENTS_RUN && at.size() == fields
-                && fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Element) {
-            return namedByARunOfEachElement(reading.run(), rest.subList(fields + 1, rest.size()));
+        if (reading.kind() == ClauseRead.Kind.EACH_ELEMENTS_RUN) {
+            return namedByARunOfEachElement(reading, here, place, read);
         }
         if (at.size() > fields || reading.kind() != ClauseRead.Kind.HOW_MANY_IT_HOLDS) {
             return Named.UNSEEN;
@@ -1874,20 +1884,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * What a rule reading {@code run} of each element says of what stands at {@code below} inside
-     * an element: nothing where the two part at a field, since the rule then reads another field of
-     * the element, and unseen where one is the other or a step is none a field names.
+     * What a rule reading a run of each element says of {@code place}: nothing where the positions
+     * it reads are neither the place, nor under it, nor a value it is a part of — the rule then
+     * reads other fields of the elements — and unseen where they are, or where they are placed
+     * nowhere.
      */
-    private static Named namedByARunOfEachElement(List<String> run, List<TermPath.Step> below) {
-        for (int i = 0; i < run.size() && i < below.size(); i++) {
-            if (!(below.get(i) instanceof TermPath.Step.Field field)) {
+    private static Named namedByARunOfEachElement(ClauseRead reading, TermPath here,
+                                                  TermPath place, InputReading read) {
+        List<TermPath> reached = placesRead(reading, here, read);
+        if (reached.isEmpty()) {
+            return Named.UNSEEN;
+        }
+        for (TermPath each : reached) {
+            if (place.isAtOrUnder(each) || each.isAtOrUnder(place)) {
                 return Named.UNSEEN;
             }
-            if (!field.name().equals(run.get(i))) {
-                return Named.NOT;
-            }
         }
-        return Named.UNSEEN;
+        return Named.NOT;
     }
 
     /**

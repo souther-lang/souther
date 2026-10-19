@@ -186,6 +186,51 @@ class ARuleTiesOnlyThePlacesItReadsTest {
                 data Top = Mid | C""")));
     }
 
+    private static String ofSums(String caseRule, String bookRule, String test) {
+        return """
+                module w4
+                data Common = { id: Int, owner: Int }
+                data A = { ...Common, a: Int }%s
+                data B = { ...Common, b: Int }%s
+                data Contact = A | B
+                data Book = List<Contact>
+                    invariant %s
+                behavior m : (b: Book, k: Int) -> List<Contact>
+                let m (b, k) = List.filter(c -> %s, b.value)
+                """.formatted(caseRule, caseRule, bookRule, test);
+    }
+
+    private static final String DISTINCT_BY_ID = "List.allDistinctBy(c -> c.id, value)";
+
+    /** The cases hold the fields the rule reads and the one it does not, as a record would. */
+    @Test
+    void aRuleOfDistinctnessByAFieldTheCasesShareLeavesTheirOtherFieldsAlone() {
+        assertEquals(Map.of("b[*].owner", RELATES, "k", RELATES),
+                left(ofSums("", DISTINCT_BY_ID, "c.owner == k")));
+    }
+
+    @Test
+    void aRuleOfDistinctnessByAFieldTheCasesShareTiesThatField() {
+        assertEquals(Map.of("b[*].id", RELATES, "k", NOT_READ),
+                left(ofSums("", DISTINCT_BY_ID, "c.id == k")));
+    }
+
+    /** A rule of each case relating the shared fields is met as it is of a record. */
+    @Test
+    void aRuleOfEachCaseOnTheSharedFieldsReadsAsItDoesOfARecord() {
+        assertEquals(Map.of("b[*].owner", RELATES, "k", RELATES), left("""
+                module w5
+                data Contact = { id: Int, owner: Int }
+                    invariant id >= owner
+                data Book = List<Contact>
+                    invariant %s
+                behavior m : (b: Book, k: Int) -> List<Contact>
+                let m (b, k) = List.filter(c -> c.owner == k, b.value)
+                """.formatted(DISTINCT_BY_ID)));
+        assertEquals(Map.of("b[*].owner", RELATES, "k", RELATES), left(ofSums(
+                "\n    invariant id >= owner", DISTINCT_BY_ID, "c.owner == k")));
+    }
+
     private static final String WRAPPED = """
             data Contact = { id: Int, owner: Int }
             data Wrapped = Contact
