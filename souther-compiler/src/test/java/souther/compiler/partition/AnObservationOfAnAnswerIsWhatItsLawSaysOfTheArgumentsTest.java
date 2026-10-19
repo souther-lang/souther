@@ -454,6 +454,37 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
         }
     }
 
+    /** A conversion of a conversion is read as the count of what the last one answers, and is not
+     *  the count of what either alone does. */
+    @Test
+    void charactersOfAConversionOfAConversionAreCountedInWhatTheLastAnswers() {
+        String any = "if List.any(c -> String.matches(\"[a-z0-9]\", c),"
+                + " String.characters(%s)) then 1 else 0";
+        Proposition nested = stated(any.formatted("String.lowercase(String.uppercase(b.s))"));
+        assertNull(Proposition.firstStopIn(nested), nested.toString());
+        assertTrue(nested.toString().contains("String.lowercase(String.uppercase(b.s))"),
+                nested.toString());
+        assertNotEquals(nested, stated(any.formatted("String.lowercase(b.s)")));
+        assertNotEquals(nested, stated(any.formatted("String.uppercase(String.lowercase(b.s))")));
+    }
+
+    /**
+     * Some of the first piece being a value and some of the first two being it are two statements:
+     * a string split at a code point can hold the value in its second piece alone. Read as one,
+     * a body that asks both would be given a statement and its negation as the same one.
+     */
+    @Test
+    void someOfTheFirstPieceAndSomeOfTheFirstTwoAreNotTheSameStatement() {
+        String any = "if List.any(p -> p == b.t, List.take(%s, String.split(\"@\", b.s)))"
+                + " then 1 else 0";
+        Proposition first = stated(any.formatted("1"));
+        Proposition firstTwo = stated(any.formatted("2"));
+        assertNull(Proposition.firstStopIn(first), first.toString());
+        assertNotEquals(first, firstTwo);
+        assertNotEquals(first, stated("if List.any(p -> p == b.t, String.split(\"@\", b.s))"
+                + " then 1 else 0"));
+    }
+
     /** What the condition of the one fork of a body written {@code body} states. */
     private static Proposition stated(String body) {
         return stated(body, false);

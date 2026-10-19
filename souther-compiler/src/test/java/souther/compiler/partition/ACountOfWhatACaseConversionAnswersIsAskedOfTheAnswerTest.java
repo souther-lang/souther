@@ -114,6 +114,28 @@ class ACountOfWhatACaseConversionAnswersIsAskedOfTheAnswerTest {
     }
 
     /**
+     * A conversion of a conversion is counted as one: the outermost is the last applied, so the
+     * lowercase of the uppercase of a sharp s is two letters, where either alone leaves none.
+     */
+    @Test
+    void aConversionOfAConversionIsCountedInWhatTheLastOneAnswers() {
+        CaseMapping lowercaseOfUppercase = new CaseMapping.Lowercase(CaseMapping.UPPERCASE);
+        CaseMapping uppercaseOfLowercase = new CaseMapping.Uppercase(CaseMapping.LOWERCASE);
+        assertNotEquals(lowercaseOfUppercase, uppercaseOfLowercase);
+        assertEquals(new NumericTerm.Reading.Number(Count.of(2)),
+                read(lowercaseOfUppercase, "ß"));
+        assertEquals(new NumericTerm.Reading.Number(Count.of(0)), read(CaseMapping.LOWERCASE, "ß"));
+        assertEquals(new NumericTerm.Reading.Number(Count.of(0)),
+                read(uppercaseOfLowercase, "ß"));
+        assertEquals("String.lowercase(String.uppercase(t))",
+                lowercaseOfUppercase.writtenAround("t"));
+        assertEquals(new CaseMapping.Lowercase(CaseMapping.UPPERCASE),
+                CaseMapping.applying(
+                        souther.compiler.types.ValueName.Stdlib.operation("String", "lowercase"),
+                        CaseMapping.UPPERCASE));
+    }
+
+    /**
      * What is built for a count of the answer reads back as that count, through the conversion,
      * and a count of the string's own is not mistaken for it: the string built for nought of the
      * lowercase holds a capital it would be counted at as it stands.

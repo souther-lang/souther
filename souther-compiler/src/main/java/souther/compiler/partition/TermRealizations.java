@@ -363,15 +363,6 @@ final class TermRealizations {
                     return nothingSolvesAGroup();
                 }
                 case NumericTerm.ValueOf _ -> itself = target;
-                // The code points of what a case conversion answers are not counted kind by kind
-                // of the string's own, which is what the arm below writes a string by: a letter
-                // and the mark after it can be one code point of the answer. Beside another number
-                // of the string it is a group nothing writes a value for, and alone it is searched
-                // for by reading each candidate back ({@link #stringsHoldingThatManyOf}).
-                case NumericTerm.CodePointClassCount count
-                        when !count.through().equals(CaseMapping.NONE) -> {
-                    return nothingSolvesAGroup();
-                }
                 // Numbers of a string, which a string is chosen for and no container is built to
                 // have: what its code points come to is no total of elements composed one by one.
                 case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> {
@@ -2763,7 +2754,7 @@ final class TermRealizations {
         List<CodePoints> by = new ArrayList<>();
         by.add(new CodePointClass.NotWhitespace().held());
         for (OfAString each : wanted) {
-            if (each.number() instanceof NumberOfAString.InAClass(CodePointClass counted)
+            if (each.number() instanceof NumberOfAString.InAClass(CodePointClass counted, var _)
                     && !by.contains(counted.held())) {
                 by.add(counted.held());
             }
@@ -2844,7 +2835,16 @@ final class TermRealizations {
 
         record Length() implements NumberOfAString {}
 
-        record InAClass(CodePointClass counted) implements NumberOfAString {}
+        /** How many code points of {@code counted} what {@code through} makes of the string holds.
+         *  Written by the code points of the string that the class counts, which is where it is
+         *  looked for and not what it is held to: a string is offered only as the answer reads. */
+        record InAClass(CodePointClass counted, CaseMapping through) implements NumberOfAString {
+
+            /** Whether this counts the answer of a conversion. */
+            boolean ofAnAnswer() {
+                return !through.equals(CaseMapping.NONE);
+            }
+        }
 
         record CodePointSum() implements NumberOfAString {}
 
@@ -2852,7 +2852,7 @@ final class TermRealizations {
         default long of(String text) {
             return switch (this) {
                 case Length _ -> text.codePointCount(0, text.length());
-                case InAClass in -> countIn(in.counted(), text);
+                case InAClass in -> countIn(in.counted(), in.through(), text);
                 case CodePointSum _ -> text.codePoints().asLongStream().sum();
             };
         }
@@ -2873,13 +2873,9 @@ final class TermRealizations {
             return switch (term) {
                 case NumericTerm.TakenOf taken
                         when taken.takenAs() instanceof TakenAs.HowManyItHolds -> new Length();
-                case NumericTerm.CodePointClassCount count
-                        when count.through().equals(CaseMapping.NONE) ->
-                        new InAClass(count.counted());
+                case NumericTerm.CodePointClassCount count ->
+                        new InAClass(count.counted(), count.through());
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
-                case NumericTerm.CodePointClassCount _ -> throw new IllegalStateException(
-                        term + " is counted in what a conversion answers, which no group of a"
-                                + " string's numbers is written for");
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _ ->
                         throw new IllegalStateException(
@@ -3050,7 +3046,12 @@ final class TermRealizations {
         // than the largest is still one covering it. Where what the code points come to is asked,
         // only with the length asked as well: the length bounds every kind, and a longer string is
         // one no count looked at could rule out.
+        // The ways of writing a string count its code points kind by kind, which is not how the
+        // answer of a conversion holds a count, so a search over them looked at no more than some
+        // of the strings there are wherever one is asked.
         boolean everyWayLookedAt = inFull && kinds.size() > largest
+                && wanted.stream().noneMatch(each -> each.number()
+                        instanceof NumberOfAString.InAClass in && in.ofAnAnswer())
                 && search.looked() < steps && !search.leftUnwritten()
                 && (wanted.stream().noneMatch(
                         each -> each.number() instanceof NumberOfAString.CodePointSum)

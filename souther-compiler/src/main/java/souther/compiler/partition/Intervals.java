@@ -234,11 +234,8 @@ final class Intervals {
             case NumericTerm.ValueOf _ -> "value";
             // The class of code points counted, which the term says and the place does not.
             case NumericTerm.CodePointClassCount count -> "number of code points that are "
-                    + count.counted() + switch (count.through()) {
-                        case CaseMapping.None _ -> "";
-                        case CaseMapping.Lowercase _ -> " in the lowercase of the string";
-                        case CaseMapping.Uppercase _ -> " in the uppercase of the string";
-                    };
+                    + count.counted() + (count.through().equals(CaseMapping.NONE) ? ""
+                    : " in " + count.through().writtenAround("the string"));
             case NumericTerm.CodePointValueSum _ -> "sum of the code points";
         };
     }

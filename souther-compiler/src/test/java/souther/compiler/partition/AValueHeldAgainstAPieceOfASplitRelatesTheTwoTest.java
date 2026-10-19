@@ -63,6 +63,22 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
     }
 
     @Test
+    void severalStatementsAboutTheFirstFewPiecesAreEachRead() {
+        assertEquals(List.of(), said("""
+                module w1
+                data A
+                data B
+                data C
+                behavior m : (email: String, d: String) -> A | B | C
+                let m (email, d) = {
+                    guard List.any(p -> p == d, List.take(2, String.split("@", email))) else A
+                    guard List.any(p -> p == d, List.take(1, String.split("@", email))) else B
+                    C
+                }
+                """).stream().filter(line -> line.contains("does not read")).toList());
+    }
+
+    @Test
     void noPieceTakenIsNoRelation() {
         assertEquals(List.of("· not read: comparison@3:36 — written in a form this compiler does not"
                 + " read, about `d`"), said("""

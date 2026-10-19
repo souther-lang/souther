@@ -55,10 +55,16 @@ public final class BoundUnderEvaluation {
         try {
             return switch (mapping) {
                 case CaseMapping.None _ -> text;
-                case CaseMapping.Lowercase _ ->
-                        Strings.lowercase(text, EvaluationContext.checkpoint());
-                case CaseMapping.Uppercase _ ->
-                        Strings.uppercase(text, EvaluationContext.checkpoint());
+                case CaseMapping.Lowercase(CaseMapping of) -> {
+                    String inner = mapped(of, text);
+                    yield inner == null ? null
+                            : Strings.lowercase(inner, EvaluationContext.checkpoint());
+                }
+                case CaseMapping.Uppercase(CaseMapping of) -> {
+                    String inner = mapped(of, text);
+                    yield inner == null ? null
+                            : Strings.uppercase(inner, EvaluationContext.checkpoint());
+                }
             };
         } catch (ConstraintViolation _) {
             return null;

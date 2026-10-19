@@ -201,9 +201,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param separator the code point it is parted at, or none where it parts into characters
      * @param string    the string, a number of the input or what an operation answers of one
      * @param within    how many statements about some piece this one is read inside of
+     * @param among     how many of the first pieces it is one of, or nought where it is one of
+     *                  all of them: the piece of the first one and the piece of the first two
+     *                  are two values, as a string can hold the value in its second piece alone
      */
     record APieceOf(ValueName.Stdlib operation, OptionalInt separator, Quantity string,
-                    int within) implements Quantity {
+                    int within, int among) implements Quantity {
 
         public APieceOf {
             Objects.requireNonNull(operation, "a piece is of what some operation parts");
@@ -216,6 +219,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (within < 0) {
                 throw new IllegalArgumentException(
                         "a piece is of a statement some number of statements in: " + within);
+            }
+            if (among < 0) {
+                throw new IllegalArgumentException(
+                        "a piece is one of some number of the first pieces: " + among);
             }
         }
 
@@ -230,7 +237,9 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "a piece " + within + " in of " + operation.qualified() + "("
+            return "a piece " + within + " in"
+                    + (among > 0 ? " among the first " + among : "") + " of "
+                    + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
                             + ", " : "") + string.spelled() + ")";
         }

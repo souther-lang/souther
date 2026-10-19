@@ -1601,12 +1601,13 @@ final class Pullback {
      * for the very node its binding was given, and the reading by what it holds. What else is held
      * is what that call and reading say.
      *
-     * <p>{@code firstOnly} is the pieces a container holds when only the first of them were taken:
-     * whether some of those meets a statement is not whether some piece does.
+     * <p>{@code first} is how many of the first pieces a container holds when only those were
+     * taken, and nought where it holds them all: whether some of the first few meets a statement
+     * is not whether some piece does, and the first one and the first two are not the same few.
      */
     private record Pieces(Core.PreservedCall split, ValueName.Stdlib operation, InputReads at,
                           BoundOperationFacts.Pieces parted, OptionalInt separator,
-                          boolean firstOnly) {
+                          int first) {
 
         @Override
         public boolean equals(Object other) {
@@ -1650,7 +1651,7 @@ final class Pullback {
             }
             separatedBy = OptionalInt.of(written.value().codePointAt(0));
         }
-        return new Pieces(call, operation, container.at(), parted, separatedBy, false);
+        return new Pieces(call, operation, container.at(), parted, separatedBy, 0);
     }
 
     /**
@@ -1676,7 +1677,8 @@ final class Pullback {
         Pieces taken = piecesOf(container.at().standing(call.args().get(1),
                 read.rules().symbols(), read.rules().newtypes()));
         return taken == null ? null : new Pieces(taken.split(), taken.operation(), taken.at(),
-                taken.parted(), taken.separator(), true);
+                taken.parted(), taken.separator(),
+                (int) Math.min(number.value(), Integer.MAX_VALUE));
     }
 
     /**
@@ -1830,7 +1832,8 @@ final class Pullback {
         Quantity string = valueOfTheInput(
                 piece.split().args().get(piece.parted().string().position()), piece.at());
         return string == null ? null
-                : new Quantity.APieceOf(piece.operation(), piece.separator(), string, within);
+                : new Quantity.APieceOf(piece.operation(), piece.separator(), string, within,
+                        piece.first());
     }
 
     /** A statement read of each value a container written out holds, or why it was not. */
@@ -2893,7 +2896,7 @@ final class Pullback {
                 return leaf(new Derivation.SomePieceEqualling(answered),
                         askedAt != null ? askedAt : new Denotation(e, reads));
             }
-            CodePoints held = pieces.firstOnly() ? null
+            CodePoints held = pieces.first() > 0 ? null
                     : Derivation.SomePieceMeeting.held(pieces.separator(), within, element);
             if (held == null) {
                 WhyUnread stopped = Proposition.firstStopIn(element);
@@ -3764,11 +3767,9 @@ final class Pullback {
             }
             // What a case conversion answers of the string at a position is counted as it is, by
             // asking the answer: its code points are no image of the string's own code by code.
-            if (Core.withoutStanding(standing.value()) instanceof Core.PreservedCall call
-                    && CaseMapping.of(call.declared().operation()) instanceof CaseMapping through
-                    && standing.at().pathOf(call.args().getFirst(), read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath at)) {
-                return codePointsAt(at, counted, through);
+            Sized converted = codePointsOfAConversion(standing, counted);
+            if (converted != null) {
+                return converted;
             }
             Pieces piece = pieceThatIs(value, in, false);
             if (piece != null) {
@@ -3779,6 +3780,34 @@ final class Pullback {
                     && made.operation() instanceof ValueName.Stdlib madeBy
                     ? new WhyUnread.CodePointsOfWhatAnOperationAnswers(madeBy)
                     : new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
+        }
+
+        /**
+         * How many of the code points of {@code standing} are in {@code counted}, where it is what
+         * case conversions, one made of another, answer of the string at a position — or null
+         * where it is not.
+         */
+        private Sized codePointsOfAConversion(Denotation standing, CodePointClass counted) {
+            List<ValueName> applied = new ArrayList<>();
+            Denotation cursor = standing;
+            Core inner = null;
+            InputReads where = standing.at();
+            while (Core.withoutStanding(cursor.value()) instanceof Core.PreservedCall call
+                    && CaseMapping.isAConversion(call.declared().operation())) {
+                applied.add(call.declared().operation());
+                inner = call.args().getFirst();
+                where = cursor.at();
+                cursor = where.standing(inner, read.rules().symbols(), read.rules().newtypes());
+            }
+            if (inner == null || !(where.pathOf(inner, read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath at))) {
+                return null;
+            }
+            CaseMapping through = CaseMapping.NONE;
+            for (ValueName each : applied.reversed()) {
+                through = CaseMapping.applying(each, through);
+            }
+            return codePointsAt(at, counted, through);
         }
 
         /** How many of the code points of {@code through} of the string at {@code at} are in
