@@ -276,7 +276,7 @@ final class Conditions {
         ComparisonReadings.Reading read = new ComparisonReadings.Reading(stated, at, true);
         for (ComparisonReadings.Reading composed = orderStatedBy(terms, read);
                 composed != null && composed.isTheCondition()
-                        && composed.at().bound().keySet().equals(at.bound().keySet());
+                        && composed.at().meansWhatItMeansIn(at);
                 composed = orderStatedBy(terms, composed)) {
             read = composed;
         }

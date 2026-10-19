@@ -23,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The clauses reaching a value, read for which values each of its positions may hold.
@@ -279,7 +280,7 @@ final class AdmissibleReading {
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
         Core e = part.of();
         UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER
-                : relatesTwoPositions(e, at) ? UnreadReason.RELATES_TWO_POSITIONS
+                : relatesTwoPositions(part, at) ? UnreadReason.RELATES_TWO_POSITIONS
                 : UnreadReason.FORM_NOT_READ;
         return shortOf(part, names(e, at), why);
     }
@@ -460,8 +461,11 @@ final class AdmissibleReading {
      * there tells an author two different things about one clause. What stays here is how this
      * reading looks a position up.
      */
-    private boolean relatesTwoPositions(Core e, Denotations at) {
-        return Relates.twoPositions(e, part -> positionIn(part, at));
+    private boolean relatesTwoPositions(ClauseExpr.Part part, Denotations at) {
+        Function<Core, Object> position = side -> positionIn(side, at);
+        StatedComparison stated = Conditions.statedBy(terms, part, at);
+        return stated == null ? Relates.twoPositions(part.of(), position)
+                : Relates.twoPositions(stated, position);
     }
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null

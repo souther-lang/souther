@@ -10,6 +10,8 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -34,6 +36,12 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
                     "l.a > 3.0m"),
             new Same("Decimal", "Decimal.compare(value, 5.0m) == 0", "value == 5.0m",
                     "l.value > 3.0m"),
+            new Same("{ a: Decimal, b: Decimal }", "Decimal.compare(a, b) == 0", "a == b",
+                    "l.a > 3.0m"),
+            new Same("{ a: Decimal, b: Decimal }", "Decimal.compare(a, b) /= 0", "a /= b",
+                    "l.a > 3.0m"),
+            new Same("{ a: Decimal, b: Decimal }", "Decimal.compare(a, b) < 0", "a < b",
+                    "l.a > 3.0m"),
             new Same("Decimal", "!(Decimal.compare(value, 5.0m) <= 0)", "!(value <= 5.0m)",
                     "l.value > 3.0m"));
 
@@ -74,6 +82,23 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("not read: invariant Pair #1"), report);
+    }
+
+    /** Equal reports would also come of two rules both left unread, so the plain one is held to
+     *  being read. */
+    @Test
+    void aBoundOnOneValueIsRead() {
+        String report = report("Decimal", "Decimal.compare(value, 5.0m) <= 0", "l.value > 3.0m");
+        assertFalse(report.contains("not read: invariant T"), report);
+    }
+
+    /** A count of days above one proves the order of the dates and is not where it holds, so the
+     *  rule is not the order. */
+    @Test
+    void anOrderThatOnlyFollowsFromTheSignIsNotTheRule() {
+        String fields = "{ a: Date, b: Date }";
+        assertNotEquals(report(fields, "b > a", "l.a == l.b"),
+                report(fields, "Date.daysBetween(a, b) > 1", "l.a == l.b"));
     }
 
     @Test
