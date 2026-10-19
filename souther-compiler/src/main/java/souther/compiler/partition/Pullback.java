@@ -5933,6 +5933,12 @@ final class Pullback {
      * and the inputs, work out nothing that can abort, and read nothing the walk carried.
      */
     private Inside.AFiniteSelection intoAFiniteSelection(Denotation value) {
+        // Asked of every value a reading goes into, so the ones a walk cannot be are turned away
+        // before they are stood.
+        Core written = Core.withoutStanding(value.value());
+        if (!(written instanceof Core.PreservedCall) && !(written instanceof Core.Read)) {
+            return null;
+        }
         Denotation call = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
         SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
