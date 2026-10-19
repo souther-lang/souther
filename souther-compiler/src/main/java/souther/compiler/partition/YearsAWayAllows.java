@@ -166,12 +166,22 @@ final class YearsAWayAllows {
         Bounds bounds = new Bounds();
         List<BigInteger[]> lowersOfLater = new ArrayList<>();
         List<BigInteger[]> uppersOfLater = new ArrayList<>();
+        Lattice lattice = Lattice.EVERY_YEAR;
         for (int i = 0; i < constants.length; i++) {
             BigInteger constant = BigInteger.valueOf(constants[i]);
             for (int before = 0; before < date; before++) {
                 constant = constant.add(
                         BigInteger.valueOf(weights[i][before]).multiply(
                                 BigInteger.valueOf(chosen[before])));
+            }
+            if (later >= 0 && statements.get(i).relation() == Rel.EQ
+                    && weights[i][date] != 0 && weights[i][later] != 0
+                    && lattice == Lattice.EVERY_YEAR) {
+                lattice = Lattice.of(BigInteger.valueOf(weights[i][date]),
+                        BigInteger.valueOf(weights[i][later]), constant);
+                if (lattice == null) {
+                    return List.of();
+                }
             }
             for (BigInteger[] sum : notBelowNought(weights[i][date],
                     later < 0 ? 0 : weights[i][later], constant, statements.get(i).relation())) {
@@ -200,16 +210,53 @@ final class YearsAWayAllows {
         long to = bounds.high.longValueExact();
         List<Long> out = new ArrayList<>();
         for (long anchor : new long[] {Math.max(from, Math.min(to, USUAL_YEAR)), from, to}) {
-            // A cycle of years from an anchor meets every year of a cycle, so every pattern.
+            BigInteger onTheLattice = lattice.atOrBelow(BigInteger.valueOf(anchor));
+            // The years the lattice allows come round in the calendar's pattern within a cycle of
+            // them, because a step of the lattice moves the year and the one it goes with by the
+            // same amounts every time: so a cycle of them from an anchor meets every pattern.
             for (int step = 0; step < YEARS_OF_A_CYCLE; step++) {
-                for (long year : new long[] {anchor + step, anchor - step}) {
-                    if (from <= year && year <= to && !out.contains(year)) {
-                        out.add(year);
+                BigInteger moved = lattice.modulus().multiply(BigInteger.valueOf(step));
+                for (BigInteger candidate : new BigInteger[] {
+                        onTheLattice.add(moved), onTheLattice.subtract(moved)}) {
+                    if (bounds.low.compareTo(candidate) <= 0
+                            && candidate.compareTo(bounds.high) <= 0
+                            && !out.contains(candidate.longValueExact())) {
+                        out.add(candidate.longValueExact());
                     }
                 }
             }
         }
         return out;
+    }
+
+    /**
+     * The years of a date at which a statement of two dates held to nought, {@code a * year +
+     * b * yearAfter + c = 0}, can hold at all: those congruent to {@code residue} modulo
+     * {@code modulus}, because the year after is then the whole number the statement gives.
+     * Looking at the years in a row would meet none of them where the weights are large, whatever
+     * the interval.
+     */
+    private record Lattice(BigInteger residue, BigInteger modulus) {
+
+        static final Lattice EVERY_YEAR = new Lattice(BigInteger.ZERO, BigInteger.ONE);
+
+        /** The lattice of {@code a * x + b * z + c = 0}, or null where no whole x and z hold it. */
+        static Lattice of(BigInteger a, BigInteger b, BigInteger c) {
+            BigInteger gcd = a.gcd(b);
+            if (c.remainder(gcd).signum() != 0) {
+                return null;
+            }
+            BigInteger reducedA = a.divide(gcd);
+            BigInteger modulus = b.abs().divide(gcd);
+            BigInteger residue = c.divide(gcd).negate()
+                    .multiply(reducedA.modInverse(modulus)).mod(modulus);
+            return new Lattice(residue, modulus);
+        }
+
+        /** The greatest year on the lattice that is not past {@code year}. */
+        BigInteger atOrBelow(BigInteger year) {
+            return year.subtract(year.subtract(residue).mod(modulus));
+        }
     }
 
     /**

@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -144,6 +145,30 @@ class AStatementOfOnePartOfADateLeavesTheOtherPartsToTheCalendarTest {
         var fixedTurned = statement(-5000, Rel.EQ, year(0, 1, NOT_MOVED));
         assertArrayEquals(new int[] {5000, 5060},
                 YearsAWayAllows.choose(List.of(gapTurned, fixedTurned), both));
+    }
+
+    /**
+     * {@code 100019 * year(a) == 100003 * year(b)}: the years are whole numbers only at multiples
+     * of 100003 and 100019, which a look at the years in a row from any one year does not meet.
+     */
+    @Test
+    void yearsThatOnlyWeightsFarApartAllowAreFound() {
+        var both = List.of(List.of(MONTH, DAY), List.of(MONTH, DAY));
+        var apart = statement(0, Rel.EQ, year(0, 100_019, NOT_MOVED), year(1, -100_003, NOT_MOVED));
+
+        int[] years = YearsAWayAllows.choose(List.of(apart), both);
+        assertEquals(100_019L * years[0], 100_003L * years[1]);
+
+        var never = statement(1, Rel.EQ, year(0, 4, NOT_MOVED), year(1, -2, NOT_MOVED));
+        assertNull(YearsAWayAllows.choose(List.of(never), both));
+    }
+
+    /** A year is a number of its own: no month or day goes with it as one of them goes with the
+     *  other, and asking for it as a part is refused. */
+    @Test
+    void theYearIsNotAPartThatGoesWithAMonthAndADay() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new DatesThatStandInEveryYear.Part(TakenAs.DatePart.YEAR, NOT_MOVED));
     }
 
     /** A move defined only at dates in the early years takes no date in the years asked. */

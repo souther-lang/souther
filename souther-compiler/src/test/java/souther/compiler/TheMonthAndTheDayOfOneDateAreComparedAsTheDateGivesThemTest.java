@@ -60,6 +60,20 @@ class TheMonthAndTheDayOfOneDateAreComparedAsTheDateGivesThemTest {
                 + " is not worked out, about `Date.month(on)`"), report);
     }
 
+    /**
+     * The year of a date is not a month or a day: it runs as far as the calendar does, so a year
+     * and a month taken of one date are not asked as a month and a day are. The sum is above
+     * nought at the years from the first of the next to the last, and below it before, and that
+     * is not shown to be reached.
+     */
+    @Test
+    void theYearOfADateIsNotAskedAsTheCombinationsOfAMonthAndADay() {
+        String report = about("Date.year(on) + Date.month(on) > 0");
+
+        assertTrue(report.contains(NOT_REACHED + ", so which values here settle it on their own"
+                + " is not worked out, about `Date.year(on)`"), report);
+    }
+
     /** A way that narrows the month leaves the combinations it lets through, which are not asked
      *  for, so the comparison is read as it was. */
     @Test

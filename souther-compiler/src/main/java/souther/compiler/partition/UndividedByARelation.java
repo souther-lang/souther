@@ -758,7 +758,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<TermPath, List<Integer>> ofOneDate = new LinkedHashMap<>();
         for (int i = 0; i < sides.size(); i++) {
             if (sides.get(i).term() instanceof NumericTerm.TakenOf taken
-                    && taken.takenAs() instanceof TakenAs.PartOfDate
+                    && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
+                    && part != TakenAs.DatePart.YEAR
                     && sources.get(i) != null && sources.get(i).takes().every()
                     && wayOf(taken, stating.get(i)) == Way.UNTOUCHED) {
                 ofOneDate.computeIfAbsent(taken.position(), _ -> new ArrayList<>()).add(i);

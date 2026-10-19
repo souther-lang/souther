@@ -39,8 +39,38 @@ final class DatesThatStandInEveryYear {
             IntStream.range(FIRST_YEAR, FIRST_YEAR + YEARS_OF_A_CYCLE),
             IntStream.of(LocalDate.MIN.getYear(), LocalDate.MAX.getYear())).toArray();
 
-    /** A part of a date, taken after the date was moved. */
-    record Part(TakenAs.DatePart which, DateTranslation moved) {}
+    /**
+     * The month or the day of a date, taken after the date was moved. The year is not one: it
+     * runs as far as the calendar does and goes with no month or day in particular, so it is
+     * not a part these are made for.
+     */
+    record Part(TakenAs.DatePart which, DateTranslation moved) {
+
+        Part {
+            if (which == TakenAs.DatePart.YEAR) {
+                throw new IllegalArgumentException("the year is not a part that goes with a"
+                        + " month and a day");
+            }
+        }
+
+        /** What this part is of {@code date}. */
+        int of(LocalDate date) {
+            return switch (which) {
+                case MONTH -> date.getMonthValue();
+                case DAY -> date.getDayOfMonth();
+                case YEAR -> throw new IllegalStateException("not a part of this kind");
+            };
+        }
+
+        /** How many numbers this part can be, which are one to that many. */
+        int howManyThereAre() {
+            return switch (which) {
+                case MONTH -> 12;
+                case DAY -> 31;
+                case YEAR -> throw new IllegalStateException("not a part of this kind");
+            };
+        }
+    }
 
     /** A month and a day of the date, and the number each of the parts comes to there. */
     record Origin(int month, int day, List<ExactRatio> parts) {}
@@ -107,8 +137,7 @@ final class DatesThatStandInEveryYear {
                     return null;
                 }
                 LocalDate date = LocalDate.ofEpochDay(origin + part.moved().offsetDays());
-                here.add(ExactRatio.of(part.which() == TakenAs.DatePart.MONTH
-                        ? date.getMonthValue() : date.getDayOfMonth()));
+                here.add(ExactRatio.of(part.of(date)));
             }
             if (out == null) {
                 out = here;

@@ -4,7 +4,6 @@ import souther.compiler.check.DatePartsLeft;
 import souther.compiler.check.HeldClass;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.semantics.TakenAs;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -122,13 +121,11 @@ final class MonthsAndDaysOfOneDate {
             for (int i = 0; i < seen.length; i++) {
                 DatesThatStandInEveryYear.Part part = parts.get(i);
                 LocalDate date = LocalDate.ofEpochDay(day + part.moved().offsetDays());
-                seen[i] |= 1L << (part.which() == TakenAs.DatePart.MONTH
-                        ? date.getMonthValue() : date.getDayOfMonth());
+                seen[i] |= 1L << part.of(date);
             }
         }
         for (int i = 0; i < seen.length; i++) {
-            long every = parts.get(i).which() == TakenAs.DatePart.MONTH
-                    ? (1L << 13) - 2 : (1L << 32) - 2;
+            long every = (1L << (parts.get(i).howManyThereAre() + 1)) - 2;
             if (seen[i] != every) {
                 return false;
             }
@@ -143,8 +140,7 @@ final class MonthsAndDaysOfOneDate {
         for (int i = 0; i < parts.size(); i++) {
             int at = i;
             long values = combinations.stream().map(each -> each.get(at)).distinct().count();
-            long every = parts.get(i).which() == TakenAs.DatePart.MONTH ? 12 : 31;
-            if (values != every) {
+            if (values != parts.get(i).howManyThereAre()) {
                 return false;
             }
         }
@@ -169,8 +165,7 @@ final class MonthsAndDaysOfOneDate {
                 return null;
             }
             LocalDate date = LocalDate.ofEpochDay(day + part.moved().offsetDays());
-            combination.add(ExactRatio.of(part.which() == TakenAs.DatePart.MONTH
-                    ? date.getMonthValue() : date.getDayOfMonth()));
+            combination.add(ExactRatio.of(part.of(date)));
         }
         return combination;
     }
