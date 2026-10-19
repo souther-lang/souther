@@ -258,8 +258,13 @@ final class StatementsOnClasses {
                 return null;
             }
             for (int c = 0; c < classes; c++) {
-                yes[c] = conjunction ? yes[c] & one.yes()[c] : yes[c] | one.yes()[c];
-                no[c] = conjunction ? no[c] | one.no()[c] : no[c] & one.no()[c];
+                if (conjunction) {
+                    yes[c] = yes[c] && one.yes()[c];
+                    no[c] = no[c] || one.no()[c];
+                } else {
+                    yes[c] = yes[c] || one.yes()[c];
+                    no[c] = no[c] && one.no()[c];
+                }
             }
         }
         return new Settled(yes, no);
@@ -305,8 +310,8 @@ final class StatementsOnClasses {
             boolean some = false;
             boolean every = true;
             for (Settled one : each) {
-                some |= held ? one.yes()[c] : one.no()[c];
-                every &= held ? one.no()[c] : one.yes()[c];
+                some = some || (held ? one.yes()[c] : one.no()[c]);
+                every = every && (held ? one.no()[c] : one.yes()[c]);
             }
             if (!some && !every) {
                 return null;

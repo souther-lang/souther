@@ -175,8 +175,12 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
         private final Map<ModelOccurrence, Set<ModelOccurrence>> within = new LinkedHashMap<>();
         private final boolean keepsStatements;
 
-        /** @param keepsStatements whether the statements are asked for, and so held beside the
-         *                         positions */
+        /**
+         * A reader of the positions a construct turns on.
+         *
+         * @param keepsStatements whether the statements are asked for, and so held beside the
+         *                        positions
+         */
         Bounds(boolean keepsStatements) {
             this.keepsStatements = keepsStatements;
         }
