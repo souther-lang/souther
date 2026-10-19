@@ -2227,7 +2227,7 @@ public final class InputReads {
             Denotation standing = standing(asked, symbols, newtypes);
             if (standing.at().everyElementOf(standing.value(), newtypes)
                     instanceof PathResolution.At(TermPath elements)) {
-                return pending >= 0 || !keptBy.isEmpty() && madeNewBeneath ? null
+                return pending >= 0 || (!keptBy.isEmpty() && madeNewBeneath) ? null
                         : new Occurrences(projected.from(elements), keptBy);
             }
             if (Core.withoutStanding(standing.value()) instanceof Core.Read name
@@ -2488,7 +2488,7 @@ public final class InputReads {
                     ElementQuestion.ONE_PER_ELEMENT, where.names(), newtypes,
                     each -> blockOf(where, each, symbols, newtypes));
             if (step == null
-                    || ofTheListsThemselves && !step.answered().at().fields().isEmpty()) {
+                    || (ofTheListsThemselves && !step.answered().at().fields().isEmpty())) {
                 return null;
             }
             projected = step.answered().at().then(projected);
