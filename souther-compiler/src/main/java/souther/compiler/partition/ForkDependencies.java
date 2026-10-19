@@ -85,8 +85,8 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
     /** What a walk reads as it meets the constructs that decide forks. */
     static final class Gathered {
 
-        private final Bounds forks = new Bounds();
-        private final Bounds answers = new Bounds();
+        private final Bounds forks = new Bounds(true);
+        private final Bounds answers = new Bounds(false);
 
         /** That the condition of {@code fork} states {@code stated}, wherever else it was read. */
         void forkReads(ModelOccurrence fork, Proposition stated) {
@@ -115,11 +115,20 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
         private final Set<ModelOccurrence> unknown = new LinkedHashSet<>();
         private final Map<ModelOccurrence, Proposition> statements = new LinkedHashMap<>();
         private final Set<ModelOccurrence> readTwoWays = new LinkedHashSet<>();
+        private final boolean keepsStatements;
+
+        /** @param keepsStatements whether the statements are asked for, and so held beside the
+         *                         positions */
+        Bounds(boolean keepsStatements) {
+            this.keepsStatements = keepsStatements;
+        }
 
         void reads(ModelOccurrence decides, Proposition stated) {
-            Proposition before = statements.putIfAbsent(decides, stated);
-            if (before != null && !before.equals(stated)) {
-                readTwoWays.add(decides);
+            if (keepsStatements) {
+                Proposition before = statements.putIfAbsent(decides, stated);
+                if (before != null && before != stated && !before.equals(stated)) {
+                    readTwoWays.add(decides);
+                }
             }
             Optional<List<TermPath>> positions = PositionsAStatementReads.of(stated);
             if (positions.isEmpty()) {

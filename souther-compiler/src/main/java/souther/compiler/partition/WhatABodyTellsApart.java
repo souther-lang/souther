@@ -74,6 +74,8 @@ final class WhatABodyTellsApart {
     private final List<Axis> axes;
     /** The rules the reading of the input read to the end and found no line in, with why. */
     private final List<RuleWithoutALine> noLine;
+    /** Per position, whether {@link #readToTheEnd} holds, asked once of the rules without a line. */
+    private final Boolean[] readToTheEnd;
     /** The case each arm of a {@code match} is, where the tree the operations stand in names it. */
     private final ArmsNamed armsNamed;
     /** Which positions what decides a fork may turn on, where the same tree reads it. */
@@ -100,6 +102,7 @@ final class WhatABodyTellsApart {
         this.arrives = arrives;
         this.coexistence = ClassCoexistence.among(axes);
         this.unread = new boolean[axes.size()];
+        this.readToTheEnd = new Boolean[axes.size()];
         for (int at = 0; at < axes.size(); at++) {
             splits.add(new ArrayList<>());
             comparisonsRead.add(new LinkedHashSet<>());
@@ -355,7 +358,7 @@ final class WhatABodyTellsApart {
             return null;
         }
         InteractionCells.Evaluated where = InteractionCells.evaluate(stated.get(), axes, at,
-                readToTheEnd(axes.get(at)));
+                readToTheEnd(at));
         if (where == null) {
             return null;
         }
@@ -545,15 +548,20 @@ final class WhatABodyTellsApart {
      * and divides nothing that arrives at it: none was refused, stopped on or left relating
      * another value.
      */
-    private boolean readToTheEnd(Axis axis) {
-        for (RuleWithoutALine each : noLine) {
-            if (filedAt(each.at(), axis)
-                    && !(each.why() instanceof BlockReason.ReadToEndWithoutLine read
-                            && dividesNothing(read))) {
-                return false;
+    private boolean readToTheEnd(int at) {
+        if (readToTheEnd[at] == null) {
+            boolean whole = true;
+            for (RuleWithoutALine each : noLine) {
+                if (filedAt(each.at(), axes.get(at))
+                        && !(each.why() instanceof BlockReason.ReadToEndWithoutLine read
+                                && dividesNothing(read))) {
+                    whole = false;
+                    break;
+                }
             }
+            readToTheEnd[at] = whole;
         }
-        return true;
+        return readToTheEnd[at];
     }
 
     /** Whether a finding filed at {@code at} is about the number {@code axis} measures. */
