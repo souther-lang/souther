@@ -550,10 +550,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TiedOnTheWay tied = TiedOnTheWay.of(conditions, read);
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
-            tiedTo.add(tiedTo(i, tied, conditions, sources));
+            tiedTo.add(tiedTo(i, tied, conditions, sources, read));
         }
         WhatARelationLeavesUndivided.Independence independent =
-                (one, other) -> apartByTheDeclarations(one, other, sources)
+                (one, other) -> apartByTheDeclarations(one, other, sources, read)
                         && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
         if (kind == Kind.PRODUCT) {
             for (int at = 0; at < 2; at++) {
@@ -589,7 +589,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         if (!out.containsAll(places())) {
-            out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole));
+            out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read));
         }
         for (int at = 0; at < sides.size(); at++) {
             if (leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled
@@ -892,7 +892,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param sources what the declarations leave each side, in the order of the sides
      */
-    private boolean apartByTheDeclarations(int one, int other, List<Source> sources) {
+    private boolean apartByTheDeclarations(int one, int other, List<Source> sources,
+                                           InputReading read) {
         if (!mayBeNamed(one, sources) || !mayBeNamed(other, sources)) {
             return true;
         }
@@ -903,7 +904,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (FilingCoordinate each : first) {
             for (FilingCoordinate that : second) {
-                if (each.path().head().equals(that.path().head())) {
+                if (overlap(each, that) || !Collections.disjoint(
+                        tiedByTheDeclarations(each.path(), read),
+                        tiedByTheDeclarations(that.path(), read))) {
                     return false;
                 }
             }
@@ -956,10 +959,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Set<FilingCoordinate> undividedByTheDifference(List<Source> sources,
                                                          List<Carrier> carriers,
                                                          List<List<OnAWay>> stating,
-                                                         boolean heldWhole) {
+                                                         boolean heldWhole, InputReading read) {
         if (!heldWhole || sides.size() != 2 || carriers.get(0) == null
                 || !carriers.get(0).equals(carriers.get(1))
-                || !apartByTheDeclarations(0, 1, sources)) {
+                || !apartByTheDeclarations(0, 1, sources, read)) {
             return Set.of();
         }
         Carrier on = carriers.get(0);
@@ -1128,7 +1131,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * in no class together are tied by nothing the way states.
      */
     private Set<Object> tiedTo(int at, TiedOnTheWay tied, List<OnAWay> conditions,
-                               List<Source> sources) {
+                               List<Source> sources, InputReading read) {
         Side side = sides.get(at);
         Set<Object> out = new HashSet<>();
         for (OnAWay each : conditions) {
@@ -1149,8 +1152,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         if (mayBeNamed(at, sources)) {
-            placesAsked(side).forEach(place -> out.add(tied.classOf(
-                    new TiedOnTheWay.Parameter(place.path().head()))));
+            for (FilingCoordinate place : placesAsked(side)) {
+                for (Object node : tiedByTheDeclarations(place.path(), read)) {
+                    out.add(tied.classOf(node));
+                }
+            }
         }
         return out;
     }
@@ -1168,9 +1174,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static final class TiedOnTheWay {
 
-        /** The parameter a place is in, as one node every place a rule may name there is tied
-         *  to. */
+        /** The parameter a place is in, as one node every place under a value the rules leave
+         *  nothing of is tied to. */
         private record Parameter(String head) {}
+
+        /**
+         * One rule of the value at {@code at}, as a node every place it may relate is tied to.
+         *
+         * @param worn   the name or declaration the rule is of
+         * @param clause which of its clauses, or {@code -1} for a rule not read, which may relate
+         *               anything under {@code at}
+         */
+        private record Rule(TermPath at, TypeSymbol worn, int clause) {}
 
         private final Map<Object, Object> parent = new HashMap<>();
 
@@ -1185,8 +1200,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     } else {
                         out.join(first, at);
                     }
-                    if (places.add(at) && namedByTheDeclarations(at, read) != Named.NOT) {
-                        out.join(at, new Parameter(at.head()));
+                    if (places.add(at)) {
+                        for (Object node : tiedByTheDeclarations(at, read)) {
+                            out.join(at, node);
+                        }
                     }
                 }
             }
@@ -1359,9 +1376,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         boolean seedNamed = kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)
                 && (sourceOf(from, read) == null || sourceOf(from, read).named());
+        // A rule keeping elements apart by some field relates them to one another whichever field
+        // the number is, so it is asked at the elements and not at the number.
+        int deepest = kept.container().steps().size();
         return new Source(each.takes(), each.onlyItsEnds(), seedNamed
-                || namedDownTo(kept.ofEach().subjectPath(), kept.container().steps().size(), read)
-                        != Named.NOT);
+                || namedDownTo(kept.ofEach().subjectPath(), deepest, read) != Named.NOT
+                || namedDownTo(kept.container().element(), deepest, read) == Named.UNSEEN);
     }
 
     /**
@@ -1500,11 +1520,74 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * places its statements are about.
      */
     private record RulesRead(Map<TypeSymbol.AtModule, PublishedRules> byName,
-                             Map<TermPath, Named> byPlace) {
+                             Map<TermPath, Named> byPlace,
+                             Map<TermPath, Set<Object>> tiesByPlace) {
 
         static RulesRead of(InputReading read) {
-            return read.derived(RulesRead.class,
-                    _ -> new RulesRead(new ConcurrentHashMap<>(), new ConcurrentHashMap<>()));
+            return read.derived(RulesRead.class, _ -> new RulesRead(
+                    new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+                    new ConcurrentHashMap<>()));
+        }
+    }
+
+    /**
+     * The rules of the values {@code path} sits in that may relate it to another place: one node
+     * per rule of a value around it, for each clause that reads something at, under or around
+     * what stands at {@code path} ({@link #namedByTheDeclarations}). Two places are tied by the
+     * declarations where they share a node, and only then: a rule of a value relates places in
+     * that value, so places the rules of no value around both read are in no way related by them.
+     * Empty where {@link #namedByTheDeclarations} says {@link Named#NOT}.
+     */
+    private static Set<Object> tiedByTheDeclarations(TermPath path, InputReading read) {
+        return RulesRead.of(read).tiesByPlace().computeIfAbsent(path, each -> {
+            Set<Object> out = new LinkedHashSet<>();
+            List<TermPath.Step> steps = each.steps();
+            for (int length = 0; length < steps.size(); length++) {
+                TermPath here = new TermPath(each.head(), steps.subList(0, length));
+                Position around = read.domain().at(here.position());
+                if (around == null || around.nothingExists()) {
+                    out.add(new TiedOnTheWay.Parameter(each.head()));
+                    return out;
+                }
+                List<TypeSymbol> worn = new ArrayList<>(around.view().wrappers());
+                switch (around.view().shape()) {
+                    case Shape.Product product -> worn.add(product.name());
+                    case Shape.Sum sum -> worn.add(sum.name());
+                    default -> { }
+                }
+                for (TypeSymbol name : worn) {
+                    tiesBy(name, here, steps.subList(length, steps.size()), read, out);
+                }
+            }
+            return out;
+        });
+    }
+
+    /** The rules of {@code worn} that read something of what stands at {@code rest} below
+     *  {@code here}, added to {@code out}. */
+    private static void tiesBy(TypeSymbol worn, TermPath here, List<TermPath.Step> rest,
+                               InputReading read, Set<Object> out) {
+        if (!(worn instanceof TypeSymbol.AtModule name)) {
+            return;
+        }
+        PublishedRules rules = RulesRead.of(read).byName().computeIfAbsent(name,
+                each -> PublishedRules.governing(each, read.rules().published()));
+        if (!rules.everyRuleReached()) {
+            out.add(new TiedOnTheWay.Rule(here, worn, -1));
+            return;
+        }
+        List<ClauseMeaning> reached = rules.reached();
+        for (int clause = 0; clause < reached.size(); clause++) {
+            if (!(reached.get(clause) instanceof ClauseMeaning.Stated stated)) {
+                out.add(new TiedOnTheWay.Rule(here, worn, -1));
+                continue;
+            }
+            for (ClauseRead reading : stated.reads()) {
+                if (namedBy(reading, here, rest, read) != Named.NOT) {
+                    out.add(new TiedOnTheWay.Rule(here, worn, clause));
+                    break;
+                }
+            }
         }
     }
 
@@ -1653,7 +1736,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 && reading.kind() == ClauseRead.Kind.ITS_VALUES) {
             return Named.BY_A_RULE;
         }
-        if (at.size() > fields || reading.kind() == ClauseRead.Kind.ITS_VALUES) {
+        if (reading.kind() == ClauseRead.Kind.EACH_ELEMENTS_RUN && at.size() == fields
+                && fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Element) {
+            return namedByARunOfEachElement(reading.run(), rest.subList(fields + 1, rest.size()));
+        }
+        if (at.size() > fields || reading.kind() != ClauseRead.Kind.HOW_MANY_IT_HOLDS) {
             return Named.UNSEEN;
         }
         // How many a container holds, read at or above where the path stops going by fields. Only
@@ -1665,6 +1752,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<TermPath.Step> container = new ArrayList<>(here.steps());
         container.addAll(rest.subList(0, fields));
         return mayHoldOne(new TermPath(here.head(), container), read) ? Named.NOT : Named.UNSEEN;
+    }
+
+    /**
+     * What a rule reading {@code run} of each element says of what stands at {@code below} inside
+     * an element: nothing where the two part at a field, since the rule then reads another field of
+     * the element, and unseen where one is the other or a step is none a field names.
+     */
+    private static Named namedByARunOfEachElement(List<String> run, List<TermPath.Step> below) {
+        for (int i = 0; i < run.size() && i < below.size(); i++) {
+            if (!(below.get(i) instanceof TermPath.Step.Field field)) {
+                return Named.UNSEEN;
+            }
+            if (!field.name().equals(run.get(i))) {
+                return Named.NOT;
+            }
+        }
+        return Named.UNSEEN;
     }
 
     /**

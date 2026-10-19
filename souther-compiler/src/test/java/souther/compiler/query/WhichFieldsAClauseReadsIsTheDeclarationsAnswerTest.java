@@ -142,6 +142,23 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 clausesSay(c, ClauseMeaning.Stated::reads));
     }
 
+    /** A call saying no two elements share a field reads that field of each element, and no
+     *  other. */
+    @Test
+    void aCallKeepingElementsApartByAFieldReadsThatFieldOfEachElement() {
+        Compilation c = started("""
+                module shop.prices exposing ( Item, Range )
+
+                data Item = { id: Int, price: Int }
+
+                data Range = { items: List<Item> }
+                    invariant List.allDistinctBy(i -> i.id, items)
+                """);
+        assertEquals(List.of(Set.of(new ClauseRead(new RuleKey(List.of("items")),
+                        ClauseRead.Kind.EACH_ELEMENTS_RUN, List.of("id")))),
+                clausesSay(c, ClauseMeaning.Stated::reads));
+    }
+
     /** A newtype's own {@code value} is the value itself, so a newtype wrapping a record reads its
      *  places as a rule of the record would. */
     @Test
@@ -160,11 +177,12 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
     }
 
     private static ClauseRead values(String... steps) {
-        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.ITS_VALUES);
+        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.ITS_VALUES, List.of());
     }
 
     private static ClauseRead howMany(String... steps) {
-        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.HOW_MANY_IT_HOLDS);
+        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.HOW_MANY_IT_HOLDS,
+                List.of());
     }
 
     /** What each clause of {@code Range} says it reads, in the order the declaration writes them. */
