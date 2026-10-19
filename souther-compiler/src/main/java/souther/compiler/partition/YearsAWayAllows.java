@@ -8,8 +8,10 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -96,6 +98,9 @@ final class YearsAWayAllows {
         BitSet[] giving = new BitSet[dates];
         for (int date = 0; date < dates; date++) {
             giving[date] = classesGivingEveryValue(partsOfEachDate.get(date), shifts.get(date));
+            if (giving[date].isEmpty()) {
+                return null;   // no year gives this date every number, whatever the statements
+            }
         }
         long[] chosen = new long[dates];
         return search(statements, weights, constants, partsOfEachDate, shifts, giving, chosen, 0)
@@ -208,7 +213,7 @@ final class YearsAWayAllows {
         }
         long from = bounds.low.longValueExact();
         long to = bounds.high.longValueExact();
-        List<Long> out = new ArrayList<>();
+        Set<Long> out = new LinkedHashSet<>();
         for (long anchor : new long[] {Math.max(from, Math.min(to, USUAL_YEAR)), from, to}) {
             BigInteger onTheLattice = lattice.atOrBelow(BigInteger.valueOf(anchor));
             // The years the lattice allows come round in the calendar's pattern within a cycle of
@@ -219,14 +224,13 @@ final class YearsAWayAllows {
                 for (BigInteger candidate : new BigInteger[] {
                         onTheLattice.add(moved), onTheLattice.subtract(moved)}) {
                     if (bounds.low.compareTo(candidate) <= 0
-                            && candidate.compareTo(bounds.high) <= 0
-                            && !out.contains(candidate.longValueExact())) {
+                            && candidate.compareTo(bounds.high) <= 0) {
                         out.add(candidate.longValueExact());
                     }
                 }
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
