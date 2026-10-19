@@ -763,40 +763,11 @@ public final class PathReachability {
             // its own over a fork's condition: a chain is a chain wherever it is written, and one
             // read only under the fork it was written into left the same operators unread a line
             // above.
-            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
-                Walked left = walk(binary.left(), here, at, reads);
-                if (left.known().reachesNothing()) {
-                    // No run gets past the left, so the right is a place nothing arrives at.
-                    walk(binary.right(), left, at, reads);
-                    yield left;
-                }
-                // Which way the left has to come out for the right to run is the operator's own
-                // answer, and the same answer says there is a right side that runs only sometimes.
-                // Read the other way round, a comparison guarded by its neighbour would be read
-                // against conditions nothing on the way to it established.
-                boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
-                Predicates.Assumed reaching = assuming(binary.occurrence(),
-                        MeaningsOfABody.Part.Asked.LEFT, binary.left(), left.known(), at, reads,
-                        reachedWhen);
-                Walked right = walk(binary.right(), left.at(reaching.known(),
-                        with(left.decided(), reaching, binary.left().pos(), reachedWhen)), at,
-                        reads);
-                // A run leaves the operator having run the right, or with the left settling it.
-                // Which the left settling holds is asked only where no run leaves having run the
-                // right: otherwise a run leaving holds what held after the left either way, and
-                // the left is what stands for that way.
-                Walked settled = left;
-                if (right.known().reachesNothing()) {
-                    Predicates.Assumed settling = assuming(binary.occurrence(),
-                            MeaningsOfABody.Part.Asked.LEFT, binary.left(), left.known(), at,
-                            reads, !reachedWhen);
-                    settled = left.at(settling.known(),
-                            with(left.decided(), settling, binary.left().pos(), !reachedWhen));
-                }
-                yield leaving(left, List.of(right, settled));
-            }
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
+                    shortCircuitOperands(binary, here, at, reads).completed();
             case Core.If iff -> {
-                Walked cond = walk(iff.cond(), here, at, reads);
+                Exits exits = exitsOf(iff.cond(), here, at, reads);
+                Walked cond = exits.completed();
                 ControlPlace.Arm[] arms = plan.armsOf(iff);
                 if (cond.known().reachesNothing()) {
                     // No run gets past the condition, so neither arm is entered. An arm the
@@ -808,10 +779,10 @@ public final class PathReachability {
                     enterArm(arms, 1, iff, iff.els(), here, noRunPast, at, reads, false);
                     yield cond;
                 }
-                Walked then = enterArm(arms, 0, iff, iff.then(), cond, Optional.empty(), at, reads,
-                        true);
-                Walked els = enterArm(arms, 1, iff, iff.els(), cond, Optional.empty(), at, reads,
-                        false);
+                Walked then = enterArm(arms, 0, iff, iff.then(), exits.whenTrue(), Optional.empty(),
+                        at, reads, true);
+                Walked els = enterArm(arms, 1, iff, iff.els(), exits.whenFalse(), Optional.empty(),
+                        at, reads, false);
                 yield leaving(cond, List.of(then, els));
             }
             case Core.IfConstructed ic -> {
@@ -942,6 +913,13 @@ public final class PathReachability {
                 yield part;
             }
         };
+        return pastOperands(e, operands, at, reads);
+    }
+
+    /**
+     * What a run holds past {@code e}, given what it held once its operands were worked out.
+     */
+    private Walked pastOperands(Core e, Walked operands, Denotations at, InputReads reads) {
         // Every comparison this plan numbers is answered for, and answered under what holds once
         // its sides have answered: a run that stopped working a side out is no run arriving at it.
         if (e instanceof Core.Binary comparison) {
@@ -969,6 +947,107 @@ public final class PathReachability {
         // Some run reaching here may not get past it, so what follows has something above it.
         return new Walked(past.known(), answered, past.mayStop(), false, false,
                 WhyNone.BY_THE_WAY, false);
+    }
+
+    /**
+     * What a run leaving a condition holds, and what it holds having got {@code true} out of it
+     * and having got {@code false}.
+     *
+     * <p>Each is what the runs that worked the condition out and got that value hold: where a
+     * short circuit's right answers nothing, no run gets {@code true} out of {@code &&} and the
+     * state for it is empty, while the {@code false} left by the left side is not.
+     */
+    private record Exits(Walked completed, Walked whenTrue, Walked whenFalse) {
+
+        /** A condition read as one step: both values are got from where it left. */
+        static Exits of(Walked completed) {
+            return new Exits(completed, completed, completed);
+        }
+
+        Walked when(boolean value) {
+            return value ? whenTrue : whenFalse;
+        }
+    }
+
+    /**
+     * {@code e} worked out, with what each value it gets leaves. Only a short circuit has exits of
+     * its own; any other condition leaves what it left whichever value it got.
+     */
+    private Exits exitsOf(Core e, Walked here, Denotations at, InputReads reads) {
+        if (here.known().reachesNothing()) {
+            return Exits.of(walk(e, here, at, reads));
+        }
+        // A value standing as a wider type is the value it holds, with what the widening itself
+        // makes of it on top; the exits are the held value's.
+        Exits operands = switch (e) {
+            case Core.Widen widen -> exitsOf(widen.value(), here, at,
+                    reads.entering(ScopeStep.SAME, symbols, newtypes));
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
+                    shortCircuitOperands(binary, here, at, reads);
+            default -> null;
+        };
+        if (operands == null) {
+            return Exits.of(walk(e, here, at, reads));
+        }
+        Walked past = pastOperands(e, operands.completed(), at, reads);
+        return past == operands.completed() ? operands : Exits.of(past);
+    }
+
+    /**
+     * The operands of a short circuit worked out, with the exits their order gives it.
+     *
+     * <p>The value the operator reaches its right side for is got only by a run that worked the
+     * right out and got it there; the other value is got by a run the left settled or by one that
+     * worked the right out and got it. A run that did not get past the right gets neither.
+     */
+    private Exits shortCircuitOperands(Core.Binary binary, Walked here, Denotations at,
+                                       InputReads reads) {
+        Exits left = exitsOf(binary.left(), here, at, reads);
+        if (left.completed().known().reachesNothing()) {
+            // No run gets past the left, so the right is a place nothing arrives at.
+            walk(binary.right(), left.completed(), at, reads);
+            return Exits.of(left.completed());
+        }
+        // Which way the left has to come out for the right to run is the operator's own
+        // answer, and the same answer says there is a right side that runs only sometimes.
+        // Read the other way round, a comparison guarded by its neighbour would be read
+        // against conditions nothing on the way to it established.
+        boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
+        Walked before = left.when(reachedWhen);
+        Predicates.Assumed reaching = assuming(binary.occurrence(),
+                MeaningsOfABody.Part.Asked.LEFT, binary.left(), before.known(), at, reads,
+                reachedWhen);
+        Exits right = exitsOf(binary.right(), before.at(reaching.known(),
+                with(before.decided(), reaching, binary.left().pos(), reachedWhen)), at, reads);
+        // A run leaves the operator having run the right, or with the left settling it.
+        // Which the left settling holds is asked only where no run leaves having run the
+        // right: otherwise a run leaving holds what held after the left either way, and
+        // the left is what stands for that way.
+        // The left's own exit for that value and not what it left whichever value it got: where
+        // the left gets the value from no run, nothing settles it here either.
+        Walked settled = left.when(!reachedWhen);
+        if (right.completed().known().reachesNothing()) {
+            Predicates.Assumed settling = assuming(binary.occurrence(),
+                    MeaningsOfABody.Part.Asked.LEFT, binary.left(), settled.known(), at,
+                    reads, !reachedWhen);
+            settled = settled.at(settling.known(),
+                    with(settled.decided(), settling, binary.left().pos(), !reachedWhen));
+        }
+        Walked completed = leaving(left.completed(), List.of(right.completed(), settled));
+        Walked other = alternatives(left.completed(), List.of(settled, right.when(!reachedWhen)));
+        return reachedWhen
+                ? new Exits(completed, right.whenTrue(), other)
+                : new Exits(completed, other, right.whenFalse());
+    }
+
+    /**
+     * What a run holds that left by any of {@code ways}: the one way where a single way leaves
+     * anything, since there is nothing to join it with.
+     */
+    private static Walked alternatives(Walked fork, List<Walked> ways) {
+        Walked joined = leaving(fork, ways);
+        List<Walked> left = ways.stream().filter(way -> !way.known().reachesNothing()).toList();
+        return left.size() == 1 ? joined.at(left.get(0).known(), left.get(0).decided()) : joined;
     }
 
     /**
