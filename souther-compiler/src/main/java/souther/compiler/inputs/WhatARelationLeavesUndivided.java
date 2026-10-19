@@ -972,7 +972,8 @@ public final class WhatARelationLeavesUndivided {
 
     /**
      * What the type of a relation's terms limits the others to being asked together: the greatest
-     * value it holds, or null where it holds none.
+     * value it holds, or null where it holds none. A caller that does not know the type passes no
+     * {@code Jointly} at all, and the others are then asked one at a time only.
      */
     private record Jointly(BigInteger greatest) {
     }
@@ -984,11 +985,12 @@ public final class WhatARelationLeavesUndivided {
      *
      * <p>The others' weighed sum, the constant with it, takes its least where each takes the end
      * that lessens it and its greatest where each takes the other, and the order is monotone in
-     * that sum. So the relation comes out one way at the least and the other at the greatest for
-     * every value of the term when the term's value that favours the least sum still leaves the
-     * relation holding or failing there, and the value that favours the greatest still leaves it
-     * the other way. Only those two rows are witnesses, and they are asked for the ends a term is
-     * shown to take and nothing between.
+     * that sum. So the relation comes out one way at the least sum and the other way at the
+     * greatest for every value of the term when it does so at the term's worst value for each:
+     * the weighed value that adds most to the least sum still keeps the relation on its first
+     * side, and the one that adds least to the greatest sum still keeps it on the other. Only those
+     * two rows are witnesses, and they are asked for the ends a term is shown to take and nothing
+     * between.
      *
      * <p>A witness is a row that is computed, so every sum along the way has to stay inside the
      * type: the constant and the weighed size of each term at its farthest value, added, are held

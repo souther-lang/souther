@@ -111,7 +111,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
      * {@code a + c >= b} over the same runs is settled the other way, true from eleven on.
      */
     @Test
-    void theOrderTheOthersAreReadAsIsTheOneTheRelationStates() {
+    void theSameTermsHeldTheOtherWayAreSettledTheOtherWay() {
         var a = term("a", 1, run(1L, 12L), run(1L, 12L));
         var c = term("c", 1, run(1L, 31L), run(1L, 31L));
         var b = term("b", -1, run(1L, 12L), run(1L, 12L));
