@@ -330,9 +330,30 @@ final class Pullback {
     /**
      * What each total over a container the body wrote out adds up to, in the way of keeping the
      * comparison being read is read in ({@link #keepingOf}): the sum of the elements that way
-     * keeps.
+     * keeps. Newest last.
      */
-    private final Map<Core, LinearForm<Quantity>> totalInACase = new IdentityHashMap<>();
+    private final List<ATotalInACase> totalsInACase = new ArrayList<>();
+
+    /**
+     * That the total {@code call}, standing in the names of {@code at}, adds up to {@code form} in
+     * the way of keeping being read.
+     *
+     * <p>The call and the names it stands in, and not the call alone: a closure's body is one node
+     * however many elements it is applied to, and the total in it is a different total for each.
+     */
+    private record ATotalInACase(Core call, InputReads at, LinearForm<Quantity> form) {}
+
+    /** What the total {@code call} standing at {@code at} adds up to in the way of keeping being
+     *  read, or null where no way is being read for it. */
+    private LinearForm<Quantity> totalInACase(Core call, InputReads at) {
+        Core node = Core.withoutStanding(call);
+        for (ATotalInACase each : totalsInACase) {
+            if (each.call() == node && each.at().standsInTheNamesOf(at)) {
+                return each.form();
+            }
+        }
+        return null;
+    }
     /**
      * What each walk whose step is being read carried into it, on the side its end is asked about
      * ({@link #acrossAWalk}).
@@ -4881,7 +4902,7 @@ final class Pullback {
         if (total == null) {
             return null;
         }
-        LinearForm<Quantity> inACase = totalInACase.get(Core.withoutStanding(node));
+        LinearForm<Quantity> inACase = totalInACase(node, at);
         if (inACase != null) {
             return inACase;
         }
@@ -4908,7 +4929,7 @@ final class Pullback {
      */
     private Inside.ATotalByKeeping totalByKeeping(Core node, InputReads at) {
         AnOperationApplied total = sumCall(node);
-        if (total == null || totalInACase.containsKey(Core.withoutStanding(node))) {
+        if (total == null || totalInACase(node, at) != null) {
             return null;
         }
         Denotation container = at.standing(total.args().getFirst(), read.rules().symbols(),
@@ -4918,21 +4939,16 @@ final class Pullback {
             return null;
         }
         List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
-        boolean kept = false;
-        for (ReadMeaning.Occurrence occurrence : occurrences) {
-            for (ReadMeaning.Occurrence.Kept by : occurrence.keptWhere()) {
-                if (!(by instanceof ReadMeaning.Occurrence.Kept.ATruth)) {
-                    return null;
-                }
-                kept = true;
-            }
+        if (!WaysOfKeeping.allTruths(occurrences)) {
+            return null;
         }
+        boolean kept = occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty());
         if (!kept && occurrences.stream().allMatch(one -> AffineForms.outcome(one.value().value(),
                 one.value().at(), quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>)) {
             return null;
         }
-        return new Inside.ATotalByKeeping(Core.withoutStanding(node), occurrences);
+        return new Inside.ATotalByKeeping(Core.withoutStanding(node), at, occurrences);
     }
 
     /**
@@ -4948,63 +4964,47 @@ final class Pullback {
     private Derivation keepingOf(Inside.ATotalByKeeping total, InputReads reads, Denotation at,
                                  boolean fixed,
                                  Function<UnaryOperator<InputReads>, Derivation> again) {
-        List<Denotation> truths = new ArrayList<>();
-        // Which truth each occurrence is kept by, found once: asked of every occurrence at every
-        // way of keeping, a truth is compared by what it is made of.
-        int[][] keptBy = new int[total.occurrences().size()][];
-        for (int i = 0; i < keptBy.length; i++) {
-            List<ReadMeaning.Occurrence.Kept> kept = total.occurrences().get(i).keptWhere();
-            keptBy[i] = new int[kept.size()];
-            for (int j = 0; j < keptBy[i].length; j++) {
-                Denotation truth = ((ReadMeaning.Occurrence.Kept.ATruth) kept.get(j)).truth();
-                int index = truths.indexOf(truth);
-                if (index < 0) {
-                    index = truths.size();
-                    truths.add(truth);
-                }
-                keptBy[i][j] = index;
-            }
-        }
-        WhyUnread past = splitInto(reads, truths.size() >= Long.SIZE - 1 ? Long.MAX_VALUE
-                : 1L << truths.size());
+        WaysOfKeeping ways = new WaysOfKeeping(total.occurrences());
+        // The leaves of the tree, which are the readings it makes: a truth is a node only where an
+        // occurrence is handed to it, so a chain of filters is as many ways as it has filters.
+        WhyUnread past = splitInto(reads, ways.leaves(Long.MAX_VALUE >> 1));
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, fixed));
         }
         return new Derivation.AComparisonOfAChoice(
-                keptAs(total, truths, keptBy, new Derivation[truths.size()],
-                        new boolean[truths.size()], 0, at, fixed, again));
+                keptAs(total, ways, ways.undecided(), new Derivation[ways.truthCount()], at, fixed,
+                        again));
     }
 
     /**
-     * The total read with the truths from {@code next} on still to decide, those before it decided
-     * as {@code holds} says.
+     * The total read with the truths {@code decided} so far and the next one that is evaluated
+     * still to decide.
      *
-     * @param keptBy     for each occurrence, the index in {@code truths} of each truth it is kept by
-     * @param conditions what each truth states, read the first time its place in the order is met
-     *                   and the same at every way of keeping the ones before it
+     * @param conditions what each truth states, read the first time it is a node and the same at
+     *                   every way that reaches it
      */
-    private Derivation keptAs(Inside.ATotalByKeeping total, List<Denotation> truths,
-                              int[][] keptBy, Derivation[] conditions, boolean[] holds, int next,
-                              Denotation at, boolean fixed,
+    private Derivation keptAs(Inside.ATotalByKeeping total, WaysOfKeeping ways,
+                              Boolean[] decided, Derivation[] conditions, Denotation at,
+                              boolean fixed,
                               Function<UnaryOperator<InputReads>, Derivation> again) {
-        if (next < truths.size()) {
+        int next = ways.nextEvaluated(decided);
+        if (next >= 0) {
             if (conditions[next] == null) {
-                Denotation truth = truths.get(next);
+                Denotation truth = ways.truth(next);
                 conditions[next] = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
             }
-            holds[next] = true;
-            Derivation whenKept = keptAs(total, truths, keptBy, conditions, holds, next + 1, at,
-                    fixed, again);
-            holds[next] = false;
-            Derivation whenDropped = keptAs(total, truths, keptBy, conditions, holds, next + 1,
-                    at, fixed, again);
+            decided[next] = true;
+            Derivation whenKept = keptAs(total, ways, decided, conditions, at, fixed, again);
+            decided[next] = false;
+            Derivation whenDropped = keptAs(total, ways, decided, conditions, at, fixed, again);
+            decided[next] = null;
             return new Derivation.IfThenElse(conditions[next], whenKept, whenDropped);
         }
         ElementsMet metBefore = elementsMet.copied();
         List<LinearForm<Quantity>> forms = new ArrayList<>();
-        for (int i = 0; i < keptBy.length; i++) {
+        for (int i = 0; i < total.occurrences().size(); i++) {
             ReadMeaning.Occurrence occurrence = total.occurrences().get(i);
-            if (!thereWhere(occurrence, keptBy[i], holds)) {
+            if (!ways.isThere(i, decided)) {
                 continue;
             }
             Denotation element = occurrence.value();
@@ -5025,25 +5025,16 @@ final class Pullback {
                 return partOf(at, new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
             }
         }
-        totalInACase.put(total.call(), sum);
+        ATotalInACase inThisWay = new ATotalInACase(total.call(), total.at(), sum);
+        totalsInACase.add(inThisWay);
         try {
             return again.apply(on -> on);
         } finally {
-            totalInACase.remove(total.call());
+            totalsInACase.remove(inThisWay);
+            // The ways are independent readings of one comparison: what one met of the container's
+            // elements is no part of what the next meets.
+            elementsMet = metBefore;
         }
-    }
-
-    /** Whether {@code occurrence} is there where the truths decided as {@code holds} say. */
-    private static boolean thereWhere(ReadMeaning.Occurrence occurrence, int[] keptBy,
-                                      boolean[] holds) {
-        for (int j = 0; j < keptBy.length; j++) {
-            ReadMeaning.Occurrence.Kept.ATruth truth =
-                    (ReadMeaning.Occurrence.Kept.ATruth) occurrence.keptWhere().get(j);
-            if (holds[keptBy[j]] != truth.holds()) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -5884,7 +5875,7 @@ final class Pullback {
          * numbers: some of {@code occurrences} are there on some rows and not on others, each
          * kept by truths, or one composes into no form ({@link #totalByKeeping}).
          */
-        record ATotalByKeeping(Core call, List<ReadMeaning.Occurrence> occurrences)
+        record ATotalByKeeping(Core call, InputReads at, List<ReadMeaning.Occurrence> occurrences)
                 implements Inside {}
     }
 
@@ -6049,8 +6040,8 @@ final class Pullback {
                             number.at().taken(walk) != null;
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
                             number.at().isTaken(call);
-                    case Inside.ATotalByKeeping(Core call, var _) ->
-                            totalInACase.containsKey(call);
+                    case Inside.ATotalByKeeping(Core call, InputReads where, var _) ->
+                            totalInACase(call, where) != null;
                     // A name an application handed a value is that one value, and stops nothing.
                     // Met again as several, it was reached through a value handed another name and
                     // read where that value was written, which no application handed it: handed
