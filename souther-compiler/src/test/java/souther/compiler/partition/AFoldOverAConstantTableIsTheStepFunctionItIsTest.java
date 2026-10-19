@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -110,32 +111,38 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
 
     /**
      * The seed and the rows are worked out before any application, so a walk whose seed or rows a
-     * run can end on is not the answer of its last application: an input at the least {@code Int}
-     * ends the run in {@code Int.abs} before the table is walked.
+     * run can end on is not the answer of its last application. What a run is ended by is the
+     * owners' to say ({@code WhatARunMayEndFor}, and the declaration's invariant for a
+     * construction): an input at the least {@code Int} ends the run in {@code Int.abs}, and a row
+     * of a type with an invariant may be refused. The same walks with a seed and rows that end
+     * none are read, so it is those and not the walk that leave the comparison unread.
      */
     @Test
     void aSeedOrARowThatMayEndARunIsNotSkippedOver() {
-        for (String walked : List.of("""
-                List.fold((acc, r) -> if r.lowerBound <= pay then r.grade else acc,
-                    Int.abs(cur), %s)""".formatted(ASCENDING), """
-                List.fold((acc, r) -> if r.lowerBound <= pay then r.grade else acc, 0,
-                    [ Row { grade = Int.abs(cur), lowerBound = 100 },
-                      Row { grade = 2, lowerBound = 200 } ])""")) {
-            Compilation compilation = Compilation.ofSource("""
-                    module demo
-
-                    data Row = { grade: Int, lowerBound: Int }
-                    data Ok
-                    data No
-                    behavior f : (cur: Int, pay: Int) -> Ok | No
-                    let f (cur, pay) = {
-                        let computed = %s
-                        guard computed < 2 else No
-                        Ok
-                    }
-                    """.formatted(walked), "Main");
-            assertFalse(notRead(measure(compilation, "f")).isEmpty(), walked);
+        String plain = "data Row = { grade: Int, lowerBound: Int }";
+        String held = plain + "\n    invariant grade >= 0";
+        String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
+        String rows = "[ Row { grade = %s, lowerBound = 100 }, Row { grade = 2, lowerBound = 200 } ]";
+        for (String walked : List.of(
+                "List.fold(%s, Int.abs(cur), %s)".formatted(step, ASCENDING),
+                "List.fold(%s, 0, %s)".formatted(step, rows.formatted("Int.abs(cur)")))) {
+            assertTrue(Proposition.leavesSomethingUnread(stated(plain, compared(walked))),
+                    walked);
         }
+        for (String walked : List.of("List.fold(%s, 0, %s)".formatted(step, rows.formatted("1")),
+                "List.fold(%s, pay, %s)".formatted(step, rows.formatted("1")),
+                "List.fold(%s, 0, %s)".formatted(step, rows.formatted("cur")))) {
+            assertFalse(Proposition.leavesSomethingUnread(stated(plain, compared(walked))),
+                    walked);
+        }
+        // The same rows of a type that holds an invariant are not the rows of the walk above: the
+        // comparison is no longer the choice among their grades.
+        String walked = "List.fold(%s, 0, %s)".formatted(step, rows.formatted("1"));
+        assertNotEquals(stated(plain, compared(walked)), stated(held, compared(walked)));
+    }
+
+    private static String compared(String computed) {
+        return "let computed = %s\nif computed < 2 then 1 else 0".formatted(computed);
     }
 
     /**
@@ -251,16 +258,21 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
 
     /** What the condition of the one fork that ends a body written {@code body} states. */
     private static Proposition stated(String body) {
+        return stated("data Row = { grade: Int, lowerBound: Int }", body);
+    }
+
+    /** The same, over a declaration of {@code Row} as given. */
+    private static Proposition stated(String row, String body) {
         Compilation compilation = Compilation.ofSource("""
                 module demo
 
-                data Row = { grade: Int, lowerBound: Int }
+                %s
 
                 behavior f : (cur: Int, pay: Int) -> Int
                 let f (cur, pay) = {
                 %s
                 }
-                """.formatted(body.indent(4).stripTrailing()), "Main");
+                """.formatted(row, body.indent(4).stripTrailing()), "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();

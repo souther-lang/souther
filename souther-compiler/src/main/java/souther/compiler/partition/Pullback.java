@@ -23,6 +23,8 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementsWrittenOut;
+import souther.compiler.check.ExpandedClauseResult;
+import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.KeyedAccumulation;
 import souther.compiler.check.LawAtACall;
@@ -5988,15 +5990,37 @@ final class Pullback {
     }
 
     /**
-     * Whether working out {@code value} ends no run that reaches it: it is written out all the way
-     * down, so it is the same value on every run and a run it ends is no row's to avoid, or it is
-     * something {@link WhatARunMayEndFor} knows ends none.
+     * Whether working out {@code value} is known to end no run that reaches it.
+     *
+     * <p>Being the same value on every run is another fact: a negation of the least {@code Int} is
+     * written out all the way down and ends the run. What ends a run is {@link WhatARunMayEndFor}'s
+     * to say, except for a construction, which it leaves unknown because the invariant that may end
+     * it is the declaration's ({@link #endsNoRun(Core)}).
      */
     private boolean endsNoRun(Denotation value) {
-        Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
-                read.rules().newtypes());
-        return stands.at().writtenOutAsOneValue(stands.value(), read.rules().symbols(),
-                read.rules().newtypes()) || WhatARunMayEndFor.of(stands.value()).endsNone();
+        return endsNoRun(value.at().standing(value.value(), read.rules().symbols(),
+                read.rules().newtypes()).value());
+    }
+
+    /**
+     * A construction of a type that holds no invariant, of values that end no run, and a list of
+     * such values, are known to end none; anything else is {@link WhatARunMayEndFor}'s answer.
+     */
+    private boolean endsNoRun(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Construct made -> holdsNoInvariant(made.typeName())
+                    && made.values().stream().allMatch(each -> endsNoRun(each.value()));
+            case Core.ListLit list -> list.elements().stream().allMatch(this::endsNoRun);
+            case Core other -> WhatARunMayEndFor.of(other).endsNone();
+        };
+    }
+
+    /** Whether no {@code invariant} clause is written for {@code type}: the construction of it
+     *  has no clause to be refused by. */
+    private boolean holdsNoInvariant(TypeSymbol.AtModule type) {
+        return read.rules().invariants().of(type.key())
+                instanceof ExpandedClauseResult.Found(ExpandedClauses found)
+                && found.clauses().isEmpty();
     }
 
     /** Whether {@code arm} is the name of what a walk carried. */
