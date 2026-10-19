@@ -5,7 +5,6 @@ import souther.compiler.cst.CstLexer;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.ExactRatio;
@@ -22,8 +21,6 @@ import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
-import souther.compiler.meaning.Quantity;
-import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -106,49 +103,30 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     }
 
     /**
-     * The number an operation takes of what a dependency answered that {@code e} is, or null where
-     * it is no such number.
+     * The number {@code e} takes of one value, or null where it takes none or no answer is held
+     * where it is read.
      *
-     * <p>Which calls take a number of a value is {@link NumericMeasures#takenIn}'s answer, the one
-     * the input's numbers are read by, so a count of a list is one wherever the list stands. What
-     * this adds is only whose value it is taken of: the answer itself, or the elements of the list
-     * it holds, which a sum adds up one number of each.
+     * <p>Asked of every number a comparison names, so a body with no answer in it is not asked
+     * what an operation takes of one. Which calls take a number of a value is
+     * {@link NumericMeasures#takenIn}'s answer, the one the input's numbers are read by, so a
+     * count of a list is one wherever the list stands.
      */
-    Quantity numberTakenOfAnAnswer(Core e, InputReads at) {
-        // Asked of every number a comparison names, so a body with no answer in it is not asked
-        // what an operation takes of one.
-        if (!at.mayHoldAnAnswer()) {
-            return null;
-        }
-        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
-                each -> at.folded(each, symbols, newtypes));
-        if (measured == null) {
-            return null;
-        }
-        if (anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer answer) {
-            return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),
-                    answer, Core.withoutStanding(measured.of()).type());
-        }
-        return sumOverElementsOfAnAnswer(measured, at);
+    NumericMeasures.Measured measureWhereAnAnswerMayBeHeld(Core e, InputReads at) {
+        return at.mayHoldAnAnswer() ? NumericMeasures.takenIn(e, symbols,
+                each -> at.folded(each, symbols, newtypes)) : null;
     }
 
-    /** What the sum {@code measured} takes over the elements of a list a dependency answered adds
-     *  up to, or null where it is no such sum. */
-    private Quantity.SumOver sumOverElementsOfAnAnswer(NumericMeasures.Measured measured,
-                                                       InputReads at) {
-        if (!measured.arguments().none()
-                || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                        instanceof TakenAs.TheSumOfWhatItHolds)) {
+    /**
+     * The number {@code measured} takes of what a dependency answered, or null where the value it
+     * is taken of is no answer. What this adds to the measure is only whose value it is taken of.
+     */
+    DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(NumericMeasures.Measured measured,
+                                                 InputReads at) {
+        if (!(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer answer)) {
             return null;
         }
-        InputReads.ElementsOfAnAnswer elements =
-                at.answerHoldingOneForEachElementOf(measured.of(), symbols, newtypes);
-        if (elements == null) {
-            return null;
-        }
-        InputReads.AnAnswerAt container = elements.container();
-        return new Quantity.SumOver(subjectOf(container), new DecisionAtom.OfAnAnswer(
-                subjectOf(container.inside(elements.each()))));
+        return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),
+                answer, Core.withoutStanding(measured.of()).type());
     }
 
     /**

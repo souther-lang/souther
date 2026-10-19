@@ -206,35 +206,14 @@ final class DemandReading {
     }
 
     /**
-     * What a dependency answered, which a row stands in rather than writes.
-     *
-     * @param alone whether the condition names nothing of the input beside the answer
+     * What a dependency answered that {@code stated} asks, which a row stands in rather than
+     * writes. Told whether it names nothing of the input beside the answer
+     * ({@link Proposition#aboutAnAnswerAlone}).
      */
-    private static Read.Unread anAnswerARowStandsIn(boolean alone) {
+    private static Read.Unread anAnswerARowStandsIn(Proposition stated) {
         return new Read.Unread(List.of(new WhyNotTaken.OutsideDomain(
-                WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN)), alone);
-    }
-
-    /** Whether every number {@code compared} weighs is one a dependency answered. */
-    private static boolean overAnswersAlone(Proposition.Compared compared) {
-        return switch (compared.relation()) {
-            case Relation.Affine affine -> overAnswersAlone(affine.form());
-            case Relation.Ordered ordered -> isOfAnAnswerAlone(ordered.term());
-        };
-    }
-
-    /** Whether every number {@code form} weighs is one a dependency answered. */
-    private static boolean overAnswersAlone(LinearForm<Quantity> form) {
-        return form.coefs().keySet().stream().allMatch(DemandReading::isOfAnAnswerAlone);
-    }
-
-    /** Whether {@code atom} is a number of what a dependency answered and of nothing beside it. */
-    private static boolean isOfAnAnswerAlone(Quantity atom) {
-        return atom instanceof DecisionAtom.OfAnAnswer
-                || atom instanceof DecisionAtom.TakenOfAnAnswer
-                || (atom instanceof Quantity.SumOver sum
-                        && sum.container() instanceof DecisionSubject.AnAnswer
-                        && sum.ofTheElement() instanceof DecisionAtom.OfAnAnswer);
+                WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN)),
+                Proposition.aboutAnAnswerAlone(stated));
     }
 
     /**
@@ -847,14 +826,14 @@ final class DemandReading {
             // relation weighs: a count over an answer's list is no number of the answer itself,
             // and asked by the kind it would be read as a count a row composes.
             case Proposition.Compared compared when Proposition.aboutAnAnswer(compared) ->
-                    List.of(anAnswerARowStandsIn(overAnswersAlone(compared)));
+                    List.of(anAnswerARowStandsIn(compared));
             case Proposition.Compared compared -> List.of(ofARelation(compared, read));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
-                    List.of(anAnswerARowStandsIn(true));
+                    List.of(anAnswerARowStandsIn(stated));
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
                                      boolean holds, var _) ->
                     List.of(holds ? new Read.Narrows(at, cases) : notOfItsCases(at, cases, read));
@@ -928,7 +907,7 @@ final class DemandReading {
             // dependency in with and writes no value at, as the answer's own numbers are.
             case Proposition.Some some
                     when some.container() instanceof DecisionSubject.AnAnswer ->
-                    List.of(anAnswerARowStandsIn(false));
+                    List.of(anAnswerARowStandsIn(stated));
             case Proposition.Some some -> {
                 List<Read> had = met.get(some.key());
                 if (had == null) {
@@ -1709,7 +1688,7 @@ final class DemandReading {
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
                 case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> {
-                    return anAnswerARowStandsIn(overAnswersAlone(form));
+                    return anAnswerARowStandsIn(compared);
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;
                 case Quantity.HowManyDifferent _, Quantity.SumOver _,

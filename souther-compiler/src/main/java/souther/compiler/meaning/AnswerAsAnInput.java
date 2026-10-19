@@ -364,10 +364,15 @@ public final class AnswerAsAnInput {
                 DecisionSubject at = subject(of);
                 yield at == null ? null : new Proposition.Present(at, holds);
             }
-            // Which element of a list the input holds is the last of its key: a place of the
-            // input and of no answer, which is the row's ({@link #isTheRows}).
-            case Proposition.LastToHold last -> throw new IllegalStateException(
-                    "which element is the last of its key is the row's: " + last);
+            // Which element of a list the input holds is the last of its key is the row's ({@link
+            // #isTheRows}); which element of a list the answer holds is, is the answer's to meet.
+            case Proposition.LastToHold(DecisionSubject container, DecisionSubject position,
+                                        boolean holds, var _) -> {
+                DecisionSubject in = subject(container);
+                DecisionSubject by = subject(position);
+                yield in == null || by == null ? null
+                        : new Proposition.LastToHold(in, by, holds);
+            }
             // A search is read from a node of the input, and of no answer.
             case Proposition.SomeReachable _ -> null;
             case Proposition.Carried carried -> throw carried.handedToAReader();

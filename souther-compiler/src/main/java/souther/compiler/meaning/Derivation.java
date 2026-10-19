@@ -2160,8 +2160,8 @@ public sealed interface Derivation {
      * element that came last of those the key was made of, so what is said of an entry is said
      * of that one.
      */
-    record OfTheLastToHoldItsValue(Derivation ofTheElement, TermPath container,
-                                   TermPath position) implements Derivation {
+    record OfTheLastToHoldItsValue(Derivation ofTheElement, DecisionSubject container,
+                                   DecisionSubject position) implements Derivation {
 
         public OfTheLastToHoldItsValue {
             Objects.requireNonNull(ofTheElement, "something is stated of the element");

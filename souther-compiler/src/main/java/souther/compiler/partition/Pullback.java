@@ -2492,13 +2492,9 @@ final class Pullback {
             }
             // The entry a map holds under a key is the last element the key was made of, so what
             // is stated of an entry is stated of the last element of its key.
-            // The list a dependency answered has no last element of a key to name by a position, so
-            // what is stated of its entry is stated of an element of its key, and the rows composed
-            // for it are run.
-            if (located.each() instanceof ElementAt.AFiledElement(
-                    DecisionSubject.AnInput(TermPath list), Core.Block key)) {
-                TermPath filedUnder = reads.keyOfTheElement(key, list.element(),
-                        read.rules().newtypes());
+            if (located.each() instanceof ElementAt.AFiledElement(DecisionSubject list,
+                                                                   Core.Block key)) {
+                DecisionSubject filedUnder = keyOfTheFiledElement(list, key);
                 if (filedUnder == null) {
                     return unread(e, reads, new WhyUnread.AtNoPosition(
                             WhyUnread.AtNoPosition.Place.SUBJECT));
@@ -5224,9 +5220,17 @@ final class Pullback {
                         break;
                     }
                 }
-                Quantity takenOfAnAnswer = subjects.numberTakenOfAnAnswer(node, at);
-                if (takenOfAnAnswer != null) {
-                    return LinearForm.atom(takenOfAnAnswer);
+                NumericMeasures.Measured measured =
+                        subjects.measureWhereAnAnswerMayBeHeld(node, at);
+                if (measured != null) {
+                    DecisionAtom takenOfAnAnswer = subjects.takenOfAnAnswer(measured, at);
+                    if (takenOfAnAnswer != null) {
+                        return LinearForm.atom(takenOfAnAnswer);
+                    }
+                    LinearForm<Quantity> summed = sumOverTheElementsOfAnAnswer(measured, at);
+                    if (summed != null) {
+                        return summed;
+                    }
                 }
                 // A number a dependency answered, which a row stands in and so controls, named as
                 // the decision table names it: the evaluation of the call, whether it is written
@@ -5485,6 +5489,48 @@ final class Pullback {
      *  no such thing. */
     private DecisionSubject.AnAnswer answerAt(Core e, InputReads reads) {
         return subjects.anAnswer(e, reads);
+    }
+
+    /**
+     * What the sum {@code measured} takes over what a closure answers of each element of a list a
+     * dependency answered adds up to, or null where it is no such sum.
+     *
+     * <p>Read as the input's sums over a run are: the closure's answer on one element is a form of
+     * that element's numbers, and the sum is those numbers' sums over the elements and the constant
+     * times how many there are. Only a form of the element's own numbers is one: a number of the
+     * input beside them is added once for each element, which no sum of the answer says. And only
+     * the walk handed the answer's list itself, since one handed a list that kept some of its
+     * elements is a sum over those and over no element of the answer.
+     */
+    private LinearForm<Quantity> sumOverTheElementsOfAnAnswer(NumericMeasures.Measured measured,
+                                                              InputReads at) {
+        if (!measured.arguments().none()
+                || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                        instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation walk = at.standing(measured.of(), symbols, newtypes);
+        ElementBindings.StepOnEachElement step =
+                ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
+        if (step == null) {
+            return null;
+        }
+        Denotation walked = walk.at().standing(step.walked(), symbols, newtypes);
+        DecisionSubject.AnAnswer list = answerAt(walked.value(), walked.at());
+        if (list == null || !(AffineForms.outcome(step.step().body(), walk.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var each))) {
+            return null;
+        }
+        DecisionSubject element = list.element();
+        boolean ofTheElementsOwn = each.coefs().keySet().stream().allMatch(number ->
+                number instanceof DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer of)
+                        && of.isAtOrUnder(element));
+        DecisionAtom size = each.constant().signum() == 0 ? null
+                : sizeOfSubject(list, walked.value().type());
+        return !ofTheElementsOwn || (size == null && each.constant().signum() != 0) ? null
+                : Quantity.SumOver.over(list, each, size);
     }
 
     /**

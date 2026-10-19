@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What an injected behavior answers is a value nothing relates to the input, so a guard on it ties
@@ -93,6 +94,18 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
             }
             """;
 
+    private static final String TWO_KEYS = LOOKED_UP.replace("module example.looked",
+            "module example.twokeys") + """
+
+            behavior lessThan : (order: Cart, a: Sku, b: Sku) -> Bool
+                depends on readStock
+
+            let lessThan (order, a, b, readStock) = {
+                let stock = onHand(readStock(order))
+                currentStock(stock, a) < currentStock(stock, b)
+            }
+            """;
+
     private static final String CHOSEN = """
             module example.chosen
 
@@ -142,6 +155,16 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         assertFalse(report.contains("not read: comparison"), report);
         assertFalse(report.contains("not read: fork"), report);
         assertFalse(report.contains("not accounted for"), report);
+        // The entry under a key is the last element of that key, and the cases of a key held twice
+        // are the ones no row measures.
+        assertTrue(report.contains("allocate — read what this measure went without"), report);
+    }
+
+    @Test
+    void twoEntriesLookedUpInOneMapAreNeverTakenForOneValue() {
+        String report = reportOf(TWO_KEYS);
+
+        assertTrue(report.contains("not read: comparison"), report);
     }
 
     @Test
@@ -150,6 +173,25 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
 
         assertFalse(report.contains("not read"), report);
         assertFalse(report.contains("not accounted for"), report);
+    }
+
+    @Test
+    void aSumOfWhatIsMadeOfEachElementOfTheResponseIsAlsoReadAgainst() {
+        String report = reportOf(SUMMED.replace("module example.summed", "module example.made")
+                .replace(".quantity, readSnap", "i -> i.quantity + 1, readSnap"));
+
+        assertFalse(report.contains("not read: comparison"), report);
+        assertFalse(report.contains("not accounted for: comparison"), report);
+    }
+
+    @Test
+    void aSumOfAnInputNumberAddedForEachElementOfTheResponseIsNotTakenForASumOfTheResponse() {
+        String report = reportOf(SUMMED.replace("module example.summed", "module example.beside")
+                .replace("data Cart = { items: List<Item> }",
+                        "data Cart = { items: List<Item>, extra: Int }")
+                .replace(".quantity, readSnap", "i -> i.quantity + order.extra, readSnap"));
+
+        assertTrue(report.contains("not read: comparison"), report);
     }
 
     @Test

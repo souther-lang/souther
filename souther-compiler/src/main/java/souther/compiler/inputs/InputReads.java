@@ -1729,6 +1729,17 @@ public final class InputReads {
                 Objects.requireNonNull(expression, "a container made is made of something");
             }
         }
+
+        /** One a dependency answered, told from another by the evaluation that answered it and
+         *  the places inside the answer it stands at. */
+        record InAnAnswer(AnEvaluation evaluation, List<TermPath.Step> at)
+                implements ContainerOf {
+
+            public InAnAnswer {
+                Objects.requireNonNull(evaluation, "an answer is the answer of some evaluation");
+                at = List.copyOf(at);
+            }
+        }
     }
 
     /**
@@ -1759,6 +1770,14 @@ public final class InputReads {
 
     /** The element {@code name} is a name for, through the names it was only given. */
     private ElementStood elementStoodBy(BindingId name, DeclarationNewtypes newtypes, int depth) {
+        // The entry a lookup picked out of a map filed from an answer's list is an element of that
+        // list, as the entry of a map filed from the input's is.
+        AnAnswerAt entry = names.placeInAnAnswer(name);
+        if (entry != null && !entry.steps().isEmpty()
+                && entry.steps().getLast() instanceof TermPath.Step.Element) {
+            return new ElementStood(name, new ContainerOf.InAnAnswer(entry.evaluation(),
+                    entry.steps().subList(0, entry.steps().size() - 1)), HeldIn.Part.ELEMENT);
+        }
         return switch (names.roleOf(name)) {
             case BindingRole.Element(HeldIn held) -> new ElementStood(name,
                     pathOf(held.container(), newtypes) instanceof PathResolution.At(TermPath at)
@@ -2190,73 +2209,6 @@ public final class InputReads {
      */
     private OnePerElement beneathEachStep(Core list, ElementQuestion question, Symbols symbols,
                                           DeclarationNewtypes newtypes) {
-        return beneathEachStep(list, question, symbols, newtypes,
-                (at, projected, wrapped) -> at.at().pathOf(at.value(), newtypes)
-                        instanceof PathResolution.At(TermPath container)
-                        ? new OnePerElement(container, projected, wrapped) : null);
-    }
-
-    /**
-     * Where a walk down the steps of a list ends, and what the steps answered of the elements on
-     * the way.
-     *
-     * @param <R> what the end is read as
-     */
-    private interface Arrival<R> {
-
-        /** What the walk has come to at {@code at}, or null where it has not come to an end. */
-        R at(Denotation at, ElementProjection projected, boolean wrapped);
-    }
-
-    /**
-     * What a dependency answered whose elements are the elements of {@code list}, one value of the
-     * answer for each, and the way from the answer to the value standing for an element — or null
-     * where {@code list} is no such thing ({@link ElementQuestion#ONE_PER_ELEMENT}).
-     *
-     * <p>Only through the steps {@code ONE_PER_ELEMENT} crosses. A list that keeps some of the
-     * elements is not one: what is asked of every element of it is not asked of every element of
-     * the answer.
-     */
-    public ElementsOfAnAnswer answerHoldingOneForEachElementOf(Core list, Symbols symbols,
-                                                               DeclarationNewtypes newtypes) {
-        if (!mayHoldAnAnswer()) {
-            return null;
-        }
-        return beneathEachStep(list, ElementQuestion.ONE_PER_ELEMENT, symbols, newtypes,
-                (at, projected, wrapped) -> {
-                    AnAnswerAt container = at.at().answerAt(at.value(), symbols, newtypes);
-                    if (container == null) {
-                        return null;
-                    }
-                    List<TermPath.Step> each = new ArrayList<>();
-                    each.add(new TermPath.Step.Element());
-                    each.addAll(projected.steps());
-                    return new ElementsOfAnAnswer(container, each);
-                });
-    }
-
-    /**
-     * The elements of a container a dependency answered, and the way from the container to the value
-     * standing for each of them.
-     *
-     * @param container the answer's container
-     * @param each      the steps from the container to the value standing for an element
-     */
-    public record ElementsOfAnAnswer(AnAnswerAt container, List<TermPath.Step> each) {
-
-        public ElementsOfAnAnswer {
-            if (container == null || each == null) {
-                throw new IllegalArgumentException("the elements of an answer are those of some"
-                        + " container, each at some place inside it");
-            }
-            each = List.copyOf(each);
-        }
-    }
-
-    /** {@code list} followed down the steps {@code question} crosses to where {@code arrival} says
-     *  the walk ends, or null where a step is one the question does not cross. */
-    private <R> R beneathEachStep(Core list, ElementQuestion question, Symbols symbols,
-                                  DeclarationNewtypes newtypes, Arrival<R> arrival) {
         Core asked = list;
         Denotation at = standing(list, symbols, newtypes);
         ElementProjection projected = new ElementProjection(List.of());
@@ -2270,9 +2222,9 @@ public final class InputReads {
             if (!InputPath.goesOnThrough(asked, at.value(), question)) {
                 return null;
             }
-            R arrived = arrival.at(at, projected, wrapped);
-            if (arrived != null) {
-                return arrived;
+            if (at.at().pathOf(at.value(), newtypes) instanceof PathResolution.At(
+                    TermPath container)) {
+                return new OnePerElement(container, projected, wrapped);
             }
             if (Core.withoutStanding(at.value()) instanceof Core.Read name
                     && !met.add(name.binding())) {

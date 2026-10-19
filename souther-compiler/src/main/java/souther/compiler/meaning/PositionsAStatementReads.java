@@ -43,11 +43,8 @@ public final class PositionsAStatementReads {
             case Proposition.InCases cases -> reads(cases.of(), out);
             case Proposition.Present present -> reads(present.of(), out);
             case Proposition.SameValue same -> reads(same.one(), out) && reads(same.other(), out);
-            case Proposition.LastToHold last -> {
-                out.add(last.container());
-                out.add(last.position());
-                yield true;
-            }
+            case Proposition.LastToHold last ->
+                    reads(last.container(), out) && reads(last.position(), out);
             case Proposition.All all -> all.parts().stream().allMatch(part -> reads(part, out));
             case Proposition.WhereItAnswers where ->
                     reads(where.answers(), out) && reads(where.states(), out);
