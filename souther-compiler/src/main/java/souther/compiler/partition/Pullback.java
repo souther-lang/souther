@@ -19,6 +19,7 @@ import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationAccess;
+import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -31,6 +32,7 @@ import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Location;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.QuotientByAValue;
 import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.RecursionOverATree;
@@ -41,6 +43,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
@@ -5831,6 +5834,15 @@ final class Pullback {
         record ACall(Core call, ValueName.Behavior behavior, Denotation body) implements Inside {}
 
         /**
+         * A walk from {@code seed} over elements written out whose step is {@code step}, an
+         * {@code if} that keeps what the walk carried on one side and answers a value of the
+         * element on the other. {@code carried} is the step's name for what was carried, and
+         * {@code applications} are the step's applications in the order the elements are written.
+         */
+        record AFiniteSelection(Core walk, Denotation seed, Core.If step, BindingId carried,
+                                List<InputReads> applications) implements Inside {}
+
+        /**
          * A name standing for one of the values a container was written with, read where no
          * application hands it one: {@code values} are what it can be handed.
          */
@@ -5906,6 +5918,30 @@ final class Pullback {
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,
                             again.apply(on -> on.taking(call, body, 1)));
+            // The walk ends with the value of the last application whose condition holds, or with
+            // the seed where none does. Read from the seed out: what the walk ends with after an
+            // element is this step's answer for it where the condition selects it, and what it
+            // ended with before the element where it does not, which is a reading made already.
+            // Each candidate is the walk taken as one value, so no node stands for two of them.
+            case Inside.AFiniteSelection(Core walk, Denotation seed, Core.If step,
+                                         BindingId carried, List<InputReads> applications) -> {
+                int candidates = applications.size() + 1;
+                WhyUnread past = splitInto(reads, candidates);
+                if (past != null) {
+                    yield partOf(at, new Derivation.Stopped(past, fixed));
+                }
+                Derivation ending = again.apply(on -> on.taking(walk, seed, candidates));
+                for (InputReads application : applications) {
+                    Derivation before = ending;
+                    Derivation condition = observe(step.cond(), AnswerAspect.TRUTH, application);
+                    ArmsLeft left = armsLeftBy(condition);
+                    ending = madeBy(step, armsOf(step, application, condition, left, arm ->
+                            Core.withoutStanding(arm.value()) instanceof Core.Read name
+                                    && name.binding().equals(carried) ? before
+                                    : again.apply(on -> on.taking(walk, arm, candidates))));
+                }
+                yield applications.isEmpty() ? ending : new Derivation.AComparisonOfAChoice(ending);
+            }
             case Inside.OneOfTheValues(Core.Read name, List<Denotation> values) -> {
                 WhyUnread past = splitInto(reads, values.size());
                 if (past != null) {
@@ -5987,6 +6023,8 @@ final class Pullback {
                     case Inside.AChoice(Denotation chosen) ->
                             number.at().taken(chosen.value()) != null;
                     case Inside.ACall(Core call, var _, var _) -> number.at().taken(call) != null;
+                    case Inside.AFiniteSelection(Core walk, var _, var _, var _, var _) ->
+                            number.at().taken(walk) != null;
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
                             number.at().isTaken(call);
                     case Inside.ATotalByKeeping(Core call, var _) ->
@@ -6045,6 +6083,10 @@ final class Pullback {
         Inside.ACall called = intoACall(value);
         if (called != null) {
             return called;
+        }
+        Inside.AFiniteSelection selected = intoAFiniteSelection(value);
+        if (selected != null) {
+            return selected;
         }
         Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
@@ -6114,6 +6156,113 @@ final class Pullback {
                 applied.args(), read.rules().newtypes());
         return inside == null ? null
                 : new Inside.ACall(e, behavior, new Denotation(body.get().body(), inside));
+    }
+
+    /**
+     * {@code value}, where it is a walk from a seed over a container the body wrote out, whose step
+     * is an {@code if} keeping what it carried on one side and answering a value of the element on
+     * the other — or null where it is anything else.
+     *
+     * <p>Such a walk ends with the answer of the last application whose condition holds, and with
+     * the seed where none does, whatever the earlier applications answered; over no element it
+     * ends with the seed. That holds only where nothing the walk works out can stop a run: no
+     * application, which is what {@link WhatARunMayEndFor} answers of the condition and of the
+     * value it selects, and neither the seed nor the container ({@link #endsNoRun}); and where
+     * neither the condition nor the value it selects reads what the walk carried. Whether the accumulator is a number is no part of it: a
+     * walk the arithmetic reads is not offered here, because this is asked only where the
+     * arithmetic stopped.
+     */
+    private Inside.AFiniteSelection intoAFiniteSelection(Denotation value) {
+        // Asked of every value a reading goes into, so the ones a walk cannot be are turned away
+        // before they are stood.
+        Core written = Core.withoutStanding(value.value());
+        if (!(written instanceof Core.PreservedCall) && !(written instanceof Core.Read)) {
+            return null;
+        }
+        Denotation call = value.at().standing(value.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        if (walk == null || !walk.inTheContainersOrder()
+                || !(Core.withoutStanding(walk.step().body()) instanceof Core.If step)) {
+            return null;
+        }
+        BindingId carried = walk.accumulator().binding();
+        boolean keptThen = keeps(step.then(), carried);
+        boolean keptElse = keeps(step.els(), carried);
+        Core selected = keptThen ? step.els() : step.then();
+        if (keptThen == keptElse || !WhatARunMayEndFor.of(step.cond()).endsNone()
+                || !WhatARunMayEndFor.of(selected).endsNone()
+                || ComparisonAssessment.readsAnswer(step.cond(), carried)
+                || ComparisonAssessment.readsAnswer(selected, carried)) {
+            return null;
+        }
+        Denotation container = call.at().standing(walk.container(), read.rules().symbols(),
+                read.rules().newtypes());
+        // The seed and the container are worked out before any application, and a candidate takes
+        // the whole walk as a value: a run one of them ends is a run with no answer to compare.
+        if (!endsNoRun(new Denotation(walk.seed(), call.at())) || !endsNoRun(container)
+                || !(WrittenOutElements.of(container, read.rules().symbols(),
+                        read.rules().newtypes()) instanceof WrittenOutElements.Walked.Each each)) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
+        if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+            return null;
+        }
+        List<InputReads> applications = new ArrayList<>();
+        for (ReadMeaning.Occurrence occurrence : occurrences) {
+            InputReads handing = call.at().handingTheElement(walk.step(), walk.container(),
+                    occurrence.value(), read.rules().newtypes());
+            if (handing == null) {
+                return null;
+            }
+            applications.add(handing);
+        }
+        return new Inside.AFiniteSelection(Core.withoutStanding(call.value()),
+                new Denotation(walk.seed(), call.at()), step, carried, applications);
+    }
+
+    /**
+     * Whether working out {@code value} is known to end no run that reaches it.
+     *
+     * <p>Being the same value on every run is another fact: a negation of the least {@code Int} is
+     * written out all the way down and ends the run. What ends a run is {@link WhatARunMayEndFor}'s
+     * to say, except for a construction, which it leaves unknown because the invariant that may end
+     * it is the declaration's ({@link #endsNoRun(Core)}).
+     */
+    private boolean endsNoRun(Denotation value) {
+        return endsNoRun(value.at().standing(value.value(), read.rules().symbols(),
+                read.rules().newtypes()).value());
+    }
+
+    /**
+     * A construction of a type that holds no invariant, of values that end no run, and a list of
+     * such values, are known to end none; anything else is {@link WhatARunMayEndFor}'s answer.
+     */
+    private boolean endsNoRun(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Construct made -> holdsNoInvariant(made.typeName())
+                    && made.values().stream().allMatch(each -> endsNoRun(each.value()));
+            case Core.ListLit list -> list.elements().stream().allMatch(this::endsNoRun);
+            case Core other -> WhatARunMayEndFor.of(other).endsNone();
+        };
+    }
+
+    /**
+     * Whether a construction of {@code type} has no clause to be refused by: what the declaration
+     * publishes holds no {@code invariant} and spreads no declaration that might.
+     */
+    private boolean holdsNoInvariant(TypeSymbol.AtModule type) {
+        return read.rules().declarations().published().of(type.key())
+                instanceof PublishedDeclarationResult.Found(
+                        DeclarationMeaning.Product product)
+                && product.clauses().isEmpty() && product.includes().isEmpty();
+    }
+
+    /** Whether {@code arm} is the name of what a walk carried. */
+    private static boolean keeps(Core arm, BindingId carried) {
+        return Core.withoutStanding(arm) instanceof Core.Read name
+                && name.binding().equals(carried);
     }
 
     /**

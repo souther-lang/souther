@@ -398,7 +398,24 @@ public final class AffineForms {
         if (stopped.at != null) {
             return stopped.at;
         }
-        return denoted != null ? denoted : new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
+        return denoted != null ? denoted : noRule(e, at, reading, following);
+    }
+
+    /**
+     * The stop at a call this has no rule for. It stays at the call, which is what an author wrote,
+     * and says why an argument of it stopped where an argument stopped on arithmetic no form says:
+     * the product inside {@code Decimal.round(2, HALF_UP, a * b)} is still the product, and the call
+     * around it is not what the reading failed to take apart.
+     */
+    private static <A, E> Outcome<A, E> noRule(Core e, E at, Reading<A, E> reading,
+                                               Walk<A, E> following) {
+        for (Core argument : Terms.argsOf(e)) {
+            if (of(argument, at, reading, following) instanceof Outcome.StoppedAt<A, E> inside
+                    && inside.why().nonAffineOperation().isPresent()) {
+                return new Outcome.StoppedAt<>(e, at, new Halt.AnArgumentStopped<>(inside));
+            }
+        }
+        return new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
     }
 
     /** The first stop met inside what this walk composes, kept while the questions after it are

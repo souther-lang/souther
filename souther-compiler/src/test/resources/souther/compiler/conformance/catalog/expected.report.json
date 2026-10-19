@@ -3537,7 +3537,7 @@
             "path" : "amount"
           },
           "stopped" : [ {
-            "reason" : "rule_about_a_derived_value"
+            "reason" : "non_constant_divisor"
           } ]
         }, {
           "at" : "among",
@@ -3556,7 +3556,7 @@
             "path" : "among"
           },
           "stopped" : [ {
-            "reason" : "rule_about_a_derived_value"
+            "reason" : "non_constant_divisor"
           } ]
         } ],
         "claimsOffAxis" : [ ],
@@ -4062,7 +4062,7 @@
         "notDerivable" : [ ],
         "notRead" : [ {
           "position" : "amount",
-          "reason" : "rule_about_a_derived_value",
+          "reason" : "non_constant_divisor",
           "rule" : "comparison@1:49:24",
           "ruleId" : {
             "kind" : "comparison",
@@ -4074,7 +4074,7 @@
           }
         }, {
           "position" : "among",
-          "reason" : "rule_about_a_derived_value",
+          "reason" : "non_constant_divisor",
           "rule" : "comparison@1:49:24",
           "ruleId" : {
             "kind" : "comparison",
@@ -4418,7 +4418,7 @@
           "ordinal" : 4,
           "lowered" : 0
         },
-        "reason" : "rule_about_a_derived_value"
+        "reason" : "non_constant_divisor"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -4431,7 +4431,7 @@
           "ordinal" : 4,
           "lowered" : 0
         },
-        "reason" : "rule_about_a_derived_value"
+        "reason" : "non_constant_divisor"
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",

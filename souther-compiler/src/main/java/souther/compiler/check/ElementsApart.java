@@ -238,6 +238,12 @@ public final class ElementsApart {
     /** The fields read off a binding to reach {@code e}, outermost first, or null where it is not
      *  reached that way. */
     private static List<String> readOffABinding(Core e) {
+        return readOffABinding(e, null);
+    }
+
+    /** {@link #readOffABinding(Core)}, leaving out a newtype's own {@code value} where
+     *  {@code newtypes} is given. */
+    private static List<String> readOffABinding(Core e, DeclarationNewtypes newtypes) {
         List<String> run = new ArrayList<>();
         Core at = Core.withoutStanding(e);
         while (true) {
@@ -246,12 +252,22 @@ public final class ElementsApart {
                     return run.reversed();
                 }
                 case Core.FieldAccess access -> {
-                    run.add(access.field());
+                    if (newtypes == null
+                            || Location.isStep(access.target().type(), access.field(), newtypes)) {
+                        run.add(access.field());
+                    }
                     at = Core.withoutStanding(access.target());
                 }
                 case Core.FieldProjection projection -> {
-                    run.addAll(projection.steps().inOrder().reversed().stream()
-                            .map(Core.FieldProjection.Step::field).toList());
+                    Type from = projection.base().type();
+                    List<String> steps = new ArrayList<>();
+                    for (Core.FieldProjection.Step each : projection.steps().inOrder()) {
+                        if (newtypes == null || Location.isStep(from, each.field(), newtypes)) {
+                            steps.add(each.field());
+                        }
+                        from = each.type();
+                    }
+                    run.addAll(steps.reversed());
                     at = Core.withoutStanding(projection.base());
                 }
                 default -> {
@@ -301,12 +317,21 @@ public final class ElementsApart {
      * of the same call, and each makes of the answer what its own reading can hold.
      */
     public static Stated stated(Core.PreservedCall call) {
+        return stated(call, null);
+    }
+
+    /**
+     * {@link #stated(Core.PreservedCall)}, with the run named as a place of a value names its
+     * fields: a newtype's own {@code value} is the value itself and no step of it
+     * ({@link Location#isStep}). Where {@code newtypes} is null the run is as the closure wrote it.
+     */
+    public static Stated stated(Core.PreservedCall call, DeclarationNewtypes newtypes) {
         BoundOperationFacts.NoTwoAlike alike =
                 DefaultBoundOperationFacts.get().statesNoTwoAlike(call.operation());
         if (alike == null) {
             return null;
         }
-        List<String> run = runTaken(call.args().get(alike.by().position()));
+        List<String> run = runTaken(call.args().get(alike.by().position()), newtypes);
         return run == null ? null
                 : new Stated(call.args().get(alike.container().position()), run);
     }
@@ -324,14 +349,14 @@ public final class ElementsApart {
 
     /** The fields {@code closure} reads off its one parameter in order, or null where it does
      *  anything else with it. */
-    private static List<String> runTaken(Core closure) {
+    private static List<String> runTaken(Core closure, DeclarationNewtypes newtypes) {
         if (!(Core.withoutStanding(closure) instanceof Core.Block block)
                 || block.params().size() != 1) {
             return null;
         }
         Core body = block.body();
         return block.params().getFirst().binding().equals(bindingUnder(body))
-                ? readOffABinding(body) : null;
+                ? readOffABinding(body, newtypes) : null;
     }
 
     /** Elements apart at every run of {@code one} and every run of {@code other}, as one answer of

@@ -450,30 +450,37 @@ final class Clauses {
         void walk(Core e) {
             Location at = locationOf(e);
             if (at != null) {
-                read(at, ClauseRead.Kind.ITS_VALUES);
+                read(at, ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE);
+                return;
+            }
+            Core.PreservedCall call = e instanceof Core.PreservedCall preserved ? preserved : null;
+            ElementsApart.Stated apart = call == null ? null : ElementsApart.stated(call, newtypes);
+            Location container = apart == null ? null : locationOf(apart.container());
+            if (container != null) {
+                read(container, ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(apart.run()));
                 return;
             }
             if (e instanceof Core.Read r) {
                 bindings.add(r.binding());
             }
-            Core counted = e instanceof Core.PreservedCall call ? countedArgument(call) : null;
+            Core counted = call == null ? null : countedArgument(call);
             Core.forEachChild(e, child -> {
                 if (child == counted) {
-                    read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS);
+                    read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, RuleKey.THE_VALUE);
                 } else {
                     walk(child);
                 }
             });
         }
 
-        private void read(Location at, ClauseRead.Kind kind) {
+        private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
             bindings.add(at.root());
             List<String> steps = new ArrayList<>();
             if (!wraps) {
                 steps.add(fields.get(at.root()));
             }
             steps.addAll(at.path());
-            reads.add(new ClauseRead(new RuleKey(steps), kind));
+            reads.add(new ClauseRead(new RuleKey(steps), kind, run));
         }
 
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */
