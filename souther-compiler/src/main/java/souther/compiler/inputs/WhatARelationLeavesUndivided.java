@@ -1001,7 +1001,9 @@ public final class WhatARelationLeavesUndivided {
      * statements leave, and the relation is left to come out either way wherever one difference
      * they leave holds it and another fails it. Moved up to an end of the type, a value finds
      * no partner past it; that is where the representation stops and not a line the model draws,
-     * the same end the other reading passes over for two terms held against nought. A
+     * the same end the other reading passes over for two terms held against nought. A difference
+     * held apart from one value is the differences below it and the ones above it, two runs, and
+     * the relation comes out either way if it does in either run. A
      * statement that keeps the first from some values of its own is not about the difference, and
      * leaves the caller nothing to pass here.
      *

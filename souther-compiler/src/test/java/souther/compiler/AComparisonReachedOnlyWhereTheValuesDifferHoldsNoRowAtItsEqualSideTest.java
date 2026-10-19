@@ -81,6 +81,27 @@ class AComparisonReachedOnlyWhereTheValuesDifferHoldsNoRowAtItsEqualSideTest {
         assertFalse(human.contains("not accounted for"), human);
     }
 
+    /** The same two comparisons in the order that was already read. */
+    @Test
+    void aComparisonBeforeTheEqualityOfTheSameTwoValuesIsWorkedOut() {
+        String human = report(AFTER_THE_ELSE_OF_AN_EQUALITY.replace(
+                "if x == y then Eq else if x < y then Lt else Gt",
+                "if x < y then Lt else if x == y then Eq else Gt"));
+
+        assertFalse(human.contains("not accounted for"), human);
+    }
+
+    /** A value held apart from a third is not held apart from {@code y}, so nothing is worked out. */
+    @Test
+    void aComparisonAfterTheElseOfAnEqualityWithAThirdValueIsNotWorkedOut() {
+        String human = report(AFTER_THE_ELSE_OF_AN_EQUALITY
+                .replace("(x: Int, y: Int)", "(x: Int, y: Int, z: Int)")
+                .replace("(x, y)", "(x, y, z)")
+                .replace("x == y", "x == z"));
+
+        assertTrue(human.contains("not accounted for"), human);
+    }
+
     /** Without it a proof of every OFF point of a comparison would pass the case above. */
     @Test
     void whereTheEqualSideIsReachedNoRowIsSaidToBeOutOfReach() {

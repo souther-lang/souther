@@ -224,6 +224,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 held(1, 0, Rel.LE)));
     }
 
+    /** {@code 2(a - b) - 1 != 0} is held by no whole difference, so it leaves every one of them. */
+    @Test
+    void aDifferenceHeldApartFromNoWholeNumberLeavesEveryWholeDifference() {
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), 0, Rel.EQ, held(2, -1, Rel.NE)));
+    }
+
     /**
      * {@code -(a - b) <= 0} holds the difference at nought or more, where {@code a - b + 1 <= 0}
      * never holds; {@code a - b <= 0} holds it at nought or less, where it holds at minus one and
