@@ -760,6 +760,98 @@ final class CardinalityComposer {
                 + " as asked");
     }
 
+    /**
+     * Containers inside the elements of another holding some value as often as asked, in all of
+     * them put end to end.
+     *
+     * <p>Which value it is that occurs is no part of what is asked: any one occurring that often
+     * answers it, so one is taken from the values the place leaves and written as many times as
+     * asked, spread over the containers, with other values beside it where the containers need
+     * more leaves than the repeated value gives them ({@link NestedContainersAddingUp#alike}).
+     * The values are the elements themselves: a place inside an element is a second thing the
+     * elements are chosen at.
+     */
+    static TermRealizations.Realization composeAcrossContainers(
+            Type sourceType, List<List<String>> keptApart, RealizationTarget.OfANumber alike,
+            SequencedMap<RealizationTarget, AskedAt> demands, Quantities measuring,
+            SearchRegion within, RuleReadingContext reading) {
+        NumericTerm.OccurrencesOfItsValue term = (NumericTerm.OccurrencesOfItsValue) alike.term();
+        TermPath place = term.subjectPath();
+        AskedAt asked = demands.get(alike);
+        if (asked == null || asked.walking() == null) {
+            return none("nothing says how often a value at `" + place + "` is to occur");
+        }
+        NumericSet wanted = asked.walking();
+        List<TermPath> chain = place.containersHoldingIt();
+        if (chain.size() < 2 || !place.equals(chain.getLast().element())) {
+            return notChosen("a value at `" + place + "` is not an element of the container it"
+                    + " stands inside, so the elements are chosen at a place inside them");
+        }
+        NumericTerm own = new NumericTerm.ValueOf(place);
+        TermOrders orders = measuring.ordersOf(own);
+        Carrier carrier = orders == null ? null : orders.observed();
+        if (carrier == null) {
+            return notChosen("a value at `" + place + "` is on no order its values are chosen on");
+        }
+        NumericDomain.Bounds run = switch (within == null ? null : within.projectionOf(own)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case null -> NumericDomain.Bounds.OPEN;
+        };
+        if (run == null) {
+            return none("the rules leave no value at `" + place + "`");
+        }
+        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
+        Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        List<Place> candidates = carrier.counts()
+                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
+                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
+        if (candidates.isEmpty()) {
+            return none("the rules leave no value at `" + place + "` to repeat");
+        }
+        NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
+        List<FixtureTemplate> built = new ArrayList<>();
+        CompositionShortfall rest = CompositionShortfall.NONE;
+        TermRealizations.Realization unbuilt = null;
+        for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
+            if (!wanted.holds(Count.of(often), Carrier.WHOLE)) {
+                continue;
+            }
+            // The fewest leaves that give each container the room its count asks, and no more of
+            // them than another value is left for.
+            for (int extra = 0; extra <= candidates.size() - 1 && often + extra <= MOST_ELEMENTS;
+                    extra++) {
+                TermRealizations.Realization one = nested.alike(sourceType, keptApart,
+                        candidates.getFirst(), often, candidates.subList(1, 1 + extra), carrier,
+                        within, reading);
+                if (one instanceof TermRealizations.Realization.Built made) {
+                    built.addAll(made.values());
+                    rest = rest.and(made.rest());
+                    break;
+                }
+                unbuilt = one;
+            }
+        }
+        Endpoint mostOften = wanted.extent().max();
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        if (mostOften == null || mostOften.at().compareTo(Count.of(MOST_ELEMENTS)) > 0) {
+            refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+        }
+        rest = rest.and(CompositionShortfall.of(refused, unnamed, unheld));
+        if (!built.isEmpty()) {
+            return new TermRealizations.Realization.Built(built, rest);
+        }
+        if (!rest.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(rest);
+        }
+        if (unbuilt != null) {
+            return unbuilt;
+        }
+        return none("no containers of `" + place + "` this composed hold a value as often as"
+                + " asked");
+    }
+
     /** Whether some value of {@code values} occurs as often as {@code wanted} holds. */
     private static boolean occursAsOften(List<Place> values, NumericSet wanted) {
         for (Place each : values) {

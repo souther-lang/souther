@@ -180,6 +180,32 @@ sealed interface WhatATermRead {
         return row.keptOf(new ARun(on, subject));
     }
 
+    /**
+     * What {@code on} reads of the value this reading chose at {@code place}, among every value
+     * the row wrote there: how often that value occurs in all the containers the place stands in.
+     *
+     * <p>The value is the reading's own and the values it is counted among are every occurrence's,
+     * whichever a reading chose, so a row that wrote nothing at the place has no value for the
+     * number and a place the walk could not reach has none to read.
+     */
+    static WhatATermRead amongEveryOccurrence(TermOrders on, BorderQuantity.Observation row,
+                                              TermPath place) {
+        return switch (row.at(place)) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue own) -> switch (row.everyValueAt(place)) {
+                    case WalkResult.CouldNotWalk<List<ObservedValue>> _ ->
+                            new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                    case WalkResult.Reached(List<ObservedValue> values) ->
+                            of(on.readAmong(own, values));
+                };
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
+            };
+        };
+    }
+
     /** A run read of every value at {@code subject}, which no reading's choice turns. */
     record ARun(TermOrders on, TermPath subject)
             implements BorderQuantity.ReadAlike<WhatATermRead> {

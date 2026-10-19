@@ -93,6 +93,7 @@ public final class NumericTerms {
             case NumericTerm.Multiplicity _ -> "5";
             case NumericTerm.ExtremeOfItsKey _ -> "6";
             case NumericTerm.CodePointValueSum _ -> "7";
+            case NumericTerm.OccurrencesOfItsValue _ -> "8";
         };
     }
 }

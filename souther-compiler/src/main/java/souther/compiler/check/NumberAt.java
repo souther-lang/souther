@@ -100,6 +100,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfItsMultiplicity());
     }
 
+    /** How many of the values standing at {@code position}, in every container it stands inside,
+     *  are what the value under consideration is. */
+    public static <P> NumberAt<P> occurrencesOf(P position) {
+        return new NumberAt<>(position, new OfWhatNumber.OfItsOccurrencesInEveryContainer());
+    }
+
     /** The {@code extreme} of what the elements of the container {@code position} stands inside
      *  hold there, among those holding at {@code key} what the element under consideration holds
      *  there. */
@@ -196,6 +202,17 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         record OfItsMultiplicity() implements OfWhatNumber {}
 
         /**
+         * How many of the values standing at the place, in every container it stands inside, are
+         * what the value under consideration is.
+         *
+         * <p>Not {@link OfItsMultiplicity}: that counts among the elements of the one occurrence
+         * of the container the place stands inside, and this among all of them put end to end.
+         * The same place holds both numbers, and a line drawn on one falls on the other no more
+         * than a line on a length falls on the value.
+         */
+        record OfItsOccurrencesInEveryContainer() implements OfWhatNumber {}
+
+        /**
          * The least or the greatest of what the elements of the container the place stands inside
          * hold there, among the elements holding at {@code key} — the fields read from an element
          * to reach it — what the element under consideration holds there.
@@ -246,6 +263,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
             case OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                     "List.sum(String.codePoints(" + position + "))";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
+            case OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
+                    "occurrences(" + position + ")";
             case OfWhatNumber.OfTheExtremeOfItsKey extremeOf ->
                     extremeOf.spelledAt(position.toString());
         };

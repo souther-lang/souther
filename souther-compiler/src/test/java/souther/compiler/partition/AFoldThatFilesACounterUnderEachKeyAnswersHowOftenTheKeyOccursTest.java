@@ -783,6 +783,154 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 () -> "how often a label occurs: " + report(compilation));
     }
 
+    /**
+     * Touches carrying labels of the type {@code labels}, folded over {@code keys}, the list of
+     * the labels of all of them, which is written over {@code ts}.
+     */
+    private static String modelOfTouches(String labels, String keys) {
+        return """
+                module example.popular
+
+                data Label = String
+
+                data Touch = { labels: %s }
+
+                let labelCounts (ts: List<Touch>): Map<String, Int> =
+                    List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc),
+                        Map.empty, %s)
+
+                behavior popular : (ts: List<Touch>) -> Map<String, Int>
+
+                let popular (ts) =
+                    Map.filterEntries((_, count) -> count >= 3, labelCounts(ts))
+                """.formatted(labels, keys);
+    }
+
+    private static final Pattern TOUCH = Pattern.compile("Touch \\{ labels = \\[([^\\]]*)\\] \\}");
+
+    /** The labels of each touch of an offered row, which is written as its inputs are. */
+    private static List<List<String>> touchesIn(String row) {
+        List<List<String>> out = new ArrayList<>();
+        Matcher touch = TOUCH.matcher(row);
+        while (touch.find()) {
+            out.add(keysIn(touch.group(1)));
+        }
+        return out;
+    }
+
+    /** How often each label occurs among the labels of all the touches. */
+    private static Map<String, Integer> occurrencesAcross(List<List<String>> touches) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        touches.forEach(labels -> labels.forEach(label -> counts.merge(label, 1, Integer::sum)));
+        return counts;
+    }
+
+    /**
+     * The labels of the touches, put end to end, are the keys the fold files a counter under, so a
+     * label in several touches is counted across them: the line falls on how often a label occurs
+     * among all the labels, and a row is composed on each side of it with the label spread over
+     * touches that hold it once each.
+     */
+    @Test
+    void labelsOfSeveralTouchesAreCountedAcrossThem() {
+        record Shape(String labels, String keys) { }
+        for (Shape shape : List.of(
+                new Shape("List<String>", "List.flatMap(t -> t.labels, ts)"),
+                new Shape("Set<Label>",
+                        "List.flatMap(t -> List.map(l -> l.value, Set.toList(t.labels)), ts)"))) {
+            Compilation compilation = measured(modelOfTouches(shape.labels(), shape.keys()));
+            assertFalse(report(compilation).contains("not read"),
+                    () -> shape + ": " + report(compilation));
+            assertTrue(json(compilation).contains("occurrences(ts[*].labels[*])"),
+                    () -> shape + ": " + report(compilation));
+
+            // A label held once by each touch, or by a touch more than once: the commonest label
+            // is on each side of the line at three however it is spread, and a row of one touch
+            // would be a count inside it.
+            List<List<List<String>>> rows = offeredInputs(compilation).stream()
+                    .map(AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest::touchesIn)
+                    .toList();
+            assertTrue(rows.stream().anyMatch(row -> mostOften(row) == 3 && row.size() == 3),
+                    () -> shape + ": a label on the line in three touches: " + rows);
+            assertTrue(rows.stream().anyMatch(row -> mostOften(row) == 2),
+                    () -> shape + ": a label one short of it: " + rows);
+            assertTrue(rows.stream().anyMatch(row -> mostOften(row) > 3),
+                    () -> shape + ": a label past it: " + rows);
+        }
+    }
+
+    /**
+     * Rows written by hand meet the points of the line where a label occurs as often among all
+     * the touches' labels: three on the line, two one short of it, well past and well short. The
+     * touches of the row on the line hold the label once each beside another label, so a count
+     * that took every label as the same would read the row short of the line as being on it.
+     */
+    @Test
+    void rowsWrittenOutMeetTheLineOnHowOftenALabelOccursAcrossTheTouches() {
+        String keys = "List.flatMap(t -> t.labels, ts)";
+        String examples = """
+
+                example popular
+                    | "on" : ([Touch { labels = ["a"] }, Touch { labels = ["a", "b"] },
+                        Touch { labels = ["a"] }]) -> [("a", 3)]
+                    | "off" : ([Touch { labels = ["a"] }, Touch { labels = ["a", "b"] }]) -> []
+                    | "past" : ([Touch { labels = ["a", "a"] }, Touch { labels = ["a", "a"] }])
+                        -> [("a", 4)]
+                    | "short" : ([Touch { labels = ["a"] }]) -> []
+                """;
+        Compilation compilation = measured(modelOfTouches("List<String>", keys) + examples);
+        assertEquals(List.of(), unmetOf(compilation), () -> report(compilation));
+    }
+
+    /**
+     * A tuple a map built of each element, with the key read out of a component of it, is the
+     * key the map gave that component: counted where it stands in the elements.
+     */
+    @Test
+    void aKeyReadOutOfATupleAMapBuiltIsCountedAtThePlaceItWasGiven() {
+        record Walked(String params, String walked, String counted) { }
+        for (Walked each : List.of(
+                new Walked("xs: List<Item>", "List.map(x -> (x.label, x.weight), xs)",
+                        "multiplicity(xs[*].label)"),
+                new Walked("ts: List<Touch>",
+                        "List.flatMap(t -> List.map(l -> (l, t.weight), t.labels), ts)",
+                        "occurrences(ts[*].labels[*])"))) {
+            Compilation compilation = measured("""
+                    module example.popular
+
+                    data Item = { label: String, weight: Int }
+
+                    data Touch = { labels: List<String>, weight: Int }
+
+                    let counts (%1$s): Map<String, Int> =
+                        List.fold((acc, p) -> {
+                            let (k, _) = p
+                            Map.updateOrInsert(k, 1, n -> n + 1, acc)
+                        }, Map.empty, %2$s)
+
+                    behavior popular : (%1$s) -> Map<String, Int>
+
+                    let popular (%3$s) =
+                        Map.filterEntries((_, count) -> count >= 3, counts(%3$s))
+                    """.formatted(each.params(), each.walked(), each.params().substring(0, 2)));
+            assertTrue(json(compilation).contains(each.counted()),
+                    () -> each + ": " + report(compilation));
+        }
+    }
+
+    private static int mostOften(List<List<String>> touches) {
+        return occurrencesAcross(touches).values().stream().mapToInt(Integer::intValue).max()
+                .orElse(0);
+    }
+
+    /** Labels a filter kept are some of the labels, and are not counted as all of them. */
+    @Test
+    void labelsAFilterKeptAreNotCountedAsAllTheLabels() {
+        Compilation compilation = measured(modelOfTouches("List<String>",
+                "List.filter(k -> String.length(k) > 1, List.flatMap(t -> t.labels, ts))"));
+        assertFalse(json(compilation).contains("occurrences("), () -> report(compilation));
+    }
+
     private static long top(Map<String, Integer> counters) {
         return counters.values().stream().mapToInt(Integer::intValue).max().orElse(Integer.MIN_VALUE);
     }

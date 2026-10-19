@@ -304,6 +304,9 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                             + " establishes"),
             new Reader("souther.compiler.check.UniversalElementFacts",
                     "what a call hands its closure, for what holds of what the closure answered"),
+            new Reader("souther.compiler.check.DefaultBoundOperationFacts",
+                    "which argument's every element a call lists once, for the walk that follows a"
+                            + " list down to the input its elements came from"),
             new Reader("souther.compiler.check.TotalityChecker",
                     "what a call hands its closure, for crediting an element as a sub-term of its"
                             + " container"),

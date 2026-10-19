@@ -68,6 +68,7 @@ public sealed interface RealizationTarget {
         return switch (term) {
             case NumericTerm.Multiplicity among -> new AmongTheElements(among);
             case NumericTerm.ExtremeOfItsKey extreme -> new AtItsKey(extreme);
+            case NumericTerm.OccurrencesOfItsValue among -> new AmongEveryOccurrence(among);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
             case NumericTerm.TakenOver over -> new OverARun(over);
         };
@@ -143,6 +144,27 @@ public sealed interface RealizationTarget {
         @Override
         public String toString() {
             return term + " at " + writeRoot;
+        }
+    }
+
+    /**
+     * How often the value at a place occurs among every occurrence of it, realized by writing the
+     * outermost container the occurrences stand in with that many of them holding the value.
+     *
+     * <p>A number one position reads and no position holds, as {@link AmongTheElements} is, but
+     * over the containers inside the elements of another: the occurrences are spread over them, so
+     * the row that moves the number is one that rebuilds the outermost container.
+     */
+    record AmongEveryOccurrence(NumericTerm.OccurrencesOfItsValue term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.subjectPath().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
         }
     }
 

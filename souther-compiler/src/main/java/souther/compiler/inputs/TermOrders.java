@@ -216,6 +216,31 @@ public final class TermOrders {
         return TermReading.over(this, values);
     }
 
+    /** How often {@code own}, one of the values of a run, occurs among {@code values}, all of
+     *  them ({@link #readEachAmong}). */
+    public NumericTerm.Reading readAmong(ObservedValue own, List<ObservedValue> values) {
+        if (!(term instanceof NumericTerm.OccurrencesOfItsValue)) {
+            throw new IllegalArgumentException(term + " is no count of how often a value occurs"
+                    + " in a run");
+        }
+        return TermReading.occurrencesOf(this, own, values);
+    }
+
+    /**
+     * How often each of the values of a run occurs among all of them: one reading for each value,
+     * in the order they are given.
+     *
+     * <p>The values of every occurrence of the place the term counts, gathered across the
+     * containers they stand in ({@link NumericTerm.OccurrencesOfItsValue}).
+     */
+    public List<NumericTerm.Reading> readEachAmong(List<ObservedValue> values) {
+        if (!(term instanceof NumericTerm.OccurrencesOfItsValue)) {
+            throw new IllegalArgumentException(term + " is no count of how often a value occurs"
+                    + " in a run");
+        }
+        return TermReading.occurrencesAmong(this, values);
+    }
+
     /**
      * The same, over a run computed of each element: one reading per element, each answering what
      * stands at a field of that element.

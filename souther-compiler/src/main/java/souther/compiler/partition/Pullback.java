@@ -4774,11 +4774,12 @@ final class Pullback {
         }
         WhereFiled where = whereFiled(whole, filed);
         if (where == null) {
-            return null;
+            return filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
+                    ? counted(occurrencesOfTheKey(whole, filed), counted) : null;
         }
         return switch (filed.filed()) {
             case KeyedAccumulation.Filed.Counted counted ->
-                    counted(where.container(), where.key(), counted);
+                    counted(NumericTerm.Multiplicity.of(where.container(), where.key()), counted);
             case KeyedAccumulation.Filed.Kept kept -> {
                 NumericTerm.ExtremeOfItsKey extreme = where.value() == null ? null
                         : NumericTerm.ExtremeOfItsKey.of(where.container(), where.key(),
@@ -4823,14 +4824,49 @@ final class Pullback {
     }
 
     /**
-     * How often the key at {@code place} occurs among the elements of {@code held}, shifted and
+     * How often the key of each element of the list a fold walks occurs among every occurrence of
+     * those elements — or null where the list is not the whole of what some place of the input
+     * holds, or the key is no place of its elements.
+     *
+     * <p>For a list that holds one value for each element of no container: the lists of an outer
+     * list put end to end. A key occurs there as often as it does among the values of all of them,
+     * which is a count of one container's elements where only one container holds the place, and
+     * a count across containers where more than one does.
+     */
+    private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed) {
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        // A key read out of a component of a tuple the walk built of each element is the place the
+        // walk gave that component, and no place inside it.
+        int component = whole.at().tupleComponentRead(filed.key(), filed.element().binding());
+        TermPath elements = whole.at().everyOccurrenceKeyedAt(filed.walked(), component,
+                read.rules().symbols(), newtypes);
+        if (elements == null) {
+            return null;
+        }
+        OnePerElement.Answered key = component >= 0 ? OnePerElement.Answered.ITSELF
+                : whole.at().answeredOf(filed.key(), filed.element().binding(), newtypes);
+        if (key == null) {
+            return null;
+        }
+        TermPath place = key.at().from(elements);
+        List<TermPath> holding = place.containersHoldingIt();
+        return switch (holding.size()) {
+            case 0 -> null;
+            case 1 -> NumericTerm.Multiplicity.of(holding.getFirst(), place);
+            default -> RunSource.overEveryOccurrenceAt(place)
+                    instanceof RunSource.FlattenedOccurrences every
+                    ? NumericTerm.OccurrencesOfItsValue.of(every) : null;
+        };
+    }
+
+    /**
+     * How often the key occurs, as {@code occurrences} reads it, shifted and
      * scaled by what the fold starts the counter at and adds to it: the first element of a key
      * files {@code first} and each further one adds {@code step}, so the value is
      * {@code first + step * (occurrences - 1)}.
      */
-    private LinearForm<Quantity> counted(TermPath held, TermPath place,
+    private LinearForm<Quantity> counted(NumericTerm occurrences,
                                          KeyedAccumulation.Filed.Counted filed) {
-        NumericTerm.Multiplicity occurrences = NumericTerm.Multiplicity.of(held, place);
         if (!readOnAnOrder(occurrences)) {
             return null;
         }

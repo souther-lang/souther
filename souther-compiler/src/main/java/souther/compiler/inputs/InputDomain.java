@@ -1809,6 +1809,10 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> throw new IllegalStateException(
                     "a clause of a declaration was read as a rule about how often the value at "
                             + path + " occurs");
+            case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
+                    throw new IllegalStateException("a clause of a declaration was read as a rule"
+                            + " about how often the value at " + path
+                            + " occurs in every container");
             // Nor what the elements of a key come to.
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                     throw new IllegalStateException("a clause of a declaration was read as a rule"
@@ -1882,7 +1886,8 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _,
                  NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
-                 NumberAt.OfWhatNumber.OfItsMultiplicity _ -> Carrier.WHOLE;
+                 NumberAt.OfWhatNumber.OfItsMultiplicity _,
+                 NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ -> Carrier.WHOLE;
             // One of the values standing there, so on their order.
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> carried;
         };
@@ -1988,6 +1993,16 @@ public final class InputDomain {
                             + " for, and nothing holds it as an element");
                 }
                 yield multiplicity;
+            }
+            case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ -> {
+                NumericTerm.OccurrencesOfItsValue occurrences = NumericTerm.OccurrencesOfItsValue.of(
+                        RunSource.overEveryOccurrenceAt(path) instanceof
+                                RunSource.FlattenedOccurrences flat ? flat : null);
+                if (occurrences == null) {
+                    throw new IllegalStateException("how often `" + path + "` occurs in every"
+                            + " container was asked for, and it stands inside fewer than two");
+                }
+                yield occurrences;
             }
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extremeOf -> {
                 NumericTerm.ExtremeOfItsKey extreme = NumericTerm.ExtremeOfItsKey.ofTheValueAt(

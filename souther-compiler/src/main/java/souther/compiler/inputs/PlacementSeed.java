@@ -95,6 +95,8 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
             case NumericTerm.CodePointValueSum _ ->
                     new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
             case NumericTerm.Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
+            case NumericTerm.OccurrencesOfItsValue _ ->
+                    new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer();
             case NumericTerm.ExtremeOfItsKey extreme ->
                     new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme.extreme(),
                             extreme.keyField().fields());

@@ -1179,6 +1179,7 @@ public final class InvariantChecker {
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                      NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                      NumberAt.OfWhatNumber.OfItsMultiplicity _,
+                     NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                      NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
             };
             if (atom == null) {

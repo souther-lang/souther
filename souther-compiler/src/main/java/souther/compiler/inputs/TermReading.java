@@ -359,6 +359,62 @@ final class TermReading {
     }
 
     /**
+     * How often each of {@code values} occurs among all of them, in the order they are given.
+     *
+     * <p>Equal as the place's order has them, as {@link Counted} counts the elements of one
+     * container: two values are one where the order puts them at one place. A value the order puts
+     * nowhere is not counted as the same or as another, so the first such value stops every
+     * number, as it stops them there.
+     */
+    static List<Reading> occurrencesAmong(TermOrders on, List<ObservedValue> values) {
+        Map<Place, Long> counted = new HashMap<>();
+        List<Where> placed = new ArrayList<>(values.size());
+        Reading stop = null;
+        for (ObservedValue value : values) {
+            Where where = whereTheOrderPuts(on.observed(), value);
+            placed.add(where);
+            switch (where) {
+                case Where.At(Place place) -> counted.merge(place.canonical(), 1L, Long::sum);
+                case Where.Nowhere nowhere -> stop = stop != null ? stop : nowhere.why();
+            }
+        }
+        List<Reading> out = new ArrayList<>(values.size());
+        for (Where where : placed) {
+            out.add(switch (where) {
+                case Where.At(Place place) -> stop != null ? stop
+                        : new Reading.Number(Count.of(counted.get(place.canonical())));
+                case Where.Nowhere nowhere -> nowhere.why();
+            });
+        }
+        return out;
+    }
+
+    /**
+     * How often {@code own}, one of {@code values}, occurs among them: what
+     * {@link #occurrencesAmong} reads at the place {@code own} stands at.
+     */
+    static Reading occurrencesOf(TermOrders on, ObservedValue own, List<ObservedValue> values) {
+        Where itsPlace = whereTheOrderPuts(on.observed(), own);
+        long often = 0;
+        Reading stop = null;
+        for (ObservedValue value : values) {
+            switch (whereTheOrderPuts(on.observed(), value)) {
+                case Where.At(Place place) -> {
+                    if (itsPlace instanceof Where.At(Place mine)
+                            && place.canonical().equals(mine.canonical())) {
+                        often++;
+                    }
+                }
+                case Where.Nowhere nowhere -> stop = stop != null ? stop : nowhere.why();
+            }
+        }
+        return switch (itsPlace) {
+            case Where.Nowhere nowhere -> nowhere.why();
+            case Where.At _ -> stop != null ? stop : new Reading.Number(Count.of(often));
+        };
+    }
+
+    /**
      * How many of the code points a string holds are in a class.
      *
      * <p>Counted in scalar values, as {@code String.length} counts, and against the one whitespace
