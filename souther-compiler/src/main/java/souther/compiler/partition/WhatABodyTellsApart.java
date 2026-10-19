@@ -22,6 +22,7 @@ import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
 import souther.compiler.reading.WrittenWithout;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -214,8 +215,17 @@ final class WhatABodyTellsApart {
          *
          * @param admitted the classes it admits there, or null where it admits nothing this
          *                 reading can put to the classes
+         * @param explains the comparisons of the model all of whose lines at this position the
+         *                 classes it admits are the reading of, where it is a statement over
+         *                 them and not one comparison coming out one way
          */
-        record About(int at, List<Boolean> admitted) implements Placed {}
+        record About(int at, List<Boolean> admitted, Set<ModelOccurrence> explains)
+                implements Placed {
+
+            About(int at, List<Boolean> admitted) {
+                this(at, admitted, Set.of());
+            }
+        }
 
         /**
          * What one application of a closure an operation applies to the elements of a container
@@ -300,6 +310,12 @@ final class WhatABodyTellsApart {
             Optional<ForkDependencies.Dependency> turnsOn = dependencyOf(arm);
             if (turnsOn.orElse(null) instanceof ForkDependencies.Dependency.Known(var positions)) {
                 List<Integer> ats = axesReading(positions);
+                if (ats.size() == 1) {
+                    Placed.About statement = whereItsStatementHolds(arm, ats.getFirst());
+                    if (statement != null) {
+                        return statement;
+                    }
+                }
                 return ats.isEmpty() ? new Placed.AboutNoPosition() : new Placed.AboutThese(ats);
             }
         }
@@ -322,6 +338,33 @@ final class WhatABodyTellsApart {
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
         };
+    }
+
+    /**
+     * What {@code arm} of a fork the model wrote admits at the {@code at}th position, from the
+     * statement its condition makes: the classes it holds throughout where the arm is taken on its
+     * holding, and the others where on its failing. Null where the lines drawn on the position do
+     * not settle the statement, which leaves the arm about the position and putting nothing to
+     * classes.
+     */
+    private Placed.About whereItsStatementHolds(souther.compiler.reading.Condition.Arm arm,
+                                                int at) {
+        Optional<Proposition> stated = ModelOccurrence.statedAt(arm.arm().fork())
+                .flatMap(dependencies::statedBy);
+        if (stated.isEmpty() || arm.arm().part() > 1) {
+            return null;
+        }
+        InteractionCells.Evaluated where = InteractionCells.evaluate(stated.get(), axes, at,
+                readToTheEnd(axes.get(at)));
+        if (where == null) {
+            return null;
+        }
+        boolean taken = arm.arm().part() == 0;
+        List<Boolean> admitted = new ArrayList<>();
+        for (boolean holds : where.holds()) {
+            admitted.add(holds == taken);
+        }
+        return new Placed.About(at, List.copyOf(admitted), where.explained());
     }
 
     /**
@@ -495,6 +538,22 @@ final class WhatABodyTellsApart {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether every rule on the number {@code axis} measures that drew no line was read to the end
+     * and divides nothing that arrives at it: none was refused, stopped on or left relating
+     * another value.
+     */
+    private boolean readToTheEnd(Axis axis) {
+        for (RuleWithoutALine each : noLine) {
+            if (filedAt(each.at(), axis)
+                    && !(each.why() instanceof BlockReason.ReadToEndWithoutLine read
+                            && dividesNothing(read))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether a finding filed at {@code at} is about the number {@code axis} measures. */
@@ -1051,6 +1110,7 @@ final class WhatABodyTellsApart {
         if (each instanceof souther.compiler.reading.Condition.Side side) {
             ModelOccurrence.statedAt(side.statedAt()).ifPresent(statedHere.get(one.at())::add);
         }
+        statedHere.get(one.at()).addAll(one.explains());
     }
 
     /**

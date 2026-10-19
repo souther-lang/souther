@@ -36,15 +36,25 @@ import java.util.Set;
  *
  * @param byFork   what the condition of each fork the model wrote reads
  * @param byAnswer what the answer of each closure body, by the construct it answers with, reads
+ * @param statedByFork the statement the condition of a fork the model wrote makes, where every
+ *                 reading of it came to one statement
  */
 public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
-                               Map<ModelOccurrence, Dependency> byAnswer) {
+                               Map<ModelOccurrence, Dependency> byAnswer,
+                               Map<ModelOccurrence, Proposition> statedByFork) {
 
-    public static final ForkDependencies NONE = new ForkDependencies(Map.of(), Map.of());
+    public static final ForkDependencies NONE =
+            new ForkDependencies(Map.of(), Map.of(), Map.of());
 
     public ForkDependencies {
         byFork = Map.copyOf(byFork);
         byAnswer = Map.copyOf(byAnswer);
+        statedByFork = Map.copyOf(statedByFork);
+    }
+
+    /** What the condition of {@code fork} states, or empty where it was read to no one statement. */
+    public Optional<Proposition> statedBy(ModelOccurrence fork) {
+        return Optional.ofNullable(statedByFork.get(fork));
     }
 
     /** What a construct that decides a fork may turn on. */
@@ -94,7 +104,7 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
         }
 
         ForkDependencies read() {
-            return new ForkDependencies(forks.read(), answers.read());
+            return new ForkDependencies(forks.read(), answers.read(), forks.statements());
         }
     }
 
@@ -103,14 +113,27 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
 
         private final Map<ModelOccurrence, Set<TermPath>> known = new LinkedHashMap<>();
         private final Set<ModelOccurrence> unknown = new LinkedHashSet<>();
+        private final Map<ModelOccurrence, Proposition> statements = new LinkedHashMap<>();
+        private final Set<ModelOccurrence> readTwoWays = new LinkedHashSet<>();
 
         void reads(ModelOccurrence decides, Proposition stated) {
+            Proposition before = statements.putIfAbsent(decides, stated);
+            if (before != null && !before.equals(stated)) {
+                readTwoWays.add(decides);
+            }
             Optional<List<TermPath>> positions = PositionsAStatementReads.of(stated);
             if (positions.isEmpty()) {
                 unknown.add(decides);
                 return;
             }
             known.computeIfAbsent(decides, _ -> new LinkedHashSet<>()).addAll(positions.get());
+        }
+
+        /** What each construct states, where every reading of it came to the same statement. */
+        Map<ModelOccurrence, Proposition> statements() {
+            Map<ModelOccurrence, Proposition> out = new LinkedHashMap<>(statements);
+            out.keySet().removeAll(readTwoWays);
+            return out;
         }
 
         Map<ModelOccurrence, Dependency> read() {
