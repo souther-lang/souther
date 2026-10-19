@@ -62,11 +62,15 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many years the calendar's pattern repeats over"),
             Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.LAST_DAY_IN_EVERY_MONTH",
                     "the last day every month of every year has"),
-            // A statement of more dates than this is not asked, and nothing is then claimed of
-            // the years or the months and days it names; no search stops at it.
-            Map.entry("souther.compiler.partition.UndividedByARelation"
-                            + ".MOST_DATES_A_STATEMENT_IS_ASKED_OF",
-                    "how many dates a statement may name for its parts to be looked through"),
+            Map.entry("souther.compiler.partition.YearsAWayAllows.FIRST_YEAR",
+                    "where the years a way's statements of years are held at are looked for start"),
+            Map.entry("souther.compiler.partition.YearsAWayAllows.YEARS_ASKED",
+                    "how many years from there are looked at, which is two cycles of the calendar"),
+            // A way that states the parts of more dates than this is not asked, and nothing is then
+            // claimed of the years or the months and days it names; no search stops at it.
+            Map.entry("souther.compiler.partition.WhatStatementsOfDatePartsLeaveAlone"
+                            + ".MOST_DATES_A_WAY_IS_ASKED_OF",
+                    "how many dates a way may state the parts of for them to be looked through"),
 
             // A place in a list rather than an amount of anything.
             Map.entry("souther.compiler.partition.Generator.NOT_HERE",

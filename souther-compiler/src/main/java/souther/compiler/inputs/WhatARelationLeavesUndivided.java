@@ -1064,11 +1064,13 @@ public final class WhatARelationLeavesUndivided {
      * The values several terms take together, because they are read off one value: the month and
      * the day of one date are two numbers, and not every month goes with every day.
      *
-     * <p>The claim is about the whole value and not about the tuples that were found. Each tuple is
-     * one the value gives, so a combination in it can be asked for as a witness; and none the value
-     * gives is missing, so a value of one term is reached by the combinations that go with it and
-     * by no others. A caller that cannot say both makes no support, and the terms are then left to
-     * be apart from one another or not asked together.
+     * <p>Two claims, and the caller makes both or makes no support. Each tuple is one the value
+     * gives where the relation is asked, so a combination in it can be asked for as a witness. And
+     * every number a term can be appears in some tuple, so that no value of a term goes unasked.
+     * The tuples need not be every combination there is — a way that fixes the year of a date
+     * leaves the combinations of that year — because a witness is reached by what is listed and
+     * what is not listed is asked of no value. A caller that cannot say both makes no support, and
+     * the terms are then left to be apart from one another or not asked together.
      *
      * @param terms  the indexes of the terms in the relation's terms, two or more, each once
      * @param tuples the whole-number values of those terms together, in the order of {@code terms}

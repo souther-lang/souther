@@ -9,7 +9,12 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,10 +65,22 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 + " `Date.month((birthday -1 days))`"), report);
     }
 
-    /** The comparison of the difference with the age is drawn at its own line, and the month and
-     *  day correction at its. */
+    /** The age of the pair as the calendar works it out, and not as the reading does. */
+    private static int ageAttained(LocalDate birthday, LocalDate on) {
+        LocalDate dayBefore = birthday.minusDays(1);
+        int difference = on.getYear() - dayBefore.getYear();
+        boolean beforeTheDay = on.getMonthValue() * 100 + on.getDayOfMonth()
+                < dayBefore.getMonthValue() * 100 + dayBefore.getDayOfMonth();
+        return difference - (beforeTheDay ? 1 : 0);
+    }
+
+    /**
+     * The rows offered stand at both sides of the line of the age, and at both sides of the
+     * correction by the month and day where the years are sixty apart: the same difference of
+     * years, an age of fifty-nine before the day and of sixty on or after it.
+     */
     @Test
-    void aRowIsOfferedAtTheLineOfEachOfThem() {
+    void theRowsOfferedStandAtBothSidesOfTheAgeAndOfTheMonthAndDayCorrection() {
         Compilation compilation = compiled(AGE
                 + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n");
         String offered = GeneratedRows.of(
@@ -71,10 +88,27 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
                 .text();
 
-        for (String comparison : new String[] {"comparison@0:13:52", "comparison@0:6:"}) {
-            assertTrue(offered.contains("fills ON point of " + comparison)
-                    && offered.contains("fills OFF point of " + comparison), offered);
+        Set<Integer> ages = new HashSet<>();
+        boolean sixtyYearsApartBefore = false;
+        boolean sixtyYearsApartOnOrAfter = false;
+        for (String row : offered.lines().filter(each -> each.contains("Date(\"")).toList()) {
+            List<LocalDate> dates = new ArrayList<>();
+            int at = 0;
+            while ((at = row.indexOf("Date(\"", at)) >= 0) {
+                int end = row.indexOf('"', at + 6);
+                dates.add(LocalDate.parse(row.substring(at + 6, end)));
+                at = end;
+            }
+            int age = ageAttained(dates.get(0), dates.get(1));
+            ages.add(age);
+            if (dates.get(1).getYear() - dates.get(0).minusDays(1).getYear() == 60) {
+                sixtyYearsApartBefore |= age == 59;
+                sixtyYearsApartOnOrAfter |= age == 60;
+            }
         }
+
+        assertTrue(ages.contains(59) && ages.contains(60), ages + "\n" + offered);
+        assertTrue(sixtyYearsApartBefore && sixtyYearsApartOnOrAfter, offered);
     }
 
     /**
@@ -97,6 +131,26 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
 
         assertFalse(report.contains("rather than dividing the values here, about"
                 + " `Date.month(span.on)`"), report);
+    }
+
+    /**
+     * Two conditions on the year that each hold at many years and together at one: 2025, which has
+     * no twenty-ninth of February. At February every month and day sum is below thirty-one, so
+     * the month settles the comparison there, and it would not were the twenty-ninth a witness.
+     */
+    @Test
+    void conditionsOnTheYearThatHoldTogetherAtOneYearGiveTheMonthsAndDaysOfThatYear() {
+        String report = report("""
+                module p
+
+                behavior f : (on: Date) -> Bool
+                let f (on) =
+                    if Date.year(on) >= 2025 && Date.year(on) <= 2025
+                    then Date.month(on) + Date.day(on) < 31 else false
+                """);
+
+        assertFalse(report.contains("rather than dividing the values here, about"
+                + " `Date.month(on)`"), report);
     }
 
     /**

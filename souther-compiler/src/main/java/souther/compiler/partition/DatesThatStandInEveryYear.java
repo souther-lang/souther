@@ -1,15 +1,15 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.semantics.TakenAs;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
 
 /**
  * The months and days at which a date stands in every year alike.
@@ -21,9 +21,12 @@ import java.util.Map;
  * year is a number nothing said of the month and the day ties.
  *
  * <p>Only the days up to the twenty-eighth are looked at: a day past it is missing from some
- * month of some year, and one such day more would add nothing the others do not give. The years
- * asked are the four hundred of the calendar's cycle, which repeats, so what holds in all of them
- * holds in every year the calendar has.
+ * month of some year, and one such day more would add nothing the others do not give. The parts
+ * and the years come round with the calendar's cycle of four hundred years, so what is the same
+ * in all of them is the same in every year between. But the calendar has a first and a last year,
+ * and a shift is defined at the dates between its first and its last origin only, so the two
+ * years at the ends are looked at as well: a month and a day a shift takes out of the calendar
+ * there is a date some year does not have.
  */
 final class DatesThatStandInEveryYear {
 
@@ -31,41 +34,63 @@ final class DatesThatStandInEveryYear {
     private static final int YEARS_OF_A_CYCLE = 400;
     private static final int LAST_DAY_IN_EVERY_MONTH = 28;
 
+    /** The years of the cycle, and the first and the last year the calendar has. */
+    private static final int[] YEARS_ASKED = IntStream.concat(
+            IntStream.range(FIRST_YEAR, FIRST_YEAR + YEARS_OF_A_CYCLE),
+            IntStream.of(LocalDate.MIN.getYear(), LocalDate.MAX.getYear())).toArray();
+
+    /** A part of a date, taken after the date was moved. */
+    record Part(TakenAs.DatePart which, DateTranslation moved) {}
+
+    /** A month and a day of the date, and the number each of the parts comes to there. */
+    record Origin(int month, int day, List<ExactRatio> parts) {}
+
     private DatesThatStandInEveryYear() {
     }
 
     /**
-     * For each month and day of a date at which it stands in every year alike, the part each of
-     * {@code parts} takes of it, or none where there is no such month and day.
+     * Every month and day of a date at which it stands in every year alike, with what each of
+     * {@code parts} comes to there.
      *
-     * <p>Alike means that every part is the same number in all the years, and that each of
+     * <p>Alike means that every part is the same number in all the years, that each of
      * {@code yearShifts} — the moves the years asked of the date are taken after — puts the date
-     * in the year it was in. A date that a move takes to another year in some years only, or past
-     * the calendar's end, is not one.
+     * in the year it was in, and that every move is defined at the date in each year, those at
+     * the ends of the calendar included.
      *
-     * @param parts      the month and day terms taken of the date, each with the move it was taken
-     *                   after
+     * @param parts      the month and day parts taken of the date, each with the move it was
+     *                   taken after
      * @param yearShifts the moves of the date whose years are asked
      */
-    static List<Map<NumericTerm.TakenOf, ExactRatio>> of(List<NumericTerm.TakenOf> parts,
-                                                         List<DateTranslation> yearShifts) {
-        List<Map<NumericTerm.TakenOf, ExactRatio>> out = new ArrayList<>();
+    static List<Origin> of(List<Part> parts, List<DateTranslation> yearShifts) {
+        return KNOWN.computeIfAbsent(new Asked(List.copyOf(parts), List.copyOf(yearShifts)),
+                asked -> worked(asked.parts(), asked.yearShifts()));
+    }
+
+    /** What was asked, which is all there is to the answer: the calendar and the moves. */
+    private record Asked(List<Part> parts, List<DateTranslation> yearShifts) {}
+
+    /** Answers by what was asked. A pure function of its key, so an answer is never stale; a
+     *  way's statements come back to the same few moves again and again across the relations of
+     *  a program, and each answer walks four hundred years of the calendar. */
+    private static final Map<Asked, List<Origin>> KNOWN = new ConcurrentHashMap<>();
+
+    private static List<Origin> worked(List<Part> parts, List<DateTranslation> yearShifts) {
+        List<Origin> out = new ArrayList<>();
         for (int month = 1; month <= 12; month++) {
             for (int day = 1; day <= LAST_DAY_IN_EVERY_MONTH; day++) {
-                Map<NumericTerm.TakenOf, ExactRatio> taken = alikeEveryYear(month, day, parts,
-                        yearShifts);
+                List<ExactRatio> taken = alikeEveryYear(month, day, parts, yearShifts);
                 if (taken != null) {
-                    out.add(taken);
+                    out.add(new Origin(month, day, taken));
                 }
             }
         }
         return out;
     }
 
-    private static Map<NumericTerm.TakenOf, ExactRatio> alikeEveryYear(
-            int month, int day, List<NumericTerm.TakenOf> parts, List<DateTranslation> yearShifts) {
-        Map<NumericTerm.TakenOf, ExactRatio> out = new LinkedHashMap<>();
-        for (int year = FIRST_YEAR; year < FIRST_YEAR + YEARS_OF_A_CYCLE; year++) {
+    private static List<ExactRatio> alikeEveryYear(int month, int day, List<Part> parts,
+                                                   List<DateTranslation> yearShifts) {
+        List<ExactRatio> out = null;
+        for (int year : YEARS_ASKED) {
             long origin = LocalDate.of(year, month, day).toEpochDay();
             for (DateTranslation each : yearShifts) {
                 if (!each.definedAt(origin)
@@ -73,19 +98,19 @@ final class DatesThatStandInEveryYear {
                     return null;
                 }
             }
-            for (NumericTerm.TakenOf part : parts) {
-                DateTranslation moved = part.transformation().translation();
-                if (!moved.definedAt(origin)
-                        || !(part.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart which))) {
+            List<ExactRatio> here = new ArrayList<>();
+            for (Part part : parts) {
+                if (!part.moved().definedAt(origin)) {
                     return null;
                 }
-                LocalDate date = LocalDate.ofEpochDay(origin + moved.offsetDays());
-                ExactRatio value = ExactRatio.of(which == TakenAs.DatePart.MONTH
-                        ? date.getMonthValue() : date.getDayOfMonth());
-                ExactRatio before = out.putIfAbsent(part, value);
-                if (before != null && !before.equals(value)) {
-                    return null;
-                }
+                LocalDate date = LocalDate.ofEpochDay(origin + part.moved().offsetDays());
+                here.add(ExactRatio.of(part.which() == TakenAs.DatePart.MONTH
+                        ? date.getMonthValue() : date.getDayOfMonth()));
+            }
+            if (out == null) {
+                out = here;
+            } else if (!out.equals(here)) {
+                return null;
             }
         }
         return out;
