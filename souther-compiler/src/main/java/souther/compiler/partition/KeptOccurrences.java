@@ -39,14 +39,16 @@ record KeptOccurrences(DecisionSubject container, Proposition meeting,
         return position() + " meeting " + meeting.key();
     }
 
-    /** Two of these are one where they keep the same elements by the same statement. */
+    /** Two of these are one where they keep the elements of the same container by the same
+     *  statement; how the statement is put to rows is the statement's own. */
     @Override
     public boolean equals(Object other) {
-        return other instanceof KeptOccurrences that && key().equals(that.key());
+        return other instanceof KeptOccurrences that && container.equals(that.container)
+                && meeting.equals(that.meeting);
     }
 
     @Override
     public int hashCode() {
-        return key().hashCode();
+        return Objects.hash(container, meeting);
     }
 }

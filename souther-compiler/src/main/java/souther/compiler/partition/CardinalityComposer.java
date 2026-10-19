@@ -716,19 +716,11 @@ final class CardinalityComposer {
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        List<Place> candidates;
-        if (kept == null) {
-            candidates = carrier.counts()
-                    ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
-                    : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
-        } else {
-            // The values near where the statement turns over, and of them the ones it keeps: a
-            // value chosen to be counted is one the container's elements are kept for.
-            candidates = keptValues(kept, own, container, place, carrier, run, unheld, unnamed);
-            if (candidates == null) {
-                return notChosen("where `" + kept.key() + "` turns over an element of `"
-                        + container + "` could not be worked out");
-            }
+        List<Place> candidates = valuesToCount(kept, own, container, place, carrier, run, unheld,
+                unnamed);
+        if (candidates == null) {
+            return notChosen("where `" + kept.key() + "` turns over an element of `"
+                    + container + "` could not be worked out");
         }
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
@@ -835,11 +827,16 @@ final class CardinalityComposer {
         }
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        List<Place> candidates = carrier.counts()
-                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
-                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
+        KeptOccurrences kept = (KeptOccurrences) term.selection();
+        List<Place> candidates = valuesToCount(kept, own, chain.getLast(), place, carrier, run,
+                unheld, unnamed);
+        if (candidates == null) {
+            return notChosen("where `" + kept.key() + "` turns over an element of `"
+                    + chain.getLast() + "` could not be worked out");
+        }
         if (candidates.isEmpty()) {
-            return none("the rules leave no value at `" + place + "` to repeat");
+            return none(kept == null ? "the rules leave no value at `" + place + "` to repeat"
+                    : "no value at `" + place + "` to repeat that `" + kept.key() + "` keeps");
         }
         NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
         List<FixtureTemplate> built = new ArrayList<>();
@@ -881,6 +878,25 @@ final class CardinalityComposer {
         }
         return none("no containers of `" + place + "` this composed hold a value as often as"
                 + " asked");
+    }
+
+    /**
+     * The values a count of how often one occurs may be composed with: those the rules leave the
+     * place, and where {@code kept} keeps only some occurrences, of them the ones it keeps — a
+     * value chosen to be counted is one the container's elements are kept for. Null where the
+     * places the statement turns over at could not be worked out.
+     */
+    private static List<Place> valuesToCount(KeptOccurrences kept, NumericTerm own,
+                                             TermPath container, TermPath place,
+                                             Carrier carrier, NumericDomain.Bounds run,
+                                             Set<CompositionCapacity> unheld,
+                                             Set<CompositionRepertoire> unnamed) {
+        if (kept != null) {
+            return keptValues(kept, own, container, place, carrier, run, unheld, unnamed);
+        }
+        return carrier.counts()
+                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
+                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
     }
 
     /**

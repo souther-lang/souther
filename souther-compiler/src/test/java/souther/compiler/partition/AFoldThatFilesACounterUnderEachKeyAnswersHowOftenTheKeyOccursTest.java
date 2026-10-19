@@ -15,6 +15,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1000,6 +1001,51 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 () -> report(compilation));
         assertEquals(List.of("off", "on"), pointsHitOnTheCount(compilation),
                 () -> report(compilation));
+    }
+
+    /**
+     * Two keepings of one place are two numbers: what a report names a quantity by says which
+     * statement keeps the occurrences, so a line on one is not taken for a line on the other.
+     */
+    @Test
+    void twoFiltersOfOnePlaceAreNamedAsTwoQuantities() {
+        String example = """
+
+                example popular
+                    | "on" : ([Touch { labels = ["ab"] }, Touch { labels = ["ab"] },
+                        Touch { labels = ["ab"] }]) -> [("ab", 3)]
+                """;
+        List<String> kept = new ArrayList<>();
+        for (String longerThan : List.of("0", "1")) {
+            Compilation compilation = measured(modelOfTouches("List<String>",
+                    "List.filter(k -> String.length(k) > " + longerThan
+                            + ", List.flatMap(t -> t.labels, ts))") + example);
+            Matcher named = Pattern.compile("\"kept_by\"\\s*:\\s*\"([^\"]*)\"")
+                    .matcher(json(compilation));
+            assertTrue(named.find(), () -> "a quantity counted among the kept names what keeps"
+                    + " them: " + report(compilation));
+            kept.add(named.group(1));
+        }
+        assertEquals(2, new HashSet<>(kept).size(), kept.toString());
+    }
+
+    /**
+     * A statement on the value a nested count is composed of is put to the value it picks, or the
+     * count says it was not composed: a row never writes a value as often as asked that the
+     * filter drops.
+     */
+    @Test
+    void aCountAmongKeptValuesIsNotComposedOfValuesTheFilterDrops() {
+        Compilation compilation = measured(modelOfTouches("List<String>",
+                "List.filter(k -> String.length(k) > 1, List.flatMap(t -> t.labels, ts))"));
+        List<List<List<String>>> rows = offeredInputs(compilation).stream()
+                .map(AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest::touchesIn)
+                .toList();
+        assertTrue(rows.stream().noneMatch(row -> mostOften(row) >= 2
+                        && occurrencesAcross(row).entrySet().stream()
+                                .filter(e -> e.getValue() >= 2).allMatch(e -> e.getKey().length() < 2)),
+                () -> "a row repeats only values the filter drops: " + rows);
+        assertTrue(report(compilation).contains("to repeat that"), () -> report(compilation));
     }
 
     /**

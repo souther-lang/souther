@@ -6417,10 +6417,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("position", it.place().discriminated());
             }
             // How often the value at the place occurs among every occurrence of it, across the
-            // containers it stands inside.
+            // containers it stands inside, and where only some occurrences are kept, by what: two
+            // keepings of one place are two numbers.
             case NumericTerm.OccurrencesOfItsValue it -> {
                 into.put("kind", "occurrences_in_every_container");
                 into.put("position", it.subjectPath().discriminated());
+                if (it.selection() != null) {
+                    into.put("kept_by", it.selection().key());
+                }
             }
             // The least or greatest of what the elements of a container hold at one place, among
             // those alike at another.

@@ -810,22 +810,18 @@ public sealed interface NumericTerm
         @Override
         public boolean equals(Object other) {
             return other instanceof OccurrencesOfItsValue that && run.equals(that.run)
-                    && keyOf(selection).equals(keyOf(that.selection));
+                    && Objects.equals(selection, that.selection);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(OccurrencesOfItsValue.class, run, keyOf(selection));
+            return Objects.hash(OccurrencesOfItsValue.class, run, selection);
         }
 
         @Override
         public String toString() {
             return selection == null ? "occurrences(" + run + ")"
                     : "occurrences(" + run + " kept by " + selection.key() + ")";
-        }
-
-        private static String keyOf(OccurrenceSelection selection) {
-            return selection == null ? "" : selection.key();
         }
     }
 
