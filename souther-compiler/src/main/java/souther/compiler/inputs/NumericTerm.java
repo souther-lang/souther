@@ -783,7 +783,16 @@ public sealed interface NumericTerm
             return run;
         }
 
-        /** Which of the occurrences are counted, or null where every one is. */
+        /**
+         * Which of the occurrences are counted, or null where every one is.
+         *
+         * <p>Held with the statement put to rows because the readers of a term — a read back
+         * value, a row's reading, a composed container — are given the term and a row and no
+         * reading of the input to build that statement from. What names the quantity is the
+         * container and the statement the selection keeps by, which is all its equality and its
+         * report coordinate use; the statement put to rows is derived from them and is no part of
+         * which quantity this is.
+         */
         public KeptOccurrences selection() {
             return selection;
         }
