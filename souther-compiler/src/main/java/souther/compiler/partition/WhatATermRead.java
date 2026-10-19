@@ -198,7 +198,8 @@ sealed interface WhatATermRead {
             case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
                     new CameToNothing(ReadingGap.COULD_NOT_WALK);
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
-                case ObservationAtPoint.Value(ObservedValue own) -> switch (row.everyValueAt(place)) {
+                case ObservationAtPoint.Value(ObservedValue own) -> switch (
+                        row.keptOf(new EveryValue(place))) {
                     case WalkResult.CouldNotWalk<List<ObservedValue>> _ ->
                             new CameToNothing(ReadingGap.COULD_NOT_WALK);
                     case WalkResult.Reached(List<ObservedValue> values) ->
@@ -233,37 +234,75 @@ sealed interface WhatATermRead {
         if (ownKept != null) {
             return ownKept;
         }
-        // Each container the place stands in, the outer one first, is read under each element of
-        // the one outside it: the occurrences are those of every one of them.
-        List<BorderQuantity.Observation> elements = List.of(row);
-        for (TermPath container : place.containersHoldingIt()) {
-            List<BorderQuantity.Observation> inside = new ArrayList<>();
-            for (BorderQuantity.Observation outer : elements) {
-                if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
-                        List<BorderQuantity.Observation>>(
-                                List<BorderQuantity.Observation> each))) {
-                    return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+        TheKept theKept = row.keptOf(new TheKeptValues(kept, place));
+        return theKept.stopped() != null ? theKept.stopped()
+                : of(on.readAmong(own, theKept.values()));
+    }
+
+    /** Every value the row wrote at {@code place}, which no reading's choice turns. */
+    record EveryValue(TermPath place)
+            implements BorderQuantity.ReadAlike<WalkResult<List<ObservedValue>>> {
+
+        @Override
+        public WalkResult<List<ObservedValue>> readAt(BorderQuantity.Observation row) {
+            return row.everyValueAt(place);
+        }
+    }
+
+    /**
+     * The values at {@code place} of the occurrences {@code kept} keeps, or what stopped them
+     * being read.
+     *
+     * @param values  the kept occurrences' values, in the order the row wrote them
+     * @param stopped why they could not be read, or null where they were
+     */
+    record TheKept(List<ObservedValue> values, WhatATermRead stopped) {}
+
+    /**
+     * The kept occurrences' values, which no reading's choice turns: every reading of a row asks
+     * them of the same occurrences, and a row has a reading per element.
+     */
+    record TheKeptValues(KeptOccurrences kept, TermPath place)
+            implements BorderQuantity.ReadAlike<TheKept> {
+
+        @Override
+        public TheKept readAt(BorderQuantity.Observation row) {
+            // Each container the place stands in, the outer one first, is read under each element
+            // of the one outside it: the occurrences are those of every one of them.
+            List<BorderQuantity.Observation> elements = List.of(row);
+            for (TermPath container : place.containersHoldingIt()) {
+                List<BorderQuantity.Observation> inside = new ArrayList<>();
+                for (BorderQuantity.Observation outer : elements) {
+                    if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
+                            List<BorderQuantity.Observation>>(
+                                    List<BorderQuantity.Observation> each))) {
+                        return stoppedAt(ReadingGap.COULD_NOT_WALK);
+                    }
+                    inside.addAll(each);
                 }
-                inside.addAll(each);
+                elements = inside;
             }
-            elements = inside;
+            List<ObservedValue> values = new ArrayList<>();
+            for (BorderQuantity.Observation element : elements) {
+                AStatementAtARow.Answer answer = kept.perElement().at(element);
+                if (answer instanceof AStatementAtARow.Answer.CouldNotTell(var why)) {
+                    return stoppedAt(why.iterator().next());
+                }
+                if (!(answer instanceof AStatementAtARow.Answer.Holds)) {
+                    continue;
+                }
+                if (!(element.at(place) instanceof WalkResult.Reached<ObservationAtPoint>(
+                        ObservationAtPoint.Value(ObservedValue value)))) {
+                    return stoppedAt(ReadingGap.COULD_NOT_WALK);
+                }
+                values.add(value);
+            }
+            return new TheKept(values, null);
         }
-        List<ObservedValue> values = new ArrayList<>();
-        for (BorderQuantity.Observation element : elements) {
-            AStatementAtARow.Answer answer = kept.perElement().at(element);
-            if (answer instanceof AStatementAtARow.Answer.CouldNotTell(var why)) {
-                return new CameToNothing(why.iterator().next());
-            }
-            if (!(answer instanceof AStatementAtARow.Answer.Holds)) {
-                continue;
-            }
-            if (!(element.at(place) instanceof WalkResult.Reached<ObservationAtPoint>(
-                    ObservationAtPoint.Value(ObservedValue value)))) {
-                return new CameToNothing(ReadingGap.COULD_NOT_WALK);
-            }
-            values.add(value);
+
+        private static TheKept stoppedAt(ReadingGap gap) {
+            return new TheKept(List.of(), new CameToNothing(gap));
         }
-        return of(on.readAmong(own, values));
     }
 
     /** Null where the statement holds of the element, and what the reading comes to where it
