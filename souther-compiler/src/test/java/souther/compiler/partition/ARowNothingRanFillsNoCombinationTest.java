@@ -14,6 +14,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Bodies;
@@ -137,6 +138,30 @@ class ARowNothingRanFillsNoCombinationTest {
                 "and it is composed for each of them, not for where it was found");
         assertEquals(List.of(), composed.get(0).labels(),
                 "which this package spells no name for: what an arm is called is the report's word");
+    }
+
+    /**
+     * A row that was applied and answered nothing is no witness, where it was not recorded as much
+     * as where it was; a row nothing applied is offered as it was composed.
+     */
+    @Test
+    void aRowAppliedWithoutAnAnswerIsNoWitnessAndOneNothingAppliedIsOffered() {
+        Model model = Model.of(SHIPPING, "shippingFee");
+        List<ArmProbe> every = List.copyOf(GenerationFixtures.everyArmACombinationMayTake(
+                model.subject(), model.groups(), Budgets.generation()));
+
+        List<Generator.GeneratedRow> aborted = GenerationFixtures.fill(model.subject(), List.of(),
+                Generator.CandidateCheck.ANY, model.read(),
+                _ -> new Generator.ObservedRun(new Generator.Watched.NoAccount(),
+                        new AnswerObservation.NotAnswered()),
+                List.of(), List.of(), every, Budgets.generation()).rows();
+        List<Generator.GeneratedRow> notRun = GenerationFixtures.fill(model.subject(), List.of(),
+                Generator.CandidateCheck.ANY, model.read(),
+                _ -> Generator.ObservedRun.nothingRan(),
+                List.of(), List.of(), every, Budgets.generation()).rows();
+
+        assertEquals(List.of(), aborted, "a row that aborted reaches no arm");
+        assertFalse(notRun.isEmpty(), "a row nothing ran is offered as composed");
     }
 
     /**

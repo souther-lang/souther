@@ -46,6 +46,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -140,7 +141,11 @@ final class MeaningAssumptions {
      *  bound is found. */
     private final Denotations at;
     private Known known;
+    /** What was known when this reading began. */
+    private final Known entry;
     private boolean taken;
+    /** Whether the choice this was last asked to take in was left between several parts. */
+    private boolean leftUndecided;
     /** Why each part of what was stated that a path does not hold was not taken in; empty where
      *  every part is one a path holds. */
     private final List<WhyNotTaken> notTaken = new ArrayList<>();
@@ -154,6 +159,7 @@ final class MeaningAssumptions {
         this.places = places;
         this.at = at;
         this.known = known;
+        this.entry = known;
         this.tries = tries;
     }
 
@@ -168,7 +174,19 @@ final class MeaningAssumptions {
      */
     private static final class Tries {
 
-        private int left = CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum();
+        private int left;
+
+        Tries() {
+            this(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum());
+        }
+
+        Tries(int left) {
+            this.left = left;
+        }
+
+        int left() {
+            return left;
+        }
 
         /** Whether another part may be taken alone, counting it where it may. */
         boolean another() {
@@ -193,10 +211,86 @@ final class MeaningAssumptions {
             case CountsWrittenOut.PastAFigure(var figure) ->
                     taking.notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure));
         }
+        taking.settleWhatWasLeftUndecided();
+        taking.sayWhatIsStillUndecided();
         // Read to the end only where every part was taken in: a part a path cannot hold leaves an
         // arm under it unsettled for this reader's reach, which is not a fact about the model.
         return new Predicates.Assumed(taking.known, taking.taken, taking.notTaken.isEmpty(),
                 taking.notTaken);
+    }
+
+    /**
+     * Each choice a path left undecided, taken again over what is known now, until none of them
+     * comes to a part: what a later condition makes known may leave a choice one part, or none.
+     *
+     * <p>A choice still between several parts stays as it was, and nothing it was read as is kept.
+     * Every pass that goes on settles one choice, so the passes end.
+     *
+     * <p>Read only if something has been taken in since they were last read
+     * ({@link Known#awaitsSettling}), whichever way it was taken in: asked of the state, so the
+     * conditions a reading takes in and the facts the walk adds on entering an arm or a built
+     * value are followed alike ({@link #settled}).
+     *
+     * <p>A choice is read over the state it is kept in, and taken out of it only once a part is
+     * taken in for it. The parts read are counted for the path ({@link Known.Choices#PARTS_A_PATH_SETTLES});
+     * where the count runs out the choices left stay undecided, as they were when they were kept.
+     * That is no fact about the condition being read, so it is said of none.
+     */
+    private void settleWhatWasLeftUndecided() {
+        Tries settling = new Tries(known.settlingLeft());
+        boolean settled = true;
+        while (settled && !known.reachesNothing() && known.awaitsSettling()
+                && settling.left() > 0) {
+            settled = false;
+            for (Known.Declined choice : known.declinedChoices()) {
+                MeaningAssumptions again = new MeaningAssumptions(terms, choice.places(),
+                        choice.at(), known, settling);
+                again.takingOneOf(choice.any());
+                if (again.leftUndecided) {
+                    if (again.notTaken.contains(new WhyNotTaken.MoreAlternativesThanAreTried())) {
+                        break;
+                    }
+                    continue;
+                }
+                known = again.known.withoutDeclined(choice);
+                taken |= again.taken;
+                again.notTaken.forEach(this::notTaken);
+                settled = true;
+                break;
+            }
+        }
+        known = known.settledOverWhatIsKnown(settling.left());
+    }
+
+    /**
+     * {@code k} with the choices it leaves undecided taken again over what it knows, where a fact
+     * has been taken in since they were last read.
+     */
+    static Known settled(Known k, Terms terms) {
+        if (!k.awaitsSettling()) {
+            return k;
+        }
+        MeaningAssumptions settling = new MeaningAssumptions(terms, InputPlaces.NONE, null, k,
+                new Tries());
+        settling.settleWhatWasLeftUndecided();
+        return settling.known;
+    }
+
+    /** Why each choice this reading leaves undecided, and no earlier one, was not taken in — none
+     *  where nothing is reached, since no part of a choice is then left unread. */
+    private void sayWhatIsStillUndecided() {
+        if (known.reachesNothing()) {
+            return;
+        }
+        Set<Known.Declined> before = Collections.newSetFromMap(new IdentityHashMap<>());
+        before.addAll(entry.declinedChoices());
+        for (Known.Declined choice : known.declinedChoices()) {
+            if (!before.contains(choice)) {
+                WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
+                        WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), choice.any())
+                        .forEach(this::notTaken);
+            }
+        }
     }
 
     private void notTaken(WhyNotTaken why) {
@@ -608,7 +702,9 @@ final class MeaningAssumptions {
      * <p>Which part holds is no fact of a path, but a part that cannot hold under what is known is
      * one the others are left to: each part is taken alone, from what is known here, and one that
      * leaves nothing is dropped. None left is nothing reached; one left is that one holding, taken
-     * as it would be on its own. Two or more left is which of them holds, and is declined.
+     * as it would be on its own. Two or more left is which of them holds: no part is taken, and the
+     * choice is kept undecided on the path ({@link Known.Declined}) for the conditions after it to
+     * single out a part of ({@link #settleWhatWasLeftUndecided}).
      *
      * <p>A part taken only in part and still leaving nothing is dropped all the same: what it left
      * out would only have narrowed further.
@@ -648,6 +744,7 @@ final class MeaningAssumptions {
             if (!tries.another()) {
                 WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
                         .forEach(this::notTaken);
+                leftUndecided = true;
                 return;
             }
             MeaningAssumptions alone = new MeaningAssumptions(terms, places, at, known, tries);
@@ -673,10 +770,15 @@ final class MeaningAssumptions {
             default -> {
                 boolean cutShort = left.stream().anyMatch(each -> each.notTaken.contains(
                         new WhyNotTaken.MoreAlternativesThanAreTried()));
-                WhyNotTaken.declinedWhole(cutShort ? new WhyNotTaken.MoreAlternativesThanAreTried()
-                        : new WhyNotTaken.OutsideDomain(
-                                WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), any)
-                        .forEach(this::notTaken);
+                leftUndecided = true;
+                if (cutShort) {
+                    WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
+                            .forEach(this::notTaken);
+                } else {
+                    // Said when the reading ends, and only if no later condition has settled it.
+                    Known.Declined declined = new Known.Declined(any, at, places);
+                    known = known.leavingUndecided(declined);
+                }
             }
         }
     }

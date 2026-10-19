@@ -425,7 +425,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
             // watched came to is asked below; that a row was not watched is answered here, because
             // it is a fact about this build rather than about where the row went.
             switch (row.watched()) {
-                case Generator.Watched.NoAccount _ -> notWatched++;
+                case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> notWatched++;
                 case Generator.Watched.Ran _ -> {
                     switch (against.takenBy(row)) {
                         case RulesTaken.WhichRule.TookThis it -> {

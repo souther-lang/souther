@@ -178,7 +178,7 @@ final class Clauses {
                     new ClausesInOrder.OneClause.Unread(it.ref(),
                             ClausesInOrder.WhyAClauseIsUnread.A_FIELD_LEFT_OUT);
             case ClauseMeaning.Stated it -> new ClausesInOrder.OneClause.Stated(it.ref(),
-                    substituted(it.states().termForClauseReading(), given), it.parts());
+                    it.states().termForClauseReading(), given, it.parts());
         };
     }
 
@@ -274,8 +274,11 @@ final class Clauses {
                 // The clause as one reading, and the parts its author wrote as subtrees of that
                 // very reading. Read apart instead, a conjunct would be read without the conjunct
                 // beside it, and a branch one of them rules out would stand.
-                case ClausesInOrder.OneClause.Stated it -> stated.add(new Stated(it.clause(),
-                        it.states(), partsOf(new AsStated(it.states(), it.parts()))));
+                case ClausesInOrder.OneClause.Stated it -> {
+                    Core states = it.substituted();
+                    stated.add(new Stated(it.clause(), states,
+                            partsOf(new AsStated(states, it.parts()))));
+                }
                 case ClausesInOrder.OneClause.Unread it ->
                         lost.add(new RuleRef.Invariant(it.clause()));
             }

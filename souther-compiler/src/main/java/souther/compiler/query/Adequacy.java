@@ -9732,7 +9732,7 @@ public final class Adequacy {
     static Set<ArmProbe> armsSeenIn(Generator.Watched watched) {
         return switch (watched) {
             case Generator.Watched.Ran(var account) -> account.arms();
-            case Generator.Watched.NoAccount _ -> Set.of();
+            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
         };
     }
 
@@ -9741,7 +9741,7 @@ public final class Adequacy {
     static Set<SeenConditionOutcome> outcomesSeenIn(Generator.Watched watched) {
         return switch (watched) {
             case Generator.Watched.Ran(var account) -> account.outcomes();
-            case Generator.Watched.NoAccount _ -> Set.of();
+            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
         };
     }
 

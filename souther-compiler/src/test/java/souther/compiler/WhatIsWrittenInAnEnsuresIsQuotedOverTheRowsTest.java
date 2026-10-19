@@ -49,7 +49,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
             behavior findTodo : (id: TodoId) -> Todo | NotFound
                 constructs Todo
                 ensures found = Todo -> value.id.value == id.value
-                ensures asked = NotFound -> id.value > 0
+                ensures asked = NotFound -> id.value <= 0
 
             behavior echo : (id: TodoId) -> TodoId
 
@@ -87,22 +87,22 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 // Replace each `<?>` with what the system actually answers.
                 // `ensures` written for `findTodo`:
                 //     ensures found = Todo -> value.id.value == id.value
-                //     ensures asked = NotFound -> id.value > 0
+                //     ensures asked = NotFound -> id.value <= 0
 
                 example findTodo
                 // fills id=0 <= x <= 0
                 // fills a decision rule (the comparison at 16:33 does not hold)
                 // fills value = 0
-                // fills OFF point of ensures findTodo (asked)
+                // fills ON point of ensures findTodo (asked)
                 // fills OFF point of comparison@0:16:33
                     | (TodoId(0)) -> <?>
                 // fills id=0 < x
                 // fills a decision rule (the comparison at 16:33 holds)
                 // fills value in 0 < value
-                // fills ON point of ensures findTodo (asked)
+                // fills OFF point of ensures findTodo (asked)
                 // fills ON point of comparison@0:16:33
                     | (TodoId(1)) -> <?>
-                // fills IN point of ensures findTodo (asked)
+                // fills OUT point of ensures findTodo (asked)
                 // fills IN point of comparison@0:16:33
                     | (TodoId(2)) -> <?>
 

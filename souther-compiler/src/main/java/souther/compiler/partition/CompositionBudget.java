@@ -559,7 +559,19 @@ public enum CompositionBudget {
      * by itself: a row run already costs nothing to look at again, so a search with none left goes
      * on as far as rows run before take it.
      */
-    RUNS_REPAIRING_A_ROW(16);
+    RUNS_REPAIRING_A_ROW(16),
+
+    /**
+     * How many rows a walk composing a row for a point may hand the choice among the rows that
+     * answer, each once: the ones that were run and answered, the ones that were run and did not,
+     * and the ones that did not meet what they were composed for.
+     *
+     * <p>Counted in rows composed and not in runs, because a row that is composed again or does not
+     * meet the requirement costs composing and no run, and a walk over every assignment of every
+     * parameter multiplies. It stops the walk before a row that answers was found, so the point is
+     * one this compiler stopped looking for a row at, and never one no row answers at.
+     */
+    ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64);
 
     private final int maximum;
 
@@ -663,6 +675,8 @@ public enum CompositionBudget {
             case CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
                     "how many code points past a count a string is looked for";
             case RUNS_REPAIRING_A_ROW -> "how many runs looking for a row that goes further may make";
+            case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
+                    "how many rows a walk composing a row for a point hands the choice of a row";
         };
     }
 
@@ -723,7 +737,7 @@ public enum CompositionBudget {
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
-                 RUNS_REPAIRING_A_ROW -> null;
+                 RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW -> null;
         };
     }
 }

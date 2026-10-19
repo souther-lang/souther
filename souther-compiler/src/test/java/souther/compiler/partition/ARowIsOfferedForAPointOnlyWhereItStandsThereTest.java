@@ -7,18 +7,24 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -174,6 +180,13 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
     private static Generator.BoundaryAttempt attemptOver(String source, String behavior,
                                                          souther.compiler.numeric.Place at,
                                                          Generator.CandidateCheck check) {
+        return attemptOver(source, behavior, at, check, Generator.Trial.NOTHING_RUNS);
+    }
+
+    private static Generator.BoundaryAttempt attemptOver(String source, String behavior,
+                                                         souther.compiler.numeric.Place at,
+                                                         Generator.CandidateCheck check,
+                                                         Generator.Trial trial) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -198,6 +211,110 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain.quantities(rules).ordersOf(axis.term()).answered(), at))),
-                Reachability.untouched(domain.quantities(rules).region()), check);
+                Reachability.untouched(domain.quantities(rules).region()), check,
+                StandInAttempt.REQUIRING_NOTHING, trial);
+    }
+
+    /** A trial whose run of the {@code n}-th row it is handed (from 1) is {@code answered}. */
+    private static Generator.Trial running(java.util.function.IntPredicate answered,
+                                           List<List<String>> handed) {
+        return row -> {
+            handed.add(row.inputs().stream().map(FixtureTemplate::text).toList());
+            return new Generator.ObservedRun(new Generator.Watched.NoAccount(),
+                    answered.test(handed.size())
+                            ? new AnswerObservation.Answered(new ObservedValue.Integer(0))
+                            : new AnswerObservation.NotAnswered());
+        };
+    }
+
+    /** Rows run and none answering, with nothing else left untried, are no witness. */
+    @Test
+    void rowsThatNoneAnsweredAreNoWitnessAndNotAPointNoRowReaches() {
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
+                        SearchShortfall.NONE, false, CompositionAccount.NOTHING));
+
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                no.why().reason());
+    }
+
+    /** A figure that stopped the search is said as the figure beside the rows that did not answer,
+     *  because the rows past it were never composed. */
+    @Test
+    void aFigureTheSearchWasStoppedAtIsSaidBesideRowsThatNoneAnswered() {
+        Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.of(List.of(
+                                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW))),
+                        false, CompositionAccount.NOTHING));
+
+        assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                stopped.met().figures());
+    }
+
+    /** What the search could not enumerate is not dropped for the figure, or for the word. */
+    @Test
+    void aPopulationTheSearchCouldNotEnumerateIsKeptBesideTheRows() {
+        CompositionShortfall both = CompositionShortfall.of(
+                List.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED), List.of());
+
+        Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(both), false, CompositionAccount.NOTHING));
+        Generator.BoundaryAttempt.Unexhausted unexhausted = assertInstanceOf(
+                Generator.BoundaryAttempt.Unexhausted.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.writing(
+                                List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED))),
+                        false, CompositionAccount.NOTHING));
+
+        assertEquals(both, stopped.met());
+        assertEquals(Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED),
+                unexhausted.met().populations());
+    }
+
+    /** And so is the rule an offer was short of. */
+    @Test
+    void theRuleAnOfferWasShortOfIsKeptBesideTheRows() {
+        SequencedMap<TermPath, StringOfferShortfall> offered = new LinkedHashMap<>();
+        offered.put(TermPath.of("r"), StringOfferShortfall.NONE);
+
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.NONE, offered),
+                        false, CompositionAccount.NOTHING));
+
+        assertEquals(offered, no.why().alsoShort());
+    }
+
+    /** A row whose run aborts is passed over for the next one composed, which answers. */
+    @Test
+    void aFirstRowThatAbortsIsPassedOverForTheNextThatAnswers() {
+        List<List<String>> handed = new ArrayList<>();
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, candidate) -> new Generator.CandidateCheck.Built.Value(reqWith(100)),
+                running(n -> n > 1, handed));
+
+        Generator.BoundaryAttempt.Built built = assertInstanceOf(
+                Generator.BoundaryAttempt.Built.class, attempt,
+                "the second row composed answers, and stands at the point");
+        assertEquals(handed.get(1),
+                built.row().inputs().stream().map(FixtureTemplate::text).toList(),
+                "and it is the row offered, not the first");
+        assertNotEquals(handed.get(0), handed.get(1));
+    }
+
+    /** Where every row composed aborts, the point is one this compiler composed no answering row
+     *  for, and not one no row reaches. */
+    @Test
+    void aPointEveryRowOfWhichAbortsIsNoWitnessAndNotUnreachable() {
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, candidate) -> new Generator.CandidateCheck.Built.Value(reqWith(100)),
+                running(_ -> false, new ArrayList<>()));
+
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, attempt);
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                no.why().reason());
     }
 }
