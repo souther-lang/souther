@@ -113,7 +113,7 @@ final class OrderedLeaf {
      */
     static <K> Read<K> of(Core.Binary bin, boolean positive, Denotations at, Terms terms,
                           Function<Core, K> named, Function<K, Carrier> carrierOf) {
-        StatedComparison stated = StatedComparison.of(bin, positive);
+        StatedComparison stated = Conditions.statedBy(terms, bin, positive, at);
         if (stated == null) {
             // Written with an operator and not a comparison. The same as a rule of another shape.
             return notFollowed();

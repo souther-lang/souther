@@ -240,15 +240,33 @@ final class Conditions {
     }
 
     /**
-     * {@code stated} as the comparison of the values an order is of, where it compares the sign
-     * an operation answering that order answered and is exactly where their order holds — so
-     * {@code compare(a, b) <= 0} is {@code a <= b}. {@code stated} itself where it is no such
-     * sign, or where the order only follows from it.
+     * The one comparison a clause's leaf states, or null where it states none.
      *
-     * <p>For a reader that takes one comparison of a clause, and that needs it to be the clause
-     * and not a consequence of it.
+     * <p>The way into a clause for every reader that takes a single comparison of it and needs it
+     * to be the clause rather than a consequence of it: a sign of an order is the order of its
+     * arguments ({@code compare(a, b) <= 0} is {@code a <= b}), with the denial spent. Each reader
+     * recognising a leaf for itself would read the sign in some and not in others, and two readers
+     * of one leaf would be told two different things about it.
      */
-    static StatedComparison asTheOrderItIs(Terms terms, StatedComparison stated, Denotations at) {
+    static StatedComparison statedBy(Terms terms, Core.Binary leaf, boolean positive,
+                                     Denotations at) {
+        StatedComparison written = StatedComparison.of(leaf, positive);
+        return written == null ? null : asTheOrderItIs(terms, written, at);
+    }
+
+    /** The same of a part of a clause, which carries its own polarity. */
+    static StatedComparison statedBy(Terms terms, ClauseExpr.Part part, Denotations at) {
+        StatedComparison written = StatedComparison.of(part);
+        return written == null ? null : asTheOrderItIs(terms, written, at);
+    }
+
+    /**
+     * {@code stated} as the comparison of the values an order is of, where it compares the sign
+     * an operation answering that order answered and is exactly where their order holds.
+     * {@code stated} itself where it is no such sign, or where the order only follows from it.
+     */
+    private static StatedComparison asTheOrderItIs(Terms terms, StatedComparison stated,
+                                                   Denotations at) {
         StatedComparison read = stated;
         for (ComparisonReadings.Reading composed =
                      orderStatedBy(terms, new ComparisonReadings.Reading(read, true), at);

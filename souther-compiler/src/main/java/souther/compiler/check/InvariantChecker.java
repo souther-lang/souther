@@ -2529,10 +2529,7 @@ public final class InvariantChecker {
         // states. A reader handed the operator and told separately how the clause stands is a
         // reader that has to remember to put the two together, which is the one thing this walk
         // was not doing.
-        StatedComparison written = StatedComparison.of(said);
-        // The sign of an order is read back to the order it is of, as a body's condition is.
-        StatedComparison comparison = written == null ? null
-                : Conditions.asTheOrderItIs(terms, written, at);
+        StatedComparison comparison = Conditions.statedBy(terms, said, at);
         if (comparison == null) {
             // Nothing written as a comparison, so there is no reading of one for the classification
             // to be handed: what is below reads a clause for the end it places on a position and
@@ -2907,11 +2904,10 @@ public final class InvariantChecker {
         if (!(Core.withoutStanding(leaf) instanceof Core.Binary bin)) {
             return NO_LINE;
         }
-        StatedComparison written = StatedComparison.of(bin, positive);
-        if (written == null) {
+        StatedComparison read = Conditions.statedBy(terms, bin, positive, at);
+        if (read == null) {
             return NO_LINE;
         }
-        StatedComparison read = Conditions.asTheOrderItIs(terms, written, at);
         if (read.claim() instanceof ComparisonClaim.Singled singled
                 && !singled.holdsAtTheValue()) {
             return NO_LINE;
@@ -2939,7 +2935,7 @@ public final class InvariantChecker {
             // the numbers an operation answers among them.
             case CanonicalForm.NotRead _ -> {
                 Coordinate against =
-                        heldAgainstAConstant(bin, at, byName, answering);
+                        heldAgainstAConstant(read, at, byName, answering);
                 yield against == null ? ELSEWHERE : statedOn(against);
             }
             // The positions cancelled, and what is left is a number against a number. Asked of the
@@ -2975,19 +2971,19 @@ public final class InvariantChecker {
      * it answers where the first reading said it had none, and it says a number rather than a
      * narrower one.
      */
-    private Coordinate heldAgainstAConstant(Core.Binary bin, Denotations at,
+    private Coordinate heldAgainstAConstant(StatedComparison stated, Denotations at,
                                             Coordinates byName,
                                             Arrivals answering) {
         // A whole side may be a number the values are read back out of as well, which is the one
         // place a line on one is found: no form is read over such a number.
-        Coordinate left = wholeSide(nameOf(bin.left(), at), byName);
-        Coordinate right = wholeSide(nameOf(bin.right(), at), byName);
+        Coordinate left = wholeSide(nameOf(stated.left(), at), byName);
+        Coordinate right = wholeSide(nameOf(stated.right(), at), byName);
         if (left != null && right == null
-                && coordinatesIn(bin.right(), at, byName, answering).isEmpty()) {
+                && coordinatesIn(stated.right(), at, byName, answering).isEmpty()) {
             return left;
         }
         if (right != null && left == null
-                && coordinatesIn(bin.left(), at, byName, answering).isEmpty()) {
+                && coordinatesIn(stated.left(), at, byName, answering).isEmpty()) {
             return right;
         }
         return null;
