@@ -106,21 +106,37 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     }
 
     /**
-     * What a sum {@code e} takes over the elements of a container a dependency answered adds up
-     * to, or null where it is no such sum.
+     * The number an operation takes of what a dependency answered that {@code e} is, or null where
+     * it is no such number.
      *
-     * <p>A number of the answer and of no place of the input, as a number taken of an answer's
-     * list is ({@link #takenOfAnAnswer}); what is added up here is a number of each element the
-     * walk handed to it, one for each, so the sum is of the container's elements as they stand in
-     * the answer.
+     * <p>Which calls take a number of a value is {@link NumericMeasures#takenIn}'s answer, the one
+     * the input's numbers are read by, so a count of a list is one wherever the list stands. What
+     * this adds is only whose value it is taken of: the answer itself, or the elements of the list
+     * it holds, which a sum adds up one number of each.
      */
-    Quantity.SumOver sumOverAnAnswersElements(Core e, InputReads at) {
+    Quantity numberTakenOfAnAnswer(Core e, InputReads at) {
+        // Asked of every number a comparison names, so a body with no answer in it is not asked
+        // what an operation takes of one.
         if (!at.mayHoldAnAnswer()) {
             return null;
         }
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
                 each -> at.folded(each, symbols, newtypes));
-        if (measured == null || !measured.arguments().none()
+        if (measured == null) {
+            return null;
+        }
+        if (anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer answer) {
+            return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),
+                    answer, Core.withoutStanding(measured.of()).type());
+        }
+        return sumOverElementsOfAnAnswer(measured, at);
+    }
+
+    /** What the sum {@code measured} takes over the elements of a list a dependency answered adds
+     *  up to, or null where it is no such sum. */
+    private Quantity.SumOver sumOverElementsOfAnAnswer(NumericMeasures.Measured measured,
+                                                       InputReads at) {
+        if (!measured.arguments().none()
                 || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
                         instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
@@ -133,30 +149,6 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         InputReads.AnAnswerAt container = elements.container();
         return new Quantity.SumOver(subjectOf(container), new DecisionAtom.OfAnAnswer(
                 subjectOf(container.inside(elements.each()))));
-    }
-
-    /**
-     * The number an operation takes of what a dependency answered that {@code e} is, or null where
-     * it is no such number.
-     *
-     * <p>Which calls take a number of a value is {@link NumericMeasures#takenIn}'s answer, the one
-     * the input's numbers are read by, so a count of a list is one wherever the list stands. What
-     * this adds is only whose value it is taken of.
-     */
-    DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(Core e, InputReads at) {
-        // Asked of every number a comparison names, so a body with no answer in it is not asked
-        // what an operation takes of one.
-        if (!at.mayHoldAnAnswer()) {
-            return null;
-        }
-        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
-                each -> at.folded(each, symbols, newtypes));
-        if (measured == null || !(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer
-                answer)) {
-            return null;
-        }
-        return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),
-                answer, Core.withoutStanding(measured.of()).type());
     }
 
     /**

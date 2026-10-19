@@ -5224,13 +5224,9 @@ final class Pullback {
                         break;
                     }
                 }
-                DecisionAtom takenOfAnAnswer = subjects.takenOfAnAnswer(node, at);
+                Quantity takenOfAnAnswer = subjects.numberTakenOfAnAnswer(node, at);
                 if (takenOfAnAnswer != null) {
                     return LinearForm.atom(takenOfAnAnswer);
-                }
-                Quantity.SumOver sumOfAnAnswer = subjects.sumOverAnAnswersElements(node, at);
-                if (sumOfAnAnswer != null) {
-                    return LinearForm.atom(sumOfAnAnswer);
                 }
                 // A number a dependency answered, which a row stands in and so controls, named as
                 // the decision table names it: the evaluation of the call, whether it is written
