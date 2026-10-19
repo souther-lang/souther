@@ -2270,6 +2270,13 @@ final class Terms {
         return kindsOfAtoms(f.coefs().keySet());
     }
 
+    /** The spacing of {@code atom}, or nothing where no form was ever written over it: a place a
+     *  closure was handed and never read is one no form names. */
+    Map<FactSubject, Granularity> kindsOfIfNamed(FactSubject atom) {
+        Carrier carrier = atomCarriers.get(atom);
+        return carrier == null ? Map.of() : Map.of(atom, carrier.spacing());
+    }
+
     private Map<FactSubject, Granularity> kindsOfAtoms(Set<FactSubject> atoms) {
         Map<FactSubject, Granularity> out = new HashMap<>();
         for (FactSubject atom : atoms) {

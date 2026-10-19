@@ -318,7 +318,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
     private static NumericDomain<FactSubject> assuming(Map<FactSubject, Bounds> facts, Terms terms) {
         NumericDomain<FactSubject> given = NumericDomain.top(FactSubject.inOneOrder());
         for (Map.Entry<FactSubject, Bounds> one : facts.entrySet()) {
-            Map<FactSubject, Granularity> spacing = terms.kindsOf(LinearForm.atom(one.getKey()));
+            Map<FactSubject, Granularity> spacing = terms.kindsOfIfNamed(one.getKey());
             if (!spacing.isEmpty()) {
                 given = given.assuming(one.getKey(), one.getValue(), spacing);
             }

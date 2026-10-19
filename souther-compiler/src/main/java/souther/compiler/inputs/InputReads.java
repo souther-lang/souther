@@ -754,6 +754,15 @@ public final class InputReads {
                         instanceof TakenAs.AFormOfItsArguments(var form)) ? null : form;
     }
 
+    /**
+     * Whether a node stands for the same values here as it does in {@code other}: the names it
+     * reads are bound to the same things. Readings made from one by taking a choice's arm or a
+     * form stand in the same names; one an application or a call made stands in others.
+     */
+    public boolean standsInTheNamesOf(InputReads other) {
+        return names.equals(other.names);
+    }
+
     /** Whether {@code e} is taken as anything on the reading here, a value or a form. */
     public boolean isTaken(Core e) {
         return applied.taken() != null && applied.taken().of(Core.withoutStanding(e)) != null;
@@ -2249,7 +2258,7 @@ public final class InputReads {
 
     /** What the walk handing {@code binding} its element answered, as the closure, where a licence
      *  says it answered one value per element ({@link ElementAnswer}). */
-    ElementAnswer answerAt(BindingId binding) {
+    public ElementAnswer answerAt(BindingId binding) {
         return names.answerAt(binding);
     }
 

@@ -516,6 +516,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/WhyUnread;",
                     "counts the readings a split makes along one way down, and says which figure"
                             + " where they are past it"),
+            Map.entry("souther.compiler.partition.Pullback#splitInto("
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Ljava/util/function/LongUnaryOperator;)"
+                            + "Lsouther/compiler/meaning/WhyUnread;",
+                    "tells a count of the readings of a split how far the figures can tell, and"
+                            + " asks the split of what it counted"),
             Map.entry("souther.compiler.partition.Pullback#<init>("
                             + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;)V",
                     "how many readings one reading of a condition makes in all, which every split"

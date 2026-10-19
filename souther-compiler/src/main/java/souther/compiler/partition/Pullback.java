@@ -6,6 +6,7 @@ import souther.compiler.check.ARecursion;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.FoldedValue;
 import souther.compiler.check.ValueStanding;
+import souther.compiler.check.WalkElements;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.CalledBody;
@@ -22,6 +23,7 @@ import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.Extreme;
@@ -136,6 +138,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -325,6 +328,33 @@ final class Pullback {
      * stand as that case says.
      */
     private final Map<Core, LinearForm<Quantity>> sizedInACase = new HashMap<>();
+    /**
+     * What each total over a container the body wrote out adds up to, in the way of keeping the
+     * comparison being read is read in ({@link #keepingOf}): the sum of the elements that way
+     * keeps. Newest last.
+     */
+    private final List<ATotalInACase> totalsInACase = new ArrayList<>();
+
+    /**
+     * That the total {@code call}, standing in the names of {@code at}, adds up to {@code form} in
+     * the way of keeping being read.
+     *
+     * <p>The call and the names it stands in, and not the call alone: a closure's body is one node
+     * however many elements it is applied to, and the total in it is a different total for each.
+     */
+    private record ATotalInACase(Core call, InputReads at, LinearForm<Quantity> form) {}
+
+    /** What the total {@code call} standing at {@code at} adds up to in the way of keeping being
+     *  read, or null where no way is being read for it. */
+    private LinearForm<Quantity> totalInACase(Core call, InputReads at) {
+        Core node = Core.withoutStanding(call);
+        for (ATotalInACase each : totalsInACase) {
+            if (each.call() == node && each.at().standsInTheNamesOf(at)) {
+                return each.form();
+            }
+        }
+        return null;
+    }
     /**
      * What each walk whose step is being read carried into it, on the side its end is asked about
      * ({@link #acrossAWalk}).
@@ -1054,6 +1084,23 @@ final class Pullback {
             return new WhyUnread.MoreReadingsThanAreMade();
         }
         return made(more);
+    }
+
+    /**
+     * The same, of a split whose readings are worked out by counting {@code count}, which is asked
+     * to count no further than the figures can tell.
+     *
+     * <p>That is one more than the larger of what either figure leaves: past it the split is
+     * refused whatever the rest comes to, so a count that reaches it has said all there is to say.
+     * Left to run on, a count of every combination of independent conditions is a work that no
+     * figure bounds, done to find out that a figure was passed.
+     *
+     * @param count the readings the split makes, or the limit it was asked to count to where they
+     *              are that many or more
+     */
+    private WhyUnread splitInto(InputReads reads, LongUnaryOperator count) {
+        long mostAsked = Math.max(READINGS.maximum() / reads.readings(), readingsLeft) + 1;
+        return splitInto(reads, count.applyAsLong(mostAsked));
     }
 
     /** Why {@code more} readings are not made in all — or null where they are, taken from what is
@@ -4869,14 +4916,143 @@ final class Pullback {
      * keeping and not one form. The elements are those {@link #sizeOf} counts.
      */
     private LinearForm<Quantity> totalOfWrittenOut(Core node, InputReads at) {
-        if (!(AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied total
+        AnOperationApplied total = sumCall(node);
+        if (total == null) {
+            return null;
+        }
+        LinearForm<Quantity> inACase = totalInACase(node, at);
+        if (inACase != null) {
+            return inACase;
+        }
+        return unlessUnread(() -> sumOfWrittenOut(total.args().getFirst(), at));
+    }
+
+    /** {@code node} as a call of the operation that adds up what a container holds, or null. */
+    private static AnOperationApplied sumCall(Core node) {
+        return AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied total
                 && total.operation() instanceof ValueName.Stdlib operation
                 && DefaultBoundOperationFacts.get().takenAs(operation)
                         instanceof TakenAs.TheSumOfWhatItHolds
-                && total.args().size() == 1)) {
+                && total.args().size() == 1 ? total : null;
+    }
+
+    /**
+     * The total {@code node} is, read once for each way its elements are kept, where that is what
+     * stops its being one form: some element is there on some rows and not on others, or one
+     * element composes into no form. Null where {@code node} is no total of a container the body
+     * wrote out, or where it is none of these.
+     *
+     * <p>An element kept by an arm of a choice is left to the reader of the choice, which is not
+     * this one.
+     */
+    private Inside.ATotalByKeeping totalByKeeping(Core node, InputReads at) {
+        AnOperationApplied total = sumCall(node);
+        if (total == null || totalInACase(node, at) != null) {
             return null;
         }
-        return unlessUnread(() -> sumOfWrittenOut(total.args().getFirst(), at));
+        Denotation container = at.standing(total.args().getFirst(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each)) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
+        if (!WaysOfKeeping.allTruths(occurrences)) {
+            return null;
+        }
+        boolean kept = occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty());
+        if (!kept && occurrences.stream().allMatch(one -> AffineForms.outcome(one.value().value(),
+                one.value().at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>)) {
+            return null;
+        }
+        return new Inside.ATotalByKeeping(Core.withoutStanding(node), at, occurrences);
+    }
+
+    /**
+     * {@code again} read once for each way the elements of the total {@code call} are kept: the
+     * truths that keep them decided in turn, as the condition of a choice is, and the total in
+     * each way the sum of the elements that way keeps. An element that composes into no form stops
+     * only the ways that keep it.
+     *
+     * @param reads where the reading being split stands, which counts the readings it is one of
+     * @param at    where what is read again is a part of a larger condition, or null
+     * @param fixed whether its answer is the same on every run
+     */
+    private Derivation keepingOf(Inside.ATotalByKeeping total, InputReads reads, Denotation at,
+                                 boolean fixed,
+                                 Function<UnaryOperator<InputReads>, Derivation> again) {
+        WaysOfKeeping ways = new WaysOfKeeping(total.occurrences());
+        // The elements the leaves of the tree read, as a total of elements kept by nothing reads
+        // them ({@link #sumOfWrittenOut}).
+        WhyUnread past = splitInto(reads, ways::work);
+        if (past != null) {
+            return partOf(at, new Derivation.Stopped(past, fixed));
+        }
+        return new Derivation.AComparisonOfAChoice(
+                keptAs(total, ways, ways.undecided(), new Derivation[ways.truthCount()], at, fixed,
+                        again));
+    }
+
+    /**
+     * The total read with the truths {@code decided} so far and the next one that is evaluated
+     * still to decide.
+     *
+     * @param conditions what each truth states, read the first time it is a node and the same at
+     *                   every way that reaches it
+     */
+    private Derivation keptAs(Inside.ATotalByKeeping total, WaysOfKeeping ways,
+                              Boolean[] decided, Derivation[] conditions, Denotation at,
+                              boolean fixed,
+                              Function<UnaryOperator<InputReads>, Derivation> again) {
+        int next = ways.nextEvaluated(decided);
+        if (next >= 0) {
+            if (conditions[next] == null) {
+                Denotation truth = ways.truth(next);
+                conditions[next] = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
+            }
+            decided[next] = true;
+            Derivation whenKept = keptAs(total, ways, decided, conditions, at, fixed, again);
+            decided[next] = false;
+            Derivation whenDropped = keptAs(total, ways, decided, conditions, at, fixed, again);
+            decided[next] = null;
+            return new Derivation.IfThenElse(conditions[next], whenKept, whenDropped);
+        }
+        ElementsMet metBefore = elementsMet.copied();
+        List<LinearForm<Quantity>> forms = new ArrayList<>();
+        for (int i = 0; i < total.occurrences().size(); i++) {
+            ReadMeaning.Occurrence occurrence = total.occurrences().get(i);
+            if (!ways.isThere(i, decided)) {
+                continue;
+            }
+            Denotation element = occurrence.value();
+            switch (AffineForms.outcome(element.value(), element.at(), quantities())) {
+                case AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form) -> forms.add(form);
+                case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                    elementsMet = metBefore;
+                    return partOf(at, new Derivation.Stopped(noFormOf(stopped), fixed));
+                }
+            }
+        }
+        LinearForm<Quantity> sum;
+        switch (LinearForm.sum(forms)) {
+            case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> sum = held;
+            case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) -> {
+                elementsMet = metBefore;
+                return partOf(at, new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
+            }
+        }
+        ATotalInACase inThisWay = new ATotalInACase(total.call(), total.at(), sum);
+        totalsInACase.add(inThisWay);
+        try {
+            return again.apply(on -> on);
+        } finally {
+            totalsInACase.remove(inThisWay);
+            // The ways are independent readings of one comparison: what one met of the container's
+            // elements is no part of what the next meets.
+            elementsMet = metBefore;
+        }
     }
 
     /**
@@ -5711,6 +5887,14 @@ final class Pullback {
         record ACallDefinedByCases(Core call, ValueName.Stdlib operation,
                                    List<Choice.ADefinitionCase> cases, InputReads at)
                 implements Inside {}
+
+        /**
+         * A total over a container the body wrote out, which is no one form of the input's
+         * numbers: some of {@code occurrences} are there on some rows and not on others, each
+         * kept by truths, or one composes into no form ({@link #totalByKeeping}).
+         */
+        record ATotalByKeeping(Core call, InputReads at, List<ReadMeaning.Occurrence> occurrences)
+                implements Inside {}
     }
 
     /**
@@ -5818,6 +6002,7 @@ final class Pullback {
                 }
                 yield madeBy(call, new Derivation.AnOperationsCases(operation, each));
             }
+            case Inside.ATotalByKeeping total -> keepingOf(total, reads, at, fixed, again);
         };
     }
 
@@ -5873,6 +6058,8 @@ final class Pullback {
                             number.at().taken(walk) != null;
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
                             number.at().isTaken(call);
+                    case Inside.ATotalByKeeping(Core call, InputReads where, var _) ->
+                            totalInACase(call, where) != null;
                     // A name an application handed a value is that one value, and stops nothing.
                     // Met again as several, it was reached through a value handed another name and
                     // read where that value was written, which no application handed it: handed
@@ -5956,7 +6143,11 @@ final class Pullback {
         });
         // A call defined by cases is gone into once what it was handed reads as one number on
         // each reading, since its cases are relations over those numbers.
-        return found[0] != null ? found[0] : definedByCases(e, stands.at());
+        if (found[0] != null) {
+            return found[0];
+        }
+        Inside.ACallDefinedByCases byCases = definedByCases(e, stands.at());
+        return byCases != null ? byCases : totalByKeeping(e, stands.at());
     }
 
     /**
@@ -7943,7 +8134,37 @@ final class Pullback {
                 && applied.operation() instanceof ValueName.Stdlib madeBy)) {
             return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         }
-        return new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, madeBy);
+        WhyUnread element = whyAnElementOfTheRunIsNoForm(measure, measured, reads);
+        return element != null ? element
+                : new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, madeBy);
+    }
+
+    /**
+     * Why the total {@code measure} takes of the walk {@code measured} over a container of the
+     * input is no number of it, where the walk answers one value per element and the arithmetic
+     * stops on that value: the value is not linear, or has no rule. Null where the total is of no
+     * such walk, or the arithmetic read the value — what stopped the total is then not the value,
+     * and nothing is said of it.
+     */
+    private WhyUnread whyAnElementOfTheRunIsNoForm(ValueName.Stdlib measure, Core measured,
+                                                   InputReads reads) {
+        if (!(DefaultBoundOperationFacts.get().takenAs(measure)
+                instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        Denotation met = reads.denotes(measured, read.rules().symbols(), read.rules().newtypes());
+        BindingId element = WalkElements.elementBindingOf(met.value(), met.at(),
+                read.rules().symbols(), read.rules().newtypes());
+        ElementAnswer answer = element == null ? null : met.at().answerAt(element);
+        if (answer == null || !(AffineForms.outcome(answer.body(), met.at(), quantities())
+                instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped)) {
+            return null;
+        }
+        return switch (stopped.why()) {
+            case AffineForms.Halt.NotLinear<Quantity, InputReads> _,
+                 AffineForms.Halt.NoRule<Quantity, InputReads> _ -> noFormOf(stopped);
+            default -> null;
+        };
     }
 
     /**
