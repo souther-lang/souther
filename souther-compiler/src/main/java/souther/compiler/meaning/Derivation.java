@@ -1045,6 +1045,9 @@ public sealed interface Derivation {
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
+                    case SomePieceEqualling(Derivation ofThePiece) ->
+                            positionOf(some.container()) == null
+                                    && reads(some.ofTheElement(), ofThePiece);
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds, var _) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
                         inside.add(some.container());
@@ -2465,6 +2468,32 @@ public sealed interface Derivation {
                         throw new IllegalStateException(element
                                 + " is not made of the counts of one character");
             };
+        }
+    }
+
+    /**
+     * That some piece of a string is the same value as a value of the input, or is not, as
+     * {@code ofThePiece} reads one piece compared with it ({@link Quantity.APieceOf}).
+     *
+     * <p>It relates that value to the string and divides neither: whatever the string holds, some
+     * value is one of its pieces and some is not. So what it concludes is what was read of the
+     * piece, which names the piece in a form with the value and says nothing of which code points
+     * the string holds ({@link SomePieceMeeting}).
+     */
+    record SomePieceEqualling(Derivation ofThePiece) implements Derivation {
+
+        public SomePieceEqualling {
+            Objects.requireNonNull(ofThePiece, "a piece is read as the same as something");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(ofThePiece);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(ofThePiece);
         }
     }
 

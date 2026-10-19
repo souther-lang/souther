@@ -1074,6 +1074,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     input.addAll(answers.positionsItIsMadeOf());
                     another = true;
                 }
+                case Quantity.APieceOf piece -> {
+                    input.addAll(piece.positionsItIsMadeOf());
+                    another = true;
+                }
                 default -> {
                     return null;
                 }
@@ -1111,7 +1115,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                      DecisionAtom.TakenOfAnAnswer _, Quantity.HowManyMeet _,
                      Quantity.HowManyHold _, Quantity.HowManyDifferent _, Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
-                     Quantity.WhatAnOperationAnswers _ -> { }
+                     Quantity.WhatAnOperationAnswers _, Quantity.APieceOf _ -> { }
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
             }
         }

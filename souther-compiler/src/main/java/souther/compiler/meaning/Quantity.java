@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Predicate;
 
 /**
@@ -40,7 +41,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
         Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
-        Quantity.HowManyCarried {
+        Quantity.HowManyCarried, Quantity.APieceOf {
 
     /**
      * How many what a recursion carries holds, whatever that is: what a walk carried into the step
@@ -71,6 +72,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                      RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
                      HowManyDifferent _ -> false;
                 case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
+                case APieceOf piece -> isIn(piece.string());
                 case SumOver sum -> isIn(sum.ofTheElement());
                 case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
                 case HowManyMeet count -> isIn(count.ofTheElement());
@@ -175,6 +177,62 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 out.append(i == 0 ? "" : ", ").append(of.get(i).spelled());
             }
             return out.append(')').toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * One piece of the string {@code string} that {@code operation} parts: the value a statement
+     * about some piece of it compares with another value.
+     *
+     * <p>A piece stands at no position a row writes, and it is whichever one the statement it is
+     * read inside is about ({@link CodePointsOfAPiece}). Compared with a value of the input it
+     * relates that value to the string as two values of the input are related: whatever the string
+     * holds, some value meets a piece of it and some does not, so it divides neither. Told apart by
+     * the string, the separator and {@code within}, which is how many statements about some piece
+     * it is read inside of: two pieces of one string read in two statements are two values, and
+     * one read in a single statement is one.
+     *
+     * @param operation the library's operation that parts the string
+     * @param separator the code point it is parted at, or none where it parts into characters
+     * @param string    the string, a number of the input or what an operation answers of one
+     * @param within    how many statements about some piece this one is read inside of
+     */
+    record APieceOf(ValueName.Stdlib operation, OptionalInt separator, Quantity string,
+                    int within) implements Quantity {
+
+        public APieceOf {
+            Objects.requireNonNull(operation, "a piece is of what some operation parts");
+            Objects.requireNonNull(separator, "parted at a code point, or into characters");
+            if (!(string instanceof DecisionAtom.OfTheInput)
+                    && !(string instanceof WhatAnOperationAnswers)) {
+                throw new IllegalArgumentException(
+                        "a piece read here is of a string of the input: " + string);
+            }
+            if (within < 0) {
+                throw new IllegalArgumentException(
+                        "a piece is of a statement some number of statements in: " + within);
+            }
+        }
+
+        /** The numbers of the input the string is made of, each once. */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            return switch (string) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                default -> throw new IllegalStateException("held out by the constructor");
+            };
+        }
+
+        @Override
+        public String spelled() {
+            return "a piece " + within + " in of " + operation.qualified() + "("
+                    + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
+                            + ", " : "") + string.spelled() + ")";
         }
 
         @Override
