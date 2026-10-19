@@ -5,6 +5,8 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.semantics.TakenAs;
 
 import java.time.LocalDate;
+import java.time.Month;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,19 +22,17 @@ import java.util.stream.IntStream;
  * one of the first kind can be put in any year the date has without a part of it changing, so the
  * year is a number nothing said of the month and the day ties.
  *
- * <p>Only the days up to the twenty-eighth are looked at: a day past it is missing from some
- * month of some year, and one such day more would add nothing the others do not give. The parts
- * and the years come round with the calendar's cycle of four hundred years, so what is the same
- * in all of them is the same in every year between. But the calendar has a first and a last year,
- * and a shift is defined at the dates between its first and its last origin only, so the two
- * years at the ends are looked at as well: a month and a day a shift takes out of the calendar
- * there is a date some year does not have.
+ * <p>A day that some month of some year does not have is not such a date, and the thirty-first of
+ * January is one. The parts and the years come round with the calendar's cycle of four hundred
+ * years, so what is the same in all of them is the same in every year between. But the calendar
+ * has a first and a last year, and a shift is defined at the dates between its first and its last
+ * origin only, so the two years at the ends are looked at as well: a month and a day a shift
+ * takes out of the calendar there is a date some year does not have.
  */
 final class DatesThatStandInEveryYear {
 
     private static final int FIRST_YEAR = 2000;
     private static final int YEARS_OF_A_CYCLE = 400;
-    private static final int LAST_DAY_IN_EVERY_MONTH = 28;
 
     /** The years of the cycle, and the first and the last year the calendar has. */
     private static final int[] YEARS_ASKED = IntStream.concat(
@@ -77,7 +77,7 @@ final class DatesThatStandInEveryYear {
     private static List<Origin> worked(List<Part> parts, List<DateTranslation> yearShifts) {
         List<Origin> out = new ArrayList<>();
         for (int month = 1; month <= 12; month++) {
-            for (int day = 1; day <= LAST_DAY_IN_EVERY_MONTH; day++) {
+            for (int day = 1; day <= Month.of(month).maxLength(); day++) {
                 List<ExactRatio> taken = alikeEveryYear(month, day, parts, yearShifts);
                 if (taken != null) {
                     out.add(new Origin(month, day, taken));
@@ -91,6 +91,9 @@ final class DatesThatStandInEveryYear {
                                                    List<DateTranslation> yearShifts) {
         List<ExactRatio> out = null;
         for (int year : YEARS_ASKED) {
+            if (day > YearMonth.of(year, month).lengthOfMonth()) {
+                return null;
+            }
             long origin = LocalDate.of(year, month, day).toEpochDay();
             for (DateTranslation each : yearShifts) {
                 if (!each.definedAt(origin)

@@ -10,6 +10,7 @@ import souther.compiler.semantics.TakenAs;
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -118,12 +119,31 @@ class AStatementOfOnePartOfADateLeavesTheOtherPartsToTheCalendarTest {
         assertTrue(pair != null && pair[0] - pair[1] >= 1000);
     }
 
-    /** A year past the last the calendar has room to move a date in is no year. */
+    /** The last year the calendar has is a year; the one after it is none. */
     @Test
-    void aYearBeyondTheCalendarChoosesNone() {
+    void theCalendarsLastYearIsChosenAndTheOneAfterItIsNot() {
         var last = statement(-999_999_999, Rel.GE, year(0, 1, NOT_MOVED));
+        var after = statement(-1_000_000_000, Rel.GE, year(0, 1, NOT_MOVED));
 
-        assertNull(YearsAWayAllows.choose(List.of(last), A_MONTH_AND_A_DAY));
+        assertEquals(999_999_999, YearsAWayAllows.choose(List.of(last), A_MONTH_AND_A_DAY)[0]);
+        assertNull(YearsAWayAllows.choose(List.of(after), A_MONTH_AND_A_DAY));
+    }
+
+    /**
+     * {@code year(a) - year(b) == 60} with {@code year(b) == 5000}: the one solution is 5060 and
+     * 5000, found whichever of the two dates is chosen first.
+     */
+    @Test
+    void theYearsAreFoundWhicheverDateIsChosenFirst() {
+        var both = List.of(List.of(MONTH, DAY), List.of(MONTH, DAY));
+        var gap = statement(-60, Rel.EQ, year(0, 1, NOT_MOVED), year(1, -1, NOT_MOVED));
+        var fixed = statement(-5000, Rel.EQ, year(1, 1, NOT_MOVED));
+        assertArrayEquals(new int[] {5060, 5000}, YearsAWayAllows.choose(List.of(gap, fixed), both));
+
+        var gapTurned = statement(-60, Rel.EQ, year(1, 1, NOT_MOVED), year(0, -1, NOT_MOVED));
+        var fixedTurned = statement(-5000, Rel.EQ, year(0, 1, NOT_MOVED));
+        assertArrayEquals(new int[] {5000, 5060},
+                YearsAWayAllows.choose(List.of(gapTurned, fixedTurned), both));
     }
 
     /** A move defined only at dates in the early years takes no date in the years asked. */
@@ -134,6 +154,13 @@ class AStatementOfOnePartOfADateLeavesTheOtherPartsToTheCalendarTest {
         var year = statement(0, Rel.GE, year(0, 1, early));
 
         assertNull(YearsAWayAllows.choose(List.of(year), A_MONTH_AND_A_DAY));
+    }
+
+    /** The days a month has in every year alike: the thirty-first of January is one, the
+     *  twenty-ninth of February is not. */
+    @Test
+    void everyDayThatEveryYearHasIsADateThatStandsInEveryYear() {
+        assertEquals(365, DatesThatStandInEveryYear.of(List.of(), List.of()).size());
     }
 
     /** A date moved a day back is in the year before it on the first of January only, so that

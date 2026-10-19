@@ -24,9 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code year <= 2025}, or a difference of two years held to sixty by a statement from above and
  * one from below — and the years chosen are years of that one.
  *
- * <p>The years are found from the statements. Each says between which years a date lies once the
- * other is chosen, and the dates are chosen in turn: a few years in the middle of the interval
- * that is left and at each end of it. The calendar comes in only to say which of those years give
+ * <p>The years are found from the statements. Together they say between which years a date lies
+ * for some year of the other to go with it, and the dates are chosen in turn: a few years in the
+ * middle of the interval that is left and at each end of it. The calendar comes in only to say which of those years give
  * every month and day, and it repeats every four hundred years, so that is worked out once for the
  * four hundred and a year is turned away without being looked at. A year taken is then looked at
  * itself, so that nothing rests on the repetition holding at the calendar's ends, where a move is
@@ -47,10 +47,10 @@ final class YearsAWayAllows {
 
     private static final int YEARS_OF_A_CYCLE = 400;
 
-    /** The years at which a date can be moved by the moves a statement asks for, with room to
-     *  spare at either end of the calendar. */
-    private static final long LEAST_YEAR = LocalDate.MIN.getYear() + 1_000L;
-    private static final long GREATEST_YEAR = LocalDate.MAX.getYear() - 1_000L;
+    /** The first and the last year the calendar has. A move defined at fewer dates is asked of a
+     *  year when it is chosen, not by leaving the ends out here. */
+    private static final long LEAST_YEAR = LocalDate.MIN.getYear();
+    private static final long GREATEST_YEAR = LocalDate.MAX.getYear();
 
     /** The year the middle of the calendar's use is taken to be, which is where a year is looked
      *  for first. */
@@ -153,38 +153,51 @@ final class YearsAWayAllows {
      * The years for {@code date} that the statements leave, given the dates before it: in the
      * interval they leave, a few at the usual year or the nearest to it, and at each end.
      *
-     * <p>The dates after it are free, so only a statement that names no later date bounds it
-     * here; the others are held at the end, where every statement is asked.
+     * <p>The interval is the years of the date at which the statements can hold with some year of
+     * the date after it, and not the years at which they hold with the other dates left out: a
+     * statement of two dates bounds each by the other, and a second statement fixing the other
+     * bounds the first through it. So it does not depend on which date is chosen first. The date
+     * after it is eliminated from the statements as they stand over the whole numbers, each
+     * statement written as sums that are not below nought.
      */
     private static List<Long> yearsToLookAt(List<Statement> statements, long[][] weights,
                                             long[] constants, long[] chosen, int date) {
-        BigInteger low = BigInteger.valueOf(LEAST_YEAR);
-        BigInteger high = BigInteger.valueOf(GREATEST_YEAR);
+        int later = date + 1 < chosen.length ? date + 1 : -1;
+        Bounds bounds = new Bounds();
+        List<BigInteger[]> lowersOfLater = new ArrayList<>();
+        List<BigInteger[]> uppersOfLater = new ArrayList<>();
         for (int i = 0; i < constants.length; i++) {
-            long weight = weights[i][date];
-            boolean namesALaterDate = false;
-            for (int later = date + 1; later < chosen.length; later++) {
-                namesALaterDate |= weights[i][later] != 0;
-            }
-            if (weight == 0 || namesALaterDate) {
-                continue;
-            }
-            long constant = constants[i];
+            BigInteger constant = BigInteger.valueOf(constants[i]);
             for (int before = 0; before < date; before++) {
-                constant += weights[i][before] * chosen[before];
+                constant = constant.add(
+                        BigInteger.valueOf(weights[i][before]).multiply(
+                                BigInteger.valueOf(chosen[before])));
             }
-            BigInteger[] interval = intervalOf(weight, constant, statements.get(i).relation());
-            if (interval == null) {
-                continue;
+            for (BigInteger[] sum : notBelowNought(weights[i][date],
+                    later < 0 ? 0 : weights[i][later], constant, statements.get(i).relation())) {
+                int towardsLater = sum[1].signum();
+                if (towardsLater == 0) {
+                    bounds.holdAtLeastNought(sum[0], sum[2]);
+                } else if (towardsLater > 0) {
+                    lowersOfLater.add(sum);
+                } else {
+                    uppersOfLater.add(sum);
+                }
             }
-            low = low.max(interval[0]);
-            high = high.min(interval[1]);
         }
-        if (low.compareTo(high) > 0) {
+        for (BigInteger[] lower : lowersOfLater) {
+            for (BigInteger[] upper : uppersOfLater) {
+                // Both are not below nought; the sum that cancels the later date's years is too.
+                bounds.holdAtLeastNought(
+                        lower[0].multiply(upper[1].negate()).add(upper[0].multiply(lower[1])),
+                        lower[2].multiply(upper[1].negate()).add(upper[2].multiply(lower[1])));
+            }
+        }
+        if (bounds.low.compareTo(bounds.high) > 0) {
             return List.of();
         }
-        long from = low.longValueExact();
-        long to = high.longValueExact();
+        long from = bounds.low.longValueExact();
+        long to = bounds.high.longValueExact();
         List<Long> out = new ArrayList<>();
         for (long anchor : new long[] {Math.max(from, Math.min(to, USUAL_YEAR)), from, to}) {
             // A cycle of years from an anchor meets every year of a cycle, so every pattern.
@@ -200,44 +213,45 @@ final class YearsAWayAllows {
     }
 
     /**
-     * The whole numbers {@code y} at which {@code weight * y + constant}, held against nought as
-     * {@code relation}, holds, as the least and the greatest of them — or null where that is no
-     * interval: a difference from nought leaves two.
+     * The sums, as {@code {a, b, c}} for {@code a * year + b * yearAfter + c}, that are not below
+     * nought exactly where {@code wx * year + wz * yearAfter + constant} holds against nought as
+     * {@code relation}. Over whole numbers a sum below nought is one at most minus one, so a
+     * strict relation loses nothing; a difference from nought says nothing that bounds a year.
      */
-    private static BigInteger[] intervalOf(long weight, long constant, Rel relation) {
-        BigInteger w = BigInteger.valueOf(weight);
-        BigInteger k = BigInteger.valueOf(-constant);
-        Rel asked = relation;
-        if (w.signum() < 0) {
-            w = w.negate();
-            k = k.negate();
-            asked = turnedOver(relation);
-        }
-        BigInteger floor = floorDiv(k, w);
-        BigInteger ceiling = ceilingDiv(k, w);
-        BigInteger least = BigInteger.valueOf(LEAST_YEAR);
-        BigInteger greatest = BigInteger.valueOf(GREATEST_YEAR);
-        return switch (asked) {
-            case LT -> new BigInteger[] {least, ceiling.subtract(BigInteger.ONE)};
-            case LE -> new BigInteger[] {least, floor};
-            case GT -> new BigInteger[] {floor.add(BigInteger.ONE), greatest};
-            case GE -> new BigInteger[] {ceiling, greatest};
-            case EQ -> floor.equals(ceiling) ? new BigInteger[] {floor, floor}
-                    : new BigInteger[] {BigInteger.ONE, BigInteger.ZERO};
-            case NE -> null;
+    private static List<BigInteger[]> notBelowNought(long wx, long wz, BigInteger constant,
+                                                     Rel relation) {
+        BigInteger a = BigInteger.valueOf(wx);
+        BigInteger b = BigInteger.valueOf(wz);
+        BigInteger[] above = {a, b, constant};
+        BigInteger[] aboveStrictly = {a, b, constant.subtract(BigInteger.ONE)};
+        BigInteger[] below = {a.negate(), b.negate(), constant.negate()};
+        BigInteger[] belowStrictly = {a.negate(), b.negate(),
+                constant.negate().subtract(BigInteger.ONE)};
+        return switch (relation) {
+            case GE -> List.<BigInteger[]>of(above);
+            case GT -> List.<BigInteger[]>of(aboveStrictly);
+            case LE -> List.<BigInteger[]>of(below);
+            case LT -> List.<BigInteger[]>of(belowStrictly);
+            case EQ -> List.<BigInteger[]>of(above, below);
+            case NE -> List.of();
         };
     }
 
-    /** The relation of the negation: {@code value < 0} is {@code -value > 0}. */
-    private static Rel turnedOver(Rel relation) {
-        return switch (relation) {
-            case LT -> Rel.GT;
-            case LE -> Rel.GE;
-            case GT -> Rel.LT;
-            case GE -> Rel.LE;
-            case EQ -> Rel.EQ;
-            case NE -> Rel.NE;
-        };
+    /** The years of the calendar that sums not below nought leave a date. */
+    private static final class Bounds {
+        BigInteger low = BigInteger.valueOf(LEAST_YEAR);
+        BigInteger high = BigInteger.valueOf(GREATEST_YEAR);
+
+        /** Keeps the years at which {@code a * year + c} is not below nought. */
+        void holdAtLeastNought(BigInteger a, BigInteger c) {
+            if (a.signum() > 0) {
+                low = low.max(ceilingDiv(c.negate(), a));
+            } else if (a.signum() < 0) {
+                high = high.min(floorDiv(c, a.negate()));
+            } else if (c.signum() < 0) {
+                high = low.subtract(BigInteger.ONE);
+            }
+        }
     }
 
     private static BigInteger floorDiv(BigInteger numerator, BigInteger positive) {

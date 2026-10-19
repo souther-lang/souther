@@ -60,8 +60,6 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "where the four hundred years that stand for every year start"),
             Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.YEARS_OF_A_CYCLE",
                     "how many years the calendar's pattern repeats over"),
-            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.LAST_DAY_IN_EVERY_MONTH",
-                    "the last day every month of every year has"),
             Map.entry("souther.compiler.partition.YearsAWayAllows.YEARS_OF_A_CYCLE",
                     "how many years the calendar's pattern repeats over, which is as many years"
                             + " as a look from one year meets every pattern in"),
