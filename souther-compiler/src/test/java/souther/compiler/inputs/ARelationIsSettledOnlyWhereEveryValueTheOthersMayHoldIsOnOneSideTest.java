@@ -108,6 +108,34 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
+     * {@code a + c >= b} over the same runs is settled the other way, true from eleven on.
+     */
+    @Test
+    void theOrderTheOthersAreReadAsIsTheOneTheRelationStates() {
+        var a = term("a", 1, run(1L, 12L), run(1L, 12L));
+        var c = term("c", 1, run(1L, 31L), run(1L, 31L));
+        var b = term("b", -1, run(1L, 12L), run(1L, 12L));
+        assertEquals(settledIn(1L, 12L, settled(11L, 12L, true)),
+                leavesOf(List.of(a, c, b), 0, 0, Rel.GE));
+    }
+
+    /**
+     * {@code a < b + 3 * c + 4 * d} with {@code a} at one below the greatest {@code Int}, {@code b}
+     * at two below, and {@code c} and {@code d} nought or one: the sum of the others at its
+     * greatest passes where the type stops, so it is no row that is computed, and the others
+     * together are not a witness for the true side.
+     */
+    @Test
+    void theOthersAreNotAWitnessWhereTheirSumPassesWhereTheTypeStops() {
+        long max = Long.MAX_VALUE;
+        var a = term("a", 1, run(max - 1, max - 1), run(max - 1, max - 1));
+        var b = term("b", -1, run(max - 2, max - 2), run(max - 2, max - 2));
+        var c = term("c", -3, run(0L, 1L), run(0L, 1L));
+        var d = term("d", -4, run(0L, 1L), run(0L, 1L));
+        assertNull(leavesOf(List.of(a, b, c, d), 0, 0, Rel.LT));
+    }
+
+    /**
      * {@code n - len <= 0}, {@code len} from nought on: every {@code n} at or below nought holds
      * it whatever {@code len} is, and from one on {@code len} is either side of it. Where
      * {@code len} may be anything, nothing is on one side, and {@code n} is undivided.
