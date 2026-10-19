@@ -125,8 +125,8 @@ public final class InvariantStatements {
         // states rather than the one its author spelled — the order of the arguments where it
         // compares the sign of an order, read once the bindings are spent so that a sign bound by a
         // helper is read as the sign it is.
-        if (Core.withoutStanding(Clauses.substituted(reached.said().of(), given))
-                instanceof Core.Binary binary) {
+        Core said = Core.withoutStanding(Clauses.substituted(reached.said().of(), given));
+        if (said instanceof Core.Binary binary) {
             StatedComparison compares = StatedComparison.of(binary, reached.said().positive());
             // Only a side that is a call of an operation answering an order can be the sign of one.
             // Asking the others what they come to reads them through, and a value named twice in a
@@ -142,9 +142,7 @@ public final class InvariantStatements {
         // What the part states with the denials above it taken off, which is the operation itself
         // where one was kept standing. Stated only: what holds where an operation does not is not
         // that operation, and there is nothing here to name it by.
-        if (reached.said().positive()
-                && Core.withoutStanding(Clauses.substituted(reached.said().of(), given))
-                        instanceof Core.PreservedCall call) {
+        if (reached.said().positive() && said instanceof Core.PreservedCall call) {
             return new InvariantStatement.Applies(reached.statement(), call);
         }
         return new InvariantStatement.Unread(reached.statement());
