@@ -240,6 +240,26 @@ final class Conditions {
     }
 
     /**
+     * {@code stated} as the comparison of the values an order is of, where it compares the sign
+     * an operation answering that order answered and is exactly where their order holds — so
+     * {@code compare(a, b) <= 0} is {@code a <= b}. {@code stated} itself where it is no such
+     * sign, or where the order only follows from it.
+     *
+     * <p>For a reader that takes one comparison of a clause, and that needs it to be the clause
+     * and not a consequence of it.
+     */
+    static StatedComparison asTheOrderItIs(Terms terms, StatedComparison stated, Denotations at) {
+        StatedComparison read = stated;
+        for (ComparisonReadings.Reading composed =
+                     orderStatedBy(terms, new ComparisonReadings.Reading(read, true), at);
+                composed != null && composed.isTheCondition();
+                composed = orderStatedBy(terms, composed, at)) {
+            read = composed.stated();
+        }
+        return read;
+    }
+
+    /**
      * The comparison of the two values an order is of, where {@code stated} compares what an
      * operation answering that order answered — or null where it states nothing about them.
      *

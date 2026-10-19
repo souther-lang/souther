@@ -2529,7 +2529,10 @@ public final class InvariantChecker {
         // states. A reader handed the operator and told separately how the clause stands is a
         // reader that has to remember to put the two together, which is the one thing this walk
         // was not doing.
-        StatedComparison comparison = StatedComparison.of(said);
+        StatedComparison written = StatedComparison.of(said);
+        // The sign of an order is read back to the order it is of, as a body's condition is.
+        StatedComparison comparison = written == null ? null
+                : Conditions.asTheOrderItIs(terms, written, at);
         if (comparison == null) {
             // Nothing written as a comparison, so there is no reading of one for the classification
             // to be handed: what is below reads a clause for the end it places on a position and
@@ -2904,10 +2907,11 @@ public final class InvariantChecker {
         if (!(Core.withoutStanding(leaf) instanceof Core.Binary bin)) {
             return NO_LINE;
         }
-        StatedComparison read = StatedComparison.of(bin, positive);
-        if (read == null) {
+        StatedComparison written = StatedComparison.of(bin, positive);
+        if (written == null) {
             return NO_LINE;
         }
+        StatedComparison read = Conditions.asTheOrderItIs(terms, written, at);
         if (read.claim() instanceof ComparisonClaim.Singled singled
                 && !singled.holdsAtTheValue()) {
             return NO_LINE;
@@ -2917,7 +2921,7 @@ public final class InvariantChecker {
         // holds no position to a position, so the end at each of them is one a reader is still owed.
         // Asked of the canonical form, the two would be one answer and a bound against something
         // built from a position would read as a line that falls at neither.
-        if (Relates.twoPositions(bin, e -> {
+        if (Relates.twoPositions(read, e -> {
             FactSubject named = nameOf(e, at);
             return named != null && byName.containsKey(named) ? named : null;
         })) {
@@ -3067,10 +3071,12 @@ public final class InvariantChecker {
                 && nothing.holdsOfEveryRow()) {
             return new ClauseStates.NoRestriction();
         }
-        if (Relates.twoPositions(clause, e -> {
+        Function<Core, Object> positionIn = e -> {
             FactSubject named = nameOf(e, at);
             return named != null && byName.containsKey(named) ? named : null;
-        })) {
+        };
+        if (read == null ? Relates.twoPositions(clause, positionIn)
+                : Relates.twoPositions(read.comparison(), positionIn)) {
             return notShown.isEmpty() ? new ClauseStates.ARelation()
                     : new ClauseStates.SomethingElse(notShown, whereItStopped(notShown));
         }

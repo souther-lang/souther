@@ -41,5 +41,12 @@ final class Relates {
         return left != null && right != null && !left.equals(right);
     }
 
+    /** The same of a comparison already recognised, which may be one the source never spelled. */
+    static boolean twoPositions(StatedComparison stated, Function<Core, Object> positionIn) {
+        Object left = positionIn.apply(stated.left());
+        Object right = positionIn.apply(stated.right());
+        return left != null && right != null && !left.equals(right);
+    }
+
     private Relates() {}
 }
