@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.collect.AppendOnly;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -72,7 +73,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * <p>{@code tries} is how many more parts the looking may take in alone along this path, across
      * every time it looks ({@link #PARTS_A_PATH_LOOKS_THROUGH}).
      */
-    record Choices(ChoiceLine held, Known wayIn, int tries) {
+    record Choices(ChoiceLine held, Known wayIn, int tries, DeclinedLine declined,
+                   ReadOver readOver) {
 
         /**
          * How many parts of the choices a path holds are taken in alone along one path, looking
@@ -92,12 +94,76 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
          */
         static final int PARTS_A_PATH_LOOKS_THROUGH = 64;
 
-        static final Choices NONE = new Choices(null, null, PARTS_A_PATH_LOOKS_THROUGH);
+        /**
+         * How many parts reading the choices a path leaves undecided may take alone along one
+         * path, across every time they are read.
+         *
+         * <p>Counted for the path and not per reading, for the reason {@link
+         * #PARTS_A_PATH_LOOKS_THROUGH} is: a fact taken in at each of many guards reads every
+         * choice kept so far, and a count kept per reading would have the path pay the whole of it
+         * at each. Where it runs out the choices left stay undecided as they were when kept, and
+         * what the path rules out then turns on the order the conditions were written in; nothing
+         * is ruled out that is not.
+         */
+        static final int PARTS_A_PATH_SETTLES = 4096;
+
+        static final Choices NONE =new Choices(null, null, PARTS_A_PATH_LOOKS_THROUGH, null, null);
 
         int count() {
             return held == null ? 0 : held.count();
         }
     }
+
+    /**
+     * A choice read by its meaning that more than one of its parts was left to when it was taken in,
+     * and the bindings and places it was read under ({@link MeaningAssumptions}).
+     *
+     * <p>Not one of the parts holding: which part holds is no fact of the path. What the path comes
+     * to know afterwards may rule parts out, and the choice is then taken in as the part left, or
+     * as nothing reached where none is. The bindings are the ones where the choice stands, as for
+     * {@link OneOf}.
+     *
+     * <p>Every one a path passes is kept, so what it rules out does not turn on how many choices
+     * stand between a choice and the condition that singles out its part. What bounds the work is
+     * the count of parts a reading takes alone ({@link MeaningAssumptions}), which says so where
+     * it is reached.
+     *
+     * <p>Equal only to itself, for the reason {@link OneOf} is.
+     */
+    record Declined(Proposition.Any any, Denotations at, MeaningAssumptions.InputPlaces places) {
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
+        }
+    }
+
+    /**
+     * The facts the choices left undecided were last read over, by which states they are and not by
+     * what they hold: a state taken in since is another object, so asking whether anything has been
+     * taken in since costs three comparisons however much is known.
+     */
+    record ReadOver(ConstraintState<FactSubject> constraints, Map<FactSubject, CasesLeft> cases,
+                    List<Quantified> quantified, int partsLeft) {
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
+        }
+    }
+
+    /** One choice left undecided, on top of the ones left before it. */
+    record DeclinedLine(Declined last, DeclinedLine before) {}
 
     /** One condition held, on top of the ones held before it, and how many that is in all. */
     record ChoiceLine(OneOf last, ChoiceLine before, int count) {}
@@ -361,7 +427,71 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     Known holdingOneOf(OneOf condition) {
         return new Known(constraints, quantified, spoken, unguarded, cases,
                 new Choices(new ChoiceLine(condition, oneOf.held(), oneOf.count() + 1),
-                        oneOf.wayIn(), oneOf.tries()));
+                        oneOf.wayIn(), oneOf.tries(), oneOf.declined(), oneOf.readOver()));
+    }
+
+    /** The choices read by their meaning that no part has yet been settled for, oldest first. */
+    List<Declined> declinedChoices() {
+        List<Declined> out = new ArrayList<>();
+        for (DeclinedLine at = oneOf.declined(); at != null; at = at.before()) {
+            out.add(at.last());
+        }
+        return out.reversed();
+    }
+
+    /**
+     * This, with {@code choice} left undecided after the ones left before it. It was read over
+     * what this knows, so the choices are as settled as they were.
+     */
+    Known leavingUndecided(Declined choice) {
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                new Choices(oneOf.held(), oneOf.wayIn(), oneOf.tries(),
+                        new DeclinedLine(choice, oneOf.declined()),
+                        awaitsSettling() ? oneOf.readOver()
+                                : readOverWhatIsKnown(settlingLeft())));
+    }
+
+    /** This, without {@code choice}, which a part of it has been taken in for. */
+    Known withoutDeclined(Declined choice) {
+        List<Declined> kept = declinedChoices();
+        kept.remove(choice);
+        DeclinedLine line = null;
+        for (Declined each : kept) {
+            line = new DeclinedLine(each, line);
+        }
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                new Choices(oneOf.held(), oneOf.wayIn(), oneOf.tries(), line, oneOf.readOver()));
+    }
+
+    /**
+     * Whether a choice left undecided here has not been read over what this knows now: some has
+     * been left, and a fact has been taken in since they were last read.
+     */
+    boolean awaitsSettling() {
+        ReadOver read = oneOf.readOver();
+        return oneOf.declined() != null && (read == null || read.constraints() != constraints
+                || read.cases() != cases || read.quantified() != quantified);
+    }
+
+    /**
+     * How many more parts reading the choices left undecided may take alone along this path,
+     * across every time they are read ({@link Choices#PARTS_A_PATH_SETTLES}).
+     */
+    int settlingLeft() {
+        return oneOf.readOver() == null ? Choices.PARTS_A_PATH_SETTLES
+                : oneOf.readOver().partsLeft();
+    }
+
+    /** This, with the choices left undecided read over what it knows, {@code partsLeft} parts
+     *  being left to read them with after this. */
+    Known settledOverWhatIsKnown(int partsLeft) {
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                new Choices(oneOf.held(), oneOf.wayIn(), oneOf.tries(), oneOf.declined(),
+                        readOverWhatIsKnown(partsLeft)));
+    }
+
+    private ReadOver readOverWhatIsKnown(int partsLeft) {
+        return new ReadOver(constraints, cases, quantified, partsLeft);
     }
 
     /** The conditions held here as one of their parts, in the order they were taken in. */
@@ -406,7 +536,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      *  was given up — and {@code tries} left to look with ({@link Choices}). */
     Known throughWay(Known way, int tries) {
         return new Known(constraints, quantified, spoken, unguarded, cases,
-                new Choices(oneOf.held(), way, tries));
+                new Choices(oneOf.held(), way, tries, oneOf.declined(), oneOf.readOver()));
     }
 
     /**
