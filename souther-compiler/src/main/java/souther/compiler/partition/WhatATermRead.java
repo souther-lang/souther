@@ -233,9 +233,20 @@ sealed interface WhatATermRead {
         if (ownKept != null) {
             return ownKept;
         }
-        if (!(row.eachElementOf(kept.position()) instanceof WalkResult.Reached<
-                List<BorderQuantity.Observation>>(List<BorderQuantity.Observation> elements))) {
-            return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+        // Each container the place stands in, the outer one first, is read under each element of
+        // the one outside it: the occurrences are those of every one of them.
+        List<BorderQuantity.Observation> elements = List.of(row);
+        for (TermPath container : place.containersHoldingIt()) {
+            List<BorderQuantity.Observation> inside = new ArrayList<>();
+            for (BorderQuantity.Observation outer : elements) {
+                if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
+                        List<BorderQuantity.Observation>>(
+                                List<BorderQuantity.Observation> each))) {
+                    return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                }
+                inside.addAll(each);
+            }
+            elements = inside;
         }
         List<ObservedValue> values = new ArrayList<>();
         for (BorderQuantity.Observation element : elements) {

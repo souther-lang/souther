@@ -286,6 +286,13 @@ final class Pullback {
      */
     private Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> counting;
     /**
+     * Whether the elements of the lists a closure answered of each element of an outer list, put
+     * end to end, are quantified as the elements of the one list the reading is in. A count of
+     * the elements meeting a statement then counts those of one of the lists, which is the
+     * statement an occurrence is kept by and no number of the whole.
+     */
+    private boolean inTheListsOfAFlattening;
+    /**
      * The counts every element settles alike that the law's comparison being read needed, as they
      * are read ({@link Derivation.ALawComparison#alike}) — or null where what is read is no law's
      * comparison.
@@ -2889,7 +2896,8 @@ final class Pullback {
                     }
                 }
                 if (walk == null) {
-                    return null;
+                    return inTheListsOfAFlattening && outerEach == null
+                            ? inTheListsOf(at, pending, located) : null;
                 }
                 Denotation step = walk.answer();
                 ElementAt each = new ElementAt.AValue(step.value(), step.at());
@@ -2908,6 +2916,25 @@ final class Pullback {
                 value = at.value();
                 where = at.at();
             }
+        }
+
+        /**
+         * Where the elements of {@code container} stand, where it is the lists a closure answered
+         * of each element of an outer list put end to end: in the list the closure answered, the
+         * statement about an element is about one of its elements, whichever of the outer list's
+         * the reading is in — or null where it is not.
+         */
+        private Located inTheListsOf(Denotation container, List<Kept> pending,
+                                     List<Kept> located) {
+            TermPath inner = container.at().containerFlattenedInto(container.value(),
+                    read.rules().symbols(), read.rules().newtypes());
+            if (inner == null) {
+                return null;
+            }
+            DecisionSubject heldAt = new DecisionSubject.AnInput(inner);
+            ElementAt each = new ElementAt.AtASubject(heldAt);
+            settle(pending, each, null, located);
+            return new Located(heldAt, null, each, null, located, null);
         }
 
         /**
@@ -4866,7 +4893,8 @@ final class Pullback {
                             RunSource.overTheOccurrencesAt(place), selection);
             default -> RunSource.overEveryOccurrenceAt(place)
                     instanceof RunSource.FlattenedOccurrences flat
-                    ? NumericTerm.OccurrencesOfItsValue.of(flat) : null;
+                    ? (selection == null ? NumericTerm.OccurrencesOfItsValue.of(flat)
+                            : NumericTerm.OccurrencesOfItsValue.of(flat, selection)) : null;
         };
     }
 
@@ -4893,7 +4921,14 @@ final class Pullback {
     /** What {@code call}, which keeps some of the elements of a list, keeps them by, as the
      *  statement about an element its size counts — or null where that was not read. */
     private OccurrenceSelection keptByTheStatementOf(Core call, InputReads at) {
-        if (!(sizeOf(call, at) instanceof Sized.AsAForm(LinearForm<Quantity> size))
+        Sized sized;
+        inTheListsOfAFlattening = true;
+        try {
+            sized = sizeOf(call, at);
+        } finally {
+            inTheListsOfAFlattening = false;
+        }
+        if (!(sized instanceof Sized.AsAForm(LinearForm<Quantity> size))
                 || !(soleQuantity(size) instanceof Quantity.HowManyMeet meeting)) {
             return null;
         }

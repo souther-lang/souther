@@ -2227,9 +2227,7 @@ public final class InputReads {
             Denotation standing = standing(asked, symbols, newtypes);
             if (standing.at().everyElementOf(standing.value(), newtypes)
                     instanceof PathResolution.At(TermPath elements)) {
-                return pending >= 0
-                        || !keptBy.isEmpty() && (madeNewBeneath
-                                || elements.containersHoldingIt().size() != 1) ? null
+                return pending >= 0 || !keptBy.isEmpty() && madeNewBeneath ? null
                         : new Occurrences(projected.from(elements), keptBy);
             }
             if (Core.withoutStanding(standing.value()) instanceof Core.Read name
@@ -2263,11 +2261,12 @@ public final class InputReads {
                 madeNewBeneath |= !keptBy.isEmpty() && !step.answered().at().fields().isEmpty();
                 continue;
             }
-            if (!keptBy.isEmpty()) {
-                return null;
-            }
-            TermPath flattened = flattenedKeysAt(standing, projected, pending, symbols, newtypes);
-            return flattened == null ? null : new Occurrences(flattened, List.of());
+            // What a statement kept some by is about the elements of the lists the flattening put
+            // end to end, so each is one of theirs and no value made of one.
+            boolean kept = !keptBy.isEmpty();
+            TermPath flattened = kept && madeNewBeneath ? null
+                    : flattenedKeysAt(standing, projected, pending, kept, symbols, newtypes);
+            return flattened == null ? null : new Occurrences(flattened, keptBy);
         }
     }
 
@@ -2284,6 +2283,22 @@ public final class InputReads {
             Objects.requireNonNull(keys, "an answer about where the keys stand says where");
             keptBy = List.copyOf(keptBy);
         }
+    }
+
+    /**
+     * The container inside the elements of an outer one whose lists {@code list} puts end to end
+     * with nothing made of an element — its elements are those of the lists — or null where the
+     * list is no such flattening.
+     */
+    public TermPath containerFlattenedInto(Core list, Symbols symbols,
+                                           DeclarationNewtypes newtypes) {
+        TermPath elements = flattenedKeysAt(standing(list, symbols, newtypes),
+                new ElementProjection(List.of()), -1, true, symbols, newtypes);
+        if (elements == null) {
+            return null;
+        }
+        List<TermPath> holding = elements.containersHoldingIt();
+        return holding.isEmpty() ? null : holding.getLast();
     }
 
     /**
@@ -2408,10 +2423,14 @@ public final class InputReads {
     /**
      * Where the keys of a list a flattening put end to end stand: inside the container whose
      * elements the closure was handed, at the place the closure's answer is read down to.
+     *
+     * @param ofTheListsThemselves whether the elements must be those of the lists the closure
+     *                             answers, the answer being read down no steps that make a value
+     *                             of one
      */
     private TermPath flattenedKeysAt(Denotation standing, ElementProjection projected,
-                                     int component, Symbols symbols,
-                                     DeclarationNewtypes newtypes) {
+                                     int component, boolean ofTheListsThemselves,
+                                     Symbols symbols, DeclarationNewtypes newtypes) {
         ValueName operation;
         List<Core> args;
         switch (Core.withoutStanding(standing.value())) {
@@ -2454,7 +2473,8 @@ public final class InputReads {
         for (int steps = 0; listAt == null && steps < MOST_STEPS_A_CLOSURE_ANSWERS_THROUGH;
                 steps++) {
             if (pending >= 0) {
-                TupleStep tuple = throughATupleMap(answer, pending, where, symbols, newtypes);
+                TupleStep tuple = ofTheListsThemselves ? null
+                        : throughATupleMap(answer, pending, where, symbols, newtypes);
                 if (tuple != null) {
                     projected = tuple.component().then(projected);
                     answer = tuple.from();
@@ -2467,7 +2487,8 @@ public final class InputReads {
             InputPath.Beneath step = InputPath.oneStepBeneath(answer,
                     ElementQuestion.ONE_PER_ELEMENT, where.names(), newtypes,
                     each -> blockOf(where, each, symbols, newtypes));
-            if (step == null) {
+            if (step == null
+                    || ofTheListsThemselves && !step.answered().at().fields().isEmpty()) {
                 return null;
             }
             projected = step.answered().at().then(projected);
