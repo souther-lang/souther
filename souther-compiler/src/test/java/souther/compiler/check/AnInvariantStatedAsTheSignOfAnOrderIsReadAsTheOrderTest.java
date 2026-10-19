@@ -10,6 +10,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An invariant stated as {@code compare(a, b) op 0} is read as the one stated as {@code a op b}.
@@ -30,7 +31,11 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
             new Same("Decimal", "Decimal.compare(value, 5.0m) <= 0 || value >= 10.0m",
                     "value <= 5.0m || value >= 10.0m", "l.value > 3.0m"),
             new Same("{ a: Decimal, b: Decimal }", "0 < Decimal.compare(a, b)", "a > b",
-                    "l.a > 3.0m"));
+                    "l.a > 3.0m"),
+            new Same("Decimal", "Decimal.compare(value, 5.0m) == 0", "value == 5.0m",
+                    "l.value > 3.0m"),
+            new Same("Decimal", "!(Decimal.compare(value, 5.0m) <= 0)", "!(value <= 5.0m)",
+                    "l.value > 3.0m"));
 
     private static String report(String fields, String rule, String use) {
         Compilation compilation = Compilation.ofSource("""
@@ -46,6 +51,29 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /**
+     * A sign whose arguments name a binding made inside it is not read as the order: readers
+     * downstream read the sides of a comparison with no environment, and the order would be read by
+     * some of them and not by the others. It keeps the reason it had.
+     */
+    @Test
+    void anOrderOverANameMadeInsideTheSignIsLeftAsWritten() {
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                data Pair = { a: Int, b: Int }
+                    invariant ({ let x = a + 1  Int.compare(x, b) }) <= 0
+
+                behavior pick : (l: Pair) -> Int
+                let pick (l) = if l.a > 3 then 1 else 0
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("not read: invariant Pair #1"), report);
     }
 
     @Test

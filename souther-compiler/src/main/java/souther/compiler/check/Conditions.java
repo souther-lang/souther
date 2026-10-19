@@ -168,11 +168,12 @@ final class Conditions {
         public List<NumericConstraint> whole(ClauseExpr.Part part, Denotations at) {
             boolean positive = part.positive();
             List<NumericConstraint> out = new ArrayList<>();
-            for (StatedComparison stated
+            for (ComparisonReadings.Reading read
                     : comparisonsStatedBy(terms, asSizeComparison(part.of()), at)
                             .holdingWhere(positive)) {
-                LinearForm<FactSubject> left = terms.affineOf(stated.left(), at);
-                LinearForm<FactSubject> right = terms.affineOf(stated.right(), at);
+                StatedComparison stated = read.stated();
+                LinearForm<FactSubject> left = terms.affineOf(stated.left(), read.at());
+                LinearForm<FactSubject> right = terms.affineOf(stated.right(), read.at());
                 LinearForm<FactSubject> between = Terms.add(left, right, true);
                 if (between != null) {
                     out.add(new NumericConstraint(between, stated.relationUnder(positive)));
@@ -229,10 +230,10 @@ final class Conditions {
             return ComparisonReadings.none();
         }
         List<ComparisonReadings.Reading> readings = new ArrayList<>();
-        readings.add(new ComparisonReadings.Reading(placed.stated(), true));
-        for (ComparisonReadings.Reading composed = orderStatedBy(terms, readings.getLast(), at);
+        readings.add(new ComparisonReadings.Reading(placed.stated(), at, true));
+        for (ComparisonReadings.Reading composed = orderStatedBy(terms, readings.getLast());
                 composed != null;
-                composed = orderStatedBy(terms, readings.getLast(), at)) {
+                composed = orderStatedBy(terms, readings.getLast())) {
             readings.add(composed);
         }
         Collections.reverse(readings);
@@ -264,17 +265,22 @@ final class Conditions {
      * {@code stated} as the comparison of the values an order is of, where it compares the sign
      * an operation answering that order answered and is exactly where their order holds.
      * {@code stated} itself where it is no such sign, or where the order only follows from it.
+     *
+     * <p>And only where the values are read in the environment {@code stated} is: this comparison
+     * is handed on to readers that read its sides with no environment of their own, so one whose
+     * sides name a binding made inside the sign would be read by some of them and not by others.
+     * Such a comparison stays as it was written, and keeps the reason it had.
      */
     private static StatedComparison asTheOrderItIs(Terms terms, StatedComparison stated,
                                                    Denotations at) {
-        StatedComparison read = stated;
-        for (ComparisonReadings.Reading composed =
-                     orderStatedBy(terms, new ComparisonReadings.Reading(read, true), at);
-                composed != null && composed.isTheCondition();
-                composed = orderStatedBy(terms, composed, at)) {
-            read = composed.stated();
+        ComparisonReadings.Reading read = new ComparisonReadings.Reading(stated, at, true);
+        for (ComparisonReadings.Reading composed = orderStatedBy(terms, read);
+                composed != null && composed.isTheCondition()
+                        && composed.at().bound().keySet().equals(at.bound().keySet());
+                composed = orderStatedBy(terms, composed)) {
+            read = composed;
         }
-        return read;
+        return read.stated();
     }
 
     /**
@@ -299,9 +305,8 @@ final class Conditions {
      * off a reading that only follows from the condition only follows from it too.
      */
     private static ComparisonReadings.Reading orderStatedBy(Terms terms,
-                                                            ComparisonReadings.Reading from,
-                                                            Denotations at) {
-        if (!(TheSignOfAnOrder.read(from.stated(), at, sides(terms))
+                                                            ComparisonReadings.Reading from) {
+        if (!(TheSignOfAnOrder.read(from.stated(), from.at(), sides(terms))
                 instanceof TheSignOfAnOrder.Read.OfTheArguments<Denotations> ordered)) {
             return null;
         }
@@ -310,7 +315,7 @@ final class Conditions {
                 || terms.bodyKey(arguments.right(), ordered.at()) == null) {
             return null;
         }
-        return new ComparisonReadings.Reading(arguments,
+        return new ComparisonReadings.Reading(arguments, ordered.at(),
                 from.isTheCondition() && ordered.isTheCondition());
     }
 
