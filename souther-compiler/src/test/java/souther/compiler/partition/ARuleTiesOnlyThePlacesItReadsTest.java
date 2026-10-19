@@ -152,6 +152,40 @@ class ARuleTiesOnlyThePlacesItReadsTest {
                 "\n    invariant a >= b", ""), "x.a > x.b")));
     }
 
+    private static String between(String sOfR, String cases) {
+        return pair("""
+                data Common = { n: Int }
+                %s
+                data R = { s: %s, low: Int, high: Int }
+                    invariant low <= s.n
+                    invariant s.n <= high
+                """.formatted(cases, sOfR), "x.low < x.high");
+    }
+
+    private static final Map<String, String> BOTH_NOT_READ =
+            Map.of("x.low", NOT_READ, "x.high", NOT_READ);
+
+    /** Two rules of the record meet at a field the cases of a sum share, which they write once
+     *  and which stands under each case. */
+    @Test
+    void twoRulesMeetingAtAFieldTheCasesShareTieTheOtherTwo() {
+        assertEquals(BOTH_NOT_READ, left(between("Common", "")));
+        assertEquals(BOTH_NOT_READ, left(between("S", """
+                data A = { ...Common, a: Int }
+                data B = { ...Common, b: Int }
+                data S = A | B""")));
+    }
+
+    @Test
+    void twoRulesMeetingAtAFieldSharedAcrossTwoSumsTieTheOtherTwo() {
+        assertEquals(BOTH_NOT_READ, left(between("Top", """
+                data A = { ...Common, a: Int }
+                data B = { ...Common, b: Int }
+                data C = { ...Common, c: Int }
+                data Mid = A | B
+                data Top = Mid | C""")));
+    }
+
     private static final String WRAPPED = """
             data Contact = { id: Int, owner: Int }
             data Wrapped = Contact

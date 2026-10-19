@@ -6,8 +6,10 @@ import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.PublishedRules;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Shape;
 import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
@@ -1543,12 +1545,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private record RulesRead(Map<TypeSymbol.AtModule, PublishedRules> byName,
                              Map<TermPath, Reached> byPlace,
-                             Map<String, TiedOnTheWay> declared) {
+                             Map<String, TiedOnTheWay> declared,
+                             Map<Written, List<TermPath>> placed) {
 
         static RulesRead of(InputReading read) {
             return read.derived(RulesRead.class, _ -> new RulesRead(
                     new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
-                    new ConcurrentHashMap<>()));
+                    new ConcurrentHashMap<>(), new ConcurrentHashMap<>()));
         }
     }
 
@@ -1725,7 +1728,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             List<TermPath.Step> rest = steps.subList(length, steps.size());
             for (TypeSymbol each : worn) {
-                out = out.and(namedBy(each, here, rest, read, nodes));
+                out = out.and(namedBy(each, here, path, rest, read, nodes));
                 if (out == Named.UNSEEN && nodes == null) {
                     return out;
                 }
@@ -1738,8 +1741,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * What a rule of {@code worn} says of what stands at {@code rest} below {@code here}: unseen
      * where one was not reached or has no form to say what it reads.
      */
-    private static Named namedBy(TypeSymbol worn, TermPath here, List<TermPath.Step> rest,
-                                 InputReading read, Nodes nodes) {
+    private static Named namedBy(TypeSymbol worn, TermPath here, TermPath place,
+                                 List<TermPath.Step> rest, InputReading read, Nodes nodes) {
         if (!(worn instanceof TypeSymbol.AtModule name)) {
             return Named.NOT;
         }
@@ -1768,7 +1771,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (says != Named.NOT && nodes != null) {
                     TiedOnTheWay.Rule rule = new TiedOnTheWay.Rule(here, worn, clause);
                     nodes.ties().add(rule);
-                    if (readsThePlace(reading, rest)) {
+                    if (readsThePlace(reading, here, place, read)) {
                         nodes.reads().add(rule);
                     }
                 }
@@ -1781,46 +1784,47 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether {@code reading} reads the place at {@code rest} below its value, or a value that
-     * place is a part of whole; and not only parts of it, nor the places beside it.
+     * Whether {@code reading}, written in the rules of the value at {@code here}, reads
+     * {@code place} or a value it is a part of whole; and not only parts of it, nor the places
+     * beside it.
      *
-     * <p>The same comparison {@link #namedBy(ClauseRead, TermPath, List, InputReading)} makes, for
-     * the question of whether two rules meet at a place and not of what the rules leave it.
+     * <p>Asked of the positions the name stands at ({@link InputDomain#positionsNamed}), which is
+     * where a name a sum's cases share stands under each of them. Where none is found the reading
+     * is placed nowhere, and a rule that cannot be placed may read anything under {@code here}.
      */
-    private static boolean readsThePlace(ClauseRead reading, List<TermPath.Step> rest) {
-        int fields = 0;
-        while (fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Field) {
-            fields++;
+    private static boolean readsThePlace(ClauseRead reading, TermPath here, TermPath place,
+                                         InputReading read) {
+        List<TermPath> reached = RulesRead.of(read).placed().computeIfAbsent(
+                new Written(here, reading.at()),
+                each -> read.domain().positionsNamed(each.root(), each.key()));
+        if (reached.isEmpty()) {
+            return true;
         }
-        List<String> at = reading.at().steps();
-        for (int i = 0; i < at.size() && i < fields; i++) {
-            if (!at.get(i).equals(((TermPath.Step.Field) rest.get(i)).name())) {
-                return false;
+        for (TermPath each : reached) {
+            boolean reads = switch (reading.kind()) {
+                case ITS_VALUES -> place.isAtOrUnder(each);
+                case HOW_MANY_IT_HOLDS -> place.equals(each);
+                case EACH_ELEMENTS_RUN -> place.isAtOrUnder(runOfEachElement(each, reading.run()));
+            };
+            if (reads) {
+                return true;
             }
         }
-        return switch (reading.kind()) {
-            case ITS_VALUES -> at.size() <= fields;
-            case HOW_MANY_IT_HOLDS -> at.size() == fields && fields == rest.size();
-            case EACH_ELEMENTS_RUN -> at.size() == fields && fields < rest.size()
-                    && rest.get(fields) instanceof TermPath.Step.Element
-                    && startsWith(rest.subList(fields + 1, rest.size()), reading.run());
-        };
+        return false;
     }
 
-    /** Whether {@code below} goes down the fields of {@code run}, and on past them if it is
-     *  longer. */
-    private static boolean startsWith(List<TermPath.Step> below, List<String> run) {
-        if (below.size() < run.size()) {
-            return false;
+    /** The place the fields of {@code run} lead to in each element of the container at
+     *  {@code container}. */
+    private static TermPath runOfEachElement(TermPath container, List<String> run) {
+        TermPath out = container.element();
+        for (String field : run) {
+            out = out.then(field);
         }
-        for (int i = 0; i < run.size(); i++) {
-            if (!(below.get(i) instanceof TermPath.Step.Field field)
-                    || !field.name().equals(run.get(i))) {
-                return false;
-            }
-        }
-        return true;
+        return out;
     }
+
+    /** A name written in the rules of the value at {@code root}. */
+    private record Written(TermPath root, RuleKey key) {}
 
     /**
      * What a clause reading {@code reading} says of what stands at {@code rest} below
