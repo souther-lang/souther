@@ -161,6 +161,28 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
     }
 
     @Test
+    void theEntryUnderAKeyIsTheLastOfItsKeyWhereTheResponseMayHoldAKeyTwice() {
+        String report = reportOf(LOOKED_UP.replace("module example.looked", "module example.twice")
+                .replace("\n    invariant List.allDistinctBy(.sku, rows)", ""));
+
+        assertFalse(report.contains("not read"), report);
+        assertTrue(report.contains("allocate — read what this measure went without"), report);
+    }
+
+    @Test
+    void twoAnswersOfOneWrittenCallAreNotTakenForOneContainer() {
+        String report = reportOf(LOOKED_UP.replace("module example.looked", "module example.apart")
+                .replace("    commitStock(order)\n}", "    commitStock(order)\n}\n"
+                        + "\nlet stockOf (order: Cart) = onHand(readStock(order))\n"
+                        + "\nbehavior lessThan : (one: Cart, other: Cart, k: Sku) -> Bool\n"
+                        + "    depends on readStock\n"
+                        + "\nlet lessThan (one, other, k, readStock) =\n"
+                        + "    currentStock(stockOf(one), k) < currentStock(stockOf(other), k)\n"));
+
+        assertFalse(report.contains("not read: comparison@"), report);
+    }
+
+    @Test
     void twoEntriesLookedUpInOneMapAreNeverTakenForOneValue() {
         String report = reportOf(TWO_KEYS);
 

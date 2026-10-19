@@ -1179,9 +1179,17 @@ public sealed interface Proposition {
         return aboutAnAnswer(stated) && namesNothingOfTheInput(stated);
     }
 
+    /**
+     * Whether {@code stated} is proved to name nothing of the input.
+     *
+     * <p>Proved, and so false for what is not known: a part nothing read, or one carried from
+     * elsewhere, may name a position of the input for all that was said of it, and a search is
+     * from a position of the input whatever it asks along the way.
+     */
     private static boolean namesNothingOfTheInput(Proposition stated) {
         return switch (stated) {
-            case Always _, Unread _, Carried _ -> true;
+            case Always _ -> true;
+            case Unread _, Carried _, SomeReachable _ -> false;
             case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer
                     && last.position() instanceof DecisionSubject.AnAnswer;
             case Compared(Relation relation, boolean _, String _) -> switch (relation) {
@@ -1196,8 +1204,7 @@ public sealed interface Proposition {
                     && same.other() instanceof DecisionSubject.AnAnswer;
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
                     && some.partsHeld().stream().allMatch(Proposition::namesNothingOfTheInput);
-            case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
-                 WhereItAnswers _ ->
+            case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
                     stated.partsHeld().stream().allMatch(Proposition::namesNothingOfTheInput);
         };
     }
