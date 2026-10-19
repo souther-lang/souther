@@ -349,14 +349,15 @@ final class WhatABodyTellsApart {
      */
     private Placed.About whereItsStatementHolds(souther.compiler.reading.Condition.Arm arm,
                                                 int at) {
-        Optional<Proposition> stated = ModelOccurrence.statedAt(arm.arm().fork())
+        Optional<ForkDependencies.Statement> stated = ModelOccurrence.statedAt(arm.arm().fork())
                 .flatMap(dependencies::statedBy);
         if (stated.isEmpty() || arm.arm().part() > 1) {
             return null;
         }
+        Proposition statement = stated.get().stated();
         StatementsOnClasses.Evaluated where =
-                new StatementsOnClasses(axes, at, List.of(stated.get()), null)
-                        .evaluate(stated.get());
+                new StatementsOnClasses(axes, at, List.of(statement), null)
+                        .evaluate(statement, stated.get().within());
         if (where == null) {
             return null;
         }
@@ -558,7 +559,7 @@ final class WhatABodyTellsApart {
         }
         StatementsOnClasses.Evaluated admitted =
                 new StatementsOnClasses(axes, at, statements, states)
-                        .admittedBy(statements, side.held());
+                        .admittedBy(statements, side.held(), Set.of(states));
         if (admitted == null) {
             return new Placed.About(at, null);
         }

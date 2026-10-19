@@ -36,9 +36,11 @@ import souther.compiler.semantics.OperationLaw;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -648,7 +650,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 if (iff.occurrence() != null) {
                     ModelOccurrence.statedAt(in.context().of(iff.occurrence())).ifPresent(fork ->
                             in.dependencies().forkReads(fork, DemandReading.statedBy(condition,
-                                    in.read(), in.conditions())));
+                                    in.read(), in.conditions()),
+                                    comparisonsWritten(iff.cond(), in)));
                 }
                 appliedCondition(iff, applying, in);
                 Choice.Decides then = Choice.Decides.ofCondition(iff, true);
@@ -1218,6 +1221,25 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
     }
 
+
+    /**
+     * The constructs of the model written in {@code condition}, the closures it holds included.
+     *
+     * <p>Which comparisons a statement made of the condition can be a reading of: the source says
+     * it, and a relation that happens to be spelled the same elsewhere is another rule.
+     */
+    private static Set<ModelOccurrence> comparisonsWritten(Core condition, Body in) {
+        Set<ModelOccurrence> out = new LinkedHashSet<>();
+        collectWritten(condition, in, out);
+        return out;
+    }
+
+    private static void collectWritten(Core e, Body in, Set<ModelOccurrence> out) {
+        if (Core.withoutStanding(e) instanceof Core.Binary binary && binary.occurrence() != null) {
+            ModelOccurrence.statedAt(in.context().of(binary.occurrence())).ifPresent(out::add);
+        }
+        Core.forEachChild(e, child -> collectWritten(child, in, out));
+    }
 
     /**
      * What the condition of {@code iff} states on every application of the closure around it,

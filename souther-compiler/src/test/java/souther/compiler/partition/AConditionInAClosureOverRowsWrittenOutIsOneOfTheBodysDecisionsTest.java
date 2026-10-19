@@ -77,6 +77,15 @@ class AConditionInAClosureOverRowsWrittenOutIsOneOfTheBodysDecisionsTest {
             let byFold (paid) =
                 List.fold((acc, r) -> if r.bound <= paid.amount then acc + 1 else acc, 0, table)
 
+            data Flags = { each: List<Bool> }
+
+            behavior besideAnotherCopyOfTheComparison : (paid: Paid) -> Flags | No
+                constructs Flags
+            let besideAnotherCopyOfTheComparison (paid) = {
+                guard List.any(r -> r.bound <= paid.amount, table) else No
+                Flags { each = List.map(r -> r.bound <= paid.amount, table) }
+            }
+
             behavior byAFlagToo : (pay: Int, flag: Bool) -> Ok | No
             let byAFlagToo (pay, flag) = {
                 guard List.any(r -> r.bound <= pay && flag, table) else No
@@ -140,6 +149,20 @@ class AConditionInAClosureOverRowsWrittenOutIsOneOfTheBodysDecisionsTest {
     void aRowEveryValueMeetsIsNotLeftOutOfWhatACountOfTheRowsMeetingTellsApartBy() {
         assertInstanceOf(BodyDistinction.Unread.class,
                 toldApart("countBesideARowEveryValueMeets").get("paid.amount"));
+    }
+
+    /**
+     * What a fork's statement accounts for is the comparisons written in its condition. Another
+     * comparison drawing the same lines for the same relation is another rule, and what the
+     * statement says is no reading of it.
+     */
+    @Test
+    void aCopyOfTheComparisonElsewhereIsNotReadByTheStatementOfAnother() {
+        assertEquals(new BodyDistinction.Unread(List.of(
+                                List.of("paid.amount/0 <= x < 100"),
+                                List.of("paid.amount/100 <= x < 200", "paid.amount/200 <= x")),
+                        true),
+                toldApart("besideAnotherCopyOfTheComparison").get("paid.amount"));
     }
 
     /** The step of a fold that keeps one side is a fork on the comparison, decided on each row. */

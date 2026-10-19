@@ -70,12 +70,28 @@ final class StatementsOnClasses {
             if (mine == null || theirs == null) {
                 return false;
             }
-            int order = mine.compareTo(theirs);
-            if (order == 0) {
-                return !other.strict || strict;
-            }
-            return up ? order > 0 : order < 0;
+            return follows(up, strict, other.strict, mine.compareTo(theirs));
         }
+    }
+
+    /**
+     * Whether a relation to a place implies another relation facing the same way.
+     *
+     * <p>Further out implies nearer: {@code x >= 200} implies {@code x >= 100}, and
+     * {@code x <= 100} implies {@code x <= 200}. At the same place the stricter one implies the
+     * other and not the reverse: {@code x > 5} implies {@code x >= 5}.
+     *
+     * @param up          whether the relations bound the quantity from below
+     * @param strict      whether the implying relation excludes its place
+     * @param otherStrict whether the implied relation excludes its place
+     * @param order       how the place of the implying relation stands to the other's: negative
+     *                    below it, nought at it, positive above it
+     */
+    static boolean follows(boolean up, boolean strict, boolean otherStrict, int order) {
+        if (order == 0) {
+            return !otherStrict || strict;
+        }
+        return up ? order > 0 : order < 0;
     }
 
     private final List<Axis> axes;
@@ -118,7 +134,7 @@ final class StatementsOnClasses {
         });
         rays.forEach((key, ray) -> {
             if (!drawn.contains(key)) {
-                known.put(key, impliedFor(key, ray, rays));
+                known.put(key, impliedFor(ray, rays));
             }
         });
     }
@@ -184,7 +200,7 @@ final class StatementsOnClasses {
     }
 
     /** What the relations that were drawn say of the one that was not, by what implies what. */
-    private Settled impliedFor(String key, Ray ray, Map<String, Ray> rays) {
+    private Settled impliedFor(Ray ray, Map<String, Ray> rays) {
         boolean[] yes = new boolean[classes];
         boolean[] no = new boolean[classes];
         for (String other : drawn) {
@@ -255,8 +271,12 @@ final class StatementsOnClasses {
         }
     }
 
-    /** Where {@code stated} holds, or null where some class is not settled. */
-    Evaluated evaluate(Proposition stated) {
+    /**
+     * Where {@code stated} holds, or null where some class is not settled.
+     *
+     * @param within the comparisons of the model {@code stated} is a statement made of
+     */
+    Evaluated evaluate(Proposition stated, Set<ModelOccurrence> within) {
         Settled settled = settled(stated);
         if (settled == null) {
             return null;
@@ -266,15 +286,18 @@ final class StatementsOnClasses {
                 return null;
             }
         }
-        return new Evaluated(settled.yes().clone(), explained());
+        return new Evaluated(settled.yes().clone(), explained(within));
     }
 
     /**
      * The classes a run can take the way an application of a closure comes out {@code held} in,
      * or null where some class is not settled: a class admits it where some application holds
      * (fails) throughout it, and not where every application fails (holds) throughout it.
+     *
+     * @param within the comparisons of the model the applications are those of
      */
-    Evaluated admittedBy(Collection<Proposition> applications, boolean held) {
+    Evaluated admittedBy(Collection<Proposition> applications, boolean held,
+                         Set<ModelOccurrence> within) {
         List<Settled> each = new ArrayList<>();
         for (Proposition application : applications) {
             Settled settled = settled(application);
@@ -296,15 +319,21 @@ final class StatementsOnClasses {
             }
             admitted[c] = some;
         }
-        return new Evaluated(admitted, explained());
+        return new Evaluated(admitted, explained(within));
     }
 
-    /** The comparisons of the model all of whose lines on this axis are relations drawn here. */
-    private Set<ModelOccurrence> explained() {
+    /**
+     * The comparisons of {@code within} all of whose lines on this axis are relations drawn here.
+     *
+     * <p>Of those and no others. A comparison elsewhere that draws a line at the same place, for
+     * a relation spelled the same, is another rule, and nothing read here is a reading of it.
+     */
+    private Set<ModelOccurrence> explained(Set<ModelOccurrence> within) {
         Map<ModelOccurrence, Boolean> every = new LinkedHashMap<>();
         for (Cut cut : axes.get(axis).cuts()) {
             for (LineOrigin origin : cut.origins()) {
-                if (origin instanceof LineOrigin.ComparisonOrigin guard) {
+                if (origin instanceof LineOrigin.ComparisonOrigin guard
+                        && within.contains(guard.read().states())) {
                     boolean accounted = guard.part().isPresent()
                             ? drawn.contains(guard.part().get().part().relation())
                             : guard.read().states().equals(soleLineOf);

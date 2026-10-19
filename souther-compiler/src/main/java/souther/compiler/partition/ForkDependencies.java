@@ -38,15 +38,16 @@ import java.util.Set;
  *
  * @param byFork   what the condition of each fork the model wrote reads
  * @param byAnswer what the answer of each closure body, by the construct it answers with, reads
- * @param statedByFork the statement the condition of a fork the model wrote makes, where every
- *                 reading of it came to one statement
- * @param applied  every application a run makes of the closure whose body is decided by the
+ * @param statedByFork the statement the condition of a fork the model wrote makes, and the
+ *                 comparisons the condition is written with, where every reading of it came to
+ *                 one statement
+ * @param applied every application a run makes of the closure whose body is decided by the
  *                 construct, in the order they were read: what each states and what it takes to
  *                 make it. Absent for a closure whose applications are not all said
  */
 public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
                                Map<ModelOccurrence, Dependency> byAnswer,
-                               Map<ModelOccurrence, Proposition> statedByFork,
+                               Map<ModelOccurrence, Statement> statedByFork,
                                Map<ModelOccurrence, List<Application>> applied) {
 
     public static final ForkDependencies NONE =
@@ -75,8 +76,23 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
         return Optional.ofNullable(applied.get(answers));
     }
 
+    /**
+     * What a fork's condition states.
+     *
+     * @param stated the statement
+     * @param within the comparisons of the model the condition is written with, closures it holds
+     *               included: the only ones the statement can be a reading of, whatever else
+     *               states the same relation
+     */
+    public record Statement(Proposition stated, Set<ModelOccurrence> within) {
+
+        public Statement {
+            within = Set.copyOf(within);
+        }
+    }
+
     /** What the condition of {@code fork} states, or empty where it was read to no one statement. */
-    public Optional<Proposition> statedBy(ModelOccurrence fork) {
+    public Optional<Statement> statedBy(ModelOccurrence fork) {
         return Optional.ofNullable(statedByFork.get(fork));
     }
 
@@ -115,8 +131,9 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
         private final Set<ModelOccurrence> applicationsNotSaid = new LinkedHashSet<>();
 
         /** That the condition of {@code fork} states {@code stated}, wherever else it was read. */
-        void forkReads(ModelOccurrence fork, Proposition stated) {
+        void forkReads(ModelOccurrence fork, Proposition stated, Set<ModelOccurrence> within) {
             forks.reads(fork, stated);
+            forks.within.computeIfAbsent(fork, _ -> new LinkedHashSet<>()).addAll(within);
         }
 
         /** That the answer {@code answers} gives states {@code stated} on one application. */
@@ -155,6 +172,7 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
         private final Set<ModelOccurrence> unknown = new LinkedHashSet<>();
         private final Map<ModelOccurrence, Proposition> statements = new LinkedHashMap<>();
         private final Set<ModelOccurrence> readTwoWays = new LinkedHashSet<>();
+        private final Map<ModelOccurrence, Set<ModelOccurrence>> within = new LinkedHashMap<>();
         private final boolean keepsStatements;
 
         /** @param keepsStatements whether the statements are asked for, and so held beside the
@@ -179,9 +197,14 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
         }
 
         /** What each construct states, where every reading of it came to the same statement. */
-        Map<ModelOccurrence, Proposition> statements() {
-            Map<ModelOccurrence, Proposition> out = new LinkedHashMap<>(statements);
-            out.keySet().removeAll(readTwoWays);
+        Map<ModelOccurrence, Statement> statements() {
+            Map<ModelOccurrence, Statement> out = new LinkedHashMap<>();
+            statements.forEach((decides, stated) -> {
+                if (!readTwoWays.contains(decides)) {
+                    out.put(decides, new Statement(stated,
+                            within.getOrDefault(decides, Set.of())));
+                }
+            });
             return out;
         }
 
