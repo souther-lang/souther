@@ -78,6 +78,28 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     }
 
     /**
+     * A declaration that relates the two dates ties their months and days to each other, so
+     * neither is a number apart from the other's.
+     */
+    @Test
+    void aDeclarationThatRelatesTheDatesKeepsTheirPartsTied() {
+        String report = report("""
+                module p
+
+                data Span = { birthday: Date, on: Date }
+                    invariant Date.daysBetween(birthday, on) >= 0
+
+                behavior f : (span: Span) -> Bool
+                let f (span) =
+                    Date.month(span.on) * 100 + Date.day(span.on)
+                        < Date.month(span.birthday) * 100 + Date.day(span.birthday)
+                """);
+
+        assertFalse(report.contains("rather than dividing the values here, about"
+                + " `Date.month(span.on)`"), report);
+    }
+
+    /**
      * A way that holds only at the twenty-ninth of February is a month and day that is not in
      * every year, so the years of the date are not left alone by it.
      */

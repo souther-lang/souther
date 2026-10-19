@@ -28,8 +28,8 @@ final class EveryPatternOfYears {
      *  by before its year is taken. */
     record Year(int date, ExactRatio weight, long offsetDays) {}
 
-    private static final int WIDTH = 800;
-    private static final int MARGIN = 1_000;
+    private static final long WIDTH = 800;
+    private static final long MARGIN = 1_000;
     private static final long DAYS_IN_A_YEAR = 365;
 
     private EveryPatternOfYears() {

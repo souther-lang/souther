@@ -62,10 +62,6 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many years the calendar's pattern repeats over"),
             Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.LAST_DAY_IN_EVERY_MONTH",
                     "the last day every month of every year has"),
-            Map.entry("souther.compiler.partition.EveryPatternOfYears.WIDTH",
-                    "how many years a stretch holds, which is two cycles of the calendar"),
-            Map.entry("souther.compiler.partition.EveryPatternOfYears.MARGIN",
-                    "how far inside the calendar's first and last years a stretch lies"),
             // A statement of more dates than this is not asked, and nothing is then claimed of
             // the years or the months and days it names; no search stops at it.
             Map.entry("souther.compiler.partition.UndividedByARelation"
