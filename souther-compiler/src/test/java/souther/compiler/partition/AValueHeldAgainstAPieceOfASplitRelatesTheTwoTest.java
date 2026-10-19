@@ -54,6 +54,25 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
     }
 
     @Test
+    void aValueHeldAgainstOneOfTheFirstPiecesIsRelatedToTheString() {
+        assertEquals(Set.of(relates("3:36", "email"), notShown("3:36", "d")), Set.copyOf(said("""
+                module w1
+                behavior m : (email: String, d: String) -> Bool
+                let m (email, d) = List.any(p -> p == d, List.take(1, String.split("@", email)))
+                """)));
+    }
+
+    @Test
+    void noPieceTakenIsNoRelation() {
+        assertEquals(List.of("· not read: comparison@3:36 — written in a form this compiler does not"
+                + " read, about `d`"), said("""
+                module w1
+                behavior m : (email: String, d: String) -> Bool
+                let m (email, d) = List.any(p -> p == d, List.take(0, String.split("@", email)))
+                """));
+    }
+
+    @Test
     void theStringHeldAgainstItsOwnPiecesIsNotRead() {
         assertEquals(List.of("· not read: comparison@3:36 — written in a form this compiler does not"
                 + " read, about `email`"), said("""

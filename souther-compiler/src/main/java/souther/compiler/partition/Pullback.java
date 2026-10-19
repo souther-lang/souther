@@ -1065,6 +1065,8 @@ final class Pullback {
      */
     private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
 
+    private static final ValueName.Stdlib TAKE = ValueName.Stdlib.operation("List", "take");
+
     /**
      * Why {@code more} readings of the condition, made at one place where it splits, are not
      * made — or null where they are, taken from what this reading has left to make.
@@ -1597,9 +1599,13 @@ final class Pullback {
      * <p>One call in one reading is one set of pieces: the call by identity, since a name stands
      * for the very node its binding was given, and the reading by what it holds. What else is held
      * is what that call and reading say.
+     *
+     * <p>{@code firstOnly} is the pieces a container holds when only the first of them were taken:
+     * whether some of those meets a statement is not whether some piece does.
      */
     private record Pieces(Core.PreservedCall split, ValueName.Stdlib operation, InputReads at,
-                          BoundOperationFacts.Pieces parted, OptionalInt separator) {
+                          BoundOperationFacts.Pieces parted, OptionalInt separator,
+                          boolean firstOnly) {
 
         @Override
         public boolean equals(Object other) {
@@ -1643,7 +1649,33 @@ final class Pullback {
             }
             separatedBy = OptionalInt.of(written.value().codePointAt(0));
         }
-        return new Pieces(call, operation, container.at(), parted, separatedBy);
+        return new Pieces(call, operation, container.at(), parted, separatedBy, false);
+    }
+
+    /**
+     * The pieces {@code container} is, or of which it holds the first ones: what {@code List.take}
+     * answers of them, for a count written as a number of one or more. Or null where it is
+     * neither.
+     */
+    private Pieces piecesOrTheFirstOf(Denotation container) {
+        Pieces whole = piecesOf(container);
+        if (whole != null) {
+            return whole;
+        }
+        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
+                || !TAKE.equals(call.declared().operation())) {
+            return null;
+        }
+        Denotation count = container.at().standing(call.args().get(0),
+                read.rules().symbols(), read.rules().newtypes());
+        if (!(Core.withoutStanding(count.value()) instanceof Core.Int number)
+                || number.value() < 1) {
+            return null;
+        }
+        Pieces taken = piecesOf(container.at().standing(call.args().get(1),
+                read.rules().symbols(), read.rules().newtypes()));
+        return taken == null ? null : new Pieces(taken.split(), taken.operation(), taken.at(),
+                taken.parted(), taken.separator(), true);
     }
 
     /**
@@ -1651,7 +1683,7 @@ final class Pullback {
      * hands each element of what an operation answering the pieces of a string was given, or
      * of what only kept some of those — or null where it is not.
      */
-    private Pieces pieceThatIs(Core e, InputReads at) {
+    private Pieces pieceThatIs(Core e, InputReads at, boolean ofTheFirstToo) {
         Denotation standing = at.standing(e, read.rules().symbols(), read.rules().newtypes());
         Core container = standing.at().containerOfTheElement(standing.value());
         // An element of what a walk answered stands as the walk's answer on its element, which
@@ -1669,7 +1701,7 @@ final class Pullback {
                 read.rules().newtypes());
         Beneath beneath = beneath(whole, false);
         Denotation made = beneath == null ? whole : beneath.at();
-        Pieces direct = piecesOf(made);
+        Pieces direct = ofTheFirstToo ? piecesOrTheFirstOf(made) : piecesOf(made);
         if (direct != null) {
             return direct;
         }
@@ -1788,7 +1820,7 @@ final class Pullback {
      * depth this is read at: either way the one the same statement names.
      */
     private Quantity.APieceOf aPiece(Denotation side) {
-        Pieces piece = pieceThatIs(side.value(), side.at());
+        Pieces piece = pieceThatIs(side.value(), side.at(), true);
         if (piece == null) {
             return null;
         }
@@ -2860,8 +2892,8 @@ final class Pullback {
                 return leaf(new Derivation.SomePieceEqualling(answered),
                         askedAt != null ? askedAt : new Denotation(e, reads));
             }
-            CodePoints held = Derivation.SomePieceMeeting.held(pieces.separator(), within,
-                    element);
+            CodePoints held = pieces.firstOnly() ? null
+                    : Derivation.SomePieceMeeting.held(pieces.separator(), within, element);
             if (held == null) {
                 WhyUnread stopped = Proposition.firstStopIn(element);
                 return unread(over, in, stopped != null ? stopped : new WhyUnread.AtNoPosition(
@@ -3042,7 +3074,7 @@ final class Pullback {
                 // writes. Only whether some piece meets a statement is asked of them: how many of
                 // the pieces do depends on how the separator stands in the string, which no number
                 // of the input says.
-                Pieces pieces = counting ? null : piecesOf(at);
+                Pieces pieces = counting ? null : piecesOrTheFirstOf(at);
                 if (pieces != null) {
                     ElementAt each = new ElementAt.APiece(pieces);
                     settle(pending, each, null, located);
@@ -3126,7 +3158,7 @@ final class Pullback {
             StringPredicates predicate =
                     StringPredicates.of(read.rules().symbols().kernelOf(operation));
             Pieces piece = predicate == null ? null
-                    : pieceThatIs(call.args().get(predicate.subject()), reads);
+                    : pieceThatIs(call.args().get(predicate.subject()), reads, false);
             Integer within = piece == null ? null : parting.get(piece);
             return within == null || piece.separator().isPresent() ? null
                     : leaf(new Derivation.ACharacterInAClass(matches.meaning(), within), e, reads);
@@ -3729,7 +3761,7 @@ final class Pullback {
                 return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(
                         written.value().codePoints().filter(counted::contains).count())));
             }
-            Pieces piece = pieceThatIs(value, in);
+            Pieces piece = pieceThatIs(value, in, false);
             if (piece != null) {
                 return codePointsOfAPiece(piece, counted);
             }
