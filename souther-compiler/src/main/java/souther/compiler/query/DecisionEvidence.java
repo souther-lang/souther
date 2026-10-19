@@ -255,13 +255,22 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * What the rules of the decision, read in full, leave unmeasured of the rows.
      *
      * <p>A decision resting on which of several elements of one key a map holds is read as it is,
-     * and none of the rows written holds a key twice. Not part of {@link #derivation}: every rule
-     * is in hand, and what is short is the rows that would tell them apart.
+     * and none of the rows written holds a key twice. The same holds of a search from a node: its
+     * statement is read, and no row is written toward a node further down settling it. Not part of
+     * {@link #derivation}: every rule is in hand, and what is short is the rows that would tell
+     * them apart.
      */
     private static WeakeningSet unmeasuredOf(DecisionReading read) {
-        return read.consultsWhichElementOfAKeyIsLast()
-                ? WeakeningSet.of(new Weakening.KeyedOverwriteCasesUnmeasured(read.behavior()))
-                : WeakeningSet.none();
+        WeakeningSet out = WeakeningSet.none();
+        if (read.consultsWhichElementOfAKeyIsLast()) {
+            out = out.union(WeakeningSet.of(
+                    new Weakening.KeyedOverwriteCasesUnmeasured(read.behavior())));
+        }
+        if (read.consultsASearchBelowTheNodesARowWrites()) {
+            out = out.union(WeakeningSet.of(
+                    new Weakening.ReachableNodeCasesUnmeasured(read.behavior())));
+        }
+        return out;
     }
 
     /**

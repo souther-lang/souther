@@ -9466,6 +9466,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.DecisionRuleReadShort _ -> WeakeningWord.DECISION_RULE_READ_SHORT;
             case Weakening.KeyedOverwriteCasesUnmeasured _ ->
                     WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED;
+            case Weakening.ReachableNodeCasesUnmeasured _ ->
+                    WeakeningWord.REACHABLE_NODE_CASES_UNMEASURED;
             case Weakening.RewriteUndecided _ -> WeakeningWord.REWRITE_UNDECIDED;
         };
     }

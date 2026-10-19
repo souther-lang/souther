@@ -337,6 +337,23 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
                 java.util.SequencedMap<Refinement, CaseOutcome>> cases =
                 new java.util.LinkedHashMap<>();
 
+        /**
+         * Where the walk closed its listing of the positions a type has, because the input returned
+         * to a declaration the path had opened.
+         */
+        private final java.util.Map<TermPath, BlockReason.RecursiveExpansion> closed =
+                new java.util.LinkedHashMap<>();
+
+        /** Say that the listing was closed at {@code at}, and where the declaration was opened. */
+        void closedAt(TermPath at, BlockReason.RecursiveExpansion why) {
+            closed.putIfAbsent(at, why);
+        }
+
+        /** Every position the listing was closed at. */
+        java.util.Map<TermPath, BlockReason.RecursiveExpansion> closed() {
+            return java.util.Map.copyOf(closed);
+        }
+
         /** Say that {@code field}, written at the sum standing at {@code at}, stands at {@code to}
          *  once the value there is the case {@code branch} names. */
         void crosses(TermPath at, String field, Refinement branch, TermPath to) {

@@ -143,6 +143,10 @@ public final class InputDomain {
      * name one step down. Made by the walk that made the positions, so that what a name reaches and
      * what the reading produced are one answer. */
     private final NameReach reach;
+    /** The positions where the listing of what a type has was closed because the input returned to
+     * a declaration already opened on the path. A name that is followed to one of them and goes
+     * further is told so, which the position itself does not say: it is read like any other. */
+    private final Map<TermPath, BlockReason.RecursiveExpansion> closed;
     /** Everything the rules of the values this reading opened placed, in the words each of them was
      * written in. What became of each is {@link #placements()}. */
     private final List<PlacementSeed> placed;
@@ -202,7 +206,8 @@ public final class InputDomain {
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
-                        NameReach reach, List<PlacementSeed> placed,
+                        NameReach reach, Map<TermPath, BlockReason.RecursiveExpansion> closed,
+                        List<PlacementSeed> placed,
                         List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases,
                         DeclarationReadings machines,
                         souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
@@ -222,6 +227,7 @@ public final class InputDomain {
         // whatever the walk found.
         this.policy = Objects.requireNonNull(policy, "a reading is made under a policy");
         this.reach = Objects.requireNonNull(reach, "a reading says what its names reach");
+        this.closed = Map.copyOf(closed);
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
         // readings under one path would be the position answering differently depending on which
@@ -251,6 +257,7 @@ public final class InputDomain {
                 && roots.equals(that.roots)
                 && java.util.Objects.equals(policy, that.policy)
                 && reach.equals(that.reach)
+                && closed.equals(that.closed)
                 && placed.equals(that.placed)
                 && dependencies.equals(that.dependencies);
     }
@@ -259,7 +266,7 @@ public final class InputDomain {
     public int hashCode() {
         int known = hash;
         if (known == 0) {
-            known = Objects.hash(positions, read, parameters, roots, policy, reach, placed,
+            known = Objects.hash(positions, read, parameters, roots, policy, reach, closed, placed,
                     dependencies);
             hash = known;
         }
@@ -379,7 +386,7 @@ public final class InputDomain {
         // it reached. Answered with a value standing for no reading at all, an input nobody could
         // read would be the same value as an input there was nothing to read.
         return new InputDomain(settled, read, parameters, roots, reading.policy(), observed.reach(),
-                account.placed(), account.clauses(), observed.cases(), reading.retainedReadings(),
+                observed.closed(), account.placed(), account.clauses(), observed.cases(), reading.retainedReadings(),
                 dependencies);
     }
 
@@ -731,7 +738,9 @@ public final class InputDomain {
             return new PlacementOutcome.Reason.TheReadingStoppedThere(
                     new PositionId(at), blocked.why());
         }
-        return null;
+        BlockReason.RecursiveExpansion returned = closed.get(at);
+        return returned == null ? null
+                : new PlacementOutcome.Reason.TheReadingStoppedThere(new PositionId(at), returned);
     }
 
     /**
@@ -1060,10 +1069,25 @@ public final class InputDomain {
         // for a bound and needs no other, which is why the same walk answers both questions and
         // stops for only one of them.
         TermPath already = reach.enumerating() ? ancestry.openedAt(unfolds) : null;
-        StructuralInspection structure = already != null
-                ? StructuralInspection.stoppedAt(
-                        new BlockReason.RecursiveExpansion(unfolds, already))
-                : StructuralInspection.of(input.shape(), declared);
+        // Closing the listing here is a bound this walk puts on itself, and says nothing about what
+        // is under the position until the declaration it returns to states a rule: that rule
+        // applies to the value below, and nothing below is opened for it to be read at.
+        boolean rulesReachBelow = already != null
+                && (reach.handedOn() && placed.handsTheRulesOnAt(path)
+                        || !PlacedRules.of(path, type, reading).placed().isEmpty());
+        StructuralInspection structure;
+        if (already == null) {
+            structure = StructuralInspection.of(input.shape(), declared);
+        } else {
+            BlockReason.RecursiveExpansion returned =
+                    new BlockReason.RecursiveExpansion(unfolds, already);
+            if (rulesReachBelow) {
+                structure = StructuralInspection.stoppedAt(returned);
+            } else {
+                structure = StructuralInspection.of(input.shape(), declared);
+                observed.closedAt(path, returned);
+            }
+        }
         Position here = read(input, path, reading, counted, placed, structure, declared);
         // Passing through an occurrence is not finding a position. A reading following a path the
         // model named opens every declaration on the way — that is how it knows which step to take
@@ -1086,7 +1110,7 @@ public final class InputDomain {
         // answer about the reading — it decides what the position reports and where the enumeration
         // goes next — and it does not change what stands under the type, so a path the measurement
         // named goes on through here while its siblings do not.
-        StructuralInspection descent = already != null
+        StructuralInspection descent = rulesReachBelow
                 ? StructuralInspection.of(input.shape(), declared) : structure;
         switch (descent) {
             case StructuralInspection.Decomposed decomposed -> {

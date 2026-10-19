@@ -355,12 +355,13 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: N) -> Answer
                 let f (n) = Yes
                 """.formatted(ANSWER)));
-        // The walk reaches this declaration again under itself, so what stands below is what stands
-        // below the one it already read.
+        // The walk reaches this declaration again under itself, and a rule of it is handed on to
+        // where it comes back, so what stands below is what stands below the one it already read.
         out.put(UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ, of("""
                 module m
                 %s
                 data Node = { next: Node?, n: Int }
+                    invariant n >= 0
 
                 behavior f : (node: Node) -> Answer
                 let f (node) = if node.n > 3 then Yes else No

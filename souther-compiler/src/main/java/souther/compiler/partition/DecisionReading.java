@@ -230,6 +230,23 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
     }
 
     /**
+     * Whether some rule of the decision consults a distinction that rests on a search from a node
+     * for some node below it: what such a statement asks of the node it starts at is a column, and
+     * what a node further down settles is not one a row is written toward.
+     */
+    public boolean consultsASearchBelowTheNodesARowWrites() {
+        for (Ruled each : found) {
+            for (DecisionCondition condition : each.rule().consulted().keySet()) {
+                if (condition instanceof DecisionCondition.AStatement(var statement)
+                        && Proposition.saysASearchReachesBelow(statement)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Every rule once, with every place it is stated, in the order the reading first met each.
      *
      * <p>The one grouping of the places of a rule. A reader that asks about the rule — what it is

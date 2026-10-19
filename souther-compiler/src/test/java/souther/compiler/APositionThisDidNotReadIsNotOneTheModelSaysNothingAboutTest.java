@@ -51,7 +51,10 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             let inAConjunction (r) =
                 if r.cost >= 0 && r.cost <= 100000 then Auto else Manual
 
-            data Deep = { note: String, more: Option<Deep> }
+            data Bottom
+            data Deep = { note: String, size: Int, more: Under }
+                invariant size >= 0
+            data Under = Bottom | Deep
             data Outer = { deep: Deep }
 
             behavior returnsToItself : (o: Outer) -> Auto | Manual
@@ -176,7 +179,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aPositionTheWalkStoppedAtSaysSo() {
         String block = blockOf("returnsToItself");
 
-        assertFalse(block.contains("divided no way: o.deep.more@Some"), block);
+        assertFalse(block.contains("divided no way: o.deep.more"), block);
         assertTrue(block.contains("the input returns here to a declaration already read above it"),
                 block);
     }

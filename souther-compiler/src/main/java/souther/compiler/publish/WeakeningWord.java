@@ -276,6 +276,18 @@ public enum WeakeningWord {
     KEYED_OVERWRITE_CASES_UNMEASURED,
 
     /**
+     * A search from a node for some node below it decides something of the body, and what a node
+     * further down meeting what it asks does to the answer has not been measured.
+     *
+     * <p>The search is read as it is. What is missing is the rows: a value holding values of its
+     * own kind is written so deep and no deeper, so no row is written toward a node further down
+     * settling the search. Apart from {@link #DECISION_RULE_READ_SHORT}: the rules here are read
+     * whole, and a capacity to write rows is what is short. Apart from {@link #POSITION_NOT_READ}
+     * too: nothing about the input's own positions was left unread.
+     */
+    REACHABLE_NODE_CASES_UNMEASURED,
+
+    /**
      * A rewrite of a body nothing here could decide about: whether a row tells it from the body is
      * not known. Which of the ways that happens it was is the reason the rewrite's own entry gives.
      */

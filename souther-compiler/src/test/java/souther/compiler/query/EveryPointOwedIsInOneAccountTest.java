@@ -135,21 +135,24 @@ class EveryPointOwedIsInOneAccountTest {
     /**
      * A module whose walk stops before it is through the input.
      *
-     * <p>What the list holds returns to the declaration the walk has already opened, so the walk
-     * stops there.
+     * <p>What a link holds returns to the declaration the walk has already opened, and the rule of
+     * the case under it is handed on to that position, so the walk stops there.
      */
     private static final String NOT_REACHED = """
             module example.notreached
 
-            data Req = { more: List<Req>, flag: Bool }
+            data End
+            data Link = { size: Int, rest: Chain }
+                invariant size >= 0
+            data Chain = End | Link
             data Res = { n: Int }
 
-            behavior f : (r: Req) -> Res
+            behavior f : (c: Chain) -> Res
                 constructs Res
-            let f (r) = Res { n = 0 }
+            let f (c) = Res { n = 0 }
 
             example f
-                | "one" : (Req { more = [], flag = true }) -> Res { n = 0 }
+                | "one" : (Link { size = 1, rest = End }) -> Res { n = 0 }
             """;
 
     /**

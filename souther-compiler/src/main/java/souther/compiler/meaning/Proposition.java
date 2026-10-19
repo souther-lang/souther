@@ -1137,6 +1137,20 @@ public sealed interface Proposition {
     }
 
     /**
+     * Whether {@code stated} is, or holds, a search from a node for some node below it meeting
+     * something.
+     */
+    static boolean saysASearchReachesBelow(Proposition stated) {
+        return switch (stated) {
+            case SomeReachable _ -> true;
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _ ->
+                    stated.partsHeld().stream().anyMatch(Proposition::saysASearchReachesBelow);
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
+                 Carried _, LastToHold _ -> false;
+        };
+    }
+
+    /**
      * Whether some part of {@code stated} is about what a dependency answered, rather than about
      * the input alone.
      *
