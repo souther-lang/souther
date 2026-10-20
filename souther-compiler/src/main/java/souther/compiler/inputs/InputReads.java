@@ -3207,6 +3207,24 @@ public final class InputReads {
         return InputPath.everyElementOf(e, names, newtypes, this::taken);
     }
 
+    /**
+     * The container whose every element {@code e} holds, each as often, though {@code e} may be no
+     * place a row writes — a list in another order is one — or null where it holds no such
+     * container's.
+     *
+     * <p>Only a container that stands inside no other. The elements of what a flattening made
+     * stand inside two, and a list inside the elements of another holds some of the occurrences of
+     * its path: no statement about the elements of one container says what those do.
+     */
+    public TermPath containerWhoseEveryElementIsIn(Core e, DeclarationNewtypes newtypes) {
+        if (!(everyElementOf(e, newtypes) instanceof PathResolution.At(TermPath elements))
+                || !(elements.steps().getLast() instanceof TermPath.Step.Element)) {
+            return null;
+        }
+        List<TermPath> holding = elements.containersHoldingIt();
+        return holding.size() == 1 ? holding.getFirst() : null;
+    }
+
     /** The same, of the elements handed to {@code binding} ({@link InputPath#everyElementAt}). */
     public PathResolution everyElementAt(BindingId binding, DeclarationNewtypes newtypes) {
         return InputPath.everyElementAt(binding, names, newtypes, this::taken);

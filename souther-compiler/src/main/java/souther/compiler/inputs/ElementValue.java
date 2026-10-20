@@ -1460,8 +1460,7 @@ public sealed interface ElementValue {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, source.symbols(),
                 _ -> Optional.empty());
         return measured != null && measured.arguments().none()
-                && DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                        instanceof TakenAs.HowManyItHolds
+                && measured.takenAs() instanceof TakenAs.HowManyItHolds
                 ? ElementProjection.read(measured.of(), element, held, source.newtypes()) : null;
     }
 }

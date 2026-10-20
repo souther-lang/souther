@@ -1316,8 +1316,7 @@ public sealed interface Derivation {
             private static boolean howManyAt(Quantity atom, TermPath at) {
                 return atom instanceof DecisionAtom.OfTheInput(
                         NumericTerm.TakenOf taken) && taken.position().equals(at)
-                        && DefaultBoundOperationFacts.get().takenAs(taken.operation())
-                        instanceof TakenAs.HowManyItHolds;
+                        && taken.takenAs() instanceof TakenAs.HowManyItHolds;
             }
         }
     }
