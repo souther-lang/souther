@@ -827,8 +827,20 @@ final class Terms {
         /** The form the parts come to. */
         record Form<A>(LinearForm<A> form) implements Operated<A> {}
 
-        /** Arithmetic no form over the atoms says: a product of two unknowns, a quotient by one. */
-        record NotLinear<A>(NonAffineOperation operation) implements Operated<A> {}
+        /**
+         * Arithmetic no form over the atoms says: a product of two unknowns, a quotient by one.
+         *
+         * @param over the atoms each of which, were it a constant, would make it a form: the one
+         *             atom of a factor of a product that weighs one, and the one atom of a divisor
+         *             that weighs one. An atom beside another in its factor is not among them,
+         *             since a constant there leaves the other multiplied
+         */
+        record NotLinear<A>(NonAffineOperation operation, Set<A> over) implements Operated<A> {
+
+            public NotLinear {
+                over = Set.copyOf(over);
+            }
+        }
 
         /** A quotient by nought, which no run has a number for. */
         record NoNumberOnARun<A>() implements Operated<A> {}
@@ -855,8 +867,17 @@ final class Terms {
         if (a.coefs().isEmpty()) {
             return Operated.of(b.times(a.constant()));
         }
-        return b.coefs().isEmpty() ? Operated.of(a.times(b.constant()))
-                : new Operated.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
+        if (b.coefs().isEmpty()) {
+            return Operated.of(a.times(b.constant()));
+        }
+        Set<A> over = new HashSet<>(theOneAtomOf(a));
+        over.addAll(theOneAtomOf(b));
+        return new Operated.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES, over);
+    }
+
+    /** The atom {@code form} weighs, where it weighs one and no other; none otherwise. */
+    private static <A> Set<A> theOneAtomOf(LinearForm<A> form) {
+        return form.coefs().size() == 1 ? form.coefs().keySet() : Set.of();
     }
 
     /**
@@ -881,7 +902,8 @@ final class Terms {
      */
     static <A> Operated<A> quotient(LinearForm<A> a, LinearForm<A> b) {
         if (!b.coefs().isEmpty()) {
-            return new Operated.NotLinear<>(NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE);
+            return new Operated.NotLinear<>(NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE,
+                    theOneAtomOf(b));
         }
         if (b.constant().isZero()) {
             return new Operated.NoNumberOnARun<>();
