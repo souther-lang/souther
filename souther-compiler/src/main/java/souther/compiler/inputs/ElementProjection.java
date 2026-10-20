@@ -179,6 +179,28 @@ public record ElementProjection(List<TermPath.Step> steps) {
                 : new OnePerElement.Answered(new ElementProjection(found.steps()), found.wrapped());
     }
 
+    /**
+     * What {@code read} takes out of what a closure whose parameter is {@code element} answered, as
+     * far as which values are equal goes — or null where that is no place of the element and no
+     * newtype wearing one.
+     *
+     * <p>The answer may be something built: a tuple or a record made of the element, which is no
+     * place of it. What is taken out of one is what the construction was given for the part taken,
+     * the same cancellation a field read back out of a construction is read by, so a component or a
+     * field read where the walk was handed what the closure built is read where the closure was
+     * handed the element. What is left of the read once the construction is taken apart goes on
+     * from the place it came to.
+     */
+    static OnePerElement.Answered readAsAKey(Core answer, OnePerElement.ReadOff read,
+                                            BindingId element, Map<BindingId, Core> held,
+                                            DeclarationNewtypes newtypes) {
+        Found found = new Reading(Map.of(), held, newtypes, Licence.EQUAL_KEY)
+                .takenApart(answer, read, element);
+        return found == null ? null
+                : new OnePerElement.Answered(new ElementProjection(found.steps()),
+                        found.wrapped() || read.then().wrapped());
+    }
+
     /** Whether what a closure whose parameter is {@code element} answered is the element itself
      *  ({@link Licence#IDENTICAL_VALUE}). */
     static boolean isTheElementItself(Core answer, BindingId element, Map<BindingId, Core> held,
@@ -251,6 +273,45 @@ public record ElementProjection(List<TermPath.Step> steps) {
 
         private Found from(Core e, BindingId element) {
             return steps(e, element, new BindingTrail());
+        }
+
+        private Found takenApart(Core e, OnePerElement.ReadOff read, BindingId element) {
+            BindingTrail trail = new BindingTrail();
+            Core at = read.component() < 0 ? e : componentOf(e, read.component(), trail);
+            List<TermPath.Step> within = read.then().at().steps();
+            int taken = 0;
+            while (at != null && taken < within.size()
+                    && within.get(taken) instanceof TermPath.Step.Field(String field)
+                    && givenTo(at, field, trail) instanceof Core given) {
+                at = given;
+                taken++;
+            }
+            Found base = at == null ? null : steps(at, element, trail);
+            if (base == null) {
+                return null;
+            }
+            List<TermPath.Step> longer = new ArrayList<>(base.steps());
+            longer.addAll(within.subList(taken, within.size()));
+            return new Found(longer, base.wrapped());
+        }
+
+        /** What the tuple {@code e} stands for was given for its {@code component}, or null where
+         *  {@code e} stands for no tuple this reaches. */
+        private Core componentOf(Core e, int component, BindingTrail trail) {
+            return switch (e) {
+                case Core.Widen wider -> licence == Licence.PLACE
+                        ? componentOf(wider.value(), component, trail) : null;
+                case Core.Tuple tuple -> component < tuple.elements().size()
+                        ? tuple.elements().get(component) : null;
+                case Core.LetIn let -> componentOf(let.body(), component, trail);
+                case Core.Read read -> {
+                    Core through = held.get(read.binding());
+                    yield through == null ? null
+                            : trail.through(read.binding(),
+                                    () -> componentOf(through, component, trail));
+                }
+                case null, default -> null;
+            };
         }
 
         private Found steps(Core e, BindingId element, BindingTrail trail) {

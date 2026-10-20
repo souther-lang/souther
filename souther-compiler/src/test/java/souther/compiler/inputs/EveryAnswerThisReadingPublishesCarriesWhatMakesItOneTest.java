@@ -173,6 +173,12 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == ElementProjection.class) {
             return new ElementProjection(List.of());
         }
+        if (type == OnePerElement.class) {
+            return new OnePerElement(TermPath.of("x"), new ElementProjection(List.of()), false);
+        }
+        if (type == OnePerElement.Answered.class) {
+            return OnePerElement.Answered.ITSELF;
+        }
         if (type == AnEvaluation.class) {
             return Evaluations.of(new ValueName.Behavior("example", "f"), 0);
         }

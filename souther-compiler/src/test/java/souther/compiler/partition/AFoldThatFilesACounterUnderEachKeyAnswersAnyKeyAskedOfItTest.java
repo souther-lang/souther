@@ -236,17 +236,28 @@ class AFoldThatFilesACounterUnderEachKeyAnswersAnyKeyAskedOfItTest {
     }
 
     /**
-     * The list a fold walks may be a position's elements kept by a statement, or a tuple a map
-     * built of each: the key asked for occurs among the elements meeting what they were kept by,
-     * and the key of an element is the place it was given. The line is drawn on that count, and
-     * the lookup finding nothing is told apart from it as before.
+     * The list a fold walks may be a position's elements kept by a statement, or a tuple or a
+     * record a map built of each, or a map of the kept elements: the key asked for occurs among
+     * the elements meeting what they were kept by, and the key of an element is the place it was
+     * given. The line is drawn on that count, and the lookup finding nothing is told apart from it
+     * as before.
      */
     @Test
     void theElementsAFoldWalksAreThosePutToItInsteadOfThePositionsOwn() {
         record Walked(String walked, String step, String statement) { }
         String record = "Map.updateOrInsert(p.label, 1, n -> n + 1, acc)";
         String tupled = "{ let (k, _) = p\n Map.updateOrInsert(k, 1, n -> n + 1, acc) }";
+        String plain = "Map.updateOrInsert(p, 1, n -> n + 1, acc)";
         for (Walked each : List.of(
+                new Walked("List.filter(l -> String.length(l) > 1, List.map(x -> x.label, xs))",
+                        plain, "String.length(xs[*].label) > 1 && label - xs[*].label == 0"),
+                new Walked("List.map(x -> x.label, List.filter(x -> x.weight >= 2, xs))", plain,
+                        "xs[*].weight >= 2 && label - xs[*].label == 0"),
+                new Walked("List.map(x -> (x.label, x.weight),"
+                        + " List.filter(x -> x.weight >= 2, xs))", tupled,
+                        "xs[*].weight >= 2 && label - xs[*].label == 0"),
+                new Walked("List.map(x -> Item { label = x.label, weight = 0 }, xs)", record,
+                        "label - xs[*].label == 0"),
                 new Walked("List.filter(x -> x.weight >= 2, xs)", record,
                         "xs[*].weight >= 2 && label - xs[*].label == 0"),
                 new Walked("List.filter(x -> x.weight >= 2, List.filter(x -> x.weight < 9, xs))",

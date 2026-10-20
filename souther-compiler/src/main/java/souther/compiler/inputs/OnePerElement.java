@@ -71,4 +71,36 @@ public record OnePerElement(TermPath container, ElementProjection projected, boo
             return ElementProjection.readAsAKey(answer, element, held, newtypes);
         }
     }
+
+    /**
+     * What a reading takes out of each element of a list, where the element may be something a
+     * walk built and no place of the input: a component of the tuple it is, and then a way into
+     * what that comes to.
+     *
+     * <p>A key or a value a fold's step reads off its element is read off what the list holds,
+     * which a walk may have built of each element of another list. Crossing that walk takes the
+     * construction apart ({@link ElementProjection#readAsAKey(Core, ReadOff, BindingId, Map,
+     * DeclarationNewtypes)}), and once nothing is left to take apart the read is a place of the
+     * element it reached.
+     *
+     * @param component which component of the tuple each element is is taken, or -1 where the
+     *                  element is read as it is
+     * @param then      what is read from there: a way to a value, and whether a newtype wearing it
+     *                  was read through on the way
+     */
+    public record ReadOff(int component, Answered then) {
+
+        public ReadOff {
+            Objects.requireNonNull(then, "a read goes on to some value, the one it came to at the"
+                    + " least");
+        }
+
+        /** The element itself. */
+        public static final ReadOff ITSELF = new ReadOff(-1, Answered.ITSELF);
+
+        /** Whether nothing is left to take apart, so that the read is a place of the element. */
+        public boolean placed() {
+            return component < 0;
+        }
+    }
 }

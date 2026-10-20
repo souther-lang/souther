@@ -2257,101 +2257,160 @@ public final class InputReads {
      */
     public OnePerElement onePerElementOf(Core list, Symbols symbols,
                                          DeclarationNewtypes newtypes) {
-        return beneathEachStep(list, ElementQuestion.ONE_PER_ELEMENT, symbols, newtypes);
+        return occurrencesOf(list, OnePerElement.ReadOff.ITSELF, null, symbols, newtypes)
+                instanceof Occurrences.OfOneContainer(OnePerElement walked, List<Denotation> keptBy)
+                && keptBy.isEmpty() ? walked : null;
     }
 
     /**
-     * The place whose every occurrence the elements of {@code list} are one key each of, each as
-     * often, as far as which keys are equal goes — or null where the list is not that.
+     * Where what {@code read} takes out of each element of {@code list} stands among the places of
+     * the input, and which occurrences of that place the list holds one each of — or null where
+     * the list is not shown to hold one value for each of some occurrences of a place.
      *
-     * <p>Not {@link #onePerElementOf}, which names the one container the list holds one value for
-     * each element of. A list put end to end out of what a closure answered of each element holds
-     * a value for each occurrence of a place inside many containers, and how often a key occurs
-     * in it is how often it occurs among all of them. The steps down are the ones that question
-     * crosses ({@link InputPath#oneStepBeneath}) and, beside them, the flattening: what a
-     * closure answers is read down the same steps to a list at a place of the element it was
-     * handed, and that element is one of every occurrence of the place the list flattened holds.
+     * <p>One walk for both of the runs a list can be. A list holding one value for each element of
+     * one container ({@link ElementQuestion#ONE_PER_ELEMENT}) is the occurrences of a place inside
+     * that one occurrence of the container. A list put end to end out of what a closure answered of
+     * each element holds a value for each occurrence of a place inside many containers, and how
+     * often a value occurs in it is how often it occurs among all of them. The steps down are the
+     * ones the first question crosses ({@link InputPath#oneStepBeneath}); a map that built
+     * something of each element is crossed by taking it apart where {@code read} takes something
+     * out of it; and the flattening: what a closure answers is read down the same steps to a list at
+     * a place of the element it was handed, and that element is one of every occurrence of the
+     * place the list flattened holds.
      *
      * <p>A list some of whose elements an operation kept by a statement is crossed too, when
-     * {@code keeping} says so, and the call is handed back among {@code keptBy}: the key then
-     * counts only the occurrences the statement keeps. The statement is about the elements of the
-     * container the list was made from, so it is read only when nothing between it and that
-     * container made anything new of an element, and only for the elements of one container.
+     * {@code keeping} says so, and the call is handed back among the answer's {@code keptBy}: a
+     * count then counts only the occurrences the statement keeps. The call is handed back where it
+     * stands, and what it keeps by is read down the same list to the same container, whatever a
+     * map beneath it made of an element on the way. Across the lists of a flattening it is about
+     * the elements of those lists, so a flattening is crossed beneath one only where nothing
+     * between them made anything new of an element.
      *
+     * <p>Every step is asked of the list as handed to it and as it came to be reached, since which
+     * values are equal is what both runs are read for, and what a wider type calls equal is not
+     * shown to be what the narrower one does ({@link InputPath#goesOnThrough}).
+     *
+     * @param read    what is taken out of each element of the list
      * @param keeping the list a call keeps some of the elements of by a statement, or null where
      *                the call is no such operation
-     * @return where the keys stand, among the places of the elements of the list: a place of an
-     *         element, or of the value an element wears
      */
-    public Occurrences everyOccurrenceKeyedAt(Core list, int component,
-                                              Function<Core, Core> keeping, Symbols symbols,
-                                              DeclarationNewtypes newtypes) {
-        ElementProjection projected = new ElementProjection(List.of());
+    public Occurrences occurrencesOf(Core list, OnePerElement.ReadOff read,
+                                     Function<Core, Core> keeping, Symbols symbols,
+                                     DeclarationNewtypes newtypes) {
         Core asked = list;
-        int pending = component;
-        List<Core> keptBy = new ArrayList<>();
+        Denotation standing = standing(list, symbols, newtypes);
+        OnePerElement.ReadOff sought = read;
+        List<Denotation> keptBy = new ArrayList<>();
         // Whether anything new was made of an element beneath the first operation that kept some.
         boolean madeNewBeneath = false;
+        // A step to a name is a step over the binding graph, and a name come round to again is one
+        // already answered for; a step down an operation stays inside one finite tree.
         Set<BindingId> met = new HashSet<>();
         while (true) {
-            Denotation standing = standing(asked, symbols, newtypes);
-            if (standing.at().everyElementOf(standing.value(), newtypes)
-                    instanceof PathResolution.At(TermPath elements)) {
-                return pending >= 0 || (!keptBy.isEmpty() && madeNewBeneath) ? null
-                        : new Occurrences(projected.from(elements), keptBy);
+            if (!InputPath.goesOnThrough(asked, standing.value(),
+                    ElementQuestion.ONE_PER_ELEMENT)) {
+                return null;
+            }
+            InputReads where = standing.at();
+            if (where.pathOf(standing.value(), newtypes) instanceof PathResolution.At(
+                    TermPath container)) {
+                return sought.placed() ? new Occurrences.OfOneContainer(new OnePerElement(
+                        container, sought.then().at(), sought.then().wrapped()), keptBy) : null;
             }
             if (Core.withoutStanding(standing.value()) instanceof Core.Read name
                     && !met.add(name.binding())) {
                 return null;
             }
-            InputReads where = standing.at();
             Core beneathKept = keeping == null ? null : keeping.apply(standing.value());
             if (beneathKept != null) {
-                keptBy.add(standing.value());
+                keptBy.add(standing);
                 asked = beneathKept;
+                standing = where.standing(asked, symbols, newtypes);
                 continue;
             }
-            if (pending >= 0) {
-                TupleStep tuple = throughATupleMap(standing.value(), pending, where, symbols,
-                        newtypes);
-                if (tuple != null) {
-                    projected = tuple.component().then(projected);
-                    asked = tuple.from();
-                    pending = -1;
-                    madeNewBeneath |= !keptBy.isEmpty();
-                    continue;
-                }
+            MapStep mapped = throughAMap(standing, sought, symbols, newtypes);
+            if (mapped != null) {
+                madeNewBeneath |= !keptBy.isEmpty() && mapped.madeNew();
+                sought = mapped.read();
+                asked = mapped.from();
+                standing = where.standing(asked, symbols, newtypes);
+                continue;
             }
             InputPath.Beneath step = InputPath.oneStepBeneath(standing.value(),
                     ElementQuestion.ONE_PER_ELEMENT, where.names(), newtypes,
                     closure -> blockOf(where, closure, symbols, newtypes));
             if (step != null) {
-                projected = step.answered().at().then(projected);
-                asked = step.from();
+                sought = new OnePerElement.ReadOff(sought.component(),
+                        new OnePerElement.Answered(step.answered().at().then(sought.then().at()),
+                                sought.then().wrapped() || step.answered().wrapped()));
                 madeNewBeneath |= !keptBy.isEmpty() && !step.answered().at().fields().isEmpty();
+                asked = step.from();
+                standing = where.standing(asked, symbols, newtypes);
                 continue;
             }
             // What a statement kept some by is about the elements of the lists the flattening put
             // end to end, so each is one of theirs and no value made of one.
             boolean kept = !keptBy.isEmpty();
-            TermPath flattened = kept && madeNewBeneath ? null
-                    : flattenedKeysAt(standing, projected, pending, kept, symbols, newtypes);
-            return flattened == null ? null : new Occurrences(flattened, keptBy);
+            Flattened flattened = kept && madeNewBeneath ? null
+                    : flattenedKeysAt(standing, sought, kept, symbols, newtypes);
+            return flattened == null ? null
+                    : new Occurrences.AcrossContainers(flattened.keys(), flattened.wrapped(),
+                            keptBy);
         }
     }
 
     /**
-     * Where the keys of a list stand, and the calls that kept some of its occurrences by a
-     * statement.
-     *
-     * @param keys   the place whose every occurrence the keys are one each of
-     * @param keptBy the calls whose statements the occurrences counted must meet, outermost first
+     * Which occurrences of a place a list holds one value for each of, where the value stands,
+     * and the calls that kept some of them by a statement.
      */
-    public record Occurrences(TermPath keys, List<Core> keptBy) {
+    public sealed interface Occurrences {
 
-        public Occurrences {
-            Objects.requireNonNull(keys, "an answer about where the keys stand says where");
-            keptBy = List.copyOf(keptBy);
+        /** The place whose occurrences the values are one each of. */
+        TermPath keys();
+
+        /** Whether the values wear the place's as a newtype rather than being them: which are equal
+         *  is kept, and nothing about their order is said. */
+        boolean wrapped();
+
+        /** The calls whose statements the occurrences counted must meet, outermost first, each
+         *  where it stands. */
+        List<Denotation> keptBy();
+
+        /**
+         * The elements of one occurrence of a container, one value each.
+         *
+         * @param walked the container, and where in its element the value stands
+         */
+        record OfOneContainer(OnePerElement walked, List<Denotation> keptBy)
+                implements Occurrences {
+
+            public OfOneContainer {
+                Objects.requireNonNull(walked, "the elements of a container are a container's");
+                keptBy = List.copyOf(keptBy);
+            }
+
+            @Override
+            public TermPath keys() {
+                return walked.placeOf(new ElementProjection(List.of()));
+            }
+
+            @Override
+            public boolean wrapped() {
+                return walked.wrapped();
+            }
+        }
+
+        /**
+         * Every occurrence of a place inside more than one container: the lists of an outer list
+         * put end to end.
+         */
+        record AcrossContainers(TermPath keys, boolean wrapped, List<Denotation> keptBy)
+                implements Occurrences {
+
+            public AcrossContainers {
+                Objects.requireNonNull(keys, "an answer about where the values stand says where");
+                keptBy = List.copyOf(keptBy);
+            }
         }
     }
 
@@ -2362,39 +2421,55 @@ public final class InputReads {
      */
     public TermPath containerFlattenedInto(Core list, Symbols symbols,
                                            DeclarationNewtypes newtypes) {
-        TermPath elements = flattenedKeysAt(standing(list, symbols, newtypes),
-                new ElementProjection(List.of()), -1, true, symbols, newtypes);
+        Flattened elements = flattenedKeysAt(standing(list, symbols, newtypes),
+                OnePerElement.ReadOff.ITSELF, true, symbols, newtypes);
         if (elements == null) {
             return null;
         }
-        List<TermPath> holding = elements.containersHoldingIt();
+        List<TermPath> holding = elements.keys().containersHoldingIt();
         return holding.isEmpty() ? null : holding.getLast();
     }
 
     /**
-     * Which component of its element {@code key} is, for an element that is a tuple, or -1 where
-     * it is anything else.
+     * What {@code answer}, made of the element handed to {@code element}, takes out of it: a
+     * component of the tuple the element is, or a place of it or a newtype wearing one — or null
+     * where it is none of these ({@link OnePerElement.ReadOff}).
      */
-    public int tupleComponentRead(Core key, BindingId element) {
-        Core.TupleGet get = element == null ? null
-                : followedToAComponent(key, element, heldByTheBody());
-        return get == null ? -1 : get.index();
+    public OnePerElement.ReadOff readOff(Core answer, BindingId element,
+                                         DeclarationNewtypes newtypes) {
+        if (element == null) {
+            return null;
+        }
+        Core.TupleGet get = followedToAComponent(answer, element, heldByTheBody());
+        if (get != null) {
+            return new OnePerElement.ReadOff(get.index(), OnePerElement.Answered.ITSELF);
+        }
+        OnePerElement.Answered answered = answeredOf(answer, element, newtypes);
+        return answered == null ? null : new OnePerElement.ReadOff(-1, answered);
     }
 
-    /** The list a map built a tuple of each element of was made from, and where in that list's
-     *  element the component stands. */
-    private record TupleStep(Core from, ElementProjection component) {}
+    /**
+     * The list a map was made from, and what {@code read}, taken out of each element of the map's
+     * answer, takes out of each element of that list.
+     *
+     * @param read    what is taken out of each element of the list beneath
+     * @param madeNew whether the map answered something other than each element as it is, or a
+     *                newtype wearing it
+     */
+    private record MapStep(Core from, OnePerElement.ReadOff read, boolean madeNew) {}
 
     /**
-     * {@code list}, when it is a map that built a tuple of each element, looked through at one
-     * {@code component} of the tuple: the construction and the projection cancel, as they do for
-     * a record ({@link ElementProjection}), so what that component of the answers is, is what the
-     * map gave it of the element it was handed. Null where the list is no such map or the
-     * component is no place of the element.
+     * {@code standing}, where it is a map, looked through at what {@code read} takes out of each
+     * element of its answer — or null where it is no map, or what is taken comes to no place of
+     * the element the map was handed.
+     *
+     * <p>What the map answered may be the element, a place of it, or something built of it. Where
+     * it is something built, a tuple or a record, what is taken out of it is what the map gave that
+     * part of it: the construction and the read cancel ({@link ElementProjection#readAsAKey(Core,
+     * OnePerElement.ReadOff, BindingId, Map, DeclarationNewtypes)}).
      */
-    private TupleStep throughATupleMap(Core list, int component, InputReads where,
-                                       Symbols symbols, DeclarationNewtypes newtypes) {
-        Denotation standing = where.standing(list, symbols, newtypes);
+    private MapStep throughAMap(Denotation standing, OnePerElement.ReadOff read, Symbols symbols,
+                                DeclarationNewtypes newtypes) {
         ValueName operation;
         List<Core> args;
         switch (Core.withoutStanding(standing.value())) {
@@ -2422,32 +2497,16 @@ public final class InputReads {
                 || closure.params().getFirst().binding() == null) {
             return null;
         }
-        Core.Tuple tuple = followedToATuple(closure.body(), inside.heldByTheBody());
-        if (tuple == null || component >= tuple.elements().size()) {
+        BindingId element = closure.params().getFirst().binding();
+        OnePerElement.Answered given = ElementProjection.readAsAKey(closure.body(), read, element,
+                inside.heldByTheBody(), newtypes);
+        if (given == null) {
             return null;
         }
-        OnePerElement.Answered given = OnePerElement.Answered.of(tuple.elements().get(component),
-                closure.params().getFirst().binding(), inside.heldByTheBody(), newtypes);
-        return given == null ? null : new TupleStep(args.get(mapped), given.at());
-    }
-
-    /** The tuple {@code e} is, through the lets and names it stands behind, or null. */
-    private static Core.Tuple followedToATuple(Core e, Map<BindingId, Core> held) {
-        Core at = e;
-        for (int steps = 0; steps < MOST_STEPS_A_CLOSURE_ANSWERS_THROUGH; steps++) {
-            switch (Core.withoutStanding(at)) {
-                case Core.Tuple tuple -> {
-                    return tuple;
-                }
-                case Core.LetIn let -> at = let.body();
-                case Core.Read read when held.get(read.binding()) != null ->
-                        at = held.get(read.binding());
-                default -> {
-                    return null;
-                }
-            }
-        }
-        return null;
+        OnePerElement.Answered itself = OnePerElement.Answered.of(closure.body(), element,
+                inside.heldByTheBody(), newtypes);
+        return new MapStep(args.get(mapped), new OnePerElement.ReadOff(-1, given),
+                itself == null || !itself.at().fields().isEmpty());
     }
 
     /** Whether {@code e} is the element handed to {@code element}, through the names it stands
@@ -2498,9 +2557,9 @@ public final class InputReads {
      *                             answers, the answer being read down no steps that make a value
      *                             of one
      */
-    private TermPath flattenedKeysAt(Denotation standing, ElementProjection projected,
-                                     int component, boolean ofTheListsThemselves,
-                                     Symbols symbols, DeclarationNewtypes newtypes) {
+    private Flattened flattenedKeysAt(Denotation standing, OnePerElement.ReadOff read,
+                                      boolean ofTheListsThemselves, Symbols symbols,
+                                      DeclarationNewtypes newtypes) {
         ValueName operation;
         List<Core> args;
         switch (Core.withoutStanding(standing.value())) {
@@ -2537,22 +2596,21 @@ public final class InputReads {
         Core answer = closure.body();
         ElementProjection listAt = ElementProjection.read(answer, element, where.heldByTheBody(),
                 newtypes);
-        int pending = component;
+        OnePerElement.ReadOff sought = read;
         // A list is read down to a place of the element a step at a time, and a closure answers a
         // few steps at most.
         for (int steps = 0; listAt == null && steps < MOST_STEPS_A_CLOSURE_ANSWERS_THROUGH;
                 steps++) {
-            if (pending >= 0) {
-                TupleStep tuple = ofTheListsThemselves ? null
-                        : throughATupleMap(answer, pending, where, symbols, newtypes);
-                if (tuple != null) {
-                    projected = tuple.component().then(projected);
-                    answer = tuple.from();
-                    pending = -1;
-                    listAt = ElementProjection.read(answer, element, where.heldByTheBody(),
-                            newtypes);
-                    continue;
+            MapStep mapped = throughAMap(where.standing(answer, symbols, newtypes), sought,
+                    symbols, newtypes);
+            if (mapped != null) {
+                if (ofTheListsThemselves && mapped.madeNew()) {
+                    return null;
                 }
+                sought = mapped.read();
+                answer = mapped.from();
+                listAt = ElementProjection.read(answer, element, where.heldByTheBody(), newtypes);
+                continue;
             }
             InputPath.Beneath step = InputPath.oneStepBeneath(answer,
                     ElementQuestion.ONE_PER_ELEMENT, where.names(), newtypes,
@@ -2561,13 +2619,20 @@ public final class InputReads {
                     || (ofTheListsThemselves && !step.answered().at().fields().isEmpty())) {
                 return null;
             }
-            projected = step.answered().at().then(projected);
+            sought = new OnePerElement.ReadOff(sought.component(),
+                    new OnePerElement.Answered(step.answered().at().then(sought.then().at()),
+                            sought.then().wrapped() || step.answered().wrapped()));
             answer = step.from();
             listAt = ElementProjection.read(answer, element, where.heldByTheBody(), newtypes);
         }
-        return listAt == null || pending >= 0 ? null
-                : projected.from(listAt.from(outer).element());
+        return listAt == null || !sought.placed() ? null
+                : new Flattened(sought.then().at().from(listAt.from(outer).element()),
+                        sought.then().wrapped());
     }
+
+    /** Where the values of a list a flattening put end to end stand, and whether they wear what
+     *  stands there as a newtype. */
+    private record Flattened(TermPath keys, boolean wrapped) {}
 
     private static final int MOST_STEPS_A_CLOSURE_ANSWERS_THROUGH = 16;
 
@@ -2583,56 +2648,31 @@ public final class InputReads {
      */
     public PathResolution holdingSomethingWhere(Core list, Symbols symbols,
                                                 DeclarationNewtypes newtypes) {
-        OnePerElement beneath =
-                beneathEachStep(list, ElementQuestion.SAME_EMPTINESS, symbols, newtypes);
-        return beneath == null ? new PathResolution.NotAPosition()
-                : new PathResolution.At(beneath.container());
-    }
-
-    /**
-     * {@code list} followed down the steps {@code question} crosses ({@link InputPath#oneStepBeneath})
-     * to a container of the input, with what each step answered of the elements beneath it — or
-     * null where a step is one the question does not cross.
-     *
-     * <p>Each step is taken where the list it is taken from stands: a name, or a parameter of a
-     * body this reading entered, is what this reading says it stands for, and what the step says
-     * of the operation is the question's. What a step answered is read only for the question that
-     * asks it, and for the other the way to the value is the element itself.
-     */
-    private OnePerElement beneathEachStep(Core list, ElementQuestion question, Symbols symbols,
-                                          DeclarationNewtypes newtypes) {
         Core asked = list;
         Denotation at = standing(list, symbols, newtypes);
-        ElementProjection projected = new ElementProjection(List.of());
-        boolean wrapped = false;
         // A step to a name is a step over the binding graph, and a name come round to again is one
         // already answered for; a step down an operation stays inside one finite tree.
         Set<BindingId> met = new HashSet<>();
         while (true) {
             // Asked of the list as handed to the step and as it came to be reached, since
             // following names sets aside what a value stood as on the way.
-            if (!InputPath.goesOnThrough(asked, at.value(), question)) {
-                return null;
+            if (!InputPath.goesOnThrough(asked, at.value(), ElementQuestion.SAME_EMPTINESS)) {
+                return new PathResolution.NotAPosition();
             }
             if (at.at().pathOf(at.value(), newtypes) instanceof PathResolution.At(
                     TermPath container)) {
-                return new OnePerElement(container, projected, wrapped);
+                return new PathResolution.At(container);
             }
             if (Core.withoutStanding(at.value()) instanceof Core.Read name
                     && !met.add(name.binding())) {
-                return null;
+                return new PathResolution.NotAPosition();
             }
             InputReads where = at.at();
-            InputPath.Beneath step = InputPath.oneStepBeneath(at.value(), question,
-                    where.names(), newtypes, closure -> Core.withoutStanding(
-                            where.standing(closure, symbols, newtypes).value())
-                            instanceof Core.Block block ? block : null);
+            InputPath.Beneath step = InputPath.oneStepBeneath(at.value(),
+                    ElementQuestion.SAME_EMPTINESS, where.names(), newtypes,
+                    closure -> blockOf(where, closure, symbols, newtypes));
             if (step == null) {
-                return null;
-            }
-            if (step.answered() != null) {
-                projected = step.answered().at().then(projected);
-                wrapped |= step.answered().wrapped();
+                return new PathResolution.NotAPosition();
             }
             asked = step.from();
             at = where.standing(asked, symbols, newtypes);
