@@ -237,9 +237,9 @@ class AFoldThatFilesACounterUnderEachKeyAnswersAnyKeyAskedOfItTest {
 
     /**
      * The list a fold walks may be a position's elements kept by a statement, or a tuple or a
-     * record a map built of each, or a map of the kept elements: the key asked for occurs among
-     * the elements meeting what they were kept by, and the key of an element is the place it was
-     * given. The line is drawn on that count, and the lookup finding nothing is told apart from it
+     * record a map built of each — one inside another, or passed on by a map above as it is — or a
+     * map of the kept elements: the key asked for occurs among the elements meeting what they were
+     * kept by, and the key of an element is the place it was given. The line is drawn on that count, and the lookup finding nothing is told apart from it
      * as before.
      */
     @Test
@@ -264,6 +264,15 @@ class AFoldThatFilesACounterUnderEachKeyAnswersAnyKeyAskedOfItTest {
                         record,
                         "xs[*].weight < 9 && xs[*].weight >= 2 && label - xs[*].label == 0"),
                 new Walked("List.map(x -> (x.label, x.weight), xs)", tupled,
+                        "label - xs[*].label == 0"),
+                new Walked("List.map(x -> ((x.label, 1), x.weight), xs)",
+                        "{ let (q, _) = p\n let (k, _) = q\n"
+                                + " Map.updateOrInsert(k, 1, n -> n + 1, acc) }",
+                        "label - xs[*].label == 0"),
+                new Walked("List.map(x -> (Item { label = x.label, weight = 0 }, 1), xs)",
+                        "{ let (it, _) = p\n Map.updateOrInsert(it.label, 1, n -> n + 1, acc) }",
+                        "label - xs[*].label == 0"),
+                new Walked("List.map(p -> p, List.map(x -> (x.label, x.weight), xs))", tupled,
                         "label - xs[*].label == 0"))) {
             Compilation compilation = measured("""
                     module example.popular

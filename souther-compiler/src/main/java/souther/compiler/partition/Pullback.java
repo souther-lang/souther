@@ -54,7 +54,6 @@ import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
-import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -3383,13 +3382,13 @@ final class Pullback {
         private Located entriesOfWhatWasKept(Denotation container, KeyedAccumulation filed,
                                              List<Kept> pending, List<Kept> located,
                                              ElementAt outerEach, Denotation outerHanded) {
-            InputReads.Occurrences keyed = keysOf(container, filed);
             // Where the entries are does not turn on the key being read: an entry is some kept
-            // element's, whatever key it was filed under.
-            InputReads.Occurrences every = keyed != null ? keyed
-                    : occurrencesOf(container, filed, OnePerElement.ReadOff.ITSELF);
-            if (!(every instanceof InputReads.Occurrences.OfOneContainer(
-                    OnePerElement walked, List<Denotation> keptAt))) {
+            // element's, whatever key it was filed under, and the walk is the same with no read.
+            OnePerElement.ReadOff key = readOff(container, filed, filed.key());
+            if (!(occurrencesOf(container, filed, key == null ? List.of() : List.of(key))
+                    instanceof InputReads.Occurrences.OfOneContainer(TermPath walked,
+                            List<InputReads.Occurrences.Read> reads,
+                            List<Denotation> keptAt))) {
                 return null;
             }
             List<Kept> keptBy = new ArrayList<>();
@@ -3400,10 +3399,11 @@ final class Pullback {
                 }
                 keptBy.add(law);
             }
-            DecisionSubject heldAt = new DecisionSubject.AnInput(walked.container());
+            DecisionSubject heldAt = new DecisionSubject.AnInput(walked);
             settle(keptBy, new ElementAt.AtASubject(heldAt), null, located);
-            ElementAt each = new ElementAt.AnEntry(keyed == null ? null
-                    : new DecisionSubject.AnInput(keyed.keys()));
+            ElementAt each = new ElementAt.AnEntry(!reads.isEmpty()
+                    && reads.getFirst() instanceof InputReads.Occurrences.Read.At(
+                            TermPath keyAt, var _) ? new DecisionSubject.AnInput(keyAt) : null);
             settle(pending, each, null, located);
             return outerEach == null ? new Located(heldAt, null, each, null, located, null)
                     : new Located(heldAt, null, outerEach, outerHanded, located, null);
@@ -5379,40 +5379,53 @@ final class Pullback {
     /** Where {@code filed}, read where {@code whole} stands, files — or null where the list is no
      *  container of the input holding one value for each element, or the key is no place of it. */
     private WhereFiled whereFiled(Denotation whole, KeyedAccumulation filed) {
-        if (!(keysOf(whole, filed) instanceof InputReads.Occurrences.OfOneContainer(
-                OnePerElement key, List<Denotation> keptBy)) || !keptBy.isEmpty()) {
+        OnePerElement.ReadOff key = readOff(whole, filed, filed.key());
+        if (key == null) {
             return null;
         }
-        TermPath value = null;
-        if (filed.filed() instanceof KeyedAccumulation.Filed.Kept kept) {
-            OnePerElement.ReadOff taken = whole.at().readOff(kept.value(),
-                    filed.element().binding(), read.rules().newtypes());
-            // Read down the same list as the key, so that it comes to the same container and the
-            // value of an element is the one filed under that element's key.
-            value = taken != null && occurrencesOf(whole, filed, taken)
-                    instanceof InputReads.Occurrences.OfOneContainer(OnePerElement held, var _)
-                    && !held.wrapped() ? held.placeOf(new ElementProjection(List.of())) : null;
+        List<OnePerElement.ReadOff> reads = new ArrayList<>(List.of(key));
+        if (filed.filed() instanceof KeyedAccumulation.Filed.Kept kept
+                && readOff(whole, filed, kept.value()) instanceof OnePerElement.ReadOff value) {
+            reads.add(value);
         }
-        return new WhereFiled(key.container(), key.placeOf(new ElementProjection(List.of())),
-                value);
+        // The key and the value are read down one walk, so that they stand in the same element of
+        // the same container and the value of an element is the one filed under its key.
+        if (!(occurrencesOf(whole, filed, reads) instanceof InputReads.Occurrences.OfOneContainer(
+                TermPath container, List<InputReads.Occurrences.Read> placed,
+                List<Denotation> keptBy))
+                || !keptBy.isEmpty()
+                || !(placed.getFirst() instanceof InputReads.Occurrences.Read.At(
+                        TermPath keyAt, var _))) {
+            return null;
+        }
+        TermPath value = placed.size() > 1
+                && placed.get(1) instanceof InputReads.Occurrences.Read.At(
+                        TermPath valueAt, boolean wrapped)
+                && !wrapped ? valueAt : null;
+        return new WhereFiled(container, keyAt, value);
+    }
+
+    /** What {@code answer}, made of the element the step of {@code filed} is handed, takes out of
+     *  it, or null where it is no way through what the element is. */
+    private OnePerElement.ReadOff readOff(Denotation whole, KeyedAccumulation filed, Core answer) {
+        return whole.at().readOff(answer, filed.element().binding(), read.rules().newtypes());
     }
 
     /**
-     * Which occurrences of a place the list {@code filed} walks holds one value each of, with the
-     * place standing where the key of each is taken out of it — or null where the list is not
-     * shown to be such a run, or the key is no place of what it holds.
+     * Which occurrences the list {@code filed} walks holds one value each of, with where the key
+     * of each is taken out of it as the one read — or null where the list is not shown to be such
+     * a run, or the key is read off no element.
      */
     private InputReads.Occurrences keysOf(Denotation whole, KeyedAccumulation filed) {
-        OnePerElement.ReadOff key = whole.at().readOff(filed.key(), filed.element().binding(),
-                read.rules().newtypes());
-        return key == null ? null : occurrencesOf(whole, filed, key);
+        OnePerElement.ReadOff key = readOff(whole, filed, filed.key());
+        return key == null ? null : occurrencesOf(whole, filed, List.of(key));
     }
 
-    /** The occurrences the list {@code filed} walks holds one value each of, where {@code taken}
-     *  is what is read off each of them. */
+    /** The occurrences the list {@code filed} walks holds one value each of, with what each of
+     *  {@code reads} takes out of each of them. */
     private InputReads.Occurrences occurrencesOf(Denotation whole, KeyedAccumulation filed,
-                                                 OnePerElement.ReadOff taken) {
-        return whole.at().occurrencesOf(filed.walked(), taken,
+                                                 List<OnePerElement.ReadOff> reads) {
+        return whole.at().occurrencesOf(filed.walked(), reads,
                 this::theListAKeepingCallKeepsSomeOf, read.rules().symbols(),
                 read.rules().newtypes());
     }
@@ -5438,12 +5451,13 @@ final class Pullback {
     private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed,
                                             boolean acrossOnly) {
         InputReads.Occurrences every = keysOf(whole, filed);
-        if (every == null || (acrossOnly
-                && (!(every instanceof InputReads.Occurrences.AcrossContainers)
+        if (every == null
+                || !(every.reads().getFirst() instanceof InputReads.Occurrences.Read.At(
+                        TermPath place, var _))
+                || (acrossOnly && (!(every instanceof InputReads.Occurrences.AcrossContainers)
                         || !every.keptBy().isEmpty()))) {
             return null;
         }
-        TermPath place = every.keys();
         KeptOccurrences selection = null;
         if (!every.keptBy().isEmpty()) {
             selection = every.keptBy().size() == 1
@@ -5454,8 +5468,8 @@ final class Pullback {
             }
         }
         return switch (every) {
-            case InputReads.Occurrences.OfOneContainer(OnePerElement walked, var _) ->
-                    selection == null ? NumericTerm.Multiplicity.of(walked.container(), place)
+            case InputReads.Occurrences.OfOneContainer(TermPath container, var _, var _) ->
+                    selection == null ? NumericTerm.Multiplicity.of(container, place)
                             // A statement keeping some elements is read of a container no other
                             // holds, whose every element it is about.
                             : place.containersHoldingIt().size() == 1

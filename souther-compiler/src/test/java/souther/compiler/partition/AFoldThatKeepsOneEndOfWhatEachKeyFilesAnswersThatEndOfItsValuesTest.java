@@ -326,9 +326,9 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
             """;
 
     /**
-     * A tuple or a record a map built of each touch, with the key and the value read out of it,
-     * keeps the ends the touches do: the line is the one a fold over the touches draws, and the
-     * rows offered are the ones it is offered.
+     * A tuple or a record a map built of each touch, either inside the other or a tuple inside a
+     * tuple, with the key and the value read out of it, keeps the ends the touches do: the line is
+     * the one a fold over the touches draws, and the rows offered are the ones it is offered.
      */
     @Test
     void aTupleOrARecordAMapBuiltOfTheTouchesKeepsTheEndsTheTouchesDo() {
@@ -342,7 +342,13 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                         "List.map(t -> (t.account, t.days), touches)"),
                 new Built("Map.updateOrInsert(p.who, p.since,"
                         + " seen -> Int.min(seen, p.since), acc)",
-                        "List.map(t -> Seen { who = t.account, since = t.days }, touches)"))) {
+                        "List.map(t -> Seen { who = t.account, since = t.days }, touches)"),
+                new Built("{ let (q, d) = p\n let (a, _) = q\n Map.updateOrInsert(a, d,"
+                        + " seen -> Int.min(seen, d), acc) }",
+                        "List.map(t -> ((t.account, 0), t.days), touches)"),
+                new Built("{ let (s, _) = p\n Map.updateOrInsert(s.who, s.since,"
+                        + " seen -> Int.min(seen, s.since), acc) }",
+                        "List.map(t -> (Seen { who = t.account, since = t.days }, 0), touches)"))) {
             Compilation built = measured(OVER_WHAT_A_MAP_BUILT.formatted(each.step(),
                     each.walked()));
             assertTrue(json(built).contains("least(touches[*].days by account)"),

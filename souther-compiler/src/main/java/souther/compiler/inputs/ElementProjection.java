@@ -4,6 +4,8 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Location;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.OnePerElement.ReadOff;
+import souther.compiler.inputs.OnePerElement.ReadOff.Taken;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -134,8 +136,8 @@ public record ElementProjection(List<TermPath.Step> steps) {
      *
      * <p><b>Null wherever the answer is not read out of the element.</b> A branch chooses between
      * two of them and is neither; arithmetic over one is a value the element does not hold; a
-     * construction is something new, though a field read back out of one is the value it was
-     * given. None of those is a place a row writes, so a rule about what a
+     * construction is something new, though a field or a component read back out of one is the
+     * value it was given. None of those is a place a row writes, so a rule about what a
      * walk answered is not a rule about any position, and saying so is this reading's whole job on
      * that side.
      *
@@ -161,8 +163,8 @@ public record ElementProjection(List<TermPath.Step> steps) {
                                          Map<BindingId, ElementProjection> standing,
                                          Map<BindingId, Core> held,
                                          DeclarationNewtypes newtypes) {
-        Found found = new Reading(standing, held, newtypes, Licence.PLACE).from(answer, element);
-        return found == null ? null : new ElementProjection(found.steps());
+        ReadOff found = new Reading(standing, held, newtypes, Licence.PLACE).from(answer, element);
+        return found == null || found.placed() == null ? null : found.placed().at();
     }
 
     /**
@@ -173,39 +175,36 @@ public record ElementProjection(List<TermPath.Step> steps) {
     static OnePerElement.Answered readAsAKey(Core answer, BindingId element,
                                             Map<BindingId, Core> held,
                                             DeclarationNewtypes newtypes) {
-        Found found = new Reading(Map.of(), held, newtypes, Licence.EQUAL_KEY)
+        ReadOff found = new Reading(Map.of(), held, newtypes, Licence.EQUAL_KEY)
                 .from(answer, element);
-        return found == null ? null
-                : new OnePerElement.Answered(new ElementProjection(found.steps()), found.wrapped());
+        return found == null ? null : found.placed();
     }
 
     /**
      * What {@code read} takes out of what a closure whose parameter is {@code element} answered, as
-     * far as which values are equal goes — or null where that is no place of the element and no
-     * newtype wearing one.
+     * far as which values are equal goes, as a way from the element — or null where that is
+     * neither a way through what the element is nor a newtype wearing what it reaches.
      *
      * <p>The answer may be something built: a tuple or a record made of the element, which is no
      * place of it. What is taken out of one is what the construction was given for the part taken,
      * the same cancellation a field read back out of a construction is read by, so a component or a
      * field read where the walk was handed what the closure built is read where the closure was
-     * handed the element. What is left of the read once the construction is taken apart goes on
-     * from the place it came to.
+     * handed the element. What is left of the read once no construction is there to take apart
+     * goes on from where the answer stands in the element, and may still take a component out of
+     * a tuple some walk beneath built. Read of the element itself ({@link ReadOff#ITSELF}), it is
+     * the way the answer is read off the element.
      */
-    static OnePerElement.Answered readAsAKey(Core answer, OnePerElement.ReadOff read,
-                                            BindingId element, Map<BindingId, Core> held,
-                                            DeclarationNewtypes newtypes) {
-        Found found = new Reading(Map.of(), held, newtypes, Licence.EQUAL_KEY)
+    static ReadOff readAsAKey(Core answer, ReadOff read, BindingId element,
+                              Map<BindingId, Core> held, DeclarationNewtypes newtypes) {
+        return new Reading(Map.of(), held, newtypes, Licence.EQUAL_KEY)
                 .takenApart(answer, read, element);
-        return found == null ? null
-                : new OnePerElement.Answered(new ElementProjection(found.steps()),
-                        found.wrapped() || read.then().wrapped());
     }
 
     /** Whether what a closure whose parameter is {@code element} answered is the element itself
      *  ({@link Licence#IDENTICAL_VALUE}). */
     static boolean isTheElementItself(Core answer, BindingId element, Map<BindingId, Core> held,
                                       DeclarationNewtypes newtypes) {
-        Found found = new Reading(Map.of(), held, newtypes, Licence.IDENTICAL_VALUE)
+        ReadOff found = new Reading(Map.of(), held, newtypes, Licence.IDENTICAL_VALUE)
                 .from(answer, element);
         return found != null && found.steps().isEmpty() && !found.wrapped();
     }
@@ -239,20 +238,6 @@ public record ElementProjection(List<TermPath.Step> steps) {
         IDENTICAL_VALUE
     }
 
-    /** The way a reading found, and whether a newtype was read through on it. */
-    private record Found(List<TermPath.Step> steps, boolean wrapped) {
-
-        private static final Found THE_ELEMENT = new Found(List.of(), false);
-
-        Found {
-            steps = List.copyOf(steps);
-        }
-
-        Found worn() {
-            return new Found(steps, true);
-        }
-    }
-
     /**
      * One reading of one closure's answer, for one licence.
      *
@@ -271,50 +256,30 @@ public record ElementProjection(List<TermPath.Step> steps) {
             }
         }
 
-        private Found from(Core e, BindingId element) {
+        private ReadOff from(Core e, BindingId element) {
             return steps(e, element, new BindingTrail());
         }
 
-        private Found takenApart(Core e, OnePerElement.ReadOff read, BindingId element) {
+        private ReadOff takenApart(Core e, ReadOff read, BindingId element) {
             BindingTrail trail = new BindingTrail();
-            Core at = read.component() < 0 ? e : componentOf(e, read.component(), trail);
-            List<TermPath.Step> within = read.then().at().steps();
+            Core at = e;
+            List<Taken> within = read.steps();
             int taken = 0;
-            while (at != null && taken < within.size()
-                    && within.get(taken) instanceof TermPath.Step.Field(String field)
-                    && givenTo(at, field, trail) instanceof Core given) {
+            while (taken < within.size()
+                    && given(at, within.get(taken), trail) instanceof Core given) {
                 at = given;
                 taken++;
             }
-            Found base = at == null ? null : steps(at, element, trail);
+            ReadOff base = steps(at, element, trail);
             if (base == null) {
                 return null;
             }
-            List<TermPath.Step> longer = new ArrayList<>(base.steps());
+            List<Taken> longer = new ArrayList<>(base.steps());
             longer.addAll(within.subList(taken, within.size()));
-            return new Found(longer, base.wrapped());
+            return new ReadOff(longer, base.wrapped() || read.wrapped());
         }
 
-        /** What the tuple {@code e} stands for was given for its {@code component}, or null where
-         *  {@code e} stands for no tuple this reaches. */
-        private Core componentOf(Core e, int component, BindingTrail trail) {
-            return switch (e) {
-                case Core.Widen wider -> licence == Licence.PLACE
-                        ? componentOf(wider.value(), component, trail) : null;
-                case Core.Tuple tuple -> component < tuple.elements().size()
-                        ? tuple.elements().get(component) : null;
-                case Core.LetIn let -> componentOf(let.body(), component, trail);
-                case Core.Read read -> {
-                    Core through = held.get(read.binding());
-                    yield through == null ? null
-                            : trail.through(read.binding(),
-                                    () -> componentOf(through, component, trail));
-                }
-                case null, default -> null;
-            };
-        }
-
-        private Found steps(Core e, BindingId element, BindingTrail trail) {
+        private ReadOff steps(Core e, BindingId element, BindingTrail trail) {
             return switch (e) {
                 // Where an element stands does not turn on the type it stands as; what is equal
                 // and what is the same value do.
@@ -328,12 +293,12 @@ public record ElementProjection(List<TermPath.Step> steps) {
                 case Core.LetIn let -> steps(let.body(), element, trail);
                 case Core.Read read -> {
                     if (element.equals(read.binding())) {
-                        yield Found.THE_ELEMENT;
+                        yield ReadOff.ITSELF;
                     }
                     // A name an arm bound is the value it matched, at the case the arm took.
                     ElementProjection matched = standing.get(read.binding());
                     if (matched != null) {
-                        yield new Found(matched.steps(), false);
+                        yield ReadOff.ITSELF.after(new OnePerElement.Answered(matched, false));
                     }
                     Core through = held.get(read.binding());
                     yield through == null ? null
@@ -347,7 +312,7 @@ public record ElementProjection(List<TermPath.Step> steps) {
                     Type from = p.base().type();
                     int next = 0;
                     while (next < along.size()) {
-                        Core given = givenTo(read, along.get(next).field(), trail);
+                        Core given = given(read, field(along.get(next).field()), trail);
                         if (given == null) {
                             break;
                         }
@@ -355,28 +320,28 @@ public record ElementProjection(List<TermPath.Step> steps) {
                         from = along.get(next).type();
                         next++;
                     }
-                    Found base = steps(read, element, trail);
+                    ReadOff base = steps(read, element, trail);
                     if (base == null || next == along.size()) {
                         yield base;
                     }
                     if (licence == Licence.IDENTICAL_VALUE) {
                         yield null;
                     }
-                    List<TermPath.Step> longer = new ArrayList<>(base.steps());
+                    List<Taken> longer = new ArrayList<>(base.steps());
                     for (Core.FieldProjection.Step step : along.subList(next, along.size())) {
                         if (Location.isStep(from, step.field(), newtypes)) {
-                            longer.add(new TermPath.Step.Field(step.field()));
+                            longer.add(field(step.field()));
                         }
                         from = step.type();
                     }
-                    yield new Found(longer, base.wrapped());
+                    yield new ReadOff(longer, base.wrapped());
                 }
                 // A field of a construction is the value the construction was given for it, which
                 // is where that value stands.
-                case Core.FieldAccess fa when givenTo(fa.target(), fa.field(), trail)
+                case Core.FieldAccess fa when given(fa.target(), field(fa.field()), trail)
                         instanceof Core given -> steps(given, element, trail);
                 case Core.FieldAccess fa -> {
-                    Found base = licence == Licence.IDENTICAL_VALUE ? null
+                    ReadOff base = licence == Licence.IDENTICAL_VALUE ? null
                             : steps(fa.target(), element, trail);
                     if (base == null) {
                         yield null;
@@ -384,54 +349,84 @@ public record ElementProjection(List<TermPath.Step> steps) {
                     if (!Location.isStep(fa.target().type(), fa.field(), newtypes)) {
                         yield base;
                     }
-                    List<TermPath.Step> longer = new ArrayList<>(base.steps());
-                    longer.add(new TermPath.Step.Field(fa.field()));
-                    yield new Found(longer, base.wrapped());
+                    List<Taken> longer = new ArrayList<>(base.steps());
+                    longer.add(field(fa.field()));
+                    yield new ReadOff(longer, base.wrapped());
+                }
+                // A component of a tuple is the value the tuple was given for it, as a field of a
+                // construction is.
+                case Core.TupleGet get when given(get.tuple(), new Taken.Component(get.index()),
+                        trail) instanceof Core given -> steps(given, element, trail);
+                // A component of a tuple standing in the element is another value, and stands at
+                // no place of the input, since no input holds a tuple: the way goes on through it,
+                // and a reading asking for a place says it comes to none.
+                case Core.TupleGet get -> {
+                    ReadOff base = licence == Licence.IDENTICAL_VALUE ? null
+                            : steps(get.tuple(), element, trail);
+                    if (base == null) {
+                        yield null;
+                    }
+                    List<Taken> longer = new ArrayList<>(base.steps());
+                    longer.add(new Taken.Component(get.index()));
+                    yield new ReadOff(longer, base.wrapped());
                 }
                 // A newtype of one value is a name the value wears: equal where the value is, and
                 // not the value.
                 case Core.Construct made when licence == Licence.EQUAL_KEY
                         && newtypes.of(made.typeName().key()) && made.values().size() == 1 -> {
-                    Found worn = steps(made.values().getFirst().value(), element, trail);
-                    yield worn == null ? null : worn.worn();
+                    ReadOff worn = steps(made.values().getFirst().value(), element, trail);
+                    yield worn == null ? null : new ReadOff(worn.steps(), true);
                 }
                 case null, default -> null;
             };
         }
 
         /**
-         * What the construction {@code e} stands for was given for {@code field}, or null where
-         * {@code e} stands for no construction this reaches — the same cancellation a position of
-         * the input is read by ({@link ConstructionProjection#given}).
+         * What the construction {@code e} stands for was given for the part {@code step} takes
+         * out of it — a field of a record, a component of a tuple — or null where {@code e} stands
+         * for no such construction this reaches: the same cancellation a position of the input is
+         * read by ({@link ConstructionProjection#given}).
          */
-        private Core givenTo(Core e, String field, BindingTrail trail) {
+        private Core given(Core e, Taken step, BindingTrail trail) {
             return switch (e) {
                 case Core.Widen wider -> licence == Licence.PLACE
-                        ? givenTo(wider.value(), field, trail) : null;
-                case Core.Construct made -> ConstructionProjection.given(made, field);
-                case Core.LetIn let -> givenTo(let.body(), field, trail);
+                        ? given(wider.value(), step, trail) : null;
+                case Core.Construct made when step instanceof Taken.Inside(
+                        TermPath.Step.Field(String field)) ->
+                        ConstructionProjection.given(made, field);
+                case Core.Tuple tuple when step instanceof Taken.Component(int index) ->
+                        index < tuple.elements().size() ? tuple.elements().get(index) : null;
+                case Core.LetIn let -> given(let.body(), step, trail);
                 case Core.Read read -> {
                     Core through = held.get(read.binding());
                     yield through == null ? null
-                            : trail.through(read.binding(), () -> givenTo(through, field, trail));
+                            : trail.through(read.binding(), () -> given(through, step, trail));
                 }
-                // A construction whose field was given another construction, a name at a time.
+                // A construction whose part was given another construction, a name at a time.
                 case Core.FieldAccess fa -> {
-                    Core inner = givenTo(fa.target(), fa.field(), trail);
-                    yield inner == null ? null : givenTo(inner, field, trail);
+                    Core inner = given(fa.target(), field(fa.field()), trail);
+                    yield inner == null ? null : given(inner, step, trail);
+                }
+                case Core.TupleGet get -> {
+                    Core inner = given(get.tuple(), new Taken.Component(get.index()), trail);
+                    yield inner == null ? null : given(inner, step, trail);
                 }
                 case Core.FieldProjection p -> {
                     Core inner = p.base();
-                    for (Core.FieldProjection.Step step : p.steps().inOrder()) {
-                        inner = givenTo(inner, step.field(), trail);
+                    for (Core.FieldProjection.Step each : p.steps().inOrder()) {
+                        inner = given(inner, field(each.field()), trail);
                         if (inner == null) {
                             break;
                         }
                     }
-                    yield inner == null ? null : givenTo(inner, field, trail);
+                    yield inner == null ? null : given(inner, step, trail);
                 }
                 case null, default -> null;
             };
+        }
+
+        private static Taken field(String name) {
+            return new Taken.Inside(new TermPath.Step.Field(name));
         }
     }
 

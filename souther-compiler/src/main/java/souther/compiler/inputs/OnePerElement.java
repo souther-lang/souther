@@ -4,6 +4,7 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -74,33 +75,64 @@ public record OnePerElement(TermPath container, ElementProjection projected, boo
 
     /**
      * What a reading takes out of each element of a list, where the element may be something a
-     * walk built and no place of the input: a component of the tuple it is, and then a way into
-     * what that comes to.
+     * walk built and no place of the input: a way down through the components of tuples and the
+     * fields of records, in any order and to any depth.
      *
      * <p>A key or a value a fold's step reads off its element is read off what the list holds,
      * which a walk may have built of each element of another list. Crossing that walk takes the
      * construction apart ({@link ElementProjection#readAsAKey(Core, ReadOff, BindingId, Map,
-     * DeclarationNewtypes)}), and once nothing is left to take apart the read is a place of the
-     * element it reached.
+     * DeclarationNewtypes)}), and once no component is left on the way the read is a place of the
+     * element it reached. A tuple is never a place of the input, so a component left over is a read
+     * of something built that no walk took apart.
      *
-     * @param component which component of the tuple each element is is taken, or -1 where the
-     *                  element is read as it is
-     * @param then      what is read from there: a way to a value, and whether a newtype wearing it
-     *                  was read through on the way
+     * @param steps   the way from the element to the value, outermost first
+     * @param wrapped whether a newtype wearing the value was read through on the way
      */
-    public record ReadOff(int component, Answered then) {
+    public record ReadOff(List<Taken> steps, boolean wrapped) {
 
         public ReadOff {
-            Objects.requireNonNull(then, "a read goes on to some value, the one it came to at the"
-                    + " least");
+            steps = List.copyOf(steps);
         }
 
         /** The element itself. */
-        public static final ReadOff ITSELF = new ReadOff(-1, Answered.ITSELF);
+        public static final ReadOff ITSELF = new ReadOff(List.of(), false);
 
-        /** Whether nothing is left to take apart, so that the read is a place of the element. */
-        public boolean placed() {
-            return component < 0;
+        /** One step of the way: into a component of a tuple, or a step inside an element. */
+        public sealed interface Taken {
+
+            /** The component at {@code index} of the tuple the value is. */
+            record Component(int index) implements Taken {}
+
+            /** A step a place of the input is reached by: a field, or a narrowing. */
+            record Inside(TermPath.Step step) implements Taken {
+
+                public Inside {
+                    Objects.requireNonNull(step, "a step inside an element is some step");
+                }
+            }
+        }
+
+        /** The place of the element the read comes to, or null where a component is left on the
+         *  way and it comes to none. */
+        public Answered placed() {
+            List<TermPath.Step> inside = new ArrayList<>();
+            for (Taken each : steps) {
+                if (!(each instanceof Taken.Inside(TermPath.Step step))) {
+                    return null;
+                }
+                inside.add(step);
+            }
+            return new Answered(new ElementProjection(inside), wrapped);
+        }
+
+        /** The same read, made of what stands at {@code at} rather than of the value itself. */
+        public ReadOff after(Answered at) {
+            List<Taken> longer = new ArrayList<>();
+            for (TermPath.Step step : at.at().steps()) {
+                longer.add(new Taken.Inside(step));
+            }
+            longer.addAll(steps);
+            return new ReadOff(longer, wrapped || at.wrapped());
         }
     }
 }
