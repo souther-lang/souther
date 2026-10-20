@@ -3253,6 +3253,12 @@ public final class InputReads {
         return InputPath.inTheOrderAt(binding, direction, names, newtypes, this::taken);
     }
 
+    /** The same, of the elements {@code e} holds ({@link InputPath#inTheOrderOf}). */
+    public PathResolution inTheOrderOf(Core e, TraversalDirection direction,
+                                       DeclarationNewtypes newtypes) {
+        return InputPath.inTheOrderOf(e, direction, names, newtypes, this::taken);
+    }
+
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {

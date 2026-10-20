@@ -152,9 +152,10 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.assemblesPieces(operation, assembles.source().position(),
                             assembles.closure().position(), assembles.piece())
                             instanceof LibraryProver.Outcome.Proved;
-            case BoundOperationFact.HoldsTheElementsFrom from ->
-                    elements.fromAnIndexOn(operation, from.count().position(),
-                            from.list().position()) instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.HoldsTheElementsByIndex byIndex ->
+                    elements.byAnIndex(operation, byIndex.count().position(),
+                            byIndex.list().position(), byIndex.kept())
+                            instanceof LibraryProver.Outcome.Proved;
             // What these state is settled where it is proved, and read from there; filed, they
             // are read by nothing.
             case BoundOperationFact.HasALemma _ -> true;
