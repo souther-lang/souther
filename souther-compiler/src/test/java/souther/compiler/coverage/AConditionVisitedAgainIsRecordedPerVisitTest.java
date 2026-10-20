@@ -3,6 +3,8 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -70,6 +72,25 @@ class AConditionVisitedAgainIsRecordedPerVisitTest {
 
         assertTrue(seen.sawOnVisit(NUMBERING.outcome(0), 1, false));
         assertTrue(seen.sawOnVisit(NUMBERING.outcome(1), 0, false));
+    }
+
+    /** The recording grows with the numbers it is handed, and what it held before is kept. */
+    @Test
+    void aConditionNumberedPastWhatTheRecordingStartedWithIsRecordedAsAny() {
+        Numberings.Family[] families = new Numberings.Family[300];
+        Arrays.fill(families, Numberings.Family.COMPARISON);
+        SiteNumbering many = Numberings.of(families);
+        Probe.begin(many.identity());
+        Probe.condition(true, 0);
+        Probe.condition(false, 299);
+        Probe.condition(true, 299);
+        AlignedObservation seen = many.align(Probe.snapshot());
+
+        assertTrue(seen.sawOnVisit(many.outcome(0), 0, true));
+        assertTrue(seen.sawOnVisit(many.outcome(299), 0, false));
+        assertTrue(seen.sawOnVisit(many.outcome(299), 1, true));
+        assertFalse(seen.sawOnVisit(many.outcome(299), 0, true));
+        assertTrue(seen.saw(many.outcome(299), true));
     }
 
     @Test

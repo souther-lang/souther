@@ -1,9 +1,8 @@
 package souther.compiler.coverage;
 
+import java.util.Arrays;
 import java.util.BitSet;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -47,21 +46,44 @@ public final class Probe {
         /** The arms, as bits, because an arm is a number and a run passes many. */
         private final BitSet arms = new BitSet();
 
-        /** The conditions, as the ways they came out. A condition is recorded by how it answered
-         *  and by nothing else: that a way out of it exists is its having been reached. */
-        private final Set<RecordedConditionOutcome> outcomes = new LinkedHashSet<>();
+        /** The conditions, as the ways they came out: bit {@code 2 * site} for failing and the next
+         *  for holding. A condition is recorded by how it answered and by nothing else: that a way
+         *  out of it exists is its having been reached.
+         *
+         *  <p>Bits and not a set of records, because this is written at every evaluation of every
+         *  condition a row runs, which is the hottest line a measured run has: a record made and
+         *  hashed per evaluation cost more than the evaluation. */
+        private final BitSet outcomes = new BitSet();
 
-        /** The same, with the visit each came out on, for the first visits to each condition. */
-        private final Set<RecordedVisit> visits = new LinkedHashSet<>();
+        /** The same, with the visit each came out on, indexed by site: bit {@code 2 * visit} for
+         *  failing and the next for holding, for the first {@link RecordedVisit#MOST} visits. Two
+         *  bits to a visit is why that many fit a {@code long}. */
+        private long[] visits = new long[INITIAL_SITES];
 
-        /** How many times each condition has answered since the row began, which is what says
-         *  which visit the next answer is. */
-        private final Map<Integer, Integer> answered = new HashMap<>();
+        /** How many times each condition has answered since the row began, indexed by site, which
+         *  is what says which visit the next answer is. */
+        private int[] answered = new int[INITIAL_SITES];
 
         private Recording(NumberingIdentity numbering) {
             this.numbering = numbering;
         }
+
+        private void sees(int site, boolean held) {
+            outcomes.set(2 * site + (held ? 1 : 0));
+            if (site >= answered.length) {
+                int size = Math.max(site + 1, 2 * answered.length);
+                answered = Arrays.copyOf(answered, size);
+                visits = Arrays.copyOf(visits, size);
+            }
+            int nth = answered[site]++;
+            if (nth < RecordedVisit.MOST) {
+                visits[site] |= 1L << (2 * nth + (held ? 1 : 0));
+            }
+        }
     }
+
+    /** How many sites a recording starts with room for. */
+    private static final int INITIAL_SITES = 64;
 
     /** Called by probed code where an arm ran. Public and static because that is what an
      * {@code invokestatic} from a generated class needs. */
@@ -91,11 +113,7 @@ public final class Probe {
     public static void condition(boolean held, int site) {
         Recording recording = RECORDING.get();
         if (recording != null) {
-            recording.outcomes.add(new RecordedConditionOutcome(site, held));
-            int nth = recording.answered.merge(site, 1, Integer::sum) - 1;
-            if (nth < RecordedVisit.MOST) {
-                recording.visits.add(new RecordedVisit(site, nth, held));
-            }
+            recording.sees(site, held);
         }
     }
 
@@ -129,7 +147,19 @@ public final class Probe {
                 at = recording.arms.nextSetBit(at + 1)) {
             arms.add(at);
         }
-        return new Observation(recording.numbering, arms, recording.outcomes, recording.visits);
+        Set<RecordedConditionOutcome> outcomes = new LinkedHashSet<>();
+        for (int at = recording.outcomes.nextSetBit(0); at >= 0;
+                at = recording.outcomes.nextSetBit(at + 1)) {
+            outcomes.add(new RecordedConditionOutcome(at / 2, at % 2 == 1));
+        }
+        Set<RecordedVisit> visits = new LinkedHashSet<>();
+        for (int site = 0; site < recording.visits.length; site++) {
+            for (long bits = recording.visits[site]; bits != 0; bits &= bits - 1) {
+                int at = Long.numberOfTrailingZeros(bits);
+                visits.add(new RecordedVisit(site, at / 2, at % 2 == 1));
+            }
+        }
+        return new Observation(recording.numbering, arms, outcomes, visits);
     }
 
     /** Stops collecting, and lets go of the recording. A worker thread outlives the row it ran, so a
