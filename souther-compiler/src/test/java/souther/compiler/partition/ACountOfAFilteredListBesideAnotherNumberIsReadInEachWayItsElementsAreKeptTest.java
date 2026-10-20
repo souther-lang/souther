@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -75,38 +76,68 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
                 .collect(Collectors.toCollection(TreeSet::new));
     }
 
+    /** A relation of {@code k} to the count, as written with {@code k} on the left and turned
+     *  round, and as it holds of two numbers. */
+    private record Related(String kFirst, String countFirst, BiPredicate<Integer, Integer> holds) {}
+
+    private static final List<Related> RELATIONS = List.of(
+            new Related("k >= %s", "%s <= k", (k, n) -> k >= n),
+            new Related("k > %s", "%s < k", (k, n) -> k > n),
+            new Related("k <= %s", "%s >= k", (k, n) -> k <= n),
+            new Related("k < %s", "%s > k", (k, n) -> k < n),
+            new Related("k == %s", "%s == k", (k, n) -> k.equals(n)));
+
     /**
-     * Every row of {@code a} and {@code b} from minus one to one and {@code k} from minus two to
-     * three, which the model answers as the rows say: the borders on {@code k} are at nought, one
-     * and two, and a row stands at every point of each that one is owed at.
+     * Every row of {@code a} and {@code b} from minus one to one and {@code k} from minus three to
+     * four, which the model answers as the rows say, written either way round: the borders on
+     * {@code k} are where the relation turns for a count of nought, one and two, and a row stands
+     * at every point of each that one is owed at.
      */
     @Test
-    void everyPointOfTheBordersTheWaysDrawIsReachedByARow() {
-        StringBuilder rows = new StringBuilder("example f\n");
-        for (int k = -2; k <= 3; k++) {
-            for (int a = -1; a <= 1; a++) {
-                for (int b = -1; b <= 1; b++) {
-                    int kept = (a > 0 ? 1 : 0) + (b > 0 ? 1 : 0);
-                    rows.append("    | \"k%d a%d b%d\" : (%d, %d, %d) -> %s\n".formatted(
-                            k, a, b, k, a, b, k >= kept ? "Ok" : "No"));
+    void theBordersAreWhereTheRelationTurnsForEachCountAndARowIsAtEveryPoint() {
+        for (Related related : RELATIONS) {
+            Set<String> turns = new TreeSet<>();
+            StringBuilder rows = new StringBuilder("example f\n");
+            for (int k = -3; k <= 4; k++) {
+                for (int a = -1; a <= 1; a++) {
+                    for (int b = -1; b <= 1; b++) {
+                        int kept = (a > 0 ? 1 : 0) + (b > 0 ? 1 : 0);
+                        boolean holds = related.holds().test(k, kept);
+                        rows.append("    | \"k%d a%d b%d\" : (%d, %d, %d) -> %s\n".formatted(
+                                k, a, b, k, a, b, holds ? "Ok" : "No"));
+                        if (holds && (related.holds().test(k - 1, kept) != holds
+                                || related.holds().test(k + 1, kept) != holds)) {
+                            turns.add(String.valueOf(k));
+                        }
+                    }
                 }
             }
-        }
-        Compilation compilation = compiled(guarded("k >= " + COUNT), rows.toString());
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
-        List<JsonNode> onK = bordersOn(report, "f/k");
-        Set<String> at = new TreeSet<>();
-        for (JsonNode border : onK) {
-            border.path("items").forEach(item -> {
-                if ("on".equals(item.path("point").asString())) {
-                    at.add(item.path("against").asString());
+            for (String written : List.of(related.kFirst(), related.countFirst())) {
+                Compilation compilation = compiled(guarded(written.formatted(COUNT)),
+                        rows.toString());
+                JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+                        .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                for (JsonNode border : bordersOn(report, "f/k")) {
+                    border.path("items").forEach(item -> assertTrue(
+                            item.has("notOwed") || item.path("hit").asBoolean(),
+                            () -> written + ": a row at " + item));
                 }
-                assertTrue(item.has("notOwed") || item.path("hit").asBoolean(),
-                        () -> "a row at " + item);
-            });
+                // Where the author's line is, which is what the obligations name; a reading's own
+                // border faces the relation it read, turned or not.
+                List<JsonNode> obligations = new ArrayList<>();
+                collectObligations(report, obligations);
+                Set<String> on = new TreeSet<>();
+                for (JsonNode each : obligations) {
+                    each.path("readings").forEach(reading -> {
+                        if ("on".equals(each.path("point").asString())
+                                && "f/k".equals(reading.path("axis").asString())) {
+                            on.add(reading.path("against").asString());
+                        }
+                    });
+                }
+                assertEquals(turns, on, written);
+            }
         }
-        assertEquals(Set.of("0", "1", "2"), at);
     }
 
     @Test
@@ -119,11 +150,19 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         }
     }
 
+    /** Turned round, or with both sides doubled, a comparison states the same lines and is owed
+     *  the same points. */
     @Test
     void theSameComparisonWrittenAnotherWayStatesTheSame() {
-        Set<String> written = linesDrawn(report(guarded("k >= " + COUNT)));
-        assertEquals(written, linesDrawn(report(guarded(COUNT + " <= k"))));
-        assertEquals(written, linesDrawn(report(guarded("2 * k >= 2 * " + COUNT))));
+        for (Related related : RELATIONS) {
+            String kFirst = guarded(related.kFirst().formatted(COUNT));
+            String countFirst = guarded(related.countFirst().formatted(COUNT));
+            assertEquals(linesDrawn(report(kFirst)), linesDrawn(report(countFirst)),
+                    related.kFirst());
+            assertEquals(owedByTheGuard(kFirst), owedByTheGuard(countFirst), related.kFirst());
+        }
+        assertEquals(linesDrawn(report(guarded("k >= " + COUNT))),
+                linesDrawn(report(guarded("2 * k >= 2 * " + COUNT))));
     }
 
     /** {@code List.drop(k, xs)} is empty where {@code k} is at least how many {@code xs} holds:
@@ -150,12 +189,87 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         assertFalse(lines.contains("· read as f/k: = 1"), lines::toString);
     }
 
-    /** Two counts against each other are each a count beside another number. */
+    /**
+     * What each way of keeping is owed is what the same choices written out as {@code if}s are
+     * owed: a relation of {@code k} to the count either way round, a filter handed only what the
+     * one inside it kept, the count as a factor of a product, and two counts against each other.
+     */
     @Test
-    void twoCountsAgainstEachOtherAreRead() {
-        String report = report(guarded(COUNT
-                + " >= List.length(List.filter(x -> x > 1, [a, b]))"));
+    void theWaysOfKeepingAreOwedWhatTheSameChoicesWrittenOutAre() {
+        String eachKept = "(if a > 0 then 1 else 0) + (if b > 0 then 1 else 0)";
+        for (Related related : RELATIONS) {
+            for (String written : List.of(related.kFirst(), related.countFirst())) {
+                assertOwesTheSame(written.formatted(COUNT), written.formatted(eachKept));
+            }
+        }
+        assertOwesTheSame(
+                "k >= List.length(List.filter(x -> x > 1, List.filter(x -> x > 0, [a])))",
+                "k >= (if a > 0 then (if a > 1 then 1 else 0) else 0)");
+        assertOwesTheSame("k * " + COUNT + " >= 3", "k * (" + eachKept + ") >= 3");
+        assertOwesTheSame(COUNT + " > List.length(List.filter(x -> x > 1, [a, b]))",
+                eachKept + " > (if a > 1 then 1 else 0) + (if b > 1 then 1 else 0)");
+    }
+
+    private static void assertOwesTheSame(String kept, String writtenOut) {
+        String counted = report(guarded(kept));
+        assertFalse(counted.contains("not read"), counted);
+        assertEquals(owedOfEveryRule(guarded(writtenOut)), owedOfEveryRule(guarded(kept)), kept);
+    }
+
+    /**
+     * Each point the behavior is owed, with each reading of it apart, whichever rule owes it: the
+     * filter's own comparison owes for every element what an {@code if} written for each owes for
+     * its one.
+     */
+    private static Set<String> owedOfEveryRule(String body) {
+        Set<String> out = new TreeSet<>();
+        for (JsonNode each : obligationsOf(body)) {
+            each.path("readings").forEach(reading -> out.add(each.path("point").asString() + " "
+                    + reading.path("axis").asString() + " " + reading.path("relation").asString()
+                    + " " + reading.path("against").asString()));
+        }
+        return out;
+    }
+
+    /** What a filter keeps by a statement no reader decides stays unread for that statement, and
+     *  is not read in ways that would each stop on it. */
+    @Test
+    void aStatementNoReaderDecidesStopsForItsOwnReason() {
+        String report = report(guarded("k >= List.length(List.filter(x -> x * x > 3, [a, b]))"));
+        assertTrue(report.lines().filter(line -> line.contains("not read")).allMatch(line ->
+                        line.contains("a product of two values that are not constants")),
+                report);
+    }
+
+    /** A list the input holds is no list the body wrote out: its count is a number of its own,
+     *  and the comparison is a line on that count less {@code k}, as it was. */
+    @Test
+    void aCountOfAListTheInputHoldsIsALineOnTheCount() {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+                data Ok
+                data No
+                behavior f : (k: Int, xs: List<Int>) -> Ok | No
+                let f (k, xs) = {
+                    guard k >= List.length(List.filter(x -> x > 0, xs)) else No
+                    Ok
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("read as f/#xs [xs[*] > 0] - k: = 0"), report);
         assertFalse(report.contains("not read"), report);
+    }
+
+    /** What the way to the comparison leaves of {@code k} is read before the ways: where it is at
+     *  least one, a count of nought or one holds whatever {@code k} is, and only two is a line. */
+    @Test
+    void whatTheWayHereLeavesIsReadBeforeTheWays() {
+        Set<String> lines = linesOnK(report(guarded("k > 0 && k >= " + COUNT)));
+        assertEquals(Set.of("· read as f/k: = 1", "· read as f/k: = 2", "· read as f/k: in 2 < k",
+                "· read as f/k: = 0", "· read as f/k: in k < 0"), lines);
     }
 
     /** A count weighed alone is read as which of its statements hold, however many there are:
@@ -196,28 +310,9 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
                 .collect(Collectors.toCollection(TreeSet::new));
     }
 
-    /**
-     * A truth that keeps an element is a choice the comparison's definition writes, as the
-     * condition of an {@code if} is: what the comparison is owed under each way of keeping is
-     * what it is owed under each arm of the same choices written out, and turning the comparison
-     * round changes neither.
-     */
-    @Test
-    void whatTheWaysOfKeepingAreOwedIsWhatTheSameChoicesWrittenOutAre() {
-        String written = "(if a > 0 then 1 else 0) + (if b > 0 then 1 else 0)";
-        List<String> owed = owedByTheGuard("k >= " + COUNT);
-        assertEquals(owedByTheGuard("k >= " + written), owed);
-        assertEquals(owed, owedByTheGuard(COUNT + " <= k"));
-        assertEquals(owedByTheGuard("k > " + COUNT).size(),
-                owedByTheGuard(COUNT + " < k").size());
-    }
-
     /** Each point the guard is owed, with what each reading of it is against, in order. */
-    private static List<String> owedByTheGuard(String condition) {
-        JsonNode report = JSON.readTree(AdequacyReport.of(compiled(guarded(condition), ""))
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
-        List<JsonNode> obligations = new ArrayList<>();
-        collectObligations(report, obligations);
+    private static List<String> owedByTheGuard(String body) {
+        List<JsonNode> obligations = obligationsOf(body);
         Set<Integer> guard = new TreeSet<>();
         for (JsonNode each : obligations) {
             each.path("readings").forEach(reading -> {
@@ -239,6 +334,15 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         }
         out.sort(null);
         return out;
+    }
+
+    /** Every obligation of the behavior {@code body} writes. */
+    private static List<JsonNode> obligationsOf(String body) {
+        JsonNode report = JSON.readTree(AdequacyReport.of(compiled(body, ""))
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+        List<JsonNode> obligations = new ArrayList<>();
+        collectObligations(report, obligations);
+        return obligations;
     }
 
     private static int ruleOf(JsonNode obligation) {

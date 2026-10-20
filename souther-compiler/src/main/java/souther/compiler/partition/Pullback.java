@@ -138,6 +138,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.LongUnaryOperator;
@@ -345,29 +346,12 @@ final class Pullback {
      */
     private final List<AnAggregateInACase> aggregatesInACase = new ArrayList<>();
     /**
-     * While a comparison's numbers are put together to ask which counts it weighs
+     * While a comparison's numbers are put together to ask how they stand
      * ({@link #aWayIn(List, Supplier, BooleanSupplier)}): each count of the elements a filter
-     * keeps that a size asked of a container came to, with the containers it was asked of, in the
-     * order met. Null elsewhere.
+     * keeps that how many a container holds came to ({@link #sizeOf}), with the containers it was
+     * asked of, in the order met. Null elsewhere.
      */
     private Map<Quantity.HowManyHold, List<Denotation>> countsMet;
-
-    /**
-     * How many {@code container} holds, asked by a number a comparison weighs, with each count of
-     * kept elements it comes to told to {@link #countsMet}.
-     */
-    private Sized sizeAsked(Core container, InputReads at) {
-        Sized sized = sizeOf(container, at);
-        if (countsMet != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
-            for (Quantity atom : form.coefs().keySet()) {
-                if (atom instanceof Quantity.HowManyHold count) {
-                    countsMet.computeIfAbsent(count, _ -> new ArrayList<>())
-                            .add(new Denotation(container, at));
-                }
-            }
-        }
-        return sized;
-    }
 
     /**
      * That {@code call}, standing in the names of {@code at}, is {@code form} in the way of
@@ -1921,7 +1905,25 @@ final class Pullback {
         record Stops(WhyUnread why) implements WrittenOutRead {}
     }
 
+    /**
+     * How many {@code value} holds, with each count of kept elements it comes to told to
+     * {@link #countsMet}: every such count is some container's size, so this is where each is
+     * met, whichever reading asked.
+     */
     private Sized sizeOf(Core value, InputReads at) {
+        Sized sized = howManyItHolds(value, at);
+        if (countsMet != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
+            for (Quantity atom : form.coefs().keySet()) {
+                if (atom instanceof Quantity.HowManyHold count) {
+                    countsMet.computeIfAbsent(count, _ -> new ArrayList<>())
+                            .add(new Denotation(value, at));
+                }
+            }
+        }
+        return sized;
+    }
+
+    private Sized howManyItHolds(Core value, InputReads at) {
         // What a walk has carried so far, where its step is being read for how many it adds.
         if (Core.withoutStanding(value) instanceof Core.Read soFar
                 && sizedSoFar.get(soFar.binding()) instanceof LinearForm<Quantity> carried) {
@@ -3868,7 +3870,7 @@ final class Pullback {
                 case LawNumber.SizeOf<DeclaredArgument>(LawSubject<DeclaredArgument> of) ->
                         switch (of) {
                             case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
-                                    sizeAsked(applied.argument(at), reads);
+                                    sizeOf(applied.argument(at), reads);
                             case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
                                     switch (elements.get(at)) {
                                         case ElementAt.AValue(Core value, InputReads in) ->
@@ -6085,7 +6087,7 @@ final class Pullback {
                         && DefaultBoundOperationFacts.get().takenAs(measure)
                                 instanceof TakenAs.HowManyItHolds
                         && measured.args().size() == 1) {
-                    return sizeAsked(measured.args().getFirst(), at)
+                    return sizeOf(measured.args().getFirst(), at)
                             instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
                 }
                 // What a container the body wrote out adds up to, element by element.
@@ -6855,8 +6857,22 @@ final class Pullback {
      * and has not gone into yet — or null where it stops at none.
      */
     private Inside aWayIn(List<Denotation> numbers) {
-        return aStopIn(numbers, null);
+        return aStopIn(numbers).wayIn();
     }
+
+    /**
+     * What the arithmetic of a comparison's numbers came to, as a way into the comparison is looked
+     * for.
+     *
+     * @param wayIn     the first value it stopped at that a reading can go into and has not gone
+     *                  into yet, or null
+     * @param composed  the form of each number whose arithmetic composed, in the order of the
+     *                  numbers: one for each of them where every one did
+     * @param notLinear each value it stopped at for being no linear form of what it was made of,
+     *                  which is a product or a quotient
+     */
+    private record NumbersRead(Inside wayIn, List<LinearForm<Quantity>> composed,
+                               List<Core> notLinear) {}
 
     /**
      * A number of a comparison with its weight there: the comparison is the sum of its numbers so
@@ -6866,10 +6882,13 @@ final class Pullback {
 
     /**
      * The same, of a comparison of {@code numbers} and {@code rest}, the numbers it weighs that are
-     * no values: where the arithmetic of every value composes, a count of the elements a filter
-     * keeps that the comparison still weighs beside another number. Only a count weighed alone
-     * has a reader ({@link WhichOfThemHold}); beside another number it is read as the number it
-     * is in each way of keeping the elements ({@link #keepingOf}).
+     * no values — and failing a value to go into, a count of the elements a filter keeps where it
+     * stands in the way of reading the comparison. Such a count is one number for each way the
+     * elements are kept ({@link #keepingOf}), as a value chosen by cases is one for each case; but
+     * it composes as one number ({@link Quantity.HowManyHold}), so the arithmetic does not stop at
+     * it as it stops at a choice. Only a count weighed alone has a reader
+     * ({@link WhichOfThemHold}): one weighed beside another number, or one inside a product or a
+     * quotient no linear form was made of, is read in its ways, where it is a constant.
      *
      * <p>Which counts are weighed is asked of the comparison with every number put together, so
      * that a count written on both sides and cancelled is read as the nought it comes to.
@@ -6885,41 +6904,55 @@ final class Pullback {
         Map<Quantity.HowManyHold, List<Denotation>> outer = countsMet;
         countsMet = new LinkedHashMap<>();
         try {
-            List<LinearForm<Quantity>> composed = new ArrayList<>();
-            Inside inside = aStopIn(numbers.stream().map(Weighed::number).toList(), composed);
-            if (inside != null || composed.size() < numbers.size()
+            NumbersRead read = aStopIn(numbers.stream().map(Weighed::number).toList());
+            if (read.wayIn() != null) {
+                return read.wayIn();
+            }
+            if (!read.notLinear().isEmpty()) {
+                return aCountToKeep((count, container) -> read.notLinear().stream()
+                        .anyMatch(stopped -> Core.holds(stopped, container.value())));
+            }
+            if (read.composed().size() < numbers.size()
                     || countsMet.isEmpty() && !restMayCount.getAsBoolean()
                     || !(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))
                     || countsMet.isEmpty()) {
-                return inside;
+                return null;
             }
             List<LinearForm<Quantity>> weighed = new ArrayList<>(List.of(others));
             for (int i = 0; i < numbers.size(); i++) {
-                LinearForm<Quantity> one = composed.get(i).times(numbers.get(i).by()).orNull();
+                LinearForm<Quantity> one =
+                        read.composed().get(i).times(numbers.get(i).by()).orNull();
                 if (one == null) {
                     return null;
                 }
                 weighed.add(one);
             }
             LinearForm<Quantity> relation = LinearForm.sum(weighed).orNull();
-            if (relation == null || relation.coefs().size() < 2) {
-                return null;
-            }
-            for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count : countsMet.entrySet()) {
-                if (!relation.coefs().containsKey(count.getKey())) {
-                    continue;
-                }
-                for (Denotation container : count.getValue()) {
+            return relation == null || relation.coefs().size() < 2 ? null
+                    : aCountToKeep((count, container) -> relation.coefs().containsKey(count));
+        } finally {
+            countsMet = outer;
+        }
+    }
+
+    /**
+     * The first container a count met in {@link #countsMet} was asked of, among those
+     * {@code standsInTheWay} names, whose elements truths keep — read in each way they are kept,
+     * or null where there is none.
+     */
+    private Inside.ATotalByKeeping aCountToKeep(
+            BiPredicate<Quantity.HowManyHold, Denotation> standsInTheWay) {
+        for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count : countsMet.entrySet()) {
+            for (Denotation container : count.getValue()) {
+                if (standsInTheWay.test(count.getKey(), container)) {
                     Inside.ATotalByKeeping kept = keptByTruths(container);
                     if (kept != null) {
                         return kept;
                     }
                 }
             }
-            return null;
-        } finally {
-            countsMet = outer;
         }
+        return null;
     }
 
     /** What a comparison weighs besides its values, where it weighs them alone. */
@@ -6927,22 +6960,22 @@ final class Pullback {
         return new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO));
     }
 
-    /**
-     * The first value the arithmetic of one of {@code numbers} stops at that a reading can go into,
-     * as {@link #aWayIn(List)} has it.
-     *
-     * @param composed where not null, given the form of each number whose arithmetic composes, in
-     *                 the order of {@code numbers}: one for each of them where every one does
-     */
-    private Inside aStopIn(List<Denotation> numbers, List<LinearForm<Quantity>> composed) {
+    /** What the arithmetic of {@code numbers} came to, read one after another. */
+    private NumbersRead aStopIn(List<Denotation> numbers) {
+        List<LinearForm<Quantity>> composed = new ArrayList<>();
+        List<Core> notLinear = new ArrayList<>();
         for (Denotation number : numbers) {
             AffineForms.Outcome<Quantity, InputReads> outcome =
                     AffineForms.outcome(number.value(), number.at(), quantities());
-            if (composed != null && outcome instanceof AffineForms.Outcome.Composed<Quantity,
-                    InputReads>(LinearForm<Quantity> form)) {
+            if (outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                    LinearForm<Quantity> form)) {
                 composed.add(form);
             }
             if (outcome instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+                AffineForms.Outcome.StoppedAt<Quantity, InputReads> at = whereItStopped(stopped);
+                if (at.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>) {
+                    notLinear.add(at.node());
+                }
                 Inside found = aWayInAt(stopped);
                 boolean goneInto = switch (found) {
                     case null -> true;
@@ -6963,11 +6996,19 @@ final class Pullback {
                             number.at().hands(name.binding());
                 };
                 if (!goneInto) {
-                    return found;
+                    return new NumbersRead(found, composed, notLinear);
                 }
             }
         }
-        return null;
+        return new NumbersRead(null, composed, notLinear);
+    }
+
+    /** The innermost value the arithmetic of {@code stopped} stopped at, through the arguments of
+     *  the calls it read the form of. */
+    private static AffineForms.Outcome.StoppedAt<Quantity, InputReads> whereItStopped(
+            AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+        return stopped.why() instanceof AffineForms.Halt.AnArgumentStopped<Quantity, InputReads>(
+                var argument) ? whereItStopped(argument) : stopped;
     }
 
     /**
