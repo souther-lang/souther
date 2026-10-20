@@ -5668,7 +5668,8 @@ final class Pullback {
         InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(walk.value(), read.domain(),
                 walk.at(), read.rules(), blocksAt(walk));
         if (added == null) {
-            LinearForm<Quantity> ofAnAnswer = seedPlusWhatEachElementOfAnAnswerAdds(walk);
+            LinearForm<Quantity> ofAnAnswer =
+                    unlessUnread(() -> seedPlusWhatEachElementOfAnAnswerAdds(walk));
             return ofAnAnswer != null ? ofAnAnswer : unlessUnread(() -> foldOfWrittenOut(walk));
         }
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();

@@ -1155,7 +1155,7 @@ public final class InputReads {
      * null where it holds none's.
      *
      * <p>Only through the operations that put the elements of a list in another order
-     * ({@link InputPath#argumentWhoseElementsAreReordered}): a filtered list holds some of the
+     * ({@code InputPath.argumentWhoseElementsAreReordered}): a filtered list holds some of the
      * elements of the answer, and what is added up over those is added up over no element of it.
      */
     public AnAnswerAt answerWhoseEveryElementIsHeldBy(Core container, Symbols symbols,
