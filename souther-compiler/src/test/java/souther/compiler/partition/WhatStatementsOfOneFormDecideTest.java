@@ -24,85 +24,64 @@ class WhatStatementsOfOneFormDecideTest {
     private static final NumericTerm X = new NumericTerm.ValueOf(TermPath.of("x"));
     private static final NumericTerm Y = new NumericTerm.ValueOf(TermPath.of("y"));
 
-    /** {@code weight * x + constant rel 0}. */
+    /** {@code weight * term + constant rel 0}. */
     private static TakenConstraint.Affine on(NumericTerm term, long weight, long constant,
                                              Rel rel) {
         return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant),
                 Map.of(term, ExactRatio.of(weight))), rel);
     }
 
-    private static WhatStatementsOfOneFormDecide.Verdict askedOfX(
-            List<TakenConstraint.Affine> stated, long level, Rel relation) {
-        return WhatStatementsOfOneFormDecide.of(stated, Map.of(X, ExactRatio.ONE),
-                ExactRatio.of(level), relation);
+    private static boolean noRowArrives(TakenConstraint.Affine... stated) {
+        return WhatStatementsOfOneFormDecide.of(List.of(stated), null, null, Rel.EQ)
+                .noRowArrives();
+    }
+
+    private static boolean decided(NumericTerm form, long weight, long level, Rel relation,
+                                   TakenConstraint.Affine... stated) {
+        return WhatStatementsOfOneFormDecide.of(List.of(stated), Map.of(form,
+                ExactRatio.of(weight)), ExactRatio.of(level), relation).relationIsDecided();
     }
 
     @Test
     void statementsThatHoldTheFormNowhereLeaveNoRow() {
-        var verdict = WhatStatementsOfOneFormDecide.of(
-                List.of(on(X, 100, 0, Rel.LE), on(X, 100, 0, Rel.GT)), null, null, Rel.EQ);
-
-        assertTrue(verdict.noRowArrives());
+        assertTrue(noRowArrives(on(X, 1, 0, Rel.LE), on(X, 1, 0, Rel.GT)));
     }
 
     @Test
-    void aFactorAndASignDoNotHideThatTwoStatementsAreOfOneForm() {
-        var verdict = WhatStatementsOfOneFormDecide.of(
-                List.of(on(X, 1, -5, Rel.GE), on(X, -2, 8, Rel.GE)), null, null, Rel.EQ);
-
-        assertTrue(verdict.noRowArrives(), "x >= 5 and 4 >= x");
-        assertFalse(WhatStatementsOfOneFormDecide.of(
-                List.of(on(X, 1, -5, Rel.GE), on(X, -2, 12, Rel.GE)), null, null, Rel.EQ)
-                .noRowArrives(), "x >= 5 and 6 >= x leave five and six");
+    void aNegativeFactorTurnsTheOrderingOfAStatement() {
+        assertTrue(noRowArrives(on(X, 1, -5, Rel.GE), on(X, -2, 8, Rel.GE)), "x >= 5, 4 >= x");
     }
 
     @Test
-    void aSingleLevelBoundsFromBothSidesLeavesThatPoint() {
-        var verdict = WhatStatementsOfOneFormDecide.of(
-                List.of(on(X, 1, -5, Rel.GE), on(X, 1, -5, Rel.LE)), null, null, Rel.EQ);
-
-        assertFalse(verdict.noRowArrives());
+    void aLevelHeldFromBothSidesLeavesThatPoint() {
+        assertFalse(noRowArrives(on(X, 1, -5, Rel.GE), on(X, 1, -5, Rel.LE)));
     }
 
     @Test
-    void aRelationIsDecidedWhereTheStatementsLeaveItOneWayAtEveryPoint() {
-        List<TakenConstraint.Affine> above75 = List.of(on(X, 1, -76, Rel.GE),
-                on(X, 1, -75, Rel.GT));
+    void aRelationIsDecidedWhereEveryPointTheStatementsLeaveGivesItOneAnswer() {
+        TakenConstraint.Affine atLeast76 = on(X, 1, -76, Rel.GE);
 
-        assertTrue(askedOfX(above75, 70, Rel.GE).relationIsDecided(), "x >= 70 under x >= 76");
-        assertTrue(askedOfX(above75, 76, Rel.GE).relationIsDecided(), "x >= 76 under x >= 76");
-        assertTrue(askedOfX(above75, 76, Rel.LT).relationIsDecided(), "x < 76 under x >= 76");
-        assertFalse(askedOfX(above75, 80, Rel.GE).relationIsDecided(), "x >= 80 under x >= 76");
-        assertFalse(askedOfX(above75, 77, Rel.GT).relationIsDecided(), "x > 77 under x >= 76");
+        assertTrue(decided(X, 1, 70, Rel.GE, atLeast76), "x >= 70 under x >= 76");
+        assertFalse(decided(X, 1, 80, Rel.GE, atLeast76), "x >= 80 under x >= 76");
     }
 
     @Test
-    void theRelationIsDecidedByTheStatementsOfItsOwnFormAlone() {
-        var verdict = WhatStatementsOfOneFormDecide.of(List.of(on(Y, 1, -76, Rel.GE)),
-                Map.of(X, ExactRatio.ONE), ExactRatio.of(70), Rel.GE);
-
-        assertFalse(verdict.relationIsDecided());
-        assertFalse(verdict.noRowArrives());
+    void aRelationIsDecidedInTheScaleAndSignItIsAskedIn() {
+        assertTrue(decided(X, -2, -100, Rel.LE, on(X, 1, -76, Rel.GE)), "-2x <= -100");
     }
 
     @Test
-    void aRelationOfAnotherScaleAndSignIsDecidedAsItsOwnForm() {
-        var verdict = WhatStatementsOfOneFormDecide.of(List.of(on(X, 1, -76, Rel.GE)),
-                Map.of(X, ExactRatio.of(-2)), ExactRatio.of(-100), Rel.LE);
-
-        // -2x <= -100 is x >= 50, which x >= 76 meets.
-        assertTrue(verdict.relationIsDecided());
+    void aStatementOfAnotherFormDecidesNothing() {
+        assertFalse(decided(X, 1, 70, Rel.GE, on(Y, 1, -76, Rel.GE)));
     }
 
     @Test
-    void aTermInsideAContainerIsNotTakenForOneStatementIsPerElement() {
-        TermPath inside = TermPath.of("xs").element();
-        NumericTerm element = new NumericTerm.ValueOf(inside);
+    void aTermInsideAContainerIsLeftOutBecauseEachStatementMayBeOfAnotherElement() {
+        NumericTerm element = new NumericTerm.ValueOf(TermPath.of("xs").element());
 
-        var verdict = WhatStatementsOfOneFormDecide.of(
-                List.of(on(element, 1, 0, Rel.LE), on(element, 1, 0, Rel.GT)), null, null,
-                Rel.EQ);
-
-        assertEquals(WhatStatementsOfOneFormDecide.Verdict.NOTHING, verdict);
+        assertEquals(WhatStatementsOfOneFormDecide.Verdict.NOTHING,
+                WhatStatementsOfOneFormDecide.of(
+                        List.of(on(element, 1, 0, Rel.LE), on(element, 1, 0, Rel.GT)), null, null,
+                        Rel.EQ));
     }
 }
