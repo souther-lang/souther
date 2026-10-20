@@ -237,8 +237,8 @@ public final class InputNumber {
      *
      * <p>The code points are the elements of a list no row writes, so there is no position of an
      * element to read the closure at, and the number is of the string at one position. What the
-     * closure makes of a code point is read as it is of an element of an input list
-     * ({@link ElementValue#read}). Null where the walk keeps some of the elements, where the closure
+     * closure makes of a code point is read as it is of an element of an input list, for elements
+     * that stand at no place ({@link ElementValue#readWithoutAPlace}). Null where the walk keeps some of the elements, where the closure
      * turns on where an element stands or on anything but the code point, or where the total is of
      * something else.
      *

@@ -124,9 +124,27 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
             }
             """;
 
+    /** A total that stays in the range of {@code Int} while a product on the way does not: "A" is
+     *  65, whose total is the limit asked for and whose product is past the range, so the model
+     *  aborts on it. A row holding it is one no answer of the total's can be given to. */
+    private static final String PAST_THE_RANGE_ON_THE_WAY = """
+            module p
+            behavior pick : (s: String) -> Int
+            let pick (s) = {
+                guard List.sum(List.map((x) -> 200000000000000000 * x - 4000000000000000000,
+                        String.codePoints(s))) >= 9000000000000000000 else 0
+                1
+            }
+            """;
+
     /** Each model, with what its condition works out to over the string a row holds and the
      *  answers some row of it is composed for. */
     private static final Map<String, Function<String, Integer>> ANSWERED = Map.of(
+            PAST_THE_RANGE_ON_THE_WAY, text -> text.codePoints().mapToObj(BigInteger::valueOf)
+                    .map(point -> point.multiply(BigInteger.valueOf(200000000000000000L))
+                            .subtract(new BigInteger("4000000000000000000")))
+                    .reduce(BigInteger.ZERO, BigInteger::add)
+                    .compareTo(new BigInteger("9000000000000000000")) >= 0 ? 1 : 0,
             NEAR_THE_LIMIT, text -> BigInteger.valueOf(sumOf(text))
                     .multiply(BigInteger.valueOf(100000000000000000L))
                     .compareTo(new BigInteger("9200000000000000000")) >= 0 ? 1 : 0,
@@ -139,6 +157,7 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
             BESIDE_ITS_LENGTH, text -> lengthOf(text) < 2 ? 0 : sumOf(text) <= 200 ? 2 : 1);
 
     private static final Map<String, Set<Integer>> COMPOSED_FOR = Map.of(
+            PAST_THE_RANGE_ON_THE_WAY, Set.of(0),
             NEAR_THE_LIMIT, Set.of(0, 1),
             SAME_FOR_EACH, Set.of(0, 1),
             WEIGHED, Set.of(0, 1),
