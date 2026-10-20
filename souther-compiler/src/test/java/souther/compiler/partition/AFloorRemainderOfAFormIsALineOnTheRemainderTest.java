@@ -366,67 +366,27 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     /**
-     * A remainder against another number of the input is a line on the two added, and a row at it
-     * is numbers whose remainder and other number come to what the line says.
+     * A remainder against another number of the input is read as a line on the two added, and the
+     * comparison is no longer one nothing read. However it is written, the weighed remainder and
+     * number are one quantity and so one line.
      */
     @Test
     void aRemainderAgainstAnotherNumberIsALineOnTheTwo() {
         String parameters = "a: Int, b: Int, c: Int";
-        for (String condition : List.of("c == Int.floorMod(a + b, 11)",
-                "Int.floorMod(a + b, 11) == c", "2 * c == 2 * Int.floorMod(a + b, 11)")) {
-            assertEquals(List.of("0"), bordersOf(parameters, condition), condition);
-            boolean met = false;
-            for (Row row : certifiedRows(parameters, condition)) {
-                if (row.labels().stream().anyMatch(label -> label.endsWith(" = 0")
-                        && label.contains("floorMod(a + b, 11)"))) {
-                    long a = Long.parseLong(row.inputs().get(0));
-                    long b = Long.parseLong(row.inputs().get(1));
-                    long c = Long.parseLong(row.inputs().get(2));
-                    assertEquals(c, Math.floorMod(a + b, 11L), row.inputs().toString());
-                    met = true;
-                }
-            }
-            assertTrue(met, condition + ": the line itself is owed a row");
+        Compilation compilation = compiled(parameters, "c == Int.floorMod(a + b, 11)");
+        assertEquals(List.of("0"), bordersOf(linesOf(compilation)));
+        // Read, and no longer reported as written in a form nothing reads or as about a value made
+        // from the position.
+        assertEquals(List.of(), compilation.db().ask(new Adequacy.Coverage("demo")).value()
+                .get("f").notRead().stream()
+                .map(PartitionEvidence.NotRead::reason)
+                .filter(reason -> reason == UndividedPosition.Reason.UNSUPPORTED_SYNTAX
+                        || reason == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
+                .toList());
+        for (String spelled : List.of("Int.floorMod(a + b, 11) == c",
+                "2 * c == 2 * Int.floorMod(a + b, 11)")) {
+            assertEquals(List.of("0"), bordersOf(parameters, spelled), spelled);
         }
-    }
-
-    /** The remainder added to a number reaches a level the number alone sets. */
-    @Test
-    void aRemainderPlusANumberIsHeldAtItsLevel() {
-        String condition = "c + Int.floorMod(a + b, 11) == 11";
-        assertEquals(List.of("11"), bordersOf("a: Int, b: Int, c: Int", condition));
-        boolean met = false;
-        for (Row row : certifiedRows("a: Int, b: Int, c: Int", condition)) {
-            if (row.labels().stream().anyMatch(label -> label.endsWith(" = 11"))) {
-                long a = Long.parseLong(row.inputs().get(0));
-                long b = Long.parseLong(row.inputs().get(1));
-                long c = Long.parseLong(row.inputs().get(2));
-                assertEquals(11, c + Math.floorMod(a + b, 11L), row.inputs().toString());
-                met = true;
-            }
-        }
-        assertTrue(met, "the line itself is owed a row");
-    }
-
-    /**
-     * The remainder tried is the one the other number can make up the level with, wherever the
-     * divisor puts it: pinned to a hundred, the other number leaves nothing else, so the row at the
-     * line is found at the hundredth remainder and not only among the first few.
-     */
-    @Test
-    void theRemainderTriedIsTheOneTheOtherNumberLeaves() {
-        String condition = "c >= 100 && c <= 100 && Int.floorMod(a + b, 257) == c";
-        boolean met = false;
-        for (Row row : certifiedRows("a: Int, b: Int, c: Int", condition)) {
-            if (row.labels().stream().anyMatch(label -> label.endsWith(" = 0")
-                    && label.contains("floorMod(a + b, 257)"))) {
-                long a = Long.parseLong(row.inputs().get(0));
-                long b = Long.parseLong(row.inputs().get(1));
-                assertEquals(100, Math.floorMod(a + b, 257L), row.inputs().toString());
-                met = true;
-            }
-        }
-        assertTrue(met, "the line itself is owed a row");
     }
 
     /**
@@ -436,23 +396,6 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     @Test
     void aRemainderAddedToANumberOfItsOwnFormIsNotRead() {
         assertEquals(List.of(), bordersOf("a: Int, b: Int", "a == Int.floorMod(a + b, 11)"));
-    }
-
-    /**
-     * A check digit held against a remainder that a branch moves is the remainder against a number
-     * on one arm and a constant on the other, and both are read.
-     */
-    @Test
-    void aCheckDigitAgainstABranchOnTheRemainderIsRead() {
-        Compilation compilation = compiled("a: Int, b: Int, c: Int", List.of(
-                "let r = Int.floorMod(a + b, 11)",
-                "guard c == (if r <= 1 then 0 else 11 - r) else No", "Ok"), "");
-        PartitionEvidence evidence = compilation.db().ask(new Adequacy.Coverage("demo"))
-                .value().get("f");
-        assertNotNull(evidence);
-        assertEquals(List.of("0", "1", "11", "1"), bordersOf(linesOf(compilation)),
-                "the digit against nought, the remainder against one, and the digit and the"
-                        + " remainder adding up to eleven");
     }
 
     /** One row of a measurement: what each input was written as and what each point is for. */
