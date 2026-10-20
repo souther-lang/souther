@@ -1906,8 +1906,10 @@ final class Pullback {
 
     /**
      * How many {@code value} holds, with each count of kept elements it comes to told to
-     * {@link #countsMet}: every such count is some container's size, so this is where each is
-     * met, whichever reading asked.
+     * {@link #countsMet}. A count that has ways of keeping to be read in is the size of the
+     * container whose elements truths keep, so this is where each is met, whichever reading
+     * asked. A count a law weighs of a statement about the elements, not as the size of anything,
+     * has no container of kept elements, and is read as which of its statements hold.
      */
     private Sized sizeOf(Core value, InputReads at) {
         Sized sized = howManyItHolds(value, at);
@@ -6867,9 +6869,9 @@ final class Pullback {
      *                  into yet, or null
      * @param composed  the form of each number whose arithmetic composed, in the order of the
      *                  numbers: one for each of them where every one did
-     * @param notLinear the atoms that kept a product or a quotient it stopped at from being a form
-     *                  ({@link AffineForms.Halt.NotLinear#over}), each of them a number of its
-     *                  own wherever it was read
+     * @param notLinear the atoms each of which, were it a constant, would make a product or a
+     *                  quotient it stopped at a form ({@link AffineForms.Halt.NotLinear#over}),
+     *                  each of them a number of its own wherever it was read
      */
     private record NumbersRead(Inside wayIn, List<LinearForm<Quantity>> composed,
                                Set<Quantity> notLinear) {}
@@ -6930,15 +6932,8 @@ final class Pullback {
                 }
                 weighed.add(one);
             }
-            // Inside the ways of keeping, a count weighed alone is read in its ways too: its truths
-            // are a choice inside the choice being read, as an if inside an if is, and read as
-            // which of them hold they would be the comparison's own relations under that arm.
             LinearForm<Quantity> relation = LinearForm.sum(weighed).orNull();
-            if (relation == null) {
-                return null;
-            }
-            boolean alone = relation.coefs().size() < 2;
-            return alone && aggregatesInACase.isEmpty() ? null
+            return relation == null || relation.coefs().size() < 2 ? null
                     : aCountToKeep(relation.coefs()::containsKey);
         } finally {
             countsMet = outer;

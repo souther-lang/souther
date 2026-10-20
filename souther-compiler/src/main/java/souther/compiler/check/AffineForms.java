@@ -308,8 +308,9 @@ public final class AffineForms {
          * A product of two values neither of which is a constant, or a quotient by one that is
          * not: arithmetic, and none a form over the atoms says.
          *
-         * @param over the atoms that keep it from being a form ({@link Terms.Operated.NotLinear}),
-         *             or none where what it was made of was not composed
+         * @param over the atoms each of which, were it a constant, would make it a form
+         *             ({@link Terms.Operated.NotLinear}), or none where what it was made of was
+         *             not composed
          */
         record NotLinear<A, E>(NonAffineOperation operation, Set<A> over) implements Halt<A, E> {
 

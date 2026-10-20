@@ -235,9 +235,9 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      */
     @Test
     void aCountIsTheCountOfTheValuesItsCallHandedIt() {
-        assertOwesTheSame("k * cnt(a, a) >= cnt(b, b)",
+        assertOwesTheSame("k * cnt(a, a) >= cnt(b, b) + k",
                 "k * ((if a > 0 then 1 else 0) + (if a > 0 then 1 else 0))"
-                        + " >= (if b > 0 then 1 else 0) + (if b > 0 then 1 else 0)", HELPER);
+                        + " >= (if b > 0 then 1 else 0) + (if b > 0 then 1 else 0) + k", HELPER);
     }
 
     private static void assertOwesTheSame(String kept, String writtenOut, String after) {
@@ -320,6 +320,18 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     void aCountALawWeighsAloneIsReadAsWhichOfItsStatementsHold() {
         String report = report(guarded("List.isEmpty(List.drop(1, " + MANY + "))"));
         assertFalse(report.contains("not read"), report);
+    }
+
+    /** A count beside another number inside a factor is no count a way of keeping makes a form
+     *  of: a constant there leaves {@code k * a}, so the product stops for being one, and no way
+     *  is read for it. */
+    @Test
+    void aCountWhoseWaysLeaveTheProductNoFormIsNotReadInThem() {
+        String report = report(guarded("k * (a + List.length(" + MANY + ")) >= 3"));
+        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
+        assertFalse(unread.isEmpty(), report);
+        assertTrue(unread.stream().allMatch(line ->
+                line.contains("a product of two values that are not constants")), report);
     }
 
     @Test

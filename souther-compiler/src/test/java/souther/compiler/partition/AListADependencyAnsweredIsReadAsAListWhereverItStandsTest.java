@@ -528,12 +528,8 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                         && line.contains(CompositionBudget.READINGS_OF_ONE_CONDITION.name())
                         && line.contains("about `on`")),
                 () -> "the comparison is said to be one the figure stopped: " + report);
-        assertTrue(said.stream().allMatch(why ->
-                        why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(
-                                var figures)
-                                && figures.written().contains(
-                                        CompositionBudget.READINGS_OF_ONE_CONDITION)),
-                () -> "nothing else is said of the statement: " + said);
+        assertEquals(List.of(), said,
+                "a statement the reading of what it means stopped on is no statement composed for");
     }
 
     /** What the dependency answers is a list of elements of two numbers. */

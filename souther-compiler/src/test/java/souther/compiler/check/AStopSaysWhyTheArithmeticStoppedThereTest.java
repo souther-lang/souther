@@ -144,6 +144,31 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
     }
 
     /**
+     * What a product or a quotient that is no form stops over is each atom that, were it a
+     * constant, would make it one: the one atom of either factor, and the one atom of the divisor.
+     * An atom beside another in its factor is not one of them, since a constant there leaves the
+     * other multiplied.
+     */
+    @Test
+    void aProductOrAQuotientStopsOverTheAtomsThatWouldMakeItAForm() {
+        LinearForm<String> x = LinearForm.atom("x");
+        LinearForm<String> y = LinearForm.atom("y");
+        LinearForm<String> xAndY = LinearForm.sumOfAtoms("x", "y");
+        assertEquals(Set.of("x", "y"), over(Terms.product(x, y)));
+        assertEquals(Set.of("y"), over(Terms.quotient(x, y)));
+        assertEquals(Set.of("y"), over(Terms.product(xAndY, y)));
+        assertEquals(Set.of(), over(Terms.product(xAndY, xAndY)));
+        assertEquals(Set.of(), over(Terms.quotient(y, xAndY)));
+    }
+
+    private static Set<String> over(Terms.Operated<String> operated) {
+        if (!(operated instanceof Terms.Operated.NotLinear<String>(var _, Set<String> over))) {
+            throw new AssertionError("no form: " + operated);
+        }
+        return over;
+    }
+
+    /**
      * A stop under calls the library states the form of is the stop of what the call was handed, at
      * whatever depth, and it is the one place that says so.
      */
