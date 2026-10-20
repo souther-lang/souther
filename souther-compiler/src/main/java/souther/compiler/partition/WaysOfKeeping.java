@@ -112,13 +112,10 @@ final class WaysOfKeeping {
      * <p>The reading a leaf makes is one of each element there, as the sum of the elements of a
      * container that is not kept by anything is. Counted only to {@code limit}, because what a
      * caller asks is whether the work is within a budget, and a tree of independent truths has as
-     * many leaves as there are combinations of them.
+     * many leaves as there are combinations of them. The truths {@code decided} already are not
+     * split again.
      */
-    long work(long limit) {
-        return work(undecided(), limit);
-    }
-
-    private long work(Boolean[] decided, long limit) {
+    long work(Boolean[] decided, long limit) {
         int next = nextEvaluated(decided);
         if (next < 0) {
             long there = 0;
