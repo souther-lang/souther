@@ -233,19 +233,20 @@ public final class WhereTheElementsCameFrom {
     }
 
     /**
-     * Whether {@code operation}'s answer is the elements of its argument at {@code list} from the
-     * index its argument at {@code count} names on: its body is a walk over that list as it stands,
-     * from its first element, carrying beside what it answers a count of the elements walked, which
-     * starts at nought and goes up by one at every step; what it answers starts from nothing, and a
-     * step puts the element it is handed after all of it where the count has reached the index and
-     * keeps it as it is where the count has not.
+     * Whether {@code operation}'s answer is the elements of its argument at {@code list} whose index
+     * stands to the number its argument at {@code count} names as {@code kept} says: its body is a
+     * walk over that list as it stands, from its first element, carrying beside what it answers a
+     * count of the elements walked, which starts at nought and goes up by one at every step; what
+     * it answers starts from nothing, and a step puts the element it is handed after all of it
+     * where the count stands to the index as {@code kept} says and keeps it as it is where it does
+     * not.
      *
      * <p>The count is how many elements were walked before the one handed, which is that element's
-     * index, so the element is put exactly where its index is the count or past it, and in the order
-     * it was handed in.
+     * index, so the element is put exactly where its index stands so, and in the order it was handed
+     * in.
      */
-    public LibraryProver.Outcome fromAnIndexOn(ValueName.Stdlib.Operation operation, int count,
-                                               int list) {
+    public LibraryProver.Outcome byAnIndex(ValueName.Stdlib.Operation operation, int count,
+                                           int list, Rel kept) {
         Reading reading = new Reading(library, readThrough);
         try {
             List<Value> params = new ArrayList<>();
@@ -263,8 +264,8 @@ public final class WhereTheElementsCameFrom {
                         || !(args.get(walk.seed()) instanceof Value.Tupled(List<Value> started))
                         || !(started.get(answered) instanceof Value.Listed(List<Value> nothing))
                         || !nothing.isEmpty()
-                        || !putsFromTheIndex(args.get(walk.step()), walk, started, answered,
-                                new Value.Argument(count), reading)) {
+                        || !putsByTheIndex(args.get(walk.step()), walk, started, answered,
+                                new Value.Argument(count), kept, reading)) {
                     return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
                             Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
                 }
@@ -280,10 +281,10 @@ public final class WhereTheElementsCameFrom {
      * Whether {@code step}, the step of a walk started from {@code started}, carries at some
      * component other than {@code answered} a count from nought up by one at every step, and at
      * {@code answered} puts the element it is handed after all of what it carries where that count
-     * is {@code index} or past it and keeps what it carries where it is below.
+     * stands to {@code index} as {@code kept} says and keeps what it carries where it does not.
      */
-    private static boolean putsFromTheIndex(Value step, TheWalk walk, List<Value> started,
-                                            int answered, Value index, Reading reading) {
+    private static boolean putsByTheIndex(Value step, TheWalk walk, List<Value> started,
+                                          int answered, Value index, Rel kept, Reading reading) {
         Value carried = new Value.Fresh(1, "what the walk carries");
         Value next = new Value.Fresh(3, "the element the walk is handed next");
         List<Value> handed = new ArrayList<>(List.of(next, next));
@@ -302,7 +303,8 @@ public final class WhereTheElementsCameFrom {
             boolean every = true;
             for (Reading.Case each : cases) {
                 Value after = Reading.componentOf(each.is(), answered);
-                Rel puts = after.equals(putAfter) ? Rel.GE : after.equals(before) ? Rel.LT : null;
+                Rel puts = after.equals(putAfter) ? kept
+                        : after.equals(before) ? kept.denied() : null;
                 every &= puts != null && oneMore(Reading.componentOf(each.is(), counted), walked)
                         && each.when().equals(new LawProposition.Compared<>(reached, puts));
             }

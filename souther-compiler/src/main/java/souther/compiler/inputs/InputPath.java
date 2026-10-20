@@ -220,6 +220,14 @@ final class InputPath {
                 .elementOf(binding, names).heldAt();
     }
 
+    /** The same, of the elements {@code e} holds rather than those handed to a binding. */
+    static PathResolution inTheOrderOf(Core e, TraversalDirection direction,
+                                       BindingEnvironment names, DeclarationNewtypes newtypes,
+                                       Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, taken, direction)
+                .heldAt(e, new Wanted.APart(HeldIn.Part.ELEMENT), names).heldAt();
+    }
+
     /** Whether the question in hand wants every occurrence of a position, each once. */
     private boolean asksEveryOccurrence() {
         return switch (asked) {

@@ -86,6 +86,9 @@ class ARowIsComposedForAPointOnATotalTest {
             data Two = { xs: List<Awkward> }
                 invariant List.length(xs) == 2
 
+            data Three = { ns: List<Int> }
+                invariant List.length(ns) == 3
+
             data Yes
             data No
             data Verdict = Yes | No
@@ -122,6 +125,32 @@ class ARowIsComposedForAPointOnATotalTest {
             let aTotalTheOneSidedSplitCannotReach (p) =
                 if List.sum(List.map(x -> x.value, p.xs)) >= 4 then Yes else No
 
+            behavior overTheFirstTwo : (ns: List<Int>) -> Verdict
+            let overTheFirstTwo (ns) =
+                if List.sum(List.take(2, ns)) >= 5 then Yes else No
+
+            behavior fromTheSecondOn : (ns: List<Int>) -> Verdict
+            let fromTheSecondOn (ns) =
+                if List.sum(List.drop(1, ns)) >= 5 then Yes else No
+
+            behavior overTheLastTwo : (ns: List<Int>) -> Verdict
+            let overTheLastTwo (ns) =
+                if List.sum(List.take(2, List.reverse(ns))) >= 5 then Yes else No
+
+            behavior overTheLastTwoOfThree : (t: Three) -> Verdict
+            let overTheLastTwoOfThree (t) =
+                if List.sum(List.take(2, List.reverse(t.ns))) >= 5 then Yes else No
+
+            behavior overEveryOtherPosition : (ns: List<Int>) -> Verdict
+            let overEveryOtherPosition (ns) =
+                if List.sum(List.mapIndexed((i, n) -> if Int.floorMod(i, 2) == 0 then n else 0,
+                        ns)) >= 5 then Yes else No
+
+            behavior overTheFirstTwoWorkedOut : (lines: List<Item>) -> Verdict
+            let overTheFirstTwoWorkedOut (lines) =
+                if List.sum(List.take(2, List.map(line -> 2 * line.amount.value + 1, lines)))
+                        >= 11 then Yes else No
+
             behavior noShapeOfferedReachesIt : (t: Two) -> Verdict
             let noShapeOfferedReachesIt (t) =
                 if List.sum(List.map(x -> x.value, t.xs)) >= 7 then Yes else No
@@ -130,7 +159,10 @@ class ARowIsComposedForAPointOnATotalTest {
     private static final List<String> ON_A_TOTAL =
             List.of("overABareList", "overAProjection", "needingSeveral",
                     "overADenseRunHeldAwayFromNought", "aContainerTheRecordCounts",
-                    "aTotalBelowWhereItsElementsStart", "aTotalTheOneSidedSplitCannotReach");
+                    "aTotalBelowWhereItsElementsStart", "aTotalTheOneSidedSplitCannotReach",
+                    "overTheFirstTwo", "fromTheSecondOn", "overTheLastTwo",
+                    "overTheLastTwoOfThree", "overEveryOtherPosition",
+                    "overTheFirstTwoWorkedOut");
 
     /**
      * The model cut to one behavior each: the declarations before the first behavior, and that
@@ -309,6 +341,23 @@ class ARowIsComposedForAPointOnATotalTest {
         assertEquals(List.of("(Pair { xs = [NotFour(2), NotFour(2)] })"),
                 rowsAt("aTotalTheOneSidedSplitCannotReach", " ON"),
                 "the shared shape is what the rule leaves, and the massed one is not");
+    }
+
+    /**
+     * A total of the elements kept by their position is carried by those elements, and the rest
+     * stand where an element starts.
+     *
+     * <p>From the second on, a list of one keeps nothing, so the first count that reaches five is
+     * two, the first of them left at the start. Kept from the far end, the two that carry it are
+     * the last two the row writes, so of a list of three the first is the one left out.
+     */
+    @Test
+    void aTotalOfTheElementsKeptByPositionIsCarriedWhereTheyStand() {
+        assertEquals(List.of("([0, 5])"), rowsAt("fromTheSecondOn", " ON"),
+                "the element before the count carries nothing");
+        assertEquals(List.of("(Three { ns = [0, 0, 5] })"), rowsAt("overTheLastTwoOfThree", " ON"),
+                "the whole of it on the last element the row writes, the first of those kept from"
+                        + " the far end");
     }
 
     /**

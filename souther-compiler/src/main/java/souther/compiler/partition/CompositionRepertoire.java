@@ -32,6 +32,9 @@ public enum CompositionRepertoire {
      * equal share each as the order allows — and the arrangements of more than one element are
      * many. Which of them a rule tells apart is the rule's own business, so no reading of the two
      * says anything about the rest.
+     *
+     * <p>Elements the total leaves out — those at positions a total of some of them does not take —
+     * are written at one value each, which is one of the values they could hold.
      */
     WAYS_A_TOTAL_IS_SPREAD,
 
@@ -101,7 +104,9 @@ public enum CompositionRepertoire {
      * element and solving for it, where the computation is a form of that one field alone. A form of
      * several fields, or a choice between two by a flag, has more than one value to choose in an
      * element, and nothing here chooses the others so that the first can be solved for. A choice by
-     * the element's case none of whose arms is a form of one field of its case is the same. Raising
+     * the element's case none of whose arms is a form of one field of its case is the same, and so
+     * is a weight made of the position or a choice by it between two forms of the field, which
+     * weigh the positions apart. Raising
      * anything reaches none of them; what would is a way of choosing the rest of an element.
      *
      * <p>So a total of such a number is not a total no row comes to. Read as a figure, an author is
@@ -146,6 +151,25 @@ public enum CompositionRepertoire {
      * the conversion, and raising no figure does.
      */
     STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR;
+
+    /**
+     * Whether a row that meets this for one value of a point meets it for every other: the
+     * population is of the number and not of the value it was asked at.
+     *
+     * <p>A computed total with no field to solve for is one, since which way solves it is read off
+     * the computation and never off the total asked for, so a second value is written by nothing
+     * the first was not. The others are walks of what one value admits — the ways it is spread,
+     * the places a pair stands, the elements chosen — and another value admits others.
+     */
+    public boolean metWhateverTheValue() {
+        return switch (this) {
+            case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR -> true;
+            case WAYS_A_TOTAL_IS_SPREAD, PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
+                 VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
+                 ELEMENTS_CHOSEN_FOR_A_COUNT, MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                 TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
+        };
+    }
 
     /**
      * Whether a wider run could reach the rest: never, since raising anything reaches none of it.

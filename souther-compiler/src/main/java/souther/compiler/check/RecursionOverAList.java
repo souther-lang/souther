@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 
@@ -23,7 +24,7 @@ import java.util.List;
  * <p>Read by what the operations are, never by what they are called. The element at an index is
  * read with what the library's own walk reads one with, and the rest of the list is an operation the
  * library is proved to answer the elements of its list from an index on with
- * ({@link BoundOperationFact.HoldsTheElementsFrom}), handed one.
+ * ({@link BoundOperationFact.HoldsTheElementsByIndex} at {@link Rel#GE}), handed one.
  *
  * @param walked  the parameter the list is handed on
  * @param none    the arm taken where the list holds nothing
@@ -99,9 +100,10 @@ public record RecursionOverAList(int walked, Core.Case none, Core.Case some,
                 ValueName operation, List<Core> args))) {
             return false;
         }
-        BoundOperationFact.HoldsTheElementsFrom from =
-                DefaultBoundOperationFacts.get().holdsTheElementsFrom(operation);
-        return from != null && isWhole(args.get(from.count().position()), 1)
+        BoundOperationFacts.KeptByIndex from =
+                DefaultBoundOperationFacts.get().holdsTheElementsByIndex(operation);
+        return from != null && from.kept() == Rel.GE
+                && isWhole(args.get(from.count().position()), 1)
                 && parameterAt(args.get(from.list().position()), parameters) == walked;
     }
 

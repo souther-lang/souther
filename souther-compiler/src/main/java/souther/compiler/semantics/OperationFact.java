@@ -1,5 +1,6 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -272,20 +273,32 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The operation answers the elements of {@code list} from the index {@code count} names on, in
-     * the order they stand there: each of them once, and nothing else. All of them where the count
-     * is nought or less, and none where it is past the last.
+     * The operation answers the elements of {@code list} whose index stands to the number
+     * {@code count} names as {@code kept} says, in the order they stand there: each of them once,
+     * and nothing else. {@link Rel#LT} is the elements before that index, every one of them where
+     * the count is past the last and none where it is nought or less; {@link Rel#GE} is the
+     * elements from it on, all of them where the count is nought or less and none where it is past
+     * the last.
      *
      * <p>Which of the source's elements, and not only that they came from it. What is left out is
-     * the run before the index, so some element of the answer meeting a statement is some element of
-     * the source at that index or after it meeting it — and of a list holding something, what the
-     * answer from index one holds and the element at nought are all it holds.
+     * the run on the other side of the index, so some element of the answer meeting a statement is
+     * some element of the source on the kept side meeting it — and of a list holding something,
+     * what the answer from index one holds and the element at nought are all it holds.
+     *
+     * <p>One kind for the two sides, because they are one statement about the index each element
+     * stands at and differ only in the relation: a reader totalling the kept elements reads that
+     * relation as a test of the position, and a reader that needs one side asks for it.
      */
-    record HoldsTheElementsFrom(ArgumentRef count, ArgumentRef list) implements OperationFact {
+    record HoldsTheElementsByIndex(ArgumentRef count, ArgumentRef list, Rel kept)
+            implements OperationFact {
 
-        public HoldsTheElementsFrom {
-            Objects.requireNonNull(count, "the index the elements are kept from is some argument");
+        public HoldsTheElementsByIndex {
+            Objects.requireNonNull(count, "the index the elements are kept by is some argument");
             Objects.requireNonNull(list, "and they are some list's");
+            if (kept != Rel.LT && kept != Rel.GE) {
+                throw new IllegalArgumentException("the elements kept by an index are those before"
+                        + " it or those from it on, and not those standing " + kept + " to it");
+            }
         }
     }
 
