@@ -357,15 +357,15 @@ public final class InputDomain {
             TermPath at = TermPath.of(parameter.name());
             roots.add(new RuleRoot(at, parameter.type(), new RootOpening.Taken()));
             PlacedRules rules = PlacedRules.of(at, parameter.type(), reading);
-            account.from(rules, _ -> true);
+            Reach first = Reach.enumerating(demand.under(at));
+            account.from(rules, first);
             // One walk, carrying the paths the measurement named under this parameter. Walked once
             // per demand instead, two paths sharing a prefix would open that prefix's declaration
             // twice, place its rules twice, and record a second answer where the ledger of what was
             // handed on keeps one — so a reading assembled from replays would depend on how many
             // demands ran through it.
             walk(at, parameter.type(), ExpansionTrace.NONE, reading, counted, rules, found, roots,
-                    java.util.Set.of(), handoffs, observed, account,
-                    Reach.enumerating(demand.under(at)).alsoNaming(rules));
+                    java.util.Set.of(), handoffs, observed, account, first.alsoNaming(rules));
         }
         // And only now, because a handoff is discharged by a descent that happens after the
         // position above it has been read. Held the other way round, every position that hands its
@@ -397,12 +397,16 @@ public final class InputDomain {
         private final List<ClauseWithoutAnEnd> clauses = new ArrayList<>();
 
         /**
-         * What {@code rules} put forward, ends and clauses alike, of the placements those that
-         * {@code owed} says this reading is owed an answer for.
+         * What {@code rules} put forward, ends and clauses alike, of those that {@code reach} says
+         * this reading is owed an answer for.
          */
-        void from(PlacedRules rules, java.util.function.Predicate<PlacementSeed> owed) {
-            rules.placed().stream().filter(owed).forEach(placed::add);
-            clauses.addAll(rules.clausesWithoutAnEnd());
+        void from(PlacedRules rules, Reach reach) {
+            rules.placed().stream().filter(reach::owes).forEach(placed::add);
+            for (ClauseWithoutAnEnd clause : rules.clausesWithoutAnEnd()) {
+                if (reach.owes(rules, clause)) {
+                    clauses.add(clause);
+                }
+            }
         }
 
         List<PlacementSeed> placed() {
@@ -1001,12 +1005,8 @@ public final class InputDomain {
                 return this;
             }
             java.util.Set<TermPath> named = new java.util.LinkedHashSet<>(demanded);
-            for (PlacementSeed seed : rules.placed()) {
-                RuleKey key = seed.address().key();
-                if (key.isTheValueItself()) {
-                    continue;
-                }
-                TermPath path = seed.address().root();
+            for (RuleKey key : rules.namedPlaces()) {
+                TermPath path = rules.root();
                 for (String step : key.steps()) {
                     path = path.then(step);
                 }
@@ -1023,11 +1023,37 @@ public final class InputDomain {
          * down are about another copy of the type, which nothing here lists or asks for.
          */
         boolean owes(PlacementSeed seed) {
+            return enumerating || demands(seed.address().root(), seed.address().key());
+        }
+
+        /**
+         * Whether the reading is owed an answer for {@code clause}, which draws no end of its own.
+         *
+         * <p>The same as for an end: every clause of a value the listing opens, and of any other
+         * only a clause every place of which is one the naming reaches. A clause relating two
+         * positions is filed at each of them, and one of them being further down than the naming
+         * goes leaves a line nobody can be owed a row at.
+         */
+        boolean owes(PlacedRules rules, ClauseWithoutAnEnd clause) {
             if (enumerating) {
                 return true;
             }
-            TermPath place = seed.address().root();
-            for (String step : seed.address().key().steps()) {
+            boolean any = false;
+            for (FieldDomains.NoLine each : rules.bounds().noLines()) {
+                if (each.part().equals(clause.part())) {
+                    any = true;
+                    if (!demands(rules.root(), each.path())) {
+                        return false;
+                    }
+                }
+            }
+            return any;
+        }
+
+        /** Whether a path the naming reaches is at, under or above the place {@code key} calls. */
+        private boolean demands(TermPath root, RuleKey key) {
+            TermPath place = root;
+            for (String step : key.steps()) {
                 place = place.then(step);
             }
             for (TermPath each : demanded) {
@@ -1568,7 +1594,7 @@ public final class InputDomain {
         PlacedRules rules = PlacedRules.of(opened, type, reading, crossing);
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
-        account.from(rules, reach::owes);
+        account.from(rules, reach);
         walk(opened, type, ancestry, reading, counted, rules, found, roots, visited,
                 handoffs, observed, account, reach.alsoNaming(rules));
     }
