@@ -1,7 +1,9 @@
 package souther.compiler.coverage;
 
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,6 +51,13 @@ public final class Probe {
          *  and by nothing else: that a way out of it exists is its having been reached. */
         private final Set<RecordedConditionOutcome> outcomes = new LinkedHashSet<>();
 
+        /** The same, with the visit each came out on, for the first visits to each condition. */
+        private final Set<RecordedVisit> visits = new LinkedHashSet<>();
+
+        /** How many times each condition has answered since the row began, which is what says
+         *  which visit the next answer is. */
+        private final Map<Integer, Integer> answered = new HashMap<>();
+
         private Recording(NumberingIdentity numbering) {
             this.numbering = numbering;
         }
@@ -75,11 +84,18 @@ public final class Probe {
      *
      * <p>Takes the value rather than a second site chosen from it, so that the numbering the emitter
      * was given is the numbering it uses and a way out is never a number a reading picked.
+     *
+     * <p>The visit it came out on is kept beside the way, for the first visits to each condition.
+     * It is counted here and not by the probed class, which writes this same call at every visit.
      */
     public static void condition(boolean held, int site) {
         Recording recording = RECORDING.get();
         if (recording != null) {
             recording.outcomes.add(new RecordedConditionOutcome(site, held));
+            int nth = recording.answered.merge(site, 1, Integer::sum) - 1;
+            if (nth < RecordedVisit.MOST) {
+                recording.visits.add(new RecordedVisit(site, nth, held));
+            }
         }
     }
 
@@ -113,7 +129,7 @@ public final class Probe {
                 at = recording.arms.nextSetBit(at + 1)) {
             arms.add(at);
         }
-        return new Observation(recording.numbering, arms, recording.outcomes);
+        return new Observation(recording.numbering, arms, recording.outcomes, recording.visits);
     }
 
     /** Stops collecting, and lets go of the recording. A worker thread outlives the row it ran, so a

@@ -9326,7 +9326,7 @@ public final class Adequacy {
         private static void said(Db db, souther.compiler.diag.Diagnostic.Builder built,
                                  DecisionRuleReading read) {
             switch (read) {
-                case DecisionRuleReading.AComparisonCameOut(var comparison, var held) ->
+                case DecisionRuleReading.AComparisonCameOut(var comparison, var _, var held) ->
                         label(built, comparison.at(), held
                                 ? new ExampleMessage.TheRuleTakesThisConditionHolding()
                                 : new ExampleMessage.TheRuleTakesThisConditionFailing());
@@ -9383,7 +9383,7 @@ public final class Adequacy {
          *  at that call says it in. */
         private static Supporting takenAt(DecisionRuleReading read, String called) {
             return switch (read) {
-                case DecisionRuleReading.AComparisonCameOut(var _, var held) -> held
+                case DecisionRuleReading.AComparisonCameOut(var _, var _, var held) -> held
                         ? new ExampleMessage.TheRuleTakesItHoldingInThisCall(called)
                         : new ExampleMessage.TheRuleTakesItFailingInThisCall(called);
                 case DecisionRuleReading.AnApplicationAnswered(var _, var held) -> held

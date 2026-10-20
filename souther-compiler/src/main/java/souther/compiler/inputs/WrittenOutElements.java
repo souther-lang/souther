@@ -57,8 +57,8 @@ public final class WrittenOutElements {
                 return ReadMeaning.decided(each, kept);
             }
 
-            /** Every occurrence as written. */
-            List<ReadMeaning.Occurrence> asWritten() {
+            /** Every occurrence as written, in the order a walk of the container meets them. */
+            public List<ReadMeaning.Occurrence> asWritten() {
                 return each;
             }
         }

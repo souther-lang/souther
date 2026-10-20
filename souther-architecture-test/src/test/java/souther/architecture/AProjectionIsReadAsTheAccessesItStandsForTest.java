@@ -323,6 +323,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ClosureEntries", "visit", "(" + core + "L" + c
                 + "check/ClosureEntries$Standing;)V", Reading.STRUCTURE,
                 "finds the places a closure is used, which no field read is");
+        row(out, c + "reading/KeptElements", "callWritten",
+                "(" + core + "L" + CORE + "$Call;)L" + CORE + "$PreservedCall;", Reading.STRUCTURE,
+                "finds the call of an operation that an expansion stands for, by the occurrence it"
+                        + " applies, which no field read is");
+        row(out, c + "reading/KeptElements", "collect", "(" + core + "L" + CORE
+                + "$Binary;Ljava/util/List;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/EmittedClassReferences", "visit", "(" + core + "L" + c + "types/Type;)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/EmittedClassReferences", "visitChildren",

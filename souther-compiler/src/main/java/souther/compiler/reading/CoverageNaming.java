@@ -30,6 +30,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * The conditions along a path, said of the input positions they are about and of the places a run
@@ -132,7 +133,8 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         Condition condition = compared != null ? casesLeft(compared, held)
-                : new Condition.Side(drawn.term(), outcome.occurrence(), held, lineOf(drawn));
+                : new Condition.Side(drawn.term(), outcome.occurrence(), OptionalInt.empty(), held,
+                        lineOf(drawn));
         if (condition == null) {
             return null;
         }
@@ -144,6 +146,33 @@ final class CoverageNaming implements Naming<Outcome> {
         return ControlClaim.of(outcome)
                 .map(claim -> one(new Decision(condition, claim)))
                 .orElse(null);
+    }
+
+    /**
+     * That {@code stated}, a comparison in a closure applied to each element of a list written out,
+     * came out {@code held} on the {@code visit}th time a run visits it, said of the number it
+     * compares in the names the application that visit is hands over; or null where this cannot say
+     * which position that is or where no run through it could be recorded.
+     *
+     * <p>Which application a visit is, is not decided here: the caller has shown it, and this puts
+     * the two halves of a decision together. Two comparisons: {@code stated} is the one the
+     * closure's body is read by, standing in the tree the language's operations stand in, and
+     * {@code run} is the same construct in the tree that runs, where a run is recorded. The number
+     * is read of the first in {@code at}, and the place a claim is made at is the second's.
+     */
+    Outcome sideOnVisit(Core.Binary stated, Core.Binary run, InputReads at, int visit,
+                        boolean held) {
+        if (numbers.caseOfOneApplication(stated, at) != null) {
+            return null;
+        }
+        ComparedNumber drawn = numbers.ofOneApplication(stated, at);
+        ControlPlace.Outcome outcome = plan.outcomeAt(run, held).orElse(null);
+        if (drawn == null || outcome == null) {
+            return null;
+        }
+        Condition condition = new Condition.Side(drawn.term(), outcome.occurrence(),
+                OptionalInt.of(visit), held, lineOf(drawn));
+        return one(new Decision(condition, ControlClaim.onVisit(outcome, visit)));
     }
 
     /**

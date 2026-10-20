@@ -104,7 +104,11 @@ public final class SiteNumbering {
         for (RecordedConditionOutcome way : seen.outcomes()) {
             ways.add(new SeenConditionOutcome(outcome(way.at()), way.held()));
         }
-        return new AlignedObservation(identity, arms, ways);
+        Set<SeenVisit> visits = new LinkedHashSet<>();
+        for (RecordedVisit visit : seen.visits()) {
+            visits.add(new SeenVisit(outcome(visit.at()), visit.nth(), visit.held()));
+        }
+        return new AlignedObservation(identity, arms, ways, visits);
     }
 
     private SiteAddress at(int raw) {

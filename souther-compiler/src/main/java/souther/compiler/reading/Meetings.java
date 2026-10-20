@@ -27,7 +27,9 @@ import java.util.Set;
  * {@code Order { price = if A then 100 else 200, message = if B then "x" else "y" }} the two
  * decisions arrive at a constructor and interact in nothing, because no observation is a function
  * of both. A group forms only where two values each settled by a decision are consumed into one:
- * an operand of an operator, or an argument of a call that answers one value.
+ * an operand of an operator, an argument of a call that answers one value, or the elements of a
+ * list that a total adds up — written out in the body, or kept by a comparison
+ * ({@link KeptElements}).
  */
 final class Meetings {
 
@@ -40,8 +42,12 @@ final class Meetings {
 
     private final List<Interaction> found = new ArrayList<>();
 
-    Meetings(CoverageSites.Plan plan) {
+    /** The elements a call adds up that a comparison keeps. */
+    private final KeptElements keptElements;
+
+    Meetings(CoverageSites.Plan plan, KeptElements keptElements) {
         this.plan = plan;
+        this.keptElements = keptElements;
     }
 
     /**
@@ -54,19 +60,30 @@ final class Meetings {
      *                The walk's reading, handed in rather than taken again: what a value is settled
      *                by is one question and is asked once
      */
-    void at(Core node, List<List<Decision>> reaches, ValueArrivals<Outcome> reading) {
-        List<Core> meeting = absorbed.contains(node) ? null : meetingAt(node, absorbed);
-        if (meeting == null) {
+    void at(Core node, CoverageNaming naming, List<List<Decision>> reaches,
+            ValueArrivals<Outcome> reading) {
+        if (absorbed.contains(node)) {
             return;
         }
+        List<Core> meeting = meetingAt(node, absorbed);
         List<Factor> factors = new ArrayList<>();
-        for (Core operand : meeting) {
-            List<Outcome> outcomes = outcomesOf(operand, reading);
-            // One outcome is no decision: the operand answers the same way however the row is
-            // written, so nothing about it can be varied against the other operand.
-            if (outcomes.size() > 1) {
-                factors.add(new Factor(outcomes));
+        if (meeting != null) {
+            for (Core operand : meeting) {
+                List<Outcome> outcomes = outcomesOf(operand, reading);
+                // One outcome is no decision: the operand answers the same way however the row is
+                // written, so nothing about it can be varied against the other operand.
+                if (outcomes.size() > 1) {
+                    factors.add(new Factor(outcomes));
+                }
             }
+        } else if (node instanceof Core.Call call) {
+            List<Factor> kept = keptElements.factorsOf(call, naming);
+            if (kept == null) {
+                return;
+            }
+            factors.addAll(kept);
+        } else {
+            return;
         }
         // A group says that these decisions were settled these ways and met here, which is a
         // statement about one passing. What can be established about a run is what its recording
@@ -166,15 +183,18 @@ final class Meetings {
      * what it is given rather than combining it into a number.
      */
     private static List<Core> numbersWrittenOutIn(Core.Call call) {
+        return combinesItsElements(call)
+                && Core.withoutStanding(call.args().getFirst()) instanceof Core.ListLit list
+                ? list.elements() : null;
+    }
+
+    /** Whether {@code call} adds or multiplies the elements of its only argument. */
+    static boolean combinesItsElements(Core.Call call) {
         if (!(call.fn() instanceof Core.Reached.OfKernel kernel) || call.args().size() != 1) {
-            return null;
+            return false;
         }
         Accumulation walk = DefaultBoundOperationFacts.get().accumulation(kernel.name().denotes());
-        if (walk == null || walk.combine() == Accumulation.Combine.APPEND) {
-            return null;
-        }
-        return Core.withoutStanding(call.args().getFirst()) instanceof Core.ListLit list
-                ? list.elements() : null;
+        return walk != null && walk.combine() != Accumulation.Combine.APPEND;
     }
 
     /** The values one run of {@code op} is over, and the nodes the run is written as. */

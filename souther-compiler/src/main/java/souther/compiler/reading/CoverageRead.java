@@ -335,7 +335,8 @@ public final class CoverageRead {
                                 input.domain().dependencies()),
                         symbols, source.newtypes()))
                 .orElse(MeaningsOfABody.NONE);
-        Meetings meetings = new Meetings(plan);
+        Meetings meetings = new Meetings(plan, new KeptElements(plan,
+                run.analysis().orElse(null), symbols, source.newtypes()));
         Arms arms = new Arms(plan);
         CoverageRead walked = new CoverageRead(run,
                 body -> ValueArrivals.ofBody(body, naming,
@@ -543,7 +544,8 @@ public final class CoverageRead {
             return;
         }
         if (arrives && !reach.ways().isEmpty()) {
-            meetings.at(node, reach.ways().stream().map(WayIn::decisions).toList(), reading);
+            meetings.at(node, naming, reach.ways().stream().map(WayIn::decisions).toList(),
+                    reading);
         }
         descend(node, naming, reach, arrives);
     }

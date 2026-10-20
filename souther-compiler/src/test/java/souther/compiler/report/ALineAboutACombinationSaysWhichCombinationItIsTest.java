@@ -157,9 +157,22 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
                 | (Gold, Gold) -> 200
             """;
 
+    /** One comparison applied to each of two elements: the same construct is a decision per
+     *  element, and the combinations differ in which element a way is said of. */
+    private static final String KEPT = """
+            module p
+            data Row = { days: Int, pay: Int }
+            behavior total : (first: Row, second: Row) -> Int
+            let total (first, second) =
+                List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ first, second ])))
+            example total
+                | (Row { days = 20, pay = 100 }, Row { days = 5, pay = 200 }) -> 100
+            """;
+
     private static final Map<String, String> FIXTURES = Map.of(
             "MEETING", MEETING, "TWICE", TWICE, "NESTED", NESTED, "NAMED", NAMED,
-            "SAME_CASES", SAME_CASES, "OPERATION", OPERATION, "MEETS_TWICE", MEETS_TWICE);
+            "SAME_CASES", SAME_CASES, "OPERATION", OPERATION, "MEETS_TWICE", MEETS_TWICE,
+            "KEPT", KEPT);
 
     /**
      * Each condition under a line is a place a run of that combination is recorded at, with every
@@ -168,7 +181,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
      */
     @ParameterizedTest
     @ValueSource(strings = {"MEETING", "TWICE", "NESTED", "NAMED", "SAME_CASES", "OPERATION",
-            "MEETS_TWICE"})
+            "MEETS_TWICE", "KEPT"})
     void eachConditionSaidIsAPlaceTheCombinationIsRecordedAt(String fixture) {
         Compilation compilation = measured(FIXTURES.get(fixture));
         AdequacyReport.BehaviorReport behavior =
@@ -207,7 +220,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
      *  as alternatives. */
     @ParameterizedTest
     @ValueSource(strings = {"MEETING", "TWICE", "NESTED", "NAMED", "SAME_CASES", "OPERATION",
-            "MEETS_TWICE"})
+            "MEETS_TWICE", "KEPT"})
     void combinationsAPageNamesReadApart(String fixture) {
         Compilation compilation = measured(FIXTURES.get(fixture));
         AdequacyReport report = AdequacyReport.of(compilation);
@@ -310,7 +323,11 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
                     List.of("arm", arm.origin(), arm.part(), anchor,
                             Sites.placeOf(compilation.db(), anchor), steps(arm.fork().lineage()));
             case ControlPlace.Outcome(var occurrence, var _, var held) ->
-                    List.of("outcome", occurrence.origin(), held, steps(occurrence.lineage()));
+                    claim.visit() instanceof ControlClaim.Visit.Nth(int index)
+                            ? List.of("evaluation", occurrence.origin(), index, held,
+                                    steps(occurrence.lineage()))
+                            : List.of("outcome", occurrence.origin(), held,
+                                    steps(occurrence.lineage()));
         };
     }
 
@@ -325,8 +342,12 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
             case DecisionRuleReading.AForkTookAnArm(var arm, var shownAt) ->
                     List.of("arm", arm.obligation().origin(), arm.obligation().part(), shownAt,
                             shown.at(), steps(through));
-            case DecisionRuleReading.AComparisonCameOut(var comparison, var held) ->
-                    List.of("outcome", comparison.obligation().origin(), held, steps(through));
+            case DecisionRuleReading.AComparisonCameOut(var comparison, var evaluation, var held) ->
+                    evaluation.isPresent()
+                            ? List.of("evaluation", comparison.obligation().origin(),
+                                    evaluation.getAsInt(), held, steps(through))
+                            : List.of("outcome", comparison.obligation().origin(), held,
+                                    steps(through));
             case DecisionRuleReading.AnApplicationAnswered(var application, var held) ->
                     List.of("outcome", application.application().origin(), held, steps(through));
             case DecisionRuleReading.AConditionIsNotShown _, DecisionRuleReading.AnOutcomeIsNotPlaced _,
