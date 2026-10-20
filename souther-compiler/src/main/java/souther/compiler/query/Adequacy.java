@@ -6642,17 +6642,18 @@ public final class Adequacy {
         // behavior's points compose many of the same rows.
         return Generator.once(new Generator.Trial() {
 
+            /**
+             * The row last asked about, built. A search runs a row and then each rewrite of it, one
+             * after the other, and every one of them is of the same values.
+             */
+            private volatile BuiltRow last;
+
             @Override
             public Generator.ObservedRun run(RowToRun row) {
-                List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
-                if (standing == null) {
-                    // A row short of a stand-in the behavior requires is a row nothing applies,
-                    // which is said here rather than by a construction failing: what comes back
-                    // from that is a row nothing was seen doing, and so is this — but only this one
-                    // knows why.
-                    return Generator.ObservedRun.nothingRan();
-                }
-                return application.run(valuesOf(row), standing)
+                // A row short of a stand-in the behavior requires is a row nothing applies, which is
+                // said as a row nothing was seen doing rather than by a construction failing.
+                return builtFor(row)
+                        .flatMap(RowTrials.Prepared::run)
                         .map(ran -> new Generator.ObservedRun(switch (ran.recorded()) {
                             // Read under the numbering the caller is asking about. What a run left
                             // behind says which numbering it was made under, so a recording of
@@ -6668,9 +6669,19 @@ public final class Adequacy {
             @Override
             public Optional<AnswerObservation> runReplacing(RowToRun row,
                                                             Map<Integer, Integer> replacing) {
+                return builtFor(row).flatMap(built -> built.runReplacing(replacing));
+            }
+
+            private Optional<RowTrials.Prepared> builtFor(RowToRun row) {
+                BuiltRow held = last;
+                if (held != null && held.composed() == row) {
+                    return held.built();
+                }
                 List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
-                return standing == null ? Optional.empty()
-                        : application.runReplacing(valuesOf(row), standing, replacing);
+                Optional<RowTrials.Prepared> built = standing == null ? Optional.empty()
+                        : application.prepare(valuesOf(row), standing);
+                last = new BuiltRow(row, built);
+                return built;
             }
 
             @Override
@@ -6689,6 +6700,9 @@ public final class Adequacy {
             }
         });
     }
+
+    /** A row, and what building it came to. */
+    private record BuiltRow(RowToRun composed,Optional<RowTrials.Prepared> built) {}
 
     /**
      * What one measure found and nothing filled.

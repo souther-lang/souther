@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.execute.RowTrials;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
@@ -17,6 +19,8 @@ import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -158,6 +162,45 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
                 "the run was recorded up to where it stopped");
     }
 
+    @Test
+    void aRowIsBuiltOnceHoweverManyRewritesOfItAreRun() {
+        Compilation compilation = compiled();
+        Db db = compilation.db();
+        String module = compilation.modules().get(0);
+        Sig sig = db.ask(new Bodies.Signatures(module)).value().get("discount");
+        int[] built = {0};
+        RowTrials running = Adequacy.trialling(db, module);
+        RowTrials counting = (behavior, of) -> {
+            RowTrials.OfBehavior inner = running.forBehavior(behavior, of);
+            return new RowTrials.OfBehavior() {
+                @Override
+                public Optional<RowTrials.Prepared> prepare(List<Hir.Expr> inputs,
+                                                            List<RowTrials.AnsweredWith> answers) {
+                    built[0]++;
+                    return inner.prepare(inputs, answers);
+                }
+
+                @Override
+                public AnswerChange change(AnswerObservation was, AnswerObservation now) {
+                    return inner.change(was, now);
+                }
+            };
+        };
+        Generator.Trial trial = Adequacy.runningRowsOf(db, module, counting, "discount", sig,
+                RequiredDependencies.of(db, module, "discount"));
+        RowToRun row = rowOf(compilation, "discount", "below nothing");
+
+        trial.run(row);
+        trial.runReplacing(row, Map.of(0, 0));
+        trial.runReplacing(row, Map.of(0, 1));
+
+        assertEquals(1, built[0], "the run and each rewrite of it are of the values built once");
+
+        trial.runReplacing(rowOf(compilation, "discount", "below nothing"), Map.of(0, 2));
+
+        assertEquals(2, built[0], "and another row is built for itself");
+    }
+
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
@@ -185,18 +228,24 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
                                              String name) {
         Db db = compilation.db();
         String module = compilation.modules().get(0);
-        Prepared prepared = db.ask(new Shapes.Prepared(module)).value();
         Sig sig = db.ask(new Bodies.Signatures(module)).value().get(behavior);
         assertNotNull(sig, "the behavior has a signature");
+        Generator.Trial trial = Adequacy.runningRowsOf(db, module, Adequacy.trialling(db, module),
+                behavior, sig, RequiredDependencies.of(db, module, behavior));
+        return trial.run(rowOf(compilation, behavior, name));
+    }
+
+    /** The written row {@code name} of {@code behavior}, as a composed row is handed to a run. */
+    private static RowToRun rowOf(Compilation compilation, String behavior, String name) {
+        Prepared prepared = compilation.db()
+                .ask(new Shapes.Prepared(compilation.modules().get(0))).value();
         Hir.ExampleRow row = prepared.examples().stream()
                 .map(Prepared.Example::read)
                 .filter(block -> block.target().equals(behavior))
                 .flatMap(block -> block.rows().stream())
                 .filter(each -> each.identity().shown().equals(name))
                 .findFirst().orElseThrow();
-        Generator.Trial trial = Adequacy.runningRowsOf(db, module, Adequacy.trialling(db, module),
-                behavior, sig, RequiredDependencies.of(db, module, behavior));
-        return trial.run(RowToRun.of(row.inputs().stream()
-                .map(input -> new FixtureTemplate(name, input)).toList()));
+        return RowToRun.of(row.inputs().stream()
+                .map(input -> new FixtureTemplate(name, input)).toList());
     }
 }

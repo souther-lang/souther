@@ -47,27 +47,38 @@ public interface RowTrials {
     interface OfBehavior {
 
         /**
-         * What running {@code inputs} was seen doing, or empty where nothing could run them.
+         * {@code inputs} built and gathered for an application, or empty where nothing could run
+         * them.
          *
          * @param answers what to stand each of the target's dependencies in with, in the order the
          *                target requires them. A behavior that depends on another is applied with an
          *                instance per dependency, so a row of one that hands none is a row nothing
          *                applies
          */
-        Optional<Ran> run(List<Hir.Expr> inputs, List<AnsweredWith> answers);
-
-        /**
-         * What running {@code inputs} answered with the arms at {@code replacing}'s sites answering
-         * as the parts it maps them to, or empty where nothing could run them.
-         *
-         * <p>Nothing is recorded: the program run is not the one the module's places are of.
-         */
-        Optional<AnswerObservation> runReplacing(List<Hir.Expr> inputs,
-                                                 List<AnsweredWith> answers,
-                                                 Map<Integer, Integer> replacing);
+        Optional<Prepared> prepare(List<Hir.Expr> inputs, List<AnsweredWith> answers);
 
         /** Whether this behavior answering {@code now} answered differently from {@code was}. */
         AnswerChange change(AnswerObservation was, AnswerObservation now);
+    }
+
+    /**
+     * One row built, which can be run as it is and run again with arms rewritten.
+     *
+     * <p>Built once for the row: a search that runs a row under each of its rewrites asks the same
+     * values of the same row each time, and building them is a share of what a run costs.
+     */
+    interface Prepared {
+
+        /** What running the row was seen doing. */
+        Optional<Ran> run();
+
+        /**
+         * What running the row answered with the arms at {@code replacing}'s sites answering as the
+         * parts it maps them to, or empty where nothing could run it.
+         *
+         * <p>Nothing is recorded: the program run is not the one the module's places are of.
+         */
+        Optional<AnswerObservation> runReplacing(Map<Integer, Integer> replacing);
     }
 
     /**
