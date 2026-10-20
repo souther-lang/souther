@@ -2805,6 +2805,16 @@ public final class Adequacy {
                         RuleSettlement.read(
                                 new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(
                                         never.condition()));
+                // The numbers of its way leave no value, which is what a search composing against
+                // the region it leaves comes back with, said in the same word.
+                case souther.compiler.partition.Reachability.NumbersLeaveNone _ ->
+                        RuleSettlement.provedNothingTakesIt(RuleSearch.CameToNothing.of(List.of(
+                                new CameToNothing(
+                                        new Generator.UnresolvedCombination(
+                                                List.of("a rule of the decision"),
+                                                Generator.UnresolvedCombination.Reason
+                                                        .NO_VALUE_CAN_STAND_THERE),
+                                        CompositionShortfall.NONE, Set.of()))));
                 case souther.compiler.partition.Reachability.Reaching reaching -> {
                     RuleRequirement.Excluded out = unreached.onTheWay(ruled);
                     yield out != null ? RuleSettlement.read(out)

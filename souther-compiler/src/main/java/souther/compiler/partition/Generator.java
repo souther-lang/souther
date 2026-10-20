@@ -9985,6 +9985,11 @@ public final class Generator {
                         UnresolvedCombination.Reason.A_CONDITION_NEVER_COMES_OUT_THAT_WAY, null,
                         Optional.empty()));
             }
+            case Reachability.NumbersLeaveNone _ -> {
+                return new HeldTogether.Refused(new Attempt(null,
+                        UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE, null,
+                        Optional.empty()));
+            }
         }
         Requirements required;
         switch (reaching.writing(fixing.keySet())) {

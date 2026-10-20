@@ -260,6 +260,38 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     }
 
     /**
+     * Arms of an {@code if} chain beside a flag add ways to the third comparison, most of which
+     * ask the age to be at least seventy and below nineteen at once. Those are no way and do not
+     * count against the figure, so each of the ways left is looked along.
+     */
+    @Test
+    void aChainOfAgeComparisonsBesideAFlagIsReadInTheYearsMonthsAndDays() {
+        String report = report("""
+                module p
+
+                let ageOn (birthday: Date, on: Date): Int =
+                    Date.year(on) - Date.year(birthday)
+                        - (if Date.month(on) * 100 + Date.day(on)
+                                < Date.month(birthday) * 100 + Date.day(birthday)
+                           then 1 else 0)
+
+                let attainedAgeOn (birthday: Date, on: Date): Int =
+                    ageOn(Date.addDays(0 - 1, birthday), on)
+
+                behavior f : (birthday: Date, on: Date, ascendant: Bool) -> Int
+                let f (birthday, on, ascendant) = {
+                    let age = attainedAgeOn(birthday, on)
+                    if age >= 70 && ascendant then 3
+                    else if age >= 70 then 2
+                    else if age >= 19 then 1
+                    else 0
+                }
+                """);
+
+        assertFalse(report.contains(NOT_REACHED), report);
+    }
+
+    /**
      * A way that holds only at the twenty-ninth of February is a month and day that is not in
      * every year, so the years of the date are not left alone by it.
      */
