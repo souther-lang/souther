@@ -162,8 +162,10 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                                         new NoInputTakesIt.Clash.TwoAtOnce(what);
                                 case Reachability.NothingComesOutThatWay(var condition) ->
                                         new NoInputTakesIt.Clash.NeverComesOutSo(condition);
-                                case Reachability.Reaching _ -> throw new IllegalStateException(
-                                        "a way taken in closes on why nothing reaches it");
+                                case Reachability.Reaching _, Reachability.NumbersLeaveNone _ ->
+                                        throw new IllegalStateException(
+                                        "a way taken in closes on why nothing reaches it, and"
+                                                + " not on its numbers, which the region says");
                             }));
                     case Step.Held<HeldTogether, Reachability>(var held) -> {
                         SearchRegion region = ofOnePosition(entry) && takesIn.getAsBoolean()
@@ -421,9 +423,47 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * leave none in common contradict each other in as well.
      *
      * @param counts what is left of each count asked, by its spelling
+     * @param numbers the relations of numbers it has taken in, which statements of one form
+     *                leave no point of the line in common
      */
     private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths,
-                                Map<String, LevelRegion> counts) {
+                                Map<String, LevelRegion> counts,
+                                List<TakenConstraint.Affine> numbers) {
+
+        HeldTogether withRequirements(Requirements required) {
+            return new HeldTogether(required, truths, counts, numbers);
+        }
+
+        HeldTogether withTruths(List<RowDemand.ATruth> asked) {
+            return new HeldTogether(requirements, asked, counts, numbers);
+        }
+
+        /**
+         * These with what {@code entry} says of numbers held against what the others did, or why
+         * no row is where that leaves it none. An entry that states no relation of numbers
+         * changes nothing.
+         *
+         * <p>Only the way's own reading proves this. The search for what no input takes
+         * ({@code numbered}) leaves it to the region of the declarations, which says what the
+         * same statements leave of the input together with what the declarations hold, and that
+         * is the account it reports in.
+         */
+        Step<HeldTogether, Reachability> relating(OnTheWay entry) {
+            if (!(entry instanceof OnTheWay.TakenIn(var _, RowDemand.Relational(
+                    TakenConstraint.Affine affine)))) {
+                return new Step.Held<>(this);
+            }
+            // The ones taken in before have not been proved to leave none, since the way was
+            // open, so only the statements of this one's form can newly be proved to.
+            List<TakenConstraint.Affine> ofItsForm =
+                    WhatStatementsOfOneFormDecide.ofTheFormOf(numbers, affine);
+            if (WhatStatementsOfOneFormDecide.of(ofItsForm, null).noRowArrives()) {
+                return new Step.Closed<>(new Reachability.NumbersLeaveNone(ofItsForm));
+            }
+            List<TakenConstraint.Affine> stated = new ArrayList<>(numbers);
+            stated.add(affine);
+            return new Step.Held<>(new HeldTogether(requirements, truths, counts, stated));
+        }
 
         /** These with the count {@code counted} asked to be in {@code region}, or why no row is
          *  where that leaves it none. */
@@ -437,7 +477,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             }
             Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
             out.put(counted.spelled(), left);
-            return new Step.Held<>(new HeldTogether(requirements, truths, out));
+            return new Step.Held<>(new HeldTogether(requirements, truths, out, numbers));
         }
     }
 
@@ -478,16 +518,22 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
                 @Override
                 public HeldTogether nothing() {
-                    return new HeldTogether(Requirements.NONE, List.of(), Map.of());
+                    return new HeldTogether(Requirements.NONE, List.of(), Map.of(), List.of());
                 }
 
                 /** {@code so} with {@code entry} taken in, or why no row takes them together. */
                 @Override
                 public Step<HeldTogether, Reachability> with(HeldTogether so, OnTheWay entry) {
-                    return takenIn(so, entry);
+                    return switch (takenIn(so, entry)) {
+                        case Step.Held<HeldTogether, Reachability>(var held) ->
+                                held.relating(entry);
+                        case Step.Closed<HeldTogether, Reachability> closed -> closed;
+                    };
                 }
             };
 
+    /** {@code so} with {@code entry} taken in as far as the cases, truths and counts it asks go;
+     *  what its numbers say beside the others is {@link HeldTogether#relating}. */
     private static Step<HeldTogether, Reachability> takenIn(HeldTogether so, OnTheWay entry) {
         return switch (entry) {
             case OnTheWay.Settled settled -> settled.thisWay() ? new Step.Held<>(so)
@@ -495,7 +541,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             case OnTheWay.Narrowed narrowed -> switch (so.requirements()
                     .merge(narrowed.requirements())) {
                 case Requirements.Merge.Merged(Requirements both) ->
-                        new Step.Held<>(new HeldTogether(both, so.truths(), so.counts()));
+                        new Step.Held<>(so.withRequirements(both));
                 case Requirements.Merge.Conflict conflict -> new Step.Closed<>(
                         new Reachability.NothingReaches(new Reachability.TwoAtOnce.Cases(conflict)));
             };
@@ -503,8 +549,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 List<RowDemand.ATruth> truths = new ArrayList<>(so.truths());
                 truths.add(truth);
                 yield switch (TruthsAsked.of(truths)) {
-                    case TruthsAsked.Merge.Merged _ -> new Step.Held<>(
-                            new HeldTogether(so.requirements(), truths, so.counts()));
+                    case TruthsAsked.Merge.Merged _ -> new Step.Held<>(so.withTruths(truths));
                     case TruthsAsked.Merge.Conflict(var at) -> new Step.Closed<>(
                             new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(at)));
                 };
@@ -530,7 +575,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                         }
                     }
                 }
-                yield new Step.Held<>(new HeldTogether(required, so.truths(), so.counts()));
+                yield new Step.Held<>(so.withRequirements(required));
             }
             case OnTheWay.TakenIn _, OnTheWay.Declined _, OnTheWay.OneOf _ -> new Step.Held<>(so);
         };

@@ -2805,6 +2805,10 @@ public final class Adequacy {
                         RuleSettlement.read(
                                 new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(
                                         never.condition()));
+                case souther.compiler.partition.Reachability.NumbersLeaveNone numbers ->
+                        RuleSettlement.read(
+                                new RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone(
+                                        numbers));
                 case souther.compiler.partition.Reachability.Reaching reaching -> {
                     RuleRequirement.Excluded out = unreached.onTheWay(ruled);
                     yield out != null ? RuleSettlement.read(out)

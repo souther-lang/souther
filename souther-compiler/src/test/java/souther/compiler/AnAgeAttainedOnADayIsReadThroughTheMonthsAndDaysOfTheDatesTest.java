@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.IntPredicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -257,6 +259,106 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 """);
 
         assertFalse(report.contains(YEARS_UNREAD), report);
+    }
+
+    /** The chain measured once, for the tests that read it. A measure of it is most of what they
+     *  cost, and what each asks is of this one. */
+    private static final class Measured {
+        static final Compilation CHAIN_OF_AGES = compiled(CHAIN);
+        static final String REPORT = report(CHAIN_OF_AGES);
+    }
+
+    /**
+     * Arms of an {@code if} chain beside a flag add ways to the third comparison, most of which
+     * ask the age to be at least seventy and below nineteen at once. Those are no way and do not
+     * count against the figure, so each of the ways left is looked along.
+     */
+    @Test
+    void aChainOfAgeComparisonsBesideAFlagIsReadInTheYearsMonthsAndDays() {
+        assertFalse(Measured.REPORT.contains(NOT_REACHED), Measured.REPORT);
+    }
+
+    private static final String CHAIN = AGE.replace(
+            "behavior f : (birthday: Date, on: Date) -> Bool\n", "") + """
+            behavior f : (birthday: Date, on: Date, ascendant: Bool) -> Int
+            let f (birthday, on, ascendant) = {
+                let age = attainedAgeOn(birthday, on)
+                if age >= 70 && ascendant then 3
+                else if age >= 70 then 2
+                else if age >= 19 then 1
+                else 0
+            }
+            """;
+
+    /** The class of a person of {@code age}, as the chain of comparisons is meant to put it. */
+    private static int classOf(int age, boolean ascendant) {
+        if (age >= 70 && ascendant) {
+            return 3;
+        }
+        if (age >= 70) {
+            return 2;
+        }
+        return age >= 19 ? 1 : 0;
+    }
+
+    /** One example row, answered with the class the calendar's age and the flag give. */
+    private static void example(StringBuilder into, LocalDate birthday, LocalDate on,
+                                boolean ascendant) {
+        into.append("    | (Date(\"").append(birthday).append("\"), Date(\"").append(on)
+                .append("\"), ").append(ascendant).append(") -> ")
+                .append(classOf(ageAttained(birthday, on), ascendant)).append('\n');
+    }
+
+    /**
+     * The rows offered stand at both sides of each line of the age, and the class each is
+     * answered is the one the calendar's age and the flag give: the rows are written back as
+     * examples whose answers are worked out here, apart from the compiler.
+     */
+    @Test
+    void theRowsOfferedForAChainOfAgeComparisonsAreAnsweredAsTheCalendarWorksTheClassOut() {
+        Compilation offering = Measured.CHAIN_OF_AGES;
+        String offered = GeneratedRows.of(
+                Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
+                Map.of(), SourceRendering.namedByIdentity(offering.texts()), offering.db())
+                .text();
+
+        Pattern row = Pattern.compile(
+                "Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\), (true|false)");
+        StringBuilder examples = new StringBuilder();
+        Set<Integer> ages = new HashSet<>();
+        for (String line : offered.lines().toList()) {
+            Matcher found = row.matcher(line);
+            if (!found.find()) {
+                continue;
+            }
+            LocalDate birthday = LocalDate.parse(found.group(1));
+            LocalDate on = LocalDate.parse(found.group(2));
+            boolean ascendant = Boolean.parseBoolean(found.group(3));
+            int age = ageAttained(birthday, on);
+            ages.add(age);
+            example(examples, birthday, on, ascendant);
+        }
+        assertTrue(ages.containsAll(List.of(18, 19, 69, 70)),
+                () -> "a row at each side of each line: " + ages + "\n" + offered);
+
+        // The rows offered stand at the points of each comparison and not at every way the flag
+        // combines with them, so the rows past seventy are written here at both values of it,
+        // at the day each age is attained and the day before.
+        LocalDate born = LocalDate.of(1950, 6, 15);
+        for (int age : List.of(18, 19, 69, 70, 71)) {
+            LocalDate attained = born.minusDays(1).plusYears(age);
+            for (LocalDate on : List.of(attained, attained.minusDays(1))) {
+                example(examples, born, on, true);
+                example(examples, born, on, false);
+            }
+        }
+
+        // Answered and not measured: the examples are run against the program, and one whose
+        // answer is not the program's is an error, which is all this asks.
+        Compilation answered = Compilation.ofSource(CHAIN + "\nexample f\n" + examples, "Main");
+        answered.answerEverything();
+
+        assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
     }
 
     /**
