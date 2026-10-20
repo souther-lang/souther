@@ -12,7 +12,6 @@ import souther.compiler.diag.Citation;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.types.BindingId;
@@ -126,18 +125,15 @@ public final class DeclaredThresholds {
         }
     }
 
-    /** Whether every position the quantity of {@code cutting} is over is one the input has. */
+    /**
+     * Whether every position the line is over is one the input has.
+     *
+     * <p>Asked of the line's own coordinates, which every kind of quantity answers alike, so no
+     * kind of quantity is one this has to know about.
+     */
     private static boolean namesOnlyPlacesOfTheInput(Cutting cutting, InputReading read) {
-        if (!(cutting.of() instanceof LinearQuantity linear)) {
-            return true;
-        }
-        for (NumericTerm term : linear.terms()) {
-            if (term instanceof NumericTerm.FromOnePosition one
-                    && read.domain().at(one.position()) == null) {
-                return false;
-            }
-        }
-        return true;
+        return cutting.over().stream()
+                .allMatch(coordinate -> read.domain().at(coordinate.path()) != null);
     }
 
     /**

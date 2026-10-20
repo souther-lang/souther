@@ -94,7 +94,8 @@ class ARecursiveInputOwesRowsWhereTheBodyReadsItTest {
     @Test
     void aRuleAboutAPlaceUnderTheReturnIsOwedRowsThereAsWhereTheTypeDoesNotRecurse() {
         for (String rule : List.of("next.limit >= 0", "next.limit <= limit",
-                "next.limit <= limit && x <= y")) {
+                "next.limit <= limit && x <= y",
+                "next.limit >= 0 && Int.floorMod(x - y, 7) >= 1")) {
             List<String> recursive = declaredReadingsOf(PAGED + """
                     data Link = { ...Paging, x: Int, y: Int, next: Chain }
                         invariant %s
