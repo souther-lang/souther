@@ -224,6 +224,33 @@ final class Combinators {
             ValueName.Stdlib.operation("Map", "get"),
             new AppliedClosures.Listing.AtMostOneElementOf(1));
 
+    /**
+     * The kernels whose answer holds the elements of the argument at the position given, each once
+     * and in the opposite order: the first of the answer is the last of the argument.
+     *
+     * <p>An axiom about each, as {@link #KERNELS} is, and held to the library the same way. A walk
+     * after where an element stands counts from the far end through one of these and through no
+     * other operation.
+     */
+    private static final Map<ValueName.Stdlib.Operation, Integer> REVERSING = Map.of(
+            ValueName.Stdlib.operation("List", "reverse"), 0);
+
+    /**
+     * The position of the argument whose elements {@code operation} answers in the opposite order,
+     * or -1 where it answers no argument's so.
+     */
+    public static int positionOfTheArgumentReversed(Stdlib stdlib, ValueName operation) {
+        if (!(operation instanceof ValueName.Stdlib.Operation named)
+                || !REVERSING.containsKey(named)) {
+            return -1;
+        }
+        if (stdlib.intrinsicOf(named) == null) {
+            throw new IllegalStateException(named + " is declared to answer its argument reversed"
+                    + " as a kernel, and the library writes it in the language");
+        }
+        return REVERSING.get(named);
+    }
+
     /** The places, read off the library's signatures on the first ask. */
     private static final class Positions {
         private static final Map<ValueName.Stdlib.Operation, ClosurePositions> RULES =

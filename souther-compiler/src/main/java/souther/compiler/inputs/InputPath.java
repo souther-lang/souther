@@ -204,10 +204,24 @@ final class InputPath {
                 .elementOf(binding, names).heldAt();
     }
 
+    /**
+     * The position whose every occurrence the elements handed to {@code binding} are, once each and
+     * from the last the row writes there to the first ({@link ElementQuestion#FROM_THE_FAR_END}).
+     *
+     * <p>Beside {@link #inTheOrderWrittenAt}: through the one operation that answers its list the
+     * other way round, and the order written below it.
+     */
+    static PathResolution fromTheFarEndAt(BindingId binding, BindingEnvironment names,
+                                          DeclarationNewtypes newtypes,
+                                          Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.FROM_THE_FAR_END, taken)
+                .elementOf(binding, names).heldAt();
+    }
+
     /** Whether the question in hand wants every occurrence of a position, each once. */
     private boolean asksEveryOccurrence() {
         return switch (asked) {
-            case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> true;
+            case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END -> true;
             case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> false;
         };
     }
@@ -545,6 +559,10 @@ final class InputPath {
             // is never a pair, since a pair has no form a boundary writes, so a place of one names
             // nothing there.
             case PathResolution.At at -> switch (wanted) {
+                // A container reached without the operation that turns it round is handed as it
+                // is written, which is not the question from the far end.
+                case Wanted.APart _ when asked == ElementQuestion.FROM_THE_FAR_END ->
+                        new PathResolution.NotAPosition();
                 case Wanted.APart(var part) -> asksEveryOccurrence()
                         && at.path().insideAContainer()
                         ? new PathResolution.NotAPosition() : at.deeper(part::of);
@@ -629,7 +647,8 @@ final class InputPath {
             }
             return switch (asked) {
                 case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
-                case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> PathResolution.inEveryCase(each);
+                case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END ->
+                        PathResolution.inEveryCase(each);
                 case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
             };
         }
@@ -637,6 +656,11 @@ final class InputPath {
         // a walk after the order stops at every one — even one answering each element as it is.
         if (asked == ElementQuestion.IN_THE_ORDER_WRITTEN) {
             return new PathResolution.NotAPosition();
+        }
+        // The walk from the far end crosses the one operation declared to answer its list the other
+        // way round, and then asks the order written of what it was given.
+        if (asked == ElementQuestion.FROM_THE_FAR_END) {
+            return fromTheFarEndThrough(e, wanted, names);
         }
         // Or through an operation that answers what it was given, in either of the two shapes a
         // representation gives an application: the call a name reached where the operation has been
@@ -670,6 +694,34 @@ final class InputPath {
         int argument = CallArguments.positionOf(crossing.argument(), operation);
         return argument < 0 || argument >= args.size() ? new PathResolution.NotAPosition()
                 : heldAt(args.get(argument), crossing.wanted(), names);
+    }
+
+    /**
+     * Where the elements of {@code e} stand when it is a call of an operation declared to answer
+     * the elements of one argument in the opposite order: the order written, asked of that argument.
+     * Not a position where it is any other expression.
+     */
+    private PathResolution fromTheFarEndThrough(Core standing, Wanted wanted,
+                                                BindingEnvironment names) {
+        ValueName operation;
+        List<Core> args;
+        switch (Core.withoutStanding(standing)) {
+            case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                operation = reached.denotes();
+                args = call.args();
+            }
+            case Core.PreservedCall kept -> {
+                operation = kept.declared().operation();
+                args = kept.args();
+            }
+            default -> {
+                return new PathResolution.NotAPosition();
+            }
+        }
+        int reversed = DefaultBoundOperationFacts.positionOfTheArgumentReversed(operation);
+        return reversed < 0 || reversed >= args.size() ? new PathResolution.NotAPosition()
+                : new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, taken)
+                        .heldAt(args.get(reversed), wanted, names);
     }
 
     /** Which argument of an operation what is wanted of its answer is found in, and what of that
@@ -815,8 +867,9 @@ final class InputPath {
                 return built == null ? null : built.permutesTheElementsOf();
             }
             // Stopped in `through` before any operation is asked of.
-            case IN_THE_ORDER_WRITTEN -> throw new IllegalStateException("a walk after the order"
-                    + " crosses no operation, and " + operation + " was asked of");
+            case IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END -> throw new IllegalStateException(
+                    "a walk after the order crosses no operation here, and " + operation
+                            + " was asked of");
             case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> { }
         }
         DeclaredArgument holds = argumentWhoseElementsItHolds(operation);
@@ -829,7 +882,8 @@ final class InputPath {
                 : switch (asked) {
                     case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
                             : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
-                    case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> null;
+                    case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END ->
+                            null;
                     case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
                 };
     }
@@ -873,7 +927,8 @@ final class InputPath {
             case ONE_PER_ELEMENT -> !(asked instanceof Core.Widen)
                     && !(reached instanceof Core.Widen) && asked.type().equals(reached.type());
             case SAME_EMPTINESS -> true;
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN ->
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN,
+                 FROM_THE_FAR_END ->
                     throw new IllegalArgumentException("a list is followed beneath for a question"
                             + " about one value for each element, not " + question);
         };
@@ -905,7 +960,8 @@ final class InputPath {
         boolean asksWhatEachIs = switch (question) {
             case ONE_PER_ELEMENT -> true;
             case SAME_EMPTINESS -> false;
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN ->
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN,
+                 FROM_THE_FAR_END ->
                     throw new IllegalArgumentException("a step beneath a list is taken for a"
                             + " question about one value for each element, not " + question);
         };

@@ -197,16 +197,16 @@ public final class ElementProvenance {
             // same order, so the walk after the order stops too.
             case ElementEdge.TheSameAs(var container) -> switch (question) {
                 case NAMED_POSITION, VALUE_ORIGIN -> new ElementStep.Through(container);
-                case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, ONE_PER_ELEMENT, SAME_EMPTINESS ->
-                        new ElementStep.Refused();
+                case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END, ONE_PER_ELEMENT,
+                     SAME_EMPTINESS -> new ElementStep.Refused();
             };
             // What is made from a position came from it and is not it, so the walk after which
             // position an expression names stops where the elements stop being the same ones —
             // stops, rather than arrives at a binding it does not have. Nor does the edge say how
             // many were made of each, so neither walk after one value for each element crosses it.
             case ElementEdge.MadeFrom(var container) -> switch (question) {
-                case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, ONE_PER_ELEMENT,
-                     SAME_EMPTINESS -> new ElementStep.Refused();
+                case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END,
+                     ONE_PER_ELEMENT, SAME_EMPTINESS -> new ElementStep.Refused();
                 case VALUE_ORIGIN -> new ElementStep.Through(container);
             };
         };

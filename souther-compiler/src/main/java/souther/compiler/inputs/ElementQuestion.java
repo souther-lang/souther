@@ -43,6 +43,16 @@ public enum ElementQuestion {
     IN_THE_ORDER_WRITTEN,
 
     /**
+     * Which position holds these very values, every occurrence of it once each, handed from the
+     * last the row writes there to the first — so that where a value stands among them is how far
+     * it is from the end of the row.
+     *
+     * <p>{@link #IN_THE_ORDER_WRITTEN} through one operation that answers its list the other way
+     * round, and no other: below it the elements are asked in the order written.
+     */
+    FROM_THE_FAR_END,
+
+    /**
      * Which container of the input a list holds one value for each element of, in the one
      * occurrence of the container the list was made from, and where in the element that value
      * stands — so that how often a value occurs in the list is how often it occurs there.

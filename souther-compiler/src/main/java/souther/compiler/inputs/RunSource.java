@@ -251,7 +251,8 @@ public sealed interface RunSource {
 
         @Override
         public String toString() {
-            return "{" + computation + " | " + elements + "}";
+            return "{" + computation + " | " + elements
+                    + (order != null && order.fromTheFarEnd() ? " from the far end" : "") + "}";
         }
     }
 
@@ -300,37 +301,48 @@ public sealed interface RunSource {
 
     /**
      * That a walk was handed the elements at {@code elements}, every one of them once and in the
-     * order the row writes them there.
+     * order the row writes them there — or from the last of them to the first.
      *
-     * <p>Made where the reading of the input showed it ({@link InputReads#inTheOrderWrittenAt}),
-     * and so in this package and nowhere else: a run is not made to claim the order by saying so.
-     * Equal by the elements it was shown of, since that is all it says.
+     * <p>Made where the reading of the input showed it ({@link InputReads#inTheOrderWrittenAt},
+     * {@link InputReads#fromTheFarEndAt}), and so in this package and nowhere else: a run is not
+     * made to claim the order by saying so. Equal by the elements it was shown of and the end it
+     * counted from, since that is all it says: a total weighted by where each stands is another
+     * number from the far end.
      */
     final class InTheOrderWritten {
 
         private final TermPath elements;
+        private final boolean fromTheFarEnd;
 
-        InTheOrderWritten(TermPath elements) {
+        InTheOrderWritten(TermPath elements, boolean fromTheFarEnd) {
             this.elements = Objects.requireNonNull(elements, "an order is shown of some elements");
+            this.fromTheFarEnd = fromTheFarEnd;
         }
 
         public TermPath elements() {
             return elements;
         }
 
+        /** Whether the walk was handed the last element the row writes first. */
+        public boolean fromTheFarEnd() {
+            return fromTheFarEnd;
+        }
+
         @Override
         public boolean equals(Object other) {
-            return other instanceof InTheOrderWritten that && elements.equals(that.elements);
+            return other instanceof InTheOrderWritten that && elements.equals(that.elements)
+                    && fromTheFarEnd == that.fromTheFarEnd;
         }
 
         @Override
         public int hashCode() {
-            return elements.hashCode();
+            return Objects.hash(elements, fromTheFarEnd);
         }
 
         @Override
         public String toString() {
-            return "in the order " + elements + " is written";
+            return fromTheFarEnd ? "in the order " + elements + " is written, from the far end"
+                    : "in the order " + elements + " is written";
         }
     }
 

@@ -97,16 +97,70 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
     }
 
     /**
-     * Elements handed in another order than the row's are not read by where they stand there, and
-     * a total that does not turn on where they stand is read whatever their order.
+     * Elements handed from the last the row writes are read by where they stand counting from the
+     * far end, and a total that does not turn on where they stand is read whatever their order.
      */
     @Test
-    void aWalkOverTheElementsInAnotherOrderIsNotReadByPosition() {
+    void aWalkOverTheElementsFromTheFarEndIsReadByThePositionCountedThere() {
         String reversed = report(model(BRANCH, "List.reverse(xs)"));
-        assertTrue(reversed.contains("not read: comparison"), reversed);
-        assertFalse(reversed.contains("the position"), reversed);
+        assertTrue(reversed.contains("from the far end"), reversed);
+        assertFalse(reversed.contains("not read:"), reversed);
         String alike = report(model("(i, c) -> 3 * c", "List.reverse(xs)"));
         assertTrue(alike.contains("List.sum({3·the element itself + 0 | xs[*]})"), alike);
+    }
+
+    /** The same total over the list and over its reverse are two terms, not one. */
+    @Test
+    void aTotalFromTheFarEndIsNotTheTotalFromTheNearEnd() {
+        String near = report(model(BRANCH, "xs"));
+        String far = report(model(BRANCH, "List.reverse(xs)"));
+        assertFalse(near.contains("from the far end"), near);
+        assertTrue(far.contains("from the far end"), far);
+    }
+
+    /** Elements handed in an order no operation declares are not read by where they stand. */
+    @Test
+    void aWalkOverTheElementsInAnOrderNothingDeclaresIsNotReadByPosition() {
+        String sorted = report(model(BRANCH, "List.sort(xs)"));
+        assertTrue(sorted.contains("not read: comparison"), sorted);
+        String twice = report(model(BRANCH, "List.reverse(List.reverse(xs))"));
+        assertTrue(twice.contains("not read: comparison"), twice);
+    }
+
+    /** A list that is the reverse on one branch and the list itself on the other is two totals,
+     *  each counted from its own end, and never one counted from the end of the other. */
+    @Test
+    void aListReversedOnOneBranchOnlyIsReadAsTwoTotals() {
+        String human = report("""
+                module p
+                data Bad
+                behavior check : (xs: List<Int>, n: Int) -> Int | Bad
+                let check (xs, n) = {
+                    let ys = if n > 0 then List.reverse(xs) else xs
+                    guard List.sum(List.mapIndexed(%s, ys)) >= 10 else Bad
+                    0
+                }
+                """.formatted(BRANCH));
+        assertTrue(human.contains(TERM), human);
+        assertTrue(human.contains(TERM.replace("xs[*]", "xs[*] from the far end")), human);
+        assertFalse(human.contains("not read:"), human);
+    }
+
+    /** A name bound to the reverse is the reverse. */
+    @Test
+    void aNameBoundToTheReverseIsTheReverse() {
+        String human = report("""
+                module p
+                data Bad
+                behavior check : (xs: List<Int>, n: Int) -> Int | Bad
+                let check (xs, n) = {
+                    let ys = List.reverse(xs)
+                    guard List.sum(List.mapIndexed(%s, ys)) >= 10 else Bad
+                    0
+                }
+                """.formatted(BRANCH));
+        assertTrue(human.contains("from the far end"), human);
+        assertFalse(human.contains("not read:"), human);
     }
 
     /** A whole number that is not the position is no position. */
@@ -157,9 +211,32 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         String human = report(guarded);
         assertTrue(human.contains("obligations 4/4"), human);
         assertFalse(human.contains("not read:"), human);
-        String reversed = report(guarded.replace("mapIndexed((i, c) -> (i + 2) * c, xs)",
-                "mapIndexed((i, c) -> (i + 2) * c, List.reverse(xs))"));
-        assertTrue(reversed.contains("not read: comparison"), reversed);
+    }
+
+    /**
+     * Over the reverse the same weights count from the other end: {@code [4, 1]} is at fourteen,
+     * {@code [3, 2]} at thirteen, {@code [2, 4]} at sixteen and {@code [4, 0]} at twelve, and read
+     * from the near end none of them is at fourteen.
+     */
+    @Test
+    void aRowIsReadWithItsElementsWhereTheReverseOfTheListPutsThem() {
+        String human = report("""
+                module p
+                data Bad
+                behavior check : (xs: List<Int>) -> Int | Bad
+                let check (xs) = {
+                    guard List.sum(List.mapIndexed((i, c) -> (i + 2) * c, List.reverse(xs))) >= 14
+                        else Bad
+                    0
+                }
+                example check
+                    | "at"    : ([4, 1]) -> 0
+                    | "below" : ([3, 2]) -> Bad
+                    | "past"  : ([4, 2]) -> 0
+                    | "short" : ([4, 0]) -> Bad
+                """);
+        assertTrue(human.contains("obligations 4/4"), human);
+        assertFalse(human.contains("not read:"), human);
     }
 
     /** The position by itself, beside an element, and chosen between by a test of it are each read. */

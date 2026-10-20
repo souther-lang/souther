@@ -297,9 +297,7 @@ public final class InputNumber {
             // A number that turns on where each element stands is a number of them in the order
             // the row writes them, which is asked as well and only then.
             RunSource.InTheOrderWritten order = computed.readsThePosition()
-                    && where.inTheOrderWrittenAt(element, source.newtypes())
-                            instanceof PathResolution.At(TermPath inOrder) && inOrder.equals(at)
-                    ? new RunSource.InTheOrderWritten(at) : null;
+                    ? theOrderTheWalkWasHandedThem(where, element, at, source) : null;
             return overWhatWasComputed(measured, where.answerAt(element), computed, at, order,
                     source);
         }
@@ -484,6 +482,21 @@ public final class InputNumber {
         Type fieldType = inputs.typeAt(place.from(at), source);
         return fieldType != null && TypeOps.base(closure.body().type(), source.inners())
                 .equals(TypeOps.base(fieldType, source.inners())) ? place : null;
+    }
+
+    /**
+     * That the walk was handed the elements at {@code at} as the row writes them, or from the last
+     * to the first, whichever the reading of the input shows — or null where it shows neither.
+     */
+    private static RunSource.InTheOrderWritten theOrderTheWalkWasHandedThem(
+            InputReads where, BindingId element, TermPath at, RuleReadingSource source) {
+        if (where.inTheOrderWrittenAt(element, source.newtypes())
+                instanceof PathResolution.At(TermPath inOrder) && inOrder.equals(at)) {
+            return new RunSource.InTheOrderWritten(at, false);
+        }
+        return where.fromTheFarEndAt(element, source.newtypes())
+                instanceof PathResolution.At(TermPath farEnd) && farEnd.equals(at)
+                ? new RunSource.InTheOrderWritten(at, true) : null;
     }
 
     /**

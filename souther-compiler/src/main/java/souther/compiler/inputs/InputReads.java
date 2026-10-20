@@ -3157,6 +3157,12 @@ public final class InputReads {
         return InputPath.inTheOrderWrittenAt(binding, names, newtypes, this::taken);
     }
 
+    /** The same, where they are handed from the last the row writes to the first
+     *  ({@link InputPath#fromTheFarEndAt}). */
+    public PathResolution fromTheFarEndAt(BindingId binding, DeclarationNewtypes newtypes) {
+        return InputPath.fromTheFarEndAt(binding, names, newtypes, this::taken);
+    }
+
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {

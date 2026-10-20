@@ -23,6 +23,7 @@ import java.util.function.Function;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -76,13 +77,27 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     @Test
     void eachElementIsWeighedByWhereItStands() {
         RunSource run = RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION, Type.Prim.INT,
-                new RunSource.InTheOrderWritten(ELEMENTS));
+                new RunSource.InTheOrderWritten(ELEMENTS, false));
         assertNotNull(run);
         assertEquals(Count.of(2 + 3 * 4), read(run, 2, 4));
         assertEquals(Count.of(4 + 3 * 2), read(run, 4, 2));
         assertEquals(Count.of(5 + 3 * 5 + 5), read(run, 5, 5, 5));
         assertEquals(Count.of(7), read(run, 7), "the first element stands at nought");
         assertEquals(Count.of(0), read(run), "and none comes to what the walk starts from");
+    }
+
+    /** Handed the last element first, the first handed stands at nought: the same row is another
+     *  total, and is not the run of the near end. */
+    @Test
+    void eachElementHandedFromTheFarEndIsWeighedByWhereItStandsThere() {
+        RunSource run = RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION, Type.Prim.INT,
+                new RunSource.InTheOrderWritten(ELEMENTS, true));
+        assertNotNull(run);
+        assertEquals(Count.of(4 + 3 * 2), read(run, 2, 4));
+        assertEquals(Count.of(2 + 3 * 4), read(run, 4, 2));
+        assertEquals(Count.of(5 + 3 * 5 + 5), read(run, 5, 5, 5));
+        assertNotEquals(run, RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION,
+                Type.Prim.INT, new RunSource.InTheOrderWritten(ELEMENTS, false)));
     }
 
     /** Without what showed the order, a run that turns on it is none; with it, only of the
@@ -94,7 +109,7 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
         assertThrows(IllegalArgumentException.class, () -> new RunSource.ComputedOccurrences(
                 ELEMENTS, BY_POSITION, Type.Prim.INT, null));
         RunSource.InTheOrderWritten elsewhere =
-                new RunSource.InTheOrderWritten(TermPath.of("ys").element());
+                new RunSource.InTheOrderWritten(TermPath.of("ys").element(), false);
         assertNull(RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION, Type.Prim.INT,
                 elsewhere));
         assertThrows(IllegalArgumentException.class, () -> new RunSource.ComputedOccurrences(
@@ -104,7 +119,8 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     /** A run that turns on no position claims nothing of the order, whatever showed it. */
     @Test
     void aRunThatTurnsOnNoPositionClaimsNoOrder() {
-        RunSource.InTheOrderWritten shown = new RunSource.InTheOrderWritten(ELEMENTS);
+        RunSource.InTheOrderWritten shown =
+                new RunSource.InTheOrderWritten(ELEMENTS, false);
         assertEquals(RunSource.computedOverTheElementsAt(ELEMENTS, weighed(3), Type.Prim.INT,
                         null),
                 RunSource.computedOverTheElementsAt(ELEMENTS, weighed(3), Type.Prim.INT, shown),
@@ -118,7 +134,7 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     @Test
     void aRunThatTurnsOnThePositionDoesNotMove() {
         RunSource byPosition = RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION,
-                Type.Prim.INT, new RunSource.InTheOrderWritten(ELEMENTS));
+                Type.Prim.INT, new RunSource.InTheOrderWritten(ELEMENTS, false));
         TermPath moved = TermPath.of("ys").element();
         assertNull(byPosition.movedTo(_ -> moved));
         RunSource alike = RunSource.computedOverTheElementsAt(ELEMENTS, weighed(3), Type.Prim.INT,
