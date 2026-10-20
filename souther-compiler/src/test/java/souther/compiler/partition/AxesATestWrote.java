@@ -35,7 +35,8 @@ public final class AxesATestWrote {
                                                          AxisId along, List<Border> lines) {
         Partitions.Partitioning over = asAMeasurement(behavior, axes);
         return new Partitions.Partitioning(over.measurements(), List.of(), Set.of(), List.of(),
-                List.of(), List.of(), Map.of(along, List.copyOf(lines)), ReachingCuts.NONE,
+                List.of(), List.of(), List.of(), Map.of(along, List.copyOf(lines)),
+                ReachingCuts.NONE,
                 over.partitionClosure(), over.borderClosure(), null,
                 WhereTheOperationsStand.NONE);
     }
@@ -55,7 +56,7 @@ public final class AxesATestWrote {
                 measurements.stream().map(PositionMeasurements::position).toList(),
                 List.of(), new LinesRead());
         return new Partitions.Partitioning(measurements, List.of(), Set.of(), List.of(), List.of(),
-                List.of(), Map.of(), ReachingCuts.NONE,
+                List.of(), List.of(), Map.of(), ReachingCuts.NONE,
                 closed.partition(), closed.border(), null, WhereTheOperationsStand.NONE);
     }
 }

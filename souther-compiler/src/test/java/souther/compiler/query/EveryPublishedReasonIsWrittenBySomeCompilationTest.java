@@ -437,6 +437,14 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (a: Int) -> Answer
                 let f (a) = if a - a <= 0 then Yes else No
                 """.formatted(ANSWER)));
+        // Every run that reaches the comparison stops in the division by nought, so it states
+        // nothing on either side.
+        out.put(UndividedPosition.Reason.RULE_ANSWERS_NOWHERE, of("""
+                module m
+                %s
+                behavior f : (a: Int) -> Answer
+                let f (a) = if a / 0 <= 0 then Yes else No
+                """.formatted(ANSWER)));
         // Every string begins with the empty one, so the rule puts every value the position holds
         // on one side of itself and the model draws no line between any two of them.
         out.put(UndividedPosition.Reason.RULE_TELLS_NOTHING_APART, of("""

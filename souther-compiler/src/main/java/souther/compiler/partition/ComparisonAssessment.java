@@ -412,6 +412,21 @@ sealed interface ComparisonAssessment {
         }
     }
 
+    /**
+     * Read to the end, and every run that reaches the comparison stops in an operation it is read
+     * through ({@link Cutting.Read.AnswersNowhere}): a division by nought is worked out first.
+     *
+     * <p>Not a reading that stopped, and not {@link CutsNothing}, where a run gets past the
+     * comparison and it comes out the same for every row. {@code filedAt} is where the rule is said
+     * to answer nowhere, as it is for {@link CutsNothing}.
+     */
+    record AnswersNowhere(List<FilingCoordinate> filedAt) implements ComparisonAssessment {
+
+        public AnswersNowhere {
+            filedAt = List.copyOf(filedAt);
+        }
+    }
+
     /** Read in full, and the quantity does not run as far as the line the rule draws. */
     record OutsideTheDomain(Cutting cutting) implements ComparisonAssessment {
 
@@ -583,9 +598,10 @@ sealed interface ComparisonAssessment {
                 return switch (line) {
                     case AtAPosition _, AcrossPositions _ -> true;
                     case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
-                         CutsNothing _, AgainstAnotherValue _, OutsideTheDomain _,
-                         NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _, Unread _,
-                         NothingArrivesAtItsRelation _, RelationTurnsNothing _, Several _ -> false;
+                         CutsNothing _, AnswersNowhere _, AgainstAnotherValue _,
+                         OutsideTheDomain _, NothingArrivesAtItsLine _, TurnsNothing _,
+                         NoFeasibleInput _, Unread _, NothingArrivesAtItsRelation _,
+                         RelationTurnsNothing _, Several _ -> false;
                 };
             }
 
@@ -651,7 +667,7 @@ sealed interface ComparisonAssessment {
                         new Unread(atEachOf(cuttingOf(line).over(),
                                 new BlockReason.SeveralLinesInOneRule()));
                 case AgainstAnotherValue _, AnswerDependent _, OnADependencysAnswer _,
-                     StatesNoRelation _, NoInput _, CutsNothing _,
+                     StatesNoRelation _, NoInput _, CutsNothing _, AnswersNowhere _,
                      NothingArrivesAtItsRelation _, RelationTurnsNothing _ -> null;
                 case Several _ -> throw new IllegalStateException(
                         "a line of a statement is what one line comes to: " + line);
@@ -763,6 +779,9 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.CutsNothing over -> over.filedAt().isEmpty()
                     ? aboutNoPosition(comparison, reads, read.newtypes())
                     : new CutsNothing(over.filedAt());
+            case Cutting.Read.AnswersNowhere over -> over.filedAt().isEmpty()
+                    ? aboutNoPosition(comparison, reads, read.newtypes())
+                    : new AnswersNowhere(over.filedAt());
             case Cutting.Read.StatesNoRelation _ -> new StatesNoRelation();
             // Where the reading stopped and the comparison is over what a dependency answered, it is
             // the decision table's. A number of an answer is no number of the input, so this reading
@@ -817,7 +836,8 @@ sealed interface ComparisonAssessment {
                     ? aboutNoPosition.get()
                     : new Unread(atEachOf(over.over(),
                             new BlockReason.LineAtANumberNoRatioHolds()));
-            case Cutting.Read.CutsNothing _, Cutting.Read.Stopped _, Cutting.Read.Several _,
+            case Cutting.Read.CutsNothing _, Cutting.Read.AnswersNowhere _,
+                 Cutting.Read.Stopped _, Cutting.Read.Several _,
                  Cutting.Read.AgainstAnotherValue _, Cutting.Read.StatesNoRelation _ ->
                     throw new IllegalArgumentException("one line is drawn or refused: " + line);
         };
@@ -845,7 +865,8 @@ sealed interface ComparisonAssessment {
                     case Cutting.Read.Stopped stopped -> new Unread(stopped.why());
                     case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                          Cutting.Read.NumberNoRatioHolds _, Cutting.Read.CutsNothing _,
-                         Cutting.Read.Several _, Cutting.Read.StatesNoRelation _ ->
+                         Cutting.Read.AnswersNowhere _, Cutting.Read.Several _,
+                         Cutting.Read.StatesNoRelation _ ->
                             aLine(part.line(), at, read, drawnByAnInvariant, aboutNoPosition);
                 }, part.cases()))
                 .toList());
@@ -871,9 +892,9 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.AgainstAnotherValue related ->
                     AgainstAnotherValue.of(related, read, Optional.of(new DrawnBeside(behavior, at,
                             WrittenLine.THE_COMPARISON, Optional.empty())));
-            case Cutting.Read.Cuts _, Cutting.Read.CutsNothing _, Cutting.Read.Stopped _,
-                 Cutting.Read.NoOrderToCountOn _, Cutting.Read.NumberNoRatioHolds _,
-                 Cutting.Read.StatesNoRelation _ ->
+            case Cutting.Read.Cuts _, Cutting.Read.CutsNothing _, Cutting.Read.AnswersNowhere _,
+                 Cutting.Read.Stopped _, Cutting.Read.NoOrderToCountOn _,
+                 Cutting.Read.NumberNoRatioHolds _, Cutting.Read.StatesNoRelation _ ->
                     throw new IllegalArgumentException(
                             "an application states lines or values it relates: " + answered);
         };
@@ -1002,6 +1023,21 @@ sealed interface ComparisonAssessment {
             return List.of();
         }
         return List.of(reaching);
+    }
+
+    /**
+     * Whether {@code way} is not shown to leave no row at the rule: it is not one the declarations
+     * and the conditions on it rule out, the places it is watched at do not all prove that nothing
+     * arrives, and some region the way leaves is not shown to hold nothing.
+     *
+     * <p>No proof that a row arrives. The reading of the way is an inclusion, and a way it cannot
+     * take in leaves the region as wide as the declarations do, so this is true of a way it could
+     * not settle as much as of one a row takes.
+     */
+    static boolean someRowArrives(Reachability way, List<ComparisonArrival> arrivals) {
+        return waysArrivedBy(way, arrivals).stream().anyMatch(reaching ->
+                reaching.holdingEveryRow().stream()
+                        .anyMatch(region -> region.emptiness().isEmpty()));
     }
 
     /** How far the rows arriving at a line get: none to it, to it, or to both sides of it. */
@@ -1305,7 +1341,7 @@ sealed interface ComparisonAssessment {
             case TurnsNothing turns -> turns.cutting();
             case NoFeasibleInput none -> none.cutting();
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
-                 CutsNothing _, Unread _, AgainstAnotherValue _, Several _,
+                 CutsNothing _, AnswersNowhere _, Unread _, AgainstAnotherValue _, Several _,
                  NothingArrivesAtItsRelation _, RelationTurnsNothing _ ->
                     throw new IllegalArgumentException(
                          "a reading that drew no line is about none: " + line);
@@ -1490,6 +1526,7 @@ sealed interface ComparisonAssessment {
             case NoFeasibleInput none -> none.cutting().over();
             case Unread unread -> List.copyOf(unread.why().keySet());
             case CutsNothing cuts -> cuts.filedAt();
+            case AnswersNowhere nowhere -> nowhere.filedAt();
             case NothingArrivesAtItsRelation unarrived -> unarrived.filedAt();
             case RelationTurnsNothing turns -> turns.filedAt();
             case AgainstAnotherValue against -> against.filedAt();
@@ -1566,6 +1603,7 @@ sealed interface ComparisonAssessment {
                         .filter(place -> !divided.contains(place)).toList(), against.undivided());
             }
             case CutsNothing _ -> sameAtEachPlace(new BlockReason.ComparisonCuttingNothing());
+            case AnswersNowhere _ -> sameAtEachPlace(new BlockReason.ComparisonAnswersNowhere());
             case OutsideTheDomain _ -> sameAtEachPlace(UnreadComparison.outsideWhatTheQuantityHolds());
             // Not the reason above: there the declarations never run as far as the line, and here
             // they do — what stops short of it is the values that arrive at the comparison, ruled
@@ -1681,8 +1719,8 @@ sealed interface ComparisonAssessment {
             case Several several -> several.parts().stream()
                     .anyMatch(part -> part.line().drawsABorder());
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
-                 CutsNothing _, AgainstAnotherValue _, OutsideTheDomain _, TurnsNothing _,
-                 NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _,
+                 CutsNothing _, AnswersNowhere _, AgainstAnotherValue _, OutsideTheDomain _,
+                 TurnsNothing _, NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _,
                  NothingArrivesAtItsRelation _, RelationTurnsNothing _ -> false;
         };
     }

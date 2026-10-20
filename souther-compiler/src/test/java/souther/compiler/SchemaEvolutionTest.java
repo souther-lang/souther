@@ -434,6 +434,86 @@ class SchemaEvolutionTest {
                         { "not": { "properties": { "description": { "const": 2 } } } }"""));
     }
 
+    private static final String KINDS = """
+            {
+              "properties": { "kind": { "enum": ["a", "b"] } },
+              "allOf": [
+                {
+                  "if": { "properties": { "kind": { "const": "a" } }, "required": ["kind"] },
+                  "then": { "required": ["x"] },
+                  "else": { "not": { "required": ["x"] } }
+                }
+              ]
+            }""";
+
+    private static String kindsWith(String words, String wrapped) {
+        return """
+                {
+                  "properties": { "kind": { "enum": %s } },
+                  "allOf": [
+                    {
+                      "if": { "properties": { "kind": { "const": "a" } }, "required": ["kind"] },
+                      "then": { "required": ["x"] },
+                      "else": %s
+                    }
+                  ]
+                }""".formatted(words, wrapped);
+    }
+
+    private static String onKind(String word) {
+        return """
+                { "if": { "properties": { "kind": { "const": "%s" } }, "required": ["kind"] },
+                  "then": { "required": ["x"] },
+                  "else": { "not": { "required": ["x"] } } }""".formatted(word);
+    }
+
+    /**
+     * A new kind may be asked more of than the others: no document of it shipped, so none is held
+     * to more than it was.
+     */
+    @Test
+    void aConditionOnAKindThatDidNotShipNarrowsNothing() {
+        assertEquals(List.of(),
+                narrowings(KINDS, kindsWith("[\"a\", \"b\", \"c\"]", onKind("c"))));
+    }
+
+    /** A kind that shipped is held to what it was held to. */
+    @Test
+    void aConditionOnAKindThatShippedIsANarrowing() {
+        assertEquals(false,
+                narrowings(KINDS, kindsWith("[\"a\", \"b\"]", onKind("b"))).isEmpty());
+    }
+
+    /** Where the discriminator was held to no enum, any word was taken, and the new one was too. */
+    @Test
+    void aConditionOnAWordNothingRefusedIsANarrowing() {
+        String open = KINDS.replace("{ \"enum\": [\"a\", \"b\"] }", "{ \"type\": \"string\" }");
+        assertEquals(false,
+                narrowings(open, kindsWith("[\"a\", \"b\", \"c\"]", onKind("c"))).isEmpty());
+    }
+
+    /** What stands in the wrapper is the branch that shipped, and nothing else may have changed. */
+    @Test
+    void aWrapperThatAlsoChangesTheBranchIsANarrowing() {
+        String changed = onKind("c").replace("{ \"not\": { \"required\": [\"x\"] } }",
+                "{ \"not\": { \"required\": [\"y\"] } }");
+        assertEquals(false,
+                narrowings(KINDS, kindsWith("[\"a\", \"b\", \"c\"]", changed)).isEmpty());
+    }
+
+    /** A key beside the conditional asks every document more, the shipped kinds included. */
+    @Test
+    void aWrapperWithAConstraintBesideItIsANarrowing() {
+        for (String beside : List.of("\"required\": [\"y\"]",
+                "\"not\": { \"required\": [\"z\"] }",
+                "\"allOf\": [{ \"required\": [\"y\"] }]")) {
+            String wrapped = onKind("c").replaceFirst("\\}$", ", " + beside + " }");
+            assertEquals(false,
+                    narrowings(KINDS, kindsWith("[\"a\", \"b\", \"c\"]", wrapped)).isEmpty(),
+                    beside);
+        }
+    }
+
     private static List<String> narrowings(String current) {
         return narrowings(SHIPPED, current);
     }

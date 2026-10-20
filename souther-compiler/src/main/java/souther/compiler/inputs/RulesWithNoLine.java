@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.LinkedHashMap;
@@ -32,16 +33,22 @@ import java.util.Map;
  *                     asked of the reasons rather than read off this
  * @param unclassified the rules nothing worked out the questions of, each holding the measures it
  *                     leaves open
+ * @param stopping     the rules a run reaching them may stop in: said beside the rules that came to
+ *                     no line because it is what the same readers find of a rule, and apart from
+ *                     them because it says nothing of whether the rule draws a line
  */
 public record RulesWithNoLine(List<RuleWithoutALine> reported,
-                              List<StandingQuestion.Unclassified> unclassified) {
+                              List<StandingQuestion.Unclassified> unclassified,
+                              List<RuleWhereARunMayStop> stopping) {
 
     /** Nothing found, which is what a reader with no rules to read hands on. */
-    public static final RulesWithNoLine NONE = new RulesWithNoLine(List.of(), List.of());
+    public static final RulesWithNoLine NONE =
+            new RulesWithNoLine(List.of(), List.of(), List.of());
 
     public RulesWithNoLine {
         reported = List.copyOf(reported);
         unclassified = List.copyOf(unclassified);
+        stopping = List.copyOf(stopping);
     }
 
     /**
@@ -139,6 +146,13 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
 
         private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
+        private final Map<RuleRef, RuleWhereARunMayStop> stopping = new LinkedHashMap<>();
+
+        /** A rule a run reaching it may stop in, which is what a report says of it. */
+        public void mayStopARun(RuleCitation cited, ModelOccurrences readAt) {
+            RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt);
+            stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith);
+        }
 
         /** One more finding, which is what a report says about the rule at that place. */
         public void add(RuleCitation cited, FilingCoordinate at,
@@ -207,12 +221,14 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         public void addAll(RulesWithNoLine other) {
             other.reported().forEach(this::add);
             other.unclassified().forEach(this::asked);
+            other.stopping().forEach(one ->
+                    stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith));
         }
 
         /** What this gathering came to, which is what a reader hands on. */
         public RulesWithNoLine found() {
             return new RulesWithNoLine(List.copyOf(reported.values()),
-                    List.copyOf(unclassified.values()));
+                    List.copyOf(unclassified.values()), List.copyOf(stopping.values()));
         }
     }
 }

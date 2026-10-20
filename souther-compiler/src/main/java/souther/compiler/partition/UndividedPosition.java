@@ -375,6 +375,15 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_CUTS_NOTHING,
         /**
+         * A rule naming this position was read to the end and every run that reaches it stops in an
+         * operation it is read through, such as a division by nought.
+         *
+         * <p>Its own word beside {@link #RULE_CUTS_NOTHING}: there a run gets past the rule and it
+         * comes out the same for every value, and here none does, so it tells no value from
+         * another and nothing is owed on its account.
+         */
+        RULE_ANSWERS_NOWHERE,
+        /**
          * A rule naming this position was read to the end and puts every value it may hold on one
          * side of itself.
          *

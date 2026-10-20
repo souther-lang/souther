@@ -2099,6 +2099,19 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * A comparison read through an operation that stops every run that reaches it, such as a
+     * division by nought: the run arrives and the operation aborts it, so the comparison states
+     * nothing on either side. Not {@link NoRunTakesIt}, where no run arrives.
+     */
+    record TheRunStopsHere() implements Derivation {
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.answersNowhere();
+        }
+    }
+
     /** A truth, a container's holding anything or an optional's holding a value, written out. */
     record WrittenOut(boolean holds) implements Derivation {
 

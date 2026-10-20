@@ -13,6 +13,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -111,6 +113,45 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
         assertEquals(null, read.placesTurnedAt(x, Map.of()));
     }
 
+    private static final TermPath Z = TermPath.of("z");
+
+    /** {@code floorMod(x, 11) + z == 7}: a number of the input beside the remainder. */
+    private static final Proposition SEVEN_WITH_A_NUMBER = new Proposition.Compared(
+            new Relation.Affine(new LinearForm<>(ExactRatio.of(-7), Map.of(
+                    new Quantity.RemainderOfADividend(
+                            ValueName.Stdlib.operation("Int", "floorMod"),
+                            new LinearForm<>(ExactRatio.ZERO,
+                                    Map.of(new NumericTerm.ValueOf(X), ExactRatio.ONE)),
+                            BigInteger.valueOf(11)), ExactRatio.ONE,
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(Z)), ExactRatio.ONE)),
+                    Rel.EQ), true);
+
+    /** The remainder and the number beside it are added before the relation is asked. */
+    @Test
+    void aNumberBesideTheRemainderIsAddedToIt() {
+        assertEquals(AStatementAtARow.Answer.HOLDS, withNumber(14, 4));
+        assertEquals(AStatementAtARow.Answer.FAILS, withNumber(14, 5));
+    }
+
+    /**
+     * What stopped the reading of the form and what stopped the number beside it are both said: a
+     * row is not read for either, and a reader told one would fix it and be told the other next.
+     */
+    @Test
+    void whatStoppedEitherPartIsSaid() {
+        AStatementAtARow.Answer answer = AStatementAtARow.of(SEVEN_WITH_A_NUMBER, "f", quantities())
+                .at(row(Map.of(Z, new ObservationAtPoint.Value(new ObservedValue.Unknown("no")))));
+        AStatementAtARow.Answer.CouldNotTell told =
+                assertInstanceOf(AStatementAtARow.Answer.CouldNotTell.class, answer);
+        assertEquals(2, told.why().size(), told.why().toString());
+    }
+
+    private static AStatementAtARow.Answer withNumber(long x, long z) {
+        return AStatementAtARow.of(SEVEN_WITH_A_NUMBER, "f", quantities()).at(row(Map.of(
+                X, new ObservationAtPoint.Value(new ObservedValue.Integer(x)),
+                Z, new ObservationAtPoint.Value(new ObservedValue.Integer(z)))));
+    }
+
     /** {@code weight * x + y + constant}, by eleven. */
     private static Quantity.RemainderOfADividend remainder(long onX, long onY, long constant) {
         return new Quantity.RemainderOfADividend(ValueName.Stdlib.operation("Int", "floorMod"),
@@ -144,7 +185,8 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
                 RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
         return InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.INT),
-                        new InputDomain.Parameter("y", null, Type.INT)),
+                        new InputDomain.Parameter("y", null, Type.INT),
+                        new InputDomain.Parameter("z", null, Type.INT)),
                 reading, TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).quantities(RULES);
     }

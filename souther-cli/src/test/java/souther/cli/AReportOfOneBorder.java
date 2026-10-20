@@ -250,7 +250,7 @@ final class AReportOfOneBorder {
         return new PartitionEvidence(
                 new Measurement.Complete<>(List.of()),
                 PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of());
     }
 
@@ -269,7 +269,7 @@ final class AReportOfOneBorder {
                                         new souther.compiler.inputs.PositionId(
                                                 souther.compiler.inputs.TermPath.of("t")))))),
                 PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of());
     }
 
