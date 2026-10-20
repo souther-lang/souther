@@ -8,6 +8,7 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.values.ValueSet;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -276,6 +277,22 @@ public interface SearchRegion {
      *  it. */
     default NumericDomain.FormProjection projectionOf(NumericTerm term) {
         return projectionOf(LinearForm.atom(term));
+    }
+
+    /**
+     * Where {@code term} runs when the terms in {@code alongside} are still to be chosen.
+     *
+     * <p>What each of them is on its own is put on the rules before {@code term} is read off them,
+     * so a relation between the two bounds {@code term} by the ends the other has from its type. The
+     * answer holds every assignment of all of them this region admits, and is narrower than
+     * {@link #projectionOf(NumericTerm)} only by what such a relation takes out. Terms that no row
+     * has together, or with {@code term}, add nothing: the answer is then that of {@code term} on
+     * its own, whatever order they are in. A region that reads no relations has nothing to add,
+     * which is what the default is.
+     */
+    default NumericDomain.FormProjection projectionOf(NumericTerm term,
+                                                      Collection<? extends NumericTerm> alongside) {
+        return projectionOf(term);
     }
 
     /**
