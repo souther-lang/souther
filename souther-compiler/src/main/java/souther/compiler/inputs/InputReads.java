@@ -3207,16 +3207,11 @@ public final class InputReads {
         return InputPath.everyElementAt(binding, names, newtypes, this::taken);
     }
 
-    /** The same, where the elements handed to {@code binding} are also handed in the order the
-     *  row writes them ({@link InputPath#inTheOrderWrittenAt}). */
-    public PathResolution inTheOrderWrittenAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.inTheOrderWrittenAt(binding, names, newtypes, this::taken);
-    }
-
-    /** The same, where they are handed from the last the row writes to the first
-     *  ({@link InputPath#fromTheFarEndAt}). */
-    public PathResolution fromTheFarEndAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.fromTheFarEndAt(binding, names, newtypes, this::taken);
+    /** The same, where the elements handed to {@code binding} are also handed in {@code direction}
+     *  ({@link InputPath#inTheOrderAt}). */
+    public PathResolution inTheOrderAt(BindingId binding, TraversalDirection direction,
+                                       DeclarationNewtypes newtypes) {
+        return InputPath.inTheOrderAt(binding, direction, names, newtypes, this::taken);
     }
 
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that

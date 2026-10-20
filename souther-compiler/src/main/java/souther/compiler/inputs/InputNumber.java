@@ -315,7 +315,7 @@ public final class InputNumber {
         if (answered == null) {
             // A number that turns on where each element stands is a number of them in the order
             // the row writes them, which is asked as well and only then.
-            RunSource.InTheOrderWritten order = computed.readsThePosition()
+            RunSource.TraversalOrder order = computed.readsThePosition()
                     ? theOrderTheWalkWasHandedThem(where, element, at, source) : null;
             return overWhatWasComputed(measured, where.answerAt(element), computed, at, order,
                     source);
@@ -504,18 +504,19 @@ public final class InputNumber {
     }
 
     /**
-     * That the walk was handed the elements at {@code at} as the row writes them, or from the last
-     * to the first, whichever the reading of the input shows — or null where it shows neither.
+     * The direction the walk was handed the elements at {@code at} in, as the row writes them or
+     * from the last to the first, whichever the reading of the input shows — or null where it shows
+     * neither.
      */
-    private static RunSource.InTheOrderWritten theOrderTheWalkWasHandedThem(
+    private static RunSource.TraversalOrder theOrderTheWalkWasHandedThem(
             InputReads where, BindingId element, TermPath at, RuleReadingSource source) {
-        if (where.inTheOrderWrittenAt(element, source.newtypes())
-                instanceof PathResolution.At(TermPath inOrder) && inOrder.equals(at)) {
-            return new RunSource.InTheOrderWritten(at, false);
+        for (TraversalDirection direction : TraversalDirection.values()) {
+            if (where.inTheOrderAt(element, direction, source.newtypes())
+                    instanceof PathResolution.At(TermPath shown) && shown.equals(at)) {
+                return new RunSource.TraversalOrder(at, direction);
+            }
         }
-        return where.fromTheFarEndAt(element, source.newtypes())
-                instanceof PathResolution.At(TermPath farEnd) && farEnd.equals(at)
-                ? new RunSource.InTheOrderWritten(at, true) : null;
+        return null;
     }
 
     /**
@@ -530,7 +531,7 @@ public final class InputNumber {
      */
     private static NumericTerm overWhatWasComputed(NumericMeasures.Measured measured,
                                                    ElementAnswer closure, ElementValue computed,
-                                                   TermPath at, RunSource.InTheOrderWritten order,
+                                                   TermPath at, RunSource.TraversalOrder order,
                                                    RuleReadingSource source) {
         Type each = closure.body().type();
         RunSource over = RunSource.computedOverTheElementsAt(at, computed, each, order);

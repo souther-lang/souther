@@ -76,12 +76,25 @@ final class InputPath {
     /** What the reading this walk is asked on takes a node as ({@link InputReads#taking}). */
     private final Function<Core, Denotation> taken;
     private final BindingTrail trail = new BindingTrail();
+    /** The direction a walk after the order must come out walking ({@link TraversalDirection});
+     *  the other questions say nothing of it. */
+    private final TraversalDirection arrivingAs;
+    /** The direction the elements are handed in at the expression the walk is at, relative to the
+     *  position it is walking towards: turned over by every operation crossed that answers its
+     *  list the other way round, and put back as the walk comes out of it. */
+    private TraversalDirection walking = TraversalDirection.FORWARD;
 
     private InputPath(DeclarationNewtypes newtypes, ElementQuestion asked,
                       Function<Core, Denotation> taken) {
+        this(newtypes, asked, taken, TraversalDirection.FORWARD);
+    }
+
+    private InputPath(DeclarationNewtypes newtypes, ElementQuestion asked,
+                      Function<Core, Denotation> taken, TraversalDirection arrivingAs) {
         this.newtypes = newtypes;
         this.asked = asked;
         this.taken = taken;
+        this.arrivingAs = arrivingAs;
     }
 
     /**
@@ -95,7 +108,8 @@ final class InputPath {
         if (as == null || Core.withoutStanding(as.value()) == Core.withoutStanding(e)) {
             return null;
         }
-        InputPath there = new InputPath(newtypes, asked, as.at()::taken);
+        InputPath there = new InputPath(newtypes, asked, as.at()::taken, arrivingAs);
+        there.walking = walking;
         return wanted == null ? there.named(as.value(), as.at().names())
                 : there.heldAt(as.value(), wanted, as.at().names());
     }
@@ -191,38 +205,25 @@ final class InputPath {
 
     /**
      * The position whose every occurrence the elements handed to {@code binding} are, once each and
-     * in the order the row writes them there — and that they are those of none where they are not
-     * ({@link ElementQuestion#IN_THE_ORDER_WRITTEN}).
+     * handed in {@code direction} — the order the row writes them there, or the opposite — and that
+     * they are those of none where they are not ({@link ElementQuestion#IN_THE_ORDER_WRITTEN}).
      *
-     * <p>Beside {@link #everyElementAt} and stronger again: the elements are walked as the row holds
-     * them, so the first handed is the first written. No operation is crossed, a reordering no more
-     * than a filter, since this says nothing of what any of them does to the order.
+     * <p>Beside {@link #everyElementAt} and stronger again. The only operations crossed are those
+     * declared to answer a list the other way round, each turning the direction over, so two of them
+     * are the order written; a reordering of any other kind or a filter says nothing of the order,
+     * and the walk stops at it.
      */
-    static PathResolution inTheOrderWrittenAt(BindingId binding, BindingEnvironment names,
-                                              DeclarationNewtypes newtypes,
-                                              Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, taken)
-                .elementOf(binding, names).heldAt();
-    }
-
-    /**
-     * The position whose every occurrence the elements handed to {@code binding} are, once each and
-     * from the last the row writes there to the first ({@link ElementQuestion#FROM_THE_FAR_END}).
-     *
-     * <p>Beside {@link #inTheOrderWrittenAt}: through the one operation that answers its list the
-     * other way round, and the order written below it.
-     */
-    static PathResolution fromTheFarEndAt(BindingId binding, BindingEnvironment names,
-                                          DeclarationNewtypes newtypes,
-                                          Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.FROM_THE_FAR_END, taken)
+    static PathResolution inTheOrderAt(BindingId binding, TraversalDirection direction,
+                                       BindingEnvironment names, DeclarationNewtypes newtypes,
+                                       Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, taken, direction)
                 .elementOf(binding, names).heldAt();
     }
 
     /** Whether the question in hand wants every occurrence of a position, each once. */
     private boolean asksEveryOccurrence() {
         return switch (asked) {
-            case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END -> true;
+            case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> true;
             case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> false;
         };
     }
@@ -560,10 +561,10 @@ final class InputPath {
             // is never a pair, since a pair has no form a boundary writes, so a place of one names
             // nothing there.
             case PathResolution.At at -> switch (wanted) {
-                // A container reached without the operation that turns it round is handed as it
-                // is written, which is not the question from the far end.
-                case Wanted.APart _ when asked == ElementQuestion.FROM_THE_FAR_END ->
-                        new PathResolution.NotAPosition();
+                // A container the elements reached it in another direction than the question asks
+                // is a container of the same elements and not the order asked after.
+                case Wanted.APart _ when asked == ElementQuestion.IN_THE_ORDER_WRITTEN
+                        && walking != arrivingAs -> new PathResolution.NotAPosition();
                 case Wanted.APart(var part) -> asksEveryOccurrence()
                         && at.path().insideAContainer()
                         ? new PathResolution.NotAPosition() : at.deeper(part::of);
@@ -648,20 +649,15 @@ final class InputPath {
             }
             return switch (asked) {
                 case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
-                case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END ->
-                        PathResolution.inEveryCase(each);
+                case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> PathResolution.inEveryCase(each);
                 case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
             };
         }
-        // What an operation does to the order of what it was given is said of none of them, so
-        // a walk after the order stops at every one — even one answering each element as it is.
+        // What an operation does to the order of what it was given is said of the ones declared
+        // to turn it round, and of none other: a walk after the order stops at every other one,
+        // even one answering each element as it is.
         if (asked == ElementQuestion.IN_THE_ORDER_WRITTEN) {
-            return new PathResolution.NotAPosition();
-        }
-        // The walk from the far end crosses the one operation declared to answer its list the other
-        // way round, and then asks the order written of what it was given.
-        if (asked == ElementQuestion.FROM_THE_FAR_END) {
-            return fromTheFarEndThrough(e, wanted, names);
+            return throughAnOperationTurningTheOrderRound(e, wanted, names);
         }
         // Or through an operation that answers what it was given, in either of the two shapes a
         // representation gives an application: the call a name reached where the operation has been
@@ -699,11 +695,11 @@ final class InputPath {
 
     /**
      * Where the elements of {@code e} stand when it is a call of an operation declared to answer
-     * the elements of one argument in the opposite order: the order written, asked of that argument.
-     * Not a position where it is any other expression.
+     * the elements of one argument in the opposite order: where they stand in that argument, handed
+     * the other way round. Not a position where it is any other expression.
      */
-    private PathResolution fromTheFarEndThrough(Core standing, Wanted wanted,
-                                                BindingEnvironment names) {
+    private PathResolution throughAnOperationTurningTheOrderRound(Core standing, Wanted wanted,
+                                                                  BindingEnvironment names) {
         ValueName operation;
         List<Core> args;
         switch (Core.withoutStanding(standing)) {
@@ -720,9 +716,16 @@ final class InputPath {
             }
         }
         int reversed = DefaultBoundOperationFacts.positionOfTheArgumentReversed(operation);
-        return reversed < 0 || reversed >= args.size() ? new PathResolution.NotAPosition()
-                : new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, taken)
-                        .heldAt(args.get(reversed), wanted, names);
+        if (reversed < 0 || reversed >= args.size()) {
+            return new PathResolution.NotAPosition();
+        }
+        TraversalDirection outside = walking;
+        walking = walking.reversed();
+        try {
+            return heldAt(args.get(reversed), wanted, names);
+        } finally {
+            walking = outside;
+        }
     }
 
     /** Which argument of an operation what is wanted of its answer is found in, and what of that
@@ -890,9 +893,9 @@ final class InputPath {
                 return built == null ? null : built.permutesTheElementsOf();
             }
             // Stopped in `through` before any operation is asked of.
-            case IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END -> throw new IllegalStateException(
-                    "a walk after the order crosses no operation here, and " + operation
-                            + " was asked of");
+            // Stopped in `through` before any operation is asked of.
+            case IN_THE_ORDER_WRITTEN -> throw new IllegalStateException("a walk after the order"
+                    + " crosses no operation here, and " + operation + " was asked of");
             case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> { }
         }
         DeclaredArgument holds = argumentWhoseElementsItHolds(operation);
@@ -905,8 +908,7 @@ final class InputPath {
                 : switch (asked) {
                     case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
                             : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
-                    case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, FROM_THE_FAR_END ->
-                            null;
+                    case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> null;
                     case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
                 };
     }
@@ -950,8 +952,7 @@ final class InputPath {
             case ONE_PER_ELEMENT -> !(asked instanceof Core.Widen)
                     && !(reached instanceof Core.Widen) && asked.type().equals(reached.type());
             case SAME_EMPTINESS -> true;
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN,
-                 FROM_THE_FAR_END ->
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN ->
                     throw new IllegalArgumentException("a list is followed beneath for a question"
                             + " about one value for each element, not " + question);
         };
@@ -983,8 +984,7 @@ final class InputPath {
         boolean asksWhatEachIs = switch (question) {
             case ONE_PER_ELEMENT -> true;
             case SAME_EMPTINESS -> false;
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN,
-                 FROM_THE_FAR_END ->
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN ->
                     throw new IllegalArgumentException("a step beneath a list is taken for a"
                             + " question about one value for each element, not " + question);
         };

@@ -77,7 +77,7 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     @Test
     void eachElementIsWeighedByWhereItStands() {
         RunSource run = RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION, Type.Prim.INT,
-                new RunSource.InTheOrderWritten(ELEMENTS, false));
+                new RunSource.TraversalOrder(ELEMENTS, TraversalDirection.FORWARD));
         assertNotNull(run);
         assertEquals(Count.of(2 + 3 * 4), read(run, 2, 4));
         assertEquals(Count.of(4 + 3 * 2), read(run, 4, 2));
@@ -91,13 +91,14 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     @Test
     void eachElementHandedFromTheFarEndIsWeighedByWhereItStandsThere() {
         RunSource run = RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION, Type.Prim.INT,
-                new RunSource.InTheOrderWritten(ELEMENTS, true));
+                new RunSource.TraversalOrder(ELEMENTS, TraversalDirection.REVERSE));
         assertNotNull(run);
         assertEquals(Count.of(4 + 3 * 2), read(run, 2, 4));
         assertEquals(Count.of(2 + 3 * 4), read(run, 4, 2));
         assertEquals(Count.of(5 + 3 * 5 + 5), read(run, 5, 5, 5));
         assertNotEquals(run, RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION,
-                Type.Prim.INT, new RunSource.InTheOrderWritten(ELEMENTS, false)));
+                Type.Prim.INT,
+                new RunSource.TraversalOrder(ELEMENTS, TraversalDirection.FORWARD)));
     }
 
     /** Without what showed the order, a run that turns on it is none; with it, only of the
@@ -108,8 +109,8 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
                 null));
         assertThrows(IllegalArgumentException.class, () -> new RunSource.ComputedOccurrences(
                 ELEMENTS, BY_POSITION, Type.Prim.INT, null));
-        RunSource.InTheOrderWritten elsewhere =
-                new RunSource.InTheOrderWritten(TermPath.of("ys").element(), false);
+        RunSource.TraversalOrder elsewhere = new RunSource.TraversalOrder(
+                TermPath.of("ys").element(), TraversalDirection.FORWARD);
         assertNull(RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION, Type.Prim.INT,
                 elsewhere));
         assertThrows(IllegalArgumentException.class, () -> new RunSource.ComputedOccurrences(
@@ -119,8 +120,8 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     /** A run that turns on no position claims nothing of the order, whatever showed it. */
     @Test
     void aRunThatTurnsOnNoPositionClaimsNoOrder() {
-        RunSource.InTheOrderWritten shown =
-                new RunSource.InTheOrderWritten(ELEMENTS, false);
+        RunSource.TraversalOrder shown =
+                new RunSource.TraversalOrder(ELEMENTS, TraversalDirection.FORWARD);
         assertEquals(RunSource.computedOverTheElementsAt(ELEMENTS, weighed(3), Type.Prim.INT,
                         null),
                 RunSource.computedOverTheElementsAt(ELEMENTS, weighed(3), Type.Prim.INT, shown),
@@ -134,7 +135,8 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     @Test
     void aRunThatTurnsOnThePositionDoesNotMove() {
         RunSource byPosition = RunSource.computedOverTheElementsAt(ELEMENTS, BY_POSITION,
-                Type.Prim.INT, new RunSource.InTheOrderWritten(ELEMENTS, false));
+                Type.Prim.INT,
+                new RunSource.TraversalOrder(ELEMENTS, TraversalDirection.FORWARD));
         TermPath moved = TermPath.of("ys").element();
         assertNull(byPosition.movedTo(_ -> moved));
         RunSource alike = RunSource.computedOverTheElementsAt(ELEMENTS, weighed(3), Type.Prim.INT,

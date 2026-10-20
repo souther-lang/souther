@@ -29,9 +29,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>A weight that is arithmetic in the position, {@code (i + 2) * c}, is a number for each element
  * as well, and the total a form of the elements.
  *
- * <p>And only there. A walk handed the elements in another order than the row's, a number that is
- * not the position, a product of the position with itself or of two numbers of the element: none
- * is read by where the elements stand.
+ * <p>The elements may be handed from the last of them to the first, through {@code List.reverse}:
+ * the position then counts from the far end, and an even number of them is the order written.
+ * That is another total over the same elements, so it is another term, and a list turned round on
+ * one branch only is two terms and not one.
+ *
+ * <p>And only there. A walk handed the elements in an order no operation declares, a number that
+ * is not the position, a product of the position with itself or of two numbers of the element:
+ * none is read by where the elements stand.
  */
 class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
 
@@ -118,13 +123,86 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         assertTrue(far.contains("from the far end"), far);
     }
 
-    /** Elements handed in an order no operation declares are not read by where they stand. */
+    /** Elements handed in an order no operation declares are not read by where they stand, and
+     *  the one that is declared does not make a sorted list known. */
     @Test
     void aWalkOverTheElementsInAnOrderNothingDeclaresIsNotReadByPosition() {
         String sorted = report(model(BRANCH, "List.sort(xs)"));
         assertTrue(sorted.contains("not read: comparison"), sorted);
+        String reversedSorted = report(model(BRANCH, "List.reverse(List.sort(xs))"));
+        assertTrue(reversedSorted.contains("not read: comparison"), reversedSorted);
+    }
+
+    /** Turning the order round twice is the order written: the same term as the list itself, and
+     *  three times is once. */
+    @Test
+    void theOrderTurnedRoundTwiceIsTheOrderWritten() {
+        String near = report(model(BRANCH, "xs"));
         String twice = report(model(BRANCH, "List.reverse(List.reverse(xs))"));
-        assertTrue(twice.contains("not read: comparison"), twice);
+        assertTrue(twice.contains(TERM), twice);
+        assertFalse(twice.contains("from the far end"), twice);
+        assertFalse(twice.contains("not read:"), twice);
+        assertFalse(near.contains("from the far end"), near);
+        String thrice = report(model(BRANCH,
+                "List.reverse(List.reverse(List.reverse(xs)))"));
+        assertTrue(thrice.contains("from the far end"), thrice);
+    }
+
+    /** A reverse beside the list through a name is composed with one written in the argument. */
+    @Test
+    void aReverseThroughANameComposesWithOneInTheArgument() {
+        String human = report("""
+                module p
+                data Bad
+                behavior check : (xs: List<Int>, n: Int) -> Int | Bad
+                let check (xs, n) = {
+                    let ys = List.reverse(xs)
+                    guard List.sum(List.mapIndexed(%s, List.reverse(ys))) >= 10 else Bad
+                    0
+                }
+                """.formatted(BRANCH));
+        assertTrue(human.contains(TERM), human);
+        assertFalse(human.contains("from the far end"), human);
+    }
+
+    /**
+     * The position a weight reads is the one the elements are handed at, so a reverse of the
+     * weighed numbers afterwards leaves the total as it was, and one of the list before it counts
+     * from the other end.
+     */
+    @Test
+    void aReverseAfterTheWeighingIsNotOneBeforeIt() {
+        String after = report(model(BRANCH, "xs").replace("List.mapIndexed(" + BRANCH + ", xs)",
+                "List.reverse(List.mapIndexed(" + BRANCH + ", xs))"));
+        assertTrue(after.contains(TERM), after);
+        assertFalse(after.contains("from the far end"), after);
+        String before = report(model(BRANCH, "List.reverse(xs)"));
+        assertTrue(before.contains("from the far end"), before);
+    }
+
+    /**
+     * A total over what a helper behavior answers is not read by where the elements stand, turned
+     * round before the helper weighs them or not: the helper's answer is a value made from the
+     * list, and the caller does not see the position it was weighed at. That is how a helper is
+     * read, and nothing about the order.
+     */
+    @Test
+    void aTotalOverWhatAHelperWeighedIsNotReadWhetherOrNotItTurnsTheListRound() {
+        for (String walked : List.of("ys", "List.reverse(ys)")) {
+            String human = report("""
+                    module p
+                    data Bad
+                    behavior check : (xs: List<Int>, n: Int) -> Int | Bad
+                    behavior weigh : (ys: List<Int>) -> List<Int>
+                    let weigh (ys) = List.mapIndexed(%s, %s)
+                    let check (xs, n) = {
+                        guard List.sum(weigh(xs)) >= 10 else Bad
+                        0
+                    }
+                    """.formatted(BRANCH, walked));
+            assertTrue(human.contains("not read: comparison"), walked + "\n" + human);
+            assertFalse(human.contains("the position"), walked + "\n" + human);
+        }
     }
 
     /** A list that is the reverse on one branch and the list itself on the other is two totals,
@@ -134,16 +212,60 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         String human = report("""
                 module p
                 data Bad
-                behavior check : (xs: List<Int>, n: Int) -> Int | Bad
-                let check (xs, n) = {
-                    let ys = if n > 0 then List.reverse(xs) else xs
+                behavior check : (xs: List<Int>, turned: Bool) -> Int | Bad
+                let check (xs, turned) = {
+                    let ys = if turned then List.reverse(xs) else xs
                     guard List.sum(List.mapIndexed(%s, ys)) >= 10 else Bad
                     0
                 }
+                example check
+                    | "round, at"     : ([2, 4], true)  -> 0
+                    | "round, below"  : ([2, 3], true)  -> Bad
+                    | "round, past"   : ([4, 2], true)  -> 0
+                    | "round, short"  : ([1, 4], true)  -> Bad
+                    | "written, at"   : ([4, 2], false) -> 0
+                    | "written, below": ([3, 2], false) -> Bad
+                    | "written, past" : ([2, 4], false) -> 0
+                    | "written, short": ([4, 1], false) -> Bad
                 """.formatted(BRANCH));
         assertTrue(human.contains(TERM), human);
         assertTrue(human.contains(TERM.replace("xs[*]", "xs[*] from the far end")), human);
         assertFalse(human.contains("not read:"), human);
+        assertTrue(human.contains("obligations 8/8"), human);
+        assertFalse(human.contains("undecided whether a row is at"), human);
+        assertFalse(human.contains("does not hold"), human);
+    }
+
+    /**
+     * The model of the report that named this, a weight that changes past the sixth place: seven
+     * elements, and the first of them is weighed three from the far end and two from the near one.
+     */
+    @Test
+    void aWeightThatChangesPastTheSixthPlaceIsCountedFromTheFarEnd() {
+        String human = report("""
+                module probe.k7
+
+                data Yes = { n: Int }
+                data No = { n: Int }
+
+                behavior verify : (xs: List<Int>) -> Yes | No
+                    constructs Yes, No
+
+                let verify (xs) =
+                    if List.sum(List.mapIndexed((i, x) -> (if i <= 5 then 2 else 3) * x,
+                            List.reverse(xs))) >= 5
+                    then Yes { n = 0 } else No { n = 0 }
+
+                example verify
+                    | "at"    : ([1, 0, 0, 0, 0, 0, 1]) -> Yes { n = 0 }
+                    | "below" : ([0, 0, 0, 0, 0, 0, 2]) -> No { n = 0 }
+                    | "past"  : ([0, 0, 0, 0, 0, 0, 3]) -> Yes { n = 0 }
+                    | "short" : ([1, 0, 0, 0, 0, 0, 0]) -> No { n = 0 }
+                """);
+        assertFalse(human.contains("not read:"), human);
+        assertTrue(human.contains("obligations 4/4"), human);
+        assertFalse(human.contains("undecided whether a row is at"), human);
+        assertFalse(human.contains("does not hold"), human);
     }
 
     /** A name bound to the reverse is the reverse. */

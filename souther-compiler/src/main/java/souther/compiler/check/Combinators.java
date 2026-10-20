@@ -228,9 +228,9 @@ final class Combinators {
      * The kernels whose answer holds the elements of the argument at the position given, each once
      * and in the opposite order: the first of the answer is the last of the argument.
      *
-     * <p>An axiom about each, as {@link #KERNELS} is, and held to the library the same way. A walk
-     * after where an element stands counts from the far end through one of these and through no
-     * other operation.
+     * <p>An axiom about each, as {@link #KERNELS} is, and held to what the kernel computes by a
+     * test that runs it. A walk after where an element stands turns its direction over through one
+     * of these and stops at every other operation.
      */
     private static final Map<ValueName.Stdlib.Operation, Integer> REVERSING = Map.of(
             ValueName.Stdlib.operation("List", "reverse"), 0);
