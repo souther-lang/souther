@@ -337,6 +337,34 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(product)));
     }
 
+    /**
+     * A remainder of a form together with another number the region leaves nowhere the level asks
+     * for is out of reach.
+     *
+     * <p>Held at nought, {@code x} leaves nought by seven and {@code y} is nought, so the sum is
+     * nought and not three. The remainders the added number can make up three with are the ones it
+     * leaves, and none is one the region leaves {@code x}.
+     */
+    @Test
+    void aRemainderPlusANumberTheRegionLeavesNoSumOfIsOutOfReach() {
+        SearchRegion holdingNought = region().assuming(form(1, 0, 0), Rel.EQ).taken()
+                .assuming(form(0, 1, 0), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class,
+                realize(remainderPlusAt(3), holdingNought),
+                "both stand at nought, which sum to nought and not three");
+        assertFalse(realize(remainderPlusAt(0), holdingNought) instanceof Realization.Impossible,
+                "and nought is the sum they do come to");
+    }
+
+    /** The remainder of {@code x} by seven plus {@code y}, at one of the sums. */
+    private static Standing remainderPlusAt(long sum) {
+        return new Standing.OfARemainderAndAForm(form(1, 0, 0), Map.of(term("x"), Carrier.WHOLE),
+                BigInteger.valueOf(7), form(0, 1, 0), Map.of(term("y"), Carrier.WHOLE),
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(sum)));
+    }
+
     /** A remainder of {@code x + y} by seven, at one of the remainders. */
     private static Standing remainderAt(long remainder) {
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();

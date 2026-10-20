@@ -36,6 +36,7 @@ import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,6 +50,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * A relation this stage read over the input, held as what is asked of it: which of its places it
@@ -121,13 +123,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * @param kind            what the sides are: the terms of a form, the factors of a product held
  *                        against a number, or the dividend and the divisor of a remainder held
  *                        against nought
+ * @param remainder       where the first side is what a division by a written number leaves of a
+ *                        form of the input's numbers, the form and the divisor; null otherwise
  */
 record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
-                            List<FilingCoordinate> amongThemselves, Kind kind) {
+                            List<FilingCoordinate> amongThemselves, Kind kind,
+                            RemainderSide remainder) {
 
     /** A relation that shows no place undivided: one nothing here takes apart. */
     static final UndividedByARelation SHOWING_NOTHING =
-            new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ, List.of(), Kind.AFFINE);
+            new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ, List.of(), Kind.AFFINE,
+                    null);
 
     UndividedByARelation {
         sides = List.copyOf(sides);
@@ -135,6 +141,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (kind != Kind.AFFINE && (sides.size() != 2 || constant == null)) {
             throw new IllegalArgumentException("a product or a remainder is of two numbers, held"
                     + " against a number: " + sides);
+        }
+        if (remainder != null && (kind != Kind.AFFINE || sides.isEmpty()
+                || sides.getFirst().term() != null || sides.getFirst().kept() != null)) {
+            throw new IllegalArgumentException("a remainder of a form is the first side of a form"
+                    + " of terms, and is no number of one place: " + sides);
         }
     }
 
@@ -156,14 +167,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return relation == Rel.EQ || relation == Rel.NE
                 ? new UndividedByARelation(List.of(ofTheInput(dividend, ExactRatio.ONE),
                         ofTheInput(divisor, ExactRatio.ONE)), ExactRatio.ZERO, relation,
-                        List.of(), Kind.DIVISIBILITY)
+                        List.of(), Kind.DIVISIBILITY, null)
                 : SHOWING_NOTHING;
     }
 
     /** The values at {@code at} held against other values at {@code at}. */
     static UndividedByARelation amongTheValuesAt(TermPath at) {
         return new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ,
-                List.of(FilingCoordinate.at(at)), Kind.AFFINE);
+                List.of(FilingCoordinate.at(at)), Kind.AFFINE, null);
     }
 
     /** What {@code one} and {@code other} come to multiplied, held against {@code level} as
@@ -172,7 +183,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                            NumericTerm.FromOnePosition other, ExactRatio level,
                                            Rel relation) {
         return new UndividedByARelation(List.of(ofTheInput(one, ExactRatio.ONE),
-                ofTheInput(other, ExactRatio.ONE)), level.negated(), relation, List.of(), Kind.PRODUCT);
+                ofTheInput(other, ExactRatio.ONE)), level.negated(), relation, List.of(),
+                Kind.PRODUCT, null);
     }
 
     /**
@@ -288,7 +300,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 default -> new Side(List.of(), each.getValue(), null, null);
             });
         }
-        return new UndividedByARelation(sides, form.constant(), relation, List.of(), Kind.AFFINE);
+        return new UndividedByARelation(sides, form.constant(), relation, List.of(), Kind.AFFINE,
+                null);
     }
 
     /**
@@ -300,7 +313,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                   ExactRatio constant, Rel relation) {
         List<Side> sides = new ArrayList<>();
         form.coefs().forEach((term, weight) -> sides.add(ofTheInput(term, weight)));
-        return new UndividedByARelation(sides, constant, relation, List.of(), Kind.AFFINE);
+        return new UndividedByARelation(sides, constant, relation, List.of(), Kind.AFFINE, null);
     }
 
     /** The values at two positions held as one value, or not. */
@@ -310,7 +323,54 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         new NumericTerm.ValueOf(one), null),
                 new Side(List.of(FilingCoordinate.at(other)), ExactRatio.ONE.negated(),
                         new NumericTerm.ValueOf(other), null)), ExactRatio.ZERO, Rel.EQ,
-                List.of(), Kind.AFFINE);
+                List.of(), Kind.AFFINE, null);
+    }
+
+    /**
+     * What a division by a written number leaves of a form of the input's numbers, with a form of
+     * other numbers added to it, held against {@code level} as {@code relation}.
+     *
+     * <p>The remainder is the first side, weighed by one and made of the places of the form, and
+     * the numbers added follow it. It is a side that is no number of one place, as what an
+     * operation answers is not, and it runs from nought to one below the divisor
+     * ({@link RemainderSide}).
+     */
+    static UndividedByARelation ofARemainderOfAForm(LinearForm<NumericTerm> dividend,
+                                                    BigInteger divisor,
+                                                    LinearForm<NumericTerm> added,
+                                                    ExactRatio level, Rel relation) {
+        // Which numbers are apart is read off the places each side is made of, so a number read
+        // off more than the place it is filed under — the times a value occurs in a run is read
+        // off the run and the value — has places no side names. Nothing is shown of it.
+        if (Stream.concat(dividend.coefs().keySet().stream(), added.coefs().keySet().stream())
+                .anyMatch(term -> !term.placesReadOff().equals(List.of(term.subjectPath())))) {
+            return SHOWING_NOTHING;
+        }
+        List<Side> sides = new ArrayList<>();
+        sides.add(new Side(dividend.coefs().keySet().stream().map(FilingCoordinate::of).toList(),
+                ExactRatio.ONE, null, null));
+        added.coefs().forEach((term, weight) -> sides.add(ofTheInput(term, weight)));
+        return new UndividedByARelation(sides, level.negated(), relation, List.of(), Kind.AFFINE,
+                new RemainderSide(dividend, divisor));
+    }
+
+    /**
+     * The first side of a relation, where it is what a division by a written number leaves of a
+     * form of the input's numbers.
+     *
+     * @param dividend the form the division is of, with no constant: its numbers and what each is
+     *                 weighed by
+     * @param divisor  the number it is divided by, above nought
+     */
+    record RemainderSide(LinearForm<NumericTerm> dividend, BigInteger divisor) {
+
+        RemainderSide {
+            if (dividend == null || divisor == null || divisor.signum() <= 0
+                    || dividend.coefs().isEmpty()) {
+                throw new IllegalArgumentException("a remainder is of a form of numbers, by a"
+                        + " divisor above nought: " + dividend + " by " + divisor);
+            }
+        }
     }
 
     private static Side ofTheInput(NumericTerm term, ExactRatio weight) {
@@ -661,7 +721,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), supports);
             leaves.add(each);
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
-                out.addAll(sides.get(at).madeOf());
+                // The remainder is left undivided by every number of its form at once, and a
+                // number of the form is left undivided where the rest of the form takes it
+                // through every remainder whatever value that number is at.
+                out.addAll(remainder != null && at == 0
+                        ? placesOfTheFormLeftEveryRemainder(read, conditions, heldWhole)
+                        : sides.get(at).madeOf());
             }
         }
         if (!out.containsAll(places())) {
@@ -948,6 +1013,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
+            if (remainder != null && i == 0) {
+                terms.add(remainderAlong(read, conditions, heldWhole));
+                continue;
+            }
             if (each.kept() != null) {
                 terms.add(keptAlong(each, sources.get(i), carriers.get(i), region, read,
                         conditions, stating.get(i), heldWhole));
@@ -975,6 +1044,173 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     spacingOf(carriers.get(i))));
         }
         return terms;
+    }
+
+    /**
+     * The remainder side as a term: it lies between nought and one below the divisor, and takes
+     * every remainder where its form is shown to reach one of each.
+     */
+    private WhatARelationLeavesUndivided.Term<FilingCoordinate> remainderAlong(
+            InputReading read, List<OnAWay> conditions, boolean heldWhole) {
+        NumericDomain.Bounds runs = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                Endpoint.inclusive(new Count(new BigDecimal(
+                        remainder.divisor().subtract(BigInteger.ONE)))));
+        Side side = sides.getFirst();
+        return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(), runs,
+                reachesEveryRemainder(null, read, conditions, heldWhole) ? runs : null, null,
+                false, Granularity.DISCRETE);
+    }
+
+    /**
+     * Whether the form the remainder is of is shown to leave every remainder, whatever the other
+     * numbers of the form are put at — apart from {@code held}, a number of it that is put at one
+     * value and so reaches none.
+     *
+     * <p>Shown by one number of the form, the witness, put at each of the values from nought to
+     * one below the divisor with every other number of the form at nought. Each of those is a
+     * row's values, and the remainders they leave are every remainder, when:
+     * <ul>
+     *   <li>the witness takes every whole number of its type, nothing in the declarations or on
+     *   the way relates it to anything, and no other number of the form is read off a place it is;
+     *   <li>its weight is prime to the divisor, so the divisor's worth of consecutive values leave
+     *   each remainder once;
+     *   <li>its type holds those values, and every other number of the form is of the same
+     *   description and holds nought, so that putting it there is no value the declarations
+     *   refuse; and
+     *   <li>the form comes to a number the type holds at each of them — the weight times the
+     *   greatest of those values lying within the type's ends — since a run that overflows is no
+     *   row, and a remainder only an overflowing value leaves is not one a row has.
+     * </ul>
+     * Every number of the form is a whole number, since a form of other numbers leaves no
+     * remainder where it comes to none. {@code held} is a number of the form left out of the
+     * others: it stands at whatever value is asked of it, and which of its values have a row is
+     * asked of the row.
+     */
+    private boolean reachesEveryRemainder(NumericTerm held, InputReading read,
+                                          List<OnAWay> conditions, boolean heldWhole) {
+        if (!heldWhole) {
+            return false;
+        }
+        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+            TermOrders orders = read.quantities().ordersOf(term);
+            if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
+                return false;
+            }
+        }
+        for (Map.Entry<NumericTerm, ExactRatio> each : remainder.dividend().coefs().entrySet()) {
+            if (each.getKey().equals(held)
+                    || !(each.getKey() instanceof NumericTerm.ValueOf value)
+                    || !(each.getValue().floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger weight))
+                    || !weight.abs().gcd(remainder.divisor()).equals(BigInteger.ONE)) {
+                continue;
+            }
+            Source source = sourceOf(value, read);
+            if (source == null || !source.takes().every() || source.named()
+                    || wayOf(value, statingAnythingOf(value, conditions)) != Way.UNTOUCHED
+                    || sharesAPlaceWithAnotherNumberOfTheForm(value)) {
+                continue;
+            }
+            Carrier carrier = read.quantities().ordersOf(value).answered();
+            BigInteger window = remainder.divisor().subtract(BigInteger.ONE);
+            if (holdsFromNoughtTo(carrier, window) && theFormIsComputedAtEachOf(weight, window,
+                    carrier) && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the values of {@code carrier} include every whole number from nought to
+     *  {@code top}, an end it has none of being no end. */
+    private static boolean holdsFromNoughtTo(Carrier carrier, BigInteger top) {
+        BigInteger least = leastOf(carrier);
+        BigInteger greatest = greatestOf(carrier);
+        return (least == null || least.signum() <= 0)
+                && (greatest == null || greatest.compareTo(top) >= 0);
+    }
+
+    /**
+     * Whether the form, with the witness weighed by {@code weight} at any value from nought to
+     * {@code top} and every other number at nought, comes to a number {@code carrier} holds.
+     *
+     * <p>In the type's own arithmetic, which stops the run where it overflows. The most it comes
+     * to either way is the weight times {@code top}; every sum the run takes along the way is a
+     * part of that, the numbers it is added to being nought. A type with no end overflows
+     * nowhere.
+     *
+     * <p>The number the form is moved by is not part of this: the quantity holds it taken by the
+     * divisor, as every reader of this remainder does, so what the run adds is not what the
+     * quantity knows. Where the run adds more than the type has room for, the values it computes
+     * are a window of the others', and which of them have a row is asked of the row.
+     */
+    private boolean theFormIsComputedAtEachOf(BigInteger weight, BigInteger top,
+                                              Carrier carrier) {
+        BigInteger most = weight.abs().multiply(top);
+        BigInteger least = leastOf(carrier);
+        BigInteger greatest = greatestOf(carrier);
+        return (greatest == null || most.compareTo(greatest) <= 0)
+                && (least == null || most.negate().compareTo(least) >= 0);
+    }
+
+    /**
+     * Whether every number of the form other than the witness and {@code held} can stand at
+     * nought, whatever else is put: each takes every whole number of its type, holds nought, is
+     * related to nothing by the declarations or the way, and is read off a place no other number
+     * of the form is. A number read off a place another is moves with it, so nought for one is not
+     * nought for the other.
+     */
+    private boolean theOthersCanBeLeftAtNought(NumericTerm witness, NumericTerm held,
+                                               InputReading read, List<OnAWay> conditions) {
+        for (NumericTerm each : remainder.dividend().coefs().keySet()) {
+            if (each.equals(witness) || each.equals(held)) {
+                continue;
+            }
+            if (!(each instanceof NumericTerm.ValueOf value)
+                    || sharesAPlaceWithAnotherNumberOfTheForm(each)) {
+                return false;
+            }
+            Source source = sourceOf(value, read);
+            if (source == null || !source.takes().every() || source.named()
+                    || wayOf(value, statingAnythingOf(value, conditions)) != Way.UNTOUCHED
+                    || !holdsFromNoughtTo(read.quantities().ordersOf(value).answered(),
+                            BigInteger.ZERO)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether another number of the form the remainder is of is read off a place {@code term} is,
+     * or one around it or under it.
+     *
+     * <p>Such a number moves with {@code term}: {@code x + Int.floorMod(x, 3)} is a function of
+     * {@code x} alone, and moving {@code x} through every value moves the other with it, so the
+     * form is not taken through a whole turn of the divisor by {@code x} however its weight leaves
+     * the remainders. Two numbers are apart only when no place of one is a place of the other, and
+     * two different numbers are not that for being different.
+     */
+    private boolean sharesAPlaceWithAnotherNumberOfTheForm(NumericTerm term) {
+        for (NumericTerm other : remainder.dividend().coefs().keySet()) {
+            if (!other.equals(term) && term.sharesAPlaceWith(other)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The places of the form the remainder is of that the relation is shown to leave undivided
+     *  where the remainder is: those whose value leaves the rest of the form every remainder. */
+    private Set<FilingCoordinate> placesOfTheFormLeftEveryRemainder(
+            InputReading read, List<OnAWay> conditions, boolean heldWhole) {
+        Set<FilingCoordinate> out = new LinkedHashSet<>();
+        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+            if (reachesEveryRemainder(term, read, conditions, heldWhole)) {
+                out.add(FilingCoordinate.of(term));
+            }
+        }
+        return out;
     }
 
     /**
@@ -2204,7 +2440,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     private static boolean overlap(FilingCoordinate one, FilingCoordinate other) {
-        return overlap(one.path(), other.path());
+        return one.overlaps(other);
     }
 
     /** Whether two places are one, or one is inside the other. */

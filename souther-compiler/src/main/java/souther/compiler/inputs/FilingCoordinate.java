@@ -30,6 +30,17 @@ public sealed interface FilingCoordinate {
     TermPath path();
 
     /**
+     * Whether the two are filed at one place, or one inside the other.
+     *
+     * <p>Of where a report files them, and not of what they depend on: a number is filed under one
+     * place and may be read off several, so two numbers that do not overlap here may still move
+     * together. Whether two numbers are apart is {@link NumericTerm#sharesAPlaceWith}.
+     */
+    default boolean overlaps(FilingCoordinate other) {
+        return path().isAtOrUnder(other.path()) || other.path().isAtOrUnder(path());
+    }
+
+    /**
      * The number itself, where the reading named it.
      *
      * <p>Every reader that reached the canonical quantity has one, and so does one that named a
