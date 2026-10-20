@@ -217,7 +217,7 @@ class ARowDownAWayNoInputTakesGoesAgainstTheProofTest {
                 }
             }
             AlignedObservation seen = plan.numbering().align(
-                    new Observation(plan.numbering().identity(), Set.of(), outcomes));
+                    new Observation(plan.numbering().identity(), Set.of(), outcomes, Set.of()));
             return InputsOfTheBody.aRunSeen(seen);
         }
     }

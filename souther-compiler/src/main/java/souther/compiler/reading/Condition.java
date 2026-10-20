@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * One decision of a body coming out one way, said in terms of the input it is about.
@@ -115,16 +116,23 @@ public sealed interface Condition {
      *                 away.
      *                 <p>The occurrence and not the number it is instrumented under — the number is
      *                 how a run is recorded and is no part of what this decision is
+     * @param visit    which of a run's visits to the comparison this is the decision on, where the
+     *                 comparison stands in a closure applied to each element of a list written out:
+     *                 the same construct is then one decision per application, about that
+     *                 application's own number, and two of them coming out different ways is a row
+     *                 doing two things. Which application a visit is, is the reading's to have
+     *                 shown and is not said here. Empty where the comparison is visited once
      * @param held     the way it came out
      * @param line     what the comparison places on the number, where the other side is a value
      *                 the number's order writes; empty where it is another position or a value
      *                 this compiler does not place. Read off the same comparison as {@code at},
      *                 so it says nothing {@code statedAt} does not already decide
      */
-    record Side(NumericTerm at, ConstructOccurrence statedAt, boolean held, Optional<Line> line)
-            implements Condition {
+    record Side(NumericTerm at, ConstructOccurrence statedAt, OptionalInt visit, boolean held,
+                Optional<Line> line) implements Condition {
 
         public Side {
+            Objects.requireNonNull(visit, "a comparison is decided on some visit, or on the one");
             Objects.requireNonNull(line, "a comparison places a line or says it places none");
         }
 
@@ -148,12 +156,13 @@ public sealed interface Condition {
         @Override
         public boolean excludes(Condition other) {
             return other instanceof Side that && that.statedAt.equals(statedAt)
-                    && that.held != held;
+                    && that.visit.equals(visit) && that.held != held;
         }
 
         @Override
         public String toString() {
-            return at + (held ? " holds" : " fails") + " at " + statedAt;
+            return at + (held ? " holds" : " fails") + " at " + statedAt
+                    + (visit.isPresent() ? " on visit " + visit.getAsInt() : "");
         }
     }
 

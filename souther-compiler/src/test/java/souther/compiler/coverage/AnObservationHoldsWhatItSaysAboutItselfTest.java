@@ -35,7 +35,7 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
     @Test
     void aComparisonsNumberIsNotAnArmARunPassed() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new Observation(UNDER, Set.of(0), Set.of()));
+                () -> new Observation(UNDER, Set.of(0), Set.of(), Set.of()));
 
         assertTrue(refused.getMessage().contains("recorded as an arm"), refused.getMessage());
     }
@@ -44,7 +44,7 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
     void anArmsNumberIsNoComparisonARunEvaluated() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new Observation(UNDER, Set.of(),
-                        Set.of(new RecordedConditionOutcome(1, true))));
+                        Set.of(new RecordedConditionOutcome(1, true)), Set.of()));
 
         assertTrue(refused.getMessage().contains("recorded as a condition"),
                 refused.getMessage());
@@ -55,7 +55,7 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
     @Test
     void andEachFamilyHoldsItsOwn() {
         Observation seen = new Observation(UNDER, Set.of(1),
-                Set.of(new RecordedConditionOutcome(0, true)));
+                Set.of(new RecordedConditionOutcome(0, true)), Set.of());
 
         assertTrue(seen.arms().contains(1));
         assertTrue(seen.outcomes().contains(new RecordedConditionOutcome(0, true)));
@@ -71,7 +71,8 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
     @Test
     void bothWaysOutOfOneComparisonAreARunThatCameBackToIt() {
         Observation seen = new Observation(UNDER, Set.of(),
-                Set.of(new RecordedConditionOutcome(0, true), new RecordedConditionOutcome(0, false)));
+                Set.of(new RecordedConditionOutcome(0, true), new RecordedConditionOutcome(0, false)),
+                Set.of());
 
         assertTrue(seen.outcomes().contains(new RecordedConditionOutcome(0, true)));
         assertTrue(seen.outcomes().contains(new RecordedConditionOutcome(0, false)));

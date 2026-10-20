@@ -128,7 +128,7 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
                 }
             }
             return plan.numbering().align(
-                    new Observation(plan.numbering().identity(), lit, Set.of()));
+                    new Observation(plan.numbering().identity(), lit, Set.of(), Set.of()));
         }
 
         private static int partOf(DecisionRule rule) {

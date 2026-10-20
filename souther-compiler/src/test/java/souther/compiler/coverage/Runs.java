@@ -26,20 +26,26 @@ public final class Runs {
     public static AlignedObservation doing(SiteNumbering numbering, List<ControlClaim> claims) {
         Set<ArmProbe> arms = new LinkedHashSet<>();
         Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
+        Set<SeenVisit> visits = new LinkedHashSet<>();
         for (ControlClaim claim : claims) {
             switch (claim.at()) {
                 case ControlPlace.Arm arm -> arm.probe().ifPresent(arms::add);
-                case ControlPlace.Outcome point ->
-                        ways.add(new SeenConditionOutcome(point.at(), point.held()));
+                // A visit coming out a way is the condition coming out that way.
+                case ControlPlace.Outcome point -> {
+                    ways.add(new SeenConditionOutcome(point.at(), point.held()));
+                    if (claim.visit() instanceof ControlClaim.Visit.Nth(int index)) {
+                        visits.add(new SeenVisit(point.at(), index, point.held()));
+                    }
+                }
             }
         }
-        return new AlignedObservation(numbering.identity(), arms, ways);
+        return new AlignedObservation(numbering.identity(), arms, ways, visits);
     }
 
     /** A run of {@code numbering} at those places. */
     public static AlignedObservation of(SiteNumbering numbering, Set<ArmProbe> arms,
                                         Set<SeenConditionOutcome> ways) {
-        return new AlignedObservation(numbering.identity(), arms, ways);
+        return new AlignedObservation(numbering.identity(), arms, ways, Set.of());
     }
 
     /** A run of {@code numbering} that was at those arms and nowhere else. */
@@ -50,7 +56,7 @@ public final class Runs {
     /** A run of {@code numbering} that nothing was recorded of — which is a run, and not the
      *  absence of one. What says nobody watched a row is said where the row is handed over. */
     public static AlignedObservation nowhere(SiteNumbering numbering) {
-        return new AlignedObservation(numbering.identity(), Set.of(), Set.of());
+        return new AlignedObservation(numbering.identity(), Set.of(), Set.of(), Set.of());
     }
 
     private Runs() {}

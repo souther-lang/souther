@@ -242,6 +242,13 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
             went = went.union(WeakeningSet.of(new Weakening.MeetingsNotPlaced(
                     behavior, asked.notPlaced().size())));
         }
+        // And the sums whose decisions were met and not joined to what a run records. Nothing is
+        // owed at them either, and the rows' having made every combination that was asked is no
+        // word on the ones that were not.
+        if (asked.notJoined() > 0) {
+            went = went.union(WeakeningSet.of(new Weakening.MeetingsNotJoined(
+                    behavior, asked.notJoined())));
+        }
         return new InteractionEvidence(asked, went.isEmpty()
                 ? new Measurement.Complete<>(rows) : new Measurement.Partial<>(rows, went),
                 unanswered);

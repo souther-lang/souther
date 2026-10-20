@@ -16,6 +16,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
@@ -55,14 +56,21 @@ public sealed interface DecisionRuleReading {
      * the two had been kept in step.
      *
      * @param comparison which comparison of the model, which is what a reader is sent to
+     * @param evaluation which evaluation of it a run makes that this is said of, where the
+     *                   comparison stands in a closure applied to each element of a list written
+     *                   out: the same comparison holding on one application and failing on the next
+     *                   is one combination, and the two the other way round is another. Empty
+     *                   where it is evaluated once
      * @param held       whether the path took it holding — of the comparison as written, not of the
      *                   proposition the rule is keyed on
      */
-    record AComparisonCameOut(CoverageSites.ComparisonSite comparison, boolean held)
-            implements DecisionRuleReading {
+    record AComparisonCameOut(CoverageSites.ComparisonSite comparison, OptionalInt evaluation,
+                              boolean held) implements DecisionRuleReading {
 
         public AComparisonCameOut {
             Objects.requireNonNull(comparison, "a comparison of the model is some site");
+            Objects.requireNonNull(evaluation,
+                    "a comparison is said of some evaluation or of the one");
         }
     }
 
@@ -221,7 +229,9 @@ public sealed interface DecisionRuleReading {
         for (ControlClaim claim : claims) {
             out.add(switch (claim.at()) {
                 case ControlPlace.Outcome(var occurrence, var _, var held) ->
-                        new Seen(places.outcomeOf(occurrence.origin(), held),
+                        new Seen(claim.visit() instanceof ControlClaim.Visit.Nth(int index)
+                                        ? places.outcomeOnVisit(occurrence.origin(), index, held)
+                                        : places.outcomeOf(occurrence.origin(), held),
                                 StepOfACopy.of(occurrence.lineage()));
                 case ControlPlace.Arm(var arm, var _, var anchor) ->
                         new Seen(places.armOf(arm.origin(), arm.part(), anchor),
@@ -271,6 +281,19 @@ public sealed interface DecisionRuleReading {
         }
 
         /**
+         * The same, said of the {@code nth} time a run visits the construct. Only a comparison is
+         * visited more than once in a way a combination turns on, so an application of an
+         * operation is said as it is anywhere.
+         */
+        DecisionRuleReading outcomeOnVisit(SourceConstructOrigin construct, int nth,
+                                           boolean held) {
+            CoverageSites.ComparisonSite comparison = comparisons.get(construct);
+            return comparison != null
+                    ? new AComparisonCameOut(comparison, OptionalInt.of(nth), held)
+                    : outcomeOf(construct, held);
+        }
+
+        /**
          * The site of one construct answering a truth, or the fact that this run has no site for
          * it.
          *
@@ -280,7 +303,7 @@ public sealed interface DecisionRuleReading {
         DecisionRuleReading outcomeOf(SourceConstructOrigin construct, boolean held) {
             CoverageSites.ComparisonSite comparison = comparisons.get(construct);
             if (comparison != null) {
-                return new AComparisonCameOut(comparison, held);
+                return new AComparisonCameOut(comparison, OptionalInt.empty(), held);
             }
             CoverageSites.AnswerSite answer = answers.get(construct);
             if (answer != null) {

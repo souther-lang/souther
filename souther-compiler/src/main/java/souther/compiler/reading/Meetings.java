@@ -1,14 +1,17 @@
 package souther.compiler.reading;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.ValueArrivals;
+import souther.compiler.semantics.Accumulation;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -25,7 +28,9 @@ import java.util.Set;
  * {@code Order { price = if A then 100 else 200, message = if B then "x" else "y" }} the two
  * decisions arrive at a constructor and interact in nothing, because no observation is a function
  * of both. A group forms only where two values each settled by a decision are consumed into one:
- * an operand of an operator, or an argument of a call that answers one value.
+ * an operand of an operator, an argument of a call that answers one value, or the elements of a
+ * list that a total adds up — written out in the body, or kept by a comparison
+ * ({@link KeptElements}).
  */
 final class Meetings {
 
@@ -36,10 +41,19 @@ final class Meetings {
      *  are two places. */
     private final Set<Core> absorbed = Collections.newSetFromMap(new IdentityHashMap<>());
 
+    /** What a comparison the walk has passed is made of: the operands it compares. */
+    private final Set<Core> compared = Collections.newSetFromMap(new IdentityHashMap<>());
+
     private final List<Interaction> found = new ArrayList<>();
 
-    Meetings(CoverageSites.Plan plan) {
+    private final List<WhyNotJoined> notJoined = new ArrayList<>();
+
+    /** The elements a call adds up that a comparison keeps. */
+    private final KeptElements keptElements;
+
+    Meetings(CoverageSites.Plan plan, KeptElements keptElements) {
         this.plan = plan;
+        this.keptElements = keptElements;
     }
 
     /**
@@ -48,23 +62,48 @@ final class Meetings {
      * <p>A meeting reached several ways is one place in the body and as many groups, and they are
      * written down together because that is when the walk is there.
      *
+     * @param body    the body holding {@code node}, which is where a comparison the elements of a
+     *                list were written with is found when it is not in the call that consumes them
      * @param reading what the body holding {@code node} was read to arrive at, and by which ways.
      *                The walk's reading, handed in rather than taken again: what a value is settled
      *                by is one question and is asked once
      */
-    void at(Core node, List<List<Decision>> reaches, ValueArrivals<Outcome> reading) {
-        List<Core> meeting = absorbed.contains(node) ? null : meetingAt(node, absorbed);
-        if (meeting == null) {
+    void at(Core node, CoverageNaming naming, Core body, List<List<Decision>> reaches,
+            ValueArrivals<Outcome> reading) {
+        // A walk meets a comparison before the operands it compares.
+        if (Core.withoutStanding(node) instanceof Core.Binary binary && binary.op().compares()) {
+            compared.add(Core.withoutStanding(binary.left()));
+            compared.add(Core.withoutStanding(binary.right()));
+        }
+        if (absorbed.contains(node)) {
             return;
         }
+        List<Core> meeting = meetingAt(node, absorbed);
         List<Factor> factors = new ArrayList<>();
-        for (Core operand : meeting) {
-            List<Outcome> outcomes = outcomesOf(operand, reading);
-            // One outcome is no decision: the operand answers the same way however the row is
-            // written, so nothing about it can be varied against the other operand.
-            if (outcomes.size() > 1) {
-                factors.add(new Factor(outcomes));
+        if (meeting != null) {
+            for (Core operand : meeting) {
+                List<Outcome> outcomes = outcomesOf(operand, reading);
+                // One outcome is no decision: the operand answers the same way however the row is
+                // written, so nothing about it can be varied against the other operand.
+                if (outcomes.size() > 1) {
+                    factors.add(new Factor(outcomes));
+                }
             }
+        } else if (node instanceof Core.Call call) {
+            switch (keptElements.of(call, naming, body, compared.contains(call))) {
+                case null -> {
+                    return;
+                }
+                // Met once however many ways reach it: it is a place in the body that was not read,
+                // and the ways in say nothing more about that.
+                case KeptElements.Read.NotJoined(var why) -> {
+                    notJoined.add(why);
+                    return;
+                }
+                case KeptElements.Read.Factors(var each) -> factors.addAll(each);
+            }
+        } else {
+            return;
         }
         // A group says that these decisions were settled these ways and met here, which is a
         // statement about one passing. What can be established about a run is what its recording
@@ -81,9 +120,18 @@ final class Meetings {
         // What varies here is read once and the ways in are as many as they are: an operand is
         // settled the same ways whichever way round the forks above a row went, so the factors
         // are no part of what a way in decides and are not read again per way.
-        if (factors.size() > 1 && !plan.mayRepeat(node)) {
-            for (List<Decision> reach : reaches) {
-                found.add(new Interaction(reach, factors));
+        // A meeting is of decisions, and an operand is only a place one is used. The same decision
+        // used in two operands — a choice named once and added to itself — is one factor: it
+        // cannot come out one way in the first and the other in the second, so a combination
+        // that says it does is one no row could make.
+        List<Factor> apart = new ArrayList<>(new LinkedHashSet<>(factors));
+        if (apart.size() > 1) {
+            if (plan.mayRepeat(node)) {
+                notJoined.add(WhyNotJoined.THE_MEETING_IS_IN_CODE_RUN_AGAIN);
+            } else {
+                for (List<Decision> reach : reaches) {
+                    found.add(new Interaction(reach, apart));
+                }
             }
         }
     }
@@ -91,6 +139,12 @@ final class Meetings {
     /** The groups, in the order the walk met them. */
     List<Interaction> found() {
         return List.copyOf(found);
+    }
+
+    /** The sums of kept elements the walk met and could not join to evaluations, each with the
+     *  reason, in the order it met them. They are meetings the measure did not ask about. */
+    List<WhyNotJoined> notJoined() {
+        return List.copyOf(notJoined);
     }
 
     /**
@@ -144,11 +198,62 @@ final class Meetings {
                 absorbed.addAll(inner);
                 yield operands;
             }
-            case Core.Call call -> call.args().size() > 1 ? call.args() : null;
+            case Core.Call call -> {
+                List<Core> written = numbersWrittenOutIn(call);
+                yield written != null ? written : call.args().size() > 1 ? call.args() : null;
+            }
             case Core.PreservedCall call -> call.args().size() > 1 ? call.args() : null;
             case Core.Apply apply -> apply.args().size() > 1 ? apply.args() : null;
             default -> null;
         };
+    }
+
+    /**
+     * The elements of the list written out in {@code call}, where the call adds or multiplies the
+     * elements of its only argument; null otherwise.
+     *
+     * <p>Which operations walk a container, and how, is the library's to say. Such a call consumes
+     * the elements into one value as an operator does its operands, so each element is a value
+     * making it. A list that is only built is no meeting, and neither is an operation that joins
+     * what it is given rather than combining it into a number.
+     */
+    private static List<Core> numbersWrittenOutIn(Core.Call call) {
+        return combinesItsElements(call)
+                && Core.withoutStanding(call.args().getFirst()) instanceof Core.ListLit list
+                ? list.elements() : null;
+    }
+
+    /** Whether {@code call} adds or multiplies the elements of its only argument. */
+    static boolean combinesItsElements(Core.Call call) {
+        return accumulationOf(call) != null;
+    }
+
+    /** How {@code call} adds or multiplies the elements of its only argument, or null where it
+     *  does not. */
+    static Accumulation accumulationOf(Core.Call call) {
+        if (!(call.fn() instanceof Core.Reached.OfKernel kernel) || call.args().size() != 1) {
+            return null;
+        }
+        Accumulation walk = DefaultBoundOperationFacts.get().accumulation(kernel.name().denotes());
+        return walk != null && walk.combine() != Accumulation.Combine.APPEND ? walk : null;
+    }
+
+    /** Whether {@code call} answers how many elements its only argument holds. */
+    static boolean countsItsElements(Core.Call call) {
+        return call.fn() instanceof Core.Reached.OfKernel kernel && call.args().size() == 1
+                && DefaultBoundOperationFacts.get().answersHowManyItHolds(kernel.name().denotes());
+    }
+
+    /**
+     * Whether {@code call} answers a number that depends on which elements its only argument holds:
+     * what they add up to, or how many there are.
+     *
+     * <p>Of a list written out whose elements are all there, the second is no decision of any
+     * element — two is two however the choices come out — and only the first is a meeting. Of a
+     * list some comparison keeps, both are: which elements are there is what the keeping decides.
+     */
+    static boolean consumesItsElements(Core.Call call) {
+        return combinesItsElements(call) || countsItsElements(call);
     }
 
     /** The values one run of {@code op} is over, and the nodes the run is written as. */

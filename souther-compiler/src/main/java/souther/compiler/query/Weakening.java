@@ -96,7 +96,7 @@ public sealed interface Weakening {
                  ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
                  DecisionOfRowUnreadable _, DecisionRunNotWatched _, DecisionRuleReadShort _,
                  KeyedOverwriteCasesUnmeasured _, ReachableNodeCasesUnmeasured _,
-                 MeetingsNotPlaced _ -> List.of();
+                 MeetingsNotPlaced _, MeetingsNotJoined _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
             case BorderReadingsNotExhausted it -> it.limits();
             case ModelReadingIncomplete it -> it.cause().figures();
@@ -613,6 +613,40 @@ public sealed interface Weakening {
         }
 
         /** The classes place what they place however much a run allows. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A sum of the elements a comparison keeps whose decisions this reading met and could not join
+     * to the evaluations a run records.
+     *
+     * <p>The sum is a meeting: each element is in it or not, and it is a function of all of them.
+     * What is missing is which evaluation of the comparison a recording holds is which element's,
+     * and without that no row can be held to a combination of them — an element kept by two
+     * comparisons, for one, is evaluated by the second only if the first kept it. So none is asked
+     * for, and which of them the rows make is not measured. Nothing is owed at any of them, because
+     * nothing established that a row is missing; and a behavior is not said to have had every
+     * combination of its decisions made when some of them were never asked about.
+     *
+     * <p>Beside {@link MeetingsNotPlaced}, which is the classes of the input not placing a group
+     * this reading did form. Here there is no group: the decisions were not joined into one. The
+     * reasons are {@code WhyNotJoined}'s, kept by the reading and not published.
+     */
+    record MeetingsNotJoined(String behavior, int groups) implements Weakening {
+
+        public MeetingsNotJoined {
+            Objects.requireNonNull(behavior, "a meeting is a meeting of some behavior");
+            if (groups < 1) {
+                throw new IllegalArgumentException(
+                        "a measure that joined every sum went without nothing here: " + groups);
+            }
+        }
+
+        /** What was joined is a matter of how the body is read, and allowing more reads it the
+         *  same way. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
