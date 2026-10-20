@@ -79,15 +79,41 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
             }
             """;
 
+    /** Each code point weighed before the total, which is a multiple of the total. */
+    private static final String WEIGHED = """
+            module p
+            behavior pick : (s: String) -> Int
+            let pick (s) = {
+                guard List.sum(List.map((x) -> 3 * x, String.codePoints(s))) >= 300 else 0
+                1
+            }
+            """;
+
+    /** Each code point weighed and moved, which is a multiple of the total and of how many there
+     *  are. */
+    private static final String WEIGHED_AND_MOVED = """
+            module p
+            behavior pick : (s: String) -> Int
+            let pick (s) = {
+                let weighed = List.map((x) -> 2 * x + 1, String.codePoints(s))
+                guard List.sum(weighed) >= 300 else 0
+                1
+            }
+            """;
+
     /** Each model, with what its condition works out to over the string a row holds and the
      *  answers some row of it is composed for. */
     private static final Map<String, Function<String, Integer>> ANSWERED = Map.of(
+            WEIGHED, text -> 3 * sumOf(text) >= 300 ? 1 : 0,
+            WEIGHED_AND_MOVED, text -> 2 * sumOf(text) + lengthOf(text) >= 300 ? 1 : 0,
             STRAIGHT, text -> sumOf(text) >= 10 ? 1 : 0,
             NAMED, text -> sumOf(text) >= 10 ? 1 : 0,
             UNDER_A_NAME, text -> sumOf(text) >= 10 ? 1 : 0,
             BESIDE_ITS_LENGTH, text -> lengthOf(text) < 2 ? 0 : sumOf(text) <= 200 ? 2 : 1);
 
     private static final Map<String, Set<Integer>> COMPOSED_FOR = Map.of(
+            WEIGHED, Set.of(0, 1),
+            WEIGHED_AND_MOVED, Set.of(0, 1),
             STRAIGHT, Set.of(0, 1),
             NAMED, Set.of(0, 1),
             UNDER_A_NAME, Set.of(0, 1),

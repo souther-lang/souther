@@ -312,6 +312,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
+                LinearForm<NumericTerm> weighed =
+                        InputNumber.codePointsWeighed(node, inputs, at, ruleSource, met);
+                if (weighed != null) {
+                    named.addAll(weighed.coefs().keySet());
+                    return weighed;
+                }
                 NumericTerm term = InputNumber.of(node, inputs, at, ruleSource, met);
                 if (term == null) {
                     return null;
