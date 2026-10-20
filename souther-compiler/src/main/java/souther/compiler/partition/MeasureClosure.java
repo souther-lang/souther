@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.inputs.BlockedDescent;
 import souther.compiler.inputs.EndLeftOpen;
-import souther.compiler.inputs.RulesLeftUnread;
 import souther.compiler.inputs.StandingQuestion;
 
 import java.util.Collections;
@@ -308,10 +307,11 @@ public final class MeasureClosure {
             for (EndLeftOpen open : at.endsLeftOpen()) {
                 border.add(new ClosureGap.LineNotDerived(at.behavior(), at.id(), open.rule()));
             }
-            for (RulesLeftUnread unread : at.residue().rulesLeftUnread()) {
-                if (derived(unread)) {
-                    continue;
-                }
+            // Each way of leaving the rules unread is a finding of its own: the reading lost a
+            // clause, or a recipient was named and no reading was opened at it. Neither is the
+            // blocked descent said from the other end, and they are one thing the measure is short
+            // of however many of them stand at the position.
+            if (!at.residue().rulesLeftUnread().isEmpty()) {
                 ClosureGap gap = new ClosureGap.RulesNotReached(at.behavior(), at.id());
                 partition.add(gap);
                 border.add(gap);
@@ -365,34 +365,6 @@ public final class MeasureClosure {
         Set<ClosureGap> gaps() {
             return Set.copyOf(byFact.values());
         }
-    }
-
-    /**
-     * Whether this way of leaving the rules unread is already reported by a finding beside it.
-     *
-     * <p><b>The fold, and the whole of it.</b> One way of leaving the rules unread is a consequence
-     * of another finding rather than a second thing that went wrong: a handing over nobody took
-     * because the walk could not go into the position is the blocked descent written above, said
-     * from the other end. Both sentences are true and a reader is told the stop once.
-     *
-     * <p><b>On the provenance and never on the path.</b> A position the reading did enter and lost a
-     * clause of its own is an independent finding, and it can sit at the same path as anything else.
-     * Suppressed by "there is already a finding here", that one would go with it — which is why this
-     * asks the arm and is handed nothing else to decide from.
-     *
-     * <p>Exhaustive with no {@code default}: a way of leaving the rules unread added later is
-     * answered here or is a compile error, rather than quietly folding into somebody else's finding.
-     */
-    private static boolean derived(RulesLeftUnread unread) {
-        return switch (unread) {
-            // The reading was there and lost a rule of its own. Nothing else says so.
-            case RulesLeftUnread.ClauseOfThisReadingWasUnread _ -> false;
-            case RulesLeftUnread.Handoff handoff -> switch (handoff.why()) {
-                case RulesLeftUnread.HandoffUnread.FromBlockedDescent _ -> true;
-                // The walk went on and left a recipient with no reading. Nothing else says so.
-                case RulesLeftUnread.HandoffUnread.NotFullyAccepted _ -> false;
-            };
-        };
     }
 
     /** An open closure's own account of itself: never empty, and in the order the readers found it,

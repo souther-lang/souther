@@ -372,7 +372,7 @@ public final class InputDomain {
         // rules on would have to be read after everything under it, and the order positions are
         // reported in is the order they are declared and descended into.
         List<Position> settled = found.stream()
-                .map(each -> shortOfHandedOnRules(each, handoffs.unresolvedAt(each.path())))
+                .map(each -> shortOfHandedOnRules(each, handoffs.standingAt(each.path())))
                 .toList();
         // Whatever the walk found, including nothing. A behavior declaring no parameters has an
         // input with no positions in it, and that is a reading that was made rather than one that
@@ -924,33 +924,14 @@ public final class InputDomain {
      * handed rules on that nobody took is short of both, and answering with the first was how the
      * second went missing.
      */
-    private static Position shortOfHandedOnRules(Position position,
-                                                 RuleHandoffs.Shortfall shortfall) {
-        if (shortfall == null) {
+    private static Position shortOfHandedOnRules(Position position, boolean standing) {
+        if (!standing) {
             return position;
         }
         ReadPosition read = (ReadPosition) position;
-        BlockedDescent blocked = BlockedDescent.of(read.structure());
-        RulesLeftUnread.HandoffUnread why = switch (shortfall) {
-            case RuleHandoffs.Shortfall.NothingExpected _ ->
-                    new RulesLeftUnread.HandoffUnread.FromBlockedDescent();
-            case RuleHandoffs.Shortfall.NotFullyAccepted _ ->
-                    new RulesLeftUnread.HandoffUnread.NotFullyAccepted();
-        };
-        // The whole agreement and not the half this arm happens to need. Over an owed handing over,
-        // nobody was named as a recipient exactly where the walk could not go in — so a ledger that
-        // named nobody at a position this entered and a ledger that named somebody at a position it
-        // could not enter are both two walks over one model disagreeing about one path, joined by
-        // the spelling of it. Held one way, the second would arrive as an arm nothing folds beside a
-        // descent that is reported, which is #1084's own two entries, reached by a different road.
-        if (why.namesABlockedDescent() != (blocked != null)) {
-            throw new IllegalStateException(
-                    "the ledger and the walk disagree at " + read.path() + ": " + shortfall
-                            + " beside " + read.structure());
-        }
         java.util.Set<RulesLeftUnread> left =
                 new java.util.LinkedHashSet<>(read.rulesLeftUnread());
-        left.add(new RulesLeftUnread.Handoff(why));
+        left.add(new RulesLeftUnread.HandoffNotAccepted());
         return new ReadPosition(read.path(), read.view(), read.bounds(),
                 read.nothingExists(), read.projection(),
                 read.declared(), read.reading(), read.obligations(), read.admitted(),

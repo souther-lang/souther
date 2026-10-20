@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -41,9 +40,9 @@ class AStopThisCompilerMadeIsSaidOnceTest {
      * stop at a position inside a container, which is where a handing over of rules would be owed
      * if the declaration had any to hand on.
      *
-     * <p>No model this compiler accepts leaves both facts: the stops that remain are a type with
-     * nothing to read, and such a type states no rules. The pair is held by the arithmetic over
-     * the arms below, which builds the residues it cannot compile.
+     * <p>The stops that remain are a type with nothing to read, and such a type states no rules to
+     * hand on, so a stop and a handing over left unread are independent facts. The combinations are
+     * held by the arithmetic over the arms below.
      */
     private static final String A_TYPE_NO_SHAPE_CAN_BE_READ_FROM = """
             module probe.again
@@ -59,10 +58,10 @@ class AStopThisCompilerMadeIsSaidOnceTest {
             """;
 
     /**
-     * The stop is reported as the stop, and the handing over it left standing is not reported again.
+     * The stop is reported as the stop, once, and nothing is reported beside it that was not found.
      *
-     * <p>{@code RulesNotReached} here would be the consequence of the finding beside it and not a
-     * second thing an author could act on.
+     * <p>No rule is handed on at a type with nothing to read, so a {@code RulesNotReached} here
+     * would be a finding with nothing behind it.
      *
      * <p><b>Counted among the stops and not among the weakenings.</b> A measure of a module whose
      * bodies nothing elaborated goes without that reading as well, and says so: two facts, and an
@@ -85,86 +84,50 @@ class AStopThisCompilerMadeIsSaidOnceTest {
                 () -> "and it is the stop itself: " + said);
         assertTrue(said.stream().noneMatch(each -> each instanceof Weakening.ModelReadingIncomplete(
                         ClosureGap.RulesNotReached _)),
-                () -> "and the handing over it left standing is that same stop: " + said);
+                () -> "and no handing over is reported beside it: " + said);
     }
 
     /**
-     * A handing over left standing by a blocked descent may not travel without the descent.
+     * What each combination of the two facts comes to: a stop and a way of leaving rules unread are
+     * findings of their own, and none of them hides another.
      *
-     * <p>The transport half. Which of the two the reading found is settled where both were in hand,
-     * and every rebuild of an axis after that is a place one of them can be dropped — a position
-     * whose elements could not be reached came back out of the second phase with nothing to say it
-     * had ever stopped, once. Dropped here, the arm would fold into a finding nothing writes and the
-     * stop would go unsaid, so the pair is refused rather than reported short.
+     * <p>Held on a stop and on the two ways rules are left unread, each alone and a stop beside
+     * each. A stop is the structure of a position the walk could not read; rules left unread are
+     * what a reading lost or a recipient nothing opened. They are independent facts, so the one
+     * thing said about the stop is said once whichever of the others stand beside it, and the
+     * others are said whether or not it stands.
+     *
+     * <p>Built here rather than compiled from sources. A position that both cannot be entered and
+     * hands rules on, or loses a clause of its own, is not one any model this compiler accepts
+     * carries; what is being held is the arithmetic over the arms, and that is what a synthetic
+     * axis is exactly good for.
      */
     @Test
-    void anArmNamingABlockedDescentMayNotTravelWithoutIt() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new ReadingResidue(null,
-                        Set.of(new RulesLeftUnread.Handoff(
-                                new RulesLeftUnread.HandoffUnread.FromBlockedDescent()))),
-                "the arm names a descent this residue does not carry");
-    }
-
-    /**
-     * Every way the two facts can arrive together, and what each comes to.
-     *
-     * <p><b>The relation and not one direction of it.</b> Which findings a residue comes to is a
-     * biconditional between what the ledger recorded and what the walk found, crossed with the one
-     * fold. Asserted a case at a time from whichever side a reader happens to be building, each
-     * assertion holds the half it was written for — which is how one stop came to be written from
-     * two ends with nothing relating them in the first place (issue #1084).
-     *
-     * <p>Built here rather than compiled from sources. Two of the six rows are this compiler
-     * contradicting itself and no model produces them, and a row of the other four needs a position
-     * that both loses a clause of its own and cannot be entered, which no model this compiler
-     * accepts carries either. What is being held is the arithmetic over the arms, and that is what a
-     * synthetic axis is exactly good for.
-     */
-    @Test
-    void whatEachPairOfFactsComesTo() {
-        // The walk could not go in, and the handing over it left standing is that same stop.
+    void whatEachCombinationOfFactsComesTo() {
         assertEquals(Set.of(ClosureGap.PositionNotReachedInto.class),
-                gapKindsOf(residue(BLOCKED, fromBlockedDescent())),
+                gapKindsOf(residue(BLOCKED)),
                 "the stop, once");
-        // And a clause this reading lost beside it is a finding of its own, at the same path.
-        // The one the issue names: folded on the path, this one goes with the other.
         assertEquals(Set.of(ClosureGap.PositionNotReachedInto.class,
                         ClosureGap.RulesNotReached.class),
-                gapKindsOf(residue(BLOCKED,
-                        new RulesLeftUnread.ClauseOfThisReadingWasUnread(),
-                        fromBlockedDescent())),
-                "a clause this reading lost is not the stop, and does not fold into it");
-        // The walk went on and left a recipient with no reading. Nothing else says so.
+                gapKindsOf(residue(BLOCKED, new RulesLeftUnread.ClauseOfThisReadingWasUnread())),
+                "a clause this reading lost is a finding of its own beside the stop");
+        assertEquals(Set.of(ClosureGap.PositionNotReachedInto.class,
+                        ClosureGap.RulesNotReached.class),
+                gapKindsOf(residue(BLOCKED, new RulesLeftUnread.HandoffNotAccepted())),
+                "and so is a recipient nothing opened");
         assertEquals(Set.of(ClosureGap.RulesNotReached.class),
-                gapKindsOf(residue(null, notFullyAccepted())),
-                "a recipient nothing opened is its own finding");
+                gapKindsOf(residue(null, new RulesLeftUnread.HandoffNotAccepted())),
+                "a recipient nothing opened is its own finding where the walk went on");
         assertEquals(Set.of(ClosureGap.RulesNotReached.class),
                 gapKindsOf(residue(null, new RulesLeftUnread.ClauseOfThisReadingWasUnread())),
                 "and so is a clause lost where nothing stopped the walk");
-
-        // And the two rows where the ledger and the walk contradict each other. Neither is a state
-        // of a model: over an owed handing over, nobody was named as a recipient exactly where the
-        // walk could not go in. Let through, the second is #1084's two entries reached another way.
-        assertThrows(IllegalArgumentException.class,
-                () -> residue(BLOCKED, notFullyAccepted()),
-                "a recipient was named at a position the walk could not enter");
-        assertThrows(IllegalArgumentException.class,
-                () -> residue(null, fromBlockedDescent()),
-                "nobody was named at a position the walk went into");
+        assertEquals(Set.of(ClosureGap.RulesNotReached.class),
+                gapKindsOf(residue(null, new RulesLeftUnread.ClauseOfThisReadingWasUnread(),
+                        new RulesLeftUnread.HandoffNotAccepted())),
+                "both together are one thing the measure is short of, however many ways it is");
     }
 
     private static final BlockedDescent BLOCKED = new BlockedDescent(new BlockReason.TypeUnresolved());
-
-    private static RulesLeftUnread fromBlockedDescent() {
-        return new RulesLeftUnread.Handoff(
-                new RulesLeftUnread.HandoffUnread.FromBlockedDescent());
-    }
-
-    private static RulesLeftUnread notFullyAccepted() {
-        return new RulesLeftUnread.Handoff(
-                new RulesLeftUnread.HandoffUnread.NotFullyAccepted());
-    }
 
     private static ReadingResidue residue(BlockedDescent blocked, RulesLeftUnread... unread) {
         return new ReadingResidue(blocked, Set.of(unread));

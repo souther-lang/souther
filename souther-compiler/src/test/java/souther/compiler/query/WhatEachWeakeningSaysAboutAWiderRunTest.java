@@ -216,22 +216,15 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
      */
     private static RunSensitivity sensitivityOf(RulesLeftUnread why) {
         return switch (why) {
-            case RulesLeftUnread.ClauseOfThisReadingWasUnread _ -> RunSensitivity.UNAFFECTED;
-            case RulesLeftUnread.Handoff handoff -> switch (handoff.why()) {
-                case RulesLeftUnread.HandoffUnread.FromBlockedDescent _,
-                     RulesLeftUnread.HandoffUnread.NotFullyAccepted _ ->
-                        RunSensitivity.UNAFFECTED;
-            };
+            case RulesLeftUnread.ClauseOfThisReadingWasUnread _,
+                 RulesLeftUnread.HandoffNotAccepted _ -> RunSensitivity.UNAFFECTED;
         };
     }
 
     /** One of each way rules are left unread, which is what a `RulesNotReached` is written from. */
     private static List<RulesLeftUnread> everyWayRulesAreLeftUnread() {
         return List.of(new RulesLeftUnread.ClauseOfThisReadingWasUnread(),
-                new RulesLeftUnread.Handoff(
-                        new RulesLeftUnread.HandoffUnread.FromBlockedDescent()),
-                new RulesLeftUnread.Handoff(
-                        new RulesLeftUnread.HandoffUnread.NotFullyAccepted()));
+                new RulesLeftUnread.HandoffNotAccepted());
     }
 
     /** Whether the arm holds something to put the question to, which is what the rows record. */
