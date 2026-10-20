@@ -260,6 +260,10 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
                 "List.fold((acc, x) -> acc + x.quantity, 0, List.sortBy(.sku, readSnap(order).rows))",
                 "List.sum(List.sortBy(x -> x, List.map(.quantity, readSnap(order).rows)))",
                 "List.sum(List.map(.quantity, List.map(x -> x, readSnap(order).rows)))",
+                "List.sum(List.map(.quantity, List.sortBy(.sku,"
+                        + " List.map(x -> x, readSnap(order).rows))))",
+                "List.sum(List.map(.quantity, List.map(x -> x,"
+                        + " List.sortBy(.sku, readSnap(order).rows))))",
                 "{ let sorted = List.sortBy(.sku, readSnap(order).rows)\n"
                         + "  List.sum(List.map(.quantity, sorted)) }")) {
             assertEquals(rows, rowsOf(summedAs("summed", number)), number);

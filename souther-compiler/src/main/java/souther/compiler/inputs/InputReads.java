@@ -1152,8 +1152,11 @@ public final class InputReads {
             if (found != null) {
                 return found;
             }
-            at = oneStepBeneath(at, symbols, newtypes,
-                    (operation, args, where) -> InputPath.argumentWhoseElementsItHolds(operation));
+            at = oneStepBeneath(at, symbols, newtypes, (operation, args, where) -> {
+                DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
+                return holds != null ? holds : keepingEveryElement(operation, args, where,
+                        symbols, newtypes);
+            });
             if (at == null) {
                 return null;
             }
@@ -1189,11 +1192,16 @@ public final class InputReads {
     public Denotation stepKeepingEveryElement(Denotation at, Symbols symbols,
                                               DeclarationNewtypes newtypes) {
         return oneStepBeneath(at, symbols, newtypes, (operation, args, where) ->
-                InputPath.argumentKeepingEveryElement(operation, args,
-                        closure -> Core.withoutStanding(
-                                where.standing(closure, symbols, newtypes).value())
-                                instanceof Core.Block block ? block : null,
-                        where.heldByTheBody(), newtypes));
+                keepingEveryElement(operation, args, where, symbols, newtypes));
+    }
+
+    private static DeclaredArgument keepingEveryElement(ValueName operation, List<Core> args,
+                                                        InputReads where, Symbols symbols,
+                                                        DeclarationNewtypes newtypes) {
+        return InputPath.argumentKeepingEveryElement(operation, args,
+                closure -> Core.withoutStanding(where.standing(closure, symbols, newtypes).value())
+                        instanceof Core.Block block ? block : null,
+                where.heldByTheBody(), newtypes);
     }
 
     /** Which argument of an operation applied to {@code args} a step goes down to. */
