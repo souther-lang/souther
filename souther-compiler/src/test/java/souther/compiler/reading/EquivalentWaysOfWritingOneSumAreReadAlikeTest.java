@@ -189,6 +189,74 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
                 readActive("{ let n = " + kept + "\n    if n == 1 then 1 else 2 }").notJoined());
     }
 
+    private static final String FLAGGED = """
+            module example.ways
+
+            data Row = { days: Int, pay: Int, active: Bool }
+
+            behavior total : (first: Row, second: Row, flag: Bool) -> Int
+
+            let total (first, second, flag) =
+                %s
+            """;
+
+    private static CoverageRead.Read readFlagged(String expression) {
+        return readAll(FLAGGED.formatted(expression), "total");
+    }
+
+    /**
+     * A condition that is the same on every run is no decision, kept or not: a filter that keeps
+     * everything is the list written without it, and one that keeps nothing leaves no element to
+     * decide anything. Neither is a meeting that went unmeasured.
+     */
+    @Test
+    void aConditionThatIsSettledDecidesNothing() {
+        for (String settled : List.of("true", "false")) {
+            String kept = "List.filter(r -> " + settled + ", [ first, second ])";
+
+            assertEquals(List.of(), readFlagged("List.sum(List.map(r -> r.pay, " + kept + "))")
+                    .notJoined(), settled);
+            assertEquals(List.of(), readFlagged("List.length(" + kept + ")").notJoined(), settled);
+        }
+    }
+
+    /**
+     * Whether there are two decisions is settled before anything is read of them, so a decision
+     * that cannot be read is no more a meeting than one that can: one comparison whose number no
+     * input holds is one decision.
+     */
+    @Test
+    void oneDecisionThatCannotBeReadIsStillOnlyOne() {
+        CoverageRead.Read read = readFlagged(
+                "List.sum(List.map(r -> if r.days * r.days > 10 then 5 else 0, [ first ]))");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(), read.notJoined());
+    }
+
+    /**
+     * A choice made once and named is one decision however often its name is used, and a choice
+     * made again on each application of a closure is as many as there are applications. What the
+     * reading cannot place it counts as its own, so it never counts fewer than there are.
+     */
+    @Test
+    void aChoiceIsCountedAsOftenAsItIsMade() {
+        assertEquals(List.of(), readFlagged("{ let chosen = if flag then 1 else 0\n"
+                + "    List.sum(List.map(x -> x, [ chosen, chosen ])) }").notJoined());
+        assertEquals(List.of(), readFlagged("{ let chosen = if flag then 1 else 0\n"
+                + "    List.sum(List.map(x -> x + 0, [ chosen, chosen ])) }").notJoined());
+
+        assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
+                "List.sum(List.flatMap(a -> { let c = if a.active then 1 else 0\n"
+                        + "    List.map(x -> x, [ c ]) }, [ first, second ]))").notJoined());
+        assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
+                "List.sum(List.flatMap(a -> [ if a.active then 1 else 0 ], [ first, second ]))")
+                .notJoined());
+        assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
+                "{ let a = if flag then 1 else 0\n    let b = if second.active then 1 else 0\n"
+                        + "    List.sum(List.map(x -> x + 0, [ a, b ])) }").notJoined());
+    }
+
     /** A decision that nothing else is decided beside meets nothing, read or not. */
     @Test
     void oneDecisionAloneIsNoMeetingToLeaveUnjoined() {

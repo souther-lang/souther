@@ -140,6 +140,7 @@ final class KeptElements {
         boolean valueMatters = Meetings.combinesItsElements(call);
         return switch (ElementEvaluations.of(each.asWritten(), contributing(call, valueMatters),
                 valueMatters, !valueMatters && compared,
+                truth -> names.folded(new ElementsWrittenOut.Stood<>(truth.value(), truth.at())),
                 value -> ValueChoices.of(value, names, newtypes))) {
             case ElementEvaluations.Result.NothingToJoin _ -> null;
             case ElementEvaluations.Result.NotJoined(var why) -> new Read.NotJoined(why);

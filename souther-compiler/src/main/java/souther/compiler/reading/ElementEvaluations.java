@@ -13,6 +13,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
@@ -122,46 +123,40 @@ final class ElementEvaluations {
      * @param statementsCountIt whether the answer is a count that a comparison is made of, which
      *                     the reading of statements takes up: what it counts is the statements that
      *                     hold, and an element kept by what a quantifier states is one of them
+     * @param folded       the constant a truth comes to on every run, where it comes to one
      * @param choicesOf    what decides the value of an occurrence
      */
     static Result of(List<ReadMeaning.Occurrence> occurrences,
                      Predicate<ReadMeaning.Occurrence> contributes, boolean valueMatters,
-                     boolean statementsCountIt, Function<Denotation, ValueChoices.Of> choicesOf) {
+                     boolean statementsCountIt,
+                     Function<Denotation, Optional<Object>> folded,
+                     Function<Denotation, ValueChoices.Of> choicesOf) {
+        List<Deciding> deciding = new ArrayList<>();
+        for (ReadMeaning.Occurrence occurrence : occurrences) {
+            if (contributes.test(occurrence)) {
+                Deciding each = decidingOf(occurrence, valueMatters, statementsCountIt, folded,
+                        choicesOf);
+                if (each != null) {
+                    deciding.add(each);
+                }
+            }
+        }
+        // What a meeting is of is decisions that are not one another's, and that is settled before
+        // anything is read of them: a single one meets nothing, whether or not it could be read,
+        // and an occurrence nothing varies is no decision. Where there are two or more and this
+        // cannot join them, that is said: a decision this reading has no words for is still one.
+        if (apartIn(deciding) < 2) {
+            return new Result.NothingToJoin();
+        }
         Map<Core.Binary, Map<Integer, Decision>> byComparison = new IdentityHashMap<>();
-        // The decisions met that are not one another's, which is what a meeting is of: a single one
-        // meets nothing, whether or not it could be read.
-        Map<Core, Set<Integer>> apart = new IdentityHashMap<>();
-        int unplaced = 0;
         List<Core.Binary> inTheOrderMet = new ArrayList<>();
         Core.Binary keeping = null;
         Core.Binary valuing = null;
         WhyNotJoined failed = null;
-        boolean aDecisionWasMet = false;
-        for (ReadMeaning.Occurrence occurrence : occurrences) {
-            if (!contributes.test(occurrence)) {
-                continue;
-            }
-            List<ReadMeaning.Occurrence.Kept> keptBy = occurrence.keptWhere();
-            if (statementsCountIt && isKeptByAQuantifierHolding(keptBy)) {
-                // How many are kept, where each is kept by what a quantifier states of a
-                // container and the count is compared, is the count of statements that hold. That
-                // is read as the statements are, and says itself when it cannot be.
-                continue;
-            }
+        for (Deciding one : deciding) {
+            ReadMeaning.Occurrence occurrence = one.occurrence();
+            List<ReadMeaning.Occurrence.Kept> keptBy = one.keptBy();
             if (!keptBy.isEmpty()) {
-                for (ReadMeaning.Occurrence.Kept each : keptBy) {
-                    if (each instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, _,
-                                                                           int application)) {
-                        apart.computeIfAbsent(Core.withoutStanding(truth.value()),
-                                _ -> new HashSet<>()).add(application);
-                    } else {
-                        unplaced++;
-                    }
-                }
-                // Met wherever anything keeps an occurrence, whatever it is and however many things
-                // do. That a decision exists is a fact about the container; whether this reading
-                // can place it is a fact about this reading, and is said below when it cannot.
-                aDecisionWasMet = true;
                 WhyNotJoined why = keptBy.size() > 1 ? WhyNotJoined.KEPT_BY_SEVERAL : null;
                 if (why == null && keptBy.getFirst() instanceof ReadMeaning.Occurrence.Kept.ATruth(
                         Denotation truth, boolean holds, int application)) {
@@ -185,17 +180,13 @@ final class ElementEvaluations {
                 }
                 failed = failed == null ? why : failed;
             }
-            if (valueMatters) {
-                switch (choicesOf.apply(occurrence.value())) {
+            if (one.choice() != null) {
+                switch (one.choice()) {
                     case ValueChoices.Of.Fixed _ -> { }
-                    case ValueChoices.Of.Unread _ -> {
-                        aDecisionWasMet = true;
-                        unplaced++;
+                    case ValueChoices.Of.Unread _ ->
                         failed = failed == null ? WhyNotJoined.A_VALUE_CHOICE_NOT_READ : failed;
-                    }
                     case ValueChoices.Of.OneComparison(Core.Binary comparison, var at,
                                                        boolean viaNames) -> {
-                        aDecisionWasMet = true;
                         // The number the walk gave the application is this comparison's only
                         // where the comparison is the closure's own. Found beneath a name it was
                         // evaluated where the name was written, which is another closure's
@@ -203,12 +194,6 @@ final class ElementEvaluations {
                         // it stands and has none.
                         OptionalInt number = viaNames ? OptionalInt.empty()
                                 : occurrence.answered();
-                        if (number.isPresent()) {
-                            apart.computeIfAbsent(comparison, _ -> new HashSet<>())
-                                    .add(number.getAsInt());
-                        } else {
-                            unplaced++;
-                        }
                         // Two comparisons that are closures' own are two closures, which is not
                         // one application of each. One that has no number says nothing of which
                         // closure it is in.
@@ -223,15 +208,8 @@ final class ElementEvaluations {
                 }
             }
         }
-        // Where nothing decides any occurrence there is no decision and nothing to say. Where
-        // something does, and this could not join it, that is said: a decision this reading has no
-        // words for is still one.
-        if (!aDecisionWasMet) {
-            return new Result.NothingToJoin();
-        }
         if (failed != null) {
-            int decisions = unplaced + apart.values().stream().mapToInt(Set::size).sum();
-            return decisions < 2 ? new Result.NothingToJoin() : new Result.NotJoined(failed);
+            return new Result.NotJoined(failed);
         }
         List<Decision> decisions = new ArrayList<>();
         for (Core.Binary comparison : inTheOrderMet) {
@@ -241,6 +219,103 @@ final class ElementEvaluations {
         }
         return decisions.isEmpty() ? new Result.NotJoined(WhyNotJoined.NOT_ONE_COMPARISON)
                 : new Result.Matched(new Joined(decisions));
+    }
+
+    /** An occurrence that something varies: what keeps it, once what is settled is set aside, and
+     *  what decides its worth, where that matters. */
+    private record Deciding(ReadMeaning.Occurrence occurrence,
+                            List<ReadMeaning.Occurrence.Kept> keptBy, ValueChoices.Of choice) { }
+
+    /** The marker for a decision made once, whichever occurrence it is met in. */
+    private static final int ONCE = -1;
+
+    /**
+     * {@code occurrence} as what varies it, or null where nothing does.
+     *
+     * <p>Nothing varies an occurrence that a constant keeps in, or keeps out: an element a filter
+     * keeps whatever the run is the same element written without the filter, and one it never
+     * keeps is not in the list at all. Nor one the reading of statements takes up, or one whose
+     * worth is fixed and that nothing else keeps out.
+     */
+    private static Deciding decidingOf(ReadMeaning.Occurrence occurrence, boolean valueMatters,
+                                       boolean statementsCountIt,
+                                       Function<Denotation, Optional<Object>> folded,
+                                       Function<Denotation, ValueChoices.Of> choicesOf) {
+        List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>();
+        for (ReadMeaning.Occurrence.Kept kept : occurrence.keptWhere()) {
+            if (kept instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
+                                                                   int _)
+                    && folded.apply(truth).orElse(null) instanceof Boolean settled) {
+                if (settled != holds) {
+                    return null;
+                }
+            } else {
+                keptBy.add(kept);
+            }
+        }
+        if (statementsCountIt && isKeptByAQuantifierHolding(keptBy)) {
+            // How many are kept, where each is kept by what a quantifier states of a container
+            // and the count is compared, is the count of statements that hold. That is read as
+            // the statements are, and says itself when it cannot be.
+            return null;
+        }
+        ValueChoices.Of choice = valueMatters ? choicesOf.apply(occurrence.value()) : null;
+        if (keptBy.isEmpty() && (choice == null || choice instanceof ValueChoices.Of.Fixed)) {
+            return null;
+        }
+        return new Deciding(occurrence, keptBy, choice);
+    }
+
+    /**
+     * How many decisions there are that are not one another's.
+     *
+     * <p>A decision is told by what it is made of and the application of it: the one comparison a
+     * filter evaluates for each element is as many decisions as it has applications, an element
+     * written out twice is one, and a choice made once and named is one however often the name is
+     * used. Where what an occurrence is decided by cannot be placed that way, it is counted as its
+     * own, so that a count never falls short of the decisions there are.
+     */
+    private static int apartIn(List<Deciding> deciding) {
+        Map<Core, Set<Integer>> placed = new IdentityHashMap<>();
+        int unplaced = 0;
+        for (Deciding one : deciding) {
+            for (ReadMeaning.Occurrence.Kept kept : one.keptBy()) {
+                if (kept instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean _,
+                                                                       int application)) {
+                    placed.computeIfAbsent(Core.withoutStanding(truth.value()),
+                            _ -> new HashSet<>()).add(application);
+                } else {
+                    unplaced++;
+                }
+            }
+            OptionalInt answered = one.occurrence().answered();
+            switch (one.choice()) {
+                case null -> { }
+                case ValueChoices.Of.Fixed _ -> { }
+                case ValueChoices.Of.Unread(Core origin, boolean viaNames,
+                                            boolean perApplication) -> {
+                    // A choice held in a name is made where the name was written: once, unless
+                    // what it turns on is handed by an application, which makes it again.
+                    if (origin == null || (viaNames && perApplication)
+                            || (!viaNames && answered.isEmpty())) {
+                        unplaced++;
+                    } else {
+                        placed.computeIfAbsent(origin, _ -> new HashSet<>())
+                                .add(viaNames ? ONCE : answered.getAsInt());
+                    }
+                }
+                case ValueChoices.Of.OneComparison(Core.Binary comparison, var _,
+                                                   boolean viaNames) -> {
+                    if (viaNames || answered.isEmpty()) {
+                        unplaced++;
+                    } else {
+                        placed.computeIfAbsent(comparison, _ -> new HashSet<>())
+                                .add(answered.getAsInt());
+                    }
+                }
+            }
+        }
+        return unplaced + placed.values().stream().mapToInt(Set::size).sum();
     }
 
     /** Whether the one thing that keeps an occurrence is a quantifier ({@code all}, {@code any})
