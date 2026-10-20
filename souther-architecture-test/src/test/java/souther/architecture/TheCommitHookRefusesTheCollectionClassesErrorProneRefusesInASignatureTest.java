@@ -198,7 +198,7 @@ class TheCommitHookRefusesTheCollectionClassesErrorProneRefusesInASignatureTest 
         List<Path> files = List.copyOf(filed.keySet());
 
         Map<Path, Integer> byErrorProne = TheCommitHook.errorProneRefusals("NonApiType", dir, files);
-        Map<Path, Integer> byTheHook = TheCommitHook.refusalsBy("MatchXpath", files);
+        Map<Path, Integer> byTheHook = TheCommitHook.refusalsBy("NonApiType", files);
 
         List<String> disagreements = new ArrayList<>();
         for (Map.Entry<Path, Case> each : filed.entrySet()) {

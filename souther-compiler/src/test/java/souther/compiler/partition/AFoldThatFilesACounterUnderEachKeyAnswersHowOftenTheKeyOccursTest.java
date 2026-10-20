@@ -919,6 +919,53 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         }
     }
 
+    /**
+     * A record a map built of each element, with the key read out of a field of it, is the key the
+     * map gave that field, as it is for a tuple. A field given something worked out of the element
+     * is no place of it, and nothing is counted.
+     */
+    @Test
+    void aKeyReadOutOfARecordAMapBuiltIsCountedAtThePlaceItWasGiven() {
+        record Walked(String params, String walked, String counted) { }
+        for (Walked each : List.of(
+                new Walked("xs: List<Item>",
+                        "List.map(x -> Pair { name = x.label, size = x.weight }, xs)",
+                        "multiplicity(xs[*].label)"),
+                new Walked("ts: List<Touch>", "List.flatMap(t -> List.map("
+                        + "l -> Pair { name = l, size = t.weight }, t.labels), ts)",
+                        "occurrences(ts[*].labels[*])"),
+                new Walked("xs: List<Item>", "List.map("
+                        + "x -> Pair { name = String.append(x.label, \"!\"), size = x.weight },"
+                        + " xs)", null))) {
+            Compilation compilation = measured("""
+                    module example.popular
+
+                    data Item = { label: String, weight: Int }
+
+                    data Touch = { labels: List<String>, weight: Int }
+
+                    data Pair = { name: String, size: Int }
+
+                    let counts (%1$s): Map<String, Int> =
+                        List.fold((acc, p) -> Map.updateOrInsert(p.name, 1, n -> n + 1, acc),
+                            Map.empty, %2$s)
+
+                    behavior popular : (%1$s) -> Map<String, Int>
+
+                    let popular (%3$s) =
+                        Map.filterEntries((_, count) -> count >= 3, counts(%3$s))
+                    """.formatted(each.params(), each.walked(), each.params().substring(0, 2)));
+            if (each.counted() == null) {
+                assertFalse(json(compilation).contains("multiplicity(")
+                        || json(compilation).contains("occurrences("),
+                        () -> each + ": " + report(compilation));
+            } else {
+                assertTrue(json(compilation).contains(each.counted()),
+                        () -> each + ": " + report(compilation));
+            }
+        }
+    }
+
     private static String modelOfKept(String keys, String more) {
         return """
                 module example.popular
@@ -1001,6 +1048,51 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 () -> report(compilation));
         assertEquals(List.of("off", "on"), pointsHitOnTheCount(compilation),
                 () -> report(compilation));
+    }
+
+    /**
+     * A filter of the keys a map took out of the elements keeps the elements whose key it keeps,
+     * so the count is the one a filter of the elements by the same statement about their key
+     * gives: the same elements kept by the same statement, and rows meet the line of the one where
+     * they meet the line of the other.
+     */
+    @Test
+    void aFilterOfTheKeysAMapTookOutCountsWhatAFilterOfTheElementsByTheKeyDoes() {
+        String model = """
+                module example.popular
+
+                data Item = { label: String, weight: Int }
+
+                let countsOf (xs: List<Item>): Map<String, Int> =
+                    List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty,
+                        %s)
+
+                behavior popular : (xs: List<Item>) -> Map<String, Int>
+
+                let popular (xs) =
+                    Map.filterEntries((_, count) -> count >= 3, countsOf(xs))
+
+                example popular
+                    | "on" : ([Item { label = "ab", weight = 1 }, Item { label = "ab", weight = 1 },
+                        Item { label = "ab", weight = 1 }]) -> [("ab", 3)]
+                    | "off" : ([Item { label = "ab", weight = 1 }, Item { label = "ab", weight = 1 },
+                        Item { label = "a", weight = 1 }, Item { label = "a", weight = 1 }]) -> []
+                """;
+        Compilation ofTheKeys = measured(model.formatted(
+                "List.filter(l -> String.length(l) > 1, List.map(i -> i.label, xs))"));
+        Compilation ofTheElements = measured(model.formatted(
+                "List.map(i -> i.label, List.filter(i -> String.length(i.label) > 1, xs))"));
+        assertTrue(json(ofTheKeys).contains("occurrences(xs[*].label kept by"),
+                () -> report(ofTheKeys));
+        assertEquals(keptByOf(ofTheElements), keptByOf(ofTheKeys), () -> report(ofTheKeys));
+        assertEquals(List.of("off", "on"), pointsHitOnTheCount(ofTheKeys),
+                () -> report(ofTheKeys));
+    }
+
+    /** What the quantities counted among kept occurrences name as keeping them. */
+    private static List<String> keptByOf(Compilation compilation) {
+        return Pattern.compile("\"kept_by\"\\s*:\\s*\"([^\"]*)\"").matcher(json(compilation))
+                .results().map(each -> each.group(1)).toList();
     }
 
     /**
