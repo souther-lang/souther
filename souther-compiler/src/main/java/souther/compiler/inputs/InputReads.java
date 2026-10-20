@@ -2330,7 +2330,7 @@ public final class InputReads {
             }
             MapStep mapped = throughAMap(standing, sought, symbols, newtypes);
             if (mapped != null) {
-                madeNewBeneath |= !keptBy.isEmpty() && mapped.madeNew();
+                madeNewBeneath |= !keptBy.isEmpty() && mapped.madeNew(newtypes);
                 sought = mapped.read();
                 asked = mapped.from();
                 standing = where.standing(asked, symbols, newtypes);
@@ -2453,10 +2453,20 @@ public final class InputReads {
      * answer, takes out of each element of that list.
      *
      * @param read    what is taken out of each element of the list beneath
-     * @param madeNew whether the map answered something other than each element as it is, or a
-     *                newtype wearing it
+     * @param closure the map's closure, read where the map stands
+     * @param held    what each binding of the body the closure is in holds
      */
-    private record MapStep(Core from, OnePerElement.ReadOff read, boolean madeNew) {}
+    private record MapStep(Core from, OnePerElement.ReadOff read, Core.Block closure,
+                           Map<BindingId, Core> held) {
+
+        /** Whether the map answered something other than each element as it is, or a newtype
+         *  wearing it. Asked only where a statement or a flattening turns on it. */
+        boolean madeNew(DeclarationNewtypes newtypes) {
+            OnePerElement.Answered itself = OnePerElement.Answered.of(closure.body(),
+                    closure.params().getFirst().binding(), held, newtypes);
+            return itself == null || !itself.at().fields().isEmpty();
+        }
+    }
 
     /**
      * {@code standing}, where it is a map, looked through at what {@code read} takes out of each
@@ -2503,10 +2513,8 @@ public final class InputReads {
         if (given == null) {
             return null;
         }
-        OnePerElement.Answered itself = OnePerElement.Answered.of(closure.body(), element,
-                inside.heldByTheBody(), newtypes);
-        return new MapStep(args.get(mapped), new OnePerElement.ReadOff(-1, given),
-                itself == null || !itself.at().fields().isEmpty());
+        return new MapStep(args.get(mapped), new OnePerElement.ReadOff(-1, given), closure,
+                inside.heldByTheBody());
     }
 
     /** Whether {@code e} is the element handed to {@code element}, through the names it stands
@@ -2604,7 +2612,7 @@ public final class InputReads {
             MapStep mapped = throughAMap(where.standing(answer, symbols, newtypes), sought,
                     symbols, newtypes);
             if (mapped != null) {
-                if (ofTheListsThemselves && mapped.madeNew()) {
+                if (ofTheListsThemselves && mapped.madeNew(newtypes)) {
                     return null;
                 }
                 sought = mapped.read();

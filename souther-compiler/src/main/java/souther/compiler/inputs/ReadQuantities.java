@@ -182,11 +182,13 @@ final class ReadQuantities implements Quantities {
      * many times: where a form runs, whether anything is left, and where the next form runs are
      * three questions under one context.
      *
-     * <p>Per value, since what was taken in is this value's. The part no caller said anything to is
-     * {@link #contexts}, and is not kept twice.
+     * <p>Per what was taken in, since that is what the rules are said with. A reading made from this
+     * one by fixing a term took in the same, and nothing these rules are worked out from reads what
+     * was fixed — the spacing a form is taken in by is the declarations' — so it is handed this one
+     * rather than working every condition out again for each candidate a search fixes. The part no
+     * caller said anything to is {@link #contexts}, and is not kept twice.
      */
-    private final Map<StructuralContext, ConstraintState<InputAtom>> answered =
-            new ConcurrentHashMap<>();
+    private final Map<StructuralContext, ConstraintState<InputAtom>> answered;
     /** The same, of those rules with this value's fixings standing in them. Beside the one above
      *  and not in place of it: a form a caller takes in is spaced by what the declarations say,
      *  and not by what a fixing happened to settle. */
@@ -360,8 +362,10 @@ final class ReadQuantities implements Quantities {
                            Map<NumericTerm, Fixed> fixed,
                            RuleReadingContext ruleReading, List<Assumed> assumed,
                            List<HeldAgainst> heldAgainst, Contexts contexts,
-                           NarrowedByOne narrowedByOne) {
+                           NarrowedByOne narrowedByOne,
+                           Map<StructuralContext, ConstraintState<InputAtom>> answered) {
         this.contexts = contexts;
+        this.answered = answered;
         this.narrowedByOne = narrowedByOne;
         this.cases = List.copyOf(cases);
         this.ruleReading = ruleReading;
@@ -387,7 +391,8 @@ final class ReadQuantities implements Quantities {
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading) {
         return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
-                ruleReading, List.of(), List.of(), new Contexts(), null);
+                ruleReading, List.of(), List.of(), new Contexts(), null,
+                new ConcurrentHashMap<>());
     }
 
     /**
@@ -401,7 +406,7 @@ final class ReadQuantities implements Quantities {
     private ReadQuantities unrefined() {
         return fixed.isEmpty() && assumed.isEmpty() ? this
                 : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                        List.of(), List.of(), contexts, null);
+                        List.of(), List.of(), contexts, null, new ConcurrentHashMap<>());
     }
 
     /**
@@ -919,7 +924,7 @@ final class ReadQuantities implements Quantities {
         // are the declarations' own, and taking one condition in is all there is to do.
         OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(taking, answered);
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both, pairs, contexts, oneMore);
+                both, pairs, contexts, oneMore, new ConcurrentHashMap<>());
     }
 
     /**
@@ -1661,7 +1666,7 @@ final class ReadQuantities implements Quantities {
             return this;
         }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed, heldAgainst, contexts, oneMoreThan(both));
+                assumed, heldAgainst, contexts, oneMoreThan(both), answered);
     }
 
     /**

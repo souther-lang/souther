@@ -324,6 +324,33 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         }
     }
 
+    /**
+     * A reading made by fixing a term in one that took conditions in took in the same conditions,
+     * so it takes none of them in again: four taken in and then one fixed put on five, where taking
+     * every condition in again for the fixed reading would put on nine. The fixed reading still
+     * holds each condition.
+     */
+    @Test
+    void aReadingFixedAfterConditionsWereTakenInTakesNoneOfThemInAgain() {
+        Read read = read(FOUR, "take");
+        ReadQuantities region = (ReadQuantities) read.inputs().quantities(read.rules());
+        long before = ReadQuantities.stepsPutOn();
+        for (NumericTerm term : FOUR_TERMS) {
+            LinearForm<NumericTerm> atMostEight = new LinearForm<>(ExactRatio.of(-8),
+                    Map.of(term, ExactRatio.ONE));
+            region = taken(region.assuming(atMostEight, Rel.LE));
+            assertTrue(region.emptiness().isEmpty(), term + " at most eight leaves it somewhere");
+        }
+        Quantities fixed = region.given(FOUR_TERMS.getFirst(), count(1));
+        assertTrue(fixed.emptiness().isEmpty(), "one fixed at one leaves the rest somewhere");
+
+        assertEquals(FOUR_TERMS.size() + 1, ReadQuantities.stepsPutOn() - before);
+        for (NumericTerm term : FOUR_TERMS.subList(1, FOUR_TERMS.size())) {
+            assertEquals(Endpoint.inclusive(count(8)), fixed.runsBetween(term).max(),
+                    term + " is held at most at eight in the fixed reading too");
+        }
+    }
+
     private static ReadQuantities taken(ReadQuantities.Taking taking) {
         return ((ReadQuantities.Taking.Taken) taking).rules();
     }
