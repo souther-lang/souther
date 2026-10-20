@@ -169,7 +169,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
     private static AlignedObservation nothingSeen(Compilation compilation) {
         CoverageSites.Plan plan = checkedOf(compilation).plan();
         return plan.numbering().align(
-                new Observation(plan.numbering().identity(), Set.of(), Set.of()));
+                new Observation(plan.numbering().identity(), Set.of(), Set.of(), Set.of()));
     }
 
     private static Bodies.Elaborated checkedOf(Compilation compilation) {

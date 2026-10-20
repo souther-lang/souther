@@ -172,7 +172,7 @@ class ABoolPassedStraightToAFieldIsReadOffTheRowTest {
         CoverageSites.Plan plan = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value().plan();
         return plan.numbering().align(
-                new Observation(plan.numbering().identity(), Set.of(), Set.of()));
+                new Observation(plan.numbering().identity(), Set.of(), Set.of(), Set.of()));
     }
 
     private static Compilation measured(String source) {

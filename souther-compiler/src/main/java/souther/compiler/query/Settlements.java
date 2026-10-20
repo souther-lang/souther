@@ -665,7 +665,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 return souther.compiler.partition.InteractionRequirements.NONE;
             }
             return souther.compiler.partition.InteractionRequirements.of(behavior,
-                    here.interactions(), subject.axes(),
+                    here.interactions(), here.notJoined(), subject.axes(),
                     db.ask(new Front.Adequacy()).value().measures().cellsPerGroup());
         }
 

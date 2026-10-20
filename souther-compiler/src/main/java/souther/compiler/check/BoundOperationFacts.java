@@ -870,6 +870,12 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.AccumulatesItsContainer.class);
     }
 
+    /** Whether {@code operation} answers how many elements the container it is given holds. */
+    public boolean answersHowManyItHolds(ValueName operation) {
+        BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven taken = numberTakenOf(operation);
+        return taken != null && taken.how() instanceof TakenAs.HowManyItHolds;
+    }
+
     /** The number {@code operation} is declared to answer, taken of which of its arguments, or
      *  null where none is declared. */
     BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven numberTakenOf(ValueName operation) {

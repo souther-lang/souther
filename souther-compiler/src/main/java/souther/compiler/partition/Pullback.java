@@ -470,7 +470,8 @@ final class Pullback {
      */
     private Derivation keeping(ReadMeaning.Occurrence.Kept kept) {
         return switch (kept) {
-            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds) -> {
+            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
+                                                    OptionalInt _) -> {
                 Derivation stated = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
                 yield holds ? stated : new Derivation.UnderADenial(stated, true);
             }

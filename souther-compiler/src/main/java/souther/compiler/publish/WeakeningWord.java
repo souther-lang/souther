@@ -220,6 +220,17 @@ public enum WeakeningWord {
      */
     MEETINGS_NOT_PLACED,
 
+    /**
+     * A sum of the elements a comparison keeps was met, and its decisions were not joined to the
+     * evaluations a run records, so none of its combinations was asked of the rows.
+     *
+     * <p>Its own word beside the one above, because the remedy differs: a sum whose elements are
+     * kept by one comparison is read, and one kept by several, or by a call expanding more than one
+     * way, is not. Nothing is owed at these, and the behavior is not said to have had every
+     * combination of its decisions made.
+     */
+    MEETINGS_NOT_JOINED,
+
     /** A row went through an arm this compiler had proven nothing arrives at. */
     PROOF_CONTRADICTED,
 
