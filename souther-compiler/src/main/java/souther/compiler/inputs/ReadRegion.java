@@ -7,6 +7,7 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.values.ValueSet;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -64,6 +65,12 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     @Override
     public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
         return within.projectionOf(form);
+    }
+
+    @Override
+    public NumericDomain.FormProjection projectionOf(NumericTerm term,
+                                                     Collection<? extends NumericTerm> alongside) {
+        return within.projectionOf(term, alongside);
     }
 
     @Override

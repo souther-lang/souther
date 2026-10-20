@@ -361,6 +361,57 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
         assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
     }
 
+    private static final String ONE_LINE_BESIDE_A_FLAG = AGE.replace(
+            "behavior f : (birthday: Date, on: Date) -> Bool\n", "") + """
+            behavior f : (birthday: Date, on: Date, ascendant: Bool) -> Int
+            let f (birthday, on, ascendant) = {
+                let age = attainedAgeOn(birthday, on)
+                if age >= 70 && ascendant then 3
+                else if age >= 70 then 2
+                else 0
+            }
+            """;
+
+    /**
+     * The years of the two dates are tied by the age, so the year of the day is not left the whole
+     * of a year's range by the year of the birthday still to be chosen: every point of the month
+     * and day correction is offered a row, and the rows are answered as the calendar works the
+     * class out.
+     */
+    @Test
+    void everyPointOfTheCorrectionOfAnAgeBesideAFlagIsOfferedARow() {
+        Compilation compilation = compiled(ONE_LINE_BESIDE_A_FLAG);
+        String report = report(compilation);
+        String offered = GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
+                .text();
+
+        assertFalse(report.contains("no row composed for"), report);
+
+        Pattern row = Pattern.compile(
+                "Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\), (true|false)");
+        StringBuilder examples = new StringBuilder();
+        for (String line : offered.lines().toList()) {
+            Matcher found = row.matcher(line);
+            if (found.find()) {
+                LocalDate birthday = LocalDate.parse(found.group(1));
+                LocalDate on = LocalDate.parse(found.group(2));
+                boolean ascendant = Boolean.parseBoolean(found.group(3));
+                int age = ageAttained(birthday, on);
+                examples.append("    | (Date(\"").append(birthday).append("\"), Date(\"")
+                        .append(on).append("\"), ").append(ascendant).append(") -> ")
+                        .append(age >= 70 ? (ascendant ? 3 : 2) : 0).append('\n');
+            }
+        }
+        assertFalse(examples.isEmpty(), offered);
+
+        Compilation answered = Compilation.ofSource(
+                ONE_LINE_BESIDE_A_FLAG + "\nexample f\n" + examples, "Main");
+        answered.answerEverything();
+        assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
+    }
+
     /**
      * A way that holds only at the twenty-ninth of February is a month and day that is not in
      * every year, so the years of the date are not left alone by it.

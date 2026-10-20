@@ -1484,7 +1484,7 @@ final class ReadQuantities implements Quantities {
         // owed, which a range cannot say, so a reader drawing lines asks
         // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
         // region face. Both keep the difference ({@link #projectionOf}).
-        return switch (projectionOf(form, false)) {
+        return switch (projectionOf(form, false, List.of())) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
             case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
         };
@@ -1492,7 +1492,7 @@ final class ReadQuantities implements Quantities {
 
     @Override
     public NumericDomain.FormProjection projectionOfTheDeclarations(NumericTerm term) {
-        return projectionOf(LinearForm.atom(term), false);
+        return projectionOf(LinearForm.atom(term), false, List.of());
     }
 
     /**
@@ -1502,13 +1502,40 @@ final class ReadQuantities implements Quantities {
      * about a form.
      */
     public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
-        return projectionOf(form, true);
+        return projectionOf(form, true, List.of());
+    }
+
+    /**
+     * Where {@code term} runs, with what each of {@code alongside} is on its own taken in as well.
+     *
+     * <p>A relation between two terms bounds one by the other's ends, and an end the other has only
+     * by its type is on the rules only if that term is put on them. Asked of the term alone, the
+     * range comes back as wide as its own type while the terms still to be chosen leave it far less.
+     *
+     * <p>The terms that cannot stand under one context with {@code term} are left out: no row has
+     * them together, so what they hold says nothing of it.
+     */
+    public NumericDomain.FormProjection projectionOf(NumericTerm term,
+                                                     Collection<? extends NumericTerm> alongside) {
+        List<NumericTerm> together = new ArrayList<>();
+        for (NumericTerm other : alongside) {
+            held(other);
+            Collection<NumericTerm> asked = new ArrayList<>(together);
+            asked.add(term);
+            asked.add(other);
+            if (asking(asked) instanceof StructuralContext.Merge.Together) {
+                together.add(other);
+            }
+        }
+        return projectionOf(LinearForm.atom(term), true, together);
     }
 
     /** The same, where the class the declarations hold a value to is or is not what its ends are
-     *  held to ({@link #classFixedAt}). */
+     *  held to ({@link #classFixedAt}), and {@code alongside} are terms taken in beside the form's
+     *  own. */
     private NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form,
-                                                      boolean andTheDeclared) {
+                                                      boolean andTheDeclared,
+                                                      List<NumericTerm> alongside) {
         if (form.coefs().isEmpty()) {
             return null;
         }
@@ -1521,9 +1548,11 @@ final class ReadQuantities implements Quantities {
         // Under the context this question is asked in, which is what says which of those rules are
         // about the row being asked about at all. Where no one value has these numbers together
         // with what was taken in, no row gives the form a value, and it runs nowhere.
-        return switch (asking(form.coefs().keySet())) {
+        Collection<NumericTerm> asked = new ArrayList<>(form.coefs().keySet());
+        asked.addAll(alongside);
+        return switch (asking(asked)) {
             case StructuralContext.Merge.Together(StructuralContext under) ->
-                    runsIn(under, form, andTheDeclared);
+                    runsIn(under, form, andTheDeclared, alongside);
             case StructuralContext.Merge.Disagreeing _ ->
                     new NumericDomain.FormProjection.NothingIsLeft();
         };
@@ -1557,11 +1586,14 @@ final class ReadQuantities implements Quantities {
      */
     private NumericDomain.FormProjection runsIn(StructuralContext under,
                                                 LinearForm<NumericTerm> form,
-                                                boolean andTheDeclared) {
+                                                boolean andTheDeclared,
+                                                List<NumericTerm> alongside) {
         ConstraintState<InputAtom> rules = effectiveConstraints(under);
         // Walked by the terms: what each one brings in is taken onto the state the one before it
         // left, and a form says which terms it weighs without saying which was written first.
-        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
+        Set<NumericTerm> brought = new LinkedHashSet<>(form.coefs().keySet());
+        brought.addAll(alongside);
+        for (NumericTerm term : NumericTerms.inOrder(brought)) {
             rules = holding(rules, term, under);
         }
         // What the rules leave, carried as what it is. A reading that admits no assignment says so
@@ -1923,7 +1955,7 @@ final class ReadQuantities implements Quantities {
         // asked whether they hold anything — said here, this would be a container proved non-empty
         // out of a reading that proves nothing at all.
         NumericDomain.Bounds many =
-                runsIn(under, LinearForm.atom(counted), false)
+                runsIn(under, LinearForm.atom(counted), false, List.of())
                         instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
                         ? bounds : null;
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
