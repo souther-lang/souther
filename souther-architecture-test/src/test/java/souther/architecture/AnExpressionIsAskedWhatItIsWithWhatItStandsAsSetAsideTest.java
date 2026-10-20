@@ -717,7 +717,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "reading/CoverageNaming;L" + c + "reading/Reach;Z)V", 1,
                 GOES_ON_INTO_IT);
         row(out, c + "reading/Meetings", "at", "(" + core + "L" + c + "reading/CoverageNaming;"
-                + "Ljava/util/List;L" + c + "flow/ValueArrivals;)V", 1,
+                + core + "Ljava/util/List;L" + c + "flow/ValueArrivals;)V", 1,
                 "whether the node the walk stands at is a call whose elements a comparison keeps: a"
                         + " Widen is one value standing as another, and the call under it is met"
                         + " one step down");

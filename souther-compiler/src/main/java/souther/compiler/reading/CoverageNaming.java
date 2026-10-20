@@ -149,18 +149,19 @@ final class CoverageNaming implements Naming<Outcome> {
     }
 
     /**
-     * That {@code stated}, a comparison in a closure applied to each element of a list written out,
-     * came out {@code held} on the {@code visit}th time a run visits it, said of the number it
-     * compares in the names the application that visit is hands over; or null where this cannot say
-     * which position that is or where no run through it could be recorded.
+     * That {@code stated}, a comparison, came out {@code held} on the {@code visit}th time a run
+     * visits it, or on whichever visit where {@code visit} is empty, said of the number it compares
+     * in the names the application that visit is hands over; or why this cannot say which position
+     * that is or where no run through it could be recorded.
      *
      * <p>Which application a visit is, is not decided here: the caller has shown it, and this puts
-     * the two halves of a decision together. Two comparisons: {@code stated} is the one the
+     * the two halves of a decision together. A comparison a run visits once has no visit to name,
+     * and is a decision as any other comparison is. Two comparisons: {@code stated} is the one the
      * closure's body is read by, standing in the tree the language's operations stand in, and
      * {@code run} is the same construct in the tree that runs, where a run is recorded. The number
      * is read of the first in {@code at}, and the place a claim is made at is the second's.
      */
-    OnVisit sideOnVisit(Core.Binary stated, Core.Binary run, InputReads at, int visit,
+    OnVisit sideOnVisit(Core.Binary stated, Core.Binary run, InputReads at, OptionalInt visit,
                         boolean held) {
         if (numbers.caseOfOneApplication(stated, at) != null) {
             return new OnVisit.Unnamed(WhyNotJoined.A_COMPARISON_OF_CASES);
@@ -173,10 +174,12 @@ final class CoverageNaming implements Naming<Outcome> {
         if (outcome == null) {
             return new OnVisit.Unnamed(WhyNotJoined.NO_RUN_IS_RECORDED_AT_IT);
         }
-        Condition condition = new Condition.Side(drawn.term(), outcome.occurrence(),
-                OptionalInt.of(visit), held, lineOf(drawn));
-        return new OnVisit.Named(one(new Decision(condition,
-                ControlClaim.onVisit(outcome, visit))));
+        Condition condition = new Condition.Side(drawn.term(), outcome.occurrence(), visit, held,
+                lineOf(drawn));
+        ControlClaim claim = visit.isPresent()
+                ? ControlClaim.onVisit(outcome, visit.getAsInt())
+                : new ControlClaim(outcome, ControlClaim.Visit.ANY);
+        return new OnVisit.Named(one(new Decision(condition, claim)));
     }
 
     /** A decision about one visit to a comparison, or why none could be named: a comparison this

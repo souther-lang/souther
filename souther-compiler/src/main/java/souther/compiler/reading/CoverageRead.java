@@ -333,15 +333,20 @@ public final class CoverageRead {
         // What each fork of the model states, read off the tree where the language's operations
         // stand, so which arm a run can enter is what the condition means rather than what its
         // expanded parts come to here.
+        // The names that tree binds are its own: it and the tree that runs are two expansions of one
+        // body, each with the bindings of its own, so what a name there stands for is read in the
+        // reading made of it and not in the one the tree that runs is walked with.
+        Optional<InputReads> analysisReads = run.analysis()
+                .map(analysis -> InputReads.ofParametersWhereCallsStand(
+                        input.domain().parameterReads(), input.declared(),
+                        analysed.orElseThrow(), input.domain().dependencies()));
         MeaningsOfABody meanings = run.analysis()
                 .map(analysis -> MeaningsOfABodyReading.of(analysis, () -> input,
-                        InputReads.ofParametersWhereCallsStand(input.domain().parameterReads(),
-                                input.declared(), analysed.orElseThrow(),
-                                input.domain().dependencies()),
-                        symbols, source.newtypes()))
+                        analysisReads.orElseThrow(), symbols, source.newtypes()))
                 .orElse(MeaningsOfABody.NONE);
         Meetings meetings = new Meetings(plan, new KeptElements(plan,
-                run.analysis().orElse(null), symbols, source.newtypes()));
+                run.analysis().orElse(null), analysisReads.orElse(null), symbols,
+                source.newtypes()));
         Arms arms = new Arms(plan);
         CoverageRead walked = new CoverageRead(run,
                 body -> ValueArrivals.ofBody(body, naming,
@@ -550,7 +555,7 @@ public final class CoverageRead {
             return;
         }
         if (arrives && !reach.ways().isEmpty()) {
-            meetings.at(node, naming, reach.ways().stream().map(WayIn::decisions).toList(),
+            meetings.at(node, naming, body, reach.ways().stream().map(WayIn::decisions).toList(),
                     reading);
         }
         descend(node, naming, reach, arrives);

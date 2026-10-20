@@ -58,11 +58,13 @@ final class Meetings {
      * <p>A meeting reached several ways is one place in the body and as many groups, and they are
      * written down together because that is when the walk is there.
      *
+     * @param body    the body holding {@code node}, which is where a comparison the elements of a
+     *                list were written with is found when it is not in the call that consumes them
      * @param reading what the body holding {@code node} was read to arrive at, and by which ways.
      *                The walk's reading, handed in rather than taken again: what a value is settled
      *                by is one question and is asked once
      */
-    void at(Core node, CoverageNaming naming, List<List<Decision>> reaches,
+    void at(Core node, CoverageNaming naming, Core body, List<List<Decision>> reaches,
             ValueArrivals<Outcome> reading) {
         if (absorbed.contains(node)) {
             return;
@@ -79,7 +81,7 @@ final class Meetings {
                 }
             }
         } else if (node instanceof Core.Call call) {
-            switch (keptElements.of(call, naming)) {
+            switch (keptElements.of(call, naming, body)) {
                 case null -> {
                     return;
                 }
