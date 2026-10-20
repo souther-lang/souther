@@ -579,9 +579,14 @@ final class TermReading {
             return new Reading.NotNumber();
         }
         List<ExactRatio> terms = new ArrayList<>();
-        // The elements come in the order the row holds them, which is where each stands.
+        // The elements come in the order the row holds them, which is where each stands — or, where
+        // the walk was handed them from the last, in the opposite order.
         long position = 0;
-        for (Function<ElementProjection, ObservedValue> element : each) {
+        List<Function<ElementProjection, ObservedValue>> walked =
+                computed.order() != null
+                        && computed.order().direction() == TraversalDirection.REVERSE
+                        ? each.reversed() : each;
+        for (Function<ElementProjection, ObservedValue> element : walked) {
             // The fields are asked for as the computation needs them, so what a row holds at a
             // field the element's own choice does not reach is no part of this element's number.
             OneElement fields = new OneElement(on, element, position++);
