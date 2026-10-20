@@ -18,6 +18,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -35,6 +36,7 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumSet;
@@ -549,18 +551,37 @@ final class ContainersAddingUp {
      * are some of the containers the total is over and not all of them — one mixing the cases is
      * never written — which is said beside whatever is written.
      *
+     * <p>A choice by the position between a form of one field and a number of none is solved for
+     * the same way at the positions that take the form ({@link Kept}): those carry the field and the
+     * total, and the rest stand at the field's start and add their number whatever they hold. A
+     * total of the first elements, or of those from an index on, is that.
+     *
      * @param field     where each element's field stands
      * @param carrier   the order the field's values are written on
      * @param weight    what the field is multiplied by, never nought
      * @param constant  what each element's number has beside it
      * @param ofOneCase whether the elements written are all of one case of several the computation
      *                  chooses among
+     * @param kept      the positions that take the form, where a choice by the position chose it;
+     *                  null where every element does
      */
     private record FieldSolved(TermPath field, Carrier carrier, ExactRatio weight,
-                               ExactRatio constant, boolean ofOneCase) {
+                               ExactRatio constant, boolean ofOneCase, Kept kept) {
+
+        /**
+         * The positions of a container that take the form a total is solved through, and what the
+         * rest come to.
+         *
+         * @param test      the test of a position that takes the form
+         * @param direction which end the positions are counted from
+         * @param rest      what the number of an element at any other position is
+         */
+        record Kept(ElementValue.PositionTest test, TraversalDirection direction,
+                    ExactRatio rest) {}
 
         /** Every field a computation is solved for: the one field of a form, each arm's of a
-         *  choice by case, and none where it is neither. */
+         *  choice by case, the form's of a choice by the position between it and a number, and
+         *  none where it is none of these. */
         static List<FieldSolved> of(RunSource.ComputedOccurrences run, TermOrders orders) {
             List<FieldSolved> out = new ArrayList<>();
             switch (run.computation()) {
@@ -580,12 +601,47 @@ final class ContainersAddingUp {
                         }
                     }
                 }
-                // A weight chosen by the position, or made of it, is one per element and not one
-                // for the run, so the fields adding up to a total are no one quotient of it.
-                case ElementValue.Choose _, ElementValue.ByPosition _, ElementValue.Indexed _,
+                case ElementValue.ByPosition choice -> {
+                    FieldSolved solved = byPosition(choice, run, orders);
+                    if (solved != null) {
+                        out.add(solved);
+                    }
+                }
+                // A choice by a flag chooses per element on a value nothing here chooses, and a
+                // weight made of the position, or a choice between two forms of the field, weighs
+                // each position apart: the fields adding up to a total are no one quotient of it.
+                case ElementValue.Choose _, ElementValue.Indexed _,
                      ElementValue.SumOfChoices _ -> { }
             }
             return List.copyOf(out);
+        }
+
+        /**
+         * The field a choice by the position is solved for, where one of its answers is a form of
+         * one field and the other a number of none — or null where it is any other choice.
+         *
+         * <p>Two forms of the field weigh the positions apart, and a choice inside a choice is a
+         * test of a test; neither is a run of positions carrying one form.
+         */
+        private static FieldSolved byPosition(ElementValue.ByPosition choice,
+                                              RunSource.ComputedOccurrences run,
+                                              TermOrders orders) {
+            if (!(choice.whenHolds() instanceof ElementValue.Affine holds)
+                    || !(choice.otherwise() instanceof ElementValue.Affine not)) {
+                return null;
+            }
+            boolean formWhereItHolds = not.form().coefs().isEmpty();
+            ElementValue.Affine form = formWhereItHolds ? holds : not;
+            ElementValue.Affine rest = formWhereItHolds ? not : holds;
+            if (!rest.form().coefs().isEmpty()) {
+                return null;
+            }
+            FieldSolved solved = ofAForm(form, null, run, orders);
+            return solved == null ? null
+                    : new FieldSolved(solved.field(), solved.carrier(), solved.weight(),
+                            solved.constant(), false, new Kept(
+                                    formWhereItHolds ? choice.test() : choice.test().denied(),
+                                    run.order().direction(), rest.form().constant()));
         }
 
         /** The field {@code affine} is solved for, where it is a form of one field and, under an
@@ -604,21 +660,61 @@ final class ContainersAddingUp {
             Carrier carrier = orders.fieldCarrier(only.getKey());
             return carrier == null ? null
                     : new FieldSolved(field, carrier, only.getValue(), affine.form().constant(),
-                            taken != null);
+                            taken != null, null);
+        }
+
+        /** How many of {@code many} elements carry the field the total is solved through: every
+         *  one, or the ones at the positions {@link #kept} names. */
+        int carrying(int many) {
+            if (kept == null) {
+                return many;
+            }
+            int carrying = 0;
+            for (int position = 0; position < many; position++) {
+                if (kept.test().holdsOf(position)) {
+                    carrying++;
+                }
+            }
+            return carrying;
         }
 
         /**
-         * What the fields of {@code many} elements are to add up to for the numbers computed of
-         * them to add up to {@code total}, or why that number is not held.
+         * What the fields of the elements carrying it, of a container of {@code many}, are to add
+         * up to for the numbers computed of every element to add up to {@code total}, or why that
+         * number is not held.
          *
          * <p>Empty where it is no written decimal: the fields are decimals and their sum is one, so
          * no container of that many comes to the total.
          */
         ExactAnswer<Optional<BigDecimal>> fieldsAddingUpTo(BigDecimal total, int many) {
-            return constant.times(ExactRatio.of(many))
+            int carrying = carrying(many);
+            ExactRatio rest = kept == null ? ExactRatio.ZERO : kept.rest();
+            return constant.times(ExactRatio.of(carrying))
+                    .flatMap(carried -> rest.times(ExactRatio.of(many - carrying))
+                            .flatMap(carried::plus))
                     .flatMap(constants -> ExactRatio.of(total).minus(constants))
-                    .flatMap(rest -> rest.dividedBy(weight))
+                    .flatMap(remains -> remains.dividedBy(weight))
                     .flatMap(ExactRatio::writtenDecimal);
+        }
+
+        /**
+         * The values of a container of {@code many}, in the order the row writes them: the shares
+         * {@code split} at the positions that carry the field, counted from the end the positions
+         * are counted from, and {@code free} at the rest.
+         */
+        List<BigDecimal> placed(List<BigDecimal> split, int many, BigDecimal free) {
+            if (kept == null) {
+                return split;
+            }
+            List<BigDecimal> written = new ArrayList<>(Collections.nCopies(many, free));
+            Iterator<BigDecimal> shares = split.iterator();
+            for (int position = 0; position < many; position++) {
+                if (kept.test().holdsOf(position)) {
+                    written.set(kept.direction() == TraversalDirection.FORWARD
+                            ? position : many - 1 - position, shares.next());
+                }
+            }
+            return List.copyOf(written);
         }
     }
 
@@ -652,7 +748,18 @@ final class ContainersAddingUp {
                 return Taken.NOT_TAKEN;
             }
             BigDecimal total = makings.total();
-            if (makings.solved() != null) {
+            FieldSolved solved = makings.solved();
+            int carrying = solved == null ? many : solved.carrying(many);
+            // The elements that carry no share stand at the start and are one of the values each
+            // could hold; where every element is to be apart from every other, those alike are
+            // apart from nothing and the count is one this writes none of.
+            if (carrying < many) {
+                left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
+                if (makings.apart().numbersApart()) {
+                    return Taken.AND_MORE;
+                }
+            }
+            if (solved != null) {
                 switch (makings.solved().fieldsAddingUpTo(total, many)) {
                     case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
                         left.unheld(new CompositionCapacity(
@@ -672,11 +779,11 @@ final class ContainersAddingUp {
             // is about which arrangements there are rather than about what came of trying two of
             // them. Nothing bounds this loop but the shapes there are to write, so a shape is never
             // refused here and no figure of this compiler's is reached by spreading.
-            if (!coversEveryArrangement(many, total)) {
+            if (!coversEveryArrangement(carrying, total)) {
                 left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
             }
             for (Spread how : Spread.values()) {
-                switch (splitting(total, many, makings.ends(), how, makings.elements(),
+                switch (splitting(total, carrying, makings.ends(), how, makings.elements(),
                         makings.apart().numbersApart())) {
                     case Split.None _ -> { }
                     // Its own vocabulary and not `notAllOf`: this compiler has a way of generating
@@ -695,7 +802,9 @@ final class ContainersAddingUp {
                         //
                         // An offer with no room for another container has none at any count, so
                         // this is the end of the counts as well and not only of the shapes.
-                        if (asFarAs(containers(values), offered, left) == Traversal.STOPPED) {
+                        List<BigDecimal> written = solved == null ? values
+                                : solved.placed(values, many, makings.ends().from().at());
+                        if (asFarAs(containers(written), offered, left) == Traversal.STOPPED) {
                             return Taken.AND_DONE;
                         }
                     }

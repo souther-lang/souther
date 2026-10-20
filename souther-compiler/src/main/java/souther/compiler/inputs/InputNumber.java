@@ -14,9 +14,11 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.DateTranslation;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
@@ -77,12 +79,11 @@ public final class InputNumber {
      */
     public static LinearForm<NumericTerm> formOf(Core e, InputDomain inputs, InputReads reads,
                                                  RuleReadingSource source, ElementsMet met) {
-        NumericTerm term = of(e, inputs, reads, source, met);
-        if (term != null) {
-            return LinearForm.atom(term);
+        if (!met.admits(e, reads, source.newtypes())) {
+            return null;
         }
-        return met.admits(e, reads, source.newtypes())
-                ? codePointsWeighed(e, inputs, reads, source) : null;
+        LinearForm<NumericTerm> form = formAlone(e, inputs, reads, source);
+        return form != null ? form : codePointsWeighed(e, inputs, reads, source);
     }
 
     /**
@@ -91,9 +92,19 @@ public final class InputNumber {
      *
      * <p>The argument of a taking has to be a location: {@code List.length(List.map(f, xs))} counts
      * something no path names, and a boundary on it could not be looked for in a row.
+     *
+     * <p>One number, so where {@code e} comes to a form of several or to a number written out —
+     * a total of three for each element is three times how many there are — it names none here,
+     * and a reader of forms ({@link #formOf}) reads it.
      */
     public static NumericTerm ofAlone(Core e, InputDomain inputs, InputReads reads,
                                       RuleReadingSource source) {
+        return alone(formAlone(e, inputs, reads, source));
+    }
+
+    /** What {@code e} comes to, as {@link #ofAlone} reads it but held as the form it is. */
+    private static LinearForm<NumericTerm> formAlone(Core e, InputDomain inputs, InputReads reads,
+                                                     RuleReadingSource source) {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
                 each -> reads.folded(each, symbols, source.newtypes()));
@@ -102,13 +113,14 @@ public final class InputNumber {
             // argument that is neither is one there is no location to take it of.
             ObservationSource of = sourceOf(measured, reads, source);
             if (of != null) {
-                return NumericTerm.TakenOf.of(measured.operation(), of, measured.arguments(),
-                        inputs.typeAt(of.position(), source), source.inners(), symbols);
+                return atomOf(NumericTerm.TakenOf.of(measured.operation(), of,
+                        measured.arguments(), inputs.typeAt(of.position(), source),
+                        source.inners(), symbols));
             }
             // A total of the code points of a string standing somewhere is a number of that string.
             NumericTerm ofAString = codePointsAddedUp(measured, inputs, reads, source);
             if (ofAString != null) {
-                return ofAString;
+                return LinearForm.atom(ofAString);
             }
             // A location the operation is not taken of, or a value standing at none. The second is
             // a walk's answer, and a number over the values it walked is a term of its own where
@@ -118,13 +130,28 @@ public final class InputNumber {
         // And a number of the input is the value at a position, so an expression naming none names
         // no number here.
         return switch (reads.pathOf(e, source.newtypes())) {
-            case PathResolution.At(var at) -> new NumericTerm.ValueOf(at);
+            case PathResolution.At(var at) -> LinearForm.atom(new NumericTerm.ValueOf(at));
             case PathResolution.NotAPosition _ -> null;
             // And a number of the input is the value at one position. A name standing at one of
             // several would be a number at whichever of them a reader picked, and a line drawn on
             // it would fall at a place the rule may say nothing about.
             case PathResolution.MayStandAt _ -> null;
         };
+    }
+
+    /** {@code term} as a form of it alone, or null where there is none. */
+    private static LinearForm<NumericTerm> atomOf(NumericTerm term) {
+        return term == null ? null : LinearForm.atom(term);
+    }
+
+    /** The one number {@code form} is, weighed one with nothing beside it, or null where it is
+     *  none or more than that. */
+    private static NumericTerm alone(LinearForm<NumericTerm> form) {
+        if (form == null || !form.constant().isZero() || form.coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
+        return only.getValue().equals(ExactRatio.ONE) ? only.getKey() : null;
     }
 
     /**
@@ -342,9 +369,9 @@ public final class InputNumber {
      * which is a `let` changing what a model means. The environment the value was given in comes
      * with it, so what is read of the walk afterwards is read where the walk stands.
      *
-     * <p>Where the answer is no place of the element but something made of its fields, the run is
-     * over what was computed of each element instead ({@link #overWhatWasComputed}), and is the run
-     * over a place where what was computed is that place.
+     * <p>Where the answer is no place of the element but something made of its fields, the number
+     * is over what was computed of each element instead, and what that comes to is asked of
+     * {@link #overTheElements} however the walk was written.
      *
      * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
      * rather than a rule the model does not state — and is reported as one. Null too where the three
@@ -352,8 +379,9 @@ public final class InputNumber {
      * ({@link RunSource#overEveryOccurrenceAt}), which is the same answer for the same reason: a
      * reading short rather than a line somewhere it does not go.
      */
-    private static NumericTerm overARun(NumericMeasures.Measured measured, InputDomain inputs,
-                                        InputReads reads, RuleReadingSource source) {
+    private static LinearForm<NumericTerm> overARun(NumericMeasures.Measured measured,
+                                                    InputDomain inputs, InputReads reads,
+                                                    RuleReadingSource source) {
         Symbols symbols = source.symbols();
         // A number over a run is named by the operation and where the values are read from, and a
         // taking given a value beside them is a number those two do not name. Read without it, the
@@ -369,7 +397,10 @@ public final class InputNumber {
         // makes them is the same total: where the outermost operation is no walk over a place, the
         // one beneath it is asked.
         while (met != null) {
-            NumericTerm run = overTheRunWalkedBy(measured, met, inputs, source);
+            LinearForm<NumericTerm> run = overTheRunWalkedBy(measured, met, null, inputs, source);
+            if (run == null) {
+                run = overTheElementsKeptBy(measured, met, inputs, source);
+            }
             if (run != null) {
                 return run;
             }
@@ -378,11 +409,177 @@ public final class InputNumber {
         return null;
     }
 
-    /** The number {@code measured} takes over the values the walk {@code met} was given
-     *  ({@link #overARun}), or null where those values are not read from a place. */
-    private static NumericTerm overTheRunWalkedBy(NumericMeasures.Measured measured,
-                                                  Denotation met, InputDomain inputs,
-                                                  RuleReadingSource source) {
+    /**
+     * The total of the elements {@code met} keeps of a list by their index — the ones before a
+     * count, or the ones from it on — or null where it keeps none that way, or the count is no
+     * whole number written out, or what they are kept of is not read from a place in an order.
+     *
+     * <p>Some of the elements, so no total of the list ({@link #sourceOf} refuses it there), and
+     * which of them is fixed by where each stands: the total of each element weighed one where its
+     * position passes the test the library keeps it by and nought where it does not
+     * ({@link ElementValue.ByPosition}). That is a number of the elements in the order they were
+     * kept in, so it is read where that order is shown, as the row writes them or from the far end.
+     * A count past the last keeps every element on one side and none on the other, and a test of
+     * the position says so without a case of its own. A count of nought or less keeps every
+     * element or none whatever the length, which the test says of itself
+     * ({@link ElementValue.PositionTest#holdsOfEveryPosition}): the total of the list, or nought.
+     *
+     * <p>Kept from what a walk answered, the walk is handed the whole list and the test is of where
+     * its answers stand, which is where it was handed each element. Kept from what a walk is then
+     * handed, the walk would number the kept elements again from nought, so a selection under a
+     * walk is not read here.
+     */
+    private static LinearForm<NumericTerm> overTheElementsKeptBy(
+            NumericMeasures.Measured measured, Denotation met, InputDomain inputs,
+            RuleReadingSource source) {
+        if (!(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        Symbols symbols = source.symbols();
+        InputReads where = met.at();
+        AnOperationApplied applied = AnOperationApplied.of(met.value());
+        BoundOperationFacts.KeptByIndex byIndex = applied == null ? null
+                : DefaultBoundOperationFacts.get().holdsTheElementsByIndex(applied.operation());
+        Core count = byIndex == null ? null : applied.argument(byIndex.count());
+        Core list = byIndex == null ? null : applied.argument(byIndex.list());
+        if (count == null || list == null
+                || !(where.folded(count, symbols, source.newtypes()).orElse(null)
+                        instanceof Long index)) {
+            return null;
+        }
+        ElementValue.PositionTest kept = new ElementValue.PositionTest(
+                ElementValue.PositionTest.THE_POSITION_ITSELF, byIndex.kept(), index);
+        Denotation listed = where.denotes(list, symbols, source.newtypes());
+        LinearForm<NumericTerm> walked = overTheRunWalkedBy(measured, listed, kept, inputs, source);
+        if (walked != null) {
+            return walked;
+        }
+        ElementValue computed = keptBy(kept, new ElementValue.Affine(
+                LinearForm.atom(new ElementProjection(List.of()))));
+        // Kept by a test that holds of every position or of none, the number turns on no position
+        // and is one of every element whatever order they stand in.
+        if (!computed.readsThePosition()) {
+            return listed.at().everyElementOf(listed.value(), source.newtypes())
+                    instanceof PathResolution.At(TermPath at)
+                    ? overTheElements(measured.operation(), measured.takenAs(), at, computed,
+                            inputs.typeAt(at, source), null, inputs, source)
+                    : null;
+        }
+        for (TraversalDirection direction : TraversalDirection.values()) {
+            if (listed.at().inTheOrderOf(listed.value(), direction, source.newtypes())
+                    instanceof PathResolution.At(TermPath at)) {
+                return overTheElements(measured.operation(), measured.takenAs(), at, computed,
+                        inputs.typeAt(at, source), new RunSource.TraversalOrder(at, direction),
+                        inputs, source);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * What {@code measured} takes over what was computed of each element standing at
+     * {@code elements}: the one place that says which number that is, so that one number has one
+     * reading however the walk that made it was written.
+     *
+     * <p>Three numbers are not runs of their own. A total of what is the same number for every
+     * element is that number times how many there are — nought where it is nought — as a fold
+     * adding it at every step is. What is the element's own place, at the place's own type, is
+     * the number taken over that place ({@link #overThePlace}). And what is left is a run over what
+     * was computed, in the order the elements were handed where the computation reads it.
+     *
+     * @param each  what one computed value stands as, with which a place is the place
+     * @param order the direction the elements were handed in, where {@code computed} reads where
+     *              each stands; null where it does not or nothing showed it
+     */
+    private static LinearForm<NumericTerm> overTheElements(ValueName.Stdlib operation,
+                                                           TakenAs takenAs, TermPath elements,
+                                                           ElementValue computed, Type each,
+                                                           RunSource.TraversalOrder order,
+                                                           InputDomain inputs,
+                                                           RuleReadingSource source) {
+        if (each == null) {
+            return null;
+        }
+        if (takenAs instanceof TakenAs.TheSumOfWhatItHolds
+                && computed instanceof ElementValue.Affine(var alike)
+                && alike.coefs().isEmpty()) {
+            if (alike.constant().isZero()) {
+                return new LinearForm<>(ExactRatio.ZERO, Map.of());
+            }
+            NumericTerm howMany = howManyStandAt(elements, inputs, source);
+            return howMany == null ? null
+                    : new LinearForm<>(ExactRatio.ZERO, Map.of(howMany, alike.constant()));
+        }
+        ElementProjection place = placeStanding(computed, each, elements, inputs, source);
+        if (place != null) {
+            return atomOf(overThePlace(operation, place.from(elements), inputs, source));
+        }
+        RunSource over = RunSource.computedOverTheElementsAt(elements, computed, each, order);
+        return over == null ? null
+                : atomOf(NumericTerm.TakenOver.of(operation, over, each, source.inners(),
+                        source.symbols()));
+    }
+
+    /**
+     * What {@code operation} takes over every occurrence of {@code under}: the taking of the
+     * container whose elements those are, where they are one container's elements themselves, and
+     * the run over them otherwise — or null where they are no one run.
+     *
+     * <p>The container's taking and not a run beside it. {@code List.sum(xs)} and a walk answering
+     * each element of {@code xs} as it is add up the same values, and two terms for them would be
+     * two lines on one number that cancel in no form.
+     */
+    private static NumericTerm overThePlace(ValueName.Stdlib operation, TermPath under,
+                                            InputDomain inputs, RuleReadingSource source) {
+        RunSource over = RunSource.overEveryOccurrenceAt(under);
+        if (over == null) {
+            return null;
+        }
+        if (over.isInOneContainer()) {
+            TermPath container = under.containersHoldingIt().getLast();
+            if (under.equals(container.element())) {
+                NumericTerm taken = NumericTerm.TakenOf.of(operation,
+                        ObservationSource.asItStands(container), TakenArguments.NONE,
+                        inputs.typeAt(container, source), source.inners(), source.symbols());
+                if (taken != null) {
+                    return taken;
+                }
+            }
+        }
+        Type stands = inputs.typeAt(under, source);
+        return stands == null ? null
+                : NumericTerm.TakenOver.of(operation, over, stands, source.inners(),
+                        source.symbols());
+    }
+
+    /** Whether {@code walk} answers what its closure answered on each element, one for each and
+     *  put end to end in the order it was handed them ({@link PieceOfAnElement#THE_CLOSURES_ANSWER}). */
+    private static boolean answersInTheOrderHanded(Core walk) {
+        AnOperationApplied applied = AnOperationApplied.of(walk);
+        BoundOperationFacts.Assembled assembled = applied == null ? null
+                : DefaultBoundOperationFacts.get().assembles(applied.operation());
+        return assembled != null && assembled.piece() == PieceOfAnElement.THE_CLOSURES_ANSWER;
+    }
+
+    /** {@code computed} for an element whose position {@code kept} holds of, and nought for the
+     *  rest. */
+    private static ElementValue keptBy(ElementValue.PositionTest kept, ElementValue computed) {
+        return ElementValue.choosingByPosition(kept, computed,
+                new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO, Map.of())));
+    }
+
+    /**
+     * The number {@code measured} takes over the values the walk {@code met} was given
+     * ({@link #overARun}), or null where those values are not read from a place.
+     *
+     * @param kept the test of the position an answer of the walk is counted where, the rest
+     *             counting nought; null where every answer counts
+     */
+    private static LinearForm<NumericTerm> overTheRunWalkedBy(NumericMeasures.Measured measured,
+                                                              Denotation met,
+                                                              ElementValue.PositionTest kept,
+                                                              InputDomain inputs,
+                                                              RuleReadingSource source) {
         Symbols symbols = source.symbols();
         Core walk = met.value();
         InputReads where = met.at();
@@ -406,46 +603,49 @@ public final class InputNumber {
         if (at == null) {
             return null;
         }
-        ElementValue computed = null;
-        if (answered == null) {
-            // A total of how many a container inside each element holds is how many occurrences
-            // of its element there are — where the elements walked are those of a container no
-            // other holds. One inside another is one of many, and every occurrence of the path is
-            // under every one of them.
+        // A total of how many a container inside each element holds is how many occurrences of its
+        // element there are — where the elements walked are those of a container no other holds.
+        // One inside another is one of many, and every occurrence of the path is under every one
+        // of them.
+        if (kept == null && answered == null) {
             ElementProjection counted = countedOfEach(measured, where, element, source);
             if (counted != null && at.containersHoldingIt().size() == 1) {
-                return howManyStandAt(counted.from(at).element(), inputs, source);
+                return atomOf(howManyStandAt(counted.from(at).element(), inputs, source));
             }
+        }
+        ElementAnswer closure = where.answerAt(element);
+        // The place the answer is, at the place's own type; or what the closure computed, as what
+        // the closure answers. Every occurrence of the elements' position, so every occurrence of
+        // the place in them: one run where one container holds them, and the lists of an outer list
+        // put end to end where several do.
+        ElementValue computed;
+        Type each;
+        if (answered != null) {
+            computed = new ElementValue.Affine(LinearForm.atom(answered));
+            each = inputs.typeAt(answered.from(at), source);
+        } else {
             computed = computedOf(measured, where, element, source,
                     new ElementValue.ElementsAt(at, where.declared()));
-            if (computed == null) {
-                return null;
-            }
-            // What was computed may be the element's own field and nothing made of it, as a closure
-            // that weighs a field once and adds nothing is. That is the place, and one number has
-            // one term whichever way its closure was spelled.
-            answered = placeStanding(computed, where.answerAt(element), at, inputs, source);
+            each = closure == null ? null : closure.body().type();
         }
-        if (answered == null) {
-            // A number that turns on where each element stands is a number of them in the order
-            // the row writes them, which is asked as well and only then.
-            RunSource.TraversalOrder order = computed.readsThePosition()
-                    ? theOrderTheWalkWasHandedThem(where, element, at, source) : null;
-            return overWhatWasComputed(measured, where.answerAt(element), computed, at, order,
-                    source);
-        }
-        TermPath under = answered.from(at);
-        // Every occurrence of the elements' position, so every occurrence of the place in them:
-        // one run where one container holds them, and the lists of an outer list put end to end
-        // where several do.
-        RunSource over = RunSource.overEveryOccurrenceAt(under);
-        if (over == null) {
+        if (computed == null) {
             return null;
         }
-        Type stands = inputs.typeAt(under, source);
-        return stands == null ? null
-                : NumericTerm.TakenOver.of(measured.operation(), over, stands, source.inners(),
-                        symbols);
+        if (kept != null) {
+            computed = keptBy(kept, computed);
+            // Some of the answers by where they stand, and an answer stands where its element was
+            // handed only where the walk puts them in that order: one answer per element says
+            // nothing of which came first. Asked only where what was kept still turns on it.
+            if (computed.readsThePosition() && !answersInTheOrderHanded(walk)) {
+                return null;
+            }
+        }
+        // A number that turns on where each element stands is a number of them in the order the
+        // row writes them, which is asked as well and only then.
+        RunSource.TraversalOrder order = computed.readsThePosition()
+                ? theOrderTheWalkWasHandedThem(where, element, at, source) : null;
+        return overTheElements(measured.operation(), measured.takenAs(), at, computed, each, order,
+                inputs, source);
     }
 
     /**
@@ -517,40 +717,27 @@ public final class InputNumber {
             }
             added.put(howMany, counted.getValue());
         }
-        ElementValue adds = step.ofTheElement();
-        if (adds instanceof ElementValue.Affine alike && alike.form().coefs().isEmpty()) {
-            // What every element adds alike is that many for each of them, so a step adding
-            // nothing else of the element counts them.
-            ExactRatio each = alike.form().constant();
-            if (each.signum() != 0) {
-                NumericTerm howMany = howManyStandAt(at, inputs, source);
-                if (howMany == null) {
-                    return null;
-                }
-                added.put(howMany, each);
-            }
-            return new SeedAndAdded(seed.form().constant(),
-                    new LinearForm<>(ExactRatio.ZERO, added));
-        }
-        ElementProjection place = adds.asAPlace();
-        NumericTerm total;
-        if (place != null && step.heldAt().isEmpty() && TypeOps.base(walk.step().body().type(),
-                source.inners()).equals(TypeOps.base(inputs.typeAt(place.from(at), source),
-                source.inners()))) {
-            RunSource over = RunSource.overEveryOccurrenceAt(place.from(at));
-            total = over == null ? null
-                    : NumericTerm.TakenOver.of(SUM, over, inputs.typeAt(place.from(at), source),
-                            source.inners(), source.symbols());
-        } else {
-            Type each = walk.step().body().type();
-            RunSource over = RunSource.computedOverTheElementsAt(at, adds, each, null);
-            total = over == null ? null
-                    : NumericTerm.TakenOver.of(SUM, over, each, source.inners(), source.symbols());
-        }
+        // What the step adds of each element is what a total of it over them is, read where every
+        // such total is: a number the same for every element counts them, the element's own place
+        // is the taking of that place, and the rest is a run of what was computed.
+        LinearForm<NumericTerm> total = overTheElements(SUM,
+                DefaultBoundOperationFacts.get().takenAs(SUM), at, step.ofTheElement(),
+                walk.step().body().type(), null, inputs, source);
         if (total == null) {
             return null;
         }
-        added.put(total, ExactRatio.ONE);
+        for (Map.Entry<NumericTerm, ExactRatio> each : total.coefs().entrySet()) {
+            ExactRatio already = added.get(each.getKey());
+            if (already == null) {
+                added.put(each.getKey(), each.getValue());
+            } else if (already.plus(each.getValue()) instanceof ExactAnswer.Held<ExactRatio>(
+                    var both)) {
+                added.put(each.getKey(), both);
+            } else {
+                return null;
+            }
+        }
+        added.values().removeIf(ExactRatio::isZero);
         return new SeedAndAdded(seed.form().constant(), new LinearForm<>(ExactRatio.ZERO, added));
     }
 
@@ -604,16 +791,17 @@ public final class InputNumber {
      * So a form that is a field is the place only where what the closure answers stands as what the
      * field stands as, with the names either is written under taken off, which is the account the
      * term is made under ({@link NumericTerm.TakenOver#of}).
+     *
+     * @param each what one computed value stands as
      */
-    private static ElementProjection placeStanding(ElementValue computed, ElementAnswer closure,
-                                                   TermPath at, InputDomain inputs,
-                                                   RuleReadingSource source) {
+    private static ElementProjection placeStanding(ElementValue computed, Type each, TermPath at,
+                                                   InputDomain inputs, RuleReadingSource source) {
         ElementProjection place = computed.asAPlace();
         if (place == null) {
             return null;
         }
         Type fieldType = inputs.typeAt(place.from(at), source);
-        return fieldType != null && TypeOps.base(closure.body().type(), source.inners())
+        return fieldType != null && TypeOps.base(each, source.inners())
                 .equals(TypeOps.base(fieldType, source.inners())) ? place : null;
     }
 
@@ -631,27 +819,6 @@ public final class InputNumber {
             }
         }
         return null;
-    }
-
-    /**
-     * The number {@code measured} takes over what a walk computed of each of its elements, or null
-     * where the walk answered no such computation this reads.
-     *
-     * <p>For a closure whose answer is not a place of its element — arithmetic over its fields, a
-     * choice between two of those by a flag it holds, or a choice among them by the case a value of
-     * it is. The licence is the one a place answer has:
-     * the walk answers one value per element of what it was given, proved before the tree was
-     * rewritten, so what is asked here is only what the closure came to.
-     */
-    private static NumericTerm overWhatWasComputed(NumericMeasures.Measured measured,
-                                                   ElementAnswer closure, ElementValue computed,
-                                                   TermPath at, RunSource.TraversalOrder order,
-                                                   RuleReadingSource source) {
-        Type each = closure.body().type();
-        RunSource over = RunSource.computedOverTheElementsAt(at, computed, each, order);
-        return over == null ? null
-                : NumericTerm.TakenOver.of(measured.operation(), over, each, source.inners(),
-                        source.symbols());
     }
 
     /**

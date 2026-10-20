@@ -18,7 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * input or the answer of an injected behavior, and as the same number however it is spelled. Two
  * walks decide what keeps every element of a list once — the input's, down to a position, and the
  * answer's, down to a dependency's answer — and this is what keeps them from parting: each shape is
- * written over both, and has to come out read on both or unread on both.
+ * written over both, and has to come out read on both or unread on both. The shapes only the input
+ * reads are listed by themselves ({@link #readOverTheInputOnly}), so that one side reading what the
+ * other does not is never a shape that went unnoticed.
  *
  * <p>Read is not enough. Spellings of one number — a count and a fold adding one, a total of a list
  * and of the list reversed — are one term, so on each side every spelling in a group comes out with
@@ -96,21 +98,33 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
     }
 
     /**
-     * Shapes neither side reads. What keeps some of the elements is a sum over those and over no
-     * element of the list: {@code [4, 6]} reversed and taken one of comes to six where both come to
-     * ten. Nor is a sum over what a closure puts end to end, a fold over a map, or a reordering of
-     * the numbers a fold adds read.
+     * Shapes neither side reads. What a filter keeps is a sum over those and over no element of
+     * the list, and which of them turns on what each holds. Nor is a sum over what a closure puts
+     * end to end, a fold over a map, or a reordering of the numbers a fold adds read.
      */
     private static List<String> unread() {
         return List.of(
                 "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))",
                 "List.fold((acc, x) -> acc + x.quantity, 0, List.filter(i -> i.active, ROWS))",
-                "List.sum(List.take(1, List.reverse(NUMS)))",
                 "List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))",
                 "List.sum(List.flatMap(i -> [i.quantity], ROWS))",
                 "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",
                 "List.fold((acc, x) -> acc + x, 0,"
                         + " List.sortBy(x -> x, List.map(.quantity, ROWS)))");
+    }
+
+    /**
+     * Shapes the input reads and the answer does not: a total chosen or weighed by where each
+     * element stands. {@code [4, 6]} reversed and taken one of comes to six where the list comes to
+     * ten, so it is read over the input as a total of each element by its position, and an answer
+     * has no number that turns on where its elements stand. Listed apart from what neither side
+     * reads, so that the answer reading one of them is a change this asks to be moved.
+     */
+    private static List<String> readOverTheInputOnly() {
+        return List.of(
+                "List.sum(List.take(1, List.reverse(NUMS)))",
+                "List.sum(List.drop(1, NUMS))",
+                "List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, NUMS))");
     }
 
     private static String overTheInput(String shape) {
@@ -151,6 +165,19 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 assertEquals(input, overTheInput(each), "over the input: " + each);
                 assertEquals(response, overTheResponse(each), "over the response: " + each);
             }
+        }
+    }
+
+    @Test
+    void whatOnlyTheInputReadsIsReadThereAndUnreadOverTheAnswer() {
+        for (String shape : readOverTheInputOnly()) {
+            String input = overTheInput(shape);
+            assertFalse(input.contains("not read: comparison"), "over the input: " + shape + "\n"
+                    + input);
+            assertTrue(input.contains("the position"), "over the input: " + shape + "\n" + input);
+            String response = overTheResponse(shape);
+            assertTrue(response.contains("not read: comparison"), "over the response: " + shape
+                    + "\n" + response);
         }
     }
 
