@@ -456,13 +456,20 @@ public final class InputNumber {
         }
         ElementValue computed = keptBy(kept, new ElementValue.Affine(
                 LinearForm.atom(new ElementProjection(List.of()))));
+        // Kept by a test that holds of every position or of none, the number turns on no position
+        // and is one of every element whatever order they stand in.
+        if (!computed.readsThePosition()) {
+            return listed.at().everyElementOf(listed.value(), source.newtypes())
+                    instanceof PathResolution.At(TermPath at)
+                    ? overTheElements(measured.operation(), measured.takenAs(), at, computed,
+                            inputs.typeAt(at, source), null, inputs, source)
+                    : null;
+        }
         for (TraversalDirection direction : TraversalDirection.values()) {
             if (listed.at().inTheOrderOf(listed.value(), direction, source.newtypes())
                     instanceof PathResolution.At(TermPath at)) {
                 return overTheElements(measured.operation(), measured.takenAs(), at, computed,
-                        inputs.typeAt(at, source),
-                        computed.readsThePosition()
-                                ? new RunSource.TraversalOrder(at, direction) : null,
+                        inputs.typeAt(at, source), new RunSource.TraversalOrder(at, direction),
                         inputs, source);
             }
         }
@@ -607,12 +614,6 @@ public final class InputNumber {
             }
         }
         ElementAnswer closure = where.answerAt(element);
-        // Some of the answers by where they stand, and an answer stands where its element was
-        // handed only where the walk puts them in that order: one answer per element says nothing
-        // of which came first.
-        if (kept != null && (closure == null || !answersInTheOrderHanded(walk))) {
-            return null;
-        }
         // The place the answer is, at the place's own type; or what the closure computed, as what
         // the closure answers. Every occurrence of the elements' position, so every occurrence of
         // the place in them: one run where one container holds them, and the lists of an outer list
@@ -632,6 +633,12 @@ public final class InputNumber {
         }
         if (kept != null) {
             computed = keptBy(kept, computed);
+            // Some of the answers by where they stand, and an answer stands where its element was
+            // handed only where the walk puts them in that order: one answer per element says
+            // nothing of which came first. Asked only where what was kept still turns on it.
+            if (computed.readsThePosition() && !answersInTheOrderHanded(walk)) {
+                return null;
+            }
         }
         // A number that turns on where each element stands is a number of them in the order the
         // row writes them, which is asked as well and only then.

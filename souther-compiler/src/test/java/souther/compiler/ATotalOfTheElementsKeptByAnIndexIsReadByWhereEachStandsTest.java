@@ -171,6 +171,11 @@ class ATotalOfTheElementsKeptByAnIndexIsReadByWhereEachStandsTest {
         for (String none : List.of("List.sum(List.take(0, xs))", "List.sum(List.take(-1, xs))")) {
             assertTrue(cancels(none), none);
         }
+        // Every element kept is every element whatever their order, so a list nothing declares
+        // the order of is kept whole as well.
+        assertTrue(cancels("List.sum(List.drop(0, List.sort(xs))) - List.sum(xs)"));
+        assertTrue(cancels("List.sum(List.drop(0, List.map(x -> 1 * x, List.sort(xs))))"
+                + " - List.sum(xs)"));
     }
 
     /**

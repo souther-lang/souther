@@ -627,8 +627,7 @@ final class ContainersAddingUp {
                                               RunSource.ComputedOccurrences run,
                                               TermOrders orders) {
             if (!(choice.whenHolds() instanceof ElementValue.Affine holds)
-                    || !(choice.otherwise() instanceof ElementValue.Affine not)
-                    || run.order() == null) {
+                    || !(choice.otherwise() instanceof ElementValue.Affine not)) {
                 return null;
             }
             boolean formWhereItHolds = not.form().coefs().isEmpty();
