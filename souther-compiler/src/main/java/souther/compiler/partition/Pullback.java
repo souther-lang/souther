@@ -138,6 +138,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
@@ -345,9 +346,9 @@ final class Pullback {
     private final List<AnAggregateInACase> aggregatesInACase = new ArrayList<>();
     /**
      * While a comparison's numbers are put together to ask which counts it weighs
-     * ({@link #aWayIn(List, Supplier)}): each count of the elements a filter keeps that a size
-     * asked of a container came to, with the containers it was asked of, in the order met. Null
-     * elsewhere.
+     * ({@link #aWayIn(List, Supplier, BooleanSupplier)}): each count of the elements a filter
+     * keeps that a size asked of a container came to, with the containers it was asked of, in the
+     * order met. Null elsewhere.
      */
     private Map<Quantity.HowManyHold, List<Denotation>> countsMet;
 
@@ -986,7 +987,7 @@ final class Pullback {
         Once<Optional<Inside>> wayIn = new Once<>(() -> Optional.ofNullable(aWayIn(List.of(
                 new Weighed(new Denotation(stated.left(), reads), ExactRatio.ONE),
                 new Weighed(new Denotation(stated.right(), reads), ExactRatio.ONE.negated())),
-                Pullback::nothingElse)));
+                Pullback::nothingElse, () -> false)));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), emptiness, reads)
@@ -3626,7 +3627,11 @@ final class Pullback {
             // read in, which reads them again.
             Inside inside = aWayIn(numbers, () -> others.isEmpty() ? nothingElse()
                     : inAComparisonsScope(false,
-                            () -> number(new LinearForm<>(ExactRatio.ZERO, others))));
+                            () -> number(new LinearForm<>(ExactRatio.ZERO, others))),
+                    () -> others.keySet().stream().anyMatch(number -> number
+                            instanceof LawNumber.SizeOf<DeclaredArgument>(
+                                    LawSubject.Argument<DeclaredArgument>(DeclaredArgument at))
+                            && keptByTruths(new Denotation(applied.argument(at), reads)) != null));
             if (inside != null) {
                 return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
                         taking -> new ALawRead(this, taking.apply(reads)).compared(compared));
@@ -6868,15 +6873,24 @@ final class Pullback {
      *
      * <p>Which counts are weighed is asked of the comparison with every number put together, so
      * that a count written on both sides and cancelled is read as the nought it comes to.
+     *
+     * @param restMayCount whether {@code rest} asks how many a container holds whose elements
+     *                     truths keep, which is the one way a count of kept elements comes of it.
+     *                     The rest is put together only where some count was met or can be:
+     *                     elsewhere there is nothing to read in its ways, and the reading that is
+     *                     taken puts it together anyway
      */
-    private Inside aWayIn(List<Weighed> numbers, Supplier<Sized> rest) {
+    private Inside aWayIn(List<Weighed> numbers, Supplier<Sized> rest,
+                          BooleanSupplier restMayCount) {
         Map<Quantity.HowManyHold, List<Denotation>> outer = countsMet;
         countsMet = new LinkedHashMap<>();
         try {
             List<LinearForm<Quantity>> composed = new ArrayList<>();
             Inside inside = aStopIn(numbers.stream().map(Weighed::number).toList(), composed);
             if (inside != null || composed.size() < numbers.size()
-                    || !(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))) {
+                    || countsMet.isEmpty() && !restMayCount.getAsBoolean()
+                    || !(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))
+                    || countsMet.isEmpty()) {
                 return inside;
             }
             List<LinearForm<Quantity>> weighed = new ArrayList<>(List.of(others));
@@ -8340,7 +8354,7 @@ final class Pullback {
         // behavior entered, both sides read there ({@link #throughWhatItStopsAt}).
         List<Weighed> numbers = new ArrayList<>(left.numbers(false));
         numbers.addAll(right.numbers(true));
-        Inside inside = aWayIn(numbers, Pullback::nothingElse);
+        Inside inside = aWayIn(numbers, Pullback::nothingElse, () -> false);
         if (inside != null) {
             return goingIn(inside, left.at(), at, false, taking -> comparedCase(
                     left.in(taking.apply(left.at())), right.in(taking.apply(right.at())),
