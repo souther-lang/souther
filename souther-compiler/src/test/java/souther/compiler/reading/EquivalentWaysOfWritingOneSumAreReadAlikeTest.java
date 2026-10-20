@@ -466,6 +466,57 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
     }
 
     /**
+     * One value decided by several choices has all of them, wherever they are written in it: side
+     * by side, nested in an arm, in both arms, or each under a name. It is a meeting that this
+     * cannot join and says so, as the same choices written as the elements of a list are one it
+     * joins. A choice named once and used twice is the one choice, and a value that does
+     * arithmetic on one choice is decided by that one.
+     */
+    @Test
+    void aValueDecidedByManyChoicesHasEachOfThem() {
+        String sum = "List.sum(List.map(r -> %s, [ first ]))";
+        for (String many : List.of(
+                "(if r.active then 1 else 0) + (if flag then 1 else 0)",
+                "{ let a = if r.active then 1 else 0\n    let b = if flag then 1 else 0\n"
+                        + "    a + b }",
+                "if r.active then (if flag then 2 else 1) else 0",
+                "if r.days > 3 then (if flag then 2 else 1) else (if r.active then 5 else 0)",
+                "(if r.active then 1 else 0) * (if flag then 3 else 2)")) {
+            assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ),
+                    readFlagged(sum.formatted(many)).notJoined(), many);
+        }
+        for (String one : List.of(
+                "{ let a = if flag then 1 else 0\n    a + a }",
+                "(if r.active then 1 else 0) * 2",
+                "(if r.active then 1 else 0) + 1")) {
+            assertEquals(List.of(), readFlagged(sum.formatted(one)).notJoined(), one);
+        }
+
+        CoverageRead.Read written = readFlagged(
+                "List.sum([ if first.active then 1 else 0, if flag then 1 else 0 ])");
+        assertEquals(List.of(List.of(2, 2)), shape(written.interactions()));
+        assertEquals(List.of(), written.notJoined());
+    }
+
+    /**
+     * Decisions that meet in code a run may come back to are not offered, and are not absent
+     * either: a total written inside a closure is said not to be joined, the same as the choices
+     * added in the closure.
+     */
+    @Test
+    void decisionsMeetingInCodeRunAgainAreSaidSo() {
+        for (String inside : List.of(
+                "(if flag then 1 else 0) + (if threshold > 3 then 1 else 0)",
+                "List.sum([ if flag then 1 else 0, if threshold > 3 then 1 else 0 ])")) {
+            CoverageRead.Read read = readFlagged(
+                    "List.sum(List.map(x -> " + inside + ", [ 1, 2 ]))");
+
+            assertEquals(List.of(), read.interactions(), inside);
+            assertFalse(read.notJoined().isEmpty(), inside);
+        }
+    }
+
+    /**
      * A closure that chooses again adds the decisions it makes to those it was handed, so a total
      * through it is never read as the one choice it started from.
      */

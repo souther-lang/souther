@@ -61,5 +61,10 @@ public enum WhyNotJoined {
     NOT_ONE_COMPARISON_THAT_RUNS,
 
     /** The container holds more occurrences than the walk writes out. */
-    MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT
+    MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
+
+    /** The decisions meet in code a run may come back to. A recording says which places a run
+     *  passed and how each came out on each visit, not which decisions were made together on the
+     *  same pass, so no row can be shown to make such a combination. */
+    THE_MEETING_IS_IN_CODE_RUN_AGAIN
 }

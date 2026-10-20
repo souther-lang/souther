@@ -303,29 +303,35 @@ final class ElementEvaluations {
             switch (one.choice()) {
                 case null -> { }
                 case ValueChoices.Of.Fixed _ -> { }
-                case ValueChoices.Of.Unread(Core origin, boolean viaNames,
-                                            boolean perApplication) -> {
+                case ValueChoices.Of.Unread(List<ValueChoices.Origin> origins) -> {
                     // A choice is evaluated once for each application of each closure it is
                     // written in, and by nothing else: not by what is done with its result, nor
                     // by what else is written in the closures the result passes through. A choice
                     // held in a name is told by the applications that wrote the occurrence out,
                     // of those closures that hold it. Where it is written in an application no
                     // step that wrote the occurrence out accounts for, which application it is
-                    // is not something this knows, and it is counted as its own.
-                    List<Integer> evaluated = new ArrayList<>();
-                    if (origin != null) {
-                        for (ElementsWrittenOut.Applied applied : one.occurrence().within()) {
-                            if (writes(applied.body(), origin)) {
-                                evaluated.add(applied.application());
+                    // is not something this knows, and it is counted as its own. A value decided
+                    // by several choices has each of them, and a walk that gave up before it
+                    // found them all may have left two where it names one.
+                    for (ValueChoices.Origin each : origins) {
+                        Core origin = each.fork();
+                        List<Integer> evaluated = new ArrayList<>();
+                        if (origin != null) {
+                            for (ElementsWrittenOut.Applied applied : one.occurrence().within()) {
+                                if (writes(applied.body(), origin)) {
+                                    evaluated.add(applied.application());
+                                }
                             }
                         }
-                    }
-                    if (origin == null || (viaNames && perApplication && evaluated.isEmpty())
-                            || (!viaNames && answered.isEmpty())) {
-                        unplaced++;
-                    } else {
-                        Object made = viaNames ? evaluated : answered.getAsInt();
-                        placed.computeIfAbsent(origin, _ -> new HashSet<>()).add(made);
+                        if (origin == null) {
+                            unplaced += 2;
+                        } else if ((each.viaNames() && each.perApplication() && evaluated.isEmpty())
+                                || (!each.viaNames() && answered.isEmpty())) {
+                            unplaced++;
+                        } else {
+                            Object made = each.viaNames() ? evaluated : answered.getAsInt();
+                            placed.computeIfAbsent(origin, _ -> new HashSet<>()).add(made);
+                        }
                     }
                 }
                 case ValueChoices.Of.OneComparison(Core.Binary comparison, var _,

@@ -7,8 +7,10 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -59,18 +61,31 @@ final class ValueChoices {
                 implements Of { }
 
         /**
-         * A fork this does not read, or one it followed names too far to find the end of.
+         * Forks this does not read, every one that decides the value: a value that comes to a sum
+         * of two choices is decided by two, and is not one choice whichever is met first.
          *
-         * @param origin   the expression the fork was found in, which two values that are the one
-         *                 choice have in common; null where the walk did not reach one
-         * @param viaNames whether it was found beneath a name that stands for something written
-         *                 elsewhere, as in {@link OneComparison}
-         * @param perApplication whether the fork is written where an application of a closure is
-         *                 on, so that it is made again on each application whatever it reads: a
-         *                 fork held in a name is one choice when it is not
+         * @param origins the forks, each once however often it is reached
          */
-        record Unread(Core origin, boolean viaNames, boolean perApplication) implements Of { }
+        record Unread(List<Origin> origins) implements Of {
+
+            public Unread {
+                origins = List.copyOf(origins);
+            }
+        }
     }
+
+    /**
+     * One fork that decides a value, or the place a walk gave up.
+     *
+     * @param fork     the expression the fork is, which two values that are the one choice have in
+     *                 common; null where the walk followed names too far to reach one
+     * @param viaNames whether it was found beneath a name that stands for something written
+     *                 elsewhere, as in {@link Of.OneComparison}
+     * @param perApplication whether the fork is written where an application of a closure is on, so
+     *                 that it is made again on each application whatever it reads: a fork held in
+     *                 a name is one choice when it is not
+     */
+    record Origin(Core fork, boolean viaNames, boolean perApplication) { }
 
     /** A value followed to what it comes to, and the reading its names are read in there. */
     private record Comes(Core core, InputReads at, boolean viaNames) { }
@@ -80,7 +95,7 @@ final class ValueChoices {
                  DeclarationNewtypes newtypes) {
         Comes comes = followed(value, names, newtypes);
         if (comes == null) {
-            return new Of.Unread(null, true, true);
+            return new Of.Unread(List.of(new Origin(null, true, true)));
         }
         if (Core.withoutStanding(comes.core()) instanceof Core.If fork
                 && Core.withoutStanding(fork.cond()) instanceof Core.Binary comparison
@@ -90,16 +105,21 @@ final class ValueChoices {
                 && !decides(fork.els(), comes.at(), names, newtypes, 0, newSeen())) {
             return new Of.OneComparison(comparison, comes.at(), comes.viaNames());
         }
-        Fork found = forkIn(comes.core(), comes.at(), names, newtypes, 0, newSeen());
-        if (found == null) {
+        List<Fork> found = new ArrayList<>();
+        forksIn(comes.core(), comes.at(), names, newtypes, 0, newSeen(), found);
+        if (found.isEmpty()) {
             return new Of.Fixed();
         }
         // The fork itself is what the choice is, and a fork held in a name is made where the name
         // was written, whichever expression handed it on.
-        boolean perApplication = found.throughAName() ? found.perApplication()
-                : found.fork() == null || comes.at().isOnAnApplication();
-        return new Of.Unread(found.fork(), comes.viaNames() || found.throughAName(),
-                perApplication);
+        List<Origin> origins = new ArrayList<>();
+        for (Fork each : found) {
+            boolean perApplication = each.throughAName() ? each.perApplication()
+                    : each.fork() == null || comes.at().isOnAnApplication();
+            origins.add(new Origin(each.fork(), comes.viaNames() || each.throughAName(),
+                    perApplication));
+        }
+        return new Of.Unread(origins);
     }
 
     /** {@code value} under its {@code let}s and past the names that stand for something else, or
@@ -142,7 +162,9 @@ final class ValueChoices {
                                    ElementsWrittenOut.Reading<InputReads> names,
                                    DeclarationNewtypes newtypes, int steps,
                                    Set<Core> seen) {
-        return forkIn(e, at, names, newtypes, steps, seen) != null;
+        List<Fork> found = new ArrayList<>();
+        forksIn(e, at, names, newtypes, steps, seen, found);
+        return !found.isEmpty();
     }
 
     /** A fork found in a value, whether it was found beneath a name, and whether the name nearest
@@ -150,55 +172,55 @@ final class ValueChoices {
      *  was. */
     private record Fork(Core fork, boolean throughAName, boolean perApplication) { }
 
-    /** The first fork in {@code e}, through the names it reads, or null where there is none. */
-    private static Fork forkIn(Core e, InputReads at,
-                               ElementsWrittenOut.Reading<InputReads> names,
-                               DeclarationNewtypes newtypes, int steps,
-                               Set<Core> seen) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.If fork -> new Fork(fork, false, false);
-            case Core.Match fork -> new Fork(fork, false, false);
-            case Core.IfConstructed fork -> new Fork(fork, false, false);
-            case Core.Read read -> forkStoodFor(read, at, names, newtypes, steps, seen);
-            default -> forkInAnyPart(e, at, names, newtypes, steps, seen);
-        };
+    /**
+     * Every fork in {@code e}, through the names it reads, each once: a fork holds more forks in
+     * its condition and its arms, a value made of several parts holds the forks of each, and a name
+     * used twice stands for one.
+     */
+    private static void forksIn(Core e, InputReads at,
+                                ElementsWrittenOut.Reading<InputReads> names,
+                                DeclarationNewtypes newtypes, int steps, Set<Core> seen,
+                                List<Fork> out) {
+        switch (Core.withoutStanding(e)) {
+            case Core.If _, Core.Match _, Core.IfConstructed _ -> {
+                out.add(new Fork(Core.withoutStanding(e), false, false));
+                forksInParts(e, at, names, newtypes, steps, seen, out);
+            }
+            case Core.Read read -> forksStoodFor(read, at, names, newtypes, steps, seen, out);
+            default -> forksInParts(e, at, names, newtypes, steps, seen, out);
+        }
     }
 
-    /** The first fork in what a name stands for. */
-    private static Fork forkStoodFor(Core.Read read, InputReads at,
-                                     ElementsWrittenOut.Reading<InputReads> names,
-                                     DeclarationNewtypes newtypes, int steps,
-                                     Set<Core> seen) {
+    /** Every fork in what a name stands for. */
+    private static void forksStoodFor(Core.Read read, InputReads at,
+                                      ElementsWrittenOut.Reading<InputReads> names,
+                                      DeclarationNewtypes newtypes, int steps, Set<Core> seen,
+                                      List<Fork> out) {
         if (steps >= MOST_STEPS) {
-            return new Fork(null, true, true);
+            out.add(new Fork(null, true, true));
+            return;
         }
         ElementsWrittenOut.Stood<InputReads> stands = names.standing(read, at);
         Core there = Core.withoutStanding(stands.value());
         // A name that stands for itself is a position of the input, and decides nothing.
         if (there == read || !seen.add(there)) {
-            return null;
+            return;
         }
-        Fork found = forkIn(there, stands.at(), names, newtypes, steps + 1, seen);
-        if (found == null) {
-            return null;
+        List<Fork> inner = new ArrayList<>();
+        forksIn(there, stands.at(), names, newtypes, steps + 1, seen, inner);
+        // Whether a fork is made again on each application is a fact about the fork, read where
+        // it was written, and the name nearest it is the one to have said so.
+        for (Fork found : inner) {
+            out.add(new Fork(found.fork(), true, found.throughAName() ? found.perApplication()
+                    : found.fork() == null || stands.at().isOnAnApplication()));
         }
-        // Whether the fork is made again on each application is a fact about the fork, read
-        // where it was written, and the name nearest it is the one to have said so.
-        return new Fork(found.fork(), true, found.throughAName() ? found.perApplication()
-                : found.fork() == null || stands.at().isOnAnApplication());
     }
 
-    /** The first fork in any part of {@code e}. */
-    private static Fork forkInAnyPart(Core e, InputReads at,
-                                      ElementsWrittenOut.Reading<InputReads> names,
-                                      DeclarationNewtypes newtypes, int steps,
-                                      Set<Core> seen) {
-        Fork[] found = {null};
-        Core.forEachChild(e, child -> {
-            if (found[0] == null) {
-                found[0] = forkIn(child, at, names, newtypes, steps, seen);
-            }
-        });
-        return found[0];
+    /** Every fork in any part of {@code e}. */
+    private static void forksInParts(Core e, InputReads at,
+                                     ElementsWrittenOut.Reading<InputReads> names,
+                                     DeclarationNewtypes newtypes, int steps, Set<Core> seen,
+                                     List<Fork> out) {
+        Core.forEachChild(e, child -> forksIn(child, at, names, newtypes, steps, seen, out));
     }
 }

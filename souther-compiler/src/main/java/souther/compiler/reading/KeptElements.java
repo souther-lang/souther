@@ -117,10 +117,20 @@ final class KeptElements {
      * @param compared whether {@code call} is an operand of a comparison
      */
     Read of(Core.Call call, CoverageNaming naming, Core body, boolean compared) {
-        if (analysis == null || analysisReads == null || !Meetings.consumesItsElements(call)
-                || plan.mayRepeat(call)) {
+        if (analysis == null || analysisReads == null || !Meetings.consumesItsElements(call)) {
             return null;
         }
+        Read read = read(call, naming, body, compared);
+        // Decisions that meet in code a run may come back to are met, and are not offered: the
+        // visits a recording counts are of the whole run, so the evaluations of the comparison
+        // are not the list's.
+        if (plan.mayRepeat(call) && read instanceof Read.Factors(var each) && each.size() > 1) {
+            return new Read.NotJoined(WhyNotJoined.THE_MEETING_IS_IN_CODE_RUN_AGAIN);
+        }
+        return read;
+    }
+
+    private Read read(Core.Call call, CoverageNaming naming, Core body, boolean compared) {
         Written written = callWritten(analysis.core(), analysisReads, call);
         if (written == null) {
             return null;

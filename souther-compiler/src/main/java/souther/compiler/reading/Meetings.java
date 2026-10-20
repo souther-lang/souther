@@ -119,9 +119,13 @@ final class Meetings {
         // What varies here is read once and the ways in are as many as they are: an operand is
         // settled the same ways whichever way round the forks above a row went, so the factors
         // are no part of what a way in decides and are not read again per way.
-        if (factors.size() > 1 && !plan.mayRepeat(node)) {
-            for (List<Decision> reach : reaches) {
-                found.add(new Interaction(reach, factors));
+        if (factors.size() > 1) {
+            if (plan.mayRepeat(node)) {
+                notJoined.add(WhyNotJoined.THE_MEETING_IS_IN_CODE_RUN_AGAIN);
+            } else {
+                for (List<Decision> reach : reaches) {
+                    found.add(new Interaction(reach, factors));
+                }
             }
         }
     }
