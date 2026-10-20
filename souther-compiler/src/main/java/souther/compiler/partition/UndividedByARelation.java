@@ -1230,7 +1230,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             NumericDomain.Bounds realizes = switch (each.term()) {
                 case NumericTerm.ValueOf _ -> on.asARelationReadsIt();
-                case NumericTerm.TakenOf taken -> realized(taken, source, region, Way.TIES);
+                case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
+                        .endsAreWhereTheRepresentationStops(taken.operation())
+                        ? realized(taken, source, region, Way.TIES) : null;
                 default -> null;
             };
             if (realizes == null) {

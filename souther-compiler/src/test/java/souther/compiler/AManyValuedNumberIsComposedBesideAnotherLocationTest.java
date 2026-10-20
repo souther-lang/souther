@@ -178,10 +178,10 @@ class AManyValuedNumberIsComposedBesideAnotherLocationTest {
             assertTrue(counted.contains(row),
                     () -> "the row for one of the four points: " + counted);
         }
-        // The comparison depends on how far apart the two lengths are, so the points of the line
-        // are one longer by a character and two of one length.
+        // A string of no characters is never longer than another, so its length is a class of its
+        // own and the row of two of one length is past it.
         String sized = generated(A_MEASURE_BESIDE_A_MEASURE);
-        assertTrue(sized.contains("(\"x\", \"\")") && sized.contains("(\"\", \"\")"),
+        assertTrue(sized.contains("(\"x\", \"\")") && sized.contains("(\"x\", \"x\")"),
                 () -> "one longer by a character, and two of one length: " + sized);
     }
 

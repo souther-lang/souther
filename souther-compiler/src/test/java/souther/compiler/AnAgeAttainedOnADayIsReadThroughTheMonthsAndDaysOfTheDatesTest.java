@@ -129,18 +129,21 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     void theRowsOfferedAreAnsweredAsTheCalendarWorksTheAgeOut() {
         assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(
                 AGE + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n",
-                age -> age >= 60);
+                age -> age >= 60, 59, 60);
     }
 
-    /** The same of a way that states the age at two lines. */
+    /** The same of a way that states the age at two lines, with a row at each side of each. */
     @Test
     void theRowsOfferedForTwoComparisonsOfOneAgeAreAnsweredAsTheCalendarWorksTheAgeOut() {
         assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(BETWEEN_FORTY_AND_SIXTY_FIVE,
-                age -> age >= 40 && age < 65);
+                age -> age >= 40 && age < 65, 39, 40, 64, 65);
     }
 
+    /**
+     * @param reached the ages the rows offered must include, one at each side of each line
+     */
     private static void assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(
-            String behavior, IntPredicate expected) {
+            String behavior, IntPredicate expected, Integer... reached) {
         Compilation offering = compiled(behavior);
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
@@ -148,6 +151,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 .text();
 
         StringBuilder examples = new StringBuilder();
+        Set<Integer> ages = new HashSet<>();
         int rows = 0;
         for (String line : offered.lines().filter(each -> each.contains("Date(\"")).toList()) {
             List<LocalDate> dates = new ArrayList<>();
@@ -157,12 +161,14 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 dates.add(LocalDate.parse(line.substring(at + 6, end)));
                 at = end;
             }
+            ages.add(ageAttained(dates.get(0), dates.get(1)));
             examples.append("    | (Date(\"").append(dates.get(0)).append("\"), Date(\"")
                     .append(dates.get(1)).append("\")) -> ")
                     .append(expected.test(ageAttained(dates.get(0), dates.get(1)))).append('\n');
             rows++;
         }
         assertTrue(rows > 0, offered);
+        assertTrue(ages.containsAll(List.of(reached)), ages + "\n" + offered);
 
         Compilation answered = compiled(behavior + "\nexample f\n" + examples);
         String report = report(answered);

@@ -599,6 +599,11 @@ final class OperationFactBinder {
                         "what every answer of it has a value for");
                 yield new BoundOperationFact.EveryAnswerItCanGiveHasASourceValue(operation);
             }
+            case OperationFact.EndsAreWhereTheRepresentationStops _ -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
+                        "what the ends of its answers are");
+                yield new BoundOperationFact.EndsAreWhereTheRepresentationStops(operation);
+            }
             case OperationFact.AnswersANumberTakenOfAValueItIsGiven taken ->
                     holdTakenOf(declaration, taken.how());
             case OperationFact.AccumulatesItsContainer accumulates ->

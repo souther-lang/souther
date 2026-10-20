@@ -1344,8 +1344,11 @@ public final class WhatARelationLeavesUndivided {
      * where its values are whole, and which a dense type holds as well: a difference left between
      * two whole numbers and at neither is passed over, and nothing is shown.
      *
-     * @param terms   two terms, each the value at its place, taking every value of its type and
-     *                the same values as the other — or nothing is shown
+     * @param terms   two terms, each the value at its place or a number taken of one, taking every
+     *                value of its type and the same values as the other — or nothing is shown. The
+     *                ends of what a term takes are passed over, so a number taken of a place is
+     *                given only where its ends are where the representation stops and not lines
+     *                of the operation that answers it
      * @param held    every statement the rows arriving hold of either term, each about their
      *                difference
      * @param extent  where the type the two take stops, open on a side it does not
