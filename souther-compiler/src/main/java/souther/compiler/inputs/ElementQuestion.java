@@ -31,14 +31,15 @@ public enum ElementQuestion {
     EVERY_OCCURRENCE,
 
     /**
-     * Which position holds these very values, every occurrence of it once each, in the order the
-     * row writes them there — so that where a value stands among them is where it stands in the
-     * row.
+     * Which position holds these very values, every occurrence of it once each, handed in a
+     * direction the question names ({@link TraversalDirection}) — so that where a value stands among
+     * them is where it stands counting from the end that direction starts at.
      *
      * <p>{@link #EVERY_OCCURRENCE} and the order beside it. That one crosses what puts the elements
      * in another order, which a total of them does not see; a number that turns on where each
-     * element stands does, so this crosses no operation, only the names and choices a list is
-     * written through.
+     * element stands does, so this crosses the names and choices a list is written through, and
+     * of the operations only those declared to answer a list the other way round, each turning the
+     * direction over.
      */
     IN_THE_ORDER_WRITTEN,
 

@@ -19,8 +19,8 @@ import java.util.function.UnaryOperator;
  * total does not depend on which came first. An operation that does depend on it — a first, a
  * running total, anything read by index — is not entitled to rest on this, and would need something
  * that says the walk kept the order as well. The one run here that does is a total of what was
- * computed of each element by where it stands, and it holds that something
- * ({@link InTheOrderWritten}).
+ * computed of each element by where it stands, and it holds that something, and the direction the
+ * elements were handed in ({@link TraversalOrder}).
  *
  * <p>Beside {@link TermPath} and not a kind of one. A path says where a location is and says
  * nothing about how many values stand there, deliberately: a rule written about a location and a
@@ -219,11 +219,12 @@ public sealed interface RunSource {
      * @param computation what the closure made of one of them
      * @param each        what one computed value stands as, with the names it is written under
      *                    taken off
-     * @param order       that the walk was handed the elements in the order the row writes them,
-     *                    where the computation reads where they stand; null where it does not
+     * @param order       the direction the walk was handed the elements in, the order the row
+     *                    writes them or its opposite, where the computation reads where they
+     *                    stand; null where it does not
      */
     record ComputedOccurrences(TermPath elements, ElementValue computation, Type each,
-                               InTheOrderWritten order) implements RunSource {
+                               TraversalOrder order) implements RunSource {
 
         public ComputedOccurrences {
             requireOneRun(elements);
@@ -233,8 +234,8 @@ public sealed interface RunSource {
             if (byPosition != (order != null)) {
                 throw new IllegalArgumentException(byPosition
                         ? "{" + computation + "} turns on where each element stands, and nothing"
-                                + " showed the walk was handed `" + elements + "` in the order"
-                                + " written"
+                                + " showed the direction the walk was handed `" + elements
+                                + "` in"
                         : "{" + computation + "} turns on no element's position, and claims"
                                 + " nothing of their order");
             }
@@ -251,7 +252,9 @@ public sealed interface RunSource {
 
         @Override
         public String toString() {
-            return "{" + computation + " | " + elements + "}";
+            return "{" + computation + " | " + elements
+                    + (order != null && order.direction() == TraversalDirection.REVERSE
+                            ? " from the far end" : "") + "}";
         }
     }
 
@@ -299,50 +302,62 @@ public sealed interface RunSource {
     }
 
     /**
-     * That a walk was handed the elements at {@code elements}, every one of them once and in the
-     * order the row writes them there.
+     * That a walk was handed the elements at {@code elements}, every one of them once, in
+     * {@code direction}: the order the row writes them there, or from the last of them to the
+     * first.
      *
-     * <p>Made where the reading of the input showed it ({@link InputReads#inTheOrderWrittenAt}),
-     * and so in this package and nowhere else: a run is not made to claim the order by saying so.
-     * Equal by the elements it was shown of, since that is all it says.
+     * <p>Made where the reading of the input showed it ({@link InputReads#inTheOrderAt}), and so
+     * in this package and nowhere else: a run is not made to claim the order by saying so. Equal by
+     * the elements it was shown of and the direction, since that is all it says: a total weighted
+     * by where each stands is another number counted from the other end.
      */
-    final class InTheOrderWritten {
+    final class TraversalOrder {
 
         private final TermPath elements;
+        private final TraversalDirection direction;
 
-        InTheOrderWritten(TermPath elements) {
+        TraversalOrder(TermPath elements, TraversalDirection direction) {
             this.elements = Objects.requireNonNull(elements, "an order is shown of some elements");
+            this.direction = Objects.requireNonNull(direction, "and handed in some direction");
         }
 
         public TermPath elements() {
             return elements;
         }
 
+        public TraversalDirection direction() {
+            return direction;
+        }
+
         @Override
         public boolean equals(Object other) {
-            return other instanceof InTheOrderWritten that && elements.equals(that.elements);
+            return other instanceof TraversalOrder that && elements.equals(that.elements)
+                    && direction == that.direction;
         }
 
         @Override
         public int hashCode() {
-            return elements.hashCode();
+            // By name: an enum's own hash differs from one run of the compiler to the next.
+            return 31 * elements.hashCode() + direction.name().hashCode();
         }
 
         @Override
         public String toString() {
-            return "in the order " + elements + " is written";
+            return direction == TraversalDirection.FORWARD
+                    ? "in the order " + elements + " is written"
+                    : "from the last of " + elements + " to the first";
         }
     }
 
     /**
      * The values computed of each element of the walk over {@code elements}, or null where those
      * elements are not one run — or where the computation turns on where each element stands and
-     * {@code order} does not show the walk was handed them in the order written.
+     * {@code order} does not show the direction the walk was handed them in.
      *
      * @param order what showed the order, or null where nothing did
      */
     static RunSource computedOverTheElementsAt(TermPath elements, ElementValue computation,
-                                               Type each, InTheOrderWritten order) {
+                                               Type each, TraversalOrder order) {
         if (elements == null || computation == null || each == null || !namesOneRun(elements)) {
             return null;
         }

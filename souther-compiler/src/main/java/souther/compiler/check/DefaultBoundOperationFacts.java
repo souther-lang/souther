@@ -56,4 +56,12 @@ public final class DefaultBoundOperationFacts {
                 instanceof AppliedClosures.Listing.EveryElementOf(int argument, boolean _)
                 ? argument : -1;
     }
+
+    /**
+     * The position of the argument whose elements {@code operation}'s answer holds in the opposite
+     * order — or -1 where it answers no argument's so.
+     */
+    public static int positionOfTheArgumentReversed(ValueName operation) {
+        return Combinators.positionOfTheArgumentReversed(DefaultStdlib.get(), operation);
+    }
 }
