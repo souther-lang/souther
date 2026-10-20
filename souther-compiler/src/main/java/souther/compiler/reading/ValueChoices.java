@@ -72,31 +72,39 @@ final class ValueChoices {
     private static boolean decides(Core e, InputReads at,
                                    ElementsWrittenOut.Reading<InputReads> names, int steps,
                                    Set<Core> seen) {
-        switch (Core.withoutStanding(e)) {
-            case Core.If _, Core.Match _, Core.IfConstructed _ -> {
-                return true;
-            }
-            case Core.Read read -> {
-                if (steps >= MOST_STEPS) {
-                    return true;
-                }
-                ElementsWrittenOut.Stood<InputReads> stands = names.standing(read, at);
-                Core there = Core.withoutStanding(stands.value());
-                // A name that stands for itself is a position of the input, and decides nothing.
-                if (there == read || !seen.add(there)) {
-                    return false;
-                }
-                return decides(there, stands.at(), names, steps + 1, seen);
-            }
-            default -> {
-                boolean[] found = {false};
-                Core.forEachChild(e, child -> {
-                    if (!found[0] && decides(child, at, names, steps, seen)) {
-                        found[0] = true;
-                    }
-                });
-                return found[0];
-            }
+        return switch (Core.withoutStanding(e)) {
+            case Core.If _, Core.Match _, Core.IfConstructed _ -> true;
+            case Core.Read read -> stoodForDecides(read, at, names, steps, seen);
+            default -> anyPartDecides(e, at, names, steps, seen);
+        };
+    }
+
+    /** Whether what a name stands for is, or holds, a fork. */
+    private static boolean stoodForDecides(Core.Read read, InputReads at,
+                                           ElementsWrittenOut.Reading<InputReads> names,
+                                           int steps, Set<Core> seen) {
+        if (steps >= MOST_STEPS) {
+            return true;
         }
+        ElementsWrittenOut.Stood<InputReads> stands = names.standing(read, at);
+        Core there = Core.withoutStanding(stands.value());
+        // A name that stands for itself is a position of the input, and decides nothing.
+        if (there == read || !seen.add(there)) {
+            return false;
+        }
+        return decides(there, stands.at(), names, steps + 1, seen);
+    }
+
+    /** Whether any part of {@code e} is, or holds, a fork. */
+    private static boolean anyPartDecides(Core e, InputReads at,
+                                          ElementsWrittenOut.Reading<InputReads> names,
+                                          int steps, Set<Core> seen) {
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> {
+            if (!found[0] && decides(child, at, names, steps, seen)) {
+                found[0] = true;
+            }
+        });
+        return found[0];
     }
 }

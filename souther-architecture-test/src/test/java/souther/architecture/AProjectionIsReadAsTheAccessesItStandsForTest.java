@@ -327,7 +327,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "L" + CORE + "$Call;)L" + CORE + "$PreservedCall;", Reading.STRUCTURE,
                 "finds the call of an operation that an expansion stands for, by the occurrence it"
                         + " applies, which no field read is");
-        row(out, c + "reading/ValueChoices", "decides", "(" + core + "L" + c
+        row(out, c + "reading/ValueChoices", "anyPartDecides", "(" + core + "L" + c
                 + "inputs/InputReads;L" + c + "check/ElementsWrittenOut$Reading;I"
                 + "Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "looks for a fork in a value and in what its names stand for, which no field read is:"
