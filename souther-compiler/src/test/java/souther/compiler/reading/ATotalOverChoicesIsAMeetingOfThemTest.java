@@ -151,6 +151,100 @@ class ATotalOverChoicesIsAMeetingOfThemTest {
         assertNotEquals(copies.get(0), copies.get(1), "and not the same copy");
     }
 
+    /** A total over what each element is worth, with every element kept, whichever way it is
+     *  written: the decisions are the same. */
+    private static String totalOf(String body) {
+        return """
+                module example.worth
+
+                data Row = { days: Int, pay: Int }
+
+                behavior total : (first: Row, second: Row) -> Int
+
+                let total (first, second) =
+                    %s
+                """.formatted(body);
+    }
+
+    private static final String AS_PLUS = "(if first.days >= 17 then first.pay else 0)"
+            + " + (if second.days >= 17 then second.pay else 0)";
+
+    private static final String AS_A_LIST = "List.sum([ if first.days >= 17 then first.pay else 0,"
+            + " if second.days >= 17 then second.pay else 0 ])";
+
+    private static final String AS_KEPT =
+            "List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ first, second ])))";
+
+    private static final String AS_WORTH =
+            "List.sum(List.map(r -> if r.days >= 17 then r.pay else 0, [ first, second ]))";
+
+    /**
+     * What an element is worth and whether it is there are two ways an element decides a total, and
+     * the total does not care which was written. Four ways of writing one sum of two choices are one
+     * meeting of two decisions.
+     */
+    @Test
+    void aSumOfTwoChoicesIsTheSameMeetingHoweverItsElementsAreDecided() {
+        for (String body : List.of(AS_PLUS, AS_A_LIST, AS_KEPT, AS_WORTH)) {
+            assertEquals(List.of(List.of(2, 2)), shape(read(totalOf(body), "total")), body);
+        }
+    }
+
+    /** The decision of a value is the comparison evaluated on each application, as a keeping is. */
+    @Test
+    void aChoiceOfWhatEachElementIsWorthIsOneDecisionPerApplication() {
+        List<Interaction> found = read(totalOf(AS_WORTH), "total");
+
+        Set<Integer> visits = found.stream()
+                .flatMap(group -> group.factors().stream())
+                .flatMap(factor -> factor.outcomes().stream())
+                .flatMap(outcome -> outcome.claims().stream())
+                .map(claim -> ((ControlClaim.Visit.Nth) claim.visit()).index())
+                .collect(Collectors.toSet());
+        assertEquals(Set.of(0, 1), visits);
+    }
+
+    /**
+     * A total of elements that are each worth what an empty total is worth is the same whichever are
+     * kept, and the keeping decides nothing of it; a total of elements each worth one is a count of
+     * what was kept, and does.
+     */
+    @Test
+    void whatIsKeptIsADecisionOfTheTotalOnlyWhereTheTotalCanTellTheDifference() {
+        String kept = "List.sum(List.map(r -> %s, List.filter(r -> r.days >= 17, [ first, second ])))";
+
+        assertEquals(List.of(), read(totalOf(kept.formatted("0")), "total"));
+        assertEquals(List.of(), readAll(totalOf(kept.formatted("0")), "total").notJoined());
+        assertEquals(List.of(List.of(2, 2)), shape(read(totalOf(kept.formatted("1")), "total")));
+    }
+
+    /**
+     * A choice of what an element is worth made after a filter is made of the elements it kept, so
+     * which evaluation is whose depends on how the filter came out. The keeping alone is not the
+     * meeting: leaving the choice out would be a reading that looks whole and is not.
+     */
+    @Test
+    void aChoiceMadeAfterAFilterIsAMeetingNotJoinedAndNotLeftOut() {
+        CoverageRead.Read read = readAll(totalOf("""
+                List.sum(List.map(r -> if r.pay >= 100 then 2 else 1,
+                    List.filter(r -> r.days >= 17, [ first, second ])))"""), "total");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_NUMBERED), read.notJoined());
+    }
+
+    /** A fork beneath the names a value is written with is a decision all the same. */
+    @Test
+    void aChoiceBeneathANameTheValueIsWrittenWithIsNotReadAsNone() {
+        CoverageRead.Read read = readAll(totalOf("""
+                List.sum(List.map(r -> r + 1,
+                    List.map(r -> if r.days >= 17 then r.pay else 0, [ first, second ])))"""),
+                "total");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), read.notJoined());
+    }
+
     private static final String NOTHING_KEPT = """
             module example.nothingkept
 

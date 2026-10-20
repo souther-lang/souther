@@ -111,7 +111,7 @@ public final class WrittenOutElements {
 
     private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {
         return new ReadMeaning.Occurrence(denotation(one.value()), one.keptWhere().stream()
-                .map(WrittenOutElements::kept).toList());
+                .map(WrittenOutElements::kept).toList(), one.answered());
     }
 
     private static ReadMeaning.Occurrence.Kept kept(ElementsWrittenOut.Kept<InputReads> kept) {

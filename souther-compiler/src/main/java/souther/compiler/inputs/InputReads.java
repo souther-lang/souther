@@ -826,7 +826,8 @@ public final class InputReads {
     /** The same, of an occurrence: its value and each thing it was kept by. */
     private ReadMeaning.Occurrence carryingWhatIsTaken(ReadMeaning.Occurrence occurrence) {
         return new ReadMeaning.Occurrence(carryingWhatIsTaken(occurrence.value()),
-                occurrence.keptWhere().stream().map(this::carryingWhatIsTaken).toList());
+                occurrence.keptWhere().stream().map(this::carryingWhatIsTaken).toList(),
+                occurrence.answered());
     }
 
     private ReadMeaning.Occurrence.Kept carryingWhatIsTaken(ReadMeaning.Occurrence.Kept kept) {

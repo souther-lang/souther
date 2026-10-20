@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 /**
@@ -97,22 +98,31 @@ public final class ElementsWrittenOut {
      *
      * @param keptWhere the truths it was kept by, each read where it was decided, those decided
      *                  first first — none where nothing keeps it out
+     * @param answered  which application of the step that made {@code value} this is, counting from
+     *                  none in the order the step is handed the elements of its container, where
+     *                  that is also the run's own count of the step's applications: every element
+     *                  the step was handed up to this one was handed it on every run. Empty where
+     *                  {@code value} is no step's answer, and where an element before it may have
+     *                  been dropped — past a drop a run applies the step to fewer, and which
+     *                  application this is is not something the container says
      */
-    public record Occurrence<E>(Stood<E> value, List<Kept<E>> keptWhere) {
+    public record Occurrence<E>(Stood<E> value, List<Kept<E>> keptWhere, OptionalInt answered) {
 
         public Occurrence {
             Objects.requireNonNull(value, "an occurrence is of some value");
             keptWhere = List.copyOf(keptWhere);
+            Objects.requireNonNull(answered,
+                    "an occurrence is answered by some application or none");
         }
 
         static <E> Occurrence<E> always(Stood<E> value) {
-            return new Occurrence<>(value, List.of());
+            return new Occurrence<>(value, List.of(), OptionalInt.empty());
         }
 
         Occurrence<E> keptAlsoWhere(List<Kept<E>> more) {
             List<Kept<E>> all = new ArrayList<>(more);
             all.addAll(keptWhere);
-            return new Occurrence<>(value, all);
+            return new Occurrence<>(value, all, answered);
         }
     }
 
@@ -351,11 +361,15 @@ public final class ElementsWrittenOut {
         }
         BindingId element = pieces.element().binding();
         List<Occurrence<E>> out = new ArrayList<>();
+        // Whether every element the step was handed so far was handed it on every run, which is
+        // what makes the number of an application the number a run counts it as.
+        boolean everyOneReached = true;
         for (int application = 0; application < elements.size(); application++) {
             Occurrence<E> each = elements.get(application);
             if (out.size() >= enough) {
                 break;
             }
+            everyOneReached &= each.keptWhere().isEmpty();
             // The step's body read on the application handing it this element.
             Stood<E> answered = new Stood<>(pieces.step().body(),
                     reading.handing(stepAt, element, each.value()));
@@ -364,7 +378,8 @@ public final class ElementsWrittenOut {
                     if (++walked[0] > MOST_WALKED) {
                         return new Walked.PastTheFigure<>();
                     }
-                    out.add(new Occurrence<>(answered, each.keptWhere()));
+                    out.add(new Occurrence<>(answered, each.keptWhere(),
+                            everyOneReached ? OptionalInt.of(application) : OptionalInt.empty()));
                 }
                 case THE_ELEMENT_WHERE_IT_HOLDS -> {
                     if (++walked[0] > MOST_WALKED) {
@@ -372,7 +387,7 @@ public final class ElementsWrittenOut {
                     }
                     List<Kept<E>> kept = new ArrayList<>(each.keptWhere());
                     kept.add(new Kept.ATruth<>(answered, true, application));
-                    out.add(new Occurrence<>(each.value(), kept));
+                    out.add(new Occurrence<>(each.value(), kept, each.answered()));
                 }
                 case WHAT_THE_CLOSURE_ANSWERS -> {
                     Walked<E> inside = of(reading.standing(answered.value(), answered.at()),

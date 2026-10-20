@@ -205,11 +205,17 @@ final class Meetings {
 
     /** Whether {@code call} adds or multiplies the elements of its only argument. */
     static boolean combinesItsElements(Core.Call call) {
+        return accumulationOf(call) != null;
+    }
+
+    /** How {@code call} adds or multiplies the elements of its only argument, or null where it
+     *  does not. */
+    static Accumulation accumulationOf(Core.Call call) {
         if (!(call.fn() instanceof Core.Reached.OfKernel kernel) || call.args().size() != 1) {
-            return false;
+            return null;
         }
         Accumulation walk = DefaultBoundOperationFacts.get().accumulation(kernel.name().denotes());
-        return walk != null && walk.combine() != Accumulation.Combine.APPEND;
+        return walk != null && walk.combine() != Accumulation.Combine.APPEND ? walk : null;
     }
 
     /** Whether {@code call} answers how many elements its only argument holds. */

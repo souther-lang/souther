@@ -38,11 +38,32 @@ class RowsAreOfferedForEveryChoiceOfKeptElementsTest {
                 List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ first, second ])))
             """;
 
+    /** Every element kept, and what each is worth decided by the same comparison. */
+    private static final String WORTH_DECIDED = """
+            module example.attendance
+
+            data Row = { days: Int, pay: Int }
+
+            behavior total : (first: Row, second: Row) -> Int
+
+            let total (first, second) =
+                List.sum(List.map(r -> if r.days >= 17 then r.pay else 0, [ first, second ]))
+            """;
+
     private static final Pattern DAYS = Pattern.compile("days = (\\d+)");
 
     @Test
     void aRowIsOfferedForEveryChoiceOfWhichElementsAreKept() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        assertEveryChoiceIsOffered(MODEL);
+    }
+
+    @Test
+    void aRowIsOfferedForEveryChoiceOfWhatEachElementIsWorth() {
+        assertEveryChoiceIsOffered(WORTH_DECIDED);
+    }
+
+    private static void assertEveryChoiceIsOffered(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String offered = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),

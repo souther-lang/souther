@@ -5,6 +5,7 @@ import souther.compiler.check.ElementsWrittenOut;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 
 /**
  * What a name a body reads stands for, said in terms of the behavior's input.
@@ -162,7 +163,8 @@ public sealed interface ReadMeaning {
         for (Occurrence each : occurrences) {
             List<Occurrence.Kept> open = kept.stillOpen(each.keptWhere());
             if (open != null) {
-                out.add(open == each.keptWhere() ? each : new Occurrence(each.value(), open));
+                out.add(open == each.keptWhere() ? each
+                        : new Occurrence(each.value(), open, each.answered()));
             }
         }
         return out;
@@ -203,17 +205,23 @@ public sealed interface ReadMeaning {
      * statement: a filter's closure was applied to the element in the reading that handed it, and
      * a filter around that one to the element it was handed in turn. Read in any other names, the
      * same truth would be about another value.
+     *
+     * @param answered which application of the step that made {@code value} this is, where that is
+     *                 also the run's own count of the step's applications
+     *                 ({@link ElementsWrittenOut.Occurrence#answered})
      */
-    record Occurrence(Denotation value, List<Kept> keptWhere) {
+    record Occurrence(Denotation value, List<Kept> keptWhere, OptionalInt answered) {
 
         public Occurrence {
             Objects.requireNonNull(value, "an occurrence is of some value");
             keptWhere = List.copyOf(keptWhere);
+            Objects.requireNonNull(answered,
+                    "an occurrence is answered by some application or none");
         }
 
         /** An occurrence nothing keeps out. */
         public static Occurrence always(Denotation value) {
-            return new Occurrence(value, List.of());
+            return new Occurrence(value, List.of(), OptionalInt.empty());
         }
 
         /** The same occurrence, kept also where every one of {@code more} holds — those decided
@@ -221,7 +229,7 @@ public sealed interface ReadMeaning {
         public Occurrence keptAlsoWhere(List<Kept> more) {
             List<Kept> all = new ArrayList<>(more);
             all.addAll(keptWhere);
-            return new Occurrence(value, all);
+            return new Occurrence(value, all, answered);
         }
 
         /**

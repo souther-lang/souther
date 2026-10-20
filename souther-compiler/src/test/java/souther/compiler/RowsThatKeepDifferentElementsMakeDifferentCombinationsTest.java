@@ -81,6 +81,36 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
         assertEquals(0, evidence.notMadeByRows().size());
     }
 
+    /** The same total, with every element kept and what each is worth decided instead. */
+    private static final String WORTH_DECIDED = """
+            module example.attendance
+
+            data Row = { days: Int, pay: Int }
+
+            behavior total : (first: Row, second: Row) -> Int
+
+            let total (first, second) =
+                List.sum(List.map(r -> if r.days >= 17 then r.pay else 0, [ first, second ]))
+
+            example total
+            """;
+
+    /**
+     * What each element is worth is decided by the same comparison on the same application, so the
+     * same rows make the same four combinations as they do when the comparison keeps the elements.
+     */
+    @Test
+    void aChoiceOfWhatEachElementIsWorthIsMadeCombinationByCombinationAsAKeepingIs() {
+        assertEquals(4, evidenceOf(rows(FIRST_ONLY)).counted());
+        assertEquals(4, evidenceOf(WORTH_DECIDED + FIRST_ONLY).counted());
+        assertEquals(1, made(evidenceOf(WORTH_DECIDED + FIRST_ONLY)));
+        assertEquals(2, made(evidenceOf(WORTH_DECIDED + FIRST_ONLY + SECOND_ONLY)));
+        InteractionEvidence all = evidenceOf(
+                WORTH_DECIDED + FIRST_ONLY + SECOND_ONLY + BOTH + NEITHER);
+        assertEquals(4, made(all));
+        assertEquals(0, all.notMadeByRows().size());
+    }
+
     /** The same total after a flatMap that writes each kept element out twice. */
     private static final String FLAT_MAPPED = """
             module example.attendance

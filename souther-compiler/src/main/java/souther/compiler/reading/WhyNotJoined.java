@@ -25,6 +25,15 @@ public enum WhyNotJoined {
      *  records which way it came out apart from the others. */
     NOT_ONE_COMPARISON,
 
+    /** What an element is worth is decided by something this reading does not read: a fork that is
+     *  not an {@code if} on one comparison, or one beneath the names the value is written with. */
+    A_VALUE_CHOICE_NOT_READ,
+
+    /** What an element is worth is decided by a comparison, and which of its evaluations is the
+     *  element's is not the container's to say: an element before it may have been dropped, so a
+     *  run applied the closure to fewer. */
+    A_VALUE_CHOICE_NOT_NUMBERED,
+
     /** The comparison asks which case of a union a value is, which an arm of a choice records and
      *  a visit to a comparison does not. */
     A_COMPARISON_OF_CASES,
