@@ -2027,7 +2027,7 @@ final class ReadQuantities implements Quantities {
      * name — so a guard bounding one would have been read against the clauses written about the
      * other (#1027).
      */
-    private static NumberAt<RuleKey> coordinateOf(UnderARoot at, NumericTerm term) {
+    private NumberAt<RuleKey> coordinateOf(UnderARoot at, NumericTerm term) {
         return switch (term) {
             case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
             case NumericTerm.TakenOf taken ->
@@ -2040,6 +2040,10 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.OccurrencesOfItsValue occurrences ->
                     NumberAt.occurrencesOf(at.named(), occurrences.selection() == null ? null
                             : occurrences.selection().key());
+            // The key by the whole place it stands at: what a rule calls a place is relative to the
+            // value it is a position of, and two parameters are both called the value.
+            case NumericTerm.OccurrencesOfAKey asked ->
+                    NumberAt.occurrencesOfAKey(at.named(), asked.key().discriminated());
             case NumericTerm.ExtremeOfItsKey extreme ->
                     NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().fields());
             case NumericTerm.TakenOver over ->
@@ -2386,7 +2390,8 @@ final class ReadQuantities implements Quantities {
                     RunReach.of(over, ordersOf(over), typeAt, ruleReading);
             // Nothing the rules of the elements say bounds how often one of them occurs besides
             // the term's own floor, which every term is read with.
-            case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _ -> null;
+            case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
+                 NumericTerm.OccurrencesOfAKey _ -> null;
             // The end of a key's values is one of the values the place holds, so it is wherever
             // what the place was read to hold is.
             case NumericTerm.ExtremeOfItsKey extreme ->

@@ -847,6 +847,16 @@ final class DemandReading {
                                        DecisionSubject.AnInput(TermPath other), boolean _, var _)
                     when keyOf(one, other) != null -> ofAnEntryKeyedAs(keyOf(one, other), stated,
                     read);
+            // A part of an element being the value at a position outside it, both on an order: the
+            // difference of the two held at nought, which a region places and a composer writes the
+            // element toward as it does for any other relation between them.
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean holds,
+                                       var _)
+                    when aPartOfAnElementAgainstAnotherPosition(one, other, read) ->
+                    List.of(ofAFormOfTheInput(LinearForm.difference(
+                            new NumericTerm.ValueOf(one), new NumericTerm.ValueOf(other)),
+                            holds ? Rel.EQ : Rel.NE, read));
             // Two positions of the row being one value, or not, which is what a row writes at
             // them.
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
@@ -1326,6 +1336,29 @@ final class DemandReading {
     }
 
     /**
+     * Whether {@code one} and {@code other} are two positions on an order, of which one stands
+     * inside a container as a part of its element and not as the element itself, and the other
+     * stands outside that container.
+     *
+     * <p>The element itself is what a container holds, which a composer writes into it
+     * ({@link RowDemand.SameAs}); a part of it is a number of the element, like any other.
+     */
+    private static boolean aPartOfAnElementAgainstAnotherPosition(TermPath one, TermPath other,
+                                                                  InputReading read) {
+        if (!one.insideAContainer() || one.equals(one.containersHoldingIt().getLast().element())
+                || other.insideAContainer() || one.mapOfTheKeys() != null
+                || other.mapOfTheKeys() != null) {
+            return false;
+        }
+        return onAnOrder(one, read) && onAnOrder(other, read);
+    }
+
+    private static boolean onAnOrder(TermPath at, InputReading read) {
+        TermOrders orders = read.quantities().ordersOf(new NumericTerm.ValueOf(at));
+        return orders != null && orders.observed() != null;
+    }
+
+    /**
      * What an entry of the map at {@code map} being filed under a key — or under another than it —
      * asks of a row: the map holds one, which is some element of it asked this.
      */
@@ -1598,18 +1631,7 @@ final class DemandReading {
                 if (against == null) {
                     yield overNoRowNumber(compared, form);
                 }
-                yield switch (read.quantities().region().assuming(against, met)) {
-                    case SearchRegion.Assumption.Taken _ -> new Read.Demands(
-                            new RowDemand.Relational(new TakenConstraint.Affine(against, met)));
-                    // Two values on no order held equal or unequal, which is what a row writes
-                    // and not a relation a region places. Held one above the other, they are a
-                    // distance on nothing, and the region's word for why is what is said.
-                    case SearchRegion.Assumption.Refused(var why) -> {
-                        RowDemand.OneValueAtBoth both = oneValueAtBoth(against, met);
-                        yield both != null ? new Read.Demands(both)
-                                : new Read.Unread(whyDeclined(why));
-                    }
-                };
+                yield ofAFormOfTheInput(against, met, read);
             }
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.FromOnePosition term),
                                   var at, Rel _) ->
@@ -1618,6 +1640,26 @@ final class DemandReading {
                             : new TakenConstraint.AwayFrom(term, at)));
             case Relation.Ordered _ ->
                     forTheRun(compared, RowDemand.NoComposer.AN_ORDER_OF_NO_ONE_POSITION);
+        };
+    }
+
+    /**
+     * What {@code against} coming out {@code met} asks of a row, where it is a form over numbers of
+     * the input: a relation a region places, or two values the row writes where they stand on no
+     * order the region measures.
+     */
+    private static Read ofAFormOfTheInput(LinearForm<NumericTerm> against, Rel met,
+                                          InputReading read) {
+        return switch (read.quantities().region().assuming(against, met)) {
+            case SearchRegion.Assumption.Taken _ -> new Read.Demands(
+                    new RowDemand.Relational(new TakenConstraint.Affine(against, met)));
+            // Two values on no order held equal or unequal, which is what a row writes
+            // and not a relation a region places. Held one above the other, they are a
+            // distance on nothing, and the region's word for why is what is said.
+            case SearchRegion.Assumption.Refused(var why) -> {
+                RowDemand.OneValueAtBoth both = oneValueAtBoth(against, met);
+                yield both != null ? new Read.Demands(both) : new Read.Unread(whyDeclined(why));
+            }
         };
     }
 

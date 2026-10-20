@@ -2806,7 +2806,8 @@ final class Pullback {
             // has, for each element there, the step's answer on it.
             Located located = locate(container, over, in, kept, false);
             if (located == null) {
-                return unread(over, in,
+                Derivation across = acrossTheListsOfAFold(container, some);
+                return across != null ? across : unread(over, in,
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             if (located.pieces() != null) {
@@ -2844,6 +2845,40 @@ final class Pullback {
                             && located.each() instanceof ElementAt.AtASubject
                             && reads.orderLeftToTheRows());
             return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething, asked);
+        }
+
+        /**
+         * Whether a map holds the key the lookup asks for, where the map is one a fold built by
+         * filing under the key of each element of the lists of an outer list put end to end — or
+         * null where it is not.
+         *
+         * <p>The map has an entry under the key where the key occurs among those elements: one
+         * count ({@link NumericTerm.OccurrencesOfAKey}) at least one. The counter the entry holds
+         * is read of the same count, so the lookup finding something and what it finds are of one
+         * number ({@link #valueLookedUpUnderAKey}).
+         */
+        private Derivation acrossTheListsOfAFold(
+                Denotation map, LawProposition.SomeElement<DeclaredArgument> some) {
+            if (!some.holds()
+                    || !(some.ofTheElement() instanceof LawProposition.Same<DeclaredArgument>(
+                            LawSubject<DeclaredArgument> one, LawSubject<DeclaredArgument> other,
+                            boolean alike))
+                    || !alike
+                    || !(one instanceof LawSubject.KeyOf<DeclaredArgument>(
+                            DeclaredArgument entries))
+                    || !entries.equals(some.container())
+                    || !(other instanceof LawSubject.Argument<DeclaredArgument>(
+                            DeclaredArgument asked))) {
+                return null;
+            }
+            KeyedAccumulation filed = KeyedAccumulation.of(map.value(), map.at(), sides(),
+                    blocksAt(map));
+            NumericTerm.OccurrencesOfAKey occurrences = filed == null ? null
+                    : occurrencesOfTheKeyAskedFor(map, filed, applied.argument(asked), reads);
+            if (occurrences == null) {
+                return null;
+            }
+            return new Derivation.SomeElementEqualToAKey(occurrences);
         }
 
         /**
@@ -5172,8 +5207,8 @@ final class Pullback {
             return null;
         }
         Core lookup = at.lookupOpenedBy(name.binding()).lookup();
-        Core map = AnOperationApplied.of(lookup) instanceof AnOperationApplied applied
-                ? KeyedAccumulation.mapOf(applied) : null;
+        AnOperationApplied applied = AnOperationApplied.of(lookup);
+        Core map = applied == null ? null : KeyedAccumulation.mapOf(applied);
         if (map == null) {
             return null;
         }
@@ -5188,7 +5223,19 @@ final class Pullback {
         }
         Derivation.SomeElementMeeting meeting = someElementMeetingIn(
                 observe(lookup, AnswerAspect.PRESENCE, at));
-        if (meeting == null || !meeting.holds()) {
+        if (meeting == null) {
+            // The key asked for may occur among the lists of an outer list put end to end, which
+            // no one container holds: the counter is read of the count the lookup's presence is
+            // read of.
+            NumericTerm.OccurrencesOfAKey across = applied.args().size() == 2
+                    ? occurrencesOfTheKeyAskedFor(whole, filed, applied.args().getFirst(), at)
+                    : null;
+            return across != null && counted.first().plus(counted.step().negated())
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio constant)
+                    ? new LinearForm<>(constant,
+                            Map.of(new DecisionAtom.OfTheInput(across), counted.step())) : null;
+        }
+        if (!meeting.holds()) {
             return null;
         }
         Derivation ofTheElement = asAComparisonOfTwoOrderedValues(meeting.ofTheElement());
@@ -5306,6 +5353,15 @@ final class Pullback {
      * a count across containers where more than one does.
      */
     private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed) {
+        return occurrencesOfTheKey(whole, filed, false);
+    }
+
+    /**
+     * The same, where {@code acrossOnly} asks for the count across containers of every
+     * occurrence and for nothing else: null for a list of one container, or of some occurrences.
+     */
+    private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed,
+                                            boolean acrossOnly) {
         DeclarationNewtypes newtypes = read.rules().newtypes();
         // A key read out of a component of a tuple the walk built of each element is the place the
         // walk gave that component, and no place inside it.
@@ -5322,6 +5378,9 @@ final class Pullback {
         }
         TermPath place = key.at().from(every.keys());
         List<TermPath> holding = place.containersHoldingIt();
+        if (acrossOnly && (holding.size() < 2 || !every.keptBy().isEmpty())) {
+            return null;
+        }
         KeptOccurrences selection = null;
         if (!every.keptBy().isEmpty()) {
             selection = every.keptBy().size() == 1
@@ -5340,6 +5399,30 @@ final class Pullback {
                     ? (selection == null ? NumericTerm.OccurrencesOfItsValue.of(flat)
                             : NumericTerm.OccurrencesOfItsValue.of(flat, selection)) : null;
         };
+    }
+
+    /**
+     * How often the value {@code asked} stands for occurs among the keys of the elements of the
+     * list a fold walks, across the containers the list puts end to end — or null where the list
+     * is not so many containers, some of its elements are kept by a statement, or the value is no
+     * input standing outside every container.
+     *
+     * <p>The count of {@link #occurrencesOfTheKey}, read for a value that is not one of the
+     * elements': nought where it occurs among none.
+     */
+    private NumericTerm.OccurrencesOfAKey occurrencesOfTheKeyAskedFor(
+            Denotation whole, KeyedAccumulation filed, Core asked, InputReads at) {
+        // A list that holds one value for each element of a container is counted among that
+        // container's elements.
+        if (asked == null || whereFiled(whole, filed) != null
+                || !(at.pathOf(asked, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath key))) {
+            return null;
+        }
+        return occurrencesOfTheKey(whole, filed, true)
+                instanceof NumericTerm.OccurrencesOfItsValue every
+                && every.run() instanceof RunSource.FlattenedOccurrences flat
+                ? NumericTerm.OccurrencesOfAKey.of(flat, key) : null;
     }
 
     /**

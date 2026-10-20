@@ -110,6 +110,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfItsOccurrencesInEveryContainer(keptBy));
     }
 
+    /** How many of the values standing at {@code position}, in every container it stands inside,
+     *  are what the value spelled {@code key} is. */
+    public static <P> NumberAt<P> occurrencesOfAKey(P position, String key) {
+        return new NumberAt<>(position, new OfWhatNumber.OfTheOccurrencesOfAKey(key));
+    }
+
     /** The {@code extreme} of what the elements of the container {@code position} stands inside
      *  hold there, among those holding at {@code key} what the element under consideration holds
      *  there. */
@@ -219,6 +225,21 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         record OfItsOccurrencesInEveryContainer(String keptBy) implements OfWhatNumber {}
 
         /**
+         * How many of the values standing at the place, in every container it stands inside, are
+         * the value standing at {@code key}, another place of the input.
+         *
+         * <p>Not {@link OfItsOccurrencesInEveryContainer}: that is counted for a value that is one
+         * of those at the place and is never nought, and this for a value outside them. The key is
+         * part of which number it is, as the key of an extreme is.
+         */
+        record OfTheOccurrencesOfAKey(String key) implements OfWhatNumber {
+
+            public OfTheOccurrencesOfAKey {
+                Objects.requireNonNull(key, "this one names the value counted for");
+            }
+        }
+
+        /**
          * The least or the greatest of what the elements of the container the place stands inside
          * hold there, among the elements holding at {@code key} — the fields read from an element
          * to reach it — what the element under consideration holds there.
@@ -273,6 +294,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
             case OfWhatNumber.OfItsOccurrencesInEveryContainer kept -> kept.keptBy() == null
                     ? "occurrences(" + position + ")"
                     : "occurrences(" + position + " kept by " + kept.keptBy() + ")";
+            case OfWhatNumber.OfTheOccurrencesOfAKey asked ->
+                    "occurrences(" + position + " equal to " + asked.key() + ")";
             case OfWhatNumber.OfTheExtremeOfItsKey extremeOf ->
                     extremeOf.spelledAt(position.toString());
         };

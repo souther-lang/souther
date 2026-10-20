@@ -83,6 +83,12 @@ public enum CompositionBudget {
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
+    /** How many combinations of how often each of several keys occurs are tried for the lists of
+     *  an outer list. They multiply with the keys, and each is a container composed whole, so a
+     *  walk over them is held to this and not to the containers it offers, which count only the
+     *  ones that were built. */
+    COUNTS_OF_KEYS_TRIED(4096),
+
     /** How many values of an element of a type that has only so many are read for the counts its
      *  container is composed for, each read for every statement the counts are of. Past it the
      *  values left are not offered, and the container is composed of the ones read. The same
@@ -609,6 +615,8 @@ public enum CompositionBudget {
             case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
             case SHARES_A_COUNT_IS_TRIED_AT ->
                     "how many ways of sharing out a container's elements are tried for a count";
+            case COUNTS_OF_KEYS_TRIED ->
+                    "how many combinations of how often each key occurs are tried";
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
                     "how many values of an element are read for a count";
             case WAYS_DOWN_TO_A_TOTAL_TRIED -> "how many ways down to what a total adds up are tried";
@@ -719,7 +727,8 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
+                 SHARES_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
+                 VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,

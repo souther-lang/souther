@@ -147,6 +147,8 @@ sealed interface InputAtom {
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + at + ")";
                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
                         "occurrences(" + at + ")";
+                case NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey asked ->
+                        "occurrences(" + at + " equal to " + asked.key() + ")";
                 case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme -> extreme.spelledAt(at);
             };
         }
