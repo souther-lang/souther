@@ -830,6 +830,19 @@ public sealed interface ElementValue {
     }
 
     /**
+     * What a licensed closure computed of its element, for elements that stand at no place of the
+     * input — the code points of a string are made from it and held by none of its fields.
+     *
+     * <p>A {@code match} on a place of the element is not read: what its arms take is the
+     * declaration's to say at the place the elements stand, and there is none.
+     */
+    static ElementValue readWithoutAPlace(ElementAnswer answer, Map<BindingId, Core> held,
+                                          RuleReadingSource source) {
+        return new Reader(answer.parameter(), answer.position(), Map.of(), held, source, null)
+                .value(answer.body());
+    }
+
+    /**
      * Where the elements of a walk stand, and what the declarations put there.
      *
      * <p>What an arm of a {@code match} on an element takes is the declaration's to say at that
@@ -857,6 +870,7 @@ public sealed interface ElementValue {
         private final Map<BindingId, ElementProjection> standing;
         private final Map<BindingId, Core> held;
         private final RuleReadingSource source;
+        /** Where the elements stand, or null where they stand at no place of the input. */
         private final ElementsAt elements;
 
         private Reader(BindingId element, BindingId position,
@@ -1088,7 +1102,7 @@ public sealed interface ElementValue {
          */
         private ElementValue byCase(Core.Match match) {
             ElementProjection subject = placeOf(match.scrutinee(), held);
-            if (subject == null) {
+            if (subject == null || elements == null) {
                 return null;
             }
             TermPath at = subject.from(elements.at());

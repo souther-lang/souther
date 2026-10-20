@@ -17,7 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AWayDecidesARelationOnlyWhereItLeavesOneAnswerTest {
 
-    private static final String NOT_SHOWN = "not shown to reach every value here";
+    private static final String POINT_OF_THE_INNER_COMPARISON =
+            "whether a row is at the OFF point (comparison@6:";
 
     private static String report(String comparison) {
         Compilation compilation = Compilation.ofSource("""
@@ -37,11 +38,11 @@ class AWayDecidesARelationOnlyWhereItLeavesOneAnswerTest {
     /** Differences of nought and of nine are both left by the way, and ten is between them. */
     @Test
     void aComparisonThatTheDifferencesTheWayLeavesCrossIsNotDecided() {
-        assertTrue(report("10").contains(NOT_SHOWN), report("10"));
+        assertTrue(report("10").contains(POINT_OF_THE_INNER_COMPARISON), report("10"));
     }
 
     @Test
     void aComparisonThatEveryDifferenceTheWayLeavesGivesOneAnswerIsDecided() {
-        assertFalse(report("-10").contains(NOT_SHOWN), report("-10"));
+        assertFalse(report("-10").contains(POINT_OF_THE_INNER_COMPARISON), report("-10"));
     }
 }

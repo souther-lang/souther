@@ -683,7 +683,12 @@ public final class InputReads {
      */
     public Core containerOfTheElement(Core e) {
         return Core.withoutStanding(e) instanceof Core.Read read && read.binding() != null
-                && names.roleOf(read.binding()) instanceof BindingRole.Element(var held)
+                ? containerOfTheElementHandedTo(read.binding()) : null;
+    }
+
+    /** The same, of the parameter {@code binding} itself. */
+    public Core containerOfTheElementHandedTo(BindingId binding) {
+        return names.roleOf(binding) instanceof BindingRole.Element(var held)
                 && held.part() == HeldIn.Part.ELEMENT ? held.container() : null;
     }
 

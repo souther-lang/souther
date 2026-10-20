@@ -188,7 +188,8 @@ final class NumericReadings {
                      BoundOperationFact.IsStatedOverAProjection _,
                      BoundOperationFact.StatesItsPredicateOfEveryElement _,
                      BoundOperationFact.MeansTheSameAsASizeOfNought _,
-                     BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> { }
+                     BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _,
+                     BoundOperationFact.EndsAreWhereTheRepresentationStops _ -> { }
             }
         }
         List<NumericReading> found = new ArrayList<>(terms);
