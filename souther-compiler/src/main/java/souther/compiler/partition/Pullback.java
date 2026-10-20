@@ -1597,9 +1597,10 @@ final class Pullback {
      * string {@code parted} says it was handed: what a split at {@code separator}, one code point,
      * leaves — or, with no separator, its characters, each code point a piece.
      *
-     * <p>One call in one reading is one set of pieces: the call by identity, since a name stands
-     * for the very node its binding was given, and the reading by what it holds. What else is held
-     * is what that call and reading say.
+     * <p>One call in one reading, taken to the same pieces, is one set of them: the call by
+     * identity, since a name stands for the very node its binding was given, the reading by what it
+     * holds, and which of the pieces were taken ({@code first}). What else is held is what that
+     * call and reading say.
      *
      * <p>{@code first} is how many of the first pieces a container holds when only those were
      * taken, and nought where it holds them all: whether some of the first few meets a statement
@@ -1611,12 +1612,13 @@ final class Pullback {
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Pieces that && split == that.split && at.equals(that.at);
+            return other instanceof Pieces that && split == that.split && at.equals(that.at)
+                    && first == that.first;
         }
 
         @Override
         public int hashCode() {
-            return 31 * System.identityHashCode(split) + at.hashCode();
+            return 31 * (31 * System.identityHashCode(split) + at.hashCode()) + first;
         }
     }
 
@@ -1800,18 +1802,54 @@ final class Pullback {
     }
 
     /**
-     * Whether {@code read} says no more than that the piece {@code within} statements in is the
-     * same value as another value, or is not: a form of that piece and one value, weighed alike.
+     * That the value is one of {@code pieces}, where {@code read} says no more than that the piece
+     * {@code within} statements in is the same value as it — or null where it says anything else.
+     *
+     * <p>Only that the piece is the value: the piece being another value is which piece it is, and
+     * not what is said of them all. And only of pieces that are never none, since the value is
+     * then one of them or not whatever the string holds; of the characters of a string that may
+     * be empty it is none of them for every value, which divides the string.
      */
-    private static boolean isAPieceComparedWithAValue(Proposition read, int within) {
-        if (!(read instanceof Proposition.Compared(Relation relation, var _, var _))
-                || !(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
-                || (rel != Rel.EQ && rel != Rel.NE) || form.constant().signum() != 0
-                || form.coefs().size() != 2) {
-            return false;
+    private Quantity.IsAmongThePieces valueBeingOneOfThePieces(Proposition read, int within,
+                                                               Pieces pieces) {
+        if (!(read instanceof Proposition.Compared(
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _))
+                || rel != Rel.EQ || !holds || form.constant().signum() != 0
+                || form.coefs().size() != 2 || !hasAPieceWhateverTheStringHolds(pieces)) {
+            return null;
         }
-        return form.coefs().keySet().stream().anyMatch(each ->
-                each instanceof Quantity.APieceOf piece && piece.within() == within);
+        Quantity.APieceOf piece = null;
+        Quantity value = null;
+        for (Quantity each : form.coefs().keySet()) {
+            if (each instanceof Quantity.APieceOf bound && bound.within() == within
+                    && piece == null) {
+                piece = bound;
+            } else {
+                value = each;
+            }
+        }
+        // The piece against the value: weighed the opposite ways, and by the same.
+        if (piece == null || value == null
+                || !form.coefs().get(piece).negated().equals(form.coefs().get(value))
+                || !(value instanceof DecisionAtom.OfTheInput
+                        || value instanceof Quantity.WhatAnOperationAnswers)) {
+            return null;
+        }
+        return new Quantity.IsAmongThePieces(value, piece.operation(), piece.separator(),
+                piece.string(), piece.among());
+    }
+
+    /** Whether what {@code pieces} are of has a piece however the string stands, as the library
+     *  states and proves of the operation that parts it. */
+    private static boolean hasAPieceWhateverTheStringHolds(Pieces pieces) {
+        return DefaultBoundOperationFacts.get()
+                .settled(pieces.operation(), OperationLaw.Observed.EMPTINESS)
+                instanceof BoundOperationFacts.Settled.ByALaw(
+                        OperationLaw<DeclaredArgument> law, var _)
+                && law instanceof OperationLaw.Observation<DeclaredArgument>(
+                        var _, LawProposition<DeclaredArgument> equivalentTo)
+                && equivalentTo instanceof LawProposition.Always<DeclaredArgument>(
+                        boolean holds) && holds;
     }
 
     /**
@@ -2890,10 +2928,13 @@ final class Pullback {
                 parting.remove(pieces);
             }
             Proposition element = trying.of(answered);
-            // A piece being the same value as one of the input, or not, relates that value to the
-            // string and divides neither; some piece being so is what the statement already says.
-            if (isAPieceComparedWithAValue(element, within)) {
-                return leaf(new Derivation.SomePieceEqualling(answered),
+            // Some piece being the same value as one of the input is that value being one of the
+            // pieces, which relates it to the string and divides neither where the string has a
+            // piece for every value to be or not to be. What leaves the statement is that, and
+            // never the piece, which the statement binds.
+            Quantity.IsAmongThePieces among = valueBeingOneOfThePieces(element, within, pieces);
+            if (among != null) {
+                return leaf(new Derivation.SomePieceEqualling(answered, among),
                         askedAt != null ? askedAt : new Denotation(e, reads));
             }
             CodePoints held = pieces.first() > 0 ? null
@@ -4622,6 +4663,8 @@ final class Pullback {
                     out.addAll(answers.positionsItIsMadeOf());
                 } else if (atom instanceof Quantity.APieceOf piece) {
                     out.addAll(piece.positionsItIsMadeOf());
+                } else if (atom instanceof Quantity.IsAmongThePieces among) {
+                    out.addAll(among.positionsItIsMadeOf());
                 }
             }
         }

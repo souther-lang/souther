@@ -90,6 +90,7 @@ public final class WrittenOfANode {
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(this::reads);
             case Quantity.APieceOf piece -> reads(piece.string());
+            case Quantity.IsAmongThePieces among -> reads(among.value()) && reads(among.string());
         };
     }
 

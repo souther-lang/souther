@@ -257,6 +257,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 case Quantity.APieceOf piece -> new Side(
                         piece.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
                         each.getValue(), null, null);
+                case Quantity.IsAmongThePieces among -> new Side(
+                        among.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
+                        each.getValue(), null, null);
                 case Quantity.OfABinding bound -> new Side(List.of(), each.getValue(), null,
                         bound.kept().orElse(null));
                 default -> new Side(List.of(), each.getValue(), null, null);

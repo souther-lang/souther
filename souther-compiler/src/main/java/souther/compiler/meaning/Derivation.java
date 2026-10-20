@@ -1046,7 +1046,7 @@ public sealed interface Derivation {
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
-                    case SomePieceEqualling(Derivation ofThePiece) ->
+                    case SomePieceEqualling(Derivation ofThePiece, var _) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds, var _) -> {
@@ -2474,23 +2474,32 @@ public sealed interface Derivation {
     }
 
     /**
-     * That some piece of a string is the same value as a value of the input, or is not, as
-     * {@code ofThePiece} reads one piece compared with it ({@link Quantity.APieceOf}).
+     * That some piece of a string is the same value as a value of the input, as {@code ofThePiece}
+     * reads one piece compared with it ({@link Quantity.APieceOf}).
      *
-     * <p>It relates that value to the string and divides neither: whatever the string holds, some
-     * value is one of its pieces and some is not. So what it concludes is what was read of the
-     * piece, which names the piece in a form with the value and says nothing of which code points
+     * <p>What it concludes is that the value is one of the pieces ({@code among}), and its denial is
+     * that it is none of them. It is not what was read of the one piece: that piece is bound by the
+     * statement and stands for whichever one the value is, so held outside it, "the piece is the
+     * value" and "the piece is another value" would be each other's denial, where a string of two
+     * pieces has one of each. It relates that value to the string and divides neither, since the
+     * string has a piece for every value to be or not to be, and says nothing of which code points
      * the string holds ({@link SomePieceMeeting}).
+     *
+     * @param ofThePiece what was read of the piece, inside the statement
+     * @param among      the value being one of the pieces, which is what leaves the statement
      */
-    record SomePieceEqualling(Derivation ofThePiece) implements Derivation {
+    record SomePieceEqualling(Derivation ofThePiece, Quantity.IsAmongThePieces among)
+            implements Derivation {
 
         public SomePieceEqualling {
             Objects.requireNonNull(ofThePiece, "a piece is read as the same as something");
+            Objects.requireNonNull(among, "and the value is one of the pieces");
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return numbering.of(ofThePiece);
+            return Proposition.compared(new Relation.Affine(
+                    LinearForm.atomMinusConstant(among, ExactRatio.ONE), Rel.EQ), true);
         }
 
         @Override

@@ -41,6 +41,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -173,39 +175,65 @@ class ACountOfWhatACaseConversionAnswersIsAskedOfTheAnswerTest {
      */
     @Test
     void aStringIsDividedByWhetherItsConversionHoldsAnAsciiLetterOrADigit() {
-        for (String conversion : List.of("lowercase", "uppercase")) {
-            String letters = conversion.equals("lowercase") ? "[a-z0-9]" : "[A-Z0-9]";
-            List<List<String>> sides = representativesOfEachClass("""
-                    module probe.conversion
-                    data Title = String
-                        invariant String.length(value) >= 1 && String.length(value) <= 40
-                    data Ok
-                    data No
-                    behavior f : (title: Title) -> Ok | No
-                    let f (title) = {
-                        guard String.length(title.value |> String.%s |> String.characters
-                            |> List.map(c -> if String.matches("%s", c) then c else " ")
-                            |> String.concat |> String.trim) >= 1 else No
-                        Ok
-                    }
-                    """.formatted(conversion, letters));
-            assertEquals(2, sides.size(), conversion);
-            for (List<String> side : sides) {
-                assertFalse(side.isEmpty(), conversion + " has a string on every side");
+        // The conversions as the model writes them, the letters it keeps, and what the run time
+        // makes of a string: the two ways of writing one conversion, and one of a conversion.
+        record Case(String written, String keeps, Function<String, String> made) {}
+        for (Case each : List.of(
+                new Case("String.lowercase", "[a-z0-9]", Strings::lowercase),
+                new Case("String.uppercase", "[A-Z0-9]", Strings::uppercase),
+                new Case("String.uppercase |> String.lowercase", "[a-z0-9]",
+                        text -> Strings.lowercase(Strings.uppercase(text))))) {
+            for (String model : List.of(inline(each.written(), each.keeps()),
+                    throughAHelper(each.written(), each.keeps()))) {
+                List<List<String>> sides = representativesOfEachClass(model);
+                String said = each.written() + " in " + model;
+                assertEquals(2, sides.size(), said);
+                for (List<String> side : sides) {
+                    assertFalse(side.isEmpty(), "a string on every side of " + said);
+                }
+                Predicate<String> holds = text -> each.made().apply(text).codePoints()
+                        .anyMatch(code -> each.keeps().equals("[a-z0-9]")
+                                ? code >= '0' && code <= '9' || code >= 'a' && code <= 'z'
+                                : code >= '0' && code <= '9' || code >= 'A' && code <= 'Z');
+                assertTrue(sides.get(0).stream().noneMatch(holds), said + ": " + sides.get(0));
+                assertTrue(sides.get(1).stream().allMatch(holds), said + ": " + sides.get(1));
             }
-            assertTrue(sides.get(0).stream().noneMatch(text -> holdsALetterOrADigit(
-                    conversion, text)), conversion + ": " + sides.get(0));
-            assertTrue(sides.get(1).stream().allMatch(text -> holdsALetterOrADigit(
-                    conversion, text)), conversion + ": " + sides.get(1));
         }
     }
 
-    private static boolean holdsALetterOrADigit(String conversion, String text) {
-        String answered = conversion.equals("lowercase")
-                ? Strings.lowercase(text) : Strings.uppercase(text);
-        return answered.codePoints().anyMatch(code -> code >= '0' && code <= '9'
-                || conversion.equals("lowercase") && code >= 'a' && code <= 'z'
-                || conversion.equals("uppercase") && code >= 'A' && code <= 'Z');
+    /** The condition written in the guard itself. */
+    private static String inline(String conversion, String letters) {
+        return """
+                module probe.conversion
+                data Title = String
+                    invariant String.length(value) >= 1 && String.length(value) <= 40
+                data Ok
+                data No
+                behavior f : (title: Title) -> Ok | No
+                let f (title) = {
+                    guard String.length(title.value |> %s |> String.characters
+                        |> List.map(c -> if String.matches("%s", c) then c else " ")
+                        |> String.concat |> String.trim) >= 1 else No
+                    Ok
+                }
+                """.formatted(conversion, letters);
+    }
+
+    /** The condition written as a helper the guard calls, which is how an author would. */
+    private static String throughAHelper(String conversion, String letters) {
+        return """
+                module probe.conversion
+                data Title = String
+                    invariant String.length(value) >= 1 && String.length(value) <= 40
+                data Ok
+                data No
+                let t (title: Title): String = title.value |> %s |> String.characters |> List.map(c -> if String.matches("%s", c) then c else " ") |> String.concat |> String.trim
+                behavior f : (title: Title) -> Ok | No
+                let f (title) = {
+                    guard String.length(t(title)) >= 1 else No
+                    Ok
+                }
+                """.formatted(conversion, letters);
     }
 
     /** The strings that stand for each class of the one position of {@code f}, in the order the

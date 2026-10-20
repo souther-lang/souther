@@ -485,6 +485,61 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                 + " then 1 else 0"));
     }
 
+    /**
+     * Some piece being the value and some piece being another value are not each other's denial:
+     * {@code "a@b"} has a piece that is {@code "a"} and one that is not, so both hold of it. The
+     * first is whether the value is one of the pieces, which its denial says it is not; the second
+     * says of which piece it is, and is not read.
+     */
+    @Test
+    void somePieceBeingTheValueAndSomePieceBeingAnotherAreNotEachOthersDenial() {
+        String any = "if List.any(p -> p %s b.t, String.split(\"@\", b.s)) then 1 else 0";
+        Proposition equal = stated(any.formatted("=="));
+        assertNull(Proposition.firstStopIn(equal), equal.toString());
+        assertTrue(equal.toString().contains("is among"), equal.toString());
+        Proposition differs = stated(any.formatted("/="));
+        assertTrue(Proposition.leavesSomethingUnread(differs), differs.toString());
+        assertNotEquals(equal.denied(), differs);
+    }
+
+    /**
+     * Whether the value is one of the pieces of a string says something of the string only where
+     * the string always has a piece. A string split at a code point does, and the characters of
+     * the empty string are none: it is one the value is none of, whatever the value is, so the
+     * statement is not one that divides neither.
+     */
+    @Test
+    void theValueBeingOneOfThePiecesIsReadOnlyOfWhatAlwaysHasAPiece() {
+        String any = "if List.any(c -> c == b.t, %s) then 1 else 0";
+        assertNull(Proposition.firstStopIn(stated(any.formatted("String.split(\"@\", b.s)"))));
+        assertTrue(Proposition.leavesSomethingUnread(
+                stated(any.formatted("String.characters(b.s)"))));
+    }
+
+    /**
+     * What each quantifier over the pieces says of a value is read as the value being one of them or
+     * not, and as nothing where it says more: none of them being the value is the value being none
+     * of the pieces whichever way it is written, and every one of them being another value is the
+     * same; every piece being the value, or some piece being another, is which pieces they are.
+     */
+    @Test
+    void whatEachQuantifierOverThePiecesSaysIsWhetherTheValueIsOneOfThem() {
+        String parts = "String.split(\"@\", b.s)";
+        Proposition oneOfThem = stated("if List.any(p -> p == b.t, " + parts + ") then 1 else 0");
+        assertEquals(oneOfThem, stated("if List.any(p -> b.t == p, " + parts + ") then 1 else 0"));
+        Proposition noneOfThem = oneOfThem.denied();
+        assertEquals(noneOfThem, stated("if Bool.not(List.any(p -> p == b.t, " + parts
+                + ")) then 1 else 0"));
+        assertEquals(noneOfThem, stated("if List.all(p -> p /= b.t, " + parts
+                + ") then 1 else 0"));
+        for (String unsaid : List.of("List.any(p -> p /= b.t, " + parts + ")",
+                "List.all(p -> p == b.t, " + parts + ")",
+                "Bool.not(List.any(p -> p /= b.t, " + parts + "))")) {
+            Proposition read = stated("if " + unsaid + " then 1 else 0");
+            assertTrue(Proposition.leavesSomethingUnread(read), unsaid + ": " + read);
+        }
+    }
+
     /** What the condition of the one fork of a body written {@code body} states. */
     private static Proposition stated(String body) {
         return stated(body, false);

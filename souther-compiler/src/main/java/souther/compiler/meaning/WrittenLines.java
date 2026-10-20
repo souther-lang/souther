@@ -428,7 +428,7 @@ public final class WrittenLines {
                     List.of(element);
             case Derivation.SomePieceMeeting(var _, var _, var _, var string, var piece) ->
                     string.map(held -> List.of(held, piece)).orElseGet(() -> List.of(piece));
-            case Derivation.SomePieceEqualling(var piece) -> List.of(piece);
+            case Derivation.SomePieceEqualling(var piece, var _) -> List.of(piece);
             case Derivation.EveryElementMeetsIt(var _, var element, var holds, var _) ->
                     List.of(element, holds);
             case Derivation.ALawJoinsWithoutWhatImpliesAnother(var _, var each) -> each.stream()

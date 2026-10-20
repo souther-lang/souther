@@ -132,6 +132,8 @@ public sealed interface Proposition {
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.APieceOf piece -> mayBeAnElementOf(piece.string(), container);
+            case Quantity.IsAmongThePieces among -> mayBeAnElementOf(among.value(), container)
+                    || mayBeAnElementOf(among.string(), container);
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
@@ -1217,7 +1219,7 @@ public sealed interface Proposition {
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
                  Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _,
-                 Quantity.APieceOf _ -> false;
+                 Quantity.APieceOf _, Quantity.IsAmongThePieces _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     && namesNothingOfTheInput(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
@@ -1239,7 +1241,7 @@ public sealed interface Proposition {
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
                  Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _,
-                 Quantity.APieceOf _ -> false;
+                 Quantity.APieceOf _, Quantity.IsAmongThePieces _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
