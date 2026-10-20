@@ -25,7 +25,6 @@ import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.math.BigInteger;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1379,23 +1378,25 @@ final class AStatementAtARow {
          * What a division by a written number leaves of a form of the input's numbers, weighed and
          * with a constant added, against nought.
          *
-         * <p>The form's numbers are read as a form of them, each weighed by one, which is what
-         * reads a row's numbers; the remainder is worked out of them the way a line on it reads a
-         * row ({@link OrderedAffineBoundary#remainderAt}).
+         * <p>The form is the one a line on the remainder is drawn on, so a row is read at the same
+         * numbers and the remainder is worked out of them the way that line reads a row
+         * ({@link OrderedAffineBoundary#remainderAt}).
          *
-         * @param numbers  the form's numbers, read at a row
-         * @param dividend the form the division is of, with its constant as a whole number
-         * @param divisor  the number it is divided by, above nought
+         * @param of       the form the division is of, and the number it is divided by
          * @param weight   what the remainder is weighed by
          * @param constant what is added to it
          */
-        record OnARemainderOfAForm(LinearQuantity numbers, LinearForm<NumericTerm> dividend,
-                                   BigInteger divisor, ExactRatio weight, ExactRatio constant,
+        record OnARemainderOfAForm(DividedForm of, ExactRatio weight, ExactRatio constant,
                                    Rel rel) implements OneRelation {
+
+            /** The form's numbers, read at a row. */
+            LinearQuantity numbers() {
+                return of.numbers();
+            }
 
             @Override
             public List<NumericTerm> terms() {
-                return numbers.terms();
+                return numbers().terms();
             }
 
             /**
@@ -1403,9 +1404,10 @@ final class AStatementAtARow {
              * number the form weighs, and where the form does not come to a whole number.
              */
             Said at(BorderQuantity.Observation row) {
-                return switch (numbers.valuesOf(numbers.read(row))) {
+                return switch (numbers().valuesOf(numbers().read(row))) {
                     case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
-                            switch (OrderedAffineBoundary.remainderAt(dividend, divisor, values)) {
+                            switch (OrderedAffineBoundary.remainderAt(of.whole(),
+                                    of.divisor(), values)) {
                                 case ExactAnswer.Held<Optional<ExactRatio>>(var left)
                                         when left.isEmpty() -> Said.NOTHING_THERE;
                                 case ExactAnswer.Held<Optional<ExactRatio>>(var left) ->
@@ -1508,20 +1510,11 @@ final class AStatementAtARow {
         /** A relation over {@code remainder}, read at the numbers of its form. */
         private static OneRelation ofARemainderOfAForm(Relation.Affine affine,
                 Quantity.RemainderOfADividend remainder, String behavior, Quantities quantities) {
-            Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
-            remainder.dividend().coefs().keySet()
-                    .forEach(number -> each.put(number, ExactRatio.ONE));
-            LinearQuantity numbers = Cutting.readAt(behavior,
-                    new LinearForm<>(ExactRatio.ZERO, each), quantities);
-            if (numbers == null || !(remainder.dividend().constant().floor()
-                    instanceof ExactAnswer.Held<BigInteger> shift)) {
-                return new NoQuantity(new LinearForm<>(ExactRatio.ZERO,
-                        remainder.dividend().coefs()));
-            }
-            return new OnARemainderOfAForm(numbers, new LinearForm<>(
-                    ExactRatio.of(shift.value()), remainder.dividend().coefs()),
-                    remainder.divisor(), affine.form().coefs().get(remainder),
-                    affine.form().constant(), affine.proposition());
+            DividedForm of = Cutting.remainderAtARow(behavior, remainder, quantities);
+            return of == null
+                    ? new NoQuantity(new LinearForm<>(ExactRatio.ZERO, remainder.dividend().coefs()))
+                    : new OnARemainderOfAForm(of, affine.form().coefs().get(remainder),
+                            affine.form().constant(), affine.proposition());
         }
 
         /** A relation over {@code remainder}, read at the two numbers. */

@@ -395,6 +395,53 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                 "a row is owed on each side of seven and nowhere about the arms' meeting at five");
     }
 
+    /**
+     * The rule as it was first met: a check digit worked out of the remainder of a sum by a
+     * constant, branched on, and its result compared. The remainder is eight where the result is
+     * three, so the rows that tell the rule apart are the ones at seven, eight and nine.
+     */
+    private static final String CHECK_DIGIT = """
+            module probe.e9
+
+            data Yes = { n: Int }
+            data No = { n: Int }
+
+            let f (x: Int, y: Int): Int = {
+                let r = Int.floorMod(x + y, 11)
+                if r <= 1 then 0 else 11 - r
+            }
+
+            behavior verify : (x: Int, y: Int) -> Yes | No
+                constructs Yes, No
+
+            let verify (x, y) =
+                if 3 == f(x, y) then Yes { n = 0 } else No { n = 0 }
+
+            example verify
+                | "the remainder is seven" : (3, 4) -> No { n = 0 }
+                | "the remainder is eight" : (3, 5) -> Yes { n = 0 }
+                | "the remainder is nine" : (3, 6) -> No { n = 0 }
+            """;
+
+    @Test
+    void aCheckDigitComparedAfterABranchOnARemainderIsDrawn() {
+        JsonNode report = reportOfSource(CHECK_DIGIT);
+        assertTrue(reasonsAt(report, "x").stream()
+                        .noneMatch("several_lines_in_one_rule"::equals),
+                () -> "the rule is drawn, not held back: " + reasonsAt(report, "x"));
+        assertEquals(Set.of("verify/Int.floorMod(x + y, 11) 7", "verify/Int.floorMod(x + y, 11) 8",
+                        "verify/Int.floorMod(x + y, 11) 9"), pointsOfParts(report),
+                "a row is owed at each remainder the result of three is told apart by");
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            JsonNode reading = obligation.path("readings").get(0);
+            if (reading.path("against").asString().contains("<")) {
+                continue;
+            }
+            assertTrue(reading.path("hit").asBoolean(),
+                    () -> "the rows written stand at " + reading.path("against") + ": " + reading);
+        }
+    }
+
     /** The remainder is of the form with its weights and constant, and read as a floor remainder. */
     @Test
     void aRemainderOfAWeightedFormWithAConstantIsDrawnToo() {
