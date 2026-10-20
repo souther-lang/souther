@@ -271,11 +271,17 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     }
 
     private static void assertOwesTheSame(String kept, String writtenOut, String after) {
-        String counted = report(guarded(kept), after);
+        Compilation compilation = compiled(guarded(kept), after);
+        String counted = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
         assertFalse(counted.contains("not read"), counted);
-        Set<String> owed = owedOfEveryRule(guarded(kept), after);
+        Set<String> owed = owedOfEveryRule(compilation);
         assertFalse(owed.isEmpty(), kept);
         assertEquals(owedOfEveryRule(guarded(writtenOut), ""), owed, kept);
+    }
+
+    private static Set<String> owedOfEveryRule(String body, String after) {
+        return owedOfEveryRule(compiled(body, after));
     }
 
     /**
@@ -283,9 +289,9 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      * filter's own comparison owes for every element what an {@code if} written for each owes for
      * its one.
      */
-    private static Set<String> owedOfEveryRule(String body, String after) {
+    private static Set<String> owedOfEveryRule(Compilation compilation) {
         Set<String> out = new TreeSet<>();
-        for (JsonNode each : obligationsOf(body, after)) {
+        for (JsonNode each : obligationsOf(compilation)) {
             each.path("readings").forEach(reading -> out.add(each.path("point").asString() + " "
                     + reading.path("axis").asString() + " " + reading.path("relation").asString()
                     + " " + reading.path("against").asString()));
@@ -416,7 +422,11 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
 
     /** Every obligation of the behavior {@code body} writes. */
     private static List<JsonNode> obligationsOf(String body, String after) {
-        JsonNode report = JSON.readTree(AdequacyReport.of(compiled(body, after))
+        return obligationsOf(compiled(body, after));
+    }
+
+    private static List<JsonNode> obligationsOf(Compilation compilation) {
+        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<JsonNode> obligations = new ArrayList<>();
         collectObligations(report, obligations);
