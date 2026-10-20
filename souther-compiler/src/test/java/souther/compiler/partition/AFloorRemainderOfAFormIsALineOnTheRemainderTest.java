@@ -374,7 +374,13 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     void aRemainderAgainstAnotherNumberIsALineOnTheTwo() {
         String parameters = "a: Int, b: Int, c: Int";
         Compilation compilation = compiled(parameters, "c == Int.floorMod(a + b, 11)");
-        assertEquals(List.of("0"), bordersOf(linesOf(compilation)));
+        // The remainder takes every value from nought to ten with either of the numbers moved, so
+        // neither is divided by it; and the number beside it is divided, by the lines at the ends
+        // outside which the relation never holds.
+        assertEquals(List.of("-1", "11", "0"), bordersOf(linesOf(compilation)));
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+                        UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
+                reasonsEach("a: Int, b: Int, c: Int", "c == Int.floorMod(a + b, 11)"));
         // Read, and no longer reported as written in a form nothing reads or as about a value made
         // from the position.
         assertEquals(List.of(), compilation.db().ask(new Adequacy.Coverage("demo")).value()
@@ -385,8 +391,31 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 .toList());
         for (String spelled : List.of("Int.floorMod(a + b, 11) == c",
                 "2 * c == 2 * Int.floorMod(a + b, 11)")) {
-            assertEquals(List.of("0"), bordersOf(parameters, spelled), spelled);
+            assertEquals(List.of("-1", "11", "0"), bordersOf(parameters, spelled), spelled);
         }
+    }
+
+    /**
+     * A remainder that cannot take every value is not said to be left undivided by the number
+     * beside it: {@code 2 * a + 2 * b} leaves only even remainders by 4, so which values of
+     * {@code a} reach a given one is a question the relation does answer.
+     */
+    @Test
+    void aRemainderTheFormCannotTakeEveryValueOfIsNotSaidToLeaveItsNumbersUndivided() {
+        assertEquals(List.of(), reasonsEach("a: Int, b: Int, c: Int",
+                "c == Int.floorMod(2 * a + 2 * b, 4)").stream()
+                .filter(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES::equals).toList());
+    }
+
+    /**
+     * And a number the remainder is of alone is divided by it: with {@code a} put at a value the
+     * remainder is that value's, so the number is not said to leave the relation either way.
+     */
+    @Test
+    void theOnlyNumberOfTheFormIsNotSaidToBeLeftUndivided() {
+        assertEquals(List.of(), reasonsEach("a: Int, c: Int",
+                "c == Int.floorMod(2 * a, 11)").stream()
+                .filter(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES::equals).toList());
     }
 
     /**
@@ -515,6 +544,13 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
             labels.addAll(row.labels());
         }
         return labels.stream().sorted().toList();
+    }
+
+    /** The reason of each place left unread, each once and in the order they were read. */
+    private static List<UndividedPosition.Reason> reasonsEach(String parameters,
+                                                              String condition) {
+        return measured(parameters, condition).notRead().stream()
+                .map(PartitionEvidence.NotRead::reason).toList();
     }
 
     private static List<UndividedPosition.Reason> reasonsOf(String parameters, String condition) {

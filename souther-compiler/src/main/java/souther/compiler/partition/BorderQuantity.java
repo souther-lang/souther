@@ -1700,7 +1700,14 @@ public sealed interface BorderQuantity
                     ? UndividedByARelation.ofADivisibility(remainder.dividend.atOnePosition(),
                             remainder.divisor.atOnePosition(), relation)
                     : UndividedByARelation.SHOWING_NOTHING;
-            case HowMany _, RemainderOfAForm _ -> UndividedByARelation.SHOWING_NOTHING;
+            // The remainder with numbers added to it relates the form to those numbers; the
+            // remainder alone is a line on a number of its own and shows nothing of the places.
+            case RemainderOfAForm remainder -> !remainder.added().coefs().isEmpty()
+                    && at instanceof Level.OfTheQuantity(ExactRatio level)
+                    ? UndividedByARelation.ofARemainderOfAForm(remainder.dividend().form(),
+                            remainder.divisor(), remainder.added(), level, relation)
+                    : UndividedByARelation.SHOWING_NOTHING;
+            case HowMany _ -> UndividedByARelation.SHOWING_NOTHING;
         };
     }
 
