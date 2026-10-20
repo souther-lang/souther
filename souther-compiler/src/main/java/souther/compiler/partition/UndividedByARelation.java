@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * A relation this stage read over the input, held as what is asked of it: which of its places it
@@ -338,6 +339,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                     BigInteger divisor,
                                                     LinearForm<NumericTerm> added,
                                                     ExactRatio level, Rel relation) {
+        // Which numbers are apart is read off the places each side is made of, so a number read
+        // off more than the place it is filed under — the times a value occurs in a run is read
+        // off the run and the value — has places no side names. Nothing is shown of it.
+        if (Stream.concat(dividend.coefs().keySet().stream(), added.coefs().keySet().stream())
+                .anyMatch(term -> !term.placesReadOff().equals(List.of(term.subjectPath())))) {
+            return SHOWING_NOTHING;
+        }
         List<Side> sides = new ArrayList<>();
         sides.add(new Side(dividend.coefs().keySet().stream().map(FilingCoordinate::of).toList(),
                 ExactRatio.ONE, null, null));
@@ -1183,9 +1191,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * two different numbers are not that for being different.
      */
     private boolean sharesAPlaceWithAnotherNumberOfTheForm(NumericTerm term) {
-        FilingCoordinate at = FilingCoordinate.of(term);
         for (NumericTerm other : remainder.dividend().coefs().keySet()) {
-            if (!other.equals(term) && overlap(at, FilingCoordinate.of(other))) {
+            if (!other.equals(term) && term.sharesAPlaceWith(other)) {
                 return true;
             }
         }

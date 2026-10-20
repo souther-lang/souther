@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.LinearForm;
@@ -223,8 +222,7 @@ public sealed interface Standing {
                     || divisor.signum() <= 0 || added.coefs().isEmpty()
                     || !addedOn.keySet().equals(added.coefs().keySet())
                     || added.coefs().keySet().stream().anyMatch(number -> dividend.coefs()
-                            .keySet().stream().anyMatch(of -> FilingCoordinate.of(number)
-                                    .overlaps(FilingCoordinate.of(of))))) {
+                            .keySet().stream().anyMatch(number::sharesAPlaceWith))) {
                 throw new IllegalArgumentException("a remainder is added to a form over other"
                         + " numbers than its own, each on one order, and divided by a divisor"
                         + " above nought: " + dividend + " by " + divisor + " plus " + added);

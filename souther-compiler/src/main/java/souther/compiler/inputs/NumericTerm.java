@@ -1104,6 +1104,27 @@ public sealed interface NumericTerm
     }
 
     /**
+     * Whether this number and {@code other} are read off a place in common, or one is read off a
+     * place inside a place the other is.
+     *
+     * <p>What two numbers being apart comes to, asked of every place each is read off and not of
+     * the place a report files it under ({@link #subjectPath}): a count of the times a value
+     * occurs in a run is read off the run and off the value, and moves with a number read off the
+     * value alone. Two numbers are different for being read by different operations, and are
+     * apart only when this is false.
+     */
+    default boolean sharesAPlaceWith(NumericTerm other) {
+        for (TermPath here : placesReadOff()) {
+            for (TermPath there : other.placesReadOff()) {
+                if (here.isAtOrUnder(there) || there.isAtOrUnder(here)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * This number where one input position answers it, or null where no single place does.
      *
      * <p>The one place the capability is asked. Every reader that goes on to draw a line, classify
