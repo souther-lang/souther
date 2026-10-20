@@ -584,9 +584,11 @@ public final class AnswerAsAnInput {
             }
             case DecisionAtom.ComputedOverAnAnswer computed -> {
                 answers.add(computed.list().answered());
-                NumericTerm term = InputNumber.overWhatWasComputedByPosition(computed.operation(),
-                        new TermPath(head, computed.list().steps()), computed.computation(),
-                        computed.each(), computed.direction(), inners, symbols);
+                TermPath place = new TermPath(head, computed.list().steps());
+                NumericTerm term = hasNoReadingToTakeTheNumberBy() ? new NumericTerm.ValueOf(place)
+                        : InputNumber.overWhatWasComputedByPosition(computed.operation(), place,
+                                computed.computation(), computed.each(), computed.direction(),
+                                inners, symbols);
                 yield term == null ? null : new DecisionAtom.OfTheInput(term);
             }
             case Quantity.HowManyMeet count -> {

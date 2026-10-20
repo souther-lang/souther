@@ -33,6 +33,7 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -254,7 +255,14 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         String body = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value)) >= on";
         for (AnswersDemanded each : waysOf(body)) {
             assertTrue(each.declined().isEmpty(), () -> "nothing was left unstated: " + each);
-            assertInstanceOf(AnswerDemand.AStatement.class, each.stated().getFirst());
+            AnswerDemand.AStatement statement = assertInstanceOf(
+                    AnswerDemand.AStatement.class, each.stated().getFirst());
+            // Asked only which answer and which numbers of the input it is about, with no reading
+            // to take a number by.
+            assertNotNull(AnswerAsAnInput.onlyAnswerIn(statement.statement()),
+                    () -> "it is about one answer: " + statement.statement());
+            assertFalse(AnswerAsAnInput.inputNumbersIn(statement.statement()).isEmpty(),
+                    () -> "and a number of the input: " + statement.statement());
         }
         // Remade as a statement about an input it is composed along, and a value is never offered
         // that misses a demand.
@@ -262,6 +270,29 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
             if (tried.attempt().outcome() instanceof AnAnswerComposed.Outcome.Composed) {
                 assertTrue(tried.attempt().unaccounted().isEmpty(), () ->
                         "a value offered meets every demand: " + tried.attempt().unaccounted());
+            }
+        }
+    }
+
+    /**
+     * What a statement is about is asked with no reading to take a number by, whichever way the
+     * total weighed by position stands in it: beside a number of the input, under a conjunction,
+     * under a disjunction, nested in both, or added to one.
+     */
+    @Test
+    void aTotalWeighedByPositionInACompoundStatementIsAskedWhatItIsAbout() {
+        String total = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value))";
+        for (String body : List.of(total + " >= on && on > 0", total + " >= on || on > 100",
+                "(" + total + " >= on && on > 0) || on > 100", "(" + total + " + on) >= 7")) {
+            for (AnswersDemanded each : waysOf(body)) {
+                for (AnswerDemand stated : each.stated()) {
+                    if (stated instanceof AnswerDemand.AStatement statement) {
+                        assertNotNull(AnswerAsAnInput.onlyAnswerIn(statement.statement()),
+                                () -> body + ": " + statement.statement());
+                        assertFalse(AnswerAsAnInput.inputNumbersIn(statement.statement())
+                                .isEmpty(), () -> body + ": " + statement.statement());
+                    }
+                }
             }
         }
     }
