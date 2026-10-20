@@ -261,6 +261,13 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
         assertFalse(report.contains(YEARS_UNREAD), report);
     }
 
+    /** The chain measured once, for the tests that read it. A measure of it is most of what they
+     *  cost, and what each asks is of this one. */
+    private static final class Measured {
+        static final Compilation CHAIN_OF_AGES = compiled(CHAIN);
+        static final String REPORT = report(CHAIN_OF_AGES);
+    }
+
     /**
      * Arms of an {@code if} chain beside a flag add ways to the third comparison, most of which
      * ask the age to be at least seventy and below nineteen at once. Those are no way and do not
@@ -268,7 +275,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
      */
     @Test
     void aChainOfAgeComparisonsBesideAFlagIsReadInTheYearsMonthsAndDays() {
-        assertFalse(report(CHAIN).contains(NOT_REACHED), report(CHAIN));
+        assertFalse(Measured.REPORT.contains(NOT_REACHED), Measured.REPORT);
     }
 
     private static final String CHAIN = AGE.replace(
@@ -309,7 +316,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
      */
     @Test
     void theRowsOfferedForAChainOfAgeComparisonsAreAnsweredAsTheCalendarWorksTheClassOut() {
-        Compilation offering = compiled(CHAIN);
+        Compilation offering = Measured.CHAIN_OF_AGES;
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(offering.texts()), offering.db())
@@ -346,11 +353,12 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
             }
         }
 
-        Compilation answered = compiled(CHAIN + "\nexample f\n" + examples);
-        String report = report(answered);
+        // Answered and not measured: the examples are run against the program, and one whose
+        // answer is not the program's is an error, which is all this asks.
+        Compilation answered = Compilation.ofSource(CHAIN + "\nexample f\n" + examples, "Main");
+        answered.answerEverything();
 
-        assertEquals(0, answered.errors().size(), report + "\n" + examples);
-        assertFalse(report.contains("no row is at"), report);
+        assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
     }
 
     /**
