@@ -2801,6 +2801,35 @@ public final class InputReads {
     }
 
     /**
+     * Whether {@code one} and {@code other}, each read where it was handed, are one value by
+     * name: the names each stands for, followed as {@link #denotes} follows them, come to one
+     * binding.
+     *
+     * <p>Names a helper's parameters bound to one value are that value's names, so two of them
+     * are one value; two calls written alike are two values here, whatever they answer.
+     */
+    public static boolean oneNamedValue(Denotation one, Denotation other, Symbols symbols,
+                                        DeclarationNewtypes newtypes) {
+        Set<BindingId> named = namesFollowed(one, symbols, newtypes);
+        return namesFollowed(other, symbols, newtypes).stream().anyMatch(named::contains);
+    }
+
+    /** The names {@code from} is read through on the way to what it denotes, itself first. */
+    private static Set<BindingId> namesFollowed(Denotation from, Symbols symbols,
+                                                DeclarationNewtypes newtypes) {
+        Core at = Core.withoutStanding(from.value());
+        InputReads reads = from.at();
+        Set<BindingId> met = new LinkedHashSet<>();
+        while (at instanceof Core.Read read && met.add(read.binding())
+                && reads.meaningOf(read, symbols, newtypes)
+                        instanceof ReadMeaning.Through through) {
+            at = Core.withoutStanding(through.denotes().value());
+            reads = through.denotes().at();
+        }
+        return met;
+    }
+
+    /**
      * Whether {@code e} is a value the source wrote out all the way down, read here — which is a
      * value the same every time.
      *

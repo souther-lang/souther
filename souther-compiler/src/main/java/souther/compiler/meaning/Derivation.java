@@ -2194,6 +2194,18 @@ public sealed interface Derivation {
     }
 
     /**
+     * A lookup in a map under a key read off that same map, which answers a value on every run:
+     * the key is one the map holds an entry under.
+     */
+    record UnderOneOfItsOwnKeys() implements Derivation {
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Always(true);
+        }
+    }
+
+    /**
      * What is stated of the value of an entry a lookup answered, and with it what picked the entry
      * out: that the element stated of is the one under the key asked for.
      *

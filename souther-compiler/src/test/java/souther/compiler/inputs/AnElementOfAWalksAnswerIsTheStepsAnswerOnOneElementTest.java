@@ -205,9 +205,9 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     }
 
     /**
-     * A value a fold worked out that is no counter is no step on an element of the list folded, and
-     * where it came from is not said here: the position it is compared with keeps its own word and
-     * is told nothing about a value made from it.
+     * A value a fold worked out that is no counter is no step on an element of the list folded: the
+     * position it is compared with keeps its own word and is told nothing about a value made from
+     * it.
      */
     @Test
     void aValueAFoldWorkedOutIsNoStep() {
@@ -224,6 +224,54 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
         assertEquals(List.of("atLeast " + UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
                 notRead.stream().filter(each -> each.startsWith("atLeast ")).toList(),
                 () -> "the position the rule is about keeps its own word: " + notRead);
+    }
+
+    /**
+     * A rule about a value such a fold worked out, comparing it with nothing of the input, is
+     * still a rule: it is not read, and is said to be about a value made of the list the fold
+     * walked — whether the value is an entry handed by a walk over the map or one a lookup under
+     * the map's own keys found.
+     */
+    @Test
+    void aRuleAboutAValueAFoldWorkedOutIsNotReadAtTheListItWalked() {
+        String fold = """
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), Map.empty, xs)
+
+                """;
+        for (String busy : List.of("""
+                behavior busy : (xs: List<String>) -> Map<String, Int>
+                let busy (xs) = Map.filterEntries((_, count) -> count >= 3, countsOf(xs))
+                """, """
+                behavior busy : (xs: List<String>) -> List<String>
+                let busy (xs) = {
+                    let counts = countsOf(xs)
+                    List.filter(x -> match Map.get(x, counts) with
+                                        | Some count -> count >= 3
+                                        | None -> false, Map.keys(counts))
+                }
+                """)) {
+            List<String> notRead = notReadIn(compiled(fold + busy));
+            assertEquals(List.of("xs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                    notRead, () -> busy);
+        }
+    }
+
+    /** A fold starting from a map the input holds made its values of the list it walked as well,
+     *  and a rule about one is said to be about a value made of that list. */
+    @Test
+    void aRuleAboutAValueAFoldFromAnInputMapWorkedOutIsNotReadAtTheListItWalked() {
+        List<String> notRead = notReadIn(compiled("""
+                let countsOf (start: Map<String, Int>, xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), start, xs)
+
+                behavior busy : (start: Map<String, Int>, xs: List<String>) -> Map<String, Int>
+                let busy (start, xs) =
+                    Map.filterEntries((_, count) -> count >= 3, countsOf(start, xs))
+                """));
+        assertEquals(List.of("xs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                notRead.stream().filter(each -> each.startsWith("xs")).toList(),
+                () -> notRead.toString());
     }
 
     @Test

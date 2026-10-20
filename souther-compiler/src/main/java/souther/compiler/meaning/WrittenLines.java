@@ -447,6 +447,7 @@ public final class WrittenLines {
                  Derivation.WrittenOut _, Derivation.NoRunTakesIt _,
                  Derivation.TheRunStopsHere _, Derivation.WhatAWalkCarried _, Derivation.Folded _,
                  Derivation.ATruthOfASubject _, Derivation.PresentInASubject _,
+                 Derivation.UnderOneOfItsOwnKeys _,
                  Derivation.CasesOfASubject _, Derivation.CasesWrittenOut _,
                  Derivation.SizeAboveNought _, Derivation.ACharacterInAClass _,
                  Derivation.OfAnElementOfAnAnswer _, Derivation.AComparisonRead _,
