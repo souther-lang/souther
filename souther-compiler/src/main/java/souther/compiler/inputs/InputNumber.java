@@ -222,6 +222,12 @@ public final class InputNumber {
      * ({@link ElementValue#read}). Null where the walk keeps some of the elements, where the closure
      * turns on where an element stands or on anything but the code point, or where the total is of
      * something else.
+     *
+     * <p>That the walk answers one value per code point is the licence the walk's closure carries
+     * ({@link InputReads#answerAt}), which the operation's declaration gives only to a walk whose
+     * result holds one answer of the closure per element ({@code BuiltFrom#mapsEachElementOf}).
+     * The binding the closure is handed its element on says nothing of that: {@code List.sortBy}
+     * hands its closure the elements too, and what it computes is a key, not a term of the total.
      */
     public static LinearForm<NumericTerm> codePointsWeighed(Core e, InputDomain inputs,
                                                             InputReads reads,

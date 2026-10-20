@@ -155,6 +155,49 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
         });
     }
 
+    /** The total of a weighed code point is a multiple of the total, however far it is carried
+     *  into a rule: the remainder of it by a modulus is read of the string's number. */
+    @Test
+    void aWeighedTotalIsReadInsideAnotherOperation() {
+        String report = report(measured("""
+                module p
+                data Yes = { n: Int }
+                data No = { n: Int }
+                behavior verify : (s: String) -> Yes | No
+                    constructs Yes, No
+                let verify (s) =
+                    if Int.floorMod(List.sum(List.map((x) -> 3 * x, String.codePoints(s))), 11) <= 1
+                    then Yes { n = 0 } else No { n = 0 }
+                """));
+        assertTrue(report.contains(
+                "read as verify/Int.floorMod(3 * List.sum(String.codePoints(s)), 11): = 1"),
+                () -> report);
+        assertFalse(report.contains("not read:"), () -> report);
+    }
+
+    /** A walk whose answer is no term of the total is no weighing of it. {@code sortBy} hands its
+     *  closure each code point and keeps the code points: what the closure computes is a key. A
+     *  walk that keeps some of them adds up some of them. */
+    @Test
+    void aWalkThatDoesNotAnswerOneValuePerCodePointIsNotReadAsAWeighing() {
+        for (String walk : List.of(
+                "List.sortBy((x) -> 3 * x, String.codePoints(s))",
+                "List.sortBy((x) -> 0, String.codePoints(s))",
+                "List.take(3, List.map((x) -> 3 * x, String.codePoints(s)))",
+                "List.filter((x) -> x > 50, String.codePoints(s))")) {
+            String report = report(measured("""
+                    module p
+                    behavior pick : (s: String) -> Int
+                    let pick (s) = {
+                        guard List.sum(%s) >= 100 else 0
+                        1
+                    }
+                    """.formatted(walk)));
+            assertTrue(report.contains("not read:"), () -> walk + "\n" + report);
+            assertFalse(report.contains("read as"), () -> walk + "\n" + report);
+        }
+    }
+
     /** The rows composed for the decision rules no row takes, each as its inputs. */
     private static List<List<FixtureTemplate>> composedForTheRules(Compilation compilation) {
         List<List<FixtureTemplate>> out = new ArrayList<>();
