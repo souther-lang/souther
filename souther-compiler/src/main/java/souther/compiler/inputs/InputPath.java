@@ -18,6 +18,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -801,6 +802,28 @@ final class InputPath {
             holds = same.source().argument();
         }
         return holds;
+    }
+
+    /**
+     * The argument whose every element {@code operation}, applied to {@code args}, answers, each as
+     * often, or null where it answers every element of none: the argument it puts in another
+     * order, or the one a closure that answers each element as it is was handed.
+     *
+     * <p>The statement of what the walk after every occurrence of a position crosses at one
+     * operation, for a walk that ends at an answer and not at a position.
+     *
+     * @param blockOf the block a closure argument stands for, or null where it stands for none
+     * @param held    what each binding of the body holds
+     */
+    static DeclaredArgument argumentKeepingEveryElement(ValueName operation, List<Core> args,
+                                                        Function<Core, Core.Block> blockOf,
+                                                        Map<BindingId, Core> held,
+                                                        DeclarationNewtypes newtypes) {
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        DeclaredArgument permuted = built == null ? null : built.permutesTheElementsOf();
+        return permuted != null ? permuted
+                : AnIdentityMap.of(operation, args, blockOf, held, newtypes);
     }
 
     /** The argument whose elements {@code operation}'s answer holds, as far as this walk's question
