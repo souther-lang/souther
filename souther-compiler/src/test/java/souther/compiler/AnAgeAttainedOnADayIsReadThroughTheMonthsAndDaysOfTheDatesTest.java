@@ -53,7 +53,10 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     }
 
     private static String report(String source) {
-        Compilation compilation = compiled(source);
+        return report(compiled(source));
+    }
+
+    private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -162,7 +165,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
         assertTrue(rows > 0, offered);
 
         Compilation answered = compiled(behavior + "\nexample f\n" + examples);
-        String report = report(behavior + "\nexample f\n" + examples);
+        String report = report(answered);
 
         assertEquals(0, answered.errors().size(), report + "\n" + examples);
         assertFalse(report.contains("no row is at"), report);
