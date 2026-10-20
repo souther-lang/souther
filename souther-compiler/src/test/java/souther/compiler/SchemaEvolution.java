@@ -225,7 +225,7 @@ public final class SchemaEvolution {
         if (!before.isObject() || !now.isObject()) {
             return now;
         }
-        if (!before.has("if") && now.has("if") && now.has("else")
+        if (!before.has("if") && now.has("if") && now.has("else") && onlyAConditional(now)
                 && onANewWord(now.get("if"), shippedWords)) {
             return withoutAWrapper(before, now.get("else"), shippedWords);
         }
@@ -239,6 +239,20 @@ public final class SchemaEvolution {
             return copy;
         }
         return now;
+    }
+
+    /**
+     * Whether {@code wrapper} holds a document to the conditional and to nothing beside it: a key
+     * of any other kind, such as a {@code required} or a {@code not}, asks every document more,
+     * whatever its discriminator is.
+     */
+    private static boolean onlyAConditional(JsonNode wrapper) {
+        for (String key : wrapper.propertyNames()) {
+            if (!Set.of("if", "then", "else", "description").contains(key)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

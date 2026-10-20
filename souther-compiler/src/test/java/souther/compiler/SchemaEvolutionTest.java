@@ -501,6 +501,19 @@ class SchemaEvolutionTest {
                 narrowings(KINDS, kindsWith("[\"a\", \"b\", \"c\"]", changed)).isEmpty());
     }
 
+    /** A key beside the conditional asks every document more, the shipped kinds included. */
+    @Test
+    void aWrapperWithAConstraintBesideItIsANarrowing() {
+        for (String beside : List.of("\"required\": [\"y\"]",
+                "\"not\": { \"required\": [\"z\"] }",
+                "\"allOf\": [{ \"required\": [\"y\"] }]")) {
+            String wrapped = onKind("c").replaceFirst("\\}$", ", " + beside + " }");
+            assertEquals(false,
+                    narrowings(KINDS, kindsWith("[\"a\", \"b\", \"c\"]", wrapped)).isEmpty(),
+                    beside);
+        }
+    }
+
     private static List<String> narrowings(String current) {
         return narrowings(SHIPPED, current);
     }

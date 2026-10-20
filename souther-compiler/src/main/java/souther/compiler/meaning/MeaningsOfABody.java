@@ -159,7 +159,32 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
                 whereARunStopsIn(otherwise, with(down, decides.denied()), stops);
                 return;
             }
-            WrittenLines.premisesOf(step).forEach(each -> whereARunStopsIn(each, down, stops));
+            // An arm is down where it selects the value and, for arms taken in order, no arm
+            // before it does; what selects is worked out before any arm.
+            switch (step) {
+                case Derivation.MatchArms(var arms) -> whereARunStopsInArms(arms, true, down, stops);
+                case Derivation.AnOperationsCases(var _, var cases) ->
+                        whereARunStopsInArms(cases, true, down, stops);
+                case Derivation.ASizeInCases(var _, var cases) ->
+                        whereARunStopsInArms(cases, true, down, stops);
+                case Derivation.OneOfItsArms(var arms) ->
+                        whereARunStopsInArms(arms, false, down, stops);
+                default -> WrittenLines.premisesOf(step)
+                        .forEach(each -> whereARunStopsIn(each, down, stops));
+            }
+        }
+
+        private static void whereARunStopsInArms(List<Derivation.MatchArms.Arm> arms,
+                                                 boolean inOrder, List<Proposition> down,
+                                                 List<Proposition> stops) {
+            List<Proposition> before = new ArrayList<>();
+            for (Derivation.MatchArms.Arm arm : arms) {
+                Proposition selects = arm.selects().concludes(Optional.empty());
+                whereARunStopsIn(arm.selects(), down, stops);
+                Proposition reached = inOrder ? Derivation.taken(before, selects) : selects;
+                whereARunStopsIn(arm.states(), with(down, reached), stops);
+                before.add(selects);
+            }
         }
 
         private static List<Proposition> with(List<Proposition> down, Proposition more) {

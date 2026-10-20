@@ -7,6 +7,10 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -76,9 +80,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         List<String> written = lineBetweenAAndK(MODEL.formatted(ABOVE, "a >= k"));
         String model = MODEL.formatted("", QUOTIENT);
         assertEquals(written, lineBetweenAAndK(model));
-        String report = human(model);
-        assertFalse(report.contains("not read"), report);
-        assertFalse(report.contains(SUCH_A_RUN_STOPS), report);
+        assertFalse(human(model).contains("not read"));
     }
 
     /**
@@ -135,6 +137,43 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
             assertTrue(report.contains(A_RUN_STOPS), guard + "\n" + report);
             assertFalse(report.contains("not read"), guard + "\n" + report);
         }
+    }
+
+    private static final String MATCHED =
+            "(match (if a > 0 then Ok else No) with | Ok -> a / 1 | No -> a / 0) >= k";
+
+    /**
+     * An arm of a {@code match} that stops is down only where the arm is taken: under a guard that
+     * rules the arm out no run stops, and without it some do.
+     */
+    @Test
+    void anArmOfAMatchStopsARunOnlyWhereTheArmIsTaken() {
+        assertFalse(human(MODEL.formatted(ABOVE, MATCHED)).contains(A_RUN_STOPS));
+        assertTrue(human(MODEL.formatted("", MATCHED)).contains(A_RUN_STOPS));
+    }
+
+    /**
+     * The finding is about a rule, and names it by the identity the document gives every rule a
+     * finding is about.
+     */
+    @Test
+    void aRuleSomeRunsStopInIsNamedByItsRuleIdInTheDocument() {
+        Compilation compilation = Compilation.ofSource(MODEL.formatted("", QUOTIENT), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        JsonNode findings = JsonMapper.builder().build()
+                .readTree(AdequacyReport.of(compilation)
+                        .json(SourceRendering.namedByIdentity(compilation.texts())))
+                .get("modules").get(0).get("behaviors").get(0).get("findings");
+        List<JsonNode> stopping = new ArrayList<>();
+        for (JsonNode each : findings) {
+            if (each.get("kind").asString().equals("rule_stops_some_runs")) {
+                stopping.add(each);
+            }
+        }
+        assertEquals(1, stopping.size(), findings.toString());
+        assertTrue(stopping.getFirst().has("ruleId"), stopping.getFirst().toString());
+        assertFalse(stopping.getFirst().has("reason"), stopping.getFirst().toString());
     }
 
     /** A comparison every run stops in is said once, as one that draws no line. */

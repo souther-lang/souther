@@ -501,7 +501,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Independent of the line it draws. A comparison whose ways divide by nought on some of them
      * draws its line on the others, and the ways that stop are no part of that line; they are said
      * as what they are, and whether a row reaches them is asked of the way to the comparison
-     * ({@link ComparisonAssessment#someRowArrivesWhere}). Asked of each application a closure is
+     * ({@link ComparisonAssessment#someRowArrives}). Asked of each application a closure is
      * made on, where that application is made, since a run that never makes one is not stopped by
      * it.
      */
