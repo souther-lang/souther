@@ -393,7 +393,7 @@ final class NumericWitness {
         // that was handed over — read back as a range there, it would be the widest answer there is
         // out of the narrowest region there is.
         NumericDomain.Bounds runs;
-        switch (within.projectionOf(term)) {
+        switch (within.projectionOf(term, terms.subList(at + 1, terms.size()))) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) -> runs = held;
             case NumericDomain.FormProjection.NothingIsLeft _ -> {
                 return false;

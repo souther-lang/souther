@@ -7,6 +7,7 @@ import souther.compiler.numeric.ExactRatio;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,16 +56,46 @@ final class MonthsAndDaysOfOneDate {
 
     private static List<List<ExactRatio>> workedOverTheCycle(
             List<DatesThatStandInEveryYear.Part> parts) {
-        Set<List<ExactRatio>> out = new LinkedHashSet<>();
+        // The numbers are compared as numbers, and only the combinations that differ are made into
+        // ratios: a cycle has far more days than it has distinct combinations.
+        Set<Combination> seen = new LinkedHashSet<>();
         for (long day = HeldClass.A_CYCLE_STARTS;
                 day < HeldClass.A_CYCLE_STARTS + DatePartsLeft.DAYS_OF_A_CYCLE; day++) {
-            List<ExactRatio> combination = combinationAt(parts, day);
-            if (combination == null) {
+            int[] numbers = numbersAt(parts, day);
+            if (numbers == null) {
                 return null;
             }
-            out.add(combination);
+            seen.add(new Combination(numbers));
+        }
+        List<List<ExactRatio>> out = new ArrayList<>(seen.size());
+        for (Combination each : seen) {
+            out.add(ratiosOf(each.numbers()));
         }
         return List.copyOf(out);
+    }
+
+    /** The numbers the parts come to at one day, compared by what they are. */
+    private static final class Combination {
+
+        private final int[] numbers;
+
+        Combination(int[] numbers) {
+            this.numbers = numbers;
+        }
+
+        int[] numbers() {
+            return numbers;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Combination that && Arrays.equals(numbers, that.numbers);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(numbers);
+        }
     }
 
     /**
@@ -159,14 +190,29 @@ final class MonthsAndDaysOfOneDate {
 
     private static List<ExactRatio> combinationAt(List<DatesThatStandInEveryYear.Part> parts,
                                                   long day) {
-        List<ExactRatio> combination = new ArrayList<>();
-        for (DatesThatStandInEveryYear.Part part : parts) {
+        int[] numbers = numbersAt(parts, day);
+        return numbers == null ? null : ratiosOf(numbers);
+    }
+
+    /** What each of {@code parts} comes to at {@code day}, or null where a move is not defined
+     *  there. */
+    private static int[] numbersAt(List<DatesThatStandInEveryYear.Part> parts, long day) {
+        int[] numbers = new int[parts.size()];
+        for (int i = 0; i < numbers.length; i++) {
+            DatesThatStandInEveryYear.Part part = parts.get(i);
             if (!part.moved().definedAt(day)) {
                 return null;
             }
-            LocalDate date = LocalDate.ofEpochDay(day + part.moved().offsetDays());
-            combination.add(ExactRatio.of(part.of(date)));
+            numbers[i] = part.of(LocalDate.ofEpochDay(day + part.moved().offsetDays()));
         }
-        return combination;
+        return numbers;
+    }
+
+    private static List<ExactRatio> ratiosOf(int[] numbers) {
+        List<ExactRatio> ratios = new ArrayList<>(numbers.length);
+        for (int number : numbers) {
+            ratios.add(ExactRatio.of(number));
+        }
+        return ratios;
     }
 }

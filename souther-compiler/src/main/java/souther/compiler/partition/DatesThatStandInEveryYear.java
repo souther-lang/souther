@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.time.Month;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -119,7 +120,7 @@ final class DatesThatStandInEveryYear {
 
     private static List<ExactRatio> alikeEveryYear(int month, int day, List<Part> parts,
                                                    List<DateTranslation> yearShifts) {
-        List<ExactRatio> out = null;
+        int[] out = null;
         for (int year : YEARS_ASKED) {
             if (day > YearMonth.of(year, month).lengthOfMonth()) {
                 return null;
@@ -131,20 +132,27 @@ final class DatesThatStandInEveryYear {
                     return null;
                 }
             }
-            List<ExactRatio> here = new ArrayList<>();
-            for (Part part : parts) {
+            int[] here = new int[parts.size()];
+            for (int i = 0; i < here.length; i++) {
+                Part part = parts.get(i);
                 if (!part.moved().definedAt(origin)) {
                     return null;
                 }
-                LocalDate date = LocalDate.ofEpochDay(origin + part.moved().offsetDays());
-                here.add(ExactRatio.of(part.of(date)));
+                here[i] = part.of(LocalDate.ofEpochDay(origin + part.moved().offsetDays()));
             }
             if (out == null) {
                 out = here;
-            } else if (!out.equals(here)) {
+            } else if (!Arrays.equals(out, here)) {
                 return null;
             }
         }
-        return out;
+        if (out == null) {
+            return null;
+        }
+        List<ExactRatio> ratios = new ArrayList<>(out.length);
+        for (int number : out) {
+            ratios.add(ExactRatio.of(number));
+        }
+        return ratios;
     }
 }
