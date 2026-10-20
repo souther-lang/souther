@@ -464,17 +464,23 @@ public sealed interface About {
     }
 
     /**
-     * A rule of the model some run reaching it stops in: an operation it is read through ends the
-     * run on some of the ways it is worked out, such as a division by nought.
+     * A rule of the model that a run reaching it may stop in: an operation it is read through ends
+     * the run on some of the ways it is worked out, such as a division by nought, and the ways
+     * before the rule do not rule such a run out.
      *
-     * <p>Beside {@link ARuleWithoutALine} and not among it. The rule draws its line on the runs
-     * that do not stop, so it is no rule without a line and no reading that stopped; this is what
-     * the model says on the runs that do. A rule every run stops in is the first of those, with its
-     * own reason.
+     * <p>A possibility and not a run shown to exist. The conditions on the way are asked whether
+     * they leave a row for the stop, and a stop is dropped only where they are shown to leave none;
+     * where that is not shown, the stop stays, as every other fact read off the way does.
+     *
+     * <p>Said of the rule whatever else is said of it, and independent of the line it draws: a
+     * rule that draws a line on the runs that do not stop, one that comes out the same for every
+     * row where a run gets past it, and one whose reading stopped may each have a run that stops
+     * in it. A rule every run stops in is not this, and has its own reason beside
+     * {@link ARuleWithoutALine}.
      */
-    record ARuleSomeRunsOfWhichStop(souther.compiler.inputs.RuleWhereARunStops finding)
+    record ARuleThatMayStopARun(souther.compiler.inputs.RuleWhereARunMayStop finding)
             implements OfARule {
-        public ARuleSomeRunsOfWhichStop {
+        public ARuleThatMayStopARun {
             java.util.Objects.requireNonNull(finding, "a finding is about something");
         }
 

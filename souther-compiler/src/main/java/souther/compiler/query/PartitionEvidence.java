@@ -77,7 +77,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
-                                List<souther.compiler.inputs.RuleWhereARunStops> rulesWhereARunStops,
+                                List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
@@ -132,7 +132,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         rulesWithoutALine = List.copyOf(rulesWithoutALine);
-        rulesWhereARunStops = List.copyOf(rulesWhereARunStops);
+        rulesWhereARunMayStop = List.copyOf(rulesWhereARunMayStop);
         notSeparated = List.copyOf(notSeparated);
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);

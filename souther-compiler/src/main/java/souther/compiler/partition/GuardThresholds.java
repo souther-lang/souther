@@ -802,7 +802,7 @@ public final class GuardThresholds {
         RuleReportAnchor anchor = reaches.anchorOf(wrote, where);
         publish(behavior, stated, wrote, anchor, read, withoutALine);
         if (aRunStops) {
-            withoutALine.stoppingSomeRuns(
+            withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
                     ModelOccurrences.of(stated));
         }

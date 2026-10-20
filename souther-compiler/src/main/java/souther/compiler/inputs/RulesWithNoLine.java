@@ -33,14 +33,13 @@ import java.util.Map;
  *                     asked of the reasons rather than read off this
  * @param unclassified the rules nothing worked out the questions of, each holding the measures it
  *                     leaves open
- * @param stopping     the rules some run reaching them stops in, which draw their lines on the runs
- *                     that do not: said beside the rules that came to no line because it is what
- *                     the same readers find of a rule, and apart from them because it is no absence
- *                     of a line
+ * @param stopping     the rules a run reaching them may stop in: said beside the rules that came to
+ *                     no line because it is what the same readers find of a rule, and apart from
+ *                     them because it says nothing of whether the rule draws a line
  */
 public record RulesWithNoLine(List<RuleWithoutALine> reported,
                               List<StandingQuestion.Unclassified> unclassified,
-                              List<RuleWhereARunStops> stopping) {
+                              List<RuleWhereARunMayStop> stopping) {
 
     /** Nothing found, which is what a reader with no rules to read hands on. */
     public static final RulesWithNoLine NONE =
@@ -147,12 +146,12 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
 
         private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
-        private final Map<RuleRef, RuleWhereARunStops> stopping = new LinkedHashMap<>();
+        private final Map<RuleRef, RuleWhereARunMayStop> stopping = new LinkedHashMap<>();
 
-        /** A rule some run reaching it stops in, which is what a report says of it. */
-        public void stoppingSomeRuns(RuleCitation cited, ModelOccurrences readAt) {
-            RuleWhereARunStops one = RuleWhereARunStops.of(cited, readAt);
-            stopping.merge(one.rule(), one, RuleWhereARunStops::mergedWith);
+        /** A rule a run reaching it may stop in, which is what a report says of it. */
+        public void mayStopARun(RuleCitation cited, ModelOccurrences readAt) {
+            RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt);
+            stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith);
         }
 
         /** One more finding, which is what a report says about the rule at that place. */
@@ -223,7 +222,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
             other.reported().forEach(this::add);
             other.unclassified().forEach(this::asked);
             other.stopping().forEach(one ->
-                    stopping.merge(one.rule(), one, RuleWhereARunStops::mergedWith));
+                    stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith));
         }
 
         /** What this gathering came to, which is what a reader hands on. */

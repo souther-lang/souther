@@ -1026,9 +1026,13 @@ sealed interface ComparisonAssessment {
     }
 
     /**
-     * Whether some row takes {@code way} to the rule at some place it is watched at: the way is
-     * not one the declarations and the conditions on it rule out, the places do not all prove
-     * that nothing arrives, and some region the way leaves is not shown to hold nothing.
+     * Whether {@code way} is not shown to leave no row at the rule: it is not one the declarations
+     * and the conditions on it rule out, the places it is watched at do not all prove that nothing
+     * arrives, and some region the way leaves is not shown to hold nothing.
+     *
+     * <p>No proof that a row arrives. The reading of the way is an inclusion, and a way it cannot
+     * take in leaves the region as wide as the declarations do, so this is true of a way it could
+     * not settle as much as of one a row takes.
      */
     static boolean someRowArrives(Reachability way, List<ComparisonArrival> arrivals) {
         return waysArrivedBy(way, arrivals).stream().anyMatch(reaching ->

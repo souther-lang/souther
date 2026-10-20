@@ -134,7 +134,7 @@ public final class Partitions {
                                List<StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
                                List<RuleWithoutALine> rulesWithoutALine,
-                               List<souther.compiler.inputs.RuleWhereARunStops> rulesWhereARunStops,
+                               List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                java.util.Map<AxisId, List<Border>> along,
@@ -148,7 +148,7 @@ public final class Partitions {
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
             rulesWithoutALine = List.copyOf(rulesWithoutALine);
-            rulesWhereARunStops = List.copyOf(rulesWhereARunStops);
+            rulesWhereARunMayStop = List.copyOf(rulesWhereARunMayStop);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
             java.util.Map<AxisId, List<Border>> lines = new LinkedHashMap<>();

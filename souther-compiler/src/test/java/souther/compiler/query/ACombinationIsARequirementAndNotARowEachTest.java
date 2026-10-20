@@ -76,9 +76,9 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // the one kind here that is read off the source rather than measured.
                 "AnUnansweredRow",
                 "ARowAtAnArmAwaitsItsAnswer",
-                // A rule some run stops in. Not a combination: it is one rule of the model, read
-                // to the end, and what it says is what the line it draws leaves out.
-                "ARuleWithoutALine", "ARuleSomeRunsOfWhichStop", "ARuleNothingClassified",
+                // A rule a run may stop in. Not a combination: it is one rule of the model, and
+                // what it says is a possibility beside whatever line it draws.
+                "ARuleWithoutALine", "ARuleThatMayStopARun", "ARuleNothingClassified",
                 "AQuestionNothingAnswered", "ARuleWithoutALine", "ARuleNothingClassified",
                 "APositionThisCouldNotRead", "APositionNoLineDivides",
                 "APositionReadWiderThanItsRules",

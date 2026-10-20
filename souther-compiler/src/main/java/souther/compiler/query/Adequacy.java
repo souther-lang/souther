@@ -3709,7 +3709,7 @@ public final class Adequacy {
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
             // What the model says, read to the end. A row does not change it.
-            case About.APositionNoLineDivides _, About.ARuleSomeRunsOfWhichStop _ ->
+            case About.APositionNoLineDivides _, About.ARuleThatMayStopARun _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.A_FACT_ABOUT_THE_MODEL);
             // <b>Asked of the finding and not read off which kind it is.</b> The two reasons here
@@ -5227,7 +5227,7 @@ public final class Adequacy {
                     // What this compiler could not read, and what it read to the end and found the
                     // model says nothing at. Neither is work a row does anything about.
                     case About.APositionNoLineDivides _, About.ARuleWithoutALine _,
-                         About.ARuleSomeRunsOfWhichStop _,
+                         About.ARuleThatMayStopARun _,
                          About.ARuleNothingClassified _, About.APositionThisCouldNotRead _,
                          About.APositionReadWiderThanItsRules _,
                          About.APositionWhoseRulesWereNotReached _,
@@ -5636,7 +5636,7 @@ public final class Adequacy {
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
-                                    About.ARuleSomeRunsOfWhichStop _,
+                                    About.ARuleThatMayStopARun _,
                                     About.APositionWhoseRulesWereNotReached _,
                                     About.APositionReadWiderThanItsRules _,
                                     About.AQuestionNothingAnswered _ ->
@@ -6859,15 +6859,15 @@ public final class Adequacy {
          */
         PARTITION_VALUES_NOT_SEPARATED(null),
         /**
-         * A rule of the model some run reaching it stops in, such as a division by nought on one
-         * of the ways it is worked out.
+         * A rule of the model that a run reaching it may stop in, such as a division by nought on
+         * one of the ways it is worked out, where the ways before it do not rule the run out.
          *
-         * <p>Its own finding beside {@link #PARTITION_NOT_READ}. The rule was read and draws its
-         * line on the runs that do not stop, so nothing is missing from the measure; what a reader
-         * is told is that on the others the run ends, which no line says. A rule every run stops in
-         * is told as a rule that draws no line, with its own reason.
+         * <p>Its own finding beside {@link #PARTITION_NOT_READ}. The rule was read, so nothing is
+         * missing from the measure; what a reader is told is that a run may end in it, which no
+         * line says. A possibility, not a run shown to exist. A rule every run stops in is told as
+         * a rule that draws no line, with its own reason.
          */
-        RULE_STOPS_SOME_RUNS(null);
+        RULE_MAY_STOP_A_RUN(null);
 
         private final DiagnosticCode code;
 
@@ -6940,7 +6940,7 @@ public final class Adequacy {
                     About.APointOfABorder _, About.ALineTheRowsDoNotTellFromAnother _,
                     About.APositionNoLineDivides _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
-                    About.ARuleSomeRunsOfWhichStop _,
+                    About.ARuleThatMayStopARun _,
                     About.APositionThisCouldNotRead _, About.APositionReadWiderThanItsRules _,
                     About.APositionWhoseRulesWereNotReached _, About.AQuestionNothingAnswered _ ->
                     whereItIsDeclared(db, module, finding.subject());
@@ -7220,7 +7220,7 @@ public final class Adequacy {
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleWithoutALine _, About.ARuleNothingClassified _ ->
                         Kind.PARTITION_NOT_READ;
-                case About.ARuleSomeRunsOfWhichStop _ -> Kind.RULE_STOPS_SOME_RUNS;
+                case About.ARuleThatMayStopARun _ -> Kind.RULE_MAY_STOP_A_RUN;
                 // One word, whatever stopped the reading, and the reason beside it says which.
                 // PARTITION_RULES_NOT_REACHED belongs to the finding above — a position the axes
                 // did measure — and the two write nothing but the position, so sharing the word
@@ -8567,8 +8567,9 @@ public final class Adequacy {
             }
             // And the rules some run reaching them stops in, which are read and draw their lines:
             // nothing is missing from the measure, and a reader is told what the lines leave out.
-            for (souther.compiler.inputs.RuleWhereARunStops each : partition.rulesWhereARunStops()) {
-                out.add(Finding.noticed(behavior.name(), new About.ARuleSomeRunsOfWhichStop(each)));
+            for (souther.compiler.inputs.RuleWhereARunMayStop each
+                    : partition.rulesWhereARunMayStop()) {
+                out.add(Finding.noticed(behavior.name(), new About.ARuleThatMayStopARun(each)));
             }
             // And what the reading could not hold together, which is neither of the two above: no
             // rule is answerable for it and nothing went unreached. Said whatever the axes made of
@@ -9015,7 +9016,7 @@ public final class Adequacy {
                         // arriving as a warning with no sentence.
                         case About.ACaseNothingWasSeenToProduce _,
                                 About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
-                                About.ARuleNothingClassified _, About.ARuleSomeRunsOfWhichStop _,
+                                About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.APositionReadWiderThanItsRules _,
                                 About.AQuestionNothingAnswered _ ->
@@ -9214,7 +9215,7 @@ public final class Adequacy {
                         About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
                         About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
-                        About.ARuleNothingClassified _, About.ARuleSomeRunsOfWhichStop _,
+                        About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,
                         About.AQuestionNothingAnswered _ -> { }
