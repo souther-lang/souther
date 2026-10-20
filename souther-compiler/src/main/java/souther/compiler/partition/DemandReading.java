@@ -1409,6 +1409,12 @@ final class DemandReading {
             if (way.never()) {
                 continue;
             }
+            // The value is written into the container as an element of its own, so an element
+            // that is to be it and to meet something besides is no element a composer writes.
+            if (stated.isPresent() && way.ofTheElement().size() > 1
+                    && way.ofTheElement().stream().anyMatch(each -> each instanceof RowDemand.SameAs)) {
+                return List.of(forTheRun(stated.get(), RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
+            }
             List<List<RowDemand.OfAnElement>> these =
                     byTheRow.computeIfAbsent(way.ofTheRow(), _ -> new ArrayList<>());
             // An element meeting nothing this reading could state is any element, and the

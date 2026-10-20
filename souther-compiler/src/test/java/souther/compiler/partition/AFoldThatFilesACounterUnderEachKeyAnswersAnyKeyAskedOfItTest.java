@@ -136,6 +136,57 @@ class AFoldThatFilesACounterUnderEachKeyAnswersAnyKeyAskedOfItTest {
         }
     }
 
+    /**
+     * The list a fold walks may be a position's elements kept by a statement, or a tuple a map
+     * built of each: the key asked for occurs among the elements meeting what they were kept by,
+     * and the key of an element is the place it was given. The line is drawn on that count, and
+     * the lookup finding nothing is told apart from it as before.
+     */
+    @Test
+    void theElementsAFoldWalksAreThosePutToItInsteadOfThePositionsOwn() {
+        record Walked(String walked, String step, String statement) { }
+        String record = "Map.updateOrInsert(p.label, 1, n -> n + 1, acc)";
+        String tupled = "{ let (k, _) = p\n Map.updateOrInsert(k, 1, n -> n + 1, acc) }";
+        for (Walked each : List.of(
+                new Walked("List.filter(x -> x.weight >= 2, xs)", record,
+                        "xs[*].weight >= 2 && label - xs[*].label == 0"),
+                new Walked("List.filter(x -> x.weight >= 2, List.filter(x -> x.weight < 9, xs))",
+                        record,
+                        "xs[*].weight < 9 && xs[*].weight >= 2 && label - xs[*].label == 0"),
+                new Walked("List.map(x -> (x.label, x.weight), xs)", tupled,
+                        "label - xs[*].label == 0"))) {
+            Compilation compilation = measured("""
+                    module example.popular
+
+                    data Item = { label: String, weight: Int }
+
+                    let countsOf (xs: List<Item>): Map<String, Int> =
+                        List.fold((acc, p) -> %s, Map.empty, %s)
+
+                    behavior popular : (xs: List<Item>, label: String) -> Bool
+
+                    let popular (xs, label) =
+                        match Map.get(label, countsOf(xs)) with
+                            | Some n -> n >= 3
+                            | None -> false
+                    """.formatted(each.step(), each.walked()));
+            assertTrue(report(compilation).contains("#xs [" + each.statement() + "]"),
+                    () -> each + ": " + report(compilation));
+            assertFalse(report(compilation).contains("stands at no position"),
+                    () -> each + ": " + report(compilation));
+        }
+    }
+
+    /** An element that is to be the key asked for and to meet what it was kept by besides is no
+     *  element a composer writes, and is left to the run rather than refused as malformed. */
+    @Test
+    void anElementKeptByItsOwnValueIsLeftToTheRun() {
+        Compilation compilation = measured(modelOf(COUNTING, 3, "").replace("Map.empty, xs)",
+                "Map.empty, List.filter(k -> k == \"z\", xs))"));
+        assertTrue(report(compilation).contains("#xs [label - xs[*] == 0 && xs[*] == z]"),
+                () -> report(compilation));
+    }
+
     /** A counter that never moves is what it starts at wherever the key occurs, so the lookup
      *  finding something is the only thing a row can turn on. */
     @Test

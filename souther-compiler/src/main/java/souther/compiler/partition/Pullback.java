@@ -3093,16 +3093,77 @@ final class Pullback {
                                  ElementAt outerEach, Denotation outerHanded) {
             KeyedAccumulation filed = KeyedAccumulation.of(container.value(), container.at(),
                     sides(), blockIn(container));
-            if (filed == null || !(container.at().holdingSomethingWhere(filed.walked(),
-                    read.rules().symbols(), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath held))) {
+            if (filed == null) {
                 return null;
             }
-            WhereFiled where = whereFiled(container, filed);
-            ElementAt each = new ElementAt.AnEntry(where == null ? null
-                    : new DecisionSubject.AnInput(where.key()));
+            if (!(container.at().holdingSomethingWhere(filed.walked(),
+                    read.rules().symbols(), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath held))) {
+                return entriesOfWhatWasKept(container, filed, pending, located, outerEach,
+                        outerHanded);
+            }
+            ElementAt each = new ElementAt.AnEntry(keyOfTheEntries(container, filed, held));
             settle(pending, each, null, located);
             DecisionSubject heldAt = new DecisionSubject.AnInput(held);
+            return outerEach == null ? new Located(heldAt, null, each, null, located, null)
+                    : new Located(heldAt, null, outerEach, outerHanded, located, null);
+        }
+
+        /**
+         * Where the key the entries of {@code container} are filed under stands among the places
+         * of the elements of the list at {@code held} — a place of the element itself, or the
+         * component of a tuple a map built of each element, read where the map was given it — or
+         * null where it is neither.
+         */
+        private DecisionSubject keyOfTheEntries(Denotation container, KeyedAccumulation filed,
+                                                TermPath held) {
+            WhereFiled where = whereFiled(container, filed);
+            if (where != null) {
+                return new DecisionSubject.AnInput(where.key());
+            }
+            int component = container.at().tupleComponentRead(filed.key(),
+                    filed.element().binding());
+            if (component < 0) {
+                return null;
+            }
+            InputReads.Occurrences every = container.at().everyOccurrenceKeyedAt(filed.walked(),
+                    component, Pullback.this::theListAKeepingCallKeepsSomeOf,
+                    read.rules().symbols(), read.rules().newtypes());
+            if (every == null || !every.keptBy().isEmpty()) {
+                return null;
+            }
+            TermPath place = OnePerElement.Answered.ITSELF.at().from(every.keys());
+            return place.containersHoldingIt().equals(List.of(held))
+                    ? new DecisionSubject.AnInput(place) : null;
+        }
+
+        /**
+         * Where the entries of {@code container} stand, where it is a map filed under the key of
+         * each element of a list made of a position's elements by operations that keep the ones
+         * meeting a statement or put them in another order — or null where it is not.
+         *
+         * <p>An entry is there for some element the list holds, which is an element of the
+         * position meeting what it was kept by, so some entry is some such element's, and the key
+         * it is filed under is the key that element has.
+         */
+        private Located entriesOfWhatWasKept(Denotation container, KeyedAccumulation filed,
+                                             List<Kept> pending, List<Kept> located,
+                                             ElementAt outerEach, Denotation outerHanded) {
+            Denotation walked = container.at().standing(filed.walked(), read.rules().symbols(),
+                    read.rules().newtypes());
+            Beneath below = beneath(walked, true);
+            if (below == null || !(subjectOf(below.at()) instanceof DecisionSubject.AnInput(
+                    TermPath held))) {
+                return null;
+            }
+            OnePerElement.Answered key = below.at().at().answeredOf(filed.key(),
+                    filed.element().binding(), read.rules().newtypes());
+            DecisionSubject heldAt = new DecisionSubject.AnInput(held);
+            List<Kept> keptBy = new ArrayList<>(below.kept());
+            settle(keptBy, new ElementAt.AtASubject(heldAt), null, located);
+            ElementAt each = new ElementAt.AnEntry(key == null ? null
+                    : new DecisionSubject.AnInput(key.at().from(held.element())));
+            settle(pending, each, null, located);
             return outerEach == null ? new Located(heldAt, null, each, null, located, null)
                     : new Located(heldAt, null, outerEach, outerHanded, located, null);
         }
@@ -4932,6 +4993,17 @@ final class Pullback {
      * else.
      */
     private Derivation asTheDifferenceOfTwoNumbers(Derivation read) {
+        if (read instanceof Derivation.OfWhatWasKept(Derivation ofTheElement,
+                                                     List<Derivation> kept)) {
+            Derivation stated = asTheDifferenceOfTwoNumbers(ofTheElement);
+            return stated == ofTheElement ? read : new Derivation.OfWhatWasKept(stated, kept);
+        }
+        if (read instanceof Derivation.Joined(var how, Derivation left, Derivation right)) {
+            Derivation one = asTheDifferenceOfTwoNumbers(left);
+            Derivation other = asTheDifferenceOfTwoNumbers(right);
+            return one == left && other == right ? read
+                    : new Derivation.Joined(how, one, other);
+        }
         if (!(trying.of(read) instanceof Proposition.SameValue(
                 DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath other),
                 boolean holds, var _))) {
