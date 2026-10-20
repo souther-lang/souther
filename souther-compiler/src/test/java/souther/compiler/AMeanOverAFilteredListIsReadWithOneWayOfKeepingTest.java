@@ -111,13 +111,34 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
     }
 
     /**
-     * Where no element is kept the count is nought and the division stops, so the mean is read
-     * where it is guarded and is stopped on by the language where it is not.
+     * Where no element is kept the count is nought and the division stops: it is no mean of
+     * nought. Were it read as one, a mean of 100 against 100 would fail on those rows and the way
+     * that fails it would be taken; against 101 it would fail the same way and the way that holds
+     * it would be taken by none. Each is taken by no input, whichever the mean is held against.
      */
     @Test
     void aMeanOverNothingKeptIsTheDivisionByZeroTheLanguageStopsAt() {
-        String report = report(guarded(meanOfEach("100") + " >= 100"));
+        String held = report(guarded(meanOfEach("100") + " >= 100"));
+        assertEquals("· the comparison at  does not hold", whatLeavesNoValue(held), held);
+        String failed = report(guarded(meanOfEach("100") + " >= 101"));
+        assertEquals("· the comparison at  holds", whatLeavesNoValue(failed), failed);
+    }
+
+    /** The mean as the shape the helper gives it, over three elements. */
+    @Test
+    void aMeanOverAHelpersListOfThreeIsNoLongerStoppedAtTheQuotient() {
+        String report = report("""
+                data Win = { first: Month, second: Month, third: Month }
+                let payable (w: Win): List<Month> =
+                    List.filter(r -> r.days >= 17, [ w.first, w.second, w.third ])
+                behavior g : (w: Win) -> Ok | No
+                let g (w) = {
+                    guard List.length(payable(w)) >= 1 else No
+                    guard List.sum(List.map(r -> r.pay, payable(w)))
+                            / List.length(payable(w)) >= 300 else No
+                    Ok
+                }
+                """);
         assertFalse(report.contains(NO_QUOTIENT_READ), report);
-        assertTrue(report.contains("measurement: complete"), report);
     }
 }

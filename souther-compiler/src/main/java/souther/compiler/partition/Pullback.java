@@ -338,26 +338,27 @@ final class Pullback {
      */
     private final Map<Core, LinearForm<Quantity>> sizedInACase = new HashMap<>();
     /**
-     * What each total over a container the body wrote out adds up to, in the way of keeping the
-     * comparison being read is read in ({@link #keepingOf}): the sum of the elements that way
-     * keeps. Newest last.
+     * What each total over a container the body wrote out adds up to, and each container it counts,
+     * in the way of keeping the comparison being read is read in ({@link #keepingOf}): the sum of
+     * the elements that way keeps, and how many of them there are. Newest last.
      */
-    private final List<ATotalInACase> totalsInACase = new ArrayList<>();
+    private final List<AnAggregateInACase> aggregatesInACase = new ArrayList<>();
 
     /**
-     * That the total {@code call}, standing in the names of {@code at}, adds up to {@code form} in
-     * the way of keeping being read.
+     * That {@code call}, standing in the names of {@code at}, is {@code form} in the way of
+     * keeping being read: the total call, which adds up to it, or the container, which holds that
+     * many.
      *
      * <p>The call and the names it stands in, and not the call alone: a closure's body is one node
      * however many elements it is applied to, and the total in it is a different total for each.
      */
-    private record ATotalInACase(Core call, InputReads at, LinearForm<Quantity> form) {}
+    private record AnAggregateInACase(Core call, InputReads at, LinearForm<Quantity> form) {}
 
-    /** What the total {@code call} standing at {@code at} adds up to in the way of keeping being
-     *  read, or null where no way is being read for it. */
-    private LinearForm<Quantity> totalInACase(Core call, InputReads at) {
+    /** What the total {@code call}, or the container it is, standing at {@code at} comes to in the
+     *  way of keeping being read, or null where no way is being read for it. */
+    private LinearForm<Quantity> aggregateInACase(Core call, InputReads at) {
         Core node = Core.withoutStanding(call);
-        for (ATotalInACase each : totalsInACase) {
+        for (AnAggregateInACase each : aggregatesInACase) {
             if (each.call() == node && each.at().standsInTheNamesOf(at)) {
                 return each.form();
             }
@@ -1922,7 +1923,8 @@ final class Pullback {
             return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(written.getAsLong())));
         }
         // How many of the container are kept in the way of keeping being read.
-        LinearForm<Quantity> kept = totalInACase(Core.withoutStanding(made.value()), made.at());
+        LinearForm<Quantity> kept = aggregateInACase(Core.withoutStanding(made.value()),
+                made.at());
         if (kept != null) {
             return new Sized.AsAForm(kept);
         }
@@ -5427,7 +5429,7 @@ final class Pullback {
         if (total == null) {
             return null;
         }
-        LinearForm<Quantity> inACase = totalInACase(node, at);
+        LinearForm<Quantity> inACase = aggregateInACase(node, at);
         if (inACase != null) {
             return inACase;
         }
@@ -5454,7 +5456,7 @@ final class Pullback {
      */
     private Inside.ATotalByKeeping totalByKeeping(Core node, InputReads at) {
         AnOperationApplied total = sumCall(node);
-        if (total == null || totalInACase(node, at) != null) {
+        if (total == null || aggregateInACase(node, at) != null) {
             return null;
         }
         Denotation container = at.standing(total.args().getFirst(), read.rules().symbols(),
@@ -5496,7 +5498,7 @@ final class Pullback {
         Denotation container = at.standing(count.args().getFirst(), read.rules().symbols(),
                 read.rules().newtypes());
         Core held = Core.withoutStanding(container.value());
-        if (totalInACase(held, container.at()) != null
+        if (aggregateInACase(held, container.at()) != null
                 || !(WrittenOutElements.of(container, read.rules().symbols(),
                         read.rules().newtypes()) instanceof WrittenOutElements.Walked.Each each)) {
             return null;
@@ -5591,7 +5593,7 @@ final class Pullback {
         if (total.counted()) {
             long there = IntStream.range(0, total.occurrences().size())
                     .filter(i -> ways.isThere(i, decided)).count();
-            return aggregateInACase(total, LinearForm.constant(ExactRatio.of(there)),
+            return readWithTheAggregate(total, LinearForm.constant(ExactRatio.of(there)),
                     elementsMet.copied(), again);
         }
         ElementsMet metBefore = elementsMet.copied();
@@ -5619,20 +5621,20 @@ final class Pullback {
                 return partOf(at, new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
             }
         }
-        return aggregateInACase(total, sum, metBefore, again);
+        return readWithTheAggregate(total, sum, metBefore, again);
     }
 
     /** {@code again} read with what {@code total} adds up to, or counts, in this way of keeping
      *  {@code form}. */
-    private Derivation aggregateInACase(Inside.ATotalByKeeping total, LinearForm<Quantity> form,
-                                        ElementsMet metBefore,
-                                        Function<UnaryOperator<InputReads>, Derivation> again) {
-        ATotalInACase inThisWay = new ATotalInACase(total.call(), total.at(), form);
-        totalsInACase.add(inThisWay);
+    private Derivation readWithTheAggregate(Inside.ATotalByKeeping total,
+                                            LinearForm<Quantity> form, ElementsMet metBefore,
+                                            Function<UnaryOperator<InputReads>, Derivation> again) {
+        AnAggregateInACase inThisWay = new AnAggregateInACase(total.call(), total.at(), form);
+        aggregatesInACase.add(inThisWay);
         try {
             return again.apply(on -> on);
         } finally {
-            totalsInACase.remove(inThisWay);
+            aggregatesInACase.remove(inThisWay);
             // The ways are independent readings of one comparison: what one met of the container's
             // elements is no part of what the next meets.
             elementsMet = metBefore;
@@ -6649,7 +6651,7 @@ final class Pullback {
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
                             number.at().isTaken(call);
                     case Inside.ATotalByKeeping(Core call, InputReads where, var _, var _) ->
-                            totalInACase(call, where) != null;
+                            aggregateInACase(call, where) != null;
                     // A name an application handed a value is that one value, and stops nothing.
                     // Met again as several, it was reached through a value handed another name and
                     // read where that value was written, which no application handed it: handed
