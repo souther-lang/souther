@@ -204,6 +204,75 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         assertFalse(human.contains("no row can be written"), human);
     }
 
+    /** The total the report says a rule is about: the part between the backquotes after "about". */
+    private static String totalOf(String human) {
+        int from = human.indexOf("about `List.sum(");
+        assertTrue(from >= 0, human);
+        int start = from + "about `".length();
+        return human.substring(start, human.indexOf('`', start));
+    }
+
+    private static String ofPairs(String closure) {
+        return report("""
+                module p
+                data Pair = { p: Int, q: Int }
+                data Bad
+                behavior check : (xs: List<Pair>) -> Int | Bad
+                let check (xs) = {
+                    guard List.sum(List.mapIndexed(%s, xs)) >= 10 else Bad
+                    0
+                }
+                """.formatted(closure));
+    }
+
+    /**
+     * A weight made of the position is one number however it is written: the position added to a
+     * choice of the position, and a choice of the position added to it, are the choice with the
+     * position in each of its answers, so the same term.
+     */
+    @Test
+    void aWeightIsTheSameTermHoweverItsPositionAndItsChoiceAreAdded() {
+        String inside = totalOf(report(model(
+                "(i, c) -> (if i <= 5 then i + 2 else i - 4) * c", "xs")));
+        for (String closure : List.of("(i, c) -> (i + (if i <= 5 then 2 else -4)) * c",
+                "(i, c) -> ((if i <= 5 then 2 else -4) + i) * c",
+                "(i, c) -> c * (i + (if i <= 5 then 2 else -4))",
+                "(i, c) -> if i <= 5 then (i + 2) * c else (i - 4) * c")) {
+            String human = report(model(closure, "xs"));
+            assertFalse(human.contains("not read:"), closure + "\n" + human);
+            assertEquals(inside, totalOf(human), closure);
+        }
+    }
+
+    /** Numbers made of the position and of the element are added as forms, so one number is one
+     *  term whether the position multiplies each field or their sum. */
+    @Test
+    void thePositionTimesEachFieldIsTheSameTermAsTheSumOfThem() {
+        String together = totalOf(ofPairs("(i, c) -> i * (c.p + c.q)"));
+        assertEquals(together, totalOf(ofPairs("(i, c) -> i * c.p + i * c.q")));
+        assertEquals(together, totalOf(ofPairs("(i, c) -> c.p * i + i * c.q")));
+        assertEquals(together, totalOf(ofPairs("(i, c) -> (i * c.p + c.p) + (i * c.q - c.p)")));
+    }
+
+    /** The case the issue reports, whose total is read through a remainder. */
+    @Test
+    void aTotalWeighedByTheIndexIsReadThroughARemainder() {
+        String human = report("""
+                module probe.f5
+
+                data Yes = { n: Int }
+                data No = { n: Int }
+
+                behavior verify : (xs: List<Int>) -> Yes | No
+                    constructs Yes, No
+
+                let verify (xs) =
+                    if Int.floorMod(List.sum(List.mapIndexed((i, c) -> (i + 2) * c, xs)), 11) <= 1 then Yes { n = 0 } else No { n = 0 }
+                """);
+        assertFalse(human.contains("not read:"), human);
+        assertTrue(human.contains("the position"), human);
+    }
+
     /** A product of two numbers of the element stays a product, whatever the position. */
     @Test
     void aProductOfTwoNumbersOfTheElementIsStillNotRead() {

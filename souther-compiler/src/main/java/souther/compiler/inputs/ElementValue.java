@@ -84,8 +84,8 @@ public sealed interface ElementValue {
                     || choice.otherwise().readsThePosition();
             case OfItsCase choice -> (choice.rest() != null && choice.rest().readsThePosition())
                     || choice.arms().stream().anyMatch(arm -> arm.value().readsThePosition());
-            case SumOfChoices sum -> sum.chosen().keySet().stream()
-                    .anyMatch(ElementValue::readsThePosition);
+            case SumOfChoices sum -> sum.besides().readsThePosition()
+                    || sum.chosen().keySet().stream().anyMatch(ElementValue::readsThePosition);
         };
     }
 
@@ -152,11 +152,9 @@ public sealed interface ElementValue {
      * term. Choices are added by being held side by side ({@link SumOfChoices}), and the type of
      * {@code other} is what keeps a product of them from being made anywhere.
      */
-    static ElementValue plus(ElementValue one, Affine other) {
+    static ElementValue plus(ElementValue one, Form other) {
         return switch (one) {
-            case Affine form -> form.form().plus(other.form())
-                    instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var summed)
-                    ? new Affine(summed) : null;
+            case Form form -> added(form, other);
             case Choose choice -> {
                 ElementValue yes = plus(choice.whenSet(), other);
                 ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
@@ -167,8 +165,6 @@ public sealed interface ElementValue {
                 ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
                 yield no == null ? null : choosingByPosition(choice.test(), yes, no);
             }
-            case Indexed indexed -> plus(indexed.base(), other) instanceof Affine base
-                    ? new Indexed(indexed.perPosition(), base) : null;
             case OfItsCase choice -> {
                 List<OfItsCase.Arm> arms = new ArrayList<>();
                 for (OfItsCase.Arm arm : choice.arms()) {
@@ -182,7 +178,7 @@ public sealed interface ElementValue {
                 yield choice.rest() != null && rest == null ? null
                         : choosingByCase(choice.subject(), arms, rest);
             }
-            case SumOfChoices sum -> plus(sum.besides(), other) instanceof Affine besides
+            case SumOfChoices sum -> added(sum.besides(), other) instanceof Form besides
                     ? new SumOfChoices(besides, sum.chosen()) : null;
         };
     }
@@ -224,7 +220,7 @@ public sealed interface ElementValue {
                 if (weight.isZero()) {
                     yield new Affine(LinearForm.constant(ExactRatio.ZERO));
                 }
-                if (!(times(sum.besides(), weight) instanceof Affine besides)) {
+                if (!(times(sum.besides(), weight) instanceof Form besides)) {
                     yield null;
                 }
                 SequencedMap<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
@@ -257,7 +253,7 @@ public sealed interface ElementValue {
      *
      * @param chosen each choice, at the weight it is added at, never nought
      */
-    record SumOfChoices(Affine besides, SequencedMap<ElementValue, ExactRatio> chosen)
+    record SumOfChoices(Form besides, SequencedMap<ElementValue, ExactRatio> chosen)
             implements ElementValue {
 
         public SumOfChoices {
@@ -328,8 +324,8 @@ public sealed interface ElementValue {
     /** Whether {@code value} is a choice, which a form is not and a sum of choices is several of. */
     private static boolean isAChoice(ElementValue value) {
         return switch (value) {
-            case Choose _, OfItsCase _, ByPosition _, Indexed _ -> true;
-            case Affine _, SumOfChoices _ -> false;
+            case Choose _, OfItsCase _, ByPosition _ -> true;
+            case Affine _, Indexed _, SumOfChoices _ -> false;
         };
     }
 
@@ -343,7 +339,11 @@ public sealed interface ElementValue {
      */
     static ElementValue summed(ExactRatio constant, Map<ElementProjection, ExactRatio> places,
                                Map<ElementValue, ExactRatio> chosen) {
-        Affine besides = new Affine(new LinearForm<>(constant, places));
+        return summed(new Affine(new LinearForm<>(constant, places)), chosen);
+    }
+
+    /** As above, for a form beside the choices that may be made of the position too. */
+    static ElementValue summed(Form besides, Map<ElementValue, ExactRatio> chosen) {
         if (chosen.isEmpty()) {
             return besides;
         }
@@ -368,7 +368,7 @@ public sealed interface ElementValue {
     }
 
     /** {@code const + Σ coef·field}. */
-    record Affine(LinearForm<ElementProjection> form) implements ElementValue {
+    record Affine(LinearForm<ElementProjection> form) implements Form {
 
         public Affine {
             if (form == null) {
@@ -499,6 +499,44 @@ public sealed interface ElementValue {
     }
 
     /**
+     * A number that is linear in the fields of the element and in the position times them, with no
+     * choice in it: an {@link Affine}, or an {@link Indexed}.
+     *
+     * <p>Not a choice. Forms added to one another, or one scaled, are one form and not several
+     * answers held side by side, so they stay out of {@link SumOfChoices} however many there are,
+     * and two writings of one number are one value.
+     */
+    sealed interface Form extends ElementValue permits Affine, Indexed {}
+
+    /**
+     * {@code one} and {@code other} added, where neither is a choice; or null where the exact
+     * arithmetic cannot hold the sum.
+     */
+    private static Form added(Form one, Form other) {
+        return switch (one) {
+            case Affine form -> switch (other) {
+                case Affine second -> form.form().plus(second.form())
+                        instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var summed)
+                        ? new Affine(summed) : null;
+                case Indexed second -> added(second, form);
+            };
+            case Indexed indexed -> {
+                Affine perPosition = indexed.perPosition();
+                Affine beside;
+                if (other instanceof Indexed second) {
+                    perPosition = added(perPosition, second.perPosition()) instanceof Affine sum
+                            ? sum : null;
+                    beside = added(indexed.base(), second.base()) instanceof Affine sum
+                            ? sum : null;
+                } else {
+                    beside = added(indexed.base(), other) instanceof Affine sum ? sum : null;
+                }
+                yield perPosition == null || beside == null ? null : indexed(perPosition, beside);
+            }
+        };
+    }
+
+    /**
      * The position times a form of the element, and a form beside it: {@code position·perPosition
      * + base}.
      *
@@ -510,7 +548,7 @@ public sealed interface ElementValue {
      * @param perPosition what each step of the position adds, never a form of nothing but nought
      *                    (that is {@code base} alone, and a {@link Affine})
      */
-    record Indexed(Affine perPosition, Affine base) implements ElementValue {
+    record Indexed(Affine perPosition, Affine base) implements Form {
 
         public Indexed {
             if (perPosition == null || base == null) {
@@ -555,7 +593,7 @@ public sealed interface ElementValue {
     }
 
     /** {@code position·perPosition + base}, which is {@code base} where the position adds nothing. */
-    static ElementValue indexed(Affine perPosition, Affine base) {
+    static Form indexed(Affine perPosition, Affine base) {
         return perPosition.form().coefs().isEmpty() && perPosition.form().constant().isZero()
                 ? base : new Indexed(perPosition, base);
     }
@@ -619,7 +657,7 @@ public sealed interface ElementValue {
      * <p>A form and never a second choice, for the reason {@link #plus} takes one: two choices
      * multiplied are every pair of their answers, and a product of several would double at each.
      */
-    static ElementValue weighedBy(ElementValue weight, Affine by) {
+    static ElementValue weighedBy(ElementValue weight, Form by) {
         return switch (weight) {
             case Affine form -> form.form().coefs().isEmpty()
                     ? times(by, form.form().constant()) : null;
@@ -633,8 +671,10 @@ public sealed interface ElementValue {
                 ElementValue no = yes == null ? null : weighedBy(choice.otherwise(), by);
                 yield no == null ? null : choosingByPosition(choice.test(), yes, no);
             }
-            // The position weighed by a number of no field, times a form: the form at each step.
-            case Indexed form -> form.perPosition().form().coefs().isEmpty()
+            // The position weighed by a number of no field, times a form of no position: the form
+            // at each step. The position times itself is no form of the elements.
+            case Indexed form -> by instanceof Affine
+                    && form.perPosition().form().coefs().isEmpty()
                     && form.base().form().coefs().isEmpty()
                     && times(by, form.perPosition().form().constant()) instanceof Affine per
                     && times(by, form.base().form().constant()) instanceof Affine base
@@ -861,22 +901,58 @@ public sealed interface ElementValue {
         /** {@code form} as what it comes to of the element, put together as {@link #summed} puts
          *  it; or null where the exact arithmetic cannot hold it. */
         private static ElementValue valueOf(LinearForm<Atom> form) {
-            Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+            Map<Atom, ExactRatio> ofTheElement = new LinkedHashMap<>();
             Map<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
             form.coefs().forEach((atom, weight) -> {
-                switch (atom) {
-                    case Atom.Place(ElementProjection place) -> places.put(place, weight);
-                    case Atom.Chosen(ElementValue choice) -> chosen.put(choice, weight);
+                if (atom instanceof Atom.Chosen(ElementValue choice)) {
+                    chosen.put(choice, weight);
+                } else {
+                    ofTheElement.put(atom, weight);
                 }
             });
-            return ElementValue.summed(form.constant(), places, chosen);
+            return ElementValue.summed(formOf(form.constant(), ofTheElement), chosen);
         }
 
-        /** What an atom of what a closure computed is: a place of the element, or a choice made
-         *  of it. */
+        /**
+         * {@code constant} and the atoms that are no choice, as the form they are: the places of
+         * the element, the position, and the position times a place.
+         *
+         * @param atoms each of them at its weight; none a {@link Atom.Chosen}
+         */
+        private static Form formOf(ExactRatio constant, Map<Atom, ExactRatio> atoms) {
+            Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+            Map<ElementProjection, ExactRatio> moved = new LinkedHashMap<>();
+            ExactRatio step = ExactRatio.ZERO;
+            for (Map.Entry<Atom, ExactRatio> each : atoms.entrySet()) {
+                switch (each.getKey()) {
+                    case Atom.Place(ElementProjection place) -> places.put(place, each.getValue());
+                    case Atom.PositionTimes(ElementProjection place) ->
+                            moved.put(place, each.getValue());
+                    case Atom.ThePosition _ -> step = each.getValue();
+                    case Atom.Chosen _ -> throw new IllegalArgumentException(
+                            "a choice is no part of a form: " + each);
+                }
+            }
+            Affine base = new Affine(new LinearForm<>(constant, places));
+            return indexed(new Affine(new LinearForm<>(step, moved)), base);
+        }
+
+        /**
+         * What an atom of what a closure computed is: a place of the element, the position, the
+         * position times a place, or a choice made of the element.
+         *
+         * <p>The first three are linear in one another, so a sum of them is the one form however it
+         * was written, and the arithmetic that adds and scales them is {@link AffineForms}'s.
+         */
         private sealed interface Atom {
 
             record Place(ElementProjection place) implements Atom {}
+
+            /** Where the element stands, as a number. */
+            record ThePosition() implements Atom {}
+
+            /** Where the element stands, times the number at a place of it. */
+            record PositionTimes(ElementProjection place) implements Atom {}
 
             record Chosen(ElementValue choice) implements Atom {}
         }
@@ -1074,9 +1150,7 @@ public sealed interface ElementValue {
                         return LinearForm.atom(new Atom.Place(place));
                     }
                     if (position != null && isThePosition(e)) {
-                        return LinearForm.atom(new Atom.Chosen(new Indexed(
-                                new Affine(LinearForm.constant(ExactRatio.ONE)),
-                                new Affine(LinearForm.constant(ExactRatio.ZERO)))));
+                        return LinearForm.atom(new Atom.ThePosition());
                     }
                     ElementValue choice = switch (Core.withoutStanding(e)) {
                         case Core.If branch -> byCondition(branch);
@@ -1086,10 +1160,19 @@ public sealed interface ElementValue {
                     return choice == null ? null : termsOf(choice);
                 }
 
-                /** A choice of numbers times a form, and only that: the choice weighs the form
-                 *  ({@link ElementValue#weighedBy}). */
+                /** The position times a form of the places of the element, which is a form of the
+                 *  places and of the position times them ({@link #movedByThePosition}); or a
+                 *  choice of numbers times a form, which weighs it ({@link ElementValue#weighedBy}).
+                 *  And nothing else. */
                 @Override
                 public LinearForm<Atom> productOf(LinearForm<Atom> left, LinearForm<Atom> right) {
+                    LinearForm<Atom> moved = movedByThePosition(left, right);
+                    if (moved == null) {
+                        moved = movedByThePosition(right, left);
+                    }
+                    if (moved != null) {
+                        return moved;
+                    }
                     ElementValue one = valueOf(left);
                     ElementValue other = one == null ? null : valueOf(right);
                     if (other == null) {
@@ -1103,10 +1186,40 @@ public sealed interface ElementValue {
                 }
 
                 private ElementValue weighed(ElementValue weight, ElementValue by) {
-                    return by instanceof Affine form && isAChoice(weight)
+                    return by instanceof Form form && isAChoice(weight)
                             ? ElementValue.weighedBy(weight, form) : null;
                 }
             };
+        }
+
+        /**
+         * {@code weight · by}, where {@code weight} is a constant and a multiple of the position
+         * and {@code by} a constant and places of the element; or null where it is not.
+         *
+         * <p>{@code (s·i + a) · (b + Σ w·p)} is {@code a·b + Σ a·w·p + s·b·i + Σ s·w·(i·p)}, each
+         * of them an atom, so the product is a form like any other. A product with the position
+         * itself, or with a choice, is not one.
+         */
+        private static LinearForm<Atom> movedByThePosition(LinearForm<Atom> weight,
+                                                           LinearForm<Atom> by) {
+            ExactRatio step = weight.coefs().get(new Atom.ThePosition());
+            if (step == null || weight.coefs().size() != 1) {
+                return null;
+            }
+            Map<Atom, ExactRatio> moved = new LinkedHashMap<>();
+            for (Map.Entry<Atom, ExactRatio> each : by.coefs().entrySet()) {
+                if (!(each.getKey() instanceof Atom.Place(ElementProjection place))) {
+                    return null;
+                }
+                moved.put(new Atom.PositionTimes(place), each.getValue());
+            }
+            if (!by.constant().isZero()) {
+                moved.put(new Atom.ThePosition(), by.constant());
+            }
+            ExactAnswer<LinearForm<Atom>> steps = new LinearForm<>(ExactRatio.ZERO, moved)
+                    .times(step);
+            return by.times(weight.constant()).flatMap(still -> steps.flatMap(still::plus))
+                    instanceof ExactAnswer.Held<LinearForm<Atom>>(var product) ? product : null;
         }
 
         /**
@@ -1126,6 +1239,17 @@ public sealed interface ElementValue {
                             places.put(new Atom.Place(place), weight));
                     yield new LinearForm<>(form.form().constant(), places);
                 }
+                case Indexed form -> {
+                    Map<Atom, ExactRatio> all = new LinkedHashMap<>();
+                    form.base().form().coefs().forEach((place, weight) ->
+                            all.put(new Atom.Place(place), weight));
+                    form.perPosition().form().coefs().forEach((place, weight) ->
+                            all.put(new Atom.PositionTimes(place), weight));
+                    if (!form.perPosition().form().constant().isZero()) {
+                        all.put(new Atom.ThePosition(), form.perPosition().form().constant());
+                    }
+                    yield new LinearForm<>(form.base().form().constant(), all);
+                }
                 case SumOfChoices sum -> {
                     LinearForm<Atom> besides = termsOf(sum.besides());
                     Map<Atom, ExactRatio> all = new LinkedHashMap<>(besides.coefs());
@@ -1133,7 +1257,7 @@ public sealed interface ElementValue {
                             all.put(new Atom.Chosen(choice), weight));
                     yield new LinearForm<>(besides.constant(), all);
                 }
-                case Choose _, OfItsCase _, ByPosition _, Indexed _ ->
+                case Choose _, OfItsCase _, ByPosition _ ->
                         LinearForm.atom(new Atom.Chosen(value));
             };
         }
@@ -1179,25 +1303,53 @@ public sealed interface ElementValue {
                             terms.put(new TheStep.OfTheElement(atom), weight));
                     return new LinearForm<>(ofTheElement.constant(), terms);
                 }
+
+                /** A product of what is of the element alone is the element's own ({@link
+                 *  #atoms}); one with the answer so far or a count is not a step this reads. */
+                @Override
+                public LinearForm<TheStep> productOf(LinearForm<TheStep> left,
+                                                     LinearForm<TheStep> right) {
+                    LinearForm<Atom> one = ofTheElementAlone(left);
+                    LinearForm<Atom> other = one == null ? null : ofTheElementAlone(right);
+                    LinearForm<Atom> product = other == null ? null
+                            : atoms().productOf(one, other);
+                    if (product == null) {
+                        return null;
+                    }
+                    Map<TheStep, ExactRatio> terms = new LinkedHashMap<>();
+                    product.coefs().forEach((atom, weight) ->
+                            terms.put(new TheStep.OfTheElement(atom), weight));
+                    return new LinearForm<>(product.constant(), terms);
+                }
+
+                private LinearForm<Atom> ofTheElementAlone(LinearForm<TheStep> step) {
+                    Map<Atom, ExactRatio> atoms = new LinkedHashMap<>();
+                    for (Map.Entry<TheStep, ExactRatio> each : step.coefs().entrySet()) {
+                        if (!(each.getKey() instanceof TheStep.OfTheElement(Atom atom))) {
+                            return null;
+                        }
+                        atoms.put(atom, each.getValue());
+                    }
+                    return new LinearForm<>(step.constant(), atoms);
+                }
             });
             if (form == null
                     || !ExactRatio.ONE.equals(form.coefs().get(new TheStep.TheAnswerSoFar()))) {
                 return null;
             }
-            Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+            Map<Atom, ExactRatio> ofTheElement = new LinkedHashMap<>();
             Map<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
             Map<ElementProjection, ExactRatio> counted = new LinkedHashMap<>();
             form.coefs().forEach((atom, weight) -> {
                 switch (atom) {
-                    case TheStep.OfTheElement(Atom.Place(ElementProjection place)) ->
-                            places.put(place, weight);
                     case TheStep.OfTheElement(Atom.Chosen(ElementValue choice)) ->
                             chosen.put(choice, weight);
+                    case TheStep.OfTheElement(Atom each) -> ofTheElement.put(each, weight);
                     case TheStep.HowManyAt(ElementProjection place) -> counted.put(place, weight);
                     case TheStep.TheAnswerSoFar _ -> { }
                 }
             });
-            ElementValue adds = ElementValue.summed(form.constant(), places, chosen);
+            ElementValue adds = ElementValue.summed(formOf(form.constant(), ofTheElement), chosen);
             return adds == null ? null : new Added(adds, counted);
         }
 
