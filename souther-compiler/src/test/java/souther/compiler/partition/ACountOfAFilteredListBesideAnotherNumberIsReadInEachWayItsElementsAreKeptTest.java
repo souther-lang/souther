@@ -51,7 +51,16 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      * @param after what the source writes after the behavior: its examples, or a helper it calls
      */
     private static Compilation compiled(String body, String after) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = Compilation.ofSource(source(body, after), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        return compilation;
+    }
+
+    private static String source(String body, String after) {
+        return """
                 module p
                 data Ok
                 data No
@@ -60,12 +69,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
                 %s
                     Ok
                 }
-                %s""".formatted(body, after), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
-        return compilation;
+                %s""".formatted(body, after);
     }
 
     private static String report(String body) {
@@ -262,12 +266,28 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         assertOwesTheSame(one + " <= " + other, chosen + " <= " + otherChosen, "");
         assertOwesTheSame(one + " + k * " + other + " >= 1",
                 chosen + " + k * " + otherChosen + " >= 1", "");
-        // The comparison's own line, holding where a is at most nought, and the filter's,
-        // holding where it is above.
-        Set<String> owed = owedOfEveryRule(guarded(one + " <= 0"), "");
-        assertTrue(owed.containsAll(List.of("on f/a = 0", "off f/a = 1", "in f/a in a < 0",
-                "out f/a in 1 < a", "on f/a = 1", "off f/a = 0", "in f/a in 1 < a",
-                "out f/a in a < 0")), owed::toString);
+        // The guard's own line, holding where a is at most nought, and the filter's, holding where
+        // it is above.
+        assertEquals(Set.of("guard on f/a = 0", "guard off f/a = 1", "guard in f/a in a < 0",
+                "guard out f/a in 1 < a", "within on f/a = 1", "within off f/a = 0",
+                "within in f/a in 1 < a", "within out f/a in a < 0"),
+                owedOfEveryRule(one + " <= 0", ""));
+    }
+
+    /**
+     * Where a count is held against one, or two of them against one, the statements do not come
+     * to one denial and nothing was carried past the comparison before either: what it is owed is
+     * still what the choices written out are, rule by rule.
+     */
+    @Test
+    void aCountWhoseStatementsComeToMoreThanOneIsOwedWhatTheChoicesWrittenOutAre() {
+        String chosen = "(if a > 0 then 1 else 0)";
+        String eachKept = chosen + " + (if b > 0 then 1 else 0)";
+        assertOwesTheSame("List.length(List.filter(v -> v > 0, [a])) >= 1", chosen + " >= 1", "");
+        assertOwesTheSame("List.length(List.filter(v -> v > 0, [a, b])) >= 1", eachKept + " >= 1",
+                "");
+        assertOwesTheSame("List.length(List.filter(v -> v > 0, [a, b])) <= 1", eachKept + " <= 1",
+                "");
     }
 
     private static void assertOwesTheSame(String kept, String writtenOut, String after) {
@@ -275,28 +295,69 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         String counted = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         assertFalse(counted.contains("not read"), counted);
-        Set<String> owed = owedOfEveryRule(compilation);
-        assertFalse(owed.isEmpty(), kept);
-        assertEquals(owedOfEveryRule(guarded(writtenOut), ""), owed, kept);
+        Set<String> owed = owedOfEveryRule(compilation, theGuard(kept, after));
+        assertTrue(owed.stream().anyMatch(each -> each.startsWith("guard ")),
+                () -> kept + " owes points of the guard's own: " + owed);
+        assertEquals(owedOfEveryRule(writtenOut, ""), owed, kept);
     }
 
-    private static Set<String> owedOfEveryRule(String body, String after) {
-        return owedOfEveryRule(compiled(body, after));
+    private static Set<String> owedOfEveryRule(String condition, String after) {
+        return owedOfEveryRule(compiled(guarded(condition), after), theGuard(condition, after));
     }
 
     /**
-     * Each point the behavior is owed, with each reading of it apart, whichever rule owes it: the
-     * filter's own comparison owes for every element what an {@code if} written for each owes for
-     * its one.
+     * Each point the behavior is owed, with each reading of it apart, and whose rule owes it: the
+     * guard's own comparison, or one written inside it. The comparisons inside are told apart no
+     * further, since the filter's own comparison owes for every element what an {@code if} written
+     * for each owes for its one.
+     *
+     * @param guard the rule of the guard's own comparison, as {@link #theGuard} names it
      */
-    private static Set<String> owedOfEveryRule(Compilation compilation) {
+    private static Set<String> owedOfEveryRule(Compilation compilation, String guard) {
         Set<String> out = new TreeSet<>();
         for (JsonNode each : obligationsOf(compilation)) {
-            each.path("readings").forEach(reading -> out.add(each.path("point").asString() + " "
-                    + reading.path("axis").asString() + " " + reading.path("relation").asString()
-                    + " " + reading.path("against").asString()));
+            String whose = guard.equals(each.path("rule").asString()) ? "guard" : "within";
+            each.path("readings").forEach(reading -> out.add(whose + " "
+                    + each.path("point").asString() + " " + reading.path("axis").asString() + " "
+                    + reading.path("relation").asString() + " "
+                    + reading.path("against").asString()));
         }
         return out;
+    }
+
+    /**
+     * The rule of the comparison the guard on {@code condition} is, as a report names it: where
+     * the one comparison {@code condition} writes outside every bracket has its operator, or,
+     * writing none there, where the call it is starts — {@code List.isEmpty(...)} states a size
+     * against nought.
+     */
+    private static String theGuard(String condition, String after) {
+        List<Integer> outside = new ArrayList<>();
+        int depth = 0;
+        for (int i = 0; i < condition.length(); i++) {
+            char c = condition.charAt(i);
+            if (c == '(' || c == '[') {
+                depth++;
+            } else if (c == ')' || c == ']') {
+                depth--;
+            } else if (depth == 0 && (c == '<' || c == '>' || c == '=')) {
+                outside.add(i);
+                // `<=`, `>=` and `==` are one operator.
+                if (i + 1 < condition.length() && condition.charAt(i + 1) == '=') {
+                    i++;
+                }
+            }
+        }
+        assertTrue(outside.size() <= 1, () -> condition + " writes at most one comparison"
+                + " outside every bracket: " + outside);
+        assertTrue(!outside.isEmpty() || condition.endsWith(")"),
+                () -> condition + " is a comparison or a call");
+        String source = source(guarded(condition), after);
+        int at = source.indexOf(guarded(condition)) + guarded(condition).indexOf(condition)
+                + (outside.isEmpty() ? 0 : outside.getFirst());
+        int line = (int) source.substring(0, at).chars().filter(c -> c == '\n').count() + 1;
+        int column = at - source.lastIndexOf('\n', at);
+        return "comparison@0:" + line + ":" + column;
     }
 
     /** What a filter keeps by a statement no reader decides stays unread for that statement, and
@@ -425,9 +486,11 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         return obligationsOf(compiled(body, after));
     }
 
+    /** Each named by where its rule is written, so one rule's obligations are told from
+     *  another's at the same point. */
     private static List<JsonNode> obligationsOf(Compilation compilation) {
         JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
         List<JsonNode> obligations = new ArrayList<>();
         collectObligations(report, obligations);
         return obligations;

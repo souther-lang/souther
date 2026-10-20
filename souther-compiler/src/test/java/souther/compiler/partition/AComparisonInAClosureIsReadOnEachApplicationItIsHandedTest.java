@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -61,26 +60,39 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
     @Test
     void anOperationThatStopsAtAHoldingAnswerReachesTheNextOnlyPastAFailingOne() {
         String guard = "List.any(x -> x > 5, [a, b])";
-        assertTrue(metAt(guard, "(0, 6)", "pick/b", "6"),
+        assertTrue(metAt(guard, "> 5", "(0, 6)", "pick/b", "6"),
                 "a at nought answers false, so the closure is applied to b");
-        assertFalse(metAt(guard, "(9, 6)", "pick/b", "6"),
+        assertFalse(metAt(guard, "> 5", "(9, 6)", "pick/b", "6"),
                 "a above five answers true, and nothing is applied to b");
     }
 
     @Test
     void anOperationThatStopsAtAFailingAnswerReachesTheNextOnlyPastAHoldingOne() {
         String guard = "List.all(x -> x > 5, [a, b])";
-        assertTrue(metAt(guard, "(9, 6)", "pick/b", "6"),
+        assertTrue(metAt(guard, "> 5", "(9, 6)", "pick/b", "6"),
                 "a above five answers true, so the closure is applied to b");
-        assertFalse(metAt(guard, "(0, 6)", "pick/b", "6"),
+        assertFalse(metAt(guard, "> 5", "(0, 6)", "pick/b", "6"),
                 "a at nought answers false, and nothing is applied to b");
     }
 
     @Test
     void anOperationThatStopsNowhereAppliesTheClosureToEveryValue() {
         String guard = "List.length(List.filter(x -> x > 5, [a, b])) >= 1";
-        assertTrue(metAt(guard, "(9, 6)", "pick/b", "6"), "whatever a answered");
-        assertTrue(metAt(guard, "(0, 6)", "pick/b", "6"), "whatever a answered");
+        assertTrue(metAt(guard, "> 5", "(9, 6)", "pick/b", "6"), "whatever a answered");
+        assertTrue(metAt(guard, "> 5", "(0, 6)", "pick/b", "6"), "whatever a answered");
+    }
+
+    /**
+     * The count against one holds where some value is above five, a line of the comparison's own
+     * on each value beside the closure's: its line on {@code b} decides only where {@code a} leaves
+     * the count at nought, as {@code (if a > 5 then 1 else 0) + (if b > 5 then 1 else 0) >= 1}
+     * does.
+     */
+    @Test
+    void theCountAroundTheClosureDecidesOnAValueOnlyWhereTheOthersLeaveItTo() {
+        String guard = "List.length(List.filter(x -> x > 5, [a, b])) >= 1";
+        assertTrue(metAt(guard, ">= 1", "(0, 6)", "pick/b", "6"), "a is not above five");
+        assertFalse(metAt(guard, ">= 1", "(9, 6)", "pick/b", "6"), "a is above five");
     }
 
     /**
@@ -102,8 +114,8 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
     @Test
     void whatStopsTheWalkIsWhatTheClosureAnswered() {
         String guard = "List.any(x -> if x > 0 then x < 5 else false, [a, b])";
-        assertTrue(metAt(guard, "(0, 4)", "pick/b", "4"), "a at nought answers false");
-        assertFalse(metAt(guard, "(2, 4)", "pick/b", "4"), "a at two answers true");
+        assertTrue(metAt(guard, "< 5", "(0, 4)", "pick/b", "4"), "a at nought answers false");
+        assertFalse(metAt(guard, "< 5", "(2, 4)", "pick/b", "4"), "a at two answers true");
     }
 
     /**
@@ -116,8 +128,8 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
     @Test
     void whatHoldsOnTheWayInsideTheClosureIsSaidOfEachApplication() {
         String guard = "List.any(x -> if x > b then x < 5 else false, [a])";
-        assertTrue(metAt(guard, "(4, 0)", "pick/a", "4"), "four is above nought");
-        assertFalse(metAt(guard, "(4, 9)", "pick/a", "4"), "four is not above nine");
+        assertTrue(metAt(guard, "< 5", "(4, 0)", "pick/a", "4"), "four is above nought");
+        assertFalse(metAt(guard, "< 5", "(4, 9)", "pick/a", "4"), "four is not above nine");
     }
 
     /**
@@ -190,32 +202,49 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
         assertFalse(reasonsAt(report, "b", "comparison").isEmpty(), "and at b");
     }
 
-    /** Whether the reading at {@code against} on {@code axis} of the comparison's line was met by
-     *  the row {@code row}. */
-    private static boolean metAt(String guard, String row, String axis, String against) {
+    /**
+     * Whether the reading at {@code against} on {@code axis} of the line of the comparison written
+     * at {@code operator} in {@code guard} was met by the row {@code row}.
+     *
+     * <p>Of that comparison alone: another written around it may draw a line at the same point,
+     * and it decides where it does, which says nothing about where this one is applied.
+     *
+     * @param operator the guard's text from the comparison's operator on, as {@code "> 5"}: the
+     *                 first place the guard writes it
+     */
+    private static boolean metAt(String guard, String operator, String row, String axis,
+                                 String against) {
         JsonNode report = reportOf(guard, """
                 example pick
                     | "the row" : %s -> High
                 """.formatted(row));
-        // The comparison around the closure may draw a line at the same point, deciding only
-        // where the other values leave it to; the row is at the point where any reading has it.
-        boolean found = false;
+        String rule = writtenAt(guard, operator);
+        List<Boolean> met = new ArrayList<>();
         for (JsonNode obligation : obligationsOf(report, "comparison")) {
+            if (!rule.equals(obligation.path("rule").asString())) {
+                continue;
+            }
             for (JsonNode reading : obligation.path("readings")) {
                 if (reading.path("axis").asString().equals(axis)
                         && reading.path("against").asString().equals(against)) {
-                    if (reading.path("hit").asBoolean()) {
-                        return true;
-                    }
-                    found = true;
+                    met.add(reading.path("hit").asBoolean());
                 }
             }
         }
-        if (found) {
-            return false;
-        }
-        throw new AssertionError("a reading on " + axis + " has a point at " + against + ": "
-                + report);
+        assertEquals(1, met.size(), () -> "one reading of " + rule + " on " + axis + " at "
+                + against + ": " + report);
+        return met.getFirst();
+    }
+
+    /** The rule of the comparison whose operator {@code guard} writes first at {@code operator},
+     *  as a report names it: where the operator stands in the model. */
+    private static String writtenAt(String guard, String operator) {
+        int at = guard.indexOf(operator);
+        assertTrue(at >= 0, () -> guard + " writes " + operator);
+        int placed = MODEL.indexOf("GUARD");
+        int line = (int) MODEL.substring(0, placed).chars().filter(c -> c == '\n').count() + 1;
+        int column = placed - MODEL.lastIndexOf('\n', placed) + at;
+        return "comparison@0:" + line + ":" + column;
     }
 
     private static JsonNode reportOf(String guard, String examples) {
@@ -227,9 +256,10 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         // An example whose answer is not the model's is still a row the model is run on, which is
-        // all that is asked of it here.
+        // all that is asked of it here. Named where they are written, so a comparison's
+        // obligations are told from another's at the same point.
         return JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     /** Every axis an obligation at a line of the kind {@code kind} is read on. */
