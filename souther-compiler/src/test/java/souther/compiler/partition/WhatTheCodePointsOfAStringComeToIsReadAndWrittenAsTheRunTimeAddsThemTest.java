@@ -21,6 +21,7 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -88,7 +89,7 @@ class WhatTheCodePointsOfAStringComeToIsReadAndWrittenAsTheRunTimeAddsThemTest {
                 ValueName.Stdlib.operation("String", "length"), AT, Type.STRING, INNERS, SYMBOLS);
         assertNotEquals(length, summed(AT));
         assertNotEquals(NumericTerm.CodePointClassCount.of(AT, new CodePointClass.NotWhitespace(),
-                Type.STRING, INNERS), summed(AT));
+                CaseMapping.NONE, Type.STRING, INNERS), summed(AT));
         assertNotEquals(NumberAt.takenAsItStands(AT, ValueName.Stdlib.operation("List", "sum")),
                 NumberAt.codePointSumOf(AT));
     }

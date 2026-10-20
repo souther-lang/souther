@@ -700,6 +700,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " and whether they were all the set admits"),
             Map.entry("souther.compiler.partition.TermRealizations#holdingThatManyOfAClass("
                             + "Lsouther/compiler/semantics/CodePointClass;"
+                            + "Lsouther/compiler/semantics/CaseMapping;"
                             + "Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/partition/AskedAt;"
                             + "Lsouther/compiler/inputs/TermOrders;"

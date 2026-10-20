@@ -102,6 +102,11 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * counts of one string two numbers, and it is the whitespace the library trims at and one
      * separator the author wrote.
      *
+     * <p>{@code CaseMapping} belongs to that count too, taken of what the author's own
+     * {@code String.lowercase} or {@code String.uppercase} made of the string: which of them it is
+     * is what makes the count of the answer another number of the place than the count of the
+     * string, and it names the call and nothing a reading produced.
+     *
      * <p>{@code ValueTransformation} and {@code DateTranslation} belong to the year of a date moved
      * by days: which number of one place it is turns on the days the date was moved by and the
      * dates the move is defined at, which are whole numbers the author's own calls wrote and
@@ -145,6 +150,10 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/semantics/CodePointClass$NotWhitespace",
             "souther/compiler/semantics/CodePointClass$NotWhitespaceNorEqualTo",
             "souther/compiler/semantics/CodePointClass$OneOf",
+            "souther/compiler/semantics/CaseMapping",
+            "souther/compiler/semantics/CaseMapping$None",
+            "souther/compiler/semantics/CaseMapping$Lowercase",
+            "souther/compiler/semantics/CaseMapping$Uppercase",
             "souther/compiler/semantics/TakenArguments",
             "souther/compiler/numeric/ValueTransformation",
             "souther/compiler/numeric/ValueTransformation$Identity",

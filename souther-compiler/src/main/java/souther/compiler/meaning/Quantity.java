@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Predicate;
 
 /**
@@ -40,7 +41,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
         Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
-        Quantity.HowManyCarried {
+        Quantity.HowManyCarried, Quantity.APieceOf, Quantity.IsAmongThePieces {
 
     /**
      * How many what a recursion carries holds, whatever that is: what a walk carried into the step
@@ -71,6 +72,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                      RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
                      HowManyDifferent _ -> false;
                 case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
+                case APieceOf piece -> isIn(piece.string());
+                case IsAmongThePieces among -> isIn(among.value()) || isIn(among.string());
                 case SumOver sum -> isIn(sum.ofTheElement());
                 case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
                 case HowManyMeet count -> isIn(count.ofTheElement());
@@ -175,6 +178,140 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 out.append(i == 0 ? "" : ", ").append(of.get(i).spelled());
             }
             return out.append(')').toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * One piece of the string {@code string} that {@code operation} parts: the value a statement
+     * about some piece of it compares with another value.
+     *
+     * <p>A piece stands at no position a row writes, and it is whichever one the statement it is
+     * read inside is about ({@link CodePointsOfAPiece}): a variable that statement binds, and one
+     * that leaves it only as what the statement comes to for the string. A comparison of a piece
+     * with a value is a statement about that piece alone, and "some piece is the value" is not
+     * "the piece is the value" held once — nor is its denial "the piece is another value" — so
+     * what leaves the statement is {@link IsAmongThePieces}, which says it of all the pieces.
+     * Told apart by the string, the separator and {@code within}, which is how many statements
+     * about some piece it is read inside of: two pieces of one string read in two statements are
+     * two values, and one read in a single statement is one.
+     *
+     * @param operation the library's operation that parts the string
+     * @param separator the code point it is parted at, or none where it parts into characters
+     * @param string    the string, a number of the input or what an operation answers of one
+     * @param within    how many statements about some piece this one is read inside of
+     * @param among     how many of the first pieces it is one of, or nought where it is one of
+     *                  all of them: the piece of the first one and the piece of the first two
+     *                  are two values, as a string can hold the value in its second piece alone
+     */
+    record APieceOf(ValueName.Stdlib operation, OptionalInt separator, Quantity string,
+                    int within, int among) implements Quantity {
+
+        public APieceOf {
+            Objects.requireNonNull(operation, "a piece is of what some operation parts");
+            Objects.requireNonNull(separator, "parted at a code point, or into characters");
+            if (!(string instanceof DecisionAtom.OfTheInput)
+                    && !(string instanceof WhatAnOperationAnswers)) {
+                throw new IllegalArgumentException(
+                        "a piece read here is of a string of the input: " + string);
+            }
+            if (within < 0) {
+                throw new IllegalArgumentException(
+                        "a piece is of a statement some number of statements in: " + within);
+            }
+            if (among < 0) {
+                throw new IllegalArgumentException(
+                        "a piece is one of some number of the first pieces: " + among);
+            }
+        }
+
+        /** The numbers of the input the string is made of, each once. */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            return switch (string) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                default -> throw new IllegalStateException("held out by the constructor");
+            };
+        }
+
+        @Override
+        public String spelled() {
+            return "a piece " + within + " in"
+                    + (among > 0 ? " among the first " + among : "") + " of "
+                    + operation.qualified() + "("
+                    + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
+                            + ", " : "") + string.spelled() + ")";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * Whether a value is one of the pieces of a string, as the number one where it is and nought
+     * where it is not: the whole of what "some piece is the value" says, and the whole of what its
+     * denial says, which is that no piece is.
+     *
+     * <p>A number, so it is held against one as any other is, and its denial is the other number.
+     * The statement that some piece is not the value is not this one's denial and is not this at
+     * all: it says which piece, and a string with two pieces has one that is the value and one that
+     * is not. Compared with a value of the input it relates that value to the string, and divides
+     * neither where the string has a piece for every value to be or not to be — which is why it is
+     * made only of what always has one ({@code operation}'s answer is never empty).
+     *
+     * @param value     the value, a number of the input or what an operation answers of one
+     * @param operation the library's operation that parts the string
+     * @param separator the code point it is parted at, or none where it parts into characters
+     * @param string    the string, a number of the input or what an operation answers of one
+     * @param among     how many of the first pieces it is one of, or nought where it is one of
+     *                  all of them
+     */
+    record IsAmongThePieces(Quantity value, ValueName.Stdlib operation, OptionalInt separator,
+                            Quantity string, int among) implements Quantity {
+
+        public IsAmongThePieces {
+            Objects.requireNonNull(operation, "the pieces are what some operation parts");
+            Objects.requireNonNull(separator, "parted at a code point, or into characters");
+            for (Quantity each : List.of(value, string)) {
+                if (!(each instanceof DecisionAtom.OfTheInput)
+                        && !(each instanceof WhatAnOperationAnswers)) {
+                    throw new IllegalArgumentException(
+                            "a piece is compared here with a value of the input: " + each);
+                }
+            }
+            if (among < 0) {
+                throw new IllegalArgumentException(
+                        "the value is one of some number of the first pieces: " + among);
+            }
+        }
+
+        /** The numbers of the input the value and the string are made of, each once. */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            List<NumericTerm> out = new ArrayList<>();
+            for (Quantity each : List.of(value, string)) {
+                List<NumericTerm> these = switch (each) {
+                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                    case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                    default -> throw new IllegalStateException("held out by the constructor");
+                };
+                these.stream().filter(term -> !out.contains(term)).forEach(out::add);
+            }
+            return List.copyOf(out);
+        }
+
+        @Override
+        public String spelled() {
+            return "[" + value.spelled() + " is among the pieces"
+                    + (among > 0 ? " (the first " + among + ")" : "") + " of "
+                    + operation.qualified() + "("
+                    + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
+                            + ", " : "") + string.spelled() + ")]";
         }
 
         @Override

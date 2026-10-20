@@ -2034,7 +2034,7 @@ final class ReadQuantities implements Quantities {
                     NumberAt.takenOf(at.named(), taken.operation(), taken.arguments(),
                             taken.transformation());
             case NumericTerm.CodePointClassCount count ->
-                    NumberAt.countOf(at.named(), count.counted());
+                    NumberAt.countOf(at.named(), count.counted(), count.through());
             case NumericTerm.CodePointValueSum _ -> NumberAt.codePointSumOf(at.named());
             case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
             case NumericTerm.OccurrencesOfItsValue occurrences ->

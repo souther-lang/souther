@@ -215,6 +215,9 @@ public final class Conclusion {
                 }
                 yield out;
             }
+            case Quantity.APieceOf piece -> partsIn(piece.string());
+            case Quantity.IsAmongThePieces among ->
+                    partsIn(among.value()) + partsIn(among.string());
             case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                  DecisionAtom.TakenOfAnAnswer _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,

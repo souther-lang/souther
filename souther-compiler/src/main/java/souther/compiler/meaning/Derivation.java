@@ -18,6 +18,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.AnswerAspect;
@@ -1045,6 +1046,9 @@ public sealed interface Derivation {
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
+                    case SomePieceEqualling(Derivation ofThePiece, var _) ->
+                            positionOf(some.container()) == null
+                                    && reads(some.ofTheElement(), ofThePiece);
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds, var _) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
                         inside.add(some.container());
@@ -1191,6 +1195,7 @@ public sealed interface Derivation {
                                 NumericTerm term)
                                 && term instanceof NumericTerm.CodePointClassCount count
                                 && count.position().equals(at)
+                                && count.through().equals(CaseMapping.NONE)
                                 && count.counted().equals(counted));
                     }
                     case LawNumber.HowManyDifferent<DeclaredArgument>(var container, var each) -> {
@@ -2465,6 +2470,41 @@ public sealed interface Derivation {
                         throw new IllegalStateException(element
                                 + " is not made of the counts of one character");
             };
+        }
+    }
+
+    /**
+     * That some piece of a string is the same value as a value of the input, as {@code ofThePiece}
+     * reads one piece compared with it ({@link Quantity.APieceOf}).
+     *
+     * <p>What it concludes is that the value is one of the pieces ({@code among}), and its denial is
+     * that it is none of them. It is not what was read of the one piece: that piece is bound by the
+     * statement and stands for whichever one the value is, so held outside it, "the piece is the
+     * value" and "the piece is another value" would be each other's denial, where a string of two
+     * pieces has one of each. It relates that value to the string and divides neither, since the
+     * string has a piece for every value to be or not to be, and says nothing of which code points
+     * the string holds ({@link SomePieceMeeting}).
+     *
+     * @param ofThePiece what was read of the piece, inside the statement
+     * @param among      the value being one of the pieces, which is what leaves the statement
+     */
+    record SomePieceEqualling(Derivation ofThePiece, Quantity.IsAmongThePieces among)
+            implements Derivation {
+
+        public SomePieceEqualling {
+            Objects.requireNonNull(ofThePiece, "a piece is read as the same as something");
+            Objects.requireNonNull(among, "and the value is one of the pieces");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.compared(new Relation.Affine(
+                    LinearForm.atomMinusConstant(among, ExactRatio.ONE), Rel.EQ), true);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(ofThePiece);
         }
     }
 

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
@@ -84,9 +85,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                 new OfWhatNumber.OfWhatAnOperationAnswers(operation, arguments, from));
     }
 
-    /** How many of the code points of the string at {@code position} are in {@code counted}. */
-    public static <P> NumberAt<P> countOf(P position, CodePointClass counted) {
-        return new NumberAt<>(position, new OfWhatNumber.OfHowManyCodePointsAreIn(counted));
+    /** How many of the code points of {@code through} of the string at {@code position} are in
+     *  {@code counted}. */
+    public static <P> NumberAt<P> countOf(P position, CodePointClass counted,
+                                          CaseMapping through) {
+        return new NumberAt<>(position,
+                new OfWhatNumber.OfHowManyCodePointsAreIn(counted, through));
     }
 
     /** What the code points of the string at {@code position} come to, each the number it is. */
@@ -174,10 +178,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
          * <p>No operation answers it, so no operation names it: what makes it a number of its own
          * is the class, and two classes of one string are two numbers at one place.
          */
-        record OfHowManyCodePointsAreIn(CodePointClass counted) implements OfWhatNumber {
+        record OfHowManyCodePointsAreIn(CodePointClass counted, CaseMapping through)
+                implements OfWhatNumber {
 
             public OfHowManyCodePointsAreIn {
                 Objects.requireNonNull(counted, "this one names the code points");
+                Objects.requireNonNull(through, "and says whether they are the string's own");
             }
         }
 
@@ -259,7 +265,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                     taken.operation() + taken.arguments().writtenWith(
                             taken.from().writtenAround(position.toString()));
             case OfWhatNumber.OfHowManyCodePointsAreIn count ->
-                    "#(" + count.counted() + ")(" + position + ")";
+                    "#(" + count.counted() + ")(" + count.through().writtenAround(
+                            position.toString()) + ")";
             case OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                     "List.sum(String.codePoints(" + position + "))";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";

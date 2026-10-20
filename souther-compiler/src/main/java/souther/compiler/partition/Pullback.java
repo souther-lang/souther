@@ -94,6 +94,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.ElementLineage;
@@ -1072,6 +1073,8 @@ final class Pullback {
      */
     private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
 
+    private static final ValueName.Stdlib TAKE = ValueName.Stdlib.operation("List", "take");
+
     /**
      * Why {@code more} readings of the condition, made at one place where it splits, are not
      * made — or null where they are, taken from what this reading has left to make.
@@ -1604,22 +1607,281 @@ final class Pullback {
      * string {@code parted} says it was handed: what a split at {@code separator}, one code point,
      * leaves — or, with no separator, its characters, each code point a piece.
      *
-     * <p>One call in one reading is one set of pieces: the call by identity, since a name stands
-     * for the very node its binding was given, and the reading by what it holds. What else is held
-     * is what that call and reading say.
+     * <p>One call in one reading, taken to the same pieces, is one set of them: the call by
+     * identity, since a name stands for the very node its binding was given, the reading by what it
+     * holds, and which of the pieces were taken ({@code first}). What else is held is what that
+     * call and reading say.
+     *
+     * <p>{@code first} is how many of the first pieces a container holds when only those were
+     * taken, and nought where it holds them all: whether some of the first few meets a statement
+     * is not whether some piece does, and the first one and the first two are not the same few.
      */
     private record Pieces(Core.PreservedCall split, ValueName.Stdlib operation, InputReads at,
-                          BoundOperationFacts.Pieces parted, OptionalInt separator) {
+                          BoundOperationFacts.Pieces parted, OptionalInt separator,
+                          int first) {
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Pieces that && split == that.split && at.equals(that.at);
+            return other instanceof Pieces that && split == that.split && at.equals(that.at)
+                    && first == that.first;
         }
 
         @Override
         public int hashCode() {
-            return 31 * System.identityHashCode(split) + at.hashCode();
+            return 31 * (31 * System.identityHashCode(split) + at.hashCode()) + first;
         }
+    }
+
+    /**
+     * The pieces {@code container} is, where it is what an operation answering the pieces of a
+     * string answered — with a separator written as one code point where it parts the string
+     * at one — or null where it is not.
+     *
+     * <p>A separator that is longer, or is not written out, is a call this does not say the
+     * pieces of: a longer one can stand across where a shorter one is looked for, and one that
+     * is not a constant is any of them.
+     */
+    private Pieces piecesOf(Denotation container) {
+        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
+                || !(call.declared().operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        BoundOperationFacts.Pieces parted = DefaultBoundOperationFacts.get().piecesOf(operation);
+        if (parted == null) {
+            return null;
+        }
+        OptionalInt separatedBy = OptionalInt.empty();
+        if (parted.separator().isPresent()) {
+            Denotation separator = container.at().standing(
+                    call.args().get(parted.separator().get().position()),
+                    read.rules().symbols(), read.rules().newtypes());
+            if (!(Core.withoutStanding(separator.value()) instanceof Core.Str written)
+                    || written.value().codePointCount(0, written.value().length()) != 1
+                    || (written.value().length() == 1
+                            && Character.isSurrogate(written.value().charAt(0)))) {
+                return null;
+            }
+            separatedBy = OptionalInt.of(written.value().codePointAt(0));
+        }
+        return new Pieces(call, operation, container.at(), parted, separatedBy, 0);
+    }
+
+    /**
+     * The pieces {@code container} is, or of which it holds the first ones: what {@code List.take}
+     * answers of them, for a count written as a number of one or more. Or null where it is
+     * neither.
+     */
+    private Pieces piecesOrTheFirstOf(Denotation container) {
+        Pieces whole = piecesOf(container);
+        if (whole != null) {
+            return whole;
+        }
+        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
+                || !TAKE.equals(call.declared().operation())) {
+            return null;
+        }
+        Denotation count = container.at().standing(call.args().get(0),
+                read.rules().symbols(), read.rules().newtypes());
+        if (!(Core.withoutStanding(count.value()) instanceof Core.Int number)
+                || number.value() < 1) {
+            return null;
+        }
+        Pieces taken = piecesOf(container.at().standing(call.args().get(1),
+                read.rules().symbols(), read.rules().newtypes()));
+        return taken == null ? null : new Pieces(taken.split(), taken.operation(), taken.at(),
+                taken.parted(), taken.separator(),
+                (int) Math.min(number.value(), Integer.MAX_VALUE));
+    }
+
+    /**
+     * The pieces {@code e}, read in {@code at}, is one of — where it is a parameter a walk
+     * hands each element of what an operation answering the pieces of a string was given, or
+     * of what only kept some of those — or null where it is not.
+     */
+    private Pieces pieceThatIs(Core e, InputReads at, boolean ofTheFirstToo) {
+        Denotation standing = at.standing(e, read.rules().symbols(), read.rules().newtypes());
+        Core container = standing.at().containerOfTheElement(standing.value());
+        // An element of what a walk answered stands as the walk's answer on its element, which
+        // is no element of a container, so the container is the one the element itself names.
+        InputReads in = standing.at();
+        if (container == null) {
+            Denotation named = at.handedOver(e);
+            container = named.at().containerOfTheElement(named.value());
+            in = named.at();
+        }
+        if (container == null) {
+            return null;
+        }
+        Denotation whole = in.standing(container, read.rules().symbols(),
+                read.rules().newtypes());
+        Beneath beneath = beneath(whole, false);
+        Denotation made = beneath == null ? whole : beneath.at();
+        Pieces direct = ofTheFirstToo ? piecesOrTheFirstOf(made) : piecesOf(made);
+        if (direct != null) {
+            return direct;
+        }
+        // A container of each piece wrapped in a newtype holds the pieces, as the values it holds
+        // are the same exactly where the pieces are.
+        ElementBindings.StepOnEachElement wrapping =
+                ElementBindings.stepAnsweredOnEachElement(made.value(), blocksAt(made));
+        if (wrapping == null || !wrapsItsElement(wrapping)) {
+            return null;
+        }
+        Denotation walked = made.at().standing(wrapping.walked(), read.rules().symbols(),
+                read.rules().newtypes());
+        Beneath beneathWalked = beneath(walked, false);
+        return piecesOf(beneathWalked == null ? walked : beneathWalked.at());
+    }
+
+    /** Whether the step of {@code walk} answers its element wrapped in a newtype's constructor
+     *  and nothing else. */
+    private boolean wrapsItsElement(ElementBindings.StepOnEachElement walk) {
+        return walk.element() != null
+                && Core.withoutStanding(walk.step().body()) instanceof Core.Construct made
+                && made.type() instanceof Type.Ref ref
+                && ref.name() instanceof TypeSymbol.AtModule at
+                && read.rules().newtypes().of(at.key()) && made.values().size() == 1
+                && Core.withoutStanding(made.values().getFirst().value())
+                        instanceof Core.Read element
+                && element.binding().equals(walk.element().binding());
+    }
+
+    /**
+     * What {@code container} is made of, beneath every operation that only puts the elements
+     * of what it was handed in another order or keeps the ones meeting a statement — or null
+     * where it is not the answer of one.
+     */
+    private Beneath beneath(Denotation container, boolean counting) {
+        List<Kept> kept = new ArrayList<>();
+        Denotation at = container;
+        boolean peeled = false;
+        while (Core.withoutStanding(at.value()) instanceof Core.PreservedCall call) {
+            ValueName operation = call.declared().operation();
+            BuiltFrom<DeclaredArgument> built =
+                    DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+            DeclaredArgument from = built == null ? null : built.permutesTheElementsOf();
+            if (from == null && built != null) {
+                DeclaredArgument holds = built.holdsTheElementsOf();
+                LawNumber.HowManyMeet<DeclaredArgument> keeping =
+                        holds == null ? null : keepsWhatMeets(operation, holds);
+                if (keeping != null) {
+                    from = holds;
+                    kept.add(new Kept(new ALawRead(
+                            new AnOperationApplied(operation, call.args()), call, at.at()),
+                            keeping, null, null));
+                }
+            }
+            // Whether some element meets a statement is the same of a container holding the
+            // same values, however many times it holds each.
+            if (from == null && !counting
+                    && DefaultBoundOperationFacts.get().holdsTheImageOfEveryElement(operation)
+                    instanceof ElementLineage.SameAs<DeclaredArgument> same) {
+                from = same.source().argument();
+            }
+            if (from == null) {
+                break;
+            }
+            at = at.at().standing(call.args().get(from.position()),
+                    read.rules().symbols(), read.rules().newtypes());
+            peeled = true;
+        }
+        return peeled ? new Beneath(at, kept) : null;
+    }
+
+    /**
+     * The statement {@code operation}'s answer holds exactly the elements of {@code from}
+     * meeting, as its size says: as many as meet it, and the elements its own — or null where
+     * its size is any other number.
+     */
+    private static LawNumber.HowManyMeet<DeclaredArgument> keepsWhatMeets(
+            ValueName operation, DeclaredArgument from) {
+        if (!(DefaultBoundOperationFacts.get().settled(operation, OperationLaw.Observed.SIZE)
+                instanceof BoundOperationFacts.Settled.ByALaw(
+                        OperationLaw.Size<DeclaredArgument> law, var _))) {
+            return null;
+        }
+        LinearForm<LawNumber<DeclaredArgument>> size = law.unconditional();
+        if (size == null || size.constant().signum() != 0 || size.coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> only =
+                size.coefs().entrySet().iterator().next();
+        return ExactRatio.ONE.equals(only.getValue())
+                && only.getKey() instanceof LawNumber.HowManyMeet<DeclaredArgument> meet
+                && meet.container().equals(from) ? meet : null;
+    }
+
+    /**
+     * That the value is one of {@code pieces}, where {@code read} says no more than that the piece
+     * {@code within} statements in is the same value as it — or null where it says anything else.
+     *
+     * <p>Only that the piece is the value: the piece being another value is which piece it is, and
+     * not what is said of them all. And only of pieces that are never none, since the value is
+     * then one of them or not whatever the string holds; of the characters of a string that may
+     * be empty it is none of them for every value, which divides the string.
+     */
+    private Quantity.IsAmongThePieces valueBeingOneOfThePieces(Proposition read, int within,
+                                                               Pieces pieces) {
+        if (!(read instanceof Proposition.Compared(
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _))
+                || rel != Rel.EQ || !holds || form.constant().signum() != 0
+                || form.coefs().size() != 2 || !hasAPieceWhateverTheStringHolds(pieces)) {
+            return null;
+        }
+        Quantity.APieceOf piece = null;
+        Quantity value = null;
+        for (Quantity each : form.coefs().keySet()) {
+            if (each instanceof Quantity.APieceOf bound && bound.within() == within
+                    && piece == null) {
+                piece = bound;
+            } else {
+                value = each;
+            }
+        }
+        // The piece against the value: weighed the opposite ways, and by the same.
+        if (piece == null || value == null
+                || !form.coefs().get(piece).negated().equals(form.coefs().get(value))
+                || !(value instanceof DecisionAtom.OfTheInput
+                        || value instanceof Quantity.WhatAnOperationAnswers)) {
+            return null;
+        }
+        return new Quantity.IsAmongThePieces(value, piece.operation(), piece.separator(),
+                piece.string(), piece.among());
+    }
+
+    /** Whether what {@code pieces} are of has a piece however the string stands, as the library
+     *  states and proves of the operation that parts it. */
+    private static boolean hasAPieceWhateverTheStringHolds(Pieces pieces) {
+        return DefaultBoundOperationFacts.get()
+                .settled(pieces.operation(), OperationLaw.Observed.EMPTINESS)
+                instanceof BoundOperationFacts.Settled.ByALaw(
+                        OperationLaw<DeclaredArgument> law, var _)
+                && law instanceof OperationLaw.Observation<DeclaredArgument>(
+                        var _, LawProposition<DeclaredArgument> equivalentTo)
+                && equivalentTo instanceof LawProposition.Always<DeclaredArgument>(
+                        boolean holds) && holds;
+    }
+
+    /**
+     * The piece {@code side} is, where it is one of the pieces of a string of the input — or null
+     * where it is not.
+     *
+     * <p>One of the pieces a statement being read is about ({@link #parting}), or, where the
+     * comparison is read on its own, the piece a statement about some piece would be about at the
+     * depth this is read at: either way the one the same statement names.
+     */
+    private Quantity.APieceOf aPiece(Denotation side) {
+        Pieces piece = pieceThatIs(side.value(), side.at(), true);
+        if (piece == null) {
+            return null;
+        }
+        int within = parting.getOrDefault(piece, parting.size());
+
+        Quantity string = valueOfTheInput(
+                piece.split().args().get(piece.parted().string().position()), piece.at());
+        return string == null ? null
+                : new Quantity.APieceOf(piece.operation(), piece.separator(), string, within,
+                        piece.first());
     }
 
     /** A statement read of each value a container written out holds, or why it was not. */
@@ -1681,7 +1943,7 @@ final class Pullback {
         // The pieces of a string parted at one code point: the operation has no number for how
         // many, and this call's separator gives one.
         ALawRead call = new ALawRead(applied, e, made.at());
-        if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()) {
+        if (piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()) {
             return call.number(pieces.parted().howManyPartedAt(pieces.separator().getAsInt()));
         }
         return switch (DefaultBoundOperationFacts.get().settled(operation,
@@ -2677,8 +2939,17 @@ final class Pullback {
                 parting.remove(pieces);
             }
             Proposition element = trying.of(answered);
-            CodePoints held = Derivation.SomePieceMeeting.held(pieces.separator(), within,
-                    element);
+            // Some piece being the same value as one of the input is that value being one of the
+            // pieces, which relates it to the string and divides neither where the string has a
+            // piece for every value to be or not to be. What leaves the statement is that, and
+            // never the piece, which the statement binds.
+            Quantity.IsAmongThePieces among = valueBeingOneOfThePieces(element, within, pieces);
+            if (among != null) {
+                return leaf(new Derivation.SomePieceEqualling(answered, among),
+                        askedAt != null ? askedAt : new Denotation(e, reads));
+            }
+            CodePoints held = pieces.first() > 0 ? null
+                    : Derivation.SomePieceMeeting.held(pieces.separator(), within, element);
             if (held == null) {
                 WhyUnread stopped = Proposition.firstStopIn(element);
                 return unread(over, in, stopped != null ? stopped : new WhyUnread.AtNoPosition(
@@ -2744,70 +3015,6 @@ final class Pullback {
             }
         }
 
-        /**
-         * What {@code container} is made of, beneath every operation that only puts the elements
-         * of what it was handed in another order or keeps the ones meeting a statement — or null
-         * where it is not the answer of one.
-         */
-        private Beneath beneath(Denotation container, boolean counting) {
-            List<Kept> kept = new ArrayList<>();
-            Denotation at = container;
-            boolean peeled = false;
-            while (Core.withoutStanding(at.value()) instanceof Core.PreservedCall call) {
-                ValueName operation = call.declared().operation();
-                BuiltFrom<DeclaredArgument> built =
-                        DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
-                DeclaredArgument from = built == null ? null : built.permutesTheElementsOf();
-                if (from == null && built != null) {
-                    DeclaredArgument holds = built.holdsTheElementsOf();
-                    LawNumber.HowManyMeet<DeclaredArgument> keeping =
-                            holds == null ? null : keepsWhatMeets(operation, holds);
-                    if (keeping != null) {
-                        from = holds;
-                        kept.add(new Kept(new ALawRead(
-                                new AnOperationApplied(operation, call.args()), call, at.at()),
-                                keeping, null, null));
-                    }
-                }
-                // Whether some element meets a statement is the same of a container holding the
-                // same values, however many times it holds each.
-                if (from == null && !counting
-                        && DefaultBoundOperationFacts.get().holdsTheImageOfEveryElement(operation)
-                        instanceof ElementLineage.SameAs<DeclaredArgument> same) {
-                    from = same.source().argument();
-                }
-                if (from == null) {
-                    break;
-                }
-                at = at.at().standing(call.args().get(from.position()),
-                        read.rules().symbols(), read.rules().newtypes());
-                peeled = true;
-            }
-            return peeled ? new Beneath(at, kept) : null;
-        }
-
-        /**
-         * The statement {@code operation}'s answer holds exactly the elements of {@code from}
-         * meeting, as its size says: as many as meet it, and the elements its own — or null where
-         * its size is any other number.
-         */
-        private static LawNumber.HowManyMeet<DeclaredArgument> keepsWhatMeets(
-                ValueName operation, DeclaredArgument from) {
-            if (!(DefaultBoundOperationFacts.get().settled(operation, OperationLaw.Observed.SIZE)
-                    instanceof BoundOperationFacts.Settled.ByALaw(
-                            OperationLaw.Size<DeclaredArgument> law, var _))) {
-                return null;
-            }
-            LinearForm<LawNumber<DeclaredArgument>> size = law.unconditional();
-            if (size == null || size.constant().signum() != 0 || size.coefs().size() != 1) {
-                return null;
-            }
-            Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> only =
-                    size.coefs().entrySet().iterator().next();
-            return ExactRatio.ONE.equals(only.getValue())
-                    && only.getKey() instanceof LawNumber.HowManyMeet<DeclaredArgument> meet
-                    && meet.container().equals(from) ? meet : null;
-        }
 
         /**
          * {@code answered}, what is stated of an element, together with what each operation that
@@ -2923,7 +3130,7 @@ final class Pullback {
                 // writes. Only whether some piece meets a statement is asked of them: how many of
                 // the pieces do depends on how the separator stands in the string, which no number
                 // of the input says.
-                Pieces pieces = counting ? null : piecesOf(at);
+                Pieces pieces = counting ? null : piecesOrTheFirstOf(at);
                 if (pieces != null) {
                     ElementAt each = new ElementAt.APiece(pieces);
                     settle(pending, each, null, located);
@@ -3012,40 +3219,6 @@ final class Pullback {
         }
 
         /**
-         * The pieces {@code container} is, where it is what an operation answering the pieces of a
-         * string answered — with a separator written as one code point where it parts the string
-         * at one — or null where it is not.
-         *
-         * <p>A separator that is longer, or is not written out, is a call this does not say the
-         * pieces of: a longer one can stand across where a shorter one is looked for, and one that
-         * is not a constant is any of them.
-         */
-        private Pieces piecesOf(Denotation container) {
-            if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
-                    || !(call.declared().operation() instanceof ValueName.Stdlib operation)) {
-                return null;
-            }
-            BoundOperationFacts.Pieces parted = DefaultBoundOperationFacts.get().piecesOf(operation);
-            if (parted == null) {
-                return null;
-            }
-            OptionalInt separatedBy = OptionalInt.empty();
-            if (parted.separator().isPresent()) {
-                Denotation separator = container.at().standing(
-                        call.args().get(parted.separator().get().position()),
-                        read.rules().symbols(), read.rules().newtypes());
-                if (!(Core.withoutStanding(separator.value()) instanceof Core.Str written)
-                        || written.value().codePointCount(0, written.value().length()) != 1
-                        || (written.value().length() == 1
-                                && Character.isSurrogate(written.value().charAt(0)))) {
-                    return null;
-                }
-                separatedBy = OptionalInt.of(written.value().codePointAt(0));
-            }
-            return new Pieces(call, operation, container.at(), parted, separatedBy);
-        }
-
-        /**
          * The call, a pattern matched against one character of a string, as the character being
          * one of the code points the pattern accepts the string of alone ({@link
          * Derivation.ACharacterInAClass}) — or null where it is no such call: another predicate,
@@ -3061,27 +3234,10 @@ final class Pullback {
             StringPredicates predicate =
                     StringPredicates.of(read.rules().symbols().kernelOf(operation));
             Pieces piece = predicate == null ? null
-                    : pieceThatIs(call.args().get(predicate.subject()), reads);
+                    : pieceThatIs(call.args().get(predicate.subject()), reads, false);
             Integer within = piece == null ? null : parting.get(piece);
             return within == null || piece.separator().isPresent() ? null
                     : leaf(new Derivation.ACharacterInAClass(matches.meaning(), within), e, reads);
-        }
-
-        /**
-         * The pieces {@code e}, read in {@code at}, is one of — where it is a parameter a walk
-         * hands each element of what an operation answering the pieces of a string was given, or
-         * of what only kept some of those — or null where it is not.
-         */
-        private Pieces pieceThatIs(Core e, InputReads at) {
-            Denotation standing = at.standing(e, read.rules().symbols(), read.rules().newtypes());
-            Core container = standing.at().containerOfTheElement(standing.value());
-            if (container == null) {
-                return null;
-            }
-            Denotation whole = standing.at().standing(container, read.rules().symbols(),
-                    read.rules().newtypes());
-            Beneath beneath = beneath(whole, false);
-            return piecesOf(beneath == null ? whole : beneath.at());
         }
 
         /**
@@ -3711,7 +3867,7 @@ final class Pullback {
                         : new Sized.NotSized(new WhyUnread.AtNoPosition(
                                 WhyUnread.AtNoPosition.Place.SUBJECT));
             }
-            return codePointsAt(at, counted);
+            return codePointsAt(at, counted, CaseMapping.NONE);
         }
 
         /**
@@ -3736,7 +3892,7 @@ final class Pullback {
          */
         private Sized codePointsOfTheValue(Core value, InputReads in, CodePointClass counted) {
             if (in.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
-                return codePointsAt(at, counted);
+                return codePointsAt(at, counted, CaseMapping.NONE);
             }
             Denotation standing = in.standing(value, read.rules().symbols(),
                     read.rules().newtypes());
@@ -3744,7 +3900,13 @@ final class Pullback {
                 return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(
                         written.value().codePoints().filter(counted::contains).count())));
             }
-            Pieces piece = pieceThatIs(value, in);
+            // What a case conversion answers of the string at a position is counted as it is, by
+            // asking the answer: its code points are no image of the string's own code by code.
+            Sized converted = codePointsOfAConversion(standing, counted);
+            if (converted != null) {
+                return converted;
+            }
+            Pieces piece = pieceThatIs(value, in, false);
             if (piece != null) {
                 return codePointsOfAPiece(piece, counted);
             }
@@ -3755,11 +3917,41 @@ final class Pullback {
                     : new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
         }
 
-        /** How many of the code points of the string at {@code at} are in {@code counted}. */
-        private Sized codePointsAt(TermPath at, CodePointClass counted) {
+        /**
+         * How many of the code points of {@code standing} are in {@code counted}, where it is what
+         * case conversions, one made of another, answer of the string at a position — or null
+         * where it is not.
+         */
+        private Sized codePointsOfAConversion(Denotation standing, CodePointClass counted) {
+            List<ValueName> applied = new ArrayList<>();
+            Denotation cursor = standing;
+            Core inner = null;
+            InputReads where = standing.at();
+            while (Core.withoutStanding(cursor.value()) instanceof Core.PreservedCall call
+                    && CaseMapping.isAConversion(call.declared().operation())) {
+                applied.add(call.declared().operation());
+                inner = call.args().getFirst();
+                where = cursor.at();
+                cursor = where.standing(inner, read.rules().symbols(), read.rules().newtypes());
+            }
+            if (inner == null || !(where.pathOf(inner, read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath at))) {
+                return null;
+            }
+            CaseMapping through = CaseMapping.NONE;
+            for (ValueName each : applied.reversed()) {
+                through = CaseMapping.applying(each, through);
+            }
+            return codePointsAt(at, counted, through);
+        }
+
+        /** How many of the code points of {@code through} of the string at {@code at} are in
+         *  {@code counted}. */
+        private Sized codePointsAt(TermPath at, CodePointClass counted, CaseMapping through) {
             Type type = read.domain().typeAt(at, read.rules());
             NumericTerm.CodePointClassCount term = type == null ? null
-                    : NumericTerm.CodePointClassCount.of(at, counted, type, read.rules().inners());
+                    : NumericTerm.CodePointClassCount.of(at, counted, through, type,
+                            read.rules().inners());
             return term == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                     : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(term)));
         }
@@ -4563,6 +4755,10 @@ final class Pullback {
                     out.add(term);
                 } else if (atom instanceof Quantity.WhatAnOperationAnswers answers) {
                     out.addAll(answers.positionsItIsMadeOf());
+                } else if (atom instanceof Quantity.APieceOf piece) {
+                    out.addAll(piece.positionsItIsMadeOf());
+                } else if (atom instanceof Quantity.IsAmongThePieces among) {
+                    out.addAll(among.positionsItIsMadeOf());
                 }
             }
         }
@@ -4583,6 +4779,7 @@ final class Pullback {
     private Derivation overQuantitiesCounting(ASide left, ASide right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
         List<Denotation> calls = new ArrayList<>();
+        List<Quantity.APieceOf> pieces = new ArrayList<>();
         Derivation unread = null;
         for (ASide each : List.of(left, right)) {
             Denotation side = each.whole();
@@ -4614,6 +4811,7 @@ final class Pullback {
                 }
                 sides.add(form);
                 calls.add(null);
+                pieces.add(null);
                 continue;
             }
             sideAsWritten = Core.withoutStanding(side.at().standing(side.value(),
@@ -4626,29 +4824,38 @@ final class Pullback {
             }
             switch (outcome) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> {
+                    // A value a walk was handed, such as a piece a closure wrapped, is a name for a
+                    // value and may be a piece of a string.
+                    Quantity.APieceOf piece = soleQuantity(form) instanceof Quantity.OfABinding
+                            && !elementsMet.crowded() ? aPiece(side) : null;
                     sides.add(form);
-                    calls.add(madeOfWhereItStopped(form) ? callOf(side) : null);
+                    calls.add(piece == null && madeOfWhereItStopped(form) ? callOf(side) : null);
+                    pieces.add(piece);
                 }
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                     // A comparison of two elements of one container is read of neither: they
                     // stand at one position, and a form would hold them as one number.
                     Derivation stop = new Derivation.Stopped(elementsMet.crowded()
                             ? new WhyUnread.TwoElementsOfOneContainer() : noFormOf(stopped), false);
-                    // Only the call of an operation may be what one answers, and nothing is
-                    // read past any other stop.
+                    // Only the call of an operation may be what one answers, or a piece of the
+                    // string a statement about some piece is read of; nothing is read past any
+                    // other stop.
                     Denotation call = elementsMet.crowded() ? null : callOf(side);
-                    if (call == null) {
+                    Quantity.APieceOf piece =
+                            call != null || elementsMet.crowded() ? null : aPiece(side);
+                    if (call == null && piece == null) {
                         return unread != null ? unread : stop;
                     }
                     unread = unread != null ? unread : stop;
                     sides.add(null);
                     calls.add(call);
+                    pieces.add(piece);
                 }
             }
         }
         LinearForm<Quantity> form = null;
-        if (calls.stream().anyMatch(Objects::nonNull)) {
-            Related related = answeredApart(sides, calls, states);
+        if (calls.stream().anyMatch(Objects::nonNull) || pieces.stream().anyMatch(Objects::nonNull)) {
+            Related related = answeredApart(sides, calls, pieces, states);
             if (related != null) {
                 sides = related.sides();
                 form = related.form();
@@ -4697,7 +4904,7 @@ final class Pullback {
      * the two.
      */
     private Related answeredApart(List<LinearForm<Quantity>> asRead, List<Denotation> calls,
-                                  Rel states) {
+                                  List<Quantity.APieceOf> pieces, Rel states) {
         if (states != Rel.EQ && states != Rel.NE && calls.stream().anyMatch(call -> call != null
                 && Carrier.ofValue(call.value().type(), read.rules().declarations())
                         instanceof Carrier carrier && carrier.counts())) {
@@ -4706,8 +4913,8 @@ final class Pullback {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
         boolean answered = false;
         for (int i = 0; i < asRead.size(); i++) {
-            Quantity.WhatAnOperationAnswers answers =
-                    calls.get(i) == null ? null : whatAnOperationAnswers(calls.get(i));
+            Quantity answers = pieces.get(i) != null ? pieces.get(i)
+                    : calls.get(i) == null ? null : whatAnOperationAnswers(calls.get(i));
             if (answers == null && asRead.get(i) == null) {
                 return null;
             }
@@ -4763,19 +4970,24 @@ final class Pullback {
         }
         List<Quantity> of = new ArrayList<>();
         for (Core argument : applied.args()) {
-            Denotation given = new Denotation(argument, call.at());
-            Quantity one = AffineForms.outcome(argument, call.at(), quantities())
-                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
-                            LinearForm<Quantity> form)
-                    && soleQuantity(form) instanceof DecisionAtom.OfTheInput input ? input
-                    : callOf(given) instanceof Denotation inner ? whatAnOperationAnswers(inner)
-                    : null;
+            Quantity one = valueOfTheInput(argument, call.at());
             if (one == null) {
                 return null;
             }
             of.add(one);
         }
         return new Quantity.WhatAnOperationAnswers(operation, of);
+    }
+
+    /** {@code argument}, read in {@code at}, as a number of the input or what an operation
+     *  answers of one — or null where it is neither. */
+    private Quantity valueOfTheInput(Core argument, InputReads at) {
+        return AffineForms.outcome(argument, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form)
+                && soleQuantity(form) instanceof DecisionAtom.OfTheInput input ? input
+                : callOf(new Denotation(argument, at)) instanceof Denotation inner
+                        ? whatAnOperationAnswers(inner) : null;
     }
 
     /**
@@ -4799,6 +5011,7 @@ final class Pullback {
             List<NumericTerm> terms = switch (each.getKey()) {
                 case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
                 case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                case Quantity.APieceOf piece -> piece.positionsItIsMadeOf();
                 default -> null;
             };
             if (terms == null) {
@@ -5124,7 +5337,7 @@ final class Pullback {
     /**
      * The list {@code call} keeps some of the elements of by a statement its answer meets, or
      * null where it is any other call: an operation whose answer holds exactly the elements of an
-     * argument meeting something ({@link ALawRead#keepsWhatMeets}), and not one that drops
+     * argument meeting something ({@link #keepsWhatMeets}), and not one that drops
      * repeats or cuts at a count.
      */
     private Core theListAKeepingCallKeepsSomeOf(Core call) {
@@ -5136,7 +5349,7 @@ final class Pullback {
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
         return holds == null || built.permutesTheElementsOf() != null
-                || ALawRead.keepsWhatMeets(operation, holds) == null
+                || keepsWhatMeets(operation, holds) == null
                 || holds.position() >= kept.args().size() ? null
                 : kept.args().get(holds.position());
     }

@@ -132,7 +132,20 @@ public enum CompositionRepertoire {
      * them. Neither is a count no tree comes to: what would reach it is a way of writing deeper
      * trees, and raising no figure does.
      */
-    TREES_WRITTEN_FOR_A_COUNT;
+    TREES_WRITTEN_FOR_A_COUNT,
+
+    /**
+     * The strings written for how many code points of a class what a case conversion makes of them
+     * holds.
+     *
+     * <p>A string is written out of the code points of the class itself, and offered where the
+     * run time's answer holds the count asked for. A string whose answer holds it by other code
+     * points — the capitals a lowercase counts as letters, a digit where the plain letters are
+     * tried first, a letter composed with a mark after it — is found by none of them. Neither is
+     * a count no string comes to: what would reach it is a way of writing strings backwards through
+     * the conversion, and raising no figure does.
+     */
+    STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR;
 
     /**
      * Whether a wider run could reach the rest: never, since raising anything reaches none of it.

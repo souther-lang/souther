@@ -25,6 +25,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -76,7 +77,7 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
             ScopedDeclarations.wrapsOf(SYMBOLS));
 
     private static NumericTerm.CodePointClassCount counting(CodePointClass counted) {
-        return NumericTerm.CodePointClassCount.of(AT, counted, Type.STRING,
+        return NumericTerm.CodePointClassCount.of(AT, counted, CaseMapping.NONE, Type.STRING,
                 ScopedDeclarations.wrapsOf(SYMBOLS));
     }
 
@@ -178,6 +179,26 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
 
     private static long lengthOf(String text) {
         return text.codePointCount(0, text.length());
+    }
+
+    /**
+     * A count of what a conversion answers is written beside the length by reading each string
+     * back: the capitals count where it is lowercased, so a string of three code points of which
+     * two are letters is offered with the letters in either case, and read as the answer reads.
+     */
+    @Test
+    void aCountOfWhatAConversionAnswersIsWrittenBesideTheLength() {
+        NumericTerm.CodePointClassCount letters = NumericTerm.CodePointClassCount.of(AT,
+                CodePointClass.of(CodePoints.between('a', 'z')), CaseMapping.LOWERCASE,
+                Type.STRING, ScopedDeclarations.wrapsOf(SYMBOLS));
+        List<String> strings = offered(new Demands().exactly(letters, 2).exactly(LENGTH, 3)
+                .written());
+        assertEquals(true, !strings.isEmpty());
+        for (String each : strings) {
+            assertEquals(2, Strings.lowercase(each).codePoints()
+                    .filter(code -> code >= 'a' && code <= 'z').count(), each);
+            assertEquals(3, lengthOf(each), each);
+        }
     }
 
     /** Both classes and the length, each at its own number, which only a string with some of each

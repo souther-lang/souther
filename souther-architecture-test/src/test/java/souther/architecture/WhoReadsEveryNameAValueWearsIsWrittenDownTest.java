@@ -236,7 +236,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(L" + PARTITION + "FixtureTemplate;" + TYPE + SOURCE + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "stringsHoldingThatManyOf",
-                    "(Lsouther/compiler/semantics/CodePointClass;" + TYPE
+                    "(Lsouther/compiler/semantics/CodePointClass;"
+                            + "Lsouther/compiler/semantics/CaseMapping;" + TYPE
                             + "Lsouther/compiler/numeric/Place;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "stringsHoldingTheirNumbers",
