@@ -159,7 +159,7 @@ final class ElementEvaluations {
             if (!keptBy.isEmpty()) {
                 WhyNotJoined why = keptBy.size() > 1 ? WhyNotJoined.KEPT_BY_SEVERAL : null;
                 if (why == null && keptBy.getFirst() instanceof ReadMeaning.Occurrence.Kept.ATruth(
-                        Denotation truth, boolean holds, int application)) {
+                        Denotation truth, boolean holds, OptionalInt application)) {
                     // A conjunction is an operator and stands as a Binary, and is not one
                     // comparison: which of its parts came out which way is not which way it did.
                     if (!(Core.withoutStanding(truth.value()) instanceof Core.Binary written)
@@ -170,7 +170,7 @@ final class ElementEvaluations {
                     } else {
                         keeping = written;
                         Decision already = put(byComparison, inTheOrderMet, new Decision(written,
-                                OptionalInt.of(application), truth, holds));
+                                application, truth, holds));
                         if (already != null && already.holds() != holds) {
                             why = WhyNotJoined.AN_APPLICATION_SAID_TWO_THINGS;
                         }
@@ -244,7 +244,7 @@ final class ElementEvaluations {
         List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>();
         for (ReadMeaning.Occurrence.Kept kept : occurrence.keptWhere()) {
             if (kept instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
-                                                                   int _)
+                                                                   OptionalInt _)
                     && folded.apply(truth).orElse(null) instanceof Boolean settled) {
                 if (settled != holds) {
                     return null;
@@ -283,9 +283,10 @@ final class ElementEvaluations {
         for (Deciding one : deciding) {
             for (ReadMeaning.Occurrence.Kept kept : one.keptBy()) {
                 if (kept instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean _,
-                                                                       int application)) {
+                                                                       OptionalInt application)
+                        && application.isPresent()) {
                     placed.computeIfAbsent(Core.withoutStanding(truth.value()),
-                            _ -> new HashSet<>()).add(application);
+                            _ -> new HashSet<>()).add(application.getAsInt());
                 } else {
                     unplaced++;
                 }

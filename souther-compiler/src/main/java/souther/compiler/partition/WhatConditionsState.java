@@ -23,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -304,7 +305,8 @@ final class WhatConditionsState {
     Proposition kept(ReadMeaning.Occurrence.Kept kept, InputReading read) {
         heldTo(read);
         return switch (kept) {
-            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds, int _) -> {
+            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
+                                                    OptionalInt _) -> {
                 Proposition stated = truth(truth.value(), truth.at(), read).proposition();
                 yield holds ? stated : denied(stated);
             }

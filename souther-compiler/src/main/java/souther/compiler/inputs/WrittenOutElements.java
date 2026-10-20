@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.Set;
 
@@ -117,7 +118,7 @@ public final class WrittenOutElements {
     private static ReadMeaning.Occurrence.Kept kept(ElementsWrittenOut.Kept<InputReads> kept) {
         return switch (kept) {
             case ElementsWrittenOut.Kept.ATruth<InputReads>(var truth, boolean holds,
-                                                            int application) ->
+                                                            OptionalInt application) ->
                     new ReadMeaning.Occurrence.Kept.ATruth(denotation(truth), holds, application);
             case ElementsWrittenOut.Kept.AnArm<InputReads>(var fork, int part) ->
                     new ReadMeaning.Occurrence.Kept.AnArm(denotation(fork), part);

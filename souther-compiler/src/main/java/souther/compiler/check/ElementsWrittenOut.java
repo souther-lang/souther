@@ -131,12 +131,8 @@ public final class ElementsWrittenOut {
             return new Occurrence<>(value, all, answered, within);
         }
 
-        /** The same occurrence, written out by the {@code application}th application of a
-         *  closure above all those it was written out by. */
-        Occurrence<E> writtenInApplication(int application) {
-            List<Integer> path = new ArrayList<>();
-            path.add(application);
-            path.addAll(within);
+        /** The same occurrence, written out by the applications {@code path} says. */
+        Occurrence<E> within(List<Integer> path) {
             return new Occurrence<>(value, keptWhere, answered, path);
         }
     }
@@ -153,17 +149,20 @@ public final class ElementsWrittenOut {
          * applications.
          *
          * @param application which application of the step this is, counting from none in the
-         *                    order the step is handed the elements of the container it filters.
-         *                    The step is handed each of them, so this is also the run's own count
-         *                    of the step's applications where nothing before it dropped an element
-         *                    on the way; past a drop a run applies the step to fewer, and the
-         *                    count is the reader's to say it cannot take from this
+         *                    order a run hands the step the elements of the container it filters:
+         *                    the elements kept out on every run are not handed it and are no
+         *                    application. Empty where an element before it is kept out on some
+         *                    runs and not others, past which a run applies the step to fewer and
+         *                    which application this is is not something the container says
          */
-        record ATruth<E>(Stood<E> truth, boolean holds, int application) implements Kept<E> {
+        record ATruth<E>(Stood<E> truth, boolean holds, OptionalInt application)
+                implements Kept<E> {
 
             public ATruth {
                 Objects.requireNonNull(truth, "an occurrence is kept by some truth");
-                if (application < 0) {
+                Objects.requireNonNull(application,
+                        "a truth is of some application or none that can be numbered");
+                if (application.isPresent() && application.getAsInt() < 0) {
                     throw new IllegalArgumentException(
                             "applications are counted from none: " + application);
                 }
@@ -253,7 +252,7 @@ public final class ElementsWrittenOut {
         boolean decided = true;
         for (Kept<E> kept : one.keptWhere()) {
             switch (kept) {
-                case Kept.ATruth<E>(Stood<E> truth, boolean wanted, int _) -> {
+                case Kept.ATruth<E>(Stood<E> truth, boolean wanted, OptionalInt _) -> {
                     if (!(reading.folded(truth).orElse(null) instanceof Boolean holds)) {
                         decided = false;
                     } else if (holds != wanted) {
@@ -383,8 +382,8 @@ public final class ElementsWrittenOut {
         // to fewer.
         int applied = 0;
         boolean countable = true;
-        for (int application = 0; application < elements.size(); application++) {
-            Occurrence<E> each = elements.get(application);
+        for (int position = 0; position < elements.size(); position++) {
+            Occurrence<E> each = elements.get(position);
             if (out.size() >= enough) {
                 break;
             }
@@ -411,7 +410,7 @@ public final class ElementsWrittenOut {
                         return new Walked.PastTheFigure<>();
                     }
                     List<Kept<E>> kept = new ArrayList<>(each.keptWhere());
-                    kept.add(new Kept.ATruth<>(answered, true, application));
+                    kept.add(new Kept.ATruth<>(answered, true, number));
                     out.add(new Occurrence<>(each.value(), kept, each.answered(), each.within()));
                 }
                 case WHAT_THE_CLOSURE_ANSWERS -> {
@@ -420,9 +419,22 @@ public final class ElementsWrittenOut {
                     if (!(inside instanceof Walked.Each<E>(List<Occurrence<E>> made))) {
                         return inside;
                     }
-                    int writtenIn = application;
-                    made.forEach(one -> out.add(one.keptAlsoWhere(each.keptWhere())
-                            .writtenInApplication(writtenIn)));
+                    int writtenIn = position;
+                    Core handedOn = Core.withoutStanding(
+                            reading.standing(each.value().value(), each.value().at()).value());
+                    made.forEach(one -> {
+                        // A value the closure only hands on was made where the element it was
+                        // handed was: the application writing it out again is no application
+                        // that made it. One the closure makes is made by this application.
+                        Core madeHere = Core.withoutStanding(reading.standing(
+                                one.value().value(), one.value().at()).value());
+                        List<Integer> path = new ArrayList<>(each.within());
+                        if (madeHere != handedOn) {
+                            path.add(writtenIn);
+                            path.addAll(one.within());
+                        }
+                        out.add(one.keptAlsoWhere(each.keptWhere()).within(path));
+                    });
                 }
             }
         }

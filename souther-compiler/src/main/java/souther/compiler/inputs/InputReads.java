@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
@@ -850,7 +851,7 @@ public final class InputReads {
     private ReadMeaning.Occurrence.Kept carryingWhatIsTaken(ReadMeaning.Occurrence.Kept kept) {
         return switch (kept) {
             case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
-                                                    int application) ->
+                                                    OptionalInt application) ->
                     new ReadMeaning.Occurrence.Kept.ATruth(carryingWhatIsTaken(truth), holds,
                             application);
             case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) ->

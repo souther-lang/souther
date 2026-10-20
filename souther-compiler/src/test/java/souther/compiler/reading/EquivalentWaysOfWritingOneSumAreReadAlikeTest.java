@@ -357,6 +357,90 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
         assertEquals(List.of(), differing);
     }
 
+    /** The visit each decision of each meeting claims, in the order they are met. */
+    private static List<Object> visitsClaimed(List<Interaction> found) {
+        return found.stream().<Object>map(group -> group.factors().stream()
+                .map(factor -> factor.outcomes().stream()
+                        .map(outcome -> outcome.holds().stream()
+                                .map(decision -> decision.claims().visit()).toList())
+                        .toList())
+                .toList()).toList();
+    }
+
+    /** Lists of the same two numbers, with what is taken out on every run before, between and
+     *  after them, and the ways of handing a list on that change nothing. */
+    private static final Map<String, String> TWO_NUMBERS = new LinkedHashMap<>();
+
+    static {
+        TWO_NUMBERS.put("as written", "[ 1, 2 ]");
+        TWO_NUMBERS.put("one taken out first", "List.filter(x -> x > 0, [ 0, 1, 2 ])");
+        TWO_NUMBERS.put("one taken out between", "List.filter(x -> x > 0, [ 1, 0, 2 ])");
+        TWO_NUMBERS.put("one taken out last", "List.filter(x -> x > 0, [ 1, 2, 0 ])");
+        TWO_NUMBERS.put("two taken out", "List.filter(x -> x > 0, [ 0, 1, 0, 2 ])");
+        TWO_NUMBERS.put("past a filter that keeps all", "List.filter(x -> true, [ 1, 2 ])");
+        TWO_NUMBERS.put("past a map that hands on", "List.map(x -> x, [ 1, 2 ])");
+        TWO_NUMBERS.put("past a flatMap that hands on", "List.flatMap(x -> [ x ], [ 1, 2 ])");
+        TWO_NUMBERS.put("taken out, then handed on",
+                "List.map(x -> x, List.filter(x -> x > 0, [ 0, 1, 2 ]))");
+    }
+
+    /**
+     * The visits a meeting claims are the visits a run makes, so they are the same however the
+     * elements came to be the list: what a filter before takes out on every run is no visit of
+     * the comparison after it. Shape alone does not say so, since a claim on a visit no run makes
+     * has the same shape as one on a visit it does.
+     */
+    @Test
+    void theVisitsClaimedAreTheRunsOwnWhateverWasTakenOutBefore() {
+        List<String> totals = List.of(
+                "List.length(List.filter(x -> threshold > x, %s))",
+                "List.sum(List.map(x -> if threshold >= 17 then x else 0, %s))",
+                "List.sum(List.map(x -> x, List.filter(x -> threshold > x, %s)))");
+        List<String> differing = new ArrayList<>();
+        for (String total : totals) {
+            List<Object> plain = visitsClaimed(
+                    readFlagged(total.formatted(TWO_NUMBERS.get("as written"))).interactions());
+            if (plain.isEmpty()) {
+                differing.add(total + ": claims nothing as written");
+            }
+            TWO_NUMBERS.forEach((way, list) -> {
+                CoverageRead.Read read = readFlagged(total.formatted(list));
+                if (!plain.equals(visitsClaimed(read.interactions()))
+                        || !read.notJoined().isEmpty()) {
+                    differing.add(total + " " + way + ": " + visitsClaimed(read.interactions())
+                            + " " + read.notJoined());
+                }
+            });
+        }
+        assertEquals(List.of(), differing);
+    }
+
+    /**
+     * A choice is made where it is written, and handing its value on through more closures is no
+     * more evaluations of it: a value passed through is made where it was made, and a value a
+     * closure makes is made by each application of that closure.
+     */
+    @Test
+    void handingAChoiceOnThroughMoreClosuresChangesNoDecisionCount() {
+        String writes = "List.flatMap(r -> { let chosen = if r.active then 1 else 0\n"
+                + "    [ chosen, chosen ] }, %s)";
+        for (int layers = 0; layers < 3; layers++) {
+            for (String handed : List.of("List.flatMap(x -> [ x ], %s)", "List.map(x -> x, %s)")) {
+                String once = writes.formatted("[ first ]");
+                String twice = writes.formatted("[ first, second ]");
+                for (int layer = 0; layer < layers; layer++) {
+                    once = handed.formatted(once);
+                    twice = handed.formatted(twice);
+                }
+                assertEquals(List.of(), readFlagged("List.sum(" + once + ")").notJoined(),
+                        layers + " layers of " + handed + ", one application");
+                assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ),
+                        readFlagged("List.sum(" + twice + ")").notJoined(),
+                        layers + " layers of " + handed + ", two applications");
+            }
+        }
+    }
+
     /**
      * A choice written once in an application and used twice there is one decision, and the same
      * written in two applications is two: what is counted is the evaluations of the choice, and
