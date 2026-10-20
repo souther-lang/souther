@@ -42,7 +42,8 @@ import java.util.function.Predicate;
  * <p>The number a walk answers per element when that number is made from the element's fields: an
  * affine form of them, the choice between two such numbers by a flag the element holds, the choice
  * among them by which case a value of the element is, or the choice between two by where the
- * element stands in the container it was walked from. Relative
+ * element stands in the container it was walked from, or the position itself times such a number
+ * ({@link Indexed}). Relative
  * to the element, so it can be joined to whichever position the run is over, as an
  * {@link ElementProjection} is — and the atoms of a form are those projections, so a field of the
  * element is named the one way wherever it is read.
@@ -57,7 +58,8 @@ import java.util.function.Predicate;
  * number stands nowhere in it. Held apart so a rule about what a walk computed is never read as a
  * rule about a field.
  *
- * <p>Only what is read exactly. A product of two fields, a call the library does not say the form
+ * <p>Only what is read exactly. A product of two fields, or of the position with itself or with a
+ * number made of the position, a call the library does not say the form
  * of, a branch on anything but a flag the element holds or a test of its position, a {@code match}
  * on anything but a place of the element: none is read, and the walk is a run this compiler did
  * not read rather than one it read wrongly.
@@ -1058,8 +1060,9 @@ public sealed interface ElementValue {
 
         /**
          * What an atom of an element is called: the way to it from the element, and what a name on
-         * the way holds; or, where the walk stopped at a branch on a flag of the element or a
-         * {@code match} on a place of it, that choice.
+         * the way holds; the position, as the number {@code 1·position + 0}; or, where the walk
+         * stopped at a branch on a flag of the element or a {@code match} on a place of it, that
+         * choice.
          */
         private AffineForms.Reading<Atom, Map<BindingId, Core>> atoms() {
             return new Names<>() {

@@ -26,8 +26,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code [2, 4]} to fourteen, though the two hold the same values. So the rows here are ones a total
  * read without the order, or read from the other end, would put somewhere else.
  *
+ * <p>A weight that is arithmetic in the position, {@code (i + 2) * c}, is a number for each element
+ * as well, and the total a form of the elements.
+ *
  * <p>And only there. A walk handed the elements in another order than the row's, a number that is
- * not the position, a weight that is arithmetic over the position: none is read as a choice by it.
+ * not the position, a product of the position with itself or of two numbers of the element: none
+ * is read by where the elements stand.
  */
 class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
 
@@ -156,6 +160,48 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         String reversed = report(guarded.replace("mapIndexed((i, c) -> (i + 2) * c, xs)",
                 "mapIndexed((i, c) -> (i + 2) * c, List.reverse(xs))"));
         assertTrue(reversed.contains("not read: comparison"), reversed);
+    }
+
+    /** The position by itself, beside an element, and chosen between by a test of it are each read. */
+    @Test
+    void thePositionByItselfAndChosenBetweenIsRead() {
+        for (String closure : List.of("(i, c) -> i", "(i, c) -> i + c",
+                "(i, c) -> (if i <= 5 then i + 2 else i - 4) * c",
+                "(i, c) -> if i <= 5 then (i + 2) * c else (i - 4) * c")) {
+            String human = report(model(closure, "xs"));
+            assertTrue(human.contains("the position"), closure + "\n" + human);
+            assertFalse(human.contains("not read:"), closure + "\n" + human);
+        }
+    }
+
+    /** Rows of no element and of one stand at the border of a total weighed by the position. */
+    @Test
+    void aRowOfNoElementAndOfOneIsHeldToTheSameWeights() {
+        String human = report("""
+                module p
+                data Bad
+                behavior check : (xs: List<Int>) -> Int | Bad
+                let check (xs) = {
+                    guard List.sum(List.mapIndexed((i, c) -> (i + 2) * c, xs)) >= 14 else Bad
+                    0
+                }
+                example check
+                    | "none" : ([]) -> Bad
+                    | "one"  : ([7]) -> 0
+                    | "less" : ([6]) -> Bad
+                """);
+        assertFalse(human.contains("not read:"), human);
+        assertFalse(human.contains("gave no answer"), human);
+    }
+
+    /** No row is written by solving for a field through a weight made of the position, and the
+     *  report says so rather than saying no row can be written. */
+    @Test
+    void aTotalWeighedByArithmeticInThePositionIsOneThisWritesNoRowForAndSaysSo() {
+        String human = report(model("(i, c) -> (i + 2) * c", "xs"));
+        assertTrue(human.contains("nothing could show a row can be written at the ON point"),
+                human);
+        assertFalse(human.contains("no row can be written"), human);
     }
 
     /** A product of two numbers of the element stays a product, whatever the position. */
