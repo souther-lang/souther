@@ -41,6 +41,9 @@ class ARecordFieldEqualToAnInputIsChosenAgainstThatInputTest {
     private static final List<Reaching> WAYS = List.of(
             new Reaching("counted directly", "",
                     "List.length(List.filter(x -> x.label == label, xs)) >= 3"),
+            // Equality is symmetric, and the side the field is written on changes nothing.
+            new Reaching("counted directly, the input written first", "",
+                    "List.length(List.filter(x -> label == x.label, xs)) >= 3"),
             new Reaching("the key a fold files under", """
 
                     let countsOf (xs: List<Item>): Map<String, Int> =
@@ -128,6 +131,37 @@ class ARecordFieldEqualToAnInputIsChosenAgainstThatInputTest {
                     () -> way.name() + ": " + report(after));
             assertFalse(report(after).contains("two values being one"),
                     () -> way.name() + ": " + report(after));
+        }
+    }
+
+    /**
+     * A number taken of an input stands at a place on the order its answer is measured on, and is
+     * not what the input holds: the year of a date is no date. A row is not written holding the
+     * one as the other, so a statement reading the date is not read as failing of it; it is not
+     * read, and the report says the elements chosen for the count are some and not all of them.
+     */
+    @Test
+    void aNumberTakenOfAnInputIsNotWrittenAsTheInputItIsTakenOf() {
+        String notRead = "writes some of the elements chosen for how many of them meet a statement";
+        for (String model : List.of("""
+                module example.popular
+
+                behavior popular : (xs: List<Int>, d: Date) -> Bool
+
+                let popular (xs, d) =
+                    List.length(List.filter(x -> x == Date.year(d), xs)) >= 3
+                """, """
+                module example.popular
+
+                data Item = { weight: Int, label: String }
+
+                behavior popular : (xs: List<Item>, d: Date) -> Bool
+
+                let popular (xs, d) =
+                    List.length(List.filter(x -> x.weight == Date.year(d), xs)) >= 3
+                """)) {
+            Compilation compilation = measured(model);
+            assertTrue(report(compilation).contains(notRead), () -> report(compilation));
         }
     }
 

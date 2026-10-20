@@ -252,17 +252,33 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         DeclaredArgument asked = (DeclaredArgument) ((LawSubject.Argument<?>)
                 ((LawProposition.Same<?>) some.ofTheElement()).other()).argument();
         Derivation.TheCall call = callOf(MAP_GET, asked, A);
-        RunSource lists = new RunSource.FlattenedOccurrences(XS.element().element());
+        RunSource.FlattenedOccurrences lists =
+                new RunSource.FlattenedOccurrences(XS.element().element());
         Derivation ofTheKeyAsked = new Derivation.SomeElementEqualToAKey(
-                NumericTerm.OccurrencesOfAKey.of((RunSource.FlattenedOccurrences) lists, A),
-                truthAt(S));
+                NumericTerm.OccurrencesOfAKey.of(lists, A));
         Derivation ofAnotherKey = new Derivation.SomeElementEqualToAKey(
-                NumericTerm.OccurrencesOfAKey.of((RunSource.FlattenedOccurrences) lists, B),
-                truthAt(S));
+                NumericTerm.OccurrencesOfAKey.of(lists, B));
         assertDoesNotThrow(() -> new Derivation.ByALaw(call, AnswerAspect.PRESENCE,
                 new Derivation.ALawQuantifies(some, ofTheKeyAsked)));
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
                 AnswerAspect.PRESENCE, new Derivation.ALawQuantifies(some, ofAnotherKey)));
+    }
+
+    /**
+     * A lookup finding something concludes the count of its key at least one, whatever a reading
+     * says besides: the derivation holds the count and no statement of its own to conclude.
+     */
+    @Test
+    void aKeyBeingAmongTheElementsConcludesItsCountAtLeastOneAndNothingElse() {
+        NumericTerm.OccurrencesOfAKey count = NumericTerm.OccurrencesOfAKey.of(
+                new RunSource.FlattenedOccurrences(XS.element().element()), A);
+        Relation.OneWay<Quantity> atLeastOne = Relation.OneWay.of(new LinearForm<>(
+                ExactRatio.of(-1), Map.of(new DecisionAtom.OfTheInput(count), ExactRatio.ONE)),
+                Rel.GE);
+        assertEquals(new Proposition.Compared(
+                        new Relation.Affine(atLeastOne.form(), atLeastOne.proposition()),
+                        atLeastOne.holds()),
+                concluded(new Derivation.SomeElementEqualToAKey(count)));
     }
 
     /**

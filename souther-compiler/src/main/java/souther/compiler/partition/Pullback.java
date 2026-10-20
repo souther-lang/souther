@@ -2608,12 +2608,7 @@ final class Pullback {
             if (occurrences == null) {
                 return null;
             }
-            return new Derivation.SomeElementEqualToAKey(occurrences,
-                    aRelation(Derivation.ComparisonReading.AS_A_CUT,
-                            new LinearForm<>(ExactRatio.of(-1),
-                                    Map.of(new DecisionAtom.OfTheInput(occurrences),
-                                            ExactRatio.ONE)),
-                            Rel.GE, Derivation.AComparisonRead.Facing.NOTHING_WRITTEN));
+            return new Derivation.SomeElementEqualToAKey(occurrences);
         }
 
         /**

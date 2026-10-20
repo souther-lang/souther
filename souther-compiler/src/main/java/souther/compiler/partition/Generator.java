@@ -748,6 +748,7 @@ public final class Generator {
                              CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
+                             COUNTS_OF_KEYS_TRIED,
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
@@ -7009,7 +7010,8 @@ public final class Generator {
         for (TakenConstraint one : stated) {
             if (one instanceof TakenConstraint.Affine affine
                     && within.projectionOf(affine.form())
-                            instanceof NumericDomain.FormProjection.NothingIsLeft) {                return new Placed.AtNone(!composer.anyChosen()
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                return new Placed.AtNone(!composer.anyChosen()
                         || unchosen.projectionOf(affine.form())
                                 instanceof NumericDomain.FormProjection.NothingIsLeft
                         ? new ReachabilityGap.ProvedImpossible(cut)
@@ -8252,8 +8254,8 @@ public final class Generator {
      * row fixed it.
      *
      * <p>A count is met by elements chosen against the numbers its statement reads beside them, and
-     * those are numbers of other locations, fixed with the count; so is how often a key occurs, which
-     * is counted for the value of another location. Every other group is composed out
+     * those are numbers of other locations, fixed with the count; so is how often a key occurs,
+     * which is counted for the value of another location. Every other group is composed out
      * of its own numbers and the way's region, which is what it is handed.
      *
      * <p>Not a number inside a container. A value placed at an element is some element standing

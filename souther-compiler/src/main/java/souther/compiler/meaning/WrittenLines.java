@@ -409,7 +409,7 @@ public final class WrittenLines {
             case Derivation.SomeElementMeeting(var _, var element, var _, var holds, var _) ->
                     holds.map(something -> List.of(element, something))
                             .orElseGet(() -> List.of(element));
-            case Derivation.SomeElementEqualToAKey(var _, var atLeastOne) -> List.of(atLeastOne);
+            case Derivation.SomeElementEqualToAKey some -> List.of(some.atLeastOne());
             case Derivation.AcrossAWalk(var seed, var walked, var keeps, var _) ->
                     List.of(seed, walked, keeps);
             case Derivation.ATreeSearched(var _, var _, var atANode, var below, var once,

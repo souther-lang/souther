@@ -76,6 +76,9 @@ final class CardinalityComposer {
     private static final int MOST_SHARES =
             CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT.maximum();
 
+    private static final int MOST_COUNTS_OF_KEYS =
+            CompositionBudget.COUNTS_OF_KEYS_TRIED.maximum();
+
     /** Every count of elements: what is asked of a thing the values are grouped by and no count
      *  of which is asked. */
     private static final LevelRegion ANY_COUNT = LevelRegion.of(new LevelInterval(
@@ -188,7 +191,7 @@ final class CardinalityComposer {
                         + container + "`");
             }
             beside.put(term, at);
-            written.put(term.subjectPath(), on.valueOf(at));
+            writtenAt(term, at, measuring, written);
         }
         NumericDomain.Bounds run = switch (within.projectionOf(element.term())) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
@@ -964,12 +967,17 @@ final class CardinalityComposer {
                 beside.add(each);
             }
         }
-        ValuesCountedFor search = new ValuesCountedFor(sourceType, keptApart, values, wanted,
-                run, beside, new NestedContainersAddingUp(place), carrier, within, reading);
+        NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
+        ValuesCountedFor search = new ValuesCountedFor(values, wanted, run, beside,
+                (counted, others) -> nested.alike(sourceType, keptApart, counted, others, carrier,
+                        within, reading));
         search.counting(0, new ArrayList<>(), 0);
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         if (search.cutShort) {
             refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+        }
+        if (search.spent) {
+            refused.add(CompositionBudget.COUNTS_OF_KEYS_TRIED);
         }
         CompositionShortfall rest = search.rest.and(
                 CompositionShortfall.of(refused, unnamed, unheld));
@@ -989,45 +997,56 @@ final class CardinalityComposer {
     /**
      * The counts of several values tried one value at a time, each as often as every count asked of
      * it allows and the rules leave it a place, the leaves between them no more than a container
-     * is composed with.
+     * is composed with, and no more combinations than {@link #MOST_COUNTS_OF_KEYS}.
+     *
+     * <p>The combinations multiply with the keys, and a walk that built nothing is stopped by
+     * neither the leaves nor the containers offered, which count what was built; so the
+     * combinations tried are counted of their own.
      */
-    private static final class ValuesCountedFor {
+    static final class ValuesCountedFor {
 
-        private final Type sourceType;
-        private final List<List<String>> keptApart;
+        /** How a container is composed with the values counted and the others beside them. */
+        interface Composes {
+
+            TermRealizations.Realization compose(List<NestedContainersAddingUp.Counted> counted,
+                                                 List<Place> others);
+        }
+
         private final List<Place> values;
         private final List<List<NumericSet>> wanted;
         private final NumericDomain.Bounds run;
         private final List<Place> beside;
-        private final NestedContainersAddingUp nested;
-        private final Carrier carrier;
-        private final SearchRegion within;
-        private final RuleReadingContext reading;
+        private final Composes composes;
         final List<FixtureTemplate> built = new ArrayList<>();
         CompositionShortfall rest = CompositionShortfall.NONE;
         TermRealizations.Realization unbuilt;
         boolean cutShort;
+        boolean spent;
+        int tried;
 
-        ValuesCountedFor(Type sourceType, List<List<String>> keptApart, List<Place> values,
-                         List<List<NumericSet>> wanted, NumericDomain.Bounds run,
-                         List<Place> beside, NestedContainersAddingUp nested, Carrier carrier,
-                         SearchRegion within, RuleReadingContext reading) {
-            this.sourceType = sourceType;
-            this.keptApart = keptApart;
+        /**
+         * @param values the values counted for, no two alike
+         * @param wanted the counts asked of each, in the order of {@code values}
+         * @param run    the values the rules leave the place
+         * @param beside the values that may stand beside them
+         */
+        ValuesCountedFor(List<Place> values, List<List<NumericSet>> wanted,
+                         NumericDomain.Bounds run, List<Place> beside, Composes composes) {
             this.values = values;
             this.wanted = wanted;
             this.run = run;
             this.beside = beside;
-            this.nested = nested;
-            this.carrier = carrier;
-            this.within = within;
-            this.reading = reading;
+            this.composes = composes;
         }
 
         /** Value {@code at} and those after it counted, {@code leaves} already given to the ones
          *  before. */
         void counting(int at, List<NestedContainersAddingUp.Counted> counted, int leaves) {
-            if (built.size() >= MOST_OFFERED) {
+            if (built.size() >= MOST_OFFERED || spent) {
+                return;
+            }
+            if (tried++ >= MOST_COUNTS_OF_KEYS) {
+                spent = true;
                 return;
             }
             if (at == values.size()) {
@@ -1056,8 +1075,12 @@ final class CardinalityComposer {
         private void composing(List<NestedContainersAddingUp.Counted> counted, int leaves) {
             for (int extra = 0; extra <= beside.size() && leaves + extra <= MOST_ELEMENTS;
                     extra++) {
-                TermRealizations.Realization one = nested.alike(sourceType, keptApart,
-                        List.copyOf(counted), beside.subList(0, extra), carrier, within, reading);
+                if (tried++ >= MOST_COUNTS_OF_KEYS) {
+                    spent = true;
+                    return;
+                }
+                TermRealizations.Realization one =
+                        composes.compose(List.copyOf(counted), beside.subList(0, extra));
                 if (one instanceof TermRealizations.Realization.Built made) {
                     built.addAll(made.values());
                     rest = rest.and(made.rest());
@@ -1367,6 +1390,28 @@ final class CardinalityComposer {
     }
 
     /**
+     * What a row holds at the position of {@code term} once the number stands at {@code at}, put
+     * in {@code written} — nothing where the number is not what the position holds.
+     *
+     * <p>A position holds the number only of a term that is the position's own value. A number
+     * taken of the position, the year of a date, stands at a place on the order its answer is
+     * measured on, and a value written at the position from it would be a whole number where a date
+     * is: the value of such a position is another term's to construct, and a statement reading it
+     * is one the row cannot yet be asked.
+     */
+    private static void writtenAt(NumericTerm term, Place at, Quantities measuring,
+                                  Map<TermPath, ObservedValue> written) {
+        if (!(term instanceof NumericTerm.ValueOf)) {
+            return;
+        }
+        TermOrders orders = measuring.ordersOf(term);
+        Carrier on = orders == null ? null : orders.observed();
+        if (on != null) {
+            written.put(term.subjectPath(), on.valueOf(at));
+        }
+    }
+
+    /**
      * The numbers {@code asked} reads that stand outside every container, each at the one value
      * the region leaves it at, and the value it is written as in {@code written}; a number the
      * region leaves at more or none, or that stands on no order, is in neither.
@@ -1384,12 +1429,10 @@ final class CardinalityComposer {
                 if (term.subjectPath().insideAContainer()) {
                     continue;
                 }
-                TermOrders orders = measuring.ordersOf(term);
-                Carrier on = orders == null ? null : orders.observed();
                 Place at = settled(within, term);
-                if (on != null && at != null) {
+                if (at != null) {
                     out.put(term, at);
-                    written.put(term.subjectPath(), on.valueOf(at));
+                    writtenAt(term, at, measuring, written);
                 }
             }
         }

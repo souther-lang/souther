@@ -1043,7 +1043,7 @@ public sealed interface Derivation {
                     // The elements of the lists of an outer list put end to end, which stand at no
                     // one position: what is read is that the key occurs among them.
                     // Counted for the value the call has at the argument the key is asked to be.
-                    case SomeElementEqualToAKey(var occurrences, var _) -> some.holds()
+                    case SomeElementEqualToAKey(var occurrences) -> some.holds()
                             && some.ofTheElement() instanceof LawProposition.Same<
                                     DeclaredArgument>(var one, var asked, var alike)
                             && alike && one instanceof LawSubject.KeyOf<DeclaredArgument>(
@@ -1705,20 +1705,34 @@ public sealed interface Derivation {
      * statement about them is a comparison of. The same count is the one the counter an entry holds
      * is read of, so the lookup finding something and what it finds are of one number.
      *
+     * <p>It holds the count and nothing else: what it concludes is the count at least one, worked
+     * out from the count here, so no reading can hand it another statement to conclude.
+     * {@link ByALaw} holds it to the key the call was handed. That the elements counted are the
+     * ones the map the call was handed was filed from is the reading's, which makes this only of
+     * the fold that built that map ({@code Pullback.acrossTheListsOfAFold}).
+     *
      * @param occurrences how often the key occurs among the elements
-     * @param atLeastOne  that count compared with one
      */
-    record SomeElementEqualToAKey(NumericTerm.OccurrencesOfAKey occurrences,
-                                  Derivation atLeastOne) implements Derivation {
+    record SomeElementEqualToAKey(NumericTerm.OccurrencesOfAKey occurrences)
+            implements Derivation {
 
         public SomeElementEqualToAKey {
             Objects.requireNonNull(occurrences, "a key occurs as often as it does");
-            Objects.requireNonNull(atLeastOne, "and an element is the key where it occurs");
+        }
+
+        /** The count compared with one, which is all an element's being the key comes to. */
+        public Derivation atLeastOne() {
+            Relation.OneWay<Quantity> one = Relation.OneWay.of(new LinearForm<>(
+                    ExactRatio.of(-1), Map.of(new DecisionAtom.OfTheInput(occurrences),
+                            ExactRatio.ONE)), Rel.GE);
+            return new AComparisonRead(ComparisonReading.AS_A_CUT,
+                    new Relation.Affine(one.form(), one.proposition()), one.holds(),
+                    AComparisonRead.Facing.NOTHING_WRITTEN);
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return numbering.of(atLeastOne);
+            return numbering.of(atLeastOne());
         }
     }
 
