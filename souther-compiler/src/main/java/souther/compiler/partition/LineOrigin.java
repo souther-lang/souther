@@ -176,8 +176,9 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          * state and nothing beside it turns the application round.
          */
         public boolean decidesItsApplication() {
-            return part.isEmpty() || part.get().decides() instanceof Proposition.Always always
-                    && always.holds();
+            return part.isEmpty()
+                    || (part.get().decides() instanceof Proposition.Always always
+                            && always.holds());
         }
 
         /**

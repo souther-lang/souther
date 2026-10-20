@@ -266,6 +266,30 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
     }
 
     /**
+     * Two combinations of which elements a comparison keeps are two identities in the document.
+     *
+     * <p>The same construct is the decision of each element, so the combinations differ only in
+     * which evaluation of it came out which way. An identity that left the evaluation out would be
+     * one for the element kept first and the element kept second alike.
+     */
+    @Test
+    void combinationsOfWhichElementsAreKeptAreTwoIdentitiesInTheDocument() {
+        Compilation compilation = measured(KEPT);
+        AdequacyReport report = AdequacyReport.of(compilation);
+        JsonNode obligations = JsonMapper.builder().build().readTree(
+                report.json(SourceRendering.namedByIdentity(compilation.texts())))
+                .findValue("interaction").get("obligations");
+
+        List<String> identities = new ArrayList<>();
+        for (JsonNode each : obligations) {
+            identities.add(each.get("obligationId").toString());
+        }
+        assertEquals(4, identities.size(), () -> "a combination for each choice: " + identities);
+        assertEquals(4, new HashSet<>(identities).size(),
+                () -> "and no two under one identity: " + identities);
+    }
+
+    /**
      * An arm inside one of the language's own operations, called twice, is shown where its own
      * call reached it: the first call's arms at the first call, the second's at the second.
      *

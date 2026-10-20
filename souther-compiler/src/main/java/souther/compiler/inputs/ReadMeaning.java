@@ -231,11 +231,16 @@ public sealed interface ReadMeaning {
          */
         public sealed interface Kept {
 
-            /** A truth, and which way it came out. */
-            record ATruth(Denotation truth, boolean holds) implements Kept {
+            /** A truth, and which way it came out, of the {@code application}th application of the
+             *  step that made it ({@link ElementsWrittenOut.Kept.ATruth}). */
+            record ATruth(Denotation truth, boolean holds, int application) implements Kept {
 
                 public ATruth {
                     Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+                    if (application < 0) {
+                        throw new IllegalArgumentException(
+                                "applications are counted from none: " + application);
+                    }
                 }
             }
 

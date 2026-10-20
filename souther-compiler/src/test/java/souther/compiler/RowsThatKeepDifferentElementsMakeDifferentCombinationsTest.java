@@ -2,12 +2,15 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.InteractionEvidence;
+import souther.compiler.query.Weakening;
 import souther.compiler.report.AdequacyReport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A total over the elements a comparison keeps is made of one decision per element, and a row makes
@@ -103,12 +106,13 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
 
     /**
      * An element kept by two comparisons is evaluated by the second only if the first kept it, so
-     * the list does not say which evaluation is whose. No meeting is read, and so no combination is
-     * reported made by evaluations that were never matched to an element.
+     * the list does not say which evaluation is whose. The sum is a meeting this reading met and
+     * could not join: no combination is reported made by evaluations that were never matched to an
+     * element, and the behavior is not said to have had every combination of its decisions made.
      */
     @Test
-    void elementsKeptByTwoComparisonsAreNotJoinedToTheirEvaluations() {
-        InteractionEvidence evidence = evidenceOf("""
+    void elementsKeptByTwoComparisonsAreAMeetingNotJoinedAndTheMeasureSaysSo() {
+        AdequacyReport.BehaviorReport behavior = behaviorOf("""
                 module example.attendance
 
                 data Row = { days: Int, pay: Int }
@@ -122,9 +126,16 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
                 example total
                     | (Row { days = 20, pay = 100 }, Row { days = 5, pay = 200 }) -> 100
                 """);
+        InteractionEvidence evidence = behavior.evidence().interaction();
 
-        assertEquals(0, evidence.asked().read(), "no meeting is read");
-        assertEquals(0, evidence.counted());
+        assertEquals(1, evidence.asked().read(), "the sum is a meeting");
+        assertEquals(1, evidence.asked().notJoined(), "that was not joined");
+        assertEquals(0, evidence.counted(), "so no combination of it is claimed");
+        assertEquals(MeasurementStatus.PARTIAL, behavior.status(),
+                () -> "and the behavior is short of a measurement: " + behavior.weakenedBy());
+        assertTrue(behavior.weakenedBy().causes().stream()
+                        .anyMatch(Weakening.MeetingsNotJoined.class::isInstance),
+                () -> "which says it went without this: " + behavior.weakenedBy());
     }
 
     private static String rows(String rows) {
@@ -140,10 +151,13 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
     }
 
     private static InteractionEvidence evidenceOf(String model) {
+        return behaviorOf(model).evidence().interaction();
+    }
+
+    private static AdequacyReport.BehaviorReport behaviorOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst()
-                .evidence().interaction();
+        return AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
     }
 }

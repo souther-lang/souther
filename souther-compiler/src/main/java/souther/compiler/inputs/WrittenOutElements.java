@@ -116,8 +116,9 @@ public final class WrittenOutElements {
 
     private static ReadMeaning.Occurrence.Kept kept(ElementsWrittenOut.Kept<InputReads> kept) {
         return switch (kept) {
-            case ElementsWrittenOut.Kept.ATruth<InputReads>(var truth, boolean holds) ->
-                    new ReadMeaning.Occurrence.Kept.ATruth(denotation(truth), holds);
+            case ElementsWrittenOut.Kept.ATruth<InputReads>(var truth, boolean holds,
+                                                            int application) ->
+                    new ReadMeaning.Occurrence.Kept.ATruth(denotation(truth), holds, application);
             case ElementsWrittenOut.Kept.AnArm<InputReads>(var fork, int part) ->
                     new ReadMeaning.Occurrence.Kept.AnArm(denotation(fork), part);
         };

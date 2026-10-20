@@ -119,11 +119,29 @@ public final class ElementsWrittenOut {
     /** What an occurrence was kept by. */
     public sealed interface Kept<E> {
 
-        /** A truth, and which way it came out: a filter's step on the element. */
-        record ATruth<E>(Stood<E> truth, boolean holds) implements Kept<E> {
+        /**
+         * A truth, and which way it came out: a filter's step on the element.
+         *
+         * <p>Of one application of the step, and the occurrences made of what an application kept
+         * are kept by that one application and say so. A flatMap after a filter writes the same
+         * kept element out twice; the step was applied to it once, and two occurrences are not two
+         * applications.
+         *
+         * @param application which application of the step this is, counting from none in the
+         *                    order the step is handed the elements of the container it filters.
+         *                    The step is handed each of them, so this is also the run's own count
+         *                    of the step's applications where nothing before it dropped an element
+         *                    on the way; past a drop a run applies the step to fewer, and the
+         *                    count is the reader's to say it cannot take from this
+         */
+        record ATruth<E>(Stood<E> truth, boolean holds, int application) implements Kept<E> {
 
             public ATruth {
                 Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+                if (application < 0) {
+                    throw new IllegalArgumentException(
+                            "applications are counted from none: " + application);
+                }
             }
         }
 
@@ -210,7 +228,7 @@ public final class ElementsWrittenOut {
         boolean decided = true;
         for (Kept<E> kept : one.keptWhere()) {
             switch (kept) {
-                case Kept.ATruth<E>(Stood<E> truth, boolean wanted) -> {
+                case Kept.ATruth<E>(Stood<E> truth, boolean wanted, int _) -> {
                     if (!(reading.folded(truth).orElse(null) instanceof Boolean holds)) {
                         decided = false;
                     } else if (holds != wanted) {
@@ -333,7 +351,8 @@ public final class ElementsWrittenOut {
         }
         BindingId element = pieces.element().binding();
         List<Occurrence<E>> out = new ArrayList<>();
-        for (Occurrence<E> each : elements) {
+        for (int application = 0; application < elements.size(); application++) {
+            Occurrence<E> each = elements.get(application);
             if (out.size() >= enough) {
                 break;
             }
@@ -352,7 +371,7 @@ public final class ElementsWrittenOut {
                         return new Walked.PastTheFigure<>();
                     }
                     List<Kept<E>> kept = new ArrayList<>(each.keptWhere());
-                    kept.add(new Kept.ATruth<>(answered, true));
+                    kept.add(new Kept.ATruth<>(answered, true, application));
                     out.add(new Occurrence<>(each.value(), kept));
                 }
                 case WHAT_THE_CLOSURE_ANSWERS -> {

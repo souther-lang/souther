@@ -2,6 +2,7 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.types.ConstructOccurrence;
 
@@ -12,6 +13,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static souther.compiler.reading.ReadInteractions.read;
+import static souther.compiler.reading.ReadInteractions.readAll;
 import static souther.compiler.reading.ReadInteractions.shape;
 
 /**
@@ -148,10 +150,63 @@ class ATotalOverChoicesIsAMeetingOfThemTest {
         assertNotEquals(copies.get(0), copies.get(1), "and not the same copy");
     }
 
+    private static final String NOTHING_KEPT = """
+            module example.nothingkept
+
+            data Row = { days: Int, pay: Int }
+
+            behavior total : (first: Row, second: Row) -> Int
+
+            let total (first, second) = List.sum(List.map(r -> r.pay, [ first, second ]))
+            """;
+
+    private static final String FLAT_MAPPED = """
+            module example.flatmapped
+
+            data Row = { days: Int, pay: Int }
+
+            behavior total : (first: Row, second: Row) -> Int
+
+            let total (first, second) =
+                List.sum(List.map(r -> r.pay,
+                    List.flatMap(r -> [ r, r ], List.filter(r -> r.days >= 17, [ first, second ]))))
+            """;
+
+    /**
+     * A flatMap after the filter writes each kept element out twice, and the filter's closure was
+     * applied to each of the two elements once. Four occurrences are two applications, so the sum
+     * is made of two decisions and the comparison is evaluated twice.
+     */
     @Test
-    void anElementKeptByTwoFiltersIsNotNamedByEitherPass() {
-        assertEquals(List.of(), read(TWO_FILTERS, "total"),
-                "which pass of the second comparison is whose depends on what the first kept");
+    void elementsMadeSeveralOfByAFlatMapAreOneDecisionApiece() {
+        List<Interaction> found = read(FLAT_MAPPED, "total");
+
+        assertEquals(List.of(List.of(2, 2)), shape(found), "one decision per application");
+        Set<Integer> visits = found.stream()
+                .flatMap(group -> group.factors().stream())
+                .flatMap(factor -> factor.outcomes().stream())
+                .flatMap(outcome -> outcome.claims().stream())
+                .map(claim -> ((ControlClaim.Visit.Nth) claim.visit()).index())
+                .collect(Collectors.toSet());
+        assertEquals(Set.of(0, 1), visits, "of the two evaluations a run makes");
+    }
+
+    @Test
+    void anElementKeptByTwoFiltersIsAMeetingNotJoinedAndNotAbsent() {
+        CoverageRead.Read read = readAll(TWO_FILTERS, "total");
+
+        assertEquals(List.of(), read.interactions(),
+                "which evaluation of the second comparison is whose depends on what the first kept");
+        assertEquals(List.of(WhyNotJoined.KEPT_BY_SEVERAL), read.notJoined(),
+                "and the sum is a meeting this reading met and did not join");
+    }
+
+    @Test
+    void aSumWithNoDecisionInItIsNeitherAMeetingNorOneNotJoined() {
+        CoverageRead.Read read = readAll(NOTHING_KEPT, "total");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(), read.notJoined(), "a total of what nothing keeps decides nothing");
     }
 
     /** The meeting is there however long the list is; that it is not measured is the budget's to

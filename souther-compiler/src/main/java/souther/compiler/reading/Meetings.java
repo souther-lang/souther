@@ -42,6 +42,8 @@ final class Meetings {
 
     private final List<Interaction> found = new ArrayList<>();
 
+    private final List<WhyNotJoined> notJoined = new ArrayList<>();
+
     /** The elements a call adds up that a comparison keeps. */
     private final KeptElements keptElements;
 
@@ -77,11 +79,18 @@ final class Meetings {
                 }
             }
         } else if (node instanceof Core.Call call) {
-            List<Factor> kept = keptElements.factorsOf(call, naming);
-            if (kept == null) {
-                return;
+            switch (keptElements.of(call, naming)) {
+                case null -> {
+                    return;
+                }
+                // Met once however many ways reach it: it is a place in the body that was not read,
+                // and the ways in say nothing more about that.
+                case KeptElements.Read.NotJoined(var why) -> {
+                    notJoined.add(why);
+                    return;
+                }
+                case KeptElements.Read.Factors(var each) -> factors.addAll(each);
             }
-            factors.addAll(kept);
         } else {
             return;
         }
@@ -110,6 +119,12 @@ final class Meetings {
     /** The groups, in the order the walk met them. */
     List<Interaction> found() {
         return List.copyOf(found);
+    }
+
+    /** The sums of kept elements the walk met and could not join to evaluations, each with the
+     *  reason, in the order it met them. They are meetings the measure did not ask about. */
+    List<WhyNotJoined> notJoined() {
+        return List.copyOf(notJoined);
     }
 
     /**

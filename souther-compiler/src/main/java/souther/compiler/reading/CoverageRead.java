@@ -199,6 +199,9 @@ public final class CoverageRead {
      *                     budget over these takes them in this order, so which of them a budget that
      *                     runs out reaches is said by where the meeting is written and not by which
      *                     way round a fork above it a row goes
+     * @param notJoined    the sums of kept elements the walk met and could not join to the
+     *                     evaluations of the comparison that keeps them, each with why, in the order
+     *                     it met them. Meetings all the same, and ones nothing was asked about
      * @param arms         one answer per arm of the behavior, by the number the plan gave it. Total
      *                     over the plan's arms: a key that is not there is not a thing to interpret,
      *                     because there is no such key.
@@ -241,6 +244,7 @@ public final class CoverageRead {
      *                       one are the inputs every other reading here says reach it
      */
     public record Read(List<Interaction> interactions,
+                       List<WhyNotJoined> notJoined,
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
                        List<WayIn> taken,
                        List<WayIn> answeredBy,
@@ -250,6 +254,7 @@ public final class CoverageRead {
 
         public Read {
             interactions = List.copyOf(interactions);
+            notJoined = List.copyOf(notJoined);
             taken = List.copyOf(taken);
             answeredBy = List.copyOf(answeredBy);
             Map<WayIn, Set<WrittenWithout>> copied = new LinkedHashMap<>();
@@ -361,7 +366,8 @@ public final class CoverageRead {
         for (Interaction group : found) {
             walked.takesAt(group);
         }
-        return new Read(found, arms.found(behavior), List.copyOf(walked.taken),
+        return new Read(found, meetings.notJoined(), arms.found(behavior),
+                List.copyOf(walked.taken),
                 List.copyOf(walked.answeredBy), walked.saidInPart, arms.restOfTheBlock(behavior),
                 walked.answersNothing);
     }

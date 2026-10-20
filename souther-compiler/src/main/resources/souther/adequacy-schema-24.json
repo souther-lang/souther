@@ -350,6 +350,7 @@
           "pair_space_truncated",
           "meetings_not_walked",
           "meetings_not_placed",
+          "meetings_not_joined",
           "proof_contradicted",
           "arms_unsettled",
           "decision_not_fully_read",
@@ -4073,6 +4074,11 @@
               "outcome": {
                 "type": "string",
                 "description": "Which case, for a case; `held` or `denied` for a comparison."
+              },
+              "visit": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Which time a run evaluates the comparison, counted from zero, written only for a comparison a run evaluates more than once and absent otherwise. A comparison in a closure applied to each element of a list written in the body is one construct and as many decisions as there are elements, so two combinations that differ in which element came out which way name the same construct and the same outcomes; this is what tells them apart."
               },
               "construct": {
                 "type": "object",

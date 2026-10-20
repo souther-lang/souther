@@ -6175,9 +6175,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.put("at", one.at().toString());
                 out.put("outcome", one.spelled());
             }
-            case Condition.Side(var _, var statedAt, var _, var held, var _) -> {
+            // The visit where the comparison is evaluated more than once: it is one construct and
+            // the decision of each application of a closure, so two combinations that differ in
+            // which application came out which way are the same construct with the same outcomes.
+            // Absent where it is evaluated once, which is every identity written before it.
+            case Condition.Side(var _, var statedAt, var visit, var held, var _) -> {
                 out.put("kind", "comparison");
                 constructId(out.putObject("construct"), statedAt);
+                visit.ifPresent(index -> out.put("visit", index));
                 out.put("outcome", held ? "held" : "denied");
             }
             // A fork the reading could not name a position for. There is nothing to name it by but
@@ -9479,6 +9484,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
             case Weakening.MeetingsNotPlaced _ -> WeakeningWord.MEETINGS_NOT_PLACED;
+            case Weakening.MeetingsNotJoined _ -> WeakeningWord.MEETINGS_NOT_JOINED;
             case Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _ ->
                     WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;

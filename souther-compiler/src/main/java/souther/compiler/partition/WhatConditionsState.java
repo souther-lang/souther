@@ -304,7 +304,7 @@ final class WhatConditionsState {
     Proposition kept(ReadMeaning.Occurrence.Kept kept, InputReading read) {
         heldTo(read);
         return switch (kept) {
-            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds) -> {
+            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds, int _) -> {
                 Proposition stated = truth(truth.value(), truth.at(), read).proposition();
                 yield holds ? stated : denied(stated);
             }
