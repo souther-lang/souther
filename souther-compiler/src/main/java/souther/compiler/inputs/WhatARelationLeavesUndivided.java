@@ -1356,7 +1356,7 @@ public final class WhatARelationLeavesUndivided {
                                                NumericDomain.Bounds extent,
                                                BiPredicate<P, P> overlap) {
         if (terms.size() != 2 || constant == null || !apart(terms, 0, overlap)
-                || !moveTogether(terms.get(0), terms.get(1))) {
+                || !moveTogether(terms.get(0), terms.get(1), extent)) {
             return Set.of();
         }
         WholeRun middle = WholeRun.reachedFromTheMiddleOf(extent);
@@ -1410,14 +1410,25 @@ public final class WhatARelationLeavesUndivided {
      * its place, taking every value of its type and the same values as the other, weighed by one
      * weight and its negation.
      */
-    private static <P> boolean moveTogether(Term<P> one, Term<P> other) {
-        return one.itsPlace() && other.itsPlace()
-                && one.realizes() != null && one.realizes().saysNothing()
-                && other.realizes() != null && other.realizes().saysNothing()
+    private static <P> boolean moveTogether(Term<P> one, Term<P> other,
+                                            NumericDomain.Bounds extent) {
+        return reachesTheWholeType(one, extent) && reachesTheWholeType(other, extent)
+                && one.itsPlace() == other.itsPlace()
                 && one.takes() != null && one.takes().equals(other.takes())
                 && one.weight().plus(other.weight()) instanceof ExactAnswer.Held<ExactRatio>(
                         ExactRatio sum)
                 && sum.signum() == 0;
+    }
+
+    /**
+     * Whether the term is shown to take every value of the type it is a value of: the value at its
+     * place says nothing of where it lies, and what is taken of a place is shown to take all of
+     * {@code extent}.
+     */
+    private static <P> boolean reachesTheWholeType(Term<P> term, NumericDomain.Bounds extent) {
+        return term.realizes() != null
+                && (term.itsPlace() ? term.realizes().saysNothing()
+                        : term.realizes().equals(extent));
     }
 
     /**

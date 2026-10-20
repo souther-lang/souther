@@ -665,7 +665,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         if (!out.containsAll(places())) {
-            out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read));
+            out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
+                    read.quantities().region()));
         }
         for (int at = 0; at < sides.size(); at++) {
             if (leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled
@@ -1212,7 +1213,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Set<FilingCoordinate> undividedByTheDifference(List<Source> sources,
                                                          List<Carrier> carriers,
                                                          List<List<OnAWay>> stating,
-                                                         boolean heldWhole, InputReading read) {
+                                                         boolean heldWhole, InputReading read,
+                                                         SearchRegion region) {
         if (!heldWhole || sides.size() != 2 || carriers.get(0) == null
                 || !carriers.get(0).equals(carriers.get(1))
                 || !apartByTheDeclarations(0, 1, sources, read)) {
@@ -1223,13 +1225,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
             Source source = sources.get(i);
-            if (!(each.term() instanceof NumericTerm.ValueOf) || source == null
-                    || !source.takes().every()) {
+            if (each.term() == null || source == null || !source.takes().every()) {
+                return Set.of();
+            }
+            NumericDomain.Bounds realizes = switch (each.term()) {
+                case NumericTerm.ValueOf _ -> on.asARelationReadsIt();
+                case NumericTerm.TakenOf taken -> realized(taken, source, region, Way.TIES);
+                default -> null;
+            };
+            if (realizes == null) {
                 return Set.of();
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
-                    on.asARelationReadsIt(), on.asARelationReadsIt(), source.takes(), true,
-                    on.spacingBetweenValues()));
+                    on.asARelationReadsIt(), realizes, source.takes(),
+                    each.term() instanceof NumericTerm.ValueOf, on.spacingBetweenValues()));
         }
         // A statement about both sides is in each side's list; it is one statement.
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));
@@ -1243,9 +1252,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             held.add(statement);
         }
+        // Values taken of a place stop where the operation does, which is short of the type.
+        NumericDomain.Bounds extent = sides.get(0).term() instanceof NumericTerm.TakenOf
+                ? terms.get(0).realizes()
+                : new NumericDomain.Bounds(on.extent().low(), on.extent().high());
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, constant, relation, held,
-                new NumericDomain.Bounds(on.extent().low(), on.extent().high()),
-                UndividedByARelation::overlap);
+                extent, UndividedByARelation::overlap);
     }
 
     /**

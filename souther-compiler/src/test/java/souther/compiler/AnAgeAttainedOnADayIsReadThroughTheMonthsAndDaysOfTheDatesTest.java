@@ -228,6 +228,10 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 + " is not worked out, about `Date.month(on)`"), report);
         assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
                 + " is not worked out, about `Date.day(on)`"), report);
+        assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
+                + " is not worked out, about `Date.year(on)`"), report);
+        assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
+                + " is not worked out, about `Date.year((birthday -1 days))`"), report);
     }
 
     /**
