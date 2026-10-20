@@ -5337,7 +5337,7 @@ final class Pullback {
     /**
      * The list {@code call} keeps some of the elements of by a statement its answer meets, or
      * null where it is any other call: an operation whose answer holds exactly the elements of an
-     * argument meeting something ({@link ALawRead#keepsWhatMeets}), and not one that drops
+     * argument meeting something ({@link #keepsWhatMeets}), and not one that drops
      * repeats or cuts at a count.
      */
     private Core theListAKeepingCallKeepsSomeOf(Core call) {
@@ -5349,7 +5349,7 @@ final class Pullback {
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
         return holds == null || built.permutesTheElementsOf() != null
-                || ALawRead.keepsWhatMeets(operation, holds) == null
+                || keepsWhatMeets(operation, holds) == null
                 || holds.position() >= kept.args().size() ? null
                 : kept.args().get(holds.position());
     }
