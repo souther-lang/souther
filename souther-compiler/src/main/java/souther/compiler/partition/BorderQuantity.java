@@ -29,6 +29,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -919,21 +920,28 @@ public sealed interface BorderQuantity
         public Stands standsAt(Criterion where, Observation row) {
             OverAForm added = addedForm();
             ExactAnswer<ExactRatio> rest = ExactAnswer.held(ExactRatio.ZERO);
+            // Whatever stopped the numbers added to the count, kept to be said beside what stopped
+            // the count: a row is not read for either, and a reader told one would fix it and be
+            // told the other next.
+            Set<ReadingGap> stopped = new LinkedHashSet<>();
             if (added != null) {
                 switch (added.valuesOf(added.read(row))) {
                     case ValuesAtARow.NoneHere _ -> {
                         return Stands.NO;
                     }
-                    case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> {
-                        return Stands.couldNotTell(why);
-                    }
+                    case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> stopped.addAll(why);
                     case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
                             rest = OrderedAffineBoundary.at(against, values);
                 }
             }
             AStatementAtARow.HowManyAtARow counted = perElement.howManyMeetIn(container, row);
             if (counted == null) {
-                return Stands.couldNotTell(ReadingGap.COULD_NOT_WALK);
+                stopped.add(ReadingGap.COULD_NOT_WALK);
+            } else if (!stopped.isEmpty()) {
+                stopped.addAll(counted.why());
+            }
+            if (!stopped.isEmpty()) {
+                return Stands.couldNotTell(stopped);
             }
             ExactAnswer<ExactRatio> addedUp = rest;
             return switch (counted.whether(count -> addedUp.flatMap(sum -> ExactRatio.of(count)
