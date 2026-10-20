@@ -76,9 +76,14 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     private static int ageAttained(LocalDate birthday, LocalDate on) {
         LocalDate dayBefore = birthday.minusDays(1);
         int difference = on.getYear() - dayBefore.getYear();
-        boolean beforeTheDay = on.getMonthValue() * 100 + on.getDayOfMonth()
+        return difference - (beforeTheDay(birthday, on) ? 1 : 0);
+    }
+
+    /** Whether the day is before the day of the year the age is attained on. */
+    private static boolean beforeTheDay(LocalDate birthday, LocalDate on) {
+        LocalDate dayBefore = birthday.minusDays(1);
+        return on.getMonthValue() * 100 + on.getDayOfMonth()
                 < dayBefore.getMonthValue() * 100 + dayBefore.getDayOfMonth();
-        return difference - (beforeTheDay ? 1 : 0);
     }
 
     /**
@@ -392,6 +397,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
         Pattern row = Pattern.compile(
                 "Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\), (true|false)");
         StringBuilder examples = new StringBuilder();
+        Set<String> points = new HashSet<>();
         for (String line : offered.lines().toList()) {
             Matcher found = row.matcher(line);
             if (found.find()) {
@@ -399,12 +405,23 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 LocalDate on = LocalDate.parse(found.group(2));
                 boolean ascendant = Boolean.parseBoolean(found.group(3));
                 int age = ageAttained(birthday, on);
+                points.add(age + " " + (beforeTheDay(birthday, on) ? "before" : "on or after")
+                        + " " + ascendant);
                 examples.append("    | (Date(\"").append(birthday).append("\"), Date(\"")
                         .append(on).append("\"), ").append(ascendant).append(") -> ")
                         .append(age >= 70 ? (ascendant ? 3 : 2) : 0).append('\n');
             }
         }
         assertFalse(examples.isEmpty(), offered);
+        // A row at each side of the correction by the month and day where the age is seventy, and
+        // one at each value of the flag from there on: the points the report would name if one of
+        // them had no row, asked of the rows themselves. The rows stand at the points of each
+        // comparison and not at every way the flag combines with them.
+        assertTrue(points.stream().anyMatch(each -> each.startsWith("70 before")), points.toString());
+        assertTrue(points.stream().anyMatch(each -> each.startsWith("70 on or after")),
+                points.toString());
+        assertTrue(points.contains("70 on or after true") && points.contains("70 on or after false"),
+                points.toString());
 
         Compilation answered = Compilation.ofSource(
                 ONE_LINE_BESIDE_A_FLAG + "\nexample f\n" + examples, "Main");

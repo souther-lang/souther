@@ -1512,23 +1512,23 @@ final class ReadQuantities implements Quantities {
      * by its type is on the rules only if that term is put on them. Asked of the term alone, the
      * range comes back as wide as its own type while the terms still to be chosen leave it far less.
      *
-     * <p>The terms that cannot stand under one context with {@code term} are left out: no row has
-     * them together, so what they hold says nothing of it.
+     * <p>Beside and not instead: {@code alongside} only adds what is known of {@code term}. Terms
+     * that cannot stand under one context together, or with {@code term}, are terms no row has
+     * together, and a row is what the answer is about — so it is the answer of {@code term} on its
+     * own, and not the answer of whichever of them were met first. The set is taken whole or not at
+     * all, which is what makes the answer the same whatever order {@code alongside} is in.
      */
     public NumericDomain.FormProjection projectionOf(NumericTerm term,
                                                      Collection<? extends NumericTerm> alongside) {
-        List<NumericTerm> together = new ArrayList<>();
-        StructuralContext standing = asking(List.of(term))
-                instanceof StructuralContext.Merge.Together(StructuralContext under) ? under : null;
-        for (NumericTerm other : alongside) {
-            held(other);
-            if (standing != null && standing.merge(StructuralContext.of(other.subjectPath()))
-                    instanceof StructuralContext.Merge.Together(StructuralContext under)) {
-                standing = under;
-                together.add(other);
-            }
+        held(term);
+        alongside.forEach(this::held);
+        List<NumericTerm> asked = new ArrayList<>(alongside.size() + 1);
+        asked.add(term);
+        asked.addAll(alongside);
+        if (asking(asked) instanceof StructuralContext.Merge.Together(StructuralContext under)) {
+            return runsIn(under, LinearForm.atom(term), true, List.copyOf(alongside));
         }
-        return projectionOf(LinearForm.atom(term), true, together);
+        return projectionOf(LinearForm.atom(term), true, List.of());
     }
 
     /** The same, where the class the declarations hold a value to is or is not what its ends are
