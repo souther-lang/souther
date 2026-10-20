@@ -1,11 +1,15 @@
 package souther.compiler;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.IntPredicate;
 
@@ -21,7 +25,10 @@ import java.util.function.IntPredicate;
  *
  * <p><b>The ways a part grows.</b> A key taken out of {@code required}, a word added to an
  * {@code enum}, a key added to the {@code properties} of an object that admits no others, and a
- * {@code description} said differently, which changes nothing a document is held to.
+ * {@code description} said differently, which changes nothing a document is held to. And a
+ * condition on a word of a discriminator that did not ship, wrapped round a branch as it shipped,
+ * where the owner held the discriminator to an {@code enum} without that word: no document that
+ * shipped carries it, so none is asked more of ({@link #withoutConditionsOnWordsThatDidNotShip}).
  *
  * <p><b>Where a part growing grows the whole.</b> Only where the part is asked of a document the way
  * the whole is: under {@code properties}, {@code items}, {@code allOf}, {@code anyOf}, {@code then},
@@ -95,6 +102,13 @@ public final class SchemaEvolution {
             }
             return;
         }
+        compareGrowing(shipped, withoutConditionsOnWordsThatDidNotShip(shipped, current), at, out,
+                roots);
+    }
+
+    /** The same, of a part that may grow: each key as it shipped, and any added since. */
+    private static void compareGrowing(JsonNode shipped, JsonNode current, String at,
+                                       List<String> out, Roots roots) {
         for (String key : shipped.propertyNames()) {
             if (key.equals("description") || key.equals("$defs")) {
                 continue;
@@ -165,6 +179,82 @@ public final class SchemaEvolution {
                 out.add(at + "/" + key + ": not in what shipped");
             }
         }
+    }
+
+    /**
+     * {@code current} without the conditions it adds on a word its discriminator did not ship
+     * with, which narrow nothing that shipped.
+     *
+     * <p>A document is held to such a condition only where its discriminator is the new word, and
+     * the owner of the {@code allOf} held that discriminator to an {@code enum} without it: every
+     * document carrying the word was refused before, so what is asked of one is asked of no
+     * document that shipped. A condition on a word the enum had, or on a discriminator the owner
+     * held to no {@code enum}, is not taken out and is compared as any other part is.
+     *
+     * <p>Only where the condition wraps what shipped: the branch it stands in, taken out, is the
+     * branch that shipped.
+     */
+    private static JsonNode withoutConditionsOnWordsThatDidNotShip(JsonNode shipped,
+                                                                   JsonNode current) {
+        JsonNode was = shipped.path("allOf");
+        JsonNode is = current.path("allOf");
+        if (!was.isArray() || !is.isArray() || is.size() < was.size()) {
+            return current;
+        }
+        Map<String, Set<String>> shippedWords = new HashMap<>();
+        for (String name : shipped.path("properties").propertyNames()) {
+            JsonNode held = shipped.get("properties").get(name).path("enum");
+            if (held.isArray()) {
+                shippedWords.put(name, words(held));
+            }
+        }
+        if (shippedWords.isEmpty()) {
+            return current;
+        }
+        ObjectNode copy = (ObjectNode) current.deepCopy();
+        ArrayNode branches = (ArrayNode) copy.get("allOf");
+        for (int i = 0; i < was.size(); i++) {
+            branches.set(i, withoutAWrapper(was.get(i), is.get(i), shippedWords));
+        }
+        return copy;
+    }
+
+    /** The branch {@code now}, with what wraps {@code before} on a new word taken out. */
+    private static JsonNode withoutAWrapper(JsonNode before, JsonNode now,
+                                            Map<String, Set<String>> shippedWords) {
+        if (!before.isObject() || !now.isObject()) {
+            return now;
+        }
+        if (!before.has("if") && now.has("if") && now.has("else")
+                && onANewWord(now.get("if"), shippedWords)) {
+            return withoutAWrapper(before, now.get("else"), shippedWords);
+        }
+        if (before.has("if") && now.has("if")) {
+            ObjectNode copy = (ObjectNode) now.deepCopy();
+            for (String key : List.of("then", "else")) {
+                if (before.has(key) && now.has(key)) {
+                    copy.set(key, withoutAWrapper(before.get(key), now.get(key), shippedWords));
+                }
+            }
+            return copy;
+        }
+        return now;
+    }
+
+    /**
+     * Whether {@code condition} asks of a document that its discriminator is one word, which the
+     * enum that held the discriminator when it shipped did not have.
+     */
+    private static boolean onANewWord(JsonNode condition, Map<String, Set<String>> shippedWords) {
+        JsonNode named = condition.path("properties");
+        if (!named.isObject() || named.size() != 1) {
+            return false;
+        }
+        String discriminator = named.propertyNames().iterator().next();
+        JsonNode word = named.get(discriminator).path("const");
+        return word.isString() && shippedWords.containsKey(discriminator)
+                && !shippedWords.get(discriminator).contains(word.asString())
+                && words(condition.path("required")).contains(discriminator);
     }
 
     /**

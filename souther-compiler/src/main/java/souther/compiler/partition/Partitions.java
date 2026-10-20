@@ -134,6 +134,7 @@ public final class Partitions {
                                List<StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
                                List<RuleWithoutALine> rulesWithoutALine,
+                               List<souther.compiler.inputs.RuleWhereARunStops> rulesWhereARunStops,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                java.util.Map<AxisId, List<Border>> along,
@@ -147,6 +148,7 @@ public final class Partitions {
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
             rulesWithoutALine = List.copyOf(rulesWithoutALine);
+            rulesWhereARunStops = List.copyOf(rulesWhereARunStops);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
             java.util.Map<AxisId, List<Border>> lines = new LinkedHashMap<>();
@@ -481,7 +483,7 @@ public final class Partitions {
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         MeasureClosure.Both closed = MeasureClosure.of(positions, standing, read);
         return new Partitioning(List.copyOf(settled), standing, uncertain,
-                refused,
+                refused, cameToHere.stopping(),
                 List.copyOf(notSeparated),
                 List.of(), lines, ReachingCuts.NONE,
                 closed.partition(), closed.border(),
@@ -1073,7 +1075,7 @@ public final class Partitions {
                 // Read after every position was measured, so that what a position's classes would
                 // not compose is in it. Taken before, the list is what the producers handed over and
                 // nothing this stage found out.
-                List.copyOf(found.found().reported()),
+                List.copyOf(found.found().reported()), found.found().stopping(),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
                 // it was read from the relation the rules admit.

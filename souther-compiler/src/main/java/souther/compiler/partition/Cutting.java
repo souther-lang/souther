@@ -35,6 +35,7 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhereARunStops;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.meaning.WhyUnread;
@@ -491,6 +492,34 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         .allMatch(one -> AStatementAtARow.askable(one.condition())))
                 ? severalNotDrawn(comparison, read, reads, answering)
                 : drawn;
+    }
+
+    /**
+     * Where a run stops in the comparison, or null where none does: the rows on which an operation
+     * it is read through ends the run, so that it states nothing on either side.
+     *
+     * <p>Independent of the line it draws. A comparison whose ways divide by nought on some of them
+     * draws its line on the others, and the ways that stop are no part of that line; they are said
+     * as what they are, and whether a row reaches them is asked of the way to the comparison
+     * ({@link ComparisonAssessment#someRowArrivesWhere}). Asked of each application a closure is
+     * made on, where that application is made, since a run that never makes one is not stopped by
+     * it.
+     */
+    static Proposition whereTheRunStops(StatedComparison comparison, InputReading read,
+                                        InputReads reads, ClosureApplications applying,
+                                        WhatConditionsState conditions) {
+        List<WhereARunStops.OnOneReading> readings = new ArrayList<>();
+        switch (applying) {
+            case ClosureApplications.Each(var made) -> made.forEach(one -> readings.add(
+                    new WhereARunStops.OnOneReading(one.reached(),
+                            conditions.comparison(comparison, one.reads(), read).stated()
+                                    .meaning())));
+            case ClosureApplications.None _ -> { }
+            case ClosureApplications.Outside _, ClosureApplications.NotSaid _ ->
+                    readings.add(new WhereARunStops.OnOneReading(null,
+                            conditions.comparison(comparison, reads, read).stated().meaning()));
+        }
+        return WhereARunStops.across(readings);
     }
 
     /**

@@ -464,6 +464,32 @@ public sealed interface About {
     }
 
     /**
+     * A rule of the model some run reaching it stops in: an operation it is read through ends the
+     * run on some of the ways it is worked out, such as a division by nought.
+     *
+     * <p>Beside {@link ARuleWithoutALine} and not among it. The rule draws its line on the runs
+     * that do not stop, so it is no rule without a line and no reading that stopped; this is what
+     * the model says on the runs that do. A rule every run stops in is the first of those, with its
+     * own reason.
+     */
+    record ARuleSomeRunsOfWhichStop(souther.compiler.inputs.RuleWhereARunStops finding)
+            implements OfARule {
+        public ARuleSomeRunsOfWhichStop {
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
+        }
+
+        @Override
+        public souther.compiler.check.RuleRef rule() {
+            return finding.rule();
+        }
+
+        @Override
+        public Set<RuleCitation> cited() {
+            return finding.cited();
+        }
+    }
+
+    /**
      * A rule of the model this did not read far enough to say what it raises, and what stopped it.
      *
      * <p>Beside {@link ARuleWithoutALine} and not among it. That one is the model stating that a

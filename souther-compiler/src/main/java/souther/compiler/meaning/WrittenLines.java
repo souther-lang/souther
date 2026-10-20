@@ -372,7 +372,7 @@ public final class WrittenLines {
     }
 
     /** The steps {@code step} is concluded from. */
-    private static List<Derivation> premisesOf(Derivation step) {
+    static List<Derivation> premisesOf(Derivation step) {
         return switch (step) {
             case Derivation.ThroughABinding(var value) -> List.of(value);
             case Derivation.OfWhatWasKept(var element, var kept) -> with(element, kept);

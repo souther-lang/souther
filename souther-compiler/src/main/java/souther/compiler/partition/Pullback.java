@@ -5753,7 +5753,8 @@ final class Pullback {
                         LinearForm<Quantity> form) -> forms.add(form);
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                     elementsMet = metBefore;
-                    return partOf(at, new Derivation.Stopped(noFormOf(stopped), fixed));
+                    return partOf(at, abortsAt(stopped) ? new Derivation.TheRunStopsHere()
+                            : new Derivation.Stopped(noFormOf(stopped), fixed));
                 }
             }
         }

@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import souther.compiler.check.ClauseName;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -126,6 +127,45 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
         /** The derivation it was concluded from. */
         public Derivation how() {
             return how;
+        }
+
+        /**
+         * The rows on which a run stops in what this states ({@link Derivation.TheRunStopsHere}),
+         * or null where none does: for each place the derivation stops a run at, the conditions of
+         * the {@code if}s it is down an arm of.
+         *
+         * <p>Only what stands between the statement and the stop is a condition of it. Any other
+         * step on the way is left out, so the rows are the rows the way to the stop admits and may
+         * be more than the rows that reach it; a stop is dropped only where the conditions kept
+         * rule every row out.
+         */
+        public Proposition whereARunStops() {
+            List<Proposition> stops = new ArrayList<>();
+            whereARunStopsIn(how, List.of(), stops);
+            return stops.isEmpty() ? null : Proposition.any(stops);
+        }
+
+        private static void whereARunStopsIn(Derivation step, List<Proposition> down,
+                                             List<Proposition> stops) {
+            if (step instanceof Derivation.TheRunStopsHere) {
+                stops.add(Proposition.all(down));
+                return;
+            }
+            if (step instanceof Derivation.IfThenElse(Derivation condition, Derivation then,
+                                                      Derivation otherwise)) {
+                Proposition decides = condition.concludes(Optional.empty());
+                whereARunStopsIn(condition, down, stops);
+                whereARunStopsIn(then, with(down, decides), stops);
+                whereARunStopsIn(otherwise, with(down, decides.denied()), stops);
+                return;
+            }
+            WrittenLines.premisesOf(step).forEach(each -> whereARunStopsIn(each, down, stops));
+        }
+
+        private static List<Proposition> with(List<Proposition> down, Proposition more) {
+            List<Proposition> out = new ArrayList<>(down);
+            out.add(more);
+            return out;
         }
 
         @Override

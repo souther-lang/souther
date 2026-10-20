@@ -1025,6 +1025,17 @@ sealed interface ComparisonAssessment {
         return List.of(reaching);
     }
 
+    /**
+     * Whether some row takes {@code way} to the rule at some place it is watched at: the way is
+     * not one the declarations and the conditions on it rule out, the places do not all prove
+     * that nothing arrives, and some region the way leaves is not shown to hold nothing.
+     */
+    static boolean someRowArrives(Reachability way, List<ComparisonArrival> arrivals) {
+        return waysArrivedBy(way, arrivals).stream().anyMatch(reaching ->
+                reaching.holdingEveryRow().stream()
+                        .anyMatch(region -> region.emptiness().isEmpty()));
+    }
+
     /** How far the rows arriving at a line get: none to it, to it, or to both sides of it. */
     enum Arrived { NOTHING_AT_THE_LINE, AT_THE_LINE, ACROSS_THE_LINE }
 

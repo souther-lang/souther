@@ -89,13 +89,96 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void aComparisonEveryRunOfWhichStopsIsReadToTheEndAndHasNoLine() {
         for (String guard : List.of("a / 0 >= k", "a / 0 + b >= k", "(a / 0) * b >= k",
-                "a >= k / 0", "-(a / 0) >= k", "(a / 0 >= k) || k > 0")) {
+                "a >= k / 0", "-(a / 0) >= k", "(a / 0 >= k) || k > 0",
+                // And through the total of a list the body wrote out, kept or not.
+                "List.sum([a / 0, b / 1]) >= k",
+                "List.sum(List.filter(x -> x > 0, [a / 0, b / 1])) >= k",
+                "List.sum(List.map(x -> x / 0, [a, b])) >= k")) {
             String report = human(MODEL.formatted("", guard));
             assertTrue(report.contains(SUCH_A_RUN_STOPS), guard + "\n" + report);
             assertFalse(report.contains("several lines held together"), guard + "\n" + report);
             assertFalse(report.contains("written in a form this compiler does not read"),
                     guard + "\n" + report);
         }
+    }
+
+    private static final String A_RUN_STOPS = "run stops:";
+
+    /**
+     * Without the guard, the way that divides by nought is a place where a run stops, said beside
+     * the line the other way draws and not instead of it.
+     */
+    @Test
+    void withoutAGuardTheWayThatStopsIsSaidBesideTheLineTheOtherWayDraws() {
+        String report = human(MODEL.formatted("", QUOTIENT));
+        assertTrue(report.contains(A_RUN_STOPS), report);
+        assertFalse(report.contains("not read"), report);
+        assertEquals(1, lineBetweenAAndK(MODEL.formatted("", QUOTIENT)).size());
+    }
+
+    /** Under the guard no row takes the way that divides by nought, and nothing is said of it. */
+    @Test
+    void underAGuardThatRulesTheWayOutNoRunStopsAndNothingIsSaid() {
+        assertFalse(human(MODEL.formatted(ABOVE, QUOTIENT)).contains(A_RUN_STOPS));
+    }
+
+    /**
+     * A stop no guard rules out is said wherever it stands in the comparison, and by the same
+     * words however the comparison is written.
+     */
+    @Test
+    void aStopOnSomeWaysIsSaidWhereverItStandsInTheComparison() {
+        for (String guard : List.of("(if a > 0 then a / 0 else b / 1) >= k",
+                "(if a > 0 then a / 1 else b / 0) >= k",
+                "a / 1 + (if b > 0 then 1 / 1 else 1 / 0) >= k")) {
+            String report = human(MODEL.formatted("", guard));
+            assertTrue(report.contains(A_RUN_STOPS), guard + "\n" + report);
+            assertFalse(report.contains("not read"), guard + "\n" + report);
+        }
+    }
+
+    /** A comparison every run stops in is said once, as one that draws no line. */
+    @Test
+    void aComparisonEveryRunStopsInIsNotSaidTwice() {
+        String report = human(MODEL.formatted("", "a / 0 >= k"));
+        assertFalse(report.contains(A_RUN_STOPS), report);
+        assertTrue(report.contains(SUCH_A_RUN_STOPS), report);
+    }
+
+    private static final String ALL = """
+            module demo
+
+            data Ok
+            data No
+
+            behavior f : (k: Int) -> Ok | No
+            let f (k) = {
+                guard List.all(d -> 10 / d >= k, %s) else No
+                Ok
+            }
+            """;
+
+    /**
+     * One closure made on two values, one of them nought: the application that divides by
+     * nought is a stop and the other draws its line, and neither is lost to the other.
+     */
+    @Test
+    void aClosureMadeOnTwoValuesOneOfWhichStopsSaysBoth() {
+        String report = human(ALL.formatted("[1, 0]"));
+        assertTrue(report.contains(A_RUN_STOPS), report);
+        assertFalse(human(ALL.formatted("[1, 2]")).contains(A_RUN_STOPS));
+    }
+
+    /**
+     * The application that stops is not folded into the one that settles the same for every row:
+     * the comparison cuts nothing where a run gets past it, and some runs do not get past it.
+     */
+    @Test
+    void anApplicationThatStopsIsNotLostToOneThatCutsNothing() {
+        String model = ALL.replace("10 / d >= k", "10 / d >= 1");
+        String report = human(model.formatted("[1, 0]"));
+        assertTrue(report.contains(A_RUN_STOPS), report);
+        assertFalse(human(model.formatted("[1, 2]")).contains(A_RUN_STOPS));
     }
 
     /** The reason is the stop's, not the reading's: a division by nought stops the run. */
