@@ -240,14 +240,16 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     @Test
     void keysAMapAnsweredAsTheyAreAreCountedAsTheListIs() {
         Compilation plain = measured(modelOf(COUNTING, "count >= atLeast", ""));
+        List<String> plainAxes = axisOf(plain);
+        List<String> plainUnread = unreadOf(plain);
         for (String keys : List.of("List.map(k -> k, xs)", "List.map(k -> k, List.map(j -> j, xs))",
                 "List.reverse(List.map(k -> k, xs))", "List.map(k -> k, List.sort(xs))")) {
             Compilation compilation = measured(modelOver(keys));
-            assertEquals(axisOf(plain), axisOf(compilation),
+            assertEquals(plainAxes, axisOf(compilation),
                     () -> keys + ": " + report(compilation));
             assertTrue(json(compilation).contains("multiplicity(xs[*])"),
                     () -> keys + ": " + report(compilation));
-            assertEquals(unreadOf(plain), unreadOf(compilation),
+            assertEquals(plainUnread, unreadOf(compilation),
                     () -> keys + ": " + report(compilation));
         }
     }
@@ -372,7 +374,8 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     void keysAMapTookOutOfTheElementsAreCountedAtThePlaceItTookThemFrom() {
         record Taken(String step, String keys, String counted) { }
         // The fold over the issues, one for each place counted.
-        Map<String, Compilation> directly = new LinkedHashMap<>();
+        record Read(List<String> axes, List<String> unread) { }
+        Map<String, Read> directly = new LinkedHashMap<>();
         for (Taken taken : List.of(
                 new Taken(countedUnder("k"), "List.map(i -> i.label, issues)", "label"),
                 new Taken(countedUnder("k"), "List.reverse(List.map(i -> i.label, issues))",
@@ -387,15 +390,18 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 new Taken(countedUnder("k"),
                         "List.map(d -> d, List.map(i -> { let d = i.detail\n d.label }, issues))",
                         "detail.label"))) {
-            Compilation direct = directly.computeIfAbsent(taken.counted(), counted ->
-                    measured(modelOfIssues(countedUnder("k." + counted), "issues")));
+            Read direct = directly.computeIfAbsent(taken.counted(), counted -> {
+                Compilation compiled =
+                        measured(modelOfIssues(countedUnder("k." + counted), "issues"));
+                return new Read(axisOf(compiled), unreadOf(compiled));
+            });
             Compilation compilation = measured(modelOfIssues(taken.step(), taken.keys()));
-            assertEquals(axisOf(direct), axisOf(compilation),
+            assertEquals(direct.axes(), axisOf(compilation),
                     () -> taken + ": " + report(compilation));
             assertTrue(json(compilation).contains(
                             "multiplicity(issues[*]." + taken.counted() + ")"),
                     () -> taken + ": " + report(compilation));
-            assertEquals(unreadOf(direct), unreadOf(compilation),
+            assertEquals(direct.unread(), unreadOf(compilation),
                     () -> taken + ": " + report(compilation));
         }
     }
