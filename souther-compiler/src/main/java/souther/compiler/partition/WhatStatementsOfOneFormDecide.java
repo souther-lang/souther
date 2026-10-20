@@ -84,9 +84,9 @@ final class WhatStatementsOfOneFormDecide {
      * The statements of {@code stated} that weigh the same terms as {@code added} alike, and
      * {@code added} with them.
      *
-     * <p>What statements of one form leave is not changed by statements of another, so once the
-     * ones before {@code added} are known to leave a point, only these can be where it leaves
-     * none.
+     * <p>What statements of one form leave is not changed by statements of another. The ones
+     * before {@code added} have not been proved to leave none, which is all that is known of
+     * them, so only the group of {@code added} can be newly proved to.
      */
     static List<TakenConstraint.Affine> ofTheFormOf(List<TakenConstraint.Affine> stated,
                                                     TakenConstraint.Affine added) {

@@ -453,8 +453,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     TakenConstraint.Affine affine)))) {
                 return new Step.Held<>(this);
             }
-            // The ones taken in before leave a point, since the way was open, so only the
-            // statements of this one's form can leave none now.
+            // The ones taken in before have not been proved to leave none, since the way was
+            // open, so only the statements of this one's form can newly be proved to.
             List<TakenConstraint.Affine> ofItsForm =
                     WhatStatementsOfOneFormDecide.ofTheFormOf(numbers, affine);
             if (WhatStatementsOfOneFormDecide.of(ofItsForm, null).noRowArrives()) {
