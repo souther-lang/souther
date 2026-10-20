@@ -12,6 +12,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.types.BindingId;
@@ -111,10 +112,32 @@ public final class DeclaredThresholds {
         // naming one value of the quantity, held equal or apart, keeps no end of it
         // ({@link #originOf}). What such a clause admits is the declaration's values themselves,
         // which is not a border a body's rule is measured against.
+        //
+        // And not between places this input does not have, for a clause of a copy of its type the
+        // listing does not reach. That copy answers for what the naming that opened it reaches, and
+        // a statement of its conjunct that names a place further down draws a line nobody can be
+        // owed a row at. Decided here, of the statement, because this is where the places one
+        // statement names are known; its neighbours in the conjunct are asked on their own.
         if (assessed instanceof ComparisonAssessment.AcrossPositions over
-                && over.places() == ComparisonAssessment.Places.ACROSS_THE_VALUE) {
+                && over.places() == ComparisonAssessment.Places.ACROSS_THE_VALUE
+                && (!clause.ofACopyNothingListed()
+                        || namesOnlyPlacesOfTheInput(over.cutting(), read))) {
             out.add(new LineDrawn(over.cutting(), originOf(clause, over.cutting())));
         }
+    }
+
+    /** Whether every position the quantity of {@code cutting} is over is one the input has. */
+    private static boolean namesOnlyPlacesOfTheInput(Cutting cutting, InputReading read) {
+        if (!(cutting.of() instanceof LinearQuantity linear)) {
+            return true;
+        }
+        for (NumericTerm term : linear.terms()) {
+            if (term instanceof NumericTerm.FromOnePosition one
+                    && read.domain().at(one.position()) == null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

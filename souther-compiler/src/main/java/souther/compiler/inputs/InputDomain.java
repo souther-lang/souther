@@ -403,9 +403,7 @@ public final class InputDomain {
         void from(PlacedRules rules, Reach reach) {
             rules.placed().stream().filter(reach::owes).forEach(placed::add);
             for (ClauseWithoutAnEnd clause : rules.clausesWithoutAnEnd()) {
-                if (reach.owes(rules, clause)) {
-                    clauses.add(clause);
-                }
+                clauses.add(reach.enumerating() ? clause : clause.readOnlyThroughANaming());
             }
         }
 
@@ -1024,30 +1022,6 @@ public final class InputDomain {
          */
         boolean owes(PlacementSeed seed) {
             return enumerating || demands(seed.address().root(), seed.address().key());
-        }
-
-        /**
-         * Whether the reading is owed an answer for {@code clause}, which draws no end of its own.
-         *
-         * <p>The same as for an end: every clause of a value the listing opens, and of any other
-         * only a clause every place of which is one the naming reaches. A clause relating two
-         * positions is filed at each of them, and one of them being further down than the naming
-         * goes leaves a line nobody can be owed a row at.
-         */
-        boolean owes(PlacedRules rules, ClauseWithoutAnEnd clause) {
-            if (enumerating) {
-                return true;
-            }
-            boolean any = false;
-            for (FieldDomains.NoLine each : rules.bounds().noLines()) {
-                if (each.part().equals(clause.part())) {
-                    any = true;
-                    if (!demands(rules.root(), each.path())) {
-                        return false;
-                    }
-                }
-            }
-            return any;
         }
 
         /** Whether a path the naming reaches is at, under or above the place {@code key} calls. */

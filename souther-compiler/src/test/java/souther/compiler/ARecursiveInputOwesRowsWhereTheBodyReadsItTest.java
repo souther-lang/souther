@@ -10,8 +10,8 @@ import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -86,28 +86,35 @@ class ARecursiveInputOwesRowsWhereTheBodyReadsItTest {
      * place a reader that went only where an end was put would never reach.
      *
      * <p>Held on the places the declaration's obligations are read at, which is what a row is
-     * written toward, and on there being nothing further down than the rule names.
+     * written toward, and on there being nothing further down than the rule names. A conjunct that
+     * holds a second statement about other fields is held to the same: that statement is owed
+     * where the link itself stands, and the copy of the link under the return, which nothing
+     * listed, owes neither of them.
      */
     @Test
     void aRuleAboutAPlaceUnderTheReturnIsOwedRowsThereAsWhereTheTypeDoesNotRecurse() {
-        for (String rule : java.util.List.of("next.limit >= 0", "next.limit <= limit")) {
-            Set<String> recursive = declaredReadingsOf(PAGED + """
-                    data Link = { ...Paging, next: Chain }
+        for (String rule : List.of("next.limit >= 0", "next.limit <= limit",
+                "next.limit <= limit && x <= y")) {
+            List<String> recursive = declaredReadingsOf(PAGED + """
+                    data Link = { ...Paging, x: Int, y: Int, next: Chain }
                         invariant %s
                     data Chain = Leaf | Link
                     """.formatted(rule) + PAGED_BEHAVIOR);
-            Set<String> flat = declaredReadingsOf(PAGED + """
+            List<String> flat = declaredReadingsOf(PAGED + """
                     data Other = { ...Paging, tag: Bool }
                     data Inner = Leaf | Other
-                    data Link = { ...Paging, next: Inner }
+                    data Link = { ...Paging, x: Int, y: Int, next: Inner }
                         invariant %s
                     data Chain = Leaf | Link
                     """.formatted(rule) + PAGED_BEHAVIOR);
 
-            assertEquals(Set.of("f/c@Link.next@Leaf.limit", "f/c@Link.next@Link.limit"), recursive,
-                    rule);
-            assertEquals(Set.of("f/c@Link.next@Leaf.limit", "f/c@Link.next@Other.limit"), flat,
-                    rule);
+            assertEquals(flat.stream().map(each -> each.replace("@Other.", "@Link.")).sorted()
+                            .toList(),
+                    recursive.stream().sorted().toList(),
+                    rule + ": the same readings, each as many times as where the type does not "
+                            + "recurse");
+            assertTrue(recursive.contains("f/c@Link.next@Leaf.limit"), rule);
+            assertTrue(recursive.contains("f/c@Link.next@Link.limit"), rule);
         }
     }
 
@@ -124,8 +131,11 @@ class ARecursiveInputOwesRowsWhereTheBodyReadsItTest {
             let f (c) = if c.limit > 3 then Yes else No
             """;
 
-    /** The axes the obligations of the declarations are read at, in the report's own words. */
-    private static Set<String> declaredReadingsOf(String source) {
+    /**
+     * The axes the obligations of the declarations are read at, in the report's own words, once for
+     * each reading: an obligation counted twice is two entries here.
+     */
+    private static List<String> declaredReadingsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -134,7 +144,7 @@ class ARecursiveInputOwesRowsWhereTheBodyReadsItTest {
                 .readTree(AdequacyReport.of(compilation)
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
                 .get("modules").get(0);
-        Set<String> axes = new LinkedHashSet<>();
+        List<String> axes = new ArrayList<>();
         for (JsonNode declaration : module.get("declarations")) {
             for (JsonNode obligation : declaration.get("obligations")) {
                 for (JsonNode reading : obligation.get("readings")) {

@@ -673,7 +673,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
                 .map(each -> new ClauseWithoutAnEnd(each.statement(), each.states(), each.wrote(),
                         each.root(),
                         root,
-                        bounds().named(), each.noFormSaysIt()))
+                        bounds().named(), each.noFormSaysIt(), false))
                 .toList();
     }
 
