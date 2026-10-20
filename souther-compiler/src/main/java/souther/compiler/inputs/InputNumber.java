@@ -574,12 +574,13 @@ public final class InputNumber {
 
     /**
      * What the operation {@code met} keeps of a list by index counts for, where the list is one a
-     * dependency answered — or null where it keeps none that way, the count is no whole number
-     * written out, or the test holds of every position or of none, which leaves a number that
-     * turns on no position.
+     * dependency answered — or null where it keeps none that way or the count is no whole number
+     * written out.
      *
      * <p>The same selection {@link #overTheElementsKeptBy} reads of a list of the input, so that a
-     * total of the elements a take keeps is one number whichever list it is of.
+     * total of the elements a take keeps is one number whichever list it is of. A count that keeps
+     * every element or none is read to the element or to nought, which the caller says what to do
+     * with ({@link ElementValue#readsThePosition}).
      */
     public static KeptOfAList keptByIndexOfAnAnswer(Denotation met, RuleReadingSource source) {
         Symbols symbols = source.symbols();
@@ -597,8 +598,7 @@ public final class InputNumber {
         ElementValue computed = keptBy(new ElementValue.PositionTest(
                         ElementValue.PositionTest.THE_POSITION_ITSELF, byIndex.kept(), index),
                 new ElementValue.Affine(LinearForm.atom(new ElementProjection(List.of()))));
-        return each == null || !computed.readsThePosition() ? null
-                : new KeptOfAList(list, computed, each);
+        return each == null ? null : new KeptOfAList(list, computed, each);
     }
 
     /** {@code computed} for an element whose position {@code kept} holds of, and nought for the
@@ -820,19 +820,16 @@ public final class InputNumber {
 
     /**
      * What the closure the elements of a list a dependency answered were handed to computes of one
-     * of them, where it turns on where the element stands in the list — or null where it does not,
-     * or is not read.
+     * of them — or null where it is not read.
      *
      * <p>The elements stand at no position of the input, so it is read as the code points of a
-     * string are ({@link ElementValue#readWithoutAPlace}). A computation that does not turn on the
-     * position is a sum of the elements' own numbers, which the answer's sums already say.
+     * string are ({@link ElementValue#readWithoutAPlace}). The value may no longer turn on the
+     * position: a test of it that holds of every position or of none is read to the element or to
+     * nought, and that is what the closure computes.
      */
-    public static ElementValue computedByPositionOfAnAnswersElement(ElementAnswer closure,
-                                                                    InputReads reads,
-                                                                    RuleReadingSource source) {
-        ElementValue computed =
-                ElementValue.readWithoutAPlace(closure, reads.heldByTheBody(), source);
-        return computed != null && computed.readsThePosition() ? computed : null;
+    public static ElementValue computedOfAnAnswersElement(ElementAnswer closure, InputReads reads,
+                                                          RuleReadingSource source) {
+        return ElementValue.readWithoutAPlace(closure, reads.heldByTheBody(), source);
     }
 
     /**

@@ -99,6 +99,18 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                         "List.sum(List.mapIndexed((i, x) -> i * x,"
                                 + " List.reverse(List.reverse(NUMS))))"),
                 List.of("List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, NUMS))"),
+                // A selection by position that keeps every element is the list, whichever way it
+                // is written, and the order of the elements has no part in it.
+                List.of("List.sum(NUMS)",
+                        "List.sum(List.drop(0, NUMS))",
+                        "List.sum(List.mapIndexed((i, x) -> if i >= 0 then x else 0, NUMS))",
+                        "List.sum(List.mapIndexed((i, x) -> x, List.sortBy(y -> y, NUMS)))",
+                        "List.sum(List.mapIndexed((i, x) -> x, NUMS))",
+                        "List.sum(List.map(x -> 1 * x, NUMS))",
+                        "List.fold((acc, x) -> acc + x, 0, NUMS)"),
+                // And one that keeps none is nought.
+                List.of("List.sum(List.take(0, NUMS))"),
+                List.of("List.sum(List.mapIndexed((i, x) -> if i < 0 then x else 0, NUMS))"),
                 // And a total of the elements a take or drop keeps is one chosen by position.
                 List.of("List.sum(List.take(1, List.reverse(NUMS)))"),
                 List.of("List.sum(List.drop(1, NUMS))"));

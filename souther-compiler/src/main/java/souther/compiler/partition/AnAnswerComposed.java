@@ -732,10 +732,12 @@ public final class AnAnswerComposed {
                         "a demand of one answer is over what that answer holds, and "
                                 + each.getKey() + " is a number of the input");
             };
-            if (term == null) {
+            // Two atoms of the comparison that come to one term would have the second's weight
+            // written over the first's, and the term would be asked for something the comparison
+            // does not state.
+            if (term == null || coefs.putIfAbsent(term, each.getValue()) != null) {
                 return null;
             }
-            coefs.put(term, each.getValue());
         }
         return new LinearForm<>(form.constant(), coefs);
     }

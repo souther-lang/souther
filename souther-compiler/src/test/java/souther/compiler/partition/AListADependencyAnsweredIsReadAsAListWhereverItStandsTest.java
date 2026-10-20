@@ -211,6 +211,61 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         return directions.iterator().next();
     }
 
+    /**
+     * Two totals weighed by position, one over each of two calls of a dependency, are a form over
+     * what two calls answered, which is one value held against itself and not two answers: the
+     * same refusal a count of each is given.
+     */
+    @Test
+    void twoCallsOfATotalWeighedByPositionAreNotTwoAnswers() {
+        String total = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value))";
+        for (AnswersDemanded each : waysOf(total + " >= " + total + " + 1")) {
+            assertEquals(List.of(new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer()),
+                    each.declined().stream().map(DemandGap.Unstated::why).toList(),
+                    () -> "a form over what two calls answered is one value held against itself: "
+                            + each);
+            assertTrue(each.stated().isEmpty(), () -> "and nothing is composed to it: " + each);
+        }
+    }
+
+    /**
+     * The same list weighed in two directions is two numbers of the one value a row writes for the
+     * dependency, as a count and a total of it are, and they may stand in one form.
+     */
+    @Test
+    void twoTotalsOfOneCallWeighedDifferentlyAreTwoNumbers() {
+        String forward = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value))";
+        String reversed =
+                "List.sum(List.mapIndexed((i, x) -> i * x, List.reverse(sched1(c).value)))";
+        for (AnswersDemanded each : waysOf(forward + " >= " + reversed)) {
+            assertTrue(each.declined().stream().noneMatch(unstated -> unstated.why()
+                            instanceof DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer),
+                    () -> "two numbers of one answer are not two answers: " + each);
+        }
+    }
+
+    /**
+     * A total weighed by position beside a number of the input is a statement about the pair, which
+     * is remade as one about an input ({@link AnswerAsAnInput}) by the same term the total alone
+     * is composed to.
+     */
+    @Test
+    void aTotalWeighedByPositionBesideANumberOfTheInputIsAStatement() {
+        String body = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value)) >= on";
+        for (AnswersDemanded each : waysOf(body)) {
+            assertTrue(each.declined().isEmpty(), () -> "nothing was left unstated: " + each);
+            assertInstanceOf(AnswerDemand.AStatement.class, each.stated().getFirst());
+        }
+        // Remade as a statement about an input it is composed along, and a value is never offered
+        // that misses a demand.
+        for (Tried tried : attemptedForEachWay(body)) {
+            if (tried.attempt().outcome() instanceof AnAnswerComposed.Outcome.Composed) {
+                assertTrue(tried.attempt().unaccounted().isEmpty(), () ->
+                        "a value offered meets every demand: " + tried.attempt().unaccounted());
+            }
+        }
+    }
+
     /** A reordering that shows no order leaves no position to weigh by. */
     @Test
     void aTotalWeighedByPositionOverAnAnswerSortedIsNotStated() {
@@ -775,6 +830,21 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
     /** The elements of the value composed for each way of {@code body}, in the order of the ways. */
     private static List<List<Long>> composedForEachWay(String body) {
+        List<List<Long>> out = new ArrayList<>();
+        for (Tried each : attemptedForEachWay(body)) {
+            AnAnswerComposed.Attempt attempt = each.attempt();
+            AnAnswerComposed.Outcome.Composed composed = assertInstanceOf(
+                    AnAnswerComposed.Outcome.Composed.class, attempt.outcome(),
+                    () -> "a value is composed for " + each.way() + ": " + attempt);
+            assertTrue(attempt.unaccounted().isEmpty(),
+                    () -> "and it meets every demand: " + attempt.unaccounted());
+            out.add(elementsOf(composed.value().text()));
+        }
+        return out;
+    }
+
+    /** What composing a value for each way of {@code body} came to, whatever it came to. */
+    private static List<Tried> attemptedForEachWay(String body) {
         String source = MODEL.replace("BODY", body);
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -785,19 +855,16 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                 compilation.db().ask(new Adequacy.Divided(module, "holds")).value();
         InputReading reading = domain.reading(RuleReadings.of(compilation, module));
         MeasuredInput subject = MeasuredInput.of("holds", reading, divided);
-        List<List<Long>> out = new ArrayList<>();
+        List<Tried> out = new ArrayList<>();
         for (AnswersDemanded each : waysOf(body)) {
-            AnAnswerComposed.Attempt attempt = AnAnswerComposed.of(subject,
-                    StatementsOfAnInput.of(reading), each.stated());
-            AnAnswerComposed.Outcome.Composed composed = assertInstanceOf(
-                    AnAnswerComposed.Outcome.Composed.class, attempt.outcome(),
-                    () -> "a value is composed for " + each + ": " + attempt);
-            assertTrue(attempt.unaccounted().isEmpty(),
-                    () -> "and it meets every demand: " + attempt.unaccounted());
-            out.add(elementsOf(composed.value().text()));
+            out.add(new Tried(each, AnAnswerComposed.of(subject, StatementsOfAnInput.of(reading),
+                    each.stated())));
         }
         return out;
     }
+
+    /** One way, and what composing a value for it came to. */
+    private record Tried(AnswersDemanded way, AnAnswerComposed.Attempt attempt) {}
 
     private static List<Long> elementsOf(String written) {
         List<Long> out = new ArrayList<>();

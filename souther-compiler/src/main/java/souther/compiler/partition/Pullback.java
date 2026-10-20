@@ -6431,14 +6431,8 @@ final class Pullback {
             ElementBindings.StepOnEachElement step =
                     ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
             Denotation standing = walk;
-            LinearForm<Quantity> summed = step == null ? null : unlessUnread(() -> {
-                LinearForm<Quantity> byPosition =
-                        sumByPositionOverTheStep(measured, standing, step);
-                return byPosition != null ? byPosition : sumOverTheStep(standing, step);
-            });
-            if (summed == null) {
-                summed = unlessUnread(() -> sumOfWhatIsKeptByIndex(measured, standing));
-            }
+            LinearForm<Quantity> summed =
+                    unlessUnread(() -> sumOverTheWalk(measured, standing, step));
             if (summed != null) {
                 return summed;
             }
@@ -6450,7 +6444,7 @@ final class Pullback {
     /** What {@code step}, applied by {@code walk}, adds up to over every element of the list a
      *  dependency answered ({@link #sumOverTheElementsOfAnAnswer}) — or null where it is not
      *  handed one. */
-    private LinearForm<Quantity> sumOverTheStep(Denotation walk,
+    private LinearForm<Quantity> sumOverTheStep(NumericMeasures.Measured measured, Denotation walk,
                                                 ElementBindings.StepOnEachElement step) {
         Denotation walked = walk.at().standing(step.walked(), read.rules().symbols(),
                 read.rules().newtypes());
@@ -6459,54 +6453,74 @@ final class Pullback {
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var each))) {
             return null;
         }
-        return addedUpOverTheElementsOfAnAnswer(list, walked.value(), each);
+        return addedUpOverTheElementsOfAnAnswer(list, walked.value(), each, measured.operation());
     }
 
     /**
-     * What {@code step}, applied by {@code walk}, adds up to over the elements of the list a
-     * dependency answered where it turns on where each element stands — or null where it does not,
-     * or the elements are not shown to be handed in the order the answer lists them or the
-     * opposite.
+     * What {@code walk} adds up to over the elements of a list a dependency answered, where it is
+     * a step applied to each element, or a take or drop that keeps some of them by where each
+     * stands — or null where it is neither.
      *
-     * <p>The sum is of the elements in that order, so a walk over the list put in any other order
-     * is none of it ({@link InputReads#answerHandedInOrder}); what the step makes of an element
-     * is read as the input's is, and the position it is handed counts from nought in that order.
+     * <p>A step that is handed the position is read for what it computes of an element, as the
+     * input's is, and what that comes to is {@link #sumOfWhatIsComputed}'s to say. A step that
+     * computes the same whatever the position was handed is the sum of the elements' own numbers
+     * the answer's sums already say, which is asked first, so one number is one term however a
+     * closure that ignores its position was spelled; only where that reads nothing is the
+     * computation asked of, since a test of the position that holds of every position or of none
+     * is read away to a number that turns on none.
      */
-    private LinearForm<Quantity> sumByPositionOverTheStep(NumericMeasures.Measured measured,
-                                                          Denotation walk,
-                                                          ElementBindings.StepOnEachElement step) {
-        InputReads where = walk.at();
-        ElementAnswer closure = where.answerAt(step.element().binding());
-        if (closure == null || closure.position() == null) {
+    private LinearForm<Quantity> sumOverTheWalk(NumericMeasures.Measured measured, Denotation walk,
+                                                ElementBindings.StepOnEachElement step) {
+        if (step != null) {
+            ElementAnswer closure = walk.at().answerAt(step.element().binding());
+            ElementValue computed = closure == null || closure.position() == null ? null
+                    : InputNumber.computedOfAnAnswersElement(closure, walk.at(), read.rules());
+            Type each = closure == null ? null : closure.body().type();
+            LinearForm<Quantity> summed = computed == null || !computed.readsThePosition() ? null
+                    : sumOfWhatIsComputed(measured, walk, step.walked(), computed, each);
+            if (summed == null) {
+                summed = sumOverTheStep(measured, walk, step);
+            }
+            if (summed == null && computed != null && !computed.readsThePosition()) {
+                summed = sumOfWhatIsComputed(measured, walk, step.walked(), computed, each);
+            }
+            return summed;
+        }
+        InputNumber.KeptOfAList kept = InputNumber.keptByIndexOfAnAnswer(walk, read.rules());
+        return kept == null ? null
+                : sumOfWhatIsComputed(measured, walk, kept.list(), kept.computed(), kept.each());
+    }
+
+    /**
+     * What {@code computed}, made of each element of the list {@code list} holds, adds up to — or
+     * null where the list is not one a dependency answered, or the elements are not shown to be
+     * handed in an order the computation needs.
+     *
+     * <p>Three numbers, as the input's are ({@code InputNumber.overTheElements}). A computation
+     * that turns on where each element stands is a number of its own: the sum is of the elements
+     * in the order they are handed in, so a list put in any other order is none of it
+     * ({@link InputReads#answerHandedInOrder}). One that does not is a form of the elements' own
+     * numbers, which are nought where it is, every element where it is the element, and in either
+     * case the same in any order the elements stand.
+     */
+    private LinearForm<Quantity> sumOfWhatIsComputed(NumericMeasures.Measured measured,
+                                                     Denotation walk, Core list,
+                                                     ElementValue computed, Type each) {
+        if (computed.readsThePosition()) {
+            DecisionSubjects.AnAnswerInOrder ordered =
+                    subjects.anAnswerHandedInOrder(list, walk.at());
+            return ordered == null || each == null ? null
+                    : LinearForm.atom(new DecisionAtom.ComputedOverAnAnswer(measured.operation(),
+                            ordered.list(), computed, each, ordered.direction()));
+        }
+        if (!(computed instanceof ElementValue.Affine(var form))) {
             return null;
         }
-        ElementValue computed =
-                InputNumber.computedByPositionOfAnAnswersElement(closure, where, read.rules());
-        DecisionSubjects.AnAnswerInOrder ordered =
-                computed == null ? null : subjects.anAnswerHandedInOrder(step.walked(), where);
-        return ordered == null ? null : LinearForm.atom(new DecisionAtom.ComputedOverAnAnswer(
-                measured.operation(), ordered.list(), computed, closure.body().type(),
-                ordered.direction()));
-    }
-
-    /**
-     * What {@code walk}, a take or drop, adds up to over the elements it keeps of the list a
-     * dependency answered — or null where it keeps none that way, or the elements are not shown to
-     * be handed in the order the answer lists them or the opposite.
-     *
-     * <p>Some of the elements, so no sum over the answer's own numbers: the sum of each element
-     * weighed one where its position is kept and nought where it is not, over the elements in the
-     * order they were kept in, which is the number the same selection is of a list of the input
-     * ({@link InputNumber#keptByIndexOfAnAnswer}).
-     */
-    private LinearForm<Quantity> sumOfWhatIsKeptByIndex(NumericMeasures.Measured measured,
-                                                        Denotation walk) {
-        InputNumber.KeptOfAList kept = InputNumber.keptByIndexOfAnAnswer(walk, read.rules());
-        DecisionSubjects.AnAnswerInOrder ordered = kept == null ? null
-                : subjects.anAnswerHandedInOrder(kept.list(), walk.at());
-        return ordered == null ? null : LinearForm.atom(new DecisionAtom.ComputedOverAnAnswer(
-                measured.operation(), ordered.list(), kept.computed(), kept.each(),
-                ordered.direction()));
+        Denotation listed = walk.at().standing(list, read.rules().symbols(),
+                read.rules().newtypes());
+        DecisionSubject.AnAnswer answer = answerWhoseEveryElementIsHeldBy(listed);
+        return answer == null ? null : addedUpOverTheElementsOfAnAnswer(answer, listed.value(),
+                DecisionSubjects.overTheElementsOf(answer, form), measured.operation());
     }
 
     /**
@@ -6521,13 +6535,25 @@ final class Pullback {
      * What {@code each}, a form over the numbers of each element of the list {@code list} is,
      * adds up to over all of them, where it is over the elements' own numbers — or null where
      * a number of the input stands beside them, or the size is not in hand.
+     *
+     * <p>Where {@code each} is the element and nothing else, the sum is the number {@code sum}
+     * takes of the list itself, the term a total written of the list is, so one number has one
+     * term however the walk that makes it was spelled.
      */
     private LinearForm<Quantity> addedUpOverTheElementsOfAnAnswer(
-            DecisionSubject.AnAnswer list, Core walked, LinearForm<Quantity> each) {
+            DecisionSubject.AnAnswer list, Core walked, LinearForm<Quantity> each,
+            ValueName.Stdlib sum) {
         DecisionSubject element = list.element();
         boolean ofTheElementsOwn = each.coefs().keySet().stream().allMatch(number ->
                 number instanceof DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer of)
                         && of.isAtOrUnder(element));
+        if (ofTheElementsOwn && each.constant().signum() == 0 && each.coefs().size() == 1
+                && each.coefs().containsKey(new DecisionAtom.OfAnAnswer(
+                        (DecisionSubject.AnAnswer) element))
+                && ExactRatio.ONE.equals(each.coefs().values().iterator().next())) {
+            return LinearForm.atom(new DecisionAtom.TakenOfAnAnswer(sum, TakenArguments.NONE,
+                    list, walked.type()));
+        }
         DecisionAtom size = each.constant().signum() == 0 ? null
                 : sizeOfSubject(list, walked.type());
         return !ofTheElementsOwn || (size == null && each.constant().signum() != 0) ? null
@@ -6572,7 +6598,8 @@ final class Pullback {
         }
         LinearForm<Quantity> each = addedBesideOnce(stepped, soFar);
         LinearForm<Quantity> added = each == null ? null
-                : addedUpOverTheElementsOfAnAnswer(list, walked.value(), each);
+                : addedUpOverTheElementsOfAnAnswer(list, walked.value(), each,
+                        ValueName.Stdlib.operation("List", "sum"));
         return added == null ? null
                 : LinearForm.<Quantity>constant(seed).plus(added).orNull();
     }
