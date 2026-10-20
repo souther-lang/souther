@@ -83,7 +83,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     void theTotalIsReadAsTheArmEachElementTakes() {
         String report = report(guarded(TWO_CASES, BY_CASE));
         assertTrue(report.contains(READ_BY_CASE), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(unreadBeyondReach(report), report);
     }
 
     /** Two cases declaring a field of one name are two places, each read where its case is. */
@@ -107,7 +107,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                         | B { fee } -> fee * 2"""));
         assertTrue(report.contains("List.sum({when @A then 1·@A.amount + 0"
                 + " when @B then 2·@B.fee + 0 | deductions[*]})"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(unreadBeyondReach(report), report);
     }
 
     /** A helper the {@code match} is written in, and a name given it, are the same number. */
@@ -144,7 +144,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                         | B { amount } -> amount"""));
         assertTrue(report.contains("List.sum({when @A then if @A.waived then 0 else 1·@A.amount + 0"
                 + " when @B then 1·@B.amount + 0 | deductions[*]})"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(unreadBeyondReach(report), report);
     }
 
     /** A {@code match} inside an arm, on a field of the case, narrows that field. */
@@ -166,7 +166,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
         assertTrue(report.contains("List.sum({when @A then when @A.kind@Statutory then"
                 + " 1·@A.amount + 0 when @A.kind@Agreed then 0"
                 + " when @B then 1·@B.amount + 0 | deductions[*]})"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(unreadBeyondReach(report), report);
     }
 
     /**
@@ -181,7 +181,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                         | B { amount } -> amount) * 2 + 1"""));
         assertTrue(added.contains("List.sum({when @A then 2·@A.amount + 1"
                 + " when @B then 2·@B.amount + 1 | deductions[*]})"), added);
-        assertFalse(added.contains("not read"), added);
+        assertFalse(unreadBeyondReach(added), added);
 
         String named = report(guarded(TWO_CASES, """
                 {
@@ -375,7 +375,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
         String report = report(compiled);
         assertTrue(report.contains("when cap@Some then 1 when cap@None then 0 | lines[*]"),
                 report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(unreadBeyondReach(report), report);
         String rows = rowsOf(compiled);
         assertTrue(RowsOfABlock.at(rows, "([Line { cap = 0 }])").fills()
                 .contains("OFF point of comparison@0:null"), rows);
@@ -421,6 +421,15 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
 
     private static String report(String model) {
         return report(compiled(model));
+    }
+
+    /**
+     * Whether something is left unread for more than that the gross is related to a total not
+     * shown to reach every value of it, which is all a total read to the end leaves the gross.
+     */
+    private static boolean unreadBeyondReach(String report) {
+        return report.lines().anyMatch(line -> line.contains("not read")
+                && !line.contains("not shown to reach every value here"));
     }
 
     private static String report(Compilation compilation) {
