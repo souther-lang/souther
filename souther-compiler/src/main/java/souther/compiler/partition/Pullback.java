@@ -138,6 +138,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
@@ -343,6 +344,13 @@ final class Pullback {
      * the elements that way keeps, and how many of them there are. Newest last.
      */
     private final List<AnAggregateInACase> aggregatesInACase = new ArrayList<>();
+    /**
+     * While a comparison's numbers are put together to ask how they stand
+     * ({@link #aWayIn(List, Supplier, BooleanSupplier)}): each count of the elements a filter
+     * keeps that how many a container holds came to ({@link #sizeOf}), with the containers it was
+     * asked of, in the order met. Null elsewhere.
+     */
+    private Map<Quantity.HowManyHold, List<Denotation>> countsMet;
 
     /**
      * That {@code call}, standing in the names of {@code at}, is {@code form} in the way of
@@ -960,7 +968,9 @@ final class Pullback {
         // not. Asked of one reading, it is one answer, and reading the sides for it again would
         // make every reading under them a second time.
         Once<Optional<Inside>> wayIn = new Once<>(() -> Optional.ofNullable(aWayIn(List.of(
-                new Denotation(stated.left(), reads), new Denotation(stated.right(), reads)))));
+                new Weighed(new Denotation(stated.left(), reads), ExactRatio.ONE),
+                new Weighed(new Denotation(stated.right(), reads), ExactRatio.ONE.negated())),
+                Pullback::nothingElse, () -> false)));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), emptiness, reads)
@@ -1894,7 +1904,27 @@ final class Pullback {
         record Stops(WhyUnread why) implements WrittenOutRead {}
     }
 
+    /**
+     * How many {@code value} holds, with each count of kept elements it comes to told to
+     * {@link #countsMet}. A count that has ways of keeping to be read in is the size of the
+     * container whose elements truths keep, so this is where each is met, whichever reading
+     * asked. A count a law weighs of a statement about the elements, not as the size of anything,
+     * has no container of kept elements, and is read as which of its statements hold.
+     */
     private Sized sizeOf(Core value, InputReads at) {
+        Sized sized = howManyItHolds(value, at);
+        if (countsMet != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
+            for (Quantity atom : form.coefs().keySet()) {
+                if (atom instanceof Quantity.HowManyHold count) {
+                    countsMet.computeIfAbsent(count, _ -> new ArrayList<>())
+                            .add(new Denotation(value, at));
+                }
+            }
+        }
+        return sized;
+    }
+
+    private Sized howManyItHolds(Core value, InputReads at) {
         // What a walk has carried so far, where its step is being read for how many it adds.
         if (Core.withoutStanding(value) instanceof Core.Read soFar
                 && sizedSoFar.get(soFar.binding()) instanceof LinearForm<Quantity> carried) {
@@ -3587,13 +3617,24 @@ final class Pullback {
             // An argument chosen by cases is compared on each of them, and one a behavior's call
             // answers through its body, as a comparison the source wrote is
             // ({@link #throughWhatItStopsAt}).
-            List<Denotation> numbers = new ArrayList<>();
-            form.coefs().keySet().forEach(number -> {
+            List<Weighed> numbers = new ArrayList<>();
+            Map<LawNumber<DeclaredArgument>, ExactRatio> others = new LinkedHashMap<>();
+            form.coefs().forEach((number, by) -> {
                 if (number instanceof LawNumber.AnArgument<DeclaredArgument>(DeclaredArgument at)) {
-                    numbers.add(new Denotation(applied.argument(at), reads));
+                    numbers.add(new Weighed(new Denotation(applied.argument(at), reads), by));
+                } else {
+                    others.put(number, by);
                 }
             });
-            Inside inside = aWayIn(numbers);
+            // The numbers that are no values are read apart from the reading this comparison is
+            // read in, which reads them again.
+            Inside inside = aWayIn(numbers, () -> others.isEmpty() ? nothingElse()
+                    : inAComparisonsScope(false,
+                            () -> number(new LinearForm<>(ExactRatio.ZERO, others))),
+                    () -> others.keySet().stream().anyMatch(number -> number
+                            instanceof LawNumber.SizeOf<DeclaredArgument>(
+                                    LawSubject.Argument<DeclaredArgument>(DeclaredArgument at))
+                            && keptByTruths(new Denotation(applied.argument(at), reads)) != null));
             if (inside != null) {
                 return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
                         taking -> new ALawRead(this, taking.apply(reads)).compared(compared));
@@ -5578,7 +5619,16 @@ final class Pullback {
                 && count.args().size() == 1)) {
             return null;
         }
-        Denotation container = at.standing(count.args().getFirst(), read.rules().symbols(),
+        return keptByTruths(new Denotation(count.args().getFirst(), at));
+    }
+
+    /**
+     * How many {@code given} holds, where it is a container the body wrote out and some of its
+     * elements are kept by truths: one number for each way of keeping them. Null where it is
+     * none of these.
+     */
+    private Inside.ATotalByKeeping keptByTruths(Denotation given) {
+        Denotation container = given.at().standing(given.value(), read.rules().symbols(),
                 read.rules().newtypes());
         Core held = Core.withoutStanding(container.value());
         if (aggregateInACase(held, container.at()) != null
@@ -5672,7 +5722,11 @@ final class Pullback {
                     decided[next] = null;
                 }
             }
-            return new Derivation.IfThenElse(conditions[next], each[0], each[1]);
+            // The truth decides a choice its comparison writes, as the condition of an if does:
+            // each way is read under its own arm, and what the truth states is how the arm is
+            // selected and not this comparison's own line.
+            return madeBy(ways.truth(next).value(),
+                    new Derivation.IfThenElse(conditions[next], each[0], each[1]));
         }
         if (total.counted()) {
             long there = IntStream.range(0, total.occurrences().size())
@@ -6804,9 +6858,133 @@ final class Pullback {
      * and has not gone into yet — or null where it stops at none.
      */
     private Inside aWayIn(List<Denotation> numbers) {
+        return aStopIn(numbers).wayIn();
+    }
+
+    /**
+     * What the arithmetic of a comparison's numbers came to, as a way into the comparison is looked
+     * for.
+     *
+     * @param wayIn     the first value it stopped at that a reading can go into and has not gone
+     *                  into yet, or null
+     * @param composed  the form of each number whose arithmetic composed, in the order of the
+     *                  numbers: one for each of them where every one did
+     * @param notLinear the atoms each of which, were it a constant, would make a product or a
+     *                  quotient it stopped at a form ({@link AffineForms.Halt.NotLinear#over}),
+     *                  each of them a number of its own wherever it was read
+     */
+    private record NumbersRead(Inside wayIn, List<LinearForm<Quantity>> composed,
+                               Set<Quantity> notLinear) {}
+
+    /**
+     * A number of a comparison with its weight there: the comparison is the sum of its numbers so
+     * weighed, stated against nought.
+     */
+    private record Weighed(Denotation number, ExactRatio by) {}
+
+    /**
+     * The same, of a comparison of {@code numbers} and {@code rest}, the numbers it weighs that are
+     * no values — and failing a value to go into, a count of the elements a filter keeps where it
+     * stands in the way of reading the comparison. Such a count is one number for each way the
+     * elements are kept ({@link #keepingOf}), as a value chosen by cases is one for each case; but
+     * it composes as one number ({@link Quantity.HowManyHold}), so the arithmetic does not stop at
+     * it as it stops at a choice. Only a count weighed alone has a reader
+     * ({@link WhichOfThemHold}): one weighed beside another number, or one inside a product or a
+     * quotient no linear form was made of, is read in its ways, where it is a constant.
+     *
+     * <p>Which counts are weighed is asked of the comparison with every number put together, so
+     * that a count written on both sides and cancelled is read as the nought it comes to.
+     *
+     * @param restMayCount whether {@code rest} asks how many a container holds whose elements
+     *                     truths keep, which is the one way a count of kept elements comes of it.
+     *                     The rest is put together only where some count was met or can be:
+     *                     elsewhere there is nothing to read in its ways, and the reading that is
+     *                     taken puts it together anyway
+     */
+    private Inside aWayIn(List<Weighed> numbers, Supplier<Sized> rest,
+                          BooleanSupplier restMayCount) {
+        Map<Quantity.HowManyHold, List<Denotation>> outer = countsMet;
+        countsMet = new LinkedHashMap<>();
+        try {
+            NumbersRead read = aStopIn(numbers.stream().map(Weighed::number).toList());
+            if (read.wayIn() != null) {
+                return read.wayIn();
+            }
+            if (!read.notLinear().isEmpty()) {
+                return aCountToKeep(read.notLinear()::contains);
+            }
+            if (read.composed().size() < numbers.size()) {
+                return null;
+            }
+            if (countsMet.isEmpty() && !restMayCount.getAsBoolean()) {
+                return null;
+            }
+            if (!(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))
+                    || countsMet.isEmpty()) {
+                return null;
+            }
+            List<LinearForm<Quantity>> weighed = new ArrayList<>(List.of(others));
+            for (int i = 0; i < numbers.size(); i++) {
+                LinearForm<Quantity> one =
+                        read.composed().get(i).times(numbers.get(i).by()).orNull();
+                if (one == null) {
+                    return null;
+                }
+                weighed.add(one);
+            }
+            LinearForm<Quantity> relation = LinearForm.sum(weighed).orNull();
+            return relation == null || relation.coefs().size() < 2 ? null
+                    : aCountToKeep(relation.coefs()::containsKey);
+        } finally {
+            countsMet = outer;
+        }
+    }
+
+    /**
+     * The first container, of those a count {@code standsInTheWay} names was met as how many it
+     * holds ({@link #countsMet}), whose elements truths keep — read in each way they are kept, or
+     * null where there is none.
+     *
+     * <p>Named by the count and not by where it was written: a count is the same number wherever
+     * it was read, and a container read through a call or a closure's body is not written where
+     * the comparison is.
+     */
+    private Inside.ATotalByKeeping aCountToKeep(Predicate<Quantity.HowManyHold> standsInTheWay) {
+        for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count : countsMet.entrySet()) {
+            if (!standsInTheWay.test(count.getKey())) {
+                continue;
+            }
+            for (Denotation container : count.getValue()) {
+                Inside.ATotalByKeeping kept = keptByTruths(container);
+                if (kept != null) {
+                    return kept;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** What a comparison weighs besides its values, where it weighs them alone. */
+    private static Sized nothingElse() {
+        return new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO));
+    }
+
+    /** What the arithmetic of {@code numbers} came to, read one after another. */
+    private NumbersRead aStopIn(List<Denotation> numbers) {
+        List<LinearForm<Quantity>> composed = new ArrayList<>();
+        Set<Quantity> notLinear = new LinkedHashSet<>();
         for (Denotation number : numbers) {
-            if (AffineForms.outcome(number.value(), number.at(), quantities())
-                    instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+            AffineForms.Outcome<Quantity, InputReads> outcome =
+                    AffineForms.outcome(number.value(), number.at(), quantities());
+            if (outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                    LinearForm<Quantity> form)) {
+                composed.add(form);
+            }
+            if (outcome instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+                if (whereItStopped(stopped).why() instanceof AffineForms.Halt.NotLinear<Quantity,
+                        InputReads>(var _, Set<Quantity> over)) {
+                    notLinear.addAll(over);
+                }
                 Inside found = aWayInAt(stopped);
                 boolean goneInto = switch (found) {
                     case null -> true;
@@ -6827,11 +7005,19 @@ final class Pullback {
                             number.at().hands(name.binding());
                 };
                 if (!goneInto) {
-                    return found;
+                    return new NumbersRead(found, composed, notLinear);
                 }
             }
         }
-        return null;
+        return new NumbersRead(null, composed, notLinear);
+    }
+
+    /** The innermost value the arithmetic of {@code stopped} stopped at, through the arguments of
+     *  the calls it read the form of. */
+    private static AffineForms.Outcome.StoppedAt<Quantity, InputReads> whereItStopped(
+            AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+        return stopped.why() instanceof AffineForms.Halt.AnArgumentStopped<Quantity, InputReads>(
+                var argument) ? whereItStopped(argument) : stopped;
     }
 
     /**
@@ -7893,7 +8079,7 @@ final class Pullback {
                 || written.op() != BinOp.MUL || inside.node() != written
                 || written != sideAsWritten
                 || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
-                        NonAffineOperation operation))
+                        NonAffineOperation operation, var _))
                 || operation != NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES) {
             return null;
         }
@@ -7927,7 +8113,7 @@ final class Pullback {
                 || !(Core.withoutStanding(node) instanceof Core.PreservedCall written)
                 || inside.node() != written || written != sideAsWritten
                 || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
-                        NonAffineOperation operation))
+                        NonAffineOperation operation, var _))
                 || operation != NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE) {
             return null;
         }
@@ -8216,9 +8402,9 @@ final class Pullback {
         }
         // A choice inside a side rather than the whole of it is split on as well, and a call of a
         // behavior entered, both sides read there ({@link #throughWhatItStopsAt}).
-        List<Denotation> numbers = new ArrayList<>(left.numbers());
-        numbers.addAll(right.numbers());
-        Inside inside = aWayIn(numbers);
+        List<Weighed> numbers = new ArrayList<>(left.numbers(false));
+        numbers.addAll(right.numbers(true));
+        Inside inside = aWayIn(numbers, Pullback::nothingElse, () -> false);
         if (inside != null) {
             return goingIn(inside, left.at(), at, false, taking -> comparedCase(
                     left.in(taking.apply(left.at())), right.in(taking.apply(right.at())),
@@ -8257,8 +8443,9 @@ final class Pullback {
          *  it is a constant or a form of several. */
         Denotation whole();
 
-        /** Each value the side weighs, where it stands. */
-        List<Denotation> numbers();
+        /** Each value the side weighs, where it stands, with its weight in the comparison: as it
+         *  is on the side, or {@code subtracted} from the other. */
+        List<Weighed> numbers(boolean subtracted);
 
         /** The same side, standing where {@code other} puts it. */
         ASide in(InputReads other);
@@ -8277,8 +8464,9 @@ final class Pullback {
             }
 
             @Override
-            public List<Denotation> numbers() {
-                return List.of(value);
+            public List<Weighed> numbers(boolean subtracted) {
+                return List.of(new Weighed(value,
+                        subtracted ? ExactRatio.ONE.negated() : ExactRatio.ONE));
             }
 
             @Override
@@ -8303,8 +8491,10 @@ final class Pullback {
             }
 
             @Override
-            public List<Denotation> numbers() {
-                return form.coefs().keySet().stream().map(each -> new Denotation(each, at))
+            public List<Weighed> numbers(boolean subtracted) {
+                return form.coefs().entrySet().stream()
+                        .map(each -> new Weighed(new Denotation(each.getKey(), at),
+                                subtracted ? each.getValue().negated() : each.getValue()))
                         .toList();
             }
 
@@ -8777,7 +8967,8 @@ final class Pullback {
         return switch (stopped.why()) {
             case AffineForms.Halt.NoRule<Quantity, InputReads> _ ->
                     noRuleFor(stopped.node(), stopped.at());
-            case AffineForms.Halt.NotLinear<Quantity, InputReads>(NonAffineOperation operation) ->
+            case AffineForms.Halt.NotLinear<Quantity, InputReads>(
+                    NonAffineOperation operation, var _) ->
                     new WhyUnread.OutsideTheLinearFragment(operation);
             case AffineForms.Halt.NoNumberOnARun<Quantity, InputReads> _ ->
                     new WhyUnread.NoNumberOnARun();

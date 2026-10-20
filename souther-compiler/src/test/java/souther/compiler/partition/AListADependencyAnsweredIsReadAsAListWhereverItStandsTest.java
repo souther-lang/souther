@@ -475,13 +475,11 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     /**
-     * A count of statements about the answer held against a number of the input is two numbers,
-     * and the reading of what the comparison means has nothing to hold to a figure; put at the
-     * value the way leaves the input's number at, it is a count alone against a constant, which is
-     * as many choices of which statements hold as there are ways of picking that many. Past the
-     * readings of one condition, which is as many choices as are handed to a reader of them, the
-     * statement is said to be one that figure stopped the composing of — and not one nothing
-     * composes for, or one about something other than the answer.
+     * A count of statements about the answer held against a number of the input is read once for
+     * each way the statements come out, and eighteen of them are more ways than one condition is
+     * read in. The comparison is said to be one that figure stopped the reading of — and no
+     * composing says of the statement that nothing composes for it, or that it is about something
+     * other than the answer.
      */
     @Test
     void aCountLeftAloneByANumberPutAtAValueIsHeldToTheFigure() {
@@ -524,12 +522,14 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
             }
         }
 
-        assertTrue(said.stream().anyMatch(why ->
-                        why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(
-                                var figures)
-                                && figures.written().contains(
-                                        CompositionBudget.READINGS_OF_ONE_CONDITION)),
-                () -> "the statement is said to be one the figure stopped: " + said);
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.lines().anyMatch(line -> line.contains("not read")
+                        && line.contains(CompositionBudget.READINGS_OF_ONE_CONDITION.name())
+                        && line.contains("about `on`")),
+                () -> "the comparison is said to be one the figure stopped: " + report);
+        assertEquals(List.of(), said,
+                "a statement the reading of what it means stopped on is no statement composed for");
     }
 
     /** What the dependency answers is a list of elements of two numbers. */
