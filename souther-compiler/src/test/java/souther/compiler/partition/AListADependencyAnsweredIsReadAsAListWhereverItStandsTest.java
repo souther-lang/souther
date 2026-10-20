@@ -8,6 +8,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.Evaluations;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -169,6 +170,54 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                 () -> "one way holds two or more: " + values);
         assertEquals(1, values.stream().filter(elements -> elements.size() < 2).count(),
                 () -> "and the other holds fewer: " + values);
+    }
+
+    /**
+     * A total weighed by where each element stands is one number of the answer, named by the
+     * computation and by the direction the elements are handed in: {@code [2, 5]} comes to five
+     * and {@code [5, 2]} to two, so the answer reversed ahead of the weighing is another number,
+     * and reversed twice it is the first again.
+     */
+    @Test
+    void aTotalWeighedByPositionIsANumberOfTheAnswerInTheDirectionItIsHandedIn() {
+        String weighed = "List.sum(List.mapIndexed((i, x) -> i * x, %s)) >= 5";
+        TraversalDirection forward = directionOfTheTotalIn(
+                weighed.formatted("sched1(c).value"));
+        TraversalDirection reversed = directionOfTheTotalIn(
+                weighed.formatted("List.reverse(sched1(c).value)"));
+        TraversalDirection twice = directionOfTheTotalIn(
+                weighed.formatted("List.reverse(List.reverse(sched1(c).value))"));
+
+        assertEquals(TraversalDirection.FORWARD, forward);
+        assertEquals(TraversalDirection.REVERSE, reversed);
+        assertEquals(TraversalDirection.FORWARD, twice);
+    }
+
+    /** The direction of the one total weighed by position that every way of {@code body} states. */
+    private static TraversalDirection directionOfTheTotalIn(String body) {
+        List<AnswersDemanded> ways = waysOf(body);
+        assertEquals(2, ways.size(), () -> body);
+        Set<TraversalDirection> directions = new HashSet<>();
+        for (AnswersDemanded each : ways) {
+            assertTrue(each.declined().isEmpty(), () -> body + " left unstated: " + each);
+            AnswerDemand.AComparison comparison = assertInstanceOf(
+                    AnswerDemand.AComparison.class, each.stated().getFirst());
+            DecisionAtom.ComputedOverAnAnswer total = assertInstanceOf(
+                    DecisionAtom.ComputedOverAnAnswer.class,
+                    comparison.form().coefs().keySet().iterator().next(), body);
+            directions.add(total.direction());
+        }
+        assertEquals(1, directions.size(), () -> body + " is one number: " + directions);
+        return directions.iterator().next();
+    }
+
+    /** A reordering that shows no order leaves no position to weigh by. */
+    @Test
+    void aTotalWeighedByPositionOverAnAnswerSortedIsNotStated() {
+        for (AnswersDemanded each : waysOf("List.sum(List.mapIndexed((i, x) -> i * x,"
+                + " List.sortBy(y -> y, sched1(c).value))) >= 5")) {
+            assertTrue(each.stated().isEmpty(), () -> "nothing is stated of it: " + each);
+        }
     }
 
     /**

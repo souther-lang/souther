@@ -17,6 +17,7 @@ import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -100,6 +101,21 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     DecisionSubject.AnAnswer anAnswerWhoseEveryElementIsHeldBy(Core e, InputReads at) {
         InputReads.AnAnswerAt found = at.answerWhoseEveryElementIsHeldBy(e, symbols, newtypes);
         return found == null ? null : subjectOf(found);
+    }
+
+    /** A list a dependency answered, and the direction the elements are handed in relative to the
+     *  order the answer lists them. */
+    record AnAnswerInOrder(DecisionSubject.AnAnswer list, TraversalDirection direction) {}
+
+    /**
+     * The answer whose elements {@code e} holds once each, with the direction it holds them in,
+     * or null where it holds no answer's in an order that is shown
+     * ({@link InputReads#answerHandedInOrder}).
+     */
+    AnAnswerInOrder anAnswerHandedInOrder(Core e, InputReads at) {
+        InputReads.AnAnswerInOrder found = at.answerHandedInOrder(e, symbols, newtypes);
+        return found == null ? null
+                : new AnAnswerInOrder(subjectOf(found.answer()), found.direction());
     }
 
     private DecisionSubject.AnAnswer subjectOf(InputReads.AnAnswerAt found) {

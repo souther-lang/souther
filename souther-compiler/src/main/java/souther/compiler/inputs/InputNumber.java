@@ -6,6 +6,7 @@ import souther.compiler.check.DateShifts;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
+import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.SeededWalk;
@@ -590,6 +591,39 @@ public final class InputNumber {
 
     private static final ValueName.Stdlib.Operation SUM =
             ValueName.Stdlib.operation("List", "sum");
+
+    /**
+     * What the closure the elements of a list a dependency answered were handed to computes of one
+     * of them, where it turns on where the element stands in the list — or null where it does not,
+     * or is not read.
+     *
+     * <p>The elements stand at no position of the input, so it is read as the code points of a
+     * string are ({@link ElementValue#readWithoutAPlace}). A computation that does not turn on the
+     * position is a sum of the elements' own numbers, which the answer's sums already say.
+     */
+    public static ElementValue computedByPositionOfAnAnswersElement(ElementAnswer closure,
+                                                                    InputReads reads,
+                                                                    RuleReadingSource source) {
+        ElementValue computed =
+                ElementValue.readWithoutAPlace(closure, reads.heldByTheBody(), source);
+        return computed != null && computed.readsThePosition() ? computed : null;
+    }
+
+    /**
+     * The number {@code operation} takes of what {@code computed} makes of each element of the list
+     * at {@code list}, handed in {@code direction} — the term a total of the same computation over a
+     * list of the input is — or null where the elements are not one run.
+     */
+    public static NumericTerm overWhatWasComputedByPosition(ValueName.Stdlib operation,
+                                                            TermPath list, ElementValue computed,
+                                                            Type each, TraversalDirection direction,
+                                                            NewtypeInners inners,
+                                                            Symbols symbols) {
+        TermPath elements = list.element();
+        RunSource over = RunSource.computedOverTheElementsAt(elements, computed, each,
+                new RunSource.TraversalOrder(elements, direction));
+        return over == null ? null : NumericTerm.TakenOver.of(operation, over, each, inners, symbols);
+    }
 
     private static ElementValue.Affine affine(ElementValue read) {
         return read instanceof ElementValue.Affine form ? form : null;

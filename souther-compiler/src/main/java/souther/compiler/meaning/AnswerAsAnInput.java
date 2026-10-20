@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
@@ -579,6 +580,13 @@ public final class AnswerAsAnInput {
                 NumericTerm term = hasNoReadingToTakeTheNumberBy() ? new NumericTerm.ValueOf(place)
                         : NumericTerm.TakenOf.asItStands(taken.operation(), place,
                                 taken.arguments(), taken.at(), inners, symbols);
+                yield term == null ? null : new DecisionAtom.OfTheInput(term);
+            }
+            case DecisionAtom.ComputedOverAnAnswer computed -> {
+                answers.add(computed.list().answered());
+                NumericTerm term = InputNumber.overWhatWasComputedByPosition(computed.operation(),
+                        new TermPath(head, computed.list().steps()), computed.computation(),
+                        computed.each(), computed.direction(), inners, symbols);
                 yield term == null ? null : new DecisionAtom.OfTheInput(term);
             }
             case Quantity.HowManyMeet count -> {

@@ -92,7 +92,13 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                         "List.sum(YS)"),
                 // And a total of what each element comes to is the same over the list reversed.
                 List.of("List.sum(List.map(x -> 2 * x, NUMS))",
-                        "List.sum(List.map(x -> 2 * x, List.reverse(NUMS)))"));
+                        "List.sum(List.map(x -> 2 * x, List.reverse(NUMS)))"),
+                // A total that turns on where each element stands is of the elements in the order
+                // they were handed in, which two reversals leave as it was.
+                List.of("List.sum(List.mapIndexed((i, x) -> i * x, NUMS))",
+                        "List.sum(List.mapIndexed((i, x) -> i * x,"
+                                + " List.reverse(List.reverse(NUMS))))"),
+                List.of("List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, NUMS))"));
     }
 
     /**
@@ -106,6 +112,8 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))",
                 "List.fold((acc, x) -> acc + x.quantity, 0, List.filter(i -> i.active, ROWS))",
                 "List.sum(List.take(1, List.reverse(NUMS)))",
+                // Sorted, the position an element is at is no position it was written at.
+                "List.sum(List.mapIndexed((i, x) -> i * x, List.sortBy(x -> x, NUMS)))",
                 "List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))",
                 "List.sum(List.flatMap(i -> [i.quantity], ROWS))",
                 "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",

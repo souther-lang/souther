@@ -54,6 +54,7 @@ import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -6429,8 +6430,11 @@ final class Pullback {
             ElementBindings.StepOnEachElement step =
                     ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
             Denotation standing = walk;
-            LinearForm<Quantity> summed =
-                    step == null ? null : unlessUnread(() -> sumOverTheStep(standing, step));
+            LinearForm<Quantity> summed = step == null ? null : unlessUnread(() -> {
+                LinearForm<Quantity> byPosition =
+                        sumByPositionOverTheStep(measured, standing, step);
+                return byPosition != null ? byPosition : sumOverTheStep(standing, step);
+            });
             if (summed != null) {
                 return summed;
             }
@@ -6452,6 +6456,33 @@ final class Pullback {
             return null;
         }
         return addedUpOverTheElementsOfAnAnswer(list, walked.value(), each);
+    }
+
+    /**
+     * What {@code step}, applied by {@code walk}, adds up to over the elements of the list a
+     * dependency answered where it turns on where each element stands — or null where it does not,
+     * or the elements are not shown to be handed in the order the answer lists them or the
+     * opposite.
+     *
+     * <p>The sum is of the elements in that order, so a walk over the list put in any other order
+     * is none of it ({@link InputReads#answerHandedInOrder}); what the step makes of an element
+     * is read as the input's is, and the position it is handed counts from nought in that order.
+     */
+    private LinearForm<Quantity> sumByPositionOverTheStep(NumericMeasures.Measured measured,
+                                                          Denotation walk,
+                                                          ElementBindings.StepOnEachElement step) {
+        InputReads where = walk.at();
+        ElementAnswer closure = where.answerAt(step.element().binding());
+        if (closure == null || closure.position() == null) {
+            return null;
+        }
+        ElementValue computed =
+                InputNumber.computedByPositionOfAnAnswersElement(closure, where, read.rules());
+        DecisionSubjects.AnAnswerInOrder ordered =
+                computed == null ? null : subjects.anAnswerHandedInOrder(step.walked(), where);
+        return ordered == null ? null : LinearForm.atom(new DecisionAtom.ComputedOverAnAnswer(
+                measured.operation(), ordered.list(), computed, closure.body().type(),
+                ordered.direction()));
     }
 
     /**

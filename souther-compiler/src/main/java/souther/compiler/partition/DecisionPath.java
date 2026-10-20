@@ -372,12 +372,20 @@ final class DecisionPath {
      * so two calls reading one place read the value held against itself.
      */
     private record Place(ValueName.Stdlib operation, TakenArguments arguments,
-                         List<TermPath.Step> steps) {}
+                         List<TermPath.Step> steps, DecisionAtom.ComputedOverAnAnswer computed) {}
 
+    /** What the number is of beyond its place: the computation and the direction, where it is a
+     *  total of one that turns on where each element stands, since two such totals of one list
+     *  are two numbers. */
     private static Place placeOf(DecisionAtom atom, DecisionSubject.AnAnswer at) {
-        return atom instanceof DecisionAtom.TakenOfAnAnswer taken
-                ? new Place(taken.operation(), taken.arguments(), at.steps())
-                : new Place(null, null, at.steps());
+        return switch (atom) {
+            case DecisionAtom.TakenOfAnAnswer taken ->
+                    new Place(taken.operation(), taken.arguments(), at.steps(), null);
+            case DecisionAtom.ComputedOverAnAnswer computed ->
+                    new Place(computed.operation(), TakenArguments.NONE, at.steps(), computed);
+            case DecisionAtom.OfAnAnswer _, DecisionAtom.OfTheInput _ ->
+                    new Place(null, null, at.steps(), null);
+        };
     }
 
     /**
