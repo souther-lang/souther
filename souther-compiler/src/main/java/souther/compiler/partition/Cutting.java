@@ -656,28 +656,54 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         ExactRatio weight = affine.form().coefs().get(remainder);
-        if (!(affine.form().constant().negated().dividedBy(weight)
-                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))
-                || !(remainder.dividend().constant().floor()
-                        instanceof ExactAnswer.Held<BigInteger> shift)) {
+        BorderQuantity.RemainderOfAForm of = remainderOf(behavior, remainder, read.quantities());
+        if (of == null || !(affine.form().constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+            return null;
+        }
+        ComparisonClaim claim = ComparisonClaim.stating(
+                holds ? affine.proposition() : affine.proposition().denied());
+        Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
+        return drawn == null ? null : cutsOrRefused(drawn);
+    }
+
+    /**
+     * What a row is asked to work {@code remainder} out of — or null where it is read at none.
+     * The same remainder a line on it is drawn on ({@link #remainderOf}), so that what is
+     * accepted as a remainder is the same for a line and for a row.
+     */
+    static DividedForm remainderAtARow(String behavior, Quantity.RemainderOfADividend remainder,
+                                       Quantities quantities) {
+        BorderQuantity.RemainderOfAForm of = remainderOf(behavior, remainder, quantities);
+        return of == null ? null : of.dividedForm();
+    }
+
+    /**
+     * The remainder {@code remainder} is, read at the numbers of its form — or null where it is
+     * read at none: a number of the form whose values are not counted, or a constant that is no
+     * whole number to move the form by.
+     *
+     * <p>The one place a remainder of a form becomes a quantity.
+     */
+    private static BorderQuantity.RemainderOfAForm remainderOf(String behavior,
+                                                       Quantity.RemainderOfADividend remainder,
+                                                       Quantities quantities) {
+        if (!(remainder.dividend().constant().floor()
+                instanceof ExactAnswer.Held<BigInteger> shift)) {
             return null;
         }
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         for (NumericTerm term : remainder.dividend().coefs().keySet()) {
-            TermOrders orders = read.quantities().ordersOf(term);
+            TermOrders orders = quantities.ordersOf(term);
             if (orders == null || orders.answered() == null || !orders.answered().counts()) {
                 return null;
             }
             on.put(term, orders);
         }
-        ComparisonClaim claim = ComparisonClaim.stating(
-                holds ? affine.proposition() : affine.proposition().denied());
-        BorderQuantity.RemainderOfAForm of = new BorderQuantity.RemainderOfAForm(behavior,
+        return new BorderQuantity.RemainderOfAForm(behavior,
                 new BorderQuantity.OverAForm(behavior,
                         new LinearForm<>(ExactRatio.ZERO, remainder.dividend().coefs()), on),
                 shift.value(), remainder.divisor());
-        Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
-        return drawn == null ? null : cutsOrRefused(drawn);
     }
 
     /**

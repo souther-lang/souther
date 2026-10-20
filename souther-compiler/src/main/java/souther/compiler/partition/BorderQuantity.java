@@ -1138,6 +1138,11 @@ public sealed interface BorderQuantity
             return new LinearForm<>(ExactRatio.of(shift), dividend.form().coefs());
         }
 
+        /** What a row is asked to work this remainder out of. */
+        DividedForm dividedForm() {
+            return new DividedForm(dividend, wholeDividend(), divisor);
+        }
+
         /** Every remainder a divisor leaves: nought to one below it, one apart. */
         @Override
         public LevelSpace levels() {
