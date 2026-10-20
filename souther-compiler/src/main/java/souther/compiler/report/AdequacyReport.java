@@ -1360,6 +1360,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             copies.add(switch (each.about()) {
                 case About.ARuleWithoutALine(var it) -> it.finding().readAt();
                 case About.ARuleNothingClassified(var it) -> it.finding().readAt();
+                case About.ARuleThatMayStopARun(var it) -> it.readAt();
                 case About.AQuestionNothingAnswered(var asked) -> asked.asked().readAt();
                 default -> ModelOccurrences.NONE;
             });
@@ -3624,6 +3625,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 rendering, declaredIn)));
             }
         }
+        // And a rule that a run may stop in. Whatever else is said of the rule, and whatever line it
+        // draws, this is what the line leaves out: a possibility the ways before it do not rule
+        // out, not a run shown to exist.
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
+                out.append(String.format("      %s may stop a run: %s — a run that reaches it may"
+                                + " stop in an operation it is read through%s%n",
+                        mark(f), cited(it.cited(), rendering, declaredIn, places),
+                        inCopies(it.readAt(), behavior.conditionPlaces().copies(),
+                                rendering, declaredIn)));
+            }
+        }
         // And a position whose rules this reading never arrived at, which names no rule because
         // nothing observed one. Its own line, so that a reader is not left reading an absent rule
         // to work out which of the two they are being told.
@@ -3713,6 +3726,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + " element of this position or of another and nothing says which";
             case RULE_CUTS_NOTHING ->
                     "it was read to the end and cuts nothing this position appears in";
+            case RULE_ANSWERS_NOWHERE ->
+                    "it was read to the end, and every run that reaches it stops in an operation"
+                            + " it is read through";
             case RULE_TELLS_NOTHING_APART ->
                     "it was read to the end and every value this position holds comes out one side"
                             + " of it";
@@ -8645,7 +8661,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     About.ALineTheRowsDoNotTellFromAnother _,
                     About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
-                    About.ARuleNothingClassified _,
+                    About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _ -> false;
@@ -8718,6 +8734,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Where a reader is sent to look at the rule, which is what such a finding has instead
             // of a subject: what the rule states there is what nothing worked out.
             case About.ARuleNothingClassified(var it) -> words(it.at());
+            // The rule, by the handle a reader finds it with: it stops some runs at no position,
+            // so the rule is all there is to name.
+            case About.ARuleThatMayStopARun(var it) -> new PublishedSentence.AroundAHandle("",
+                    PublishedRuleHandle.of(handle(it.cited(), places), places), "");
             // The position and not a number measured of it: which of this position's rules went
             // unread is a fact about the location, and the measures on it are as many as the rules
             // name numbers there.

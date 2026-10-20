@@ -35,6 +35,7 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhereARunStops;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.meaning.WhyUnread;
@@ -165,6 +166,24 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         record CutsNothing(List<FilingCoordinate> filedAt) implements Read {
 
             public CutsNothing {
+                filedAt = List.copyOf(filedAt);
+            }
+        }
+
+        /**
+         * Read to the end, and every run that reaches the comparison stops in an operation it is
+         * read through, such as a division by nought: it states nothing on either side.
+         *
+         * <p>A fact about the rule and not a reading that stopped, and not a comparison that
+         * settles the same for every row ({@link CutsNothing}): there a run gets past it, and here
+         * none does.
+         *
+         * @param filedAt where the rule is said to answer nowhere, as it is for
+         *                {@link CutsNothing}
+         */
+        record AnswersNowhere(List<FilingCoordinate> filedAt) implements Read {
+
+            public AnswersNowhere {
                 filedAt = List.copyOf(filedAt);
             }
         }
@@ -476,6 +495,34 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * Where a run stops in the comparison, or null where none does: the rows on which an operation
+     * it is read through ends the run, so that it states nothing on either side.
+     *
+     * <p>Independent of the line it draws. A comparison whose ways divide by nought on some of them
+     * draws its line on the others, and the ways that stop are no part of that line; they are said
+     * as what they are, and whether a row reaches them is asked of the way to the comparison
+     * ({@link ComparisonAssessment#someRowArrives}). Asked of each application a closure is
+     * made on, where that application is made, since a run that never makes one is not stopped by
+     * it.
+     */
+    static Proposition whereTheRunStops(StatedComparison comparison, InputReading read,
+                                        InputReads reads, ClosureApplications applying,
+                                        WhatConditionsState conditions) {
+        List<WhereARunStops.OnOneReading> readings = new ArrayList<>();
+        switch (applying) {
+            case ClosureApplications.Each(var made) -> made.forEach(one -> readings.add(
+                    new WhereARunStops.OnOneReading(one.reached(),
+                            conditions.comparison(comparison, one.reads(), read).stated()
+                                    .meaning())));
+            case ClosureApplications.None _ -> { }
+            case ClosureApplications.Outside _, ClosureApplications.NotSaid _ ->
+                    readings.add(new WhereARunStops.OnOneReading(null,
+                            conditions.comparison(comparison, reads, read).stated().meaning()));
+        }
+        return WhereARunStops.across(readings);
+    }
+
+    /**
      * One line an application of a closure draws: which of the author's lines it is a place of,
      * and what reading it came to there.
      *
@@ -517,6 +564,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> stopped =
                 new LinkedHashMap<>();
         List<FilingCoordinate> settled = new ArrayList<>();
+        List<FilingCoordinate> answeringNowhere = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
         List<UndividedByARelation> relations = new ArrayList<>();
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
@@ -537,6 +585,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Read.CutsNothing alone -> alone.filedAt().forEach(at -> {
                     if (!settled.contains(at)) {
                         settled.add(at);
+                    }
+                });
+                case Read.AnswersNowhere alone -> alone.filedAt().forEach(at -> {
+                    if (!answeringNowhere.contains(at)) {
+                        answeringNowhere.add(at);
                     }
                 });
                 case Read.AgainstAnotherValue alone -> {
@@ -575,7 +628,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     : severalNotDrawn(comparison, read, statingNoRelation, answering);
         }
         if (lines.isEmpty()) {
-            return new Read.CutsNothing(settled);
+            return settled.isEmpty() && !answeringNowhere.isEmpty()
+                    ? new Read.AnswersNowhere(answeringNowhere)
+                    : new Read.CutsNothing(settled);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
         // A relation of a statement that is no line, and relates no other value, is read in no
@@ -937,6 +992,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (stated.proposition()) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
+            case Proposition.WhereItAnswers nowhere when Proposition.answersNowhere(nowhere) ->
+                    new Read.AnswersNowhere(settledAt(stated, comparison, read, reads, answering));
             case Proposition.Compared _ when line != null -> line;
             case Proposition.Compared _ when related != null ->
                     against(related, stated.proposition());

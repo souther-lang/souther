@@ -77,6 +77,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
+                                List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
@@ -93,7 +94,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(
             PartitionDerivation.noSubject(),
-            PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
+            PairSpace.NONE, List.of(), List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of());
 
     /**
@@ -120,7 +121,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         return new PartitionEvidence(
                 why.failed(behavior),
                 PairSpace.notMeasurable(why, behavior), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of());
+                List.of(), List.of(), List.of());
     }
 
     /** Whether this is what a behavior missing something its boundary is made of comes to. */
@@ -131,6 +132,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         rulesWithoutALine = List.copyOf(rulesWithoutALine);
+        rulesWhereARunMayStop = List.copyOf(rulesWhereARunMayStop);
         notSeparated = List.copyOf(notSeparated);
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);

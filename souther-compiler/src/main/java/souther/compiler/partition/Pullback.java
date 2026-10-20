@@ -4896,6 +4896,9 @@ final class Pullback {
                             }
                         }
                         case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                            if (abortsAt(stopped)) {
+                                return new Derivation.TheRunStopsHere();
+                            }
                             Derivation stop = new Derivation.Stopped(elementsMet.crowded()
                                     ? new WhyUnread.TwoElementsOfOneContainer()
                                     : noFormOf(stopped), false);
@@ -4927,6 +4930,9 @@ final class Pullback {
                     pieces.add(piece);
                 }
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                    if (abortsAt(stopped)) {
+                        return new Derivation.TheRunStopsHere();
+                    }
                     // A comparison of two elements of one container is read of neither: they
                     // stand at one position, and a form would hold them as one number.
                     Derivation stop = new Derivation.Stopped(elementsMet.crowded()
@@ -5757,7 +5763,8 @@ final class Pullback {
                         LinearForm<Quantity> form) -> forms.add(form);
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                     elementsMet = metBefore;
-                    return partOf(at, new Derivation.Stopped(noFormOf(stopped), fixed));
+                    return partOf(at, abortsAt(stopped) ? new Derivation.TheRunStopsHere()
+                            : new Derivation.Stopped(noFormOf(stopped), fixed));
                 }
             }
         }
@@ -8947,6 +8954,11 @@ final class Pullback {
         return new WhyUnread.InACalledBody(!hasABody && reads.insideACalledBody()
                 ? WhyUnread.InACalledBody.What.WHAT_ITS_DEPENDENCY_ANSWERS
                 : WhyUnread.InACalledBody.What.AN_ANSWER_NOT_READ);
+    }
+
+    /** Whether the arithmetic stopped where a run aborts, so that no number is there to compare. */
+    private static boolean abortsAt(AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+        return stopped.why() instanceof AffineForms.Halt.NoNumberOnARun<Quantity, InputReads>;
     }
 
     /**

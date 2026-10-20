@@ -269,22 +269,31 @@ public final class GuardThresholds {
                             // The line goes only where all of them prove nothing reaches it, since
                             // a run through any one of them is a run through the rule. A line of a
                             // statement of several is asked again with where it decides taken in.
+                            List<ComparisonArrival> arrivals = at.observations().stream()
+                                    .map(one -> one.arrival()).toList();
+                            Function<Proposition, Reachability> wayToACase = decides ->
+                                    waysToACase.computeIfAbsent(decides,
+                                            _ -> Reachability.of(new WayToTheBorder(
+                                                    each.wayToACase(aCase.apply(decides))),
+                                                    read.quantities().region()));
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                             Reachability.of(new WayToTheBorder(each.assumed()),
                                                     read.quantities().region()),
-                                            decides -> waysToACase.computeIfAbsent(decides,
-                                                    _ -> Reachability.of(new WayToTheBorder(
-                                                            each.wayToACase(aCase.apply(decides))),
-                                                            read.quantities().region())),
-                                            at.observations().stream()
-                                                    .map(one -> one.arrival()).toList(), false,
-                                            read);
+                                            wayToACase, arrivals, false, read);
+                            // And whether a run that some row takes stops in it, which the line it
+                            // draws does not say: a stop the ways before it rule out is no run's.
+                            // A comparison every run stops in is already said as that.
+                            boolean aRunStops = !(arrived instanceof ComparisonAssessment
+                                    .AnswersNowhere)
+                                    && each.stopsWhere().isPresent()
+                                    && ComparisonAssessment.someRowArrives(
+                                            wayToACase.apply(each.stopsWhere().get()), arrivals);
                             reached(cuts, stated, each, readingsOf(arrived), aCase);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, found, between, withoutALine);
+                                    reaches, arrived, aRunStops, found, between, withoutALine);
                         }
                         // Not a rule with no line here: its outcome is about no row, whichever of
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a
@@ -784,7 +793,7 @@ public final class GuardThresholds {
                                EmittedComparisonState.Instrumented at,
                                SourceConstructOrigin wrote, Citation where,
                                ElementsMetOn metOn, RuleReachNumbering reaches,
-                               ComparisonAssessment read,
+                               ComparisonAssessment read, boolean aRunStops,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                RulesWithNoLine.Gathered withoutALine) {
@@ -792,6 +801,11 @@ public final class GuardThresholds {
         // same thing about one rule, and asking apiece would let them come to say two.
         RuleReportAnchor anchor = reaches.anchorOf(wrote, where);
         publish(behavior, stated, wrote, anchor, read, withoutALine);
+        if (aRunStops) {
+            withoutALine.mayStopARun(
+                    new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
+                    ModelOccurrences.of(stated));
+        }
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
         // the run meets the comparison, which is this reading's own place to say.

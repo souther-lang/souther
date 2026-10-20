@@ -341,6 +341,10 @@ public final class ReportedReason {
             // class about two positions, and the other has nothing to wait for.
             case BlockReason.ComparisonCuttingNothing _ ->
                     UndividedPosition.Reason.RULE_CUTS_NOTHING;
+            // Its own word beside that one: a run gets past a rule that cuts nothing, and none gets
+            // past this.
+            case BlockReason.ComparisonAnswersNowhere _ ->
+                    UndividedPosition.Reason.RULE_ANSWERS_NOWHERE;
             // Its own word beside that one, because what a reader looks at differs. There the rule
             // is about a quantity this position is not in, and an author looks at what it compares;
             // here it is about this position and everything the position holds comes out one side
