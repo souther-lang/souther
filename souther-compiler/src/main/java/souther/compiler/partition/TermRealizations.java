@@ -328,6 +328,10 @@ final class TermRealizations {
                 .anyMatch(each -> each.term() instanceof NumericTerm.OccurrencesOfItsValue)) {
             return amongEveryOccurrence(targets, numbers);
         }
+        if (numbers.stream()
+                .anyMatch(each -> each.term() instanceof NumericTerm.OccurrencesOfAKey)) {
+            return amongEveryOccurrenceEqualToAKey(targets, numbers);
+        }
         if (targets.size() == 1) {
             return new JointRealization.Supported(
                     new JointBuilder.OneNumberOnItsOwn(numbers.getFirst()));
@@ -357,7 +361,8 @@ final class TermRealizations {
         for (RealizationTarget.OfANumber target : numbers) {
             switch (target.term()) {
                 // Composed with the elements around it, which the arm above has already taken.
-                case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _ -> {
+                case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
+                     NumericTerm.OccurrencesOfAKey _ -> {
                     return nothingSolvesAGroup();
                 }
                 // Written as the value it is the end of, alone: beside another number of the same
@@ -559,6 +564,24 @@ final class TermRealizations {
         }
         return wholly(group, List.of(alike),
                 () -> new JointBuilder.ValuesAlikeAcrossContainers(alike));
+    }
+
+    /**
+     * How often the value of an input occurs among every occurrence of a place, in the containers
+     * inside the elements of another.
+     *
+     * <p>One number and nothing beside it, as {@link #amongEveryOccurrence} is.
+     */
+    private static JointRealization amongEveryOccurrenceEqualToAKey(
+            Collection<RealizationTarget> group, List<RealizationTarget.OfANumber> numbers) {
+        RealizationTarget.OfANumber asked = numbers.getFirst();
+        for (RealizationTarget.OfANumber each : numbers) {
+            if (!each.term().equals(asked.term())) {
+                return nothingSolvesAGroup();
+            }
+        }
+        return wholly(group, List.of(asked),
+                () -> new JointBuilder.ValuesEqualToAKeyAcrossContainers(asked));
     }
 
     /**
@@ -1200,6 +1223,27 @@ final class TermRealizations {
         }
 
         /**
+         * Containers inside the elements of another holding the value of an input as often as
+         * asked, in all of them put end to end
+         * ({@link CardinalityComposer#composeAcrossContainersEqualToAKey}).
+         *
+         * @param asked how often the key's value occurs among every occurrence of its place
+         */
+        record ValuesEqualToAKeyAcrossContainers(RealizationTarget.OfANumber asked)
+                implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.composeAcrossContainersEqualToAKey(sourceType,
+                        keptApart, asked, demands, measuring, within, reading);
+            }
+        }
+
+        /**
          * The carrier the group's root is observed on, or null where a term of it is not measured.
          *
          * <p>One root has one, so this is read off each term and is the same answer every time
@@ -1343,12 +1387,14 @@ final class TermRealizations {
                 // element of it is composed.
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
-                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.ExtremeOfItsKey _ -> false;
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                     NumericTerm.ExtremeOfItsKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
             case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _,
-                 JointBuilder.ValuesAlikeAcrossContainers _ -> false;
+                 JointBuilder.ValuesAlikeAcrossContainers _,
+                 JointBuilder.ValuesEqualToAKeyAcrossContainers _ -> false;
             case JointBuilder.StringsHoldingTheirNumbers _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
@@ -1573,6 +1619,9 @@ final class TermRealizations {
                             + " is asked for it");
             case NumericTerm.OccurrencesOfItsValue among -> throw new IllegalStateException(
                     among + " is written by composing the containers its occurrences stand in,"
+                            + " and no value of one element is asked for it");
+            case NumericTerm.OccurrencesOfAKey ofAKey -> throw new IllegalStateException(
+                    ofAKey + " is written by composing the containers its occurrences stand in,"
                             + " and no value of one element is asked for it");
         };
     }
@@ -2846,8 +2895,8 @@ final class TermRealizations {
                 case NumericTerm.CodePointClassCount count -> new InAClass(count.counted());
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
-                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.ExtremeOfItsKey _,
-                     NumericTerm.TakenOver _ ->
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _ ->
                         throw new IllegalStateException(
                         term + " is no number a string is written for");
             };

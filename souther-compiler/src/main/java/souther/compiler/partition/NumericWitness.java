@@ -519,7 +519,8 @@ final class NumericWitness {
             case NumericTerm.ExtremeOfItsKey extreme ->
                     looking.toNarrowBy(extreme.valuesTakenFrom(), within);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
-                 NumericTerm.OccurrencesOfItsValue _ -> ValueSet.ANY;
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
+                    ValueSet.ANY;
         };
     }
 
@@ -529,8 +530,8 @@ final class NumericWitness {
         return switch (term) {
             case NumericTerm.FromOnePosition one -> within.apartAt(one);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
-                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.ExtremeOfItsKey _ ->
-                    PlacesApart.NONE;
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.ExtremeOfItsKey _ -> PlacesApart.NONE;
         };
     }
 

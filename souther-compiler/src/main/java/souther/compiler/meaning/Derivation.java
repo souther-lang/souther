@@ -1040,6 +1040,14 @@ public sealed interface Derivation {
                                             boolean holds, var _, var _) ->
                             holds && standsAt(some.container(), container)
                                     && reads(some.ofTheElement(), ofTheElement);
+                    // The elements of the lists of an outer list put end to end, which stand at no
+                    // one position: what is read is that the key occurs among them.
+                    case SomeElementEqualToAKey _ -> some.holds()
+                            && some.ofTheElement() instanceof LawProposition.Same<
+                                    DeclaredArgument>(var one, var _, var alike)
+                            && alike && one instanceof LawSubject.KeyOf<DeclaredArgument>(
+                                    DeclaredArgument entries)
+                            && entries.equals(some.container());
                     // The pieces of a string are the elements of a container an operation made,
                     // which stands at no position.
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->
@@ -1680,6 +1688,33 @@ public sealed interface Derivation {
         @Override
         public List<Derivation> oneOf() {
             return each;
+        }
+    }
+
+    /**
+     * Some element of a container no position holds being the key a lookup asks for, read as how
+     * often that key occurs among the elements being at least one.
+     *
+     * <p>The elements are the lists of an outer list put end to end, so there is no one container
+     * for {@link SomeElementMeeting} to be of: the elements are counted across the containers they
+     * stand in ({@link NumericTerm.OccurrencesOfAKey}), and a number that counts is what the
+     * statement about them is a comparison of. The same count is the one the counter an entry holds
+     * is read of, so the lookup finding something and what it finds are of one number.
+     *
+     * @param occurrences how often the key occurs among the elements
+     * @param atLeastOne  that count compared with one
+     */
+    record SomeElementEqualToAKey(NumericTerm.OccurrencesOfAKey occurrences,
+                                  Derivation atLeastOne) implements Derivation {
+
+        public SomeElementEqualToAKey {
+            Objects.requireNonNull(occurrences, "a key occurs as often as it does");
+            Objects.requireNonNull(atLeastOne, "and an element is the key where it occurs");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(atLeastOne);
         }
     }
 

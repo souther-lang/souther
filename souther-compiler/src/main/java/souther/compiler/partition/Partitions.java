@@ -321,7 +321,7 @@ public final class Partitions {
                 case NumericTerm.OfAnElementsNeighbours _ -> false;
                 // How often a value occurs among every occurrence is written by containers inside
                 // the elements of another, which is no more shown to exist than the above.
-                case NumericTerm.OccurrencesOfItsValue _ -> false;
+                case NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> false;
                 // A run has as many values as a row wrote and each of them is chosen, so whether
                 // some run adds up to a given total is a question about what the elements may hold
                 // and how many there may be — not one the operation answers about itself. Nothing

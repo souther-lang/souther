@@ -6159,6 +6159,43 @@ public final class Generator {
                     + reaching.requirements());
         }
         Requirements assumed = onTheWay;
+        // The value a number of how often it occurs is counted for, placed before the occurrences
+        // are composed: they are composed holding it, and it is another input's.
+        for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
+            if (!(each.getKey() instanceof RealizationTarget.AmongEveryOccurrenceEqualToAKey keyed)) {
+                continue;
+            }
+            NumericTerm.FromOnePosition key = new NumericTerm.ValueOf(keyed.term().key());
+            if (out.containsKey(RealizationTarget.of(key))) {
+                continue;
+            }
+            Function<NumericTerm, Carrier> on = term -> {
+                TermOrders orders = subject.quantities().ordersOf(term);
+                return orders == null ? null : orders.observed();
+            };
+            switch (NumericWitness.of(here, List.of(key), on, looking)) {
+                case NumericWitness.Standing.Found beside -> {
+                    for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
+                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                        if (out.putIfAbsent(at, placed.place()) == null) {
+                            routed.put(placed.term(), at);
+                            chosen.add(at);
+                            here = here.given(placed.term(), placed.place());
+                        }
+                    }
+                }
+                case NumericWitness.Standing.ProvedImpossible _ ->
+                        gaps.add(new ReachabilityGap.Uncomposed(
+                                reaching.boundedOnTheWay().isEmpty() ? null
+                                        : reaching.boundedOnTheWay().getFirst(),
+                                new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                case NumericWitness.Standing.NotFound(CompositionShortfall met) ->
+                        gaps.add(new ReachabilityGap.Uncomposed(
+                                reaching.boundedOnTheWay().isEmpty() ? null
+                                        : reaching.boundedOnTheWay().getFirst(),
+                                ReachabilityGap.Why.ofAWalkThatFoundNothing(met)));
+            }
+        }
         // The count the item itself asks for, which is the one count its level is — by which
         // count it is, so a condition on the way asking for the same count asks it of this one.
         Map<CountedElements.Identity, RealizationTarget.ACount> itemCounts = new LinkedHashMap<>();
@@ -7367,6 +7404,8 @@ public final class Generator {
             case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
             case RealizationTarget.AmongEveryOccurrence(
                     NumericTerm.OccurrencesOfItsValue term) -> term;
+            case RealizationTarget.AmongEveryOccurrenceEqualToAKey(
+                    NumericTerm.OccurrencesOfAKey term) -> term;
             case RealizationTarget.AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
                                                          TermPath root) -> {
                 NumericTerm moved = subject.quantities().namedAt(term, root);
@@ -7882,6 +7921,11 @@ public final class Generator {
         if (on == null) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.NoOrdersOnTheEdge());
         }
+        // How often a key occurs is read with the key's value, which is another parameter's and
+        // is no part of the one candidate; the whole-row reading that follows is what reads it.
+        if (target.term() instanceof NumericTerm.OccurrencesOfAKey) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.TurnsOnAnotherParameter());
+        }
         // Only this parameter's value is filled in: the walk reads the one the path names, and the
         // others are not this candidate's to say anything about.
         List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
@@ -7894,7 +7938,8 @@ public final class Generator {
             case NumericTerm.OfAnElementsNeighbours among -> among.container();
             // Every value at the place across the containers, which is what the count is among.
             case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
-                 NumericTerm.OccurrencesOfItsValue _ -> target.term().subjectPath();
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
+                    target.term().subjectPath();
         };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
@@ -7931,7 +7976,7 @@ public final class Generator {
                             && held.isEmpty());
             case NumericTerm.FromOnePosition _, NumericTerm.OccurrencesOfItsValue _ ->
                     values.isEmpty();
-            case NumericTerm.TakenOver _ -> false;
+            case NumericTerm.TakenOver _, NumericTerm.OccurrencesOfAKey _ -> false;
         };
         if (nothingToRead) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
@@ -8034,6 +8079,10 @@ public final class Generator {
                 }
                 yield any;
             }
+            // Read with another parameter's value, so the one candidate stands nowhere here; the
+            // entry point answers before this is reached.
+            case NumericTerm.OccurrencesOfAKey _ -> throw new IllegalStateException(
+                    "how often a key occurs is read back from a whole row");
             case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
                 case NumericTerm.Reading.Number number -> number.value().compareTo(at) == 0;
                 case NumericTerm.Reading.Missing missing -> {
@@ -8183,6 +8232,9 @@ public final class Generator {
         /** The row wrote no value at the position the term names. */
         record NoValueAtThePosition() implements ReadbackGap {}
 
+        /** The number turns on the value of another parameter than the one being read back. */
+        record TurnsOnAnotherParameter() implements ReadbackGap {}
+
         /** The statement keeping some of the occurrences could not be put to one of them, and
          *  that one may be among those counted. */
         record KeptNotTold(Set<ReadingGap> causes) implements ReadbackGap {}
@@ -8201,7 +8253,8 @@ public final class Generator {
      * row fixed it.
      *
      * <p>A count is met by elements chosen against the numbers its statement reads beside them, and
-     * those are numbers of other locations, fixed with the count. Every other group is composed out
+     * those are numbers of other locations, fixed with the count; so is how often a key occurs, which
+     * is counted for the value of another location. Every other group is composed out
      * of its own numbers and the way's region, which is what it is handed.
      *
      * <p>Not a number inside a container. A value placed at an element is some element standing
@@ -8226,7 +8279,8 @@ public final class Generator {
         }
         for (RealizationTarget each : group.keySet()) {
             if (each instanceof RealizationTarget.ACount
-                    || each instanceof RealizationTarget.ElementsMeetingTogether) {
+                    || each instanceof RealizationTarget.ElementsMeetingTogether
+                    || each instanceof RealizationTarget.AmongEveryOccurrenceEqualToAKey) {
                 Map<NumericTerm, Place> fixed = new LinkedHashMap<>();
                 standing.forEach((target, place) -> {
                     if (target instanceof RealizationTarget.OfANumber number
@@ -12828,7 +12882,7 @@ public final class Generator {
                 // the values of a key, which another element of the key may hold.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
-                     NumericTerm.OccurrencesOfItsValue _,
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.

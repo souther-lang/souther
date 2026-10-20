@@ -6426,6 +6426,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     into.put("kept_by", it.selection().key());
                 }
             }
+            // How often the value an input holds occurs among every occurrence of the place.
+            case NumericTerm.OccurrencesOfAKey it -> {
+                into.put("kind", "occurrences_of_a_key");
+                into.put("position", it.subjectPath().discriminated());
+                into.put("key", it.key().discriminated());
+            }
             // The least or greatest of what the elements of a container hold at one place, among
             // those alike at another.
             case NumericTerm.ExtremeOfItsKey it -> {

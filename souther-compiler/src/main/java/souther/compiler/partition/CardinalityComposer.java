@@ -892,6 +892,97 @@ final class CardinalityComposer {
     }
 
     /**
+     * Containers inside the elements of another holding the value of an input as often as asked,
+     * in all of them put end to end.
+     *
+     * <p>The value counted for is the key's, which the row fixed: it is not chosen here, and it
+     * occurs nought times where the containers hold other values or none. It is written as many
+     * times as asked, spread over the containers ({@link NestedContainersAddingUp#alike}), with
+     * values beside it that are not it where the containers need more leaves than it gives them.
+     */
+    static TermRealizations.Realization composeAcrossContainersEqualToAKey(
+            Type sourceType, List<List<String>> keptApart, RealizationTarget.OfANumber alike,
+            SequencedMap<RealizationTarget, AskedAt> demands, Quantities measuring,
+            SearchRegion within, RuleReadingContext reading) {
+        NumericTerm.OccurrencesOfAKey term = (NumericTerm.OccurrencesOfAKey) alike.term();
+        TermPath place = term.subjectPath();
+        AskedAt asked = demands.get(alike);
+        if (asked == null || asked.walking() == null) {
+            return none("nothing says how often the value at `" + term.key() + "` is to occur at `"
+                    + place + "`");
+        }
+        NumericSet wanted = asked.walking();
+        List<TermPath> chain = place.containersHoldingIt();
+        if (chain.size() < 2 || !place.equals(chain.getLast().element())) {
+            return notChosen("a value at `" + place + "` is not an element of the container it"
+                    + " stands inside, so the elements are chosen at a place inside them");
+        }
+        NumericTerm own = new NumericTerm.ValueOf(place);
+        TermOrders orders = measuring.ordersOf(own);
+        Carrier carrier = orders == null ? null : orders.observed();
+        if (carrier == null) {
+            return notChosen("a value at `" + place + "` is on no order its values are chosen on");
+        }
+        Place counted = within == null ? null : settled(within, new NumericTerm.ValueOf(term.key()));
+        if (counted == null) {
+            return notChosen("`" + term.key() + "` stands at no one value, so what is counted"
+                    + " for is not known");
+        }
+        NumericDomain.Bounds run = switch (within.projectionOf(own)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case null -> NumericDomain.Bounds.OPEN;
+        };
+        if (run == null) {
+            return none("the rules leave no value at `" + place + "`");
+        }
+        // The key occurs where the rules leave its value at the place, and nowhere else.
+        boolean mayOccur = run.admits(counted);
+        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
+        Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        List<Place> beside = valuesBeside(counted, valuesTheRulesLeave(carrier, run, unheld, unnamed),
+                null, carrier, run, unheld, unnamed);
+        NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
+        List<FixtureTemplate> built = new ArrayList<>();
+        CompositionShortfall rest = CompositionShortfall.NONE;
+        TermRealizations.Realization unbuilt = null;
+        for (int often = 0; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
+            if (!wanted.holds(Count.of(often), Carrier.WHOLE) || often > 0 && !mayOccur) {
+                continue;
+            }
+            for (int extra = 0; extra <= beside.size() && often + extra <= MOST_ELEMENTS;
+                    extra++) {
+                TermRealizations.Realization one = nested.alike(sourceType, keptApart, counted,
+                        often, beside.subList(0, extra), carrier, within, reading);
+                if (one instanceof TermRealizations.Realization.Built made) {
+                    built.addAll(made.values());
+                    rest = rest.and(made.rest());
+                    break;
+                }
+                unbuilt = one;
+            }
+        }
+        Endpoint mostOften = wanted.extent().max();
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        if (mostOften == null || mostOften.at().compareTo(Count.of(MOST_ELEMENTS)) > 0) {
+            refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+        }
+        rest = rest.and(CompositionShortfall.of(refused, unnamed, unheld));
+        if (!built.isEmpty()) {
+            return new TermRealizations.Realization.Built(built, rest);
+        }
+        if (!rest.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(rest);
+        }
+        if (unbuilt != null) {
+            return unbuilt;
+        }
+        return none("no containers of `" + place + "` this composed hold `" + term.key()
+                + "` as often as asked");
+    }
+
+    /**
      * The values a count of how often one occurs may be composed with: those the rules leave the
      * place, and where {@code kept} keeps only some occurrences, of them the ones it keeps — a
      * value chosen to be counted is one the container's elements are kept for. Null where the
@@ -1223,25 +1314,25 @@ final class CardinalityComposer {
      * A row with the numbers beside its elements written at the values they were fixed at, which
      * a row of the container alone does not hold.
      */
-    private record WithNumbersBeside(BorderQuantity.Observation row,
+    private record WithNumbersBeside(BorderQuantity.Observation holding,
                                      Map<TermPath, ObservedValue> written)
             implements BorderQuantity.Observation {
 
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {
             ObservedValue value = written.get(path);
-            return value == null ? row.at(path)
+            return value == null ? holding.at(path)
                     : WalkResult.reached(new ObservationAtPoint.Value(value));
         }
 
         @Override
         public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
-            return row.everyValueAt(path);
+            return holding.everyValueAt(path);
         }
 
         @Override
         public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
-            return switch (row.eachElementOf(of)) {
+            return switch (holding.eachElementOf(of)) {
                 case WalkResult.CouldNotWalk<List<BorderQuantity.Observation>> _ ->
                         WalkResult.couldNotWalk();
                 case WalkResult.Reached<List<BorderQuantity.Observation>>(var elements) ->

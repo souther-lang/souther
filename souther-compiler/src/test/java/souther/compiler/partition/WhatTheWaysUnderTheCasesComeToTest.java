@@ -59,7 +59,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
     private static ContentsAsked holding(String container, String value) {
         return new ContentsAsked(List.of(new ContentsAsked.Asked(
                 LEAD.then(container), LEAD.then(value), true, false, Optional.empty())),
-                List.of());
+                List.of(), List.of());
     }
 
     @Test
@@ -194,7 +194,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
     private static ContentsAsked holdingUnder(Refinement branch) {
         return new ContentsAsked(List.of(new ContentsAsked.Asked(
                 LEAD.refine(branch).then("campaigns"), LEAD.refine(branch).then("campaign"),
-                true, false, Optional.empty())), List.of());
+                true, false, Optional.empty())), List.of(), List.of());
     }
 
     @Test
@@ -249,7 +249,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
             asked.add(new ContentsAsked.Asked(at.then("held"), TermPath.of("value"), true,
                     false, Optional.empty()));
         }
-        return new ContentsAsked(asked, List.of()).underTheCases(
+        return new ContentsAsked(asked, List.of(), List.of()).underTheCases(
                 new NameReach(crossings, List.of(), List.of()), Requirements.NONE, Set.of());
     }
 }

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NameReach;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
@@ -44,15 +45,35 @@ import java.util.function.Predicate;
  *                the way asked them
  * @param related each two positions the way asks to hold one value, or two, in the order the way
  *                asked them
+ * @param reads   each container composed for a number counted for the value at another position,
+ *                in the order the way asked them
  */
-record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related) {
+record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
+                     List<Reads> reads) {
 
     /** Nothing asked. */
-    static final ContentsAsked NONE = new ContentsAsked(List.of(), List.of());
+    static final ContentsAsked NONE = new ContentsAsked(List.of(), List.of(), List.of());
 
     ContentsAsked {
         asked = List.copyOf(asked);
         related = List.copyOf(related);
+        reads = List.copyOf(reads);
+    }
+
+    /**
+     * That the container at {@code container} is composed for how often the value at
+     * {@code value} occurs in it: the value is known, and nothing is written into the container
+     * for it but what that count asks.
+     *
+     * <p>Apart from {@link Asked}, which writes the value into the container as an element: the
+     * count may be nought.
+     */
+    record Reads(TermPath container, TermPath value) {
+
+        Reads {
+            Objects.requireNonNull(container, "a count is of some container");
+            Objects.requireNonNull(value, "a count is for some value");
+        }
     }
 
     /**
@@ -168,7 +189,15 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related) 
     static ContentsAsked of(List<OnTheWay.TakenIn> way) {
         List<Asked> out = new ArrayList<>();
         List<RowDemand.OneValueAtBoth> related = new ArrayList<>();
+        List<Reads> reads = new ArrayList<>();
         for (OnTheWay.TakenIn each : way) {
+            if (each.demand() instanceof RowDemand.OfACondition condition) {
+                for (NumericTerm term : condition.terms()) {
+                    if (term instanceof NumericTerm.OccurrencesOfAKey asked) {
+                        reads.add(new Reads(asked.subjectPath().outermostContainer(), asked.key()));
+                    }
+                }
+            }
             // One an element meets several ways is written once one of them is chosen, and
             // until then asks nothing of a container written alike.
             if (!RowDemand.writtenAlikeAsItStands(each.demand())) {
@@ -186,7 +215,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related) 
                         every.ofEachElement().theWay(), Optional.empty(), out);
             }
         }
-        return new ContentsAsked(out, related);
+        return new ContentsAsked(out, related, reads);
     }
 
     /**
@@ -197,7 +226,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related) 
         ContentsAsked asked = of(way);
         List<Asked> out = new ArrayList<>(asked.asked());
         out.addAll(ACountHandedOn.askedOf(counts));
-        return new ContentsAsked(out, asked.related());
+        return new ContentsAsked(out, asked.related(), asked.reads());
     }
 
     /**
@@ -274,6 +303,10 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related) 
         for (RowDemand.OneValueAtBoth each : related) {
             named.add(each.one());
             named.add(each.other());
+        }
+        for (Reads each : reads) {
+            named.add(each.container());
+            named.add(each.value());
         }
         List<TermPath> paths = List.copyOf(named);
         List<WhereANameIsWritten> written = new ArrayList<>();
@@ -377,7 +410,11 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related) 
                         related.add(written);
                     }
                 }
-                return composes.test(new Way(new ContentsAsked(under, related), taken, at))
+                List<Reads> readsAt = new ArrayList<>();
+                for (Reads each : asked.reads()) {
+                    readsAt.add(new Reads(at.get(each.container()), at.get(each.value())));
+                }
+                return composes.test(new Way(new ContentsAsked(under, related, readsAt), taken, at))
                         ? Walked.COMPOSED : Walked.EVERY_WAY_TRIED;
             }
             for (WhereANameIsWritten.Place place : written.get(next).places()) {
@@ -892,6 +929,13 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related) 
             from.remove(container);
             if (!from.isEmpty()) {
                 out.computeIfAbsent(container, _ -> new LinkedHashSet<>()).addAll(from);
+            }
+        }
+        // A container counted for a value is composed once the value is known.
+        for (Reads each : reads) {
+            if (!each.value().head().equals(each.container().head())) {
+                out.computeIfAbsent(each.container().head(), _ -> new LinkedHashSet<>())
+                        .add(each.value().head());
             }
         }
         return out;
