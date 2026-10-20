@@ -855,7 +855,7 @@ final class CardinalityComposer {
         NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
         List<FixtureTemplate> built = new ArrayList<>();
         CompositionShortfall rest = CompositionShortfall.NONE;
-        TermRealizations.Realization unbuilt = null;
+        UnbuiltAttempts unbuilt = new UnbuiltAttempts();
         for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
             if (!wanted.holds(Count.of(often), Carrier.WHOLE)) {
                 continue;
@@ -873,7 +873,7 @@ final class CardinalityComposer {
                     rest = rest.and(made.rest());
                     break;
                 }
-                unbuilt = one;
+                unbuilt.add(one);
             }
         }
         Endpoint mostOften = wanted.extent().max();
@@ -885,14 +885,8 @@ final class CardinalityComposer {
         if (!built.isEmpty()) {
             return new TermRealizations.Realization.Built(built, rest);
         }
-        if (!rest.figures().isEmpty()) {
-            return new TermRealizations.Realization.Stopped(rest);
-        }
-        if (unbuilt != null) {
-            return unbuilt;
-        }
-        return none("no containers of `" + place + "` this composed hold a value as often as"
-                + " asked");
+        return unbuilt.came(rest, none("no containers of `" + place + "` this composed hold a"
+                + " value as often as asked"));
     }
 
     /**
@@ -984,14 +978,8 @@ final class CardinalityComposer {
         if (!search.built.isEmpty()) {
             return new TermRealizations.Realization.Built(search.built, rest);
         }
-        if (!rest.figures().isEmpty()) {
-            return new TermRealizations.Realization.Stopped(rest);
-        }
-        if (search.unbuilt != null) {
-            return search.unbuilt;
-        }
-        return none("no containers of `" + place + "` this composed hold the keys as often as"
-                + " asked");
+        return search.unbuilt.came(rest, none("no containers of `" + place + "` this composed"
+                + " hold the keys as often as asked"));
     }
 
     /**
@@ -1019,7 +1007,7 @@ final class CardinalityComposer {
         private final Composes composes;
         final List<FixtureTemplate> built = new ArrayList<>();
         CompositionShortfall rest = CompositionShortfall.NONE;
-        TermRealizations.Realization unbuilt;
+        final UnbuiltAttempts unbuilt = new UnbuiltAttempts();
         boolean cutShort;
         boolean spent;
         int tried;
@@ -1086,7 +1074,7 @@ final class CardinalityComposer {
                     rest = rest.and(made.rest());
                     return;
                 }
-                unbuilt = one;
+                unbuilt.add(one);
             }
         }
     }

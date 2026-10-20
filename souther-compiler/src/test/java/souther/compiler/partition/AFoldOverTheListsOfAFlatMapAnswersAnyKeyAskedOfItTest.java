@@ -268,7 +268,77 @@ class AFoldOverTheListsOfAFlatMapAnswersAnyKeyAskedOfItTest {
                 () -> "a row whose keys differ: " + rows);
     }
 
-    private static final Pattern ROW =Pattern.compile("^(\\[.*\\]), (\"(?:[^\"\\\\]|\\\\.)*\"|-?\\d+)$");
+    private static final String TWO_KEYS = """
+            module example.popular
+
+            let countsOf (xss: List<List<String>>): Map<String, Int> =
+                List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty,
+                    List.flatMap(xs -> xs, xss))
+
+            behavior popular : (xss: List<List<String>>, one: String, other: String) -> Bool
+
+            let popular (xss, one, other) =
+                %s
+                    match Map.get(one, countsOf(xss)) with
+                        | Some n ->
+                            match Map.get(other, countsOf(xss)) with
+                                | Some m -> n >= 3 && m >= 2
+                                | None -> false
+                        | None -> false
+            """;
+
+    /** How often {@code key} occurs among the strings of {@code lists}. */
+    private static long occurrencesIn(String lists, String key) {
+        Matcher each = Row.KEY.matcher(lists);
+        long seen = 0;
+        while (each.find()) {
+            if (each.group().equals(key)) {
+                seen++;
+            }
+        }
+        return seen;
+    }
+
+    private static List<List<String>> offeredWithTwoKeys(String guard) {
+        return Adequacy.offeredFor(measured(TWO_KEYS.formatted(guard)).db(),
+                        OfferingRequest.overTheModule("example.popular"))
+                .rowsByBehavior().getOrDefault("popular", List.of()).stream()
+                .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
+                .toList();
+    }
+
+    /**
+     * Two keys counted over the same lists are composed together as often as each was asked: a
+     * row where the one occurs three times and the other twice is written, and read back, with
+     * each key's count what its line asked.
+     */
+    @Test
+    void twoKeysAtDifferentValuesAreEachWrittenAsOftenAsAsked() {
+        List<List<String>> rows = offeredWithTwoKeys("if one == other then false else");
+        assertTrue(rows.stream().anyMatch(row -> !row.get(1).equals(row.get(2))
+                && occurrencesIn(row.get(0), row.get(1)) == 3
+                && occurrencesIn(row.get(0), row.get(2)) == 2), () -> "three and two: " + rows);
+        // And one short of the first key's line with the second key's count unchanged, which are
+        // two counts moved apart and not one.
+        assertTrue(rows.stream().anyMatch(row -> !row.get(1).equals(row.get(2))
+                && occurrencesIn(row.get(0), row.get(1)) == 2
+                && occurrencesIn(row.get(0), row.get(2)) >= 1), () -> "two and some: " + rows);
+    }
+
+    /** Two keys at one value are one value, counted once: each is as often as the other. */
+    @Test
+    void twoKeysAtOneValueAreOneValueAndTheCountAskedOfBothIsTheCountItHas() {
+        List<List<String>> rows = offeredWithTwoKeys("");
+        List<List<String>> alike = rows.stream().filter(row -> row.get(1).equals(row.get(2)))
+                .toList();
+        assertTrue(alike.stream().anyMatch(row -> occurrencesIn(row.get(0), row.get(1)) == 3),
+                () -> "the keys at one value, three times: " + rows);
+        assertTrue(alike.stream().anyMatch(row -> occurrencesIn(row.get(0), row.get(1)) == 2),
+                () -> "the keys at one value, twice: " + rows);
+    }
+
+    private static final Pattern ROW = Pattern.compile(
+            "^(\\[.*\\]), (\"(?:[^\"\\\\]|\\\\.)*\"|-?\\d+)$");
 
     /** The rows the block offers, each read back from how it is written; a row this cannot read
      *  back to its end fails, since a part left unread is one nothing checks. */
