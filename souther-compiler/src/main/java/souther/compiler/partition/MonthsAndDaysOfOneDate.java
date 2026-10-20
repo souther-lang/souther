@@ -57,7 +57,7 @@ final class MonthsAndDaysOfOneDate {
     private static List<List<ExactRatio>> workedOverTheCycle(
             List<DatesThatStandInEveryYear.Part> parts) {
         // The numbers are compared as numbers, and only the combinations that differ are made into
-        // ratios: a cycle is a hundred thousand days and a few hundred combinations.
+        // ratios: a cycle has far more days than it has distinct combinations.
         Set<Combination> seen = new LinkedHashSet<>();
         for (long day = HeldClass.A_CYCLE_STARTS;
                 day < HeldClass.A_CYCLE_STARTS + DatePartsLeft.DAYS_OF_A_CYCLE; day++) {
