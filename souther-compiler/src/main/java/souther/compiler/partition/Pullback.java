@@ -6399,8 +6399,7 @@ final class Pullback {
     private LinearForm<Quantity> sumOverTheElementsOfAnAnswer(NumericMeasures.Measured measured,
                                                               InputReads at) {
         if (!measured.arguments().none()
-                || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                        instanceof TakenAs.TheSumOfWhatItHolds)) {
+                || !(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         Symbols symbols = read.rules().symbols();

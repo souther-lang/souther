@@ -146,9 +146,7 @@ public final class InputNumber {
             case PathResolution.At(var at) -> ObservationSource.asItStands(at);
             case PathResolution.NotAPosition _ -> {
                 ObservationSource moved = movedFromALocation(of, reads, source);
-                if (moved != null || !(DefaultBoundOperationFacts.get()
-                        .takenAs(measured.operation()) instanceof TakenAs how
-                        && how.theSameInEveryOrder())) {
+                if (moved != null || !measured.takenAs().theSameInEveryOrder()) {
                     yield moved;
                 }
                 TermPath reordered = reads.containerWhoseEveryElementIsIn(of, source.newtypes());
@@ -219,9 +217,8 @@ public final class InputNumber {
     private static NumericTerm codePointsAddedUp(NumericMeasures.Measured measured,
                                                  InputDomain inputs, InputReads reads,
                                                  RuleReadingSource source) {
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         if (!measured.arguments().none()
-                || !(facts.takenAs(measured.operation()) instanceof TakenAs.TheSumOfWhatItHolds)) {
+                || !(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         TermPath at = stringWhoseCodePointsAre(measured.of(), reads, source);
@@ -268,8 +265,7 @@ public final class InputNumber {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
                 each -> reads.folded(each, symbols, source.newtypes()));
         if (measured == null || !measured.arguments().none()
-                || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                        instanceof TakenAs.TheSumOfWhatItHolds)) {
+                || !(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         Denotation walked = reads.denotes(measured.of(), symbols, source.newtypes());
@@ -666,8 +662,7 @@ public final class InputNumber {
     private static ElementProjection countedOfEach(NumericMeasures.Measured measured,
                                                    InputReads where, BindingId element,
                                                    RuleReadingSource source) {
-        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                instanceof TakenAs.TheSumOfWhatItHolds)) {
+        if (!(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         ElementAnswer closure = where.answerAt(element);
@@ -686,8 +681,7 @@ public final class InputNumber {
     private static ElementValue computedOf(NumericMeasures.Measured measured, InputReads where,
                                            BindingId element, RuleReadingSource source,
                                            ElementValue.ElementsAt elements) {
-        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                instanceof TakenAs.TheSumOfWhatItHolds)) {
+        if (!(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         ElementAnswer closure = where.answerAt(element);

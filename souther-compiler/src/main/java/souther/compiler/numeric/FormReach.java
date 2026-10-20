@@ -312,8 +312,7 @@ final class FormReach<A> {
     /** Whether a position weighed with the sign {@code sign} has no end the way that weight runs it
      *  up — never where it is weighed nought. */
     private boolean runsWithoutEnd(A position, int sign) {
-        return sign > 0 ? ends.mostOf(position) == null
-                : sign < 0 && ends.leastOf(position) == null;
+        return sign != 0 && rangeOf(position).endWeighedBy(sign, true) == null;
     }
 
     /** How many of {@code coefs}' positions carry a weight. */
@@ -372,7 +371,7 @@ final class FormReach<A> {
             }
             negated.put(each.getKey(), weight);
         }
-        ExactCut room = Reach.of(negated, half.bound().at(), this::rangeOf).most();
+        ExactCut room = Reach.mostOf(negated, half.bound().at(), this::rangeOf);
         return room != null && room.at().signum() > 0 ? Room.ABOVE_NOUGHT : Room.NOT_SETTLED;
     }
 
@@ -608,31 +607,10 @@ final class FormReach<A> {
         return withTheDifference(coefs, constant, fromTheRanges(coefs, constant));
     }
 
-    /**
-     * What the ends leave the form, each position read at its own end.
-     *
-     * <p>The upper end of {@link Reach#of} over the ends, taken in the same order with the same
-     * sums and nothing of the lower end beside it: every route here asks for the highest, and a
-     * position with no end that way leaves the form none, so nothing after it is summed.
-     */
+    /** What the ends leave the form, each position read at its own end. The highest alone, which
+     *  is every route's question here. */
     private ExactCut fromTheRanges(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        ExactRatio most = constant;
-        boolean reached = true;
-        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
-            ExactRatio weight = each.getValue();
-            ExactCut high = weight.signum() > 0 ? ends.mostOf(each.getKey())
-                    : ends.leastOf(each.getKey());
-            if (high == null) {
-                return null;
-            }
-            ExactRatio sum = most;
-            most = weight.times(high.at()).flatMap(sum::plus).orNull();
-            if (most == null) {
-                return null;
-            }
-            reached &= high.inclusive();
-        }
-        return new ExactCut(most, reached);
+        return Reach.mostOf(coefs, constant, this::rangeOf);
     }
 
     private Reach rangeOf(A position) {

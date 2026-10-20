@@ -63,7 +63,8 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
             }
             """;
 
-    /** Spellings of one number over {@code ROWS} or {@code NUMS}, each read as the first is. */
+    /** Spellings of one number over {@code ROWS}, {@code NUMS} or {@code YS}, each read as the
+     *  first is. */
     private static List<List<String>> readAsOne() {
         return List.of(
                 List.of("List.length(ROWS)",
@@ -88,7 +89,7 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                         "List.sum(List.sortBy(x -> x, NUMS))",
                         "List.sum(List.reverse(List.sortBy(x -> x, NUMS)))",
                         "List.sum(List.map(x -> x, List.reverse(NUMS)))",
-                        "List.sum(ys)"),
+                        "List.sum(YS)"),
                 // And a total of what each element comes to is the same over the list reversed.
                 List.of("List.sum(List.map(x -> 2 * x, NUMS))",
                         "List.sum(List.map(x -> 2 * x, List.reverse(NUMS)))"));
@@ -123,12 +124,12 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
     /**
      * The report of {@code shape} compared in {@code template}, with where each part stands left
      * out: spellings of one number differ in length, and what is compared is what was read.
-     * {@code ys} is {@code NUMS} reversed and bound to a name.
+     * {@code YS} is {@code NUMS} reversed and bound to a name.
      */
     private static String reportOf(String template, String shape, String rows, String nums) {
-        String bound = shape.contains("ys") ? "let ys = List.reverse(" + nums + ")" : "";
+        String bound = shape.contains("YS") ? "let ys = List.reverse(" + nums + ")" : "";
         String model = template.replace("<bound>", bound).replace("<number>",
-                shape.replace("ROWS", rows).replace("NUMS", nums));
+                shape.replace("ROWS", rows).replace("NUMS", nums).replace("YS", "ys"));
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

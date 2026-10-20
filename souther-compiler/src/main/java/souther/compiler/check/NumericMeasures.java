@@ -64,8 +64,16 @@ public final class NumericMeasures {
         return calls().contains(operation);
     }
 
-    /** One such call: which operation, what it is taken of, and what it was given beside that. */
-    public record Measured(ValueName.Stdlib operation, Core of, TakenArguments arguments) {}
+    /**
+     * One such call: which operation, what it is taken of, what it was given beside that, and the
+     * account the call's number was found by.
+     *
+     * <p>The account travels with the call. A reader asking again by the operation alone would ask
+     * the narrower question ({@link BoundOperationFacts#takenAs(ValueName)}), which answers nothing
+     * for an operation whose calls settle their account by what they are given.
+     */
+    public record Measured(ValueName.Stdlib operation, Core of, TakenArguments arguments,
+                           TakenAs takenAs) {}
 
     /**
      * The number {@code e} takes of one value and where it takes it, or null where it takes none.
@@ -114,7 +122,7 @@ public final class NumericMeasures {
         // taking the same number as one that was not.
         TakenArguments gave = besideTheValue(args, folded);
         TakenAs how = DefaultBoundOperationFacts.get().takenAs(named, gave);
-        return how == null ? null : new Measured(named, args.getFirst(), how.naming(gave));
+        return how == null ? null : new Measured(named, args.getFirst(), how.naming(gave), how);
     }
 
     /**

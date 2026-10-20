@@ -5,7 +5,6 @@ import souther.compiler.cst.CstLexer;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.ExactRatio;
@@ -22,7 +21,6 @@ import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
-import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -140,8 +138,7 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(NumericMeasures.Measured measured,
                                                  InputReads at) {
         DecisionSubject.AnAnswer answer = anAnswer(measured.of(), at);
-        if (answer == null && DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                instanceof TakenAs how && how.theSameInEveryOrder()) {
+        if (answer == null && measured.takenAs().theSameInEveryOrder()) {
             answer = anAnswerWhoseEveryElementIsHeldBy(measured.of(), at);
         }
         if (answer == null) {
