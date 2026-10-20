@@ -343,6 +343,30 @@ final class Pullback {
      * the elements that way keeps, and how many of them there are. Newest last.
      */
     private final List<AnAggregateInACase> aggregatesInACase = new ArrayList<>();
+    /**
+     * While a comparison's numbers are put together to ask which counts it weighs
+     * ({@link #aWayIn(List, Supplier)}): each count of the elements a filter keeps that a size
+     * asked of a container came to, with the containers it was asked of, in the order met. Null
+     * elsewhere.
+     */
+    private Map<Quantity.HowManyHold, List<Denotation>> countsMet;
+
+    /**
+     * How many {@code container} holds, asked by a number a comparison weighs, with each count of
+     * kept elements it comes to told to {@link #countsMet}.
+     */
+    private Sized sizeAsked(Core container, InputReads at) {
+        Sized sized = sizeOf(container, at);
+        if (countsMet != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
+            for (Quantity atom : form.coefs().keySet()) {
+                if (atom instanceof Quantity.HowManyHold count) {
+                    countsMet.computeIfAbsent(count, _ -> new ArrayList<>())
+                            .add(new Denotation(container, at));
+                }
+            }
+        }
+        return sized;
+    }
 
     /**
      * That {@code call}, standing in the names of {@code at}, is {@code form} in the way of
@@ -960,7 +984,9 @@ final class Pullback {
         // not. Asked of one reading, it is one answer, and reading the sides for it again would
         // make every reading under them a second time.
         Once<Optional<Inside>> wayIn = new Once<>(() -> Optional.ofNullable(aWayIn(List.of(
-                new Denotation(stated.left(), reads), new Denotation(stated.right(), reads)))));
+                new Weighed(new Denotation(stated.left(), reads), ExactRatio.ONE),
+                new Weighed(new Denotation(stated.right(), reads), ExactRatio.ONE.negated())),
+                Pullback::nothingElse)));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), emptiness, reads)
@@ -3587,13 +3613,20 @@ final class Pullback {
             // An argument chosen by cases is compared on each of them, and one a behavior's call
             // answers through its body, as a comparison the source wrote is
             // ({@link #throughWhatItStopsAt}).
-            List<Denotation> numbers = new ArrayList<>();
-            form.coefs().keySet().forEach(number -> {
+            List<Weighed> numbers = new ArrayList<>();
+            Map<LawNumber<DeclaredArgument>, ExactRatio> others = new LinkedHashMap<>();
+            form.coefs().forEach((number, by) -> {
                 if (number instanceof LawNumber.AnArgument<DeclaredArgument>(DeclaredArgument at)) {
-                    numbers.add(new Denotation(applied.argument(at), reads));
+                    numbers.add(new Weighed(new Denotation(applied.argument(at), reads), by));
+                } else {
+                    others.put(number, by);
                 }
             });
-            Inside inside = aWayIn(numbers);
+            // The numbers that are no values are read apart from the reading this comparison is
+            // read in, which reads them again.
+            Inside inside = aWayIn(numbers, () -> others.isEmpty() ? nothingElse()
+                    : inAComparisonsScope(false,
+                            () -> number(new LinearForm<>(ExactRatio.ZERO, others))));
             if (inside != null) {
                 return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
                         taking -> new ALawRead(this, taking.apply(reads)).compared(compared));
@@ -3830,7 +3863,7 @@ final class Pullback {
                 case LawNumber.SizeOf<DeclaredArgument>(LawSubject<DeclaredArgument> of) ->
                         switch (of) {
                             case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
-                                    sizeOf(applied.argument(at), reads);
+                                    sizeAsked(applied.argument(at), reads);
                             case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
                                     switch (elements.get(at)) {
                                         case ElementAt.AValue(Core value, InputReads in) ->
@@ -5578,7 +5611,16 @@ final class Pullback {
                 && count.args().size() == 1)) {
             return null;
         }
-        Denotation container = at.standing(count.args().getFirst(), read.rules().symbols(),
+        return keptByTruths(new Denotation(count.args().getFirst(), at));
+    }
+
+    /**
+     * How many {@code given} holds, where it is a container the body wrote out and some of its
+     * elements are kept by truths: one number for each way of keeping them. Null where it is
+     * none of these.
+     */
+    private Inside.ATotalByKeeping keptByTruths(Denotation given) {
+        Denotation container = given.at().standing(given.value(), read.rules().symbols(),
                 read.rules().newtypes());
         Core held = Core.withoutStanding(container.value());
         if (aggregateInACase(held, container.at()) != null
@@ -5672,7 +5714,11 @@ final class Pullback {
                     decided[next] = null;
                 }
             }
-            return new Derivation.IfThenElse(conditions[next], each[0], each[1]);
+            // The truth decides a choice its comparison writes, as the condition of an if does:
+            // each way is read under its own arm, and what the truth states is how the arm is
+            // selected and not this comparison's own line.
+            return madeBy(ways.truth(next).value(),
+                    new Derivation.IfThenElse(conditions[next], each[0], each[1]));
         }
         if (total.counted()) {
             long there = IntStream.range(0, total.occurrences().size())
@@ -6034,7 +6080,7 @@ final class Pullback {
                         && DefaultBoundOperationFacts.get().takenAs(measure)
                                 instanceof TakenAs.HowManyItHolds
                         && measured.args().size() == 1) {
-                    return sizeOf(measured.args().getFirst(), at)
+                    return sizeAsked(measured.args().getFirst(), at)
                             instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
                 }
                 // What a container the body wrote out adds up to, element by element.
@@ -6804,9 +6850,85 @@ final class Pullback {
      * and has not gone into yet — or null where it stops at none.
      */
     private Inside aWayIn(List<Denotation> numbers) {
+        return aStopIn(numbers, null);
+    }
+
+    /**
+     * A number of a comparison with its weight there: the comparison is the sum of its numbers so
+     * weighed, stated against nought.
+     */
+    private record Weighed(Denotation number, ExactRatio by) {}
+
+    /**
+     * The same, of a comparison of {@code numbers} and {@code rest}, the numbers it weighs that are
+     * no values: where the arithmetic of every value composes, a count of the elements a filter
+     * keeps that the comparison still weighs beside another number. Only a count weighed alone
+     * has a reader ({@link WhichOfThemHold}); beside another number it is read as the number it
+     * is in each way of keeping the elements ({@link #keepingOf}).
+     *
+     * <p>Which counts are weighed is asked of the comparison with every number put together, so
+     * that a count written on both sides and cancelled is read as the nought it comes to.
+     */
+    private Inside aWayIn(List<Weighed> numbers, Supplier<Sized> rest) {
+        Map<Quantity.HowManyHold, List<Denotation>> outer = countsMet;
+        countsMet = new LinkedHashMap<>();
+        try {
+            List<LinearForm<Quantity>> composed = new ArrayList<>();
+            Inside inside = aStopIn(numbers.stream().map(Weighed::number).toList(), composed);
+            if (inside != null || composed.size() < numbers.size()
+                    || !(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))) {
+                return inside;
+            }
+            List<LinearForm<Quantity>> weighed = new ArrayList<>(List.of(others));
+            for (int i = 0; i < numbers.size(); i++) {
+                LinearForm<Quantity> one = composed.get(i).times(numbers.get(i).by()).orNull();
+                if (one == null) {
+                    return null;
+                }
+                weighed.add(one);
+            }
+            LinearForm<Quantity> relation = LinearForm.sum(weighed).orNull();
+            if (relation == null || relation.coefs().size() < 2) {
+                return null;
+            }
+            for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count : countsMet.entrySet()) {
+                if (!relation.coefs().containsKey(count.getKey())) {
+                    continue;
+                }
+                for (Denotation container : count.getValue()) {
+                    Inside.ATotalByKeeping kept = keptByTruths(container);
+                    if (kept != null) {
+                        return kept;
+                    }
+                }
+            }
+            return null;
+        } finally {
+            countsMet = outer;
+        }
+    }
+
+    /** What a comparison weighs besides its values, where it weighs them alone. */
+    private static Sized nothingElse() {
+        return new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO));
+    }
+
+    /**
+     * The first value the arithmetic of one of {@code numbers} stops at that a reading can go into,
+     * as {@link #aWayIn(List)} has it.
+     *
+     * @param composed where not null, given the form of each number whose arithmetic composes, in
+     *                 the order of {@code numbers}: one for each of them where every one does
+     */
+    private Inside aStopIn(List<Denotation> numbers, List<LinearForm<Quantity>> composed) {
         for (Denotation number : numbers) {
-            if (AffineForms.outcome(number.value(), number.at(), quantities())
-                    instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+            AffineForms.Outcome<Quantity, InputReads> outcome =
+                    AffineForms.outcome(number.value(), number.at(), quantities());
+            if (composed != null && outcome instanceof AffineForms.Outcome.Composed<Quantity,
+                    InputReads>(LinearForm<Quantity> form)) {
+                composed.add(form);
+            }
+            if (outcome instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
                 Inside found = aWayInAt(stopped);
                 boolean goneInto = switch (found) {
                     case null -> true;
@@ -8216,9 +8338,9 @@ final class Pullback {
         }
         // A choice inside a side rather than the whole of it is split on as well, and a call of a
         // behavior entered, both sides read there ({@link #throughWhatItStopsAt}).
-        List<Denotation> numbers = new ArrayList<>(left.numbers());
-        numbers.addAll(right.numbers());
-        Inside inside = aWayIn(numbers);
+        List<Weighed> numbers = new ArrayList<>(left.numbers(false));
+        numbers.addAll(right.numbers(true));
+        Inside inside = aWayIn(numbers, Pullback::nothingElse);
         if (inside != null) {
             return goingIn(inside, left.at(), at, false, taking -> comparedCase(
                     left.in(taking.apply(left.at())), right.in(taking.apply(right.at())),
@@ -8257,8 +8379,9 @@ final class Pullback {
          *  it is a constant or a form of several. */
         Denotation whole();
 
-        /** Each value the side weighs, where it stands. */
-        List<Denotation> numbers();
+        /** Each value the side weighs, where it stands, with its weight in the comparison: as it
+         *  is on the side, or {@code subtracted} from the other. */
+        List<Weighed> numbers(boolean subtracted);
 
         /** The same side, standing where {@code other} puts it. */
         ASide in(InputReads other);
@@ -8277,8 +8400,9 @@ final class Pullback {
             }
 
             @Override
-            public List<Denotation> numbers() {
-                return List.of(value);
+            public List<Weighed> numbers(boolean subtracted) {
+                return List.of(new Weighed(value,
+                        subtracted ? ExactRatio.ONE.negated() : ExactRatio.ONE));
             }
 
             @Override
@@ -8303,8 +8427,10 @@ final class Pullback {
             }
 
             @Override
-            public List<Denotation> numbers() {
-                return form.coefs().keySet().stream().map(each -> new Denotation(each, at))
+            public List<Weighed> numbers(boolean subtracted) {
+                return form.coefs().entrySet().stream()
+                        .map(each -> new Weighed(new Denotation(each.getKey(), at),
+                                subtracted ? each.getValue().negated() : each.getValue()))
                         .toList();
             }
 
