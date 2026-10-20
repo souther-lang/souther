@@ -5005,19 +5005,21 @@ final class Pullback {
         if (counted.step().signum() == 0) {
             return LinearForm.constant(counted.first());
         }
-        // The key asked for occurs among the lists of an outer list put end to end: the counter
-        // is read of the count the lookup's presence is read of.
-        NumericTerm.OccurrencesOfAKey across = applied.args().size() == 2
-                ? occurrencesOfTheKeyAskedFor(whole, filed, applied.args().getFirst(), at) : null;
-        if (across != null) {
-            return counted.first().plus(counted.step().negated())
+        Derivation.SomeElementMeeting meeting = someElementMeetingIn(
+                observe(lookup, AnswerAspect.PRESENCE, at));
+        if (meeting == null) {
+            // The key asked for may occur among the lists of an outer list put end to end, which
+            // no one container holds: the counter is read of the count the lookup's presence is
+            // read of.
+            NumericTerm.OccurrencesOfAKey across = applied.args().size() == 2
+                    ? occurrencesOfTheKeyAskedFor(whole, filed, applied.args().getFirst(), at)
+                    : null;
+            return across != null && counted.first().plus(counted.step().negated())
                     instanceof ExactAnswer.Held<ExactRatio>(ExactRatio constant)
                     ? new LinearForm<>(constant,
                             Map.of(new DecisionAtom.OfTheInput(across), counted.step())) : null;
         }
-        Derivation.SomeElementMeeting meeting = someElementMeetingIn(
-                observe(lookup, AnswerAspect.PRESENCE, at));
-        if (meeting == null || !meeting.holds()) {
+        if (!meeting.holds()) {
             return null;
         }
         Derivation ofTheElement = asAComparisonOfTwoOrderedValues(meeting.ofTheElement());

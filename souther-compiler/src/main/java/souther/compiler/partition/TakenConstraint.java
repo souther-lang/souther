@@ -125,6 +125,10 @@ public sealed interface TakenConstraint {
          */
         @Override
         public java.util.Set<NumericTerm> terms() {
+            if (form.coefs().keySet().stream()
+                    .noneMatch(term -> term instanceof NumericTerm.OccurrencesOfAKey)) {
+                return form.coefs().keySet();
+            }
             Set<NumericTerm> out = new LinkedHashSet<>();
             for (NumericTerm term : form.coefs().keySet()) {
                 if (term instanceof NumericTerm.OccurrencesOfAKey asked) {

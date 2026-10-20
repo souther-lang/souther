@@ -494,7 +494,7 @@ final class CardinalityComposer {
         Groups<ObservedValue> every = new Groups<>(new ArrayList<>(), new ArrayList<>(),
                 new LinkedHashSet<>());
         for (ObservedValue value : listed.values()) {
-            BorderQuantity.Observation row = new WithNumbersBeside(
+            BorderQuantity.Observation row = withNumbersBeside(
                     ofTheElement.holding(sourceType, List.of(value)), written);
             every.add(value, i -> ofAnElement.get(i).apply(row), asked.size());
         }
@@ -515,7 +515,7 @@ final class CardinalityComposer {
                     return false;
                 }
                 List<ObservedValue> values = groups.drawn(share, distinct);
-                BorderQuantity.Observation whole = new WithNumbersBeside(
+                BorderQuantity.Observation whole = withNumbersBeside(
                         ofTheElement.holding(sourceType, values), written);
                 for (Asked each : asked) {
                     // A count reads the container through the row and not the values handed it.
@@ -1394,6 +1394,13 @@ final class CardinalityComposer {
             }
         }
         return out;
+    }
+
+    /** {@code row}, with {@code written} in it where there is any: a row asked once for each way
+     *  the elements are shared out is not wrapped for nothing. */
+    private static BorderQuantity.Observation withNumbersBeside(
+            BorderQuantity.Observation row, Map<TermPath, ObservedValue> written) {
+        return written.isEmpty() ? row : new WithNumbersBeside(row, written);
     }
 
     /**
