@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.IntPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -123,7 +124,20 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
      */
     @Test
     void theRowsOfferedAreAnsweredAsTheCalendarWorksTheAgeOut() {
-        String behavior = AGE + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n";
+        assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(
+                AGE + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n",
+                age -> age >= 60);
+    }
+
+    /** The same of a way that states the age at two lines. */
+    @Test
+    void theRowsOfferedForTwoComparisonsOfOneAgeAreAnsweredAsTheCalendarWorksTheAgeOut() {
+        assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(BETWEEN_FORTY_AND_SIXTY_FIVE,
+                age -> age >= 40 && age < 65);
+    }
+
+    private static void assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(
+            String behavior, IntPredicate expected) {
         Compilation offering = compiled(behavior);
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
@@ -142,7 +156,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
             }
             examples.append("    | (Date(\"").append(dates.get(0)).append("\"), Date(\"")
                     .append(dates.get(1)).append("\")) -> ")
-                    .append(ageAttained(dates.get(0), dates.get(1)) >= 60).append('\n');
+                    .append(expected.test(ageAttained(dates.get(0), dates.get(1)))).append('\n');
             rows++;
         }
         assertTrue(rows > 0, offered);
@@ -194,6 +208,26 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
 
         assertFalse(report.contains("rather than dividing the values here, about"
                 + " `Date.month(on)`"), report);
+    }
+
+    private static final String BETWEEN_FORTY_AND_SIXTY_FIVE = AGE
+            + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 40"
+            + " && attainedAgeOn(birthday, on) < 65\n";
+
+    /**
+     * Two comparisons of one age state the months and days of the dates, and their years, along
+     * one way. The first comparison states the correction by the months and days that the second
+     * asks again, so the way decides it and the months and days are read there. The years are
+     * stated at one level and asked at another, and are not read.
+     */
+    @Test
+    void theCorrectionOneComparisonStatesAndAnotherAsksAgainIsReadAlongWaysThatStateYearsToo() {
+        String report = report(BETWEEN_FORTY_AND_SIXTY_FIVE);
+
+        assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
+                + " is not worked out, about `Date.month(on)`"), report);
+        assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
+                + " is not worked out, about `Date.day(on)`"), report);
     }
 
     /**
