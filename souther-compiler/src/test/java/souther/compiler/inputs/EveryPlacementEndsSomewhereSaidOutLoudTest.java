@@ -18,7 +18,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -46,6 +46,24 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
 
             behavior read : (h: Holder) -> Ok
             behavior atTheSum : (q: Q) -> Ok
+            """;
+
+    /**
+     * A chain whose link states a rule about the value it comes back to: the name the rule writes
+     * is a place under the position the listing ends at.
+     */
+    private static final String RETURNS_PAST_A_RULES_NAME = """
+            module g
+
+            data Paging = { limit: Int }
+            data Leaf = { ...Paging, terminal: Bool }
+            data Link = { ...Paging, next: Chain }
+                invariant next.limit >= 0
+            data Chain = Leaf | Link
+
+            data Ok
+
+            behavior read : (c: Chain) -> Ok
             """;
 
     /** A chain: the reading of a link returns to the declaration the link stands at. */
@@ -100,32 +118,25 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
     }
 
     /**
-     * A name that reaches no position says so, and says what the reading was left with.
+     * A name a rule writes past the end of the listing is read there, and ends at a position.
      *
-     * <p>The one thing a measurement may not be called complete over. Read off the filings alone,
-     * this rule would be a rule nobody wrote.
+     * <p>The listing of positions ends where the input returns to `Chain`. The rule of a link names
+     * `limit` of the chain it holds, which is under that position, so the places it names are
+     * demanded when the link is opened: they stand under each case of the chain the link holds,
+     * and every placement of the rule is filed at them. Read off the listing alone, the line the
+     * rule draws would be a line nobody is owed a row at.
      */
     @Test
-    void aNameThatReachesNoPositionComesBackSayingSo() {
-        InputDomain read = reading(RETURNS, "read");
-        // A clause of `Cons` naming a field of the link below it. The link is where the input
-        // returns to `Chain`, so the name gets that far and no further.
-        PlacementFiling filing = read.file(new PlacementSeed(
-                new RuleAddress(pathOf(read, "c@Cons"), new RuleKey(List.of("tail", "head"))),
-                new PlacementSeed.Placed.TheValuesThere(), someCitation(aRule(read))));
+    void aNameARuleWritesPastAReturnIsReadThereAndFiledThere() {
+        InputDomain read = reading(RETURNS_PAST_A_RULES_NAME, "read");
 
-        assertEquals(List.of(), filedAt(filing));
-        assertTrue(filing.anythingUnresolved(), "and nothing else stands in its place");
-        assertEquals(1, filing.outcomes().size(),
-                "the sum was not entered at all, so there is one stop and it is the sum's");
-        PlacementOutcome.Unresolved first =
-                assertInstanceOf(PlacementOutcome.Unresolved.class, filing.outcomes().getFirst());
-        PlacementOutcome.Reason.TheListingWasClosedThere closed = assertInstanceOf(
-                PlacementOutcome.Reason.TheListingWasClosedThere.class, first.why(),
-                "the listing was closed, and it is the position it closed at that says so");
-        assertEquals("c@Cons.tail", closed.at().toString());
-        assertEquals("c", closed.openedAt().toString(),
-                "and it says where the path had already opened `Chain`");
+        assertNotNull(read.at(pathOf(read, "c@Link.next@Leaf.limit")));
+        assertNotNull(read.at(pathOf(read, "c@Link.next@Link.limit")));
+        List<PlacementFiling> filings = read.placements();
+        assertFalse(filings.isEmpty(), "the rule placed an end");
+        for (PlacementFiling filing : filings) {
+            assertFalse(filing.anythingUnresolved(), () -> filing.seed().address() + " was filed");
+        }
     }
 
     /** The position this reading made at {@code spelled}, which is where a case's rules are rooted. */
@@ -146,7 +157,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
      */
     @Test
     void everyPlacementOfEveryRuleComesBackWithAnAnswer() {
-        for (String source : List.of(SHARED, RETURNS, MIXED)) {
+        for (String source : List.of(SHARED, RETURNS, RETURNS_PAST_A_RULES_NAME, MIXED)) {
             for (String behavior : behaviorsOf(source)) {
                 InputDomain read = reading(source, behavior);
                 for (PlacementFiling filing : read.placements()) {
@@ -181,7 +192,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
         assertEquals(List.of(), shared.reach().branchesNotEntered(),
                 "and the reading went down both of them");
 
-        for (String source : List.of(SHARED, RETURNS, MIXED)) {
+        for (String source : List.of(SHARED, RETURNS, RETURNS_PAST_A_RULES_NAME, MIXED)) {
             for (String behavior : behaviorsOf(source)) {
                 InputDomain read = reading(source, behavior);
                 for (NameReach.Crossing crossing : read.reach().crossings()) {

@@ -357,7 +357,7 @@ public final class InputDomain {
             TermPath at = TermPath.of(parameter.name());
             roots.add(new RuleRoot(at, parameter.type(), new RootOpening.Taken()));
             PlacedRules rules = PlacedRules.of(at, parameter.type(), reading);
-            account.from(rules);
+            account.from(rules, _ -> true);
             // One walk, carrying the paths the measurement named under this parameter. Walked once
             // per demand instead, two paths sharing a prefix would open that prefix's declaration
             // twice, place its rules twice, and record a second answer where the ledger of what was
@@ -365,7 +365,7 @@ public final class InputDomain {
             // demands ran through it.
             walk(at, parameter.type(), ExpansionTrace.NONE, reading, counted, rules, found, roots,
                     java.util.Set.of(), handoffs, observed, account,
-                    Reach.enumerating(demand.under(at)));
+                    Reach.enumerating(demand.under(at)).alsoNaming(rules));
         }
         // And only now, because a handoff is discharged by a descent that happens after the
         // position above it has been read. Held the other way round, every position that hands its
@@ -396,9 +396,12 @@ public final class InputDomain {
         private final List<PlacementSeed> placed = new ArrayList<>();
         private final List<ClauseWithoutAnEnd> clauses = new ArrayList<>();
 
-        /** Everything {@code rules} put forward, ends and clauses alike. */
-        void from(PlacedRules rules) {
-            placed.addAll(rules.placed());
+        /**
+         * What {@code rules} put forward, ends and clauses alike, of the placements those that
+         * {@code owed} says this reading is owed an answer for.
+         */
+        void from(PlacedRules rules, java.util.function.Predicate<PlacementSeed> owed) {
+            rules.placed().stream().filter(owed).forEach(placed::add);
             clauses.addAll(rules.clausesWithoutAnEnd());
         }
 
@@ -732,9 +735,7 @@ public final class InputDomain {
             return new PlacementOutcome.Reason.TheReadingStoppedThere(
                     new PositionId(at), blocked.why());
         }
-        TermPath openedAt = reach.listingClosedAt(at);
-        return openedAt == null ? null
-                : new PlacementOutcome.Reason.TheListingWasClosedThere(new PositionId(at), openedAt);
+        return null;
     }
 
     /**
@@ -983,6 +984,60 @@ public final class InputDomain {
             return new Reach(demanded, true, true);
         }
 
+        /**
+         * The same with the paths {@code rules} name added to what is demanded.
+         *
+         * <p>A rule of a value that names a place under it asks the reading to go there however far
+         * the listing of positions goes, as a path the body names does. Left out, a rule naming a
+         * place past the end of the listing would draw a line nobody is owed a row at.
+         *
+         * <p>Only the rules of a value the listing itself opens. A value reached because a path
+         * was named is read for that path, and its own rules naming places further down would ask
+         * for another copy of the same type, and so on without end: the depth is the one rule's,
+         * written where the listing opened the value.
+         */
+        Reach alsoNaming(PlacedRules rules) {
+            if (!enumerating) {
+                return this;
+            }
+            java.util.Set<TermPath> named = new java.util.LinkedHashSet<>(demanded);
+            for (PlacementSeed seed : rules.placed()) {
+                RuleKey key = seed.address().key();
+                if (key.isTheValueItself()) {
+                    continue;
+                }
+                TermPath path = seed.address().root();
+                for (String step : key.steps()) {
+                    path = path.then(step);
+                }
+                named.add(path);
+            }
+            return new Reach(List.copyOf(named), enumerating, handedOn);
+        }
+
+        /**
+         * Whether the reading is owed an answer for where {@code seed} puts its end.
+         *
+         * <p>Every placement of a value the listing opens. A value reached because a path was named
+         * answers only for the places that naming reaches: its rules written about places further
+         * down are about another copy of the type, which nothing here lists or asks for.
+         */
+        boolean owes(PlacementSeed seed) {
+            if (enumerating) {
+                return true;
+            }
+            TermPath place = seed.address().root();
+            for (String step : seed.address().key().steps()) {
+                place = place.then(step);
+            }
+            for (TermPath each : demanded) {
+                if (each.isAtOrUnder(place) || place.isAtOrUnder(each)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /** Whether this position is one the reading reports, rather than one it walked through. */
         boolean reports(TermPath at) {
             return enumerating || demanded.contains(at);
@@ -1065,13 +1120,10 @@ public final class InputDomain {
         TermPath already = reach.enumerating() ? ancestry.openedAt(unfolds) : null;
         // Closing the listing here is a bound this walk puts on itself. The position is read like
         // any other, and what stands under it is what stood under the declaration where it was
-        // first opened, whose rules were handed on there. What can still be left unread is a rule
-        // that names a path below this one, and that is the rules' own accounting: a name followed
-        // to a closed position is told the listing ended there.
+        // first opened, whose rules were handed on there. A place a rule names below this one is
+        // demanded when the rule's value is opened, so it is read whether or not the listing goes
+        // that far.
         StructuralInspection structure = StructuralInspection.of(input.shape(), declared);
-        if (already != null) {
-            observed.closedAt(path, already);
-        }
         Position here = read(input, path, reading, counted, placed, structure, declared);
         // Passing through an occurrence is not finding a position. A reading following a path the
         // model named opens every declaration on the way — that is how it knows which step to take
@@ -1516,9 +1568,9 @@ public final class InputDomain {
         PlacedRules rules = PlacedRules.of(opened, type, reading, crossing);
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
-        account.from(rules);
+        account.from(rules, reach::owes);
         walk(opened, type, ancestry, reading, counted, rules, found, roots, visited,
-                handoffs, observed, account, reach);
+                handoffs, observed, account, reach.alsoNaming(rules));
     }
 
     /**

@@ -70,6 +70,49 @@ class ARecursiveInputOwesRowsWhereTheBodyReadsItTest {
         assertFalse(report.contains("n.kids[*].amount: ="), report);
     }
 
+    /**
+     * A line a rule of the type draws at a place under the return is owed rows there, as it is
+     * where the type does not recurse.
+     *
+     * <p>The rule of a link says `next.limit >= 0` of the chain it holds, which is the position the
+     * listing ends at. The place it names stands under each case of that chain, and the line is
+     * drawn there.
+     */
+    @Test
+    void aLineARuleDrawsUnderTheReturnIsOwedRowsThereAsWhereTheTypeDoesNotRecurse() {
+        String recursive = humanReportOf(PAGED + """
+                data Link = { ...Paging, next: Chain }
+                    invariant next.limit >= 0
+                data Chain = Leaf | Link
+                """ + PAGED_BEHAVIOR);
+        String flat = humanReportOf(PAGED + """
+                data Other = { ...Paging, tag: Bool }
+                data Inner = Leaf | Other
+                data Link = { ...Paging, next: Inner }
+                    invariant next.limit >= 0
+                data Chain = Leaf | Link
+                """ + PAGED_BEHAVIOR);
+
+        for (String report : java.util.List.of(recursive, flat)) {
+            assertTrue(report.contains("declarations   borders 1   obligations 0/2"), report);
+            assertTrue(report.contains("read as f/c@Link.next@Leaf.limit: = 0"), report);
+        }
+        assertTrue(recursive.contains("read as f/c@Link.next@Link.limit: = 0"), recursive);
+    }
+
+    private static final String PAGED = """
+            module m
+            data Yes
+            data No
+            data Paging = { limit: Int }
+            data Leaf = { ...Paging, terminal: Bool }
+            """;
+
+    private static final String PAGED_BEHAVIOR = """
+            behavior f : (c: Chain) -> Yes | No
+            let f (c) = if c.limit > 3 then Yes else No
+            """;
+
     private static String humanReportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
