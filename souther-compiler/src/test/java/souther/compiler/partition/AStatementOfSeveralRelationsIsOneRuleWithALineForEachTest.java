@@ -379,6 +379,41 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                 "a row is owed on each side of three and nowhere about nought");
     }
 
+    /**
+     * A remainder of a form of several numbers is something a row is asked, as a product is: the
+     * line on the remainder is drawn among several, and the rows owed are named by the remainder
+     * they stand at.
+     */
+    @Test
+    void aLineOnARemainderOfAFormAmongSeveralIsDrawnWhereItDecides() {
+        JsonNode report = reportOf("Int.max(0, Int.floorMod(a + b.v, 11) - 5) <= 2", "");
+        assertTrue(reasonsAt(report, "a").stream()
+                        .noneMatch("several_lines_in_one_rule"::equals),
+                () -> "the statement is drawn, not held back: " + reasonsAt(report, "a"));
+        assertEquals(Set.of("pick/Int.floorMod(a + b.v, 11) 7",
+                        "pick/Int.floorMod(a + b.v, 11) 8"), pointsOfParts(report),
+                "a row is owed on each side of seven and nowhere about the arms' meeting at five");
+    }
+
+    /** The remainder is of the form with its weights and constant, and read as a floor remainder. */
+    @Test
+    void aRemainderOfAWeightedFormWithAConstantIsDrawnToo() {
+        JsonNode report = reportOf("Int.max(0, Int.floorMod(3 * a + b.v + 5, 11) - 5) <= 2", "");
+        assertTrue(reasonsAt(report, "a").stream()
+                        .noneMatch("several_lines_in_one_rule"::equals),
+                () -> "the statement is drawn, not held back: " + reasonsAt(report, "a"));
+        assertEquals(Set.of("pick/Int.floorMod(3 * a + b.v + 5, 11) 7",
+                        "pick/Int.floorMod(3 * a + b.v + 5, 11) 8"), pointsOfParts(report));
+    }
+
+    /** A statement about a remainder that holds of no row turns on none of its lines. */
+    @Test
+    void aStatementOnARemainderOfAFormThatHoldsNowhereTurnsOnNoLine() {
+        JsonNode report = reportOf("Int.max(0, Int.floorMod(a + b.v, 11)) <= -1", "");
+        assertTrue(obligationsOfParts(report).isEmpty(),
+                () -> "no row is owed at either line: " + obligationsOfParts(report));
+    }
+
     /** A statement about a product that holds of no row turns on none of its lines. */
     @Test
     void aStatementOnAProductThatHoldsNowhereTurnsOnNoLine() {
