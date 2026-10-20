@@ -182,11 +182,13 @@ final class ReadQuantities implements Quantities {
      * many times: where a form runs, whether anything is left, and where the next form runs are
      * three questions under one context.
      *
-     * <p>Per value, since what was taken in is this value's. The part no caller said anything to is
-     * {@link #contexts}, and is not kept twice.
+     * <p>Per what was taken in, since that is what the rules are said with. Every reading made from
+     * this one by fixing terms took in the same and holds this same memo, and what is kept in it is
+     * worked out by a reading holding what was taken in and nothing fixed ({@link #unfixed}), so
+     * that no candidate a search fixes can reach what the others are answered from. The part no
+     * caller said anything to is {@link #contexts}, and is not kept twice.
      */
-    private final Map<StructuralContext, ConstraintState<InputAtom>> answered =
-            new ConcurrentHashMap<>();
+    private final Map<StructuralContext, ConstraintState<InputAtom>> answered;
     /** The same, of those rules with this value's fixings standing in them. Beside the one above
      *  and not in place of it: a form a caller takes in is spaced by what the declarations say,
      *  and not by what a fixing happened to settle. */
@@ -194,39 +196,43 @@ final class ReadQuantities implements Quantities {
             new ConcurrentHashMap<>();
 
     /**
-     * How this reading was narrowed from another in one step, with what that one had worked out —
-     * or null where it was not made that way.
+     * The term this reading fixed one more of than the reading it was made from, with what that
+     * one had worked out of its fixings — or null where it was not made that way.
      *
-     * <p>Carried so that the rules this reading holds can be the ones that reading held with the
-     * one step put on, rather than every step put on again ({@link #constraints},
-     * {@link #effectiveConstraints}). What this reading answers is settled by what it was told and
-     * never by this.
+     * <p>Carried so that the rules with the fixings in them can be the ones that reading held with
+     * the one term put on, rather than every fixing put on again ({@link #effectiveConstraints}).
+     * What this reading answers is settled by what it was told and never by this.
      */
-    private final NarrowedByOne narrowedByOne;
+    private final OneMoreFixed oneMoreFixed;
 
     /**
-     * One step a reading was narrowed by, and what the reading before it had worked out — and not
-     * that reading, which holds what it spends its answers out of and is no part of this one.
+     * The condition what this reading took in has one more of than another reading's, with the
+     * rules that one had worked out — or null where what it took in was not made that way.
+     *
+     * <p>Carried through every fixing, since a fixing changes nothing taken in, so that the rules
+     * this reading's conditions make can be the ones before with one condition put on
+     * ({@link #constraints}). What this reading answers is settled by what it was told and never
+     * by this.
      */
-    private sealed interface NarrowedByOne permits OneMoreFixed, OneMoreTaken {}
+    private final OneMoreTaken oneMoreTaken;
 
     /**
      * {@code term} fixed at the end of the fixings of a reading that held {@code rulesBefore} and
-     * {@code runsBefore} as its own {@link #withTheFixings} and {@link #whereEachTermRuns}.
+     * {@code runsBefore} as its own {@link #withTheFixings} and {@link #whereEachTermRuns} — and not
+     * that reading, which holds what it spends its answers out of and is no part of this one.
      */
     private record OneMoreFixed(
             NumericTerm term,
             Map<StructuralContext, ConstraintState<InputAtom>> rulesBefore,
-            Map<NumericTerm, Optional<NumericDomain.Bounds>> runsBefore) implements NarrowedByOne {}
+            Map<NumericTerm, Optional<NumericDomain.Bounds>> runsBefore) {}
 
     /**
      * {@code taken} at the end of what a reading had taken in, which held {@code takenBefore} as its
-     * own {@link #answered}.
+     * own {@link #answered} — and not that reading.
      */
     private record OneMoreTaken(
             Assumed taken,
-            Map<StructuralContext, ConstraintState<InputAtom>> takenBefore)
-            implements NarrowedByOne {}
+            Map<StructuralContext, ConstraintState<InputAtom>> takenBefore) {}
 
     /**
      * Where each term this reading has been asked about runs, without what the declarations hold
@@ -360,9 +366,12 @@ final class ReadQuantities implements Quantities {
                            Map<NumericTerm, Fixed> fixed,
                            RuleReadingContext ruleReading, List<Assumed> assumed,
                            List<HeldAgainst> heldAgainst, Contexts contexts,
-                           NarrowedByOne narrowedByOne) {
+                           OneMoreFixed oneMoreFixed, OneMoreTaken oneMoreTaken,
+                           Map<StructuralContext, ConstraintState<InputAtom>> answered) {
         this.contexts = contexts;
-        this.narrowedByOne = narrowedByOne;
+        this.answered = answered;
+        this.oneMoreFixed = oneMoreFixed;
+        this.oneMoreTaken = oneMoreTaken;
         this.cases = List.copyOf(cases);
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
@@ -387,7 +396,8 @@ final class ReadQuantities implements Quantities {
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading) {
         return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
-                ruleReading, List.of(), List.of(), new Contexts(), null);
+                ruleReading, List.of(), List.of(), new Contexts(), null, null,
+                new ConcurrentHashMap<>());
     }
 
     /**
@@ -401,7 +411,21 @@ final class ReadQuantities implements Quantities {
     private ReadQuantities unrefined() {
         return fixed.isEmpty() && assumed.isEmpty() ? this
                 : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                        List.of(), List.of(), contexts, null);
+                        List.of(), List.of(), contexts, null, null, new ConcurrentHashMap<>());
+    }
+
+    /**
+     * This reading with what it took in and nothing fixed, which is the one {@link #answered} is
+     * worked out by.
+     *
+     * <p>Made rather than remembered, and only where a context is first asked about, as
+     * {@link #unrefined} is: what every reading fixing terms of the same conditions is answered
+     * from is then worked out by a value that holds no fixing, whichever of them asked first.
+     */
+    private ReadQuantities unfixed() {
+        return fixed.isEmpty() ? this
+                : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
+                        assumed, heldAgainst, contexts, null, oneMoreTaken, answered);
     }
 
     /**
@@ -941,7 +965,7 @@ final class ReadQuantities implements Quantities {
         // are the declarations' own, and taking one condition in is all there is to do.
         OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(taking, answered);
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both, pairs, contexts, oneMore);
+                both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>());
     }
 
     /**
@@ -993,14 +1017,13 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
+        if (!fixed.isEmpty()) {
+            return unfixed().constraints(under);
+        }
         // The rules the reading this one took one condition more than holds, with that condition
         // taken in: what taking one in puts on reads the rules said before it and nothing else
         // taken, so these are the rules taking every condition in again would say, in that order.
-        OneMoreTaken one = switch (narrowedByOne) {
-            case OneMoreTaken it -> it;
-            case OneMoreFixed _ -> null;
-            case null -> null;
-        };
+        OneMoreTaken one = oneMoreTaken;
         ConstraintState<InputAtom> before = one == null ? null : one.takenBefore().get(under);
         ConstraintState<InputAtom> made;
         if (before != null) {
@@ -1128,13 +1151,8 @@ final class ReadQuantities implements Quantities {
      * already there.
      */
     private ConstraintState<InputAtom> carriedOn(StructuralContext under) {
-        // A condition taken in moves the rules every fixing is put onto, so only a fixing is
-        // carried on from here.
-        OneMoreFixed oneMoreFixed = switch (narrowedByOne) {
-            case OneMoreFixed it -> it;
-            case OneMoreTaken _ -> null;
-            case null -> null;
-        };
+        // A condition taken in moves the rules every fixing is put onto, so a reading made by
+        // taking one in has no fixing to carry on from.
         if (oneMoreFixed == null) {
             return null;
         }
@@ -1683,7 +1701,7 @@ final class ReadQuantities implements Quantities {
             return this;
         }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed, heldAgainst, contexts, oneMoreThan(both));
+                assumed, heldAgainst, contexts, oneMoreThan(both), oneMoreTaken, answered);
     }
 
     /**

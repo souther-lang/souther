@@ -312,6 +312,77 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 () -> "the rows that were offered meet the line: " + report(after));
     }
 
+    private static final String OVER_WHAT_A_MAP_BUILT = """
+            module example.stale
+
+            data Touch = { account: String, days: Int, on: Date }
+
+            data Seen = { who: String, since: Int }
+
+            let sinceOf (touches: List<Touch>, today: Date): Map<String, Int> =
+                List.fold((acc, p) -> %s, Map.empty, %s)
+
+            behavior stale : (touches: List<Touch>, today: Date, staleAfter: Int)
+                -> Map<String, Int>
+
+            let stale (touches, today, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches, today))
+            """;
+
+    /**
+     * A tuple or a record a map built of each touch, either inside the other or a tuple inside a
+     * tuple, with the key and the value read out of it, keeps the ends the touches do: the line is
+     * the one a fold over the touches draws, and the rows offered are the ones it is offered.
+     */
+    @Test
+    void aTupleOrARecordAMapBuiltOfTheTouchesKeepsTheEndsTheTouchesDo() {
+        record Built(String step, String walked) { }
+        Compilation direct = measured(OVER_WHAT_A_MAP_BUILT.formatted(
+                "Map.updateOrInsert(p.account, p.days, seen -> Int.min(seen, p.days), acc)",
+                "touches"));
+        for (Built each : List.of(
+                new Built("{ let (a, d) = p\n Map.updateOrInsert(a, d,"
+                        + " seen -> Int.min(seen, d), acc) }",
+                        "List.map(t -> (t.account, t.days), touches)"),
+                new Built("Map.updateOrInsert(p.who, p.since,"
+                        + " seen -> Int.min(seen, p.since), acc)",
+                        "List.map(t -> Seen { who = t.account, since = t.days }, touches)"),
+                new Built("{ let (q, d) = p\n let (a, _) = q\n Map.updateOrInsert(a, d,"
+                        + " seen -> Int.min(seen, d), acc) }",
+                        "List.map(t -> ((t.account, 0), t.days), touches)"),
+                new Built("{ let (s, _) = p\n Map.updateOrInsert(s.who, s.since,"
+                        + " seen -> Int.min(seen, s.since), acc) }",
+                        "List.map(t -> (Seen { who = t.account, since = t.days }, 0), touches)"))) {
+            Compilation built = measured(OVER_WHAT_A_MAP_BUILT.formatted(each.step(),
+                    each.walked()));
+            assertTrue(json(built).contains("least(touches[*].days by account)"),
+                    () -> each + ": " + report(built));
+            assertEquals(axisOf(direct), axisOf(built), () -> each + ": " + report(built));
+            assertEquals(offeredInputs(direct), offeredInputs(built), () -> each.toString());
+        }
+    }
+
+    /**
+     * A value worked out of what an element holds, alone or with another input, is no place of
+     * the element: the comparison is left unread, and no end of what some place holds is said to
+     * be what the key keeps.
+     */
+    @Test
+    void aValueWorkedOutOfWhatTheElementHoldsLeavesTheComparisonUnread() {
+        for (String walked : List.of(
+                "List.map(t -> Seen { who = t.account, since = t.days + 1 }, touches)",
+                "List.map(t -> Seen { who = t.account,"
+                        + " since = Date.daysBetween(t.on, today) }, touches)")) {
+            Compilation compilation = measured(OVER_WHAT_A_MAP_BUILT.formatted(
+                    "Map.updateOrInsert(p.who, p.since, seen -> Int.min(seen, p.since), acc)",
+                    walked));
+            assertTrue(report(compilation).contains("not read"),
+                    () -> walked + ": " + report(compilation));
+            assertFalse(json(compilation).contains("least("),
+                    () -> walked + ": " + report(compilation));
+        }
+    }
+
     /** The line is written in a document the schema shipped beside this accepts. */
     @Test
     void theDocumentNamingTheEndIsOneTheSchemaAccepts() {

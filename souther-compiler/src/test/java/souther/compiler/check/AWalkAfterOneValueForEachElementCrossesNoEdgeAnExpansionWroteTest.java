@@ -7,7 +7,6 @@ import souther.compiler.carrier.Membership;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.DeclaredInput;
-import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.OnePerElement;
 import souther.compiler.inputs.PathResolution;
@@ -78,8 +77,19 @@ class AWalkAfterOneValueForEachElementCrossesNoEdgeAnExpansionWroteTest {
         return builder.built();
     }
 
-    private static OnePerElement onePerElement(ElementProvenance provenance) {
-        return reads(provenance).onePerElementOf(read("xs", CONTAINER), SYMBOLS, NEWTYPES);
+    /** The elements of the container the parameter {@code held} is, each read as itself. */
+    private static final InputReads.Occurrences OF_HELD = new InputReads.Occurrences.OfOneContainer(
+            TermPath.of("held"),
+            List.of(new InputReads.Occurrences.Read.At(TermPath.of("held").element(), false)),
+            List.of());
+
+    private static InputReads.Occurrences onePerElement(InputReads reads, Core list) {
+        return reads.occurrencesOf(list, List.of(OnePerElement.ReadOff.ITSELF), null, SYMBOLS,
+                NEWTYPES);
+    }
+
+    private static InputReads.Occurrences onePerElement(ElementProvenance provenance) {
+        return onePerElement(reads(provenance), read("xs", CONTAINER));
     }
 
     private static PathResolution holdingSomething(ElementProvenance provenance) {
@@ -88,8 +98,7 @@ class AWalkAfterOneValueForEachElementCrossesNoEdgeAnExpansionWroteTest {
 
     @Test
     void whereNothingWasWrittenWhatTheBindingHoldsIsRead() {
-        assertEquals(new OnePerElement(TermPath.of("held"), new ElementProjection(List.of()),
-                false), onePerElement(ElementProvenance.NONE));
+        assertEquals(OF_HELD, onePerElement(ElementProvenance.NONE));
         assertEquals(new PathResolution.At(TermPath.of("held")),
                 holdingSomething(ElementProvenance.NONE));
     }
@@ -103,11 +112,10 @@ class AWalkAfterOneValueForEachElementCrossesNoEdgeAnExpansionWroteTest {
     void aListStandingWiderIsNoRunOfOneValueEachAndStillHoldsSomethingWhereItsContainerDoes() {
         Core wider = new Core.Widen(read("held", HELD), Type.list(Type.DECIMAL));
         InputReads reads = reads(ElementProvenance.NONE);
-        assertNull(reads.onePerElementOf(wider, SYMBOLS, NEWTYPES));
+        assertNull(onePerElement(reads, wider));
         assertEquals(new PathResolution.At(TermPath.of("held")),
                 reads.holdingSomethingWhere(wider, SYMBOLS, NEWTYPES));
-        assertEquals(new OnePerElement(TermPath.of("held"), new ElementProjection(List.of()),
-                false), reads.onePerElementOf(read("held", HELD), SYMBOLS, NEWTYPES));
+        assertEquals(OF_HELD, onePerElement(reads, read("held", HELD)));
     }
 
     /**
@@ -122,7 +130,7 @@ class AWalkAfterOneValueForEachElementCrossesNoEdgeAnExpansionWroteTest {
         InputReads reads = InputReads.ofParameters(Map.of(HELD, "held", OTHER, "other"),
                 DeclaredInput.NONE, elements, ValueDefinitions.NONE, Membership.none());
         Core xs = new Core.Read("xs", CONTAINER, Type.list(Type.DECIMAL), POS);
-        assertNull(reads.onePerElementOf(xs, SYMBOLS, NEWTYPES));
+        assertNull(onePerElement(reads, xs));
         assertEquals(new PathResolution.At(TermPath.of("held")),
                 reads.holdingSomethingWhere(xs, SYMBOLS, NEWTYPES));
     }
