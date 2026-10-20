@@ -479,8 +479,12 @@ final class CardinalityComposer {
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        // The numbers the statements read beside an element, each at the one value the row was
+        // fixed at, which the row an element is read in holds too.
+        Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
+        Map<NumericTerm, Place> beside = settledOutside(asked, measuring, within, written);
         ElementValues ofTheElement = ElementValues.of(container, holding.element(), reading,
-                at -> numbersAt(at, asked, measuring, within, distinct ? MOST_ELEMENTS : 1,
+                at -> numbersAt(at, asked, measuring, within, beside, distinct ? MOST_ELEMENTS : 1,
                         unheld, unnamed));
         if (ofTheElement == null) {
             return notChosen("an element of `" + container + "` has a part whose values are"
@@ -490,7 +494,8 @@ final class CardinalityComposer {
         Groups<ObservedValue> every = new Groups<>(new ArrayList<>(), new ArrayList<>(),
                 new LinkedHashSet<>());
         for (ObservedValue value : listed.values()) {
-            BorderQuantity.Observation row = ofTheElement.holding(sourceType, List.of(value));
+            BorderQuantity.Observation row = new WithNumbersBeside(
+                    ofTheElement.holding(sourceType, List.of(value)), written);
             every.add(value, i -> ofAnElement.get(i).apply(row), asked.size());
         }
         Groups<ObservedValue> groups = every.keptBy(asked);
@@ -510,7 +515,8 @@ final class CardinalityComposer {
                     return false;
                 }
                 List<ObservedValue> values = groups.drawn(share, distinct);
-                BorderQuantity.Observation whole = ofTheElement.holding(sourceType, values);
+                BorderQuantity.Observation whole = new WithNumbersBeside(
+                        ofTheElement.holding(sourceType, values), written);
                 for (Asked each : asked) {
                     // A count reads the container through the row and not the values handed it.
                     if (!(each.over(container, List.of(), whole)
@@ -589,7 +595,7 @@ final class CardinalityComposer {
      */
     private static List<ObservedValue> numbersAt(TermPath at, List<Asked> asked,
                                                  Quantities measuring, SearchRegion within,
-                                                 int each, Set<CompositionCapacity> unheld,
+                                                 Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
                                                  Set<CompositionRepertoire> unnamed) {
         NumericTerm term = new NumericTerm.ValueOf(at);
         TermOrders orders = measuring.ordersOf(term);
@@ -610,7 +616,7 @@ final class CardinalityComposer {
         if (carrier.counts()) {
             List<ExactRatio> turns = new ArrayList<>();
             for (Asked one : asked) {
-                List<ExactRatio> where = one.turnsAt(term, Map.of());
+                List<ExactRatio> where = one.turnsAt(term, beside);
                 if (where == null) {
                     return null;
                 }
@@ -620,7 +626,7 @@ final class CardinalityComposer {
         } else {
             List<Place> turns = new ArrayList<>();
             for (Asked one : asked) {
-                List<Place> where = one.placesTurnedAt(term, Map.of());
+                List<Place> where = one.placesTurnedAt(term, beside);
                 if (where == null) {
                     return null;
                 }
@@ -1180,6 +1186,70 @@ final class CardinalityComposer {
                 return null;
             }
             return new Element(own, carrier, List.copyOf(beside), on);
+        }
+    }
+
+    /**
+     * The numbers {@code asked} reads that stand outside every container, each at the one value
+     * the region leaves it at, and the value it is written as in {@code written}; a number the
+     * region leaves at more or none, or that stands on no order, is in neither.
+     */
+    private static Map<NumericTerm, Place> settledOutside(List<Asked> asked,
+                                                          Quantities measuring,
+                                                          SearchRegion within,
+                                                          Map<TermPath, ObservedValue> written) {
+        Map<NumericTerm, Place> out = new LinkedHashMap<>();
+        for (Asked one : asked) {
+            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _))) {
+                continue;
+            }
+            for (NumericTerm term : perElement.numbers()) {
+                if (term.subjectPath().insideAContainer()) {
+                    continue;
+                }
+                TermOrders orders = measuring.ordersOf(term);
+                Carrier on = orders == null ? null : orders.observed();
+                Place at = settled(within, term);
+                if (on != null && at != null) {
+                    out.put(term, at);
+                    written.put(term.subjectPath(), on.valueOf(at));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A row with the numbers beside its elements written at the values they were fixed at, which
+     * a row of the container alone does not hold.
+     */
+    private record WithNumbersBeside(BorderQuantity.Observation row,
+                                     Map<TermPath, ObservedValue> written)
+            implements BorderQuantity.Observation {
+
+        @Override
+        public WalkResult<ObservationAtPoint> at(TermPath path) {
+            ObservedValue value = written.get(path);
+            return value == null ? row.at(path)
+                    : WalkResult.reached(new ObservationAtPoint.Value(value));
+        }
+
+        @Override
+        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+            return row.everyValueAt(path);
+        }
+
+        @Override
+        public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
+            return switch (row.eachElementOf(of)) {
+                case WalkResult.CouldNotWalk<List<BorderQuantity.Observation>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached<List<BorderQuantity.Observation>>(var elements) ->
+                        WalkResult.reached(elements.stream()
+                                .<BorderQuantity.Observation>map(each ->
+                                        new WithNumbersBeside(each, written))
+                                .toList());
+            };
         }
     }
 
