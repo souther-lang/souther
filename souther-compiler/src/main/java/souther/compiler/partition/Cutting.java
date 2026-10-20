@@ -1218,7 +1218,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Quantity.RemainderByAnInput _ ->
                         beyondTheForm.add(NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE);
                 case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
-                     DecisionAtom.TakenOfAnAnswer _, Quantity.HowManyMeet _,
+                     DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
+                     Quantity.HowManyMeet _,
                      Quantity.HowManyHold _, Quantity.HowManyDifferent _, Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                      Quantity.WhatAnOperationAnswers _, Quantity.APieceOf _,

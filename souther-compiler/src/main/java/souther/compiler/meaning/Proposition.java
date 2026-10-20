@@ -126,6 +126,8 @@ public sealed interface Proposition {
                     true;
             case DecisionAtom.TakenOfAnAnswer(var _, var _, var taken, var _) ->
                     isAnElementOf(taken, container);
+            case DecisionAtom.ComputedOverAnAnswer computed ->
+                    isAnElementOf(computed.list(), container);
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .anyMatch(each -> mayBeAnElementOf(each, container));
             // A piece of a string is whatever the statement it is read inside says it is, and
@@ -1228,7 +1230,8 @@ public sealed interface Proposition {
 
     private static boolean namesNothingOfTheInput(Quantity quantity) {
         return switch (quantity) {
-            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
+            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
+                 DecisionAtom.ComputedOverAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
@@ -1250,7 +1253,8 @@ public sealed interface Proposition {
      *  number over a container an answer holds or over elements asked something of one. */
     static boolean anAnswerIn(Quantity quantity) {
         return switch (quantity) {
-            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
+            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
+                 DecisionAtom.ComputedOverAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,

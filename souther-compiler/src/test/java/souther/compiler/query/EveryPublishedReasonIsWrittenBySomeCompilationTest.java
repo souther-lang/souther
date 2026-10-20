@@ -334,16 +334,17 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 """.formatted(ANSWER)));
         // And a line on a number taken over a run of the values at a position rather than on any
         // one of them: two of them either side of a total are on the line as surely as one is.
+        // Held against a number and no position, which a position beside it would be related to.
         out.put(UndividedPosition.Reason.RULE_ABOUT_A_RUN, of("""
                 module m
                 %s
                 data Line = { v: Int }
-                data Bag = { lines: List<Line>, cap: Int }
+                data Bag = { lines: List<Line> }
 
                 let total (lines: List<Line>): Int = List.sum(List.map(one -> one.v, lines))
 
                 behavior f : (bag: Bag) -> Answer
-                let f (bag) = if total(bag.lines) > bag.cap then Yes else No
+                let f (bag) = if total(bag.lines) > 10 then Yes else No
                 """.formatted(ANSWER)));
         // A denial says which values exist rather than where they stop, so it holds the position to
         // what it admits and places no end on it.

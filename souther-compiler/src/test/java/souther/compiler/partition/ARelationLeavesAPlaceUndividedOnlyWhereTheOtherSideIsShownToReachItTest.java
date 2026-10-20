@@ -38,6 +38,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     private static final String NOT_SHOWN = "not shown";
 
+    private static final String OVER_A_RUN = "over a run";
+
     /**
      * The classes the axis at {@code path} is divided into, where a place the relation does not
      * leave undivided is parted at the values that settle it whatever the rest hold — or none
@@ -50,7 +52,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 %s
                 behavior m : (%s) -> Bool
                 let m (%s) = %s
-                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z]+", ""), body),
+                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
                 "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -71,7 +73,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 %s
                 behavior m : (%s) -> Bool
                 let m (%s) = %s
-                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z]+", ""), body),
+                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
                 "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -87,7 +89,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             }
             String place = line.substring(line.lastIndexOf("about `") + 7, line.length() - 1);
             out.put(place, line.contains("rather than dividing the values here") ? RELATES
-                    : line.contains("not shown to reach every value here") ? NOT_SHOWN : line);
+                    : line.contains("not shown to reach every value here") ? NOT_SHOWN
+                    : line.contains("come to rather than about any one of them") ? OVER_A_RUN
+                    : line);
         }
         return out;
     }
@@ -189,6 +193,58 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("n", RELATES, "String.length(s)", RELATES),
                 left("n: N, s: String", "data N = Int invariant value >= 0",
                         "n.value == String.length(s)", "4:24"));
+    }
+
+    private static final String NAT = "data Nat = Int invariant value >= 0";
+
+    private static final String TOTAL = "List.sum(List.map(n -> n.value, ns))";
+
+    /**
+     * A total of numbers held at nought or more is a term of the relation beside it, as the count
+     * of them is. Every value of the total has a gross on either side, so the total is left
+     * undivided; the total never stands below nought, but is not shown to reach each value from
+     * there, so which grosses settle the comparison is not worked out. Doubled, the total is still
+     * never below nought and never odd: where it lies is not taken for every value it reaches.
+     */
+    @Test
+    void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
+        assertEquals(Map.of("List.length(ns)", RELATES, "gross", NOT_SHOWN),
+                leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", 27));
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", NOT_SHOWN),
+                leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
+                        "gross", NOT_SHOWN),
+                leftAt("gross: Int, ns: List<Nat>", NAT,
+                        "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
+    }
+
+    /** Beside a total, two positions are each a term of the relation and not of the run. */
+    @Test
+    void positionsBesideATotalAreAskedOfTheRelation() {
+        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "adjustment", NOT_SHOWN,
+                        "gross", NOT_SHOWN),
+                leftAt("gross: Int, adjustment: Int, ns: List<Nat>", NAT,
+                        "gross + adjustment >= " + TOTAL, 52));
+    }
+
+    /** A count of the elements meeting a statement, held against a position, divides that
+     *  position as far as the relation shows, and says nothing of the run of it. */
+    @Test
+    void aPositionBesideACountOfWhatMeetsAStatementIsAskedOfTheRelation() {
+        assertEquals(Map.of("gross", NOT_SHOWN, "ns[*]", NOT_SHOWN),
+                leftAt("gross: Int, ns: List<Nat>", NAT,
+                        "gross >= List.length(List.filter(n -> n.value > 3, ns))", 27));
+    }
+
+    /** A total held against a number, or against another total, is about what the runs come to
+     *  and divides none of their values. */
+    @Test
+    void aTotalWithNoPositionBesideItIsAboutTheRun() {
+        assertEquals(Map.of("List.sum(ns[*])", OVER_A_RUN),
+                leftAt("ns: List<Nat>", NAT, TOTAL + " >= 10", 51));
+        assertEquals(Map.of("List.sum(ms[*])", OVER_A_RUN, "List.sum(ns[*])", OVER_A_RUN),
+                leftAt("ms: List<Nat>, ns: List<Nat>", NAT,
+                        "List.sum(List.map(m -> m.value, ms)) >= " + TOTAL, 55));
     }
 
     /** A string held to two values takes two lengths with a gap between them. */

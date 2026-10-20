@@ -11,22 +11,27 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -100,6 +105,38 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     DecisionSubject.AnAnswer anAnswerWhoseEveryElementIsHeldBy(Core e, InputReads at) {
         InputReads.AnAnswerAt found = at.answerWhoseEveryElementIsHeldBy(e, symbols, newtypes);
         return found == null ? null : subjectOf(found);
+    }
+
+    /** A list a dependency answered, and the direction the elements are handed in relative to the
+     *  order the answer lists them. */
+    record AnAnswerInOrder(DecisionSubject.AnAnswer list, TraversalDirection direction) {}
+
+    /**
+     * The answer whose elements {@code e} holds once each, with the direction it holds them in,
+     * or null where it holds no answer's in an order that is shown
+     * ({@link InputReads#answerHandedInOrder}).
+     */
+    AnAnswerInOrder anAnswerHandedInOrder(Core e, InputReads at) {
+        InputReads.AnAnswerInOrder found = at.answerHandedInOrder(e, symbols, newtypes);
+        return found == null ? null
+                : new AnAnswerInOrder(subjectOf(found.answer()), found.direction());
+    }
+
+    /**
+     * {@code form}, a form of places inside one element, as a form of the numbers the answer
+     * {@code list} holds at those places of its element.
+     */
+    static LinearForm<Quantity> overTheElementsOf(DecisionSubject.AnAnswer list,
+                                                  LinearForm<ElementProjection> form) {
+        DecisionSubject.AnAnswer element = (DecisionSubject.AnAnswer) list.element();
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+        form.coefs().forEach((projection, weight) -> {
+            List<TermPath.Step> steps = new ArrayList<>(element.steps());
+            steps.addAll(projection.steps());
+            coefs.put(new DecisionAtom.OfAnAnswer(
+                    new DecisionSubject.AnAnswer(element.answered(), steps)), weight);
+        });
+        return new LinearForm<>(form.constant(), coefs);
     }
 
     private DecisionSubject.AnAnswer subjectOf(InputReads.AnAnswerAt found) {

@@ -69,6 +69,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             return switch (number) {
                 case HowManyCarried other -> equals(other);
                 case DecisionAtom.OfTheInput _, DecisionAtom.TakenOfAnAnswer _,
+                     DecisionAtom.ComputedOverAnAnswer _,
                      DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
                      RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
                      HowManyDifferent _ -> false;

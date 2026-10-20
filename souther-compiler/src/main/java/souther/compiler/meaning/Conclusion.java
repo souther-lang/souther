@@ -219,7 +219,8 @@ public final class Conclusion {
             case Quantity.IsAmongThePieces among ->
                     partsIn(among.value()) + partsIn(among.string());
             case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
-                 DecisionAtom.TakenOfAnAnswer _, Quantity.OfABinding _,
+                 DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
+                 Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,
                  Quantity.RemainderOfADividend _, Quantity.RemainderByAnInput _,
                  Quantity.ProductOfTwo _, Quantity.HowManyCarried _ -> 0;

@@ -199,9 +199,11 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                     Map.filterEntries((_, count) -> count >= atLeast, countsOf(xs))
                 """);
         assertEquals(List.of("atLeast - multiplicity(xs[*]) = 0"), linesOf(compilation));
-        assertEquals(List.of("atLeast " + UndividedPosition.Reason.RULE_ABOUT_A_RUN),
+        assertEquals(List.of("atLeast "
+                        + UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
                 notReadIn(compilation).stream().filter(each -> each.startsWith("atLeast ")).toList(),
-                "the position the rule is about is divided by none of its own values");
+                "the position the rule is about is related to how often the key occurs, which is"
+                        + " not shown to reach every value of it");
     }
 
     /**
