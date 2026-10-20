@@ -101,9 +101,20 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
             }
             """;
 
+    /** A closure that does not turn on the code point: the total is that constant for each one. */
+    private static final String SAME_FOR_EACH = """
+            module p
+            behavior pick : (s: String) -> Int
+            let pick (s) = {
+                guard List.sum(List.map((x) -> 5, String.codePoints(s))) >= 20 else 0
+                1
+            }
+            """;
+
     /** Each model, with what its condition works out to over the string a row holds and the
      *  answers some row of it is composed for. */
     private static final Map<String, Function<String, Integer>> ANSWERED = Map.of(
+            SAME_FOR_EACH, text -> 5 * lengthOf(text) >= 20 ? 1 : 0,
             WEIGHED, text -> 3 * sumOf(text) >= 300 ? 1 : 0,
             WEIGHED_AND_MOVED, text -> 2 * sumOf(text) + lengthOf(text) >= 300 ? 1 : 0,
             STRAIGHT, text -> sumOf(text) >= 10 ? 1 : 0,
@@ -112,6 +123,7 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
             BESIDE_ITS_LENGTH, text -> lengthOf(text) < 2 ? 0 : sumOf(text) <= 200 ? 2 : 1);
 
     private static final Map<String, Set<Integer>> COMPOSED_FOR = Map.of(
+            SAME_FOR_EACH, Set.of(0, 1),
             WEIGHED, Set.of(0, 1),
             WEIGHED_AND_MOVED, Set.of(0, 1),
             STRAIGHT, Set.of(0, 1),
