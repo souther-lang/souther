@@ -225,6 +225,11 @@ final class RunReach {
                         ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
                 return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
             }
+            // The range of a weight that grows with the position turns on how many elements the run
+            // has, which nothing here is told; no range is claimed.
+            case ElementValue.Indexed _ -> {
+                return null;
+            }
             case ElementValue.OfItsCase choice -> {
                 NumericDomain.Bounds every = choice.rest() == null ? null
                         : ofWhatWasComputed(choice.rest(), elements, orders, typeAt, reading);

@@ -6503,6 +6503,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 elementComputation(into.putObject("whenHolds"), it.whenHolds());
                 elementComputation(into.putObject("otherwise"), it.otherwise());
             }
+            case ElementValue.Indexed it -> {
+                into.put("kind", "indexed");
+                elementComputation(into.putObject("perPosition"), it.perPosition());
+                elementComputation(into.putObject("base"), it.base());
+            }
             case ElementValue.OfItsCase it -> {
                 into.put("kind", "case");
                 into.put("subject", it.subject().spelled());

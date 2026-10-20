@@ -77,7 +77,7 @@ public sealed interface ElementValue {
     default boolean readsThePosition() {
         return switch (this) {
             case Affine _ -> false;
-            case ByPosition _ -> true;
+            case ByPosition _, Indexed _ -> true;
             case Choose choice -> choice.whenSet().readsThePosition()
                     || choice.otherwise().readsThePosition();
             case OfItsCase choice -> (choice.rest() != null && choice.rest().readsThePosition())
@@ -165,6 +165,8 @@ public sealed interface ElementValue {
                 ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
                 yield no == null ? null : choosingByPosition(choice.test(), yes, no);
             }
+            case Indexed indexed -> plus(indexed.base(), other) instanceof Affine base
+                    ? new Indexed(indexed.perPosition(), base) : null;
             case OfItsCase choice -> {
                 List<OfItsCase.Arm> arms = new ArrayList<>();
                 for (OfItsCase.Arm arm : choice.arms()) {
@@ -200,6 +202,9 @@ public sealed interface ElementValue {
                 ElementValue no = yes == null ? null : times(choice.otherwise(), weight);
                 yield no == null ? null : choosingByPosition(choice.test(), yes, no);
             }
+            case Indexed indexed -> times(indexed.perPosition(), weight) instanceof Affine per
+                    && times(indexed.base(), weight) instanceof Affine base
+                    ? indexed(per, base) : null;
             case OfItsCase choice -> {
                 List<OfItsCase.Arm> arms = new ArrayList<>();
                 for (OfItsCase.Arm arm : choice.arms()) {
@@ -321,7 +326,7 @@ public sealed interface ElementValue {
     /** Whether {@code value} is a choice, which a form is not and a sum of choices is several of. */
     private static boolean isAChoice(ElementValue value) {
         return switch (value) {
-            case Choose _, OfItsCase _, ByPosition _ -> true;
+            case Choose _, OfItsCase _, ByPosition _, Indexed _ -> true;
             case Affine _, SumOfChoices _ -> false;
         };
     }
@@ -492,6 +497,68 @@ public sealed interface ElementValue {
     }
 
     /**
+     * The position times a form of the element, and a form beside it: {@code position·perPosition
+     * + base}.
+     *
+     * <p>The number a weight that is arithmetic in the position makes of an element. Where the
+     * element stands is fixed by the row, so the weight {@code i + 2} is one number for each element
+     * and the total over them is a form of their fields: {@code (i + 2)·c} is {@code i·c + 2·c}.
+     * Two elements holding the same values take different numbers.
+     *
+     * @param perPosition what each step of the position adds, never a form of nothing but nought
+     *                    (that is {@code base} alone, and a {@link Affine})
+     */
+    record Indexed(Affine perPosition, Affine base) implements ElementValue {
+
+        public Indexed {
+            if (perPosition == null || base == null) {
+                throw new IllegalArgumentException("a number made of the position is a form of the"
+                        + " element at each step of it and a form beside");
+            }
+            if (perPosition.form().coefs().isEmpty() && perPosition.form().constant().isZero()) {
+                throw new IllegalArgumentException("a number that does not turn on the position is"
+                        + " a form and not one made of it");
+            }
+        }
+
+        @Override
+        public Set<ElementProjection> reads() {
+            Set<ElementProjection> all = new LinkedHashSet<>(perPosition.reads());
+            all.addAll(base.reads());
+            return Set.copyOf(all);
+        }
+
+        @Override
+        public ExactAnswer<ExactRatio> at(OneElement element) {
+            ExactAnswer<ExactRatio> step = perPosition.at(element);
+            ExactAnswer<ExactRatio> beside = step == null ? null : base.at(element);
+            if (beside == null) {
+                return null;
+            }
+            ExactRatio position = ExactRatio.of(element.position());
+            return step.flatMap(each -> each.times(position))
+                    .flatMap(moved -> beside.flatMap(moved::plus));
+        }
+
+        /** A number made of the position is made of the element and is not a field of it. */
+        @Override
+        public ElementProjection asAPlace() {
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            return "the position·(" + perPosition + ") + " + base;
+        }
+    }
+
+    /** {@code position·perPosition + base}, which is {@code base} where the position adds nothing. */
+    static ElementValue indexed(Affine perPosition, Affine base) {
+        return perPosition.form().coefs().isEmpty() && perPosition.form().constant().isZero()
+                ? base : new Indexed(perPosition, base);
+    }
+
+    /**
      * A comparison of an element's position, or of what is left of it divided by a whole number
      * with the quotient floored, against a whole number.
      *
@@ -564,6 +631,12 @@ public sealed interface ElementValue {
                 ElementValue no = yes == null ? null : weighedBy(choice.otherwise(), by);
                 yield no == null ? null : choosingByPosition(choice.test(), yes, no);
             }
+            // The position weighed by a number of no field, times a form: the form at each step.
+            case Indexed form -> form.perPosition().form().coefs().isEmpty()
+                    && form.base().form().coefs().isEmpty()
+                    && times(by, form.perPosition().form().constant()) instanceof Affine per
+                    && times(by, form.base().form().constant()) instanceof Affine base
+                    ? indexed(per, base) : null;
             case OfItsCase choice -> {
                 List<OfItsCase.Arm> arms = new ArrayList<>();
                 for (OfItsCase.Arm arm : choice.arms()) {
@@ -997,6 +1070,11 @@ public sealed interface ElementValue {
                     if (place != null) {
                         return LinearForm.atom(new Atom.Place(place));
                     }
+                    if (position != null && isThePosition(e)) {
+                        return LinearForm.atom(new Atom.Chosen(new Indexed(
+                                new Affine(LinearForm.constant(ExactRatio.ONE)),
+                                new Affine(LinearForm.constant(ExactRatio.ZERO)))));
+                    }
                     ElementValue choice = switch (Core.withoutStanding(e)) {
                         case Core.If branch -> byCondition(branch);
                         case Core.Match match -> byCase(match);
@@ -1052,7 +1130,8 @@ public sealed interface ElementValue {
                             all.put(new Atom.Chosen(choice), weight));
                     yield new LinearForm<>(besides.constant(), all);
                 }
-                case Choose _, OfItsCase _, ByPosition _ -> LinearForm.atom(new Atom.Chosen(value));
+                case Choose _, OfItsCase _, ByPosition _, Indexed _ ->
+                        LinearForm.atom(new Atom.Chosen(value));
             };
         }
 

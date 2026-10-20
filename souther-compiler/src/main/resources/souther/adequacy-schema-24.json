@@ -1323,6 +1323,27 @@
         },
         {
           "type": "object",
+          "description": "The position times a number made of the element, and a number beside it: `perPosition` for each step of where the element stands in the container it was walked from, counted from nought in the order the row writes them, plus `base`. Two elements holding the same values come to different numbers.",
+          "required": [
+            "kind",
+            "perPosition",
+            "base"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "indexed"
+            },
+            "perPosition": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "base": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "The arm a `match` on a value of the element takes, tried in the order written: each arm by the place its name stands at, which is the value narrowed to the case the arm took, and what the element comes to there. `otherwise` is what an element no listed arm takes comes to, and is absent where the arms take every value.",
           "required": [
             "kind",

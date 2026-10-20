@@ -105,15 +105,80 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         assertTrue(alike.contains("List.sum({3·the element itself + 0 | xs[*]})"), alike);
     }
 
-    /** A whole number that is not the position is no position, and a weight that is arithmetic
-     *  over the position is not a choice of it. */
+    /** A whole number that is not the position is no position. */
     @Test
-    void neitherAnotherNumberNorArithmeticOverThePositionIsAChoiceOfIt() {
+    void anotherNumberIsNoChoiceByThePosition() {
         String another = report(model(
                 "(i, c) -> if Int.floorMod(n, 2) == 0 then c else 3 * c", "xs"));
         assertTrue(another.contains("not read: comparison"), another);
-        String product = report(model("(i, c) -> i * c", "xs"));
-        assertTrue(product.contains("not read: comparison"), product);
+        String notTheElement = report(model("(i, c) -> n * c", "xs"));
+        assertTrue(notTheElement.contains("not read: comparison"), notTheElement);
+    }
+
+    /**
+     * A weight that is arithmetic in the position is a number for each element, so the total is a
+     * form of the elements, whichever side the weight is written on.
+     */
+    @Test
+    void aWeightThatIsArithmeticInThePositionIsReadAsAFormOfTheElements() {
+        for (String closure : List.of("(i, c) -> (i + 2) * c", "(i, c) -> c * (2 + i)",
+                "(i, c) -> i * c + 2 * c", "(i, c) -> i * c")) {
+            String human = report(model(closure, "xs"));
+            assertTrue(human.contains("the position"), closure + "\n" + human);
+            assertFalse(human.contains("not read:"), closure + "\n" + human);
+        }
+    }
+
+    /**
+     * Weighed two and three by position, {@code [4, 2]} is at fourteen, {@code [5, 1]} at thirteen,
+     * {@code [2, 4]} at sixteen and {@code [3, 2]} at twelve — read without the order, or from the
+     * end, none of them is at fourteen, so every point of the border is taken only on this reading.
+     */
+    @Test
+    void aRowIsReadWithItsElementsWhereAWeightMadeOfThePositionPutsThem() {
+        String guarded = """
+                module p
+                data Bad
+                behavior check : (xs: List<Int>) -> Int | Bad
+                let check (xs) = {
+                    guard List.sum(List.mapIndexed((i, c) -> (i + 2) * c, xs)) >= 14 else Bad
+                    0
+                }
+                example check
+                    | "at"    : ([4, 2]) -> 0
+                    | "below" : ([5, 1]) -> Bad
+                    | "past"  : ([2, 4]) -> 0
+                    | "short" : ([3, 2]) -> Bad
+                """;
+        String human = report(guarded);
+        assertTrue(human.contains("obligations 4/4"), human);
+        assertFalse(human.contains("not read:"), human);
+        String reversed = report(guarded.replace("mapIndexed((i, c) -> (i + 2) * c, xs)",
+                "mapIndexed((i, c) -> (i + 2) * c, List.reverse(xs))"));
+        assertTrue(reversed.contains("not read: comparison"), reversed);
+    }
+
+    /** A product of two numbers of the element stays a product, whatever the position. */
+    @Test
+    void aProductOfTwoNumbersOfTheElementIsStillNotRead() {
+        String human = report("""
+                module p
+                data Pair = { p: Int, q: Int }
+                data Bad
+                behavior check : (xs: List<Pair>) -> Int | Bad
+                let check (xs) = {
+                    guard List.sum(List.mapIndexed((i, c) -> i * c.p * c.q, xs)) >= 10 else Bad
+                    0
+                }
+                """);
+        assertTrue(human.contains("not read: comparison"), human);
+    }
+
+    /** A weight that is the position squared is no form of the elements. */
+    @Test
+    void thePositionTimesItselfIsStillNotRead() {
+        String human = report(model("(i, c) -> i * i * c", "xs"));
+        assertTrue(human.contains("not read: comparison"), human);
     }
 
     /**
