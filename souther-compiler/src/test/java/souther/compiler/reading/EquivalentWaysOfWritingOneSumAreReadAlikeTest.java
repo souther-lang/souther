@@ -64,6 +64,9 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
         SOURCES.put("a closure that chooses",
                 body("List.sum(List.map(r -> if r.days >= 17 then r.pay else 0,"
                         + " [ first, second ]))"));
+        SOURCES.put("a closure that chooses under its own let",
+                body("List.sum(List.map(r -> { let s = if r.days >= 17 then r.pay else 0\n"
+                        + "    s }, [ first, second ]))"));
         SOURCES.put("a filter",
                 body("List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17,"
                         + " [ first, second ])))"));
@@ -139,23 +142,70 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
         });
     }
 
+    private static final String ACTIVE = """
+            module example.ways
+
+            data Row = { days: Int, pay: Int, active: Bool }
+
+            behavior total : (first: Row, second: Row) -> Int
+
+            let total (first, second) =
+                %s
+            """;
+
+    private static CoverageRead.Read readActive(String expression) {
+        return readAll(ACTIVE.formatted(expression), "total");
+    }
+
     /**
-     * What keeps an element can be a statement over a container rather than one comparison. A count
-     * of those is the count of statements that hold, which the statements' own reading answers for;
-     * a total of them is not, and is said not to be joined.
+     * A count and a total of the same elements are made of the same decisions. What keeps an
+     * element and is not one comparison is said not to be joined for both, however the two are
+     * written.
      */
     @Test
-    void whatAQuantifierKeepsIsCountedByTheStatementsAndNotTotalledByThem() {
-        String head = HEAD + "let total (first, second) =\n    %s\n";
-        String kept = "List.filter(r -> List.all(x -> x.days >= r.days, [ first, second ]),"
-                + " [ first, second ])";
+    void aCountIsNoMoreSilentThanATotalOfTheSameKeptElements() {
+        String kept = "List.filter(r -> r.active, [ first, second ])";
 
-        CoverageRead.Read counted = readAll(head.formatted("List.length(" + kept + ")"), "total");
-        CoverageRead.Read totalled = readAll(
-                head.formatted("List.sum(List.map(r -> r.pay, " + kept + "))"), "total");
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON),
+                readActive("List.length(" + kept + ")").notJoined());
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON),
+                readActive("List.sum(List.map(r -> 1, " + kept + "))").notJoined());
+    }
 
-        assertEquals(List.of(), counted.notJoined());
-        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON), totalled.notJoined());
+    /**
+     * Only a count that a comparison is made of, kept by a quantifier, is the statements' to read.
+     * The same count handed back as the answer is no comparison of statements, and the decisions
+     * that keep its elements are still met.
+     */
+    @Test
+    void aQuantifierKeepingIsLeftToTheStatementsOnlyWhereTheCountIsCompared() {
+        String kept = "List.length(List.filter(r -> List.all(x -> x.days >= r.days,"
+                + " [ first, second ]), [ first, second ]))";
+
+        assertEquals(List.of(),
+                readActive("if " + kept + " == 1 then 1 else 2").notJoined());
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON), readActive(kept).notJoined());
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON),
+                readActive("{ let n = " + kept + "\n    if n == 1 then 1 else 2 }").notJoined());
+    }
+
+    /** A decision that nothing else is decided beside meets nothing, read or not. */
+    @Test
+    void oneDecisionAloneIsNoMeetingToLeaveUnjoined() {
+        CoverageRead.Read read = readActive(
+                "List.sum(List.map(r -> r.pay, List.filter(r -> r.active, [ first ])))");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(), read.notJoined());
+    }
+
+    /** The same element written out twice is one decision made twice, not two. */
+    @Test
+    void anElementWrittenOutTwiceIsStillOneDecision() {
+        CoverageRead.Read read = readActive("List.sum(List.map(r -> r.pay, List.flatMap("
+                + "r -> [ r, r ], List.filter(r -> r.active, [ first ]))))");
+
+        assertEquals(List.of(), read.notJoined());
     }
 
     /**

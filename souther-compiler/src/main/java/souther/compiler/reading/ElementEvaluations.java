@@ -1,5 +1,6 @@
 package souther.compiler.reading;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.inputs.Denotation;
@@ -7,11 +8,13 @@ import souther.compiler.inputs.ReadMeaning;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -116,12 +119,19 @@ final class ElementEvaluations {
      *                     answer's
      * @param valueMatters whether what an occurrence is worth decides the answer: it does for a total
      *                     and does not for a count, which is the same however the values come out
+     * @param statementsCountIt whether the answer is a count that a comparison is made of, which
+     *                     the reading of statements takes up: what it counts is the statements that
+     *                     hold, and an element kept by what a quantifier states is one of them
      * @param choicesOf    what decides the value of an occurrence
      */
     static Result of(List<ReadMeaning.Occurrence> occurrences,
                      Predicate<ReadMeaning.Occurrence> contributes, boolean valueMatters,
-                     Function<Denotation, ValueChoices.Of> choicesOf) {
+                     boolean statementsCountIt, Function<Denotation, ValueChoices.Of> choicesOf) {
         Map<Core.Binary, Map<Integer, Decision>> byComparison = new IdentityHashMap<>();
+        // The decisions met that are not one another's, which is what a meeting is of: a single one
+        // meets nothing, whether or not it could be read.
+        Map<Core, Set<Integer>> apart = new IdentityHashMap<>();
+        int unplaced = 0;
         List<Core.Binary> inTheOrderMet = new ArrayList<>();
         Core.Binary keeping = null;
         Core.Binary valuing = null;
@@ -132,14 +142,22 @@ final class ElementEvaluations {
                 continue;
             }
             List<ReadMeaning.Occurrence.Kept> keptBy = occurrence.keptWhere();
-            if (!valueMatters && isKeptByAStatementOverAContainer(keptBy)) {
+            if (statementsCountIt && isKeptByAQuantifierHolding(keptBy)) {
                 // How many are kept, where each is kept by what a quantifier states of a
-                // container, is the count of statements that hold, and that is read as the
-                // statements are, with the reasons it cannot be that reading says itself. It is no
-                // evaluation of one comparison to join, and is not left unread here.
+                // container and the count is compared, is the count of statements that hold. That
+                // is read as the statements are, and says itself when it cannot be.
                 continue;
             }
             if (!keptBy.isEmpty()) {
+                for (ReadMeaning.Occurrence.Kept each : keptBy) {
+                    if (each instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, _,
+                                                                           int application)) {
+                        apart.computeIfAbsent(Core.withoutStanding(truth.value()),
+                                _ -> new HashSet<>()).add(application);
+                    } else {
+                        unplaced++;
+                    }
+                }
                 // Met wherever anything keeps an occurrence, whatever it is and however many things
                 // do. That a decision exists is a fact about the container; whether this reading
                 // can place it is a fact about this reading, and is said below when it cannot.
@@ -172,6 +190,7 @@ final class ElementEvaluations {
                     case ValueChoices.Of.Fixed _ -> { }
                     case ValueChoices.Of.Unread _ -> {
                         aDecisionWasMet = true;
+                        unplaced++;
                         failed = failed == null ? WhyNotJoined.A_VALUE_CHOICE_NOT_READ : failed;
                     }
                     case ValueChoices.Of.OneComparison(Core.Binary comparison, var at,
@@ -184,6 +203,12 @@ final class ElementEvaluations {
                         // it stands and has none.
                         OptionalInt number = viaNames ? OptionalInt.empty()
                                 : occurrence.answered();
+                        if (number.isPresent()) {
+                            apart.computeIfAbsent(comparison, _ -> new HashSet<>())
+                                    .add(number.getAsInt());
+                        } else {
+                            unplaced++;
+                        }
                         // Two comparisons that are closures' own are two closures, which is not
                         // one application of each. One that has no number says nothing of which
                         // closure it is in.
@@ -205,7 +230,8 @@ final class ElementEvaluations {
             return new Result.NothingToJoin();
         }
         if (failed != null) {
-            return new Result.NotJoined(failed);
+            int decisions = unplaced + apart.values().stream().mapToInt(Set::size).sum();
+            return decisions < 2 ? new Result.NothingToJoin() : new Result.NotJoined(failed);
         }
         List<Decision> decisions = new ArrayList<>();
         for (Core.Binary comparison : inTheOrderMet) {
@@ -217,13 +243,16 @@ final class ElementEvaluations {
                 : new Result.Matched(new Joined(decisions));
     }
 
-    /** Whether the one thing that keeps an occurrence is a truth that is not an operator's: a call
-     *  such as {@code all} or {@code any} over a container, or a match. */
-    private static boolean isKeptByAStatementOverAContainer(
-            List<ReadMeaning.Occurrence.Kept> keptBy) {
+    /** Whether the one thing that keeps an occurrence is a quantifier ({@code all}, {@code any})
+     *  that came out true, which is what the reading of statements states of its container. One
+     *  that came out false states no element, and is no statement. */
+    private static boolean isKeptByAQuantifierHolding(List<ReadMeaning.Occurrence.Kept> keptBy) {
         return keptBy.size() == 1
                 && keptBy.getFirst() instanceof ReadMeaning.Occurrence.Kept.ATruth truth
-                && !(Core.withoutStanding(truth.truth().value()) instanceof Core.Binary);
+                && truth.holds()
+                && Core.withoutStanding(truth.truth().value()) instanceof Core.PreservedCall call
+                && DefaultBoundOperationFacts.get().statesItsPredicateOfEveryElement(
+                        call.operation());
     }
 
     /** {@code decision} filed under its comparison and application, or the one already there. */

@@ -40,6 +40,9 @@ final class Meetings {
      *  are two places. */
     private final Set<Core> absorbed = Collections.newSetFromMap(new IdentityHashMap<>());
 
+    /** What a comparison the walk has passed is made of: the operands it compares. */
+    private final Set<Core> compared = Collections.newSetFromMap(new IdentityHashMap<>());
+
     private final List<Interaction> found = new ArrayList<>();
 
     private final List<WhyNotJoined> notJoined = new ArrayList<>();
@@ -66,6 +69,11 @@ final class Meetings {
      */
     void at(Core node, CoverageNaming naming, Core body, List<List<Decision>> reaches,
             ValueArrivals<Outcome> reading) {
+        // A walk meets a comparison before the operands it compares.
+        if (Core.withoutStanding(node) instanceof Core.Binary binary && binary.op().compares()) {
+            compared.add(Core.withoutStanding(binary.left()));
+            compared.add(Core.withoutStanding(binary.right()));
+        }
         if (absorbed.contains(node)) {
             return;
         }
@@ -81,7 +89,7 @@ final class Meetings {
                 }
             }
         } else if (node instanceof Core.Call call) {
-            switch (keptElements.of(call, naming, body)) {
+            switch (keptElements.of(call, naming, body, compared.contains(call))) {
                 case null -> {
                     return;
                 }

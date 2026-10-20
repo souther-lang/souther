@@ -376,6 +376,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.reading.CoverageRead.rightOf", "and which way it runs under"),
             new Held("souther.compiler.reading.Meetings.meetingAt",
                     "asks the enum whether the operator stops early"),
+            new Held("souther.compiler.reading.Meetings.at",
+                    "asks the enum whether the operator compares, which is what a count handed to"
+                            + " it is made into a statement by"),
             new Held("souther.compiler.reading.ValueChoices.of",
                     "asks the enum whether the operator stops early, which a conjunction does and"
                             + " a comparison does not: what an if decides by is one comparison only"

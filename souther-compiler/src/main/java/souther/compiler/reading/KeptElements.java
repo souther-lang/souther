@@ -114,8 +114,9 @@ final class KeptElements {
      * that may be made again is one whose evaluations of the comparison are not the list's.
      *
      * @param body the body {@code call} is in, in the tree that runs
+     * @param compared whether {@code call} is an operand of a comparison
      */
-    Read of(Core.Call call, CoverageNaming naming, Core body) {
+    Read of(Core.Call call, CoverageNaming naming, Core body, boolean compared) {
         if (analysis == null || analysisReads == null || !Meetings.consumesItsElements(call)
                 || plan.mayRepeat(call)) {
             return null;
@@ -138,7 +139,8 @@ final class KeptElements {
         }
         boolean valueMatters = Meetings.combinesItsElements(call);
         return switch (ElementEvaluations.of(each.asWritten(), contributing(call, valueMatters),
-                valueMatters, value -> ValueChoices.of(value, names, newtypes))) {
+                valueMatters, !valueMatters && compared,
+                value -> ValueChoices.of(value, names, newtypes))) {
             case ElementEvaluations.Result.NothingToJoin _ -> null;
             case ElementEvaluations.Result.NotJoined(var why) -> new Read.NotJoined(why);
             case ElementEvaluations.Result.Matched(var joined) ->

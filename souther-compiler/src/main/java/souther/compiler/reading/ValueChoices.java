@@ -52,7 +52,8 @@ final class ValueChoices {
          * An {@code if} on one comparison, read where the names are, with nothing decided in either
          * branch.
          *
-         * @param viaNames whether it was found beneath a name rather than in the value itself
+         * @param viaNames whether it was found beneath a name that stands for something written
+         *                 elsewhere, rather than in the value itself or under its own lets
          */
         record OneComparison(Core.Binary comparison, InputReads at, boolean viaNames)
                 implements Of { }
@@ -90,8 +91,12 @@ final class ValueChoices {
         Core e = value.value();
         InputReads at = value.at();
         boolean viaNames = false;
+        // The values of the lets this walk went under: a name that stands for one of them was
+        // written in the value itself, and is evaluated where the value is.
+        Set<Core> writtenHere = newSeen();
         for (int steps = 0; steps < MOST_STEPS; steps++) {
             if (Core.withoutStanding(e) instanceof Core.LetIn let) {
+                writtenHere.add(Core.withoutStanding(let.value()));
                 at = at.entering(new ScopeStep.Let(let), names.symbols(), newtypes);
                 e = let.body();
             } else if (Core.withoutStanding(e) instanceof Core.Read read) {
@@ -102,7 +107,7 @@ final class ValueChoices {
                 }
                 e = stands.value();
                 at = stands.at();
-                viaNames = true;
+                viaNames = viaNames || !writtenHere.contains(Core.withoutStanding(e));
             } else {
                 return new Comes(e, at, viaNames);
             }
