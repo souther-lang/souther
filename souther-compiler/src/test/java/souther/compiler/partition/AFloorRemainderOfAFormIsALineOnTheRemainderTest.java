@@ -442,6 +442,8 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 == UndividedPosition.Reason.UNSUPPORTED_SYNTAX
                 || reason == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE
                 || reason == UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE).toList());
+        int ofTheDigit = 0;
+        int ofTheRemainder = 0;
         for (Row row : certifiedRows(linesOf(compilation))) {
             long a = Long.parseLong(row.inputs().get(0));
             long b = Long.parseLong(row.inputs().get(1));
@@ -449,13 +451,35 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
             for (String label : row.labels()) {
                 if (label.startsWith("c = ")) {
                     assertEquals(c, Long.parseLong(label.substring("c = ".length())), label);
+                    ofTheDigit++;
                 } else if (label.startsWith("Int.floorMod(a + b, 11) = ")) {
                     assertEquals(Math.floorMod(a + b, 11L), Long.parseLong(
                             label.substring(label.lastIndexOf(' ') + 1)), label);
+                    ofTheRemainder++;
                 }
             }
         }
+        // The loop above checks the rows there are; that there are some of each is checked here.
+        assertTrue(ofTheDigit > 0 && ofTheRemainder > 0,
+                ofTheDigit + " rows at the digit, " + ofTheRemainder + " at the remainder");
     }
+
+    /**
+     * A remainder is taken to leave every value only where the form is computed at the values that
+     * leave them: the run stops where {@code Int} arithmetic overflows, and it does at every
+     * {@code x} but three for {@code 9223372036854775807 * x}. So the number beside the
+     * remainder is not said to be left either way at the values between nought and ten, and no
+     * line is drawn at its ends on that account.
+     */
+    @Test
+    void aFormTheRunCannotComputeAtTheValuesThatLeaveEveryRemainderIsNotSaidToLeaveThem() {
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(9223372036854775807 * x, 11)"));
+        // And where it is computed at them, the same form is: three times the number is.
+        assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x + 5, 11)"));
+    }
+
 
     /**
      * A number beside the remainder that is read off a place the form is read at is not apart from

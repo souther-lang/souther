@@ -1057,13 +1057,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * numbers of the form are put at — apart from {@code held}, a number of it that is put at one
      * value and so reaches none.
      *
-     * <p>Shown by one number of the form: the whole numbers it takes are every whole number of its
-     * type, nothing in the declarations or on the way relates it to anything, its type holds at
-     * least as many values as the divisor, and its weight leaves every remainder in turn, being
-     * prime to the divisor. Any value of the other numbers then moves the form by a fixed amount,
-     * and the number alone takes the form through a whole turn of the divisor. Every number of the
-     * form is a whole number, since a form of other numbers leaves no remainder where it comes to
-     * none.
+     * <p>Shown by one number of the form, the witness, put at each of the values from nought to
+     * one below the divisor with every other number of the form at nought. Each of those is a
+     * row's values, and the remainders they leave are every remainder, when:
+     * <ul>
+     *   <li>the witness takes every whole number of its type, nothing in the declarations or on
+     *   the way relates it to anything, and no other number of the form is read off a place it is;
+     *   <li>its weight is prime to the divisor, so the divisor's worth of consecutive values leave
+     *   each remainder once;
+     *   <li>its type holds those values, and every other number of the form is of the same
+     *   description and holds nought, so that putting it there is no value the declarations
+     *   refuse; and
+     *   <li>the form comes to a number the type holds at each of them — the weight times the
+     *   greatest of those values lying within the type's ends — since a run that overflows is no
+     *   row, and a remainder only an overflowing value leaves is not one a row has.
+     * </ul>
+     * Every number of the form is a whole number, since a form of other numbers leaves no
+     * remainder where it comes to none. {@code held} is a number of the form left out of the
+     * others: it stands at whatever value is asked of it, and which of its values have a row is
+     * asked of the row.
      */
     private boolean reachesEveryRemainder(NumericTerm held, InputReading read,
                                           List<OnAWay> conditions, boolean heldWhole) {
@@ -1091,14 +1103,73 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             Carrier carrier = read.quantities().ordersOf(value).answered();
-            BigInteger least = leastOf(carrier);
-            BigInteger greatest = greatestOf(carrier);
-            if (least == null || greatest == null || greatest.subtract(least)
-                    .compareTo(remainder.divisor().subtract(BigInteger.ONE)) >= 0) {
+            BigInteger window = remainder.divisor().subtract(BigInteger.ONE);
+            if (holdsFromNoughtTo(carrier, window) && theFormIsComputedAtEachOf(weight, window,
+                    carrier) && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Whether the values of {@code carrier} include every whole number from nought to
+     *  {@code top}, an end it has none of being no end. */
+    private static boolean holdsFromNoughtTo(Carrier carrier, BigInteger top) {
+        BigInteger least = leastOf(carrier);
+        BigInteger greatest = greatestOf(carrier);
+        return (least == null || least.signum() <= 0)
+                && (greatest == null || greatest.compareTo(top) >= 0);
+    }
+
+    /**
+     * Whether the form, with the witness weighed by {@code weight} at any value from nought to
+     * {@code top} and every other number at nought, comes to a number {@code carrier} holds.
+     *
+     * <p>In the type's own arithmetic, which stops the run where it overflows. The most it comes
+     * to either way is the weight times {@code top}; every sum the run takes along the way is a
+     * part of that, the numbers it is added to being nought. A type with no end overflows
+     * nowhere.
+     *
+     * <p>The number the form is moved by is not part of this: the quantity holds it taken by the
+     * divisor, as every reader of this remainder does, so what the run adds is not what the
+     * quantity knows. Where the run adds more than the type has room for, the values it computes
+     * are a window of the others', and which of them have a row is asked of the row.
+     */
+    private boolean theFormIsComputedAtEachOf(BigInteger weight, BigInteger top,
+                                              Carrier carrier) {
+        BigInteger most = weight.abs().multiply(top);
+        BigInteger least = leastOf(carrier);
+        BigInteger greatest = greatestOf(carrier);
+        return (greatest == null || most.compareTo(greatest) <= 0)
+                && (least == null || most.negate().compareTo(least) >= 0);
+    }
+
+    /**
+     * Whether every number of the form other than the witness and {@code held} can stand at
+     * nought, whatever else is put: each takes every whole number of its type, holds nought, is
+     * related to nothing by the declarations or the way, and is read off a place no other number
+     * of the form is. A number read off a place another is moves with it, so nought for one is not
+     * nought for the other.
+     */
+    private boolean theOthersCanBeLeftAtNought(NumericTerm witness, NumericTerm held,
+                                               InputReading read, List<OnAWay> conditions) {
+        for (NumericTerm each : remainder.dividend().coefs().keySet()) {
+            if (each.equals(witness) || each.equals(held)) {
+                continue;
+            }
+            if (!(each instanceof NumericTerm.ValueOf value)
+                    || sharesAPlaceWithAnotherNumberOfTheForm(each)) {
+                return false;
+            }
+            Source source = sourceOf(value, read);
+            if (source == null || !source.takes().every() || source.named()
+                    || wayOf(value, statingAnythingOf(value, conditions)) != Way.UNTOUCHED
+                    || !holdsFromNoughtTo(read.quantities().ordersOf(value).answered(),
+                            BigInteger.ZERO)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
