@@ -195,9 +195,9 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
 
             data Row = { days: Int, pay: Int, active: Bool }
 
-            behavior total : (first: Row, second: Row, flag: Bool) -> Int
+            behavior total : (first: Row, second: Row, flag: Bool, threshold: Int) -> Int
 
-            let total (first, second, flag) =
+            let total (first, second, flag, threshold) =
                 %s
             """;
 
@@ -334,6 +334,46 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
             }
         }));
         assertEquals(List.of(), silent);
+    }
+
+    /**
+     * What a filter takes out on every run is no application of the step after it, wherever in the
+     * list it stands, and the applications after it are numbered as a run counts them.
+     */
+    @Test
+    void anElementAlwaysTakenOutLeavesTheOtherApplicationsNumbered() {
+        List<String> lists = List.of("[ 1, 2 ]", "List.filter(x -> x > 0, [ 0, 1, 2 ])",
+                "List.filter(x -> x > 0, [ 1, 0, 2 ])", "List.filter(x -> x > 0, [ 1, 2, 0 ])",
+                "List.map(x -> x, List.filter(x -> x > 0, [ 0, 1, 2 ]))");
+        List<String> differing = new ArrayList<>();
+        for (String list : lists) {
+            CoverageRead.Read read = readFlagged("List.sum(List.map(x ->"
+                    + " if threshold >= 17 then x else 0, " + list + "))");
+            if (!List.of(List.of(2, 2)).equals(shape(read.interactions()))
+                    || !read.notJoined().isEmpty()) {
+                differing.add(list + ": " + shape(read.interactions()) + " " + read.notJoined());
+            }
+        }
+        assertEquals(List.of(), differing);
+    }
+
+    /**
+     * A choice written once in an application and used twice there is one decision, and the same
+     * written in two applications is two: what is counted is the evaluations of the choice, and
+     * not the occurrences of its value.
+     */
+    @Test
+    void aChoiceUsedTwiceInOneApplicationIsOneDecision() {
+        String writes = "List.sum(List.flatMap(r -> { let chosen = if %s then 1 else 0\n"
+                + "    [ chosen, chosen ] }, %s))";
+
+        for (String condition : List.of("r.active", "flag")) {
+            assertEquals(List.of(), readFlagged(writes.formatted(condition, "[ first ]"))
+                    .notJoined(), condition + " in one application");
+            assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
+                    writes.formatted(condition, "[ first, second ]")).notJoined(),
+                    condition + " in two");
+        }
     }
 
     /** A decision that nothing else is decided beside meets nothing, read or not. */

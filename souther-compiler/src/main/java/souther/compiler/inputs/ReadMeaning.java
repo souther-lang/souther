@@ -164,7 +164,7 @@ public sealed interface ReadMeaning {
             List<Occurrence.Kept> open = kept.stillOpen(each.keptWhere());
             if (open != null) {
                 out.add(open == each.keptWhere() ? each
-                        : new Occurrence(each.value(), open, each.answered()));
+                        : new Occurrence(each.value(), open, each.answered(), each.within()));
             }
         }
         return out;
@@ -209,19 +209,23 @@ public sealed interface ReadMeaning {
      * @param answered which application of the step that made {@code value} this is, where that is
      *                 also the run's own count of the step's applications
      *                 ({@link ElementsWrittenOut.Occurrence#answered})
+     * @param within   which application of each closure it was written out by, outermost first
+     *                 ({@link ElementsWrittenOut.Occurrence#within})
      */
-    record Occurrence(Denotation value, List<Kept> keptWhere, OptionalInt answered) {
+    record Occurrence(Denotation value, List<Kept> keptWhere, OptionalInt answered,
+                      List<Integer> within) {
 
         public Occurrence {
             Objects.requireNonNull(value, "an occurrence is of some value");
             keptWhere = List.copyOf(keptWhere);
             Objects.requireNonNull(answered,
                     "an occurrence is answered by some application or none");
+            within = List.copyOf(within);
         }
 
         /** An occurrence nothing keeps out. */
         public static Occurrence always(Denotation value) {
-            return new Occurrence(value, List.of(), OptionalInt.empty());
+            return new Occurrence(value, List.of(), OptionalInt.empty(), List.of());
         }
 
         /** The same occurrence, kept also where every one of {@code more} holds — those decided
@@ -229,7 +233,7 @@ public sealed interface ReadMeaning {
         public Occurrence keptAlsoWhere(List<Kept> more) {
             List<Kept> all = new ArrayList<>(more);
             all.addAll(keptWhere);
-            return new Occurrence(value, all, answered);
+            return new Occurrence(value, all, answered, within);
         }
 
         /**

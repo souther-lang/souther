@@ -276,7 +276,9 @@ final class ElementEvaluations {
      * own, so that a count never falls short of the decisions there are.
      */
     private static int apartIn(List<Deciding> deciding) {
-        Map<Core, Set<Integer>> placed = new IdentityHashMap<>();
+        // Each decision's made-ness: the application that made it, the writing out it was made
+        // in, or once.
+        Map<Core, Set<Object>> placed = new IdentityHashMap<>();
         int unplaced = 0;
         for (Deciding one : deciding) {
             for (ReadMeaning.Occurrence.Kept kept : one.keptBy()) {
@@ -295,13 +297,18 @@ final class ElementEvaluations {
                 case ValueChoices.Of.Unread(Core origin, boolean viaNames,
                                             boolean perApplication) -> {
                     // A choice held in a name is made where the name was written: once, unless
-                    // what it turns on is handed by an application, which makes it again.
-                    if (origin == null || (viaNames && perApplication)
+                    // that is where an application is on, which makes it again on each
+                    // application. Of those, the occurrences written out by one application share
+                    // the one choice that application made, and no occurrence that says which
+                    // application wrote it out is told from another.
+                    List<Integer> within = one.occurrence().within();
+                    if (origin == null || (viaNames && perApplication && within.isEmpty())
                             || (!viaNames && answered.isEmpty())) {
                         unplaced++;
                     } else {
-                        placed.computeIfAbsent(origin, _ -> new HashSet<>())
-                                .add(viaNames ? ONCE : answered.getAsInt());
+                        Object made = !viaNames ? answered.getAsInt()
+                                : perApplication ? within : ONCE;
+                        placed.computeIfAbsent(origin, _ -> new HashSet<>()).add(made);
                     }
                 }
                 case ValueChoices.Of.OneComparison(Core.Binary comparison, var _,

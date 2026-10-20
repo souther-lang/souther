@@ -105,24 +105,39 @@ public final class ElementsWrittenOut {
      *                  {@code value} is no step's answer, and where an element before it may have
      *                  been dropped — past a drop a run applies the step to fewer, and which
      *                  application this is is not something the container says
+     * @param within    which application of each closure it was written out by, outermost first:
+     *                  what a flatMap's closure writes out is written once per application, and
+     *                  two occurrences with the same path are written by the same evaluation of
+     *                  everything above them. Empty where nothing above writes it out
      */
-    public record Occurrence<E>(Stood<E> value, List<Kept<E>> keptWhere, OptionalInt answered) {
+    public record Occurrence<E>(Stood<E> value, List<Kept<E>> keptWhere, OptionalInt answered,
+                                List<Integer> within) {
 
         public Occurrence {
             Objects.requireNonNull(value, "an occurrence is of some value");
             keptWhere = List.copyOf(keptWhere);
             Objects.requireNonNull(answered,
                     "an occurrence is answered by some application or none");
+            within = List.copyOf(within);
         }
 
         static <E> Occurrence<E> always(Stood<E> value) {
-            return new Occurrence<>(value, List.of(), OptionalInt.empty());
+            return new Occurrence<>(value, List.of(), OptionalInt.empty(), List.of());
         }
 
         Occurrence<E> keptAlsoWhere(List<Kept<E>> more) {
             List<Kept<E>> all = new ArrayList<>(more);
             all.addAll(keptWhere);
-            return new Occurrence<>(value, all, answered);
+            return new Occurrence<>(value, all, answered, within);
+        }
+
+        /** The same occurrence, written out by the {@code application}th application of a
+         *  closure above all those it was written out by. */
+        Occurrence<E> writtenInApplication(int application) {
+            List<Integer> path = new ArrayList<>();
+            path.add(application);
+            path.addAll(within);
+            return new Occurrence<>(value, keptWhere, answered, path);
         }
     }
 
@@ -361,19 +376,26 @@ public final class ElementsWrittenOut {
         }
         BindingId element = pieces.element().binding();
         List<Occurrence<E>> out = new ArrayList<>();
-        // Whether every element the step was handed so far was handed it on every run, which is
-        // what makes the number of an application the number a run counts it as.
-        boolean everyOneReached = true;
+        // The applications a run makes of the step, counted over the elements it is handed on
+        // every run, for as long as which elements it is handed is settled. An element kept out on
+        // every run is not handed, and is no application; one that is kept out on some runs and
+        // not others leaves every number after it unsettled, since past it a run applies the step
+        // to fewer.
+        int applied = 0;
+        boolean countable = true;
         for (int application = 0; application < elements.size(); application++) {
             Occurrence<E> each = elements.get(application);
             if (out.size() >= enough) {
                 break;
             }
-            // Kept by something that comes out the way it was kept by on every run is still handed
-            // on every run: a condition that is there is not one that takes an element out.
-            // Kept by something that comes out the way it was kept by on every run is still handed
-            // on every run: a condition that is there is not one that takes an element out.
-            everyOneReached &= Boolean.TRUE.equals(onEveryRun(each, reading));
+            Boolean handed = onEveryRun(each, reading);
+            OptionalInt number = OptionalInt.empty();
+            if (handed == null) {
+                countable = false;
+            } else if (handed) {
+                number = countable ? OptionalInt.of(applied) : OptionalInt.empty();
+                applied++;
+            }
             // The step's body read on the application handing it this element.
             Stood<E> answered = new Stood<>(pieces.step().body(),
                     reading.handing(stepAt, element, each.value()));
@@ -382,8 +404,7 @@ public final class ElementsWrittenOut {
                     if (++walked[0] > MOST_WALKED) {
                         return new Walked.PastTheFigure<>();
                     }
-                    out.add(new Occurrence<>(answered, each.keptWhere(),
-                            everyOneReached ? OptionalInt.of(application) : OptionalInt.empty()));
+                    out.add(new Occurrence<>(answered, each.keptWhere(), number, each.within()));
                 }
                 case THE_ELEMENT_WHERE_IT_HOLDS -> {
                     if (++walked[0] > MOST_WALKED) {
@@ -391,7 +412,7 @@ public final class ElementsWrittenOut {
                     }
                     List<Kept<E>> kept = new ArrayList<>(each.keptWhere());
                     kept.add(new Kept.ATruth<>(answered, true, application));
-                    out.add(new Occurrence<>(each.value(), kept, each.answered()));
+                    out.add(new Occurrence<>(each.value(), kept, each.answered(), each.within()));
                 }
                 case WHAT_THE_CLOSURE_ANSWERS -> {
                     Walked<E> inside = of(reading.standing(answered.value(), answered.at()),
@@ -399,7 +420,9 @@ public final class ElementsWrittenOut {
                     if (!(inside instanceof Walked.Each<E>(List<Occurrence<E>> made))) {
                         return inside;
                     }
-                    made.forEach(one -> out.add(one.keptAlsoWhere(each.keptWhere())));
+                    int writtenIn = application;
+                    made.forEach(one -> out.add(one.keptAlsoWhere(each.keptWhere())
+                            .writtenInApplication(writtenIn)));
                 }
             }
         }
