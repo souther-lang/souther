@@ -336,7 +336,7 @@ public sealed interface RunSource {
 
         @Override
         public int hashCode() {
-            return Objects.hash(elements, fromTheFarEnd);
+            return 31 * elements.hashCode() + Boolean.hashCode(fromTheFarEnd);
         }
 
         @Override
