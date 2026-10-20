@@ -418,6 +418,8 @@ public sealed interface ObligationDisposition {
                      Weakening.MeetingsNotWalked _,
                      // And one the classes do not place, for the same reason.
                      Weakening.MeetingsNotPlaced _,
+                     // And a sum of kept elements whose decisions were not joined to evaluations.
+                     Weakening.MeetingsNotJoined _,
                      // And a decision whose ways could not all be written down, which is about
                      // what obligations there are and not about a point of a line.
                      Weakening.DecisionReadingIncomplete _,

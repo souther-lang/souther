@@ -20,6 +20,12 @@ final class ReadInteractions {
 
     /** The interactions the reading finds in {@code behavior} of {@code source}. */
     static List<Interaction> read(String source, String behavior) {
+        return readAll(source, behavior).interactions();
+    }
+
+    /** Everything the reading of {@code behavior} of {@code source} came to, the sums it met and
+     *  could not join among it. */
+    static CoverageRead.Read readAll(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -29,8 +35,7 @@ final class ReadInteractions {
         assertNotNull(body, "the behavior under test has a body");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        return CoverageRead.of(behavior, checked.run(behavior), inputs.reading(rules))
-                .interactions();
+        return CoverageRead.of(behavior, checked.run(behavior), inputs.reading(rules));
     }
 
     /** The sizes of each group's factors, which is the shape of the space a row is owed for. */

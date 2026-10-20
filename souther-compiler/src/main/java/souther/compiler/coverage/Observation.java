@@ -35,9 +35,11 @@ import java.util.Set;
  * @param arms      the numbers of the arms the run was recorded at, which is what a branch measure
  *                  counts
  * @param outcomes  the ways the conditions it evaluated came out
+ * @param visits    the same ways, each with the visit it came out on, for the first visits to each
+ *                  condition ({@link RecordedVisit#MOST})
  */
 public record Observation(NumberingIdentity numbering, Set<Integer> arms,
-                          Set<RecordedConditionOutcome> outcomes) {
+                          Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits) {
 
     public Observation {
         if (numbering == null) {
@@ -46,6 +48,7 @@ public record Observation(NumberingIdentity numbering, Set<Integer> arms,
         }
         arms = arms == null ? Set.of() : Set.copyOf(arms);
         outcomes = outcomes == null ? Set.of() : Set.copyOf(outcomes);
+        visits = visits == null ? Set.of() : Set.copyOf(visits);
         // And each number under the family the call that wrote it was for. Said here, where the
         // recording is made, rather than left to whoever reads it: a number written into the wrong
         // family is the emitter having lit a place it was not at, and a reader meeting it later has
@@ -59,6 +62,9 @@ public record Observation(NumberingIdentity numbering, Set<Integer> arms,
         }
         for (RecordedConditionOutcome way : outcomes) {
             requireIssuedTo(numbering, way.at(), SiteAddress.ConditionOutcome.class, "a condition");
+        }
+        for (RecordedVisit visit : visits) {
+            requireIssuedTo(numbering, visit.at(), SiteAddress.ConditionOutcome.class, "a condition");
         }
     }
 

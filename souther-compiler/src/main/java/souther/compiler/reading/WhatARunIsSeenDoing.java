@@ -98,13 +98,7 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
 
     /** Whether the two are one place a run passes coming out two ways. */
     private static boolean otherWayOut(ControlPlace one, ControlPlace other) {
-        return switch (one) {
-            case ControlPlace.Outcome outcome -> other instanceof ControlPlace.Outcome that
-                    && that.at().equals(outcome.at()) && that.held() != outcome.held();
-            case ControlPlace.Arm arm -> other instanceof ControlPlace.Arm that
-                    && that.arm().fork().equals(arm.arm().fork())
-                    && that.arm().part() != arm.arm().part();
-        };
+        return one.excludes(other);
     }
 
     // What a run is seen doing does not turn on what a name reads.

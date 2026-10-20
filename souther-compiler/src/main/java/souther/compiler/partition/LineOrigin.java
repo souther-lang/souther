@@ -10,6 +10,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
@@ -167,6 +168,17 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          */
         public boolean comesOutBySides() {
             return part.isEmpty();
+        }
+
+        /**
+         * Whether which way one application of the comparison comes out is which side of this line
+         * a row is on: the comparison is one line, or it is one of the lines its applications
+         * state and nothing beside it turns the application round.
+         */
+        public boolean decidesItsApplication() {
+            return part.isEmpty()
+                    || (part.get().decides() instanceof Proposition.Always always
+                            && always.holds());
         }
 
         /**
