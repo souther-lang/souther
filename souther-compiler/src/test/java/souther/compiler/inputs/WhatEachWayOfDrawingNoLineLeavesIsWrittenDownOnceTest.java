@@ -199,6 +199,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // Read to the end. Whatever the rule places has been placed, and there is none to be owed —
         // and no measurement is weakened, so from here down there is no sensitivity to answer.
         table.put("ComparisonCuttingNothing", "RULE_CUTS_NOTHING/-");
+        // Its own word beside that one: a run gets past a rule that cuts nothing, and none gets
+        // past this.
+        table.put("ComparisonAnswersNowhere", "RULE_ANSWERS_NOWHERE/-");
         table.put("ComparisonCuttingOutsideDomain",
                 "RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS/-");
         // Its own word beside the one above. There the declarations never run as far as the line,
@@ -528,6 +531,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.WhereALineDecidesNotWorkedOut(AT_A_FIGURE),
                 new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.ComparisonCuttingNothing(),
+                new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),
                 new BlockReason.ComparisonRelationNothingArrivesAt(),

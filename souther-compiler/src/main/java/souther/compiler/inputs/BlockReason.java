@@ -1323,6 +1323,17 @@ public sealed interface BlockReason {
     record ComparisonCuttingNothing() implements ReadToEndWithoutLine {}
 
     /**
+     * The comparison was read to the end, and every run that reaches it stops in an operation it is
+     * read through: {@code a / 0 >= k} is worked out only after a quotient that aborts.
+     *
+     * <p>Its own case beside {@link ComparisonCuttingNothing}. There a run gets past the comparison
+     * and it comes out the same for every row; here no run gets past, so it states nothing on
+     * either side and nothing is owed at it. Read as a rule this compiler could not take in, an
+     * author was sent after a form that was read.
+     */
+    record ComparisonAnswersNowhere() implements ReadToEndWithoutLine {}
+
+    /**
      * The comparison was read to the end, the quantity it cuts was found, and the line it draws
      * falls where that quantity never runs.
      *

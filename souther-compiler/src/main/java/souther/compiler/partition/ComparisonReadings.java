@@ -243,10 +243,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   nothing stood on the way, which a comparison at the top of a body is; one
      *                   this reading has no arithmetic for is on the list as a decline, so the two
      *                   are not one answer
-     * @param severalStated the comparison as the condition where each case of where one of its
-     *                   lines decides is put on the way at ({@link #aCasePutOnTheWay}); nothing
-     *                   where it is one line
-     * @param metOn      which elements of the input a run makes the comparison on, where it stands
+     * @param statedAsACondition the comparison as the condition where each case of where one of its
+     *                   lines decides, or where a run stops in it, is put on the way at
+     *                   ({@link #aCasePutOnTheWay}); nothing where it is one line that no run
+     *                   stops in
+     * @param stopsWhere the rows on which a run stops in the comparison, as the conditions of the
+     *                   statement; nothing where no run does. Independent of the lines it draws
+     * @param metOn     which elements of the input a run makes the comparison on, where it stands
      *                   inside closures an operation stopping at an answer applies to them
      * @param runsAs     the construct as the tree that runs holds it, which is {@code occurrence}
      *                   wherever the body read is the one that runs. A helper's body read at a call
@@ -261,12 +264,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
-                   Optional<Condition> severalStated,
+                   Optional<Condition> statedAsACondition, Optional<Proposition> stopsWhere,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay) {
 
         Reading {
-            if (occurrence == null || statement == null || at == null || severalStated == null
+            if (occurrence == null || statement == null || at == null
+                    || statedAsACondition == null || stopsWhere == null
                     || metOn == null || runsAs == null || context == null
                     || saidOnTheWay == null) {
                 throw new IllegalArgumentException(
@@ -297,9 +301,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * @param read the reading of the input this comparison was read against
          */
         ReachingCuts.Stating aCasePutOnTheWay(Proposition decides, InputReading read) {
-            Condition statedAt = severalStated.orElseThrow(() -> new IllegalArgumentException(
-                    "this comparison is one line, and no case of where one decides is put on the"
-                            + " way at it: " + decides));
+            Condition statedAt = statedAsACondition.orElseThrow(() -> new IllegalArgumentException(
+                    "this comparison is one line no run stops in, and nothing of where one decides"
+                            + " is put on the way at it: " + decides));
             return ReachingCuts.whereItDecides(statedAt, decides, read);
         }
     }
@@ -549,9 +553,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                         ComparisonAssessment.ofAnApplication(in.behavior(),
                                                 answered, where, in.read());
                             }));
+            // Where a run stops in it, which is no part of the lines it draws. Only a comparison
+            // the policy admits is read, and an application states no comparison to stop in.
+            Optional<Proposition> stopsWhere = standing instanceof BoundaryPolicy.Standing.Admitted
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? Optional.ofNullable(Cutting.whereTheRunStops(comparison, in.read(), reads,
+                            applying, in.conditions()))
+                    : Optional.empty();
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
-                    severalStated(e, standing, reads, in, numbering), applying.elementsMetOn(),
-                    stated.written(), in.context(), numbering.saidOnTheWay(List.of(assumed))));
+                    statedAsACondition(e, standing, stopsWhere, reads, in, numbering), stopsWhere,
+                    applying.elementsMetOn(), stated.written(), in.context(),
+                    numbering.saidOnTheWay(List.of(assumed))));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
@@ -1042,14 +1054,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * The comparison {@code e} as a condition, where its statement is several lines: what where
-     * each of them decides is put on the way at — nothing where it is one line or draws none.
+     * The comparison {@code e} as a condition, where its statement is several lines or a run
+     * stops in it: what where each line decides, or where the run stops, is put on the way at —
+     * nothing where it is one line that no run stops in, or draws none.
      */
-    private static Optional<Condition> severalStated(Core e, BoundaryPolicy.Standing standing,
-                                                     InputReads reads, Body in,
-                                                     ConditionNumbering numbering) {
+    private static Optional<Condition> statedAsACondition(Core e, BoundaryPolicy.Standing standing,
+                                                          Optional<Proposition> stopsWhere,
+                                                          InputReads reads, Body in,
+                                                          ConditionNumbering numbering) {
         return standing instanceof BoundaryPolicy.Standing.Admitted admitted
-                && admitted.read() instanceof ComparisonAssessment.Several
+                && (admitted.read() instanceof ComparisonAssessment.Several
+                        || stopsWhere.isPresent())
                 ? Optional.of(Condition.of(e, reads, in.symbols(), in.newtypes(), numbering))
                 : Optional.empty();
     }

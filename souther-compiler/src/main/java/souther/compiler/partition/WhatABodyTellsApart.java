@@ -608,6 +608,7 @@ final class WhatABodyTellsApart {
     private static boolean dividesNothing(BlockReason.ReadToEndWithoutLine why) {
         return switch (why) {
             case BlockReason.ComparisonCuttingNothing _,
+                 BlockReason.ComparisonAnswersNowhere _,
                  BlockReason.ComparisonCuttingOutsideDomain _,
                  BlockReason.ComparisonNothingArrivesAtItsLine _,
                  BlockReason.ComparisonLineTurningNothing _,

@@ -35,6 +35,7 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhereARunStops;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.meaning.WhyUnread;
@@ -165,6 +166,24 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         record CutsNothing(List<FilingCoordinate> filedAt) implements Read {
 
             public CutsNothing {
+                filedAt = List.copyOf(filedAt);
+            }
+        }
+
+        /**
+         * Read to the end, and every run that reaches the comparison stops in an operation it is
+         * read through, such as a division by nought: it states nothing on either side.
+         *
+         * <p>A fact about the rule and not a reading that stopped, and not a comparison that
+         * settles the same for every row ({@link CutsNothing}): there a run gets past it, and here
+         * none does.
+         *
+         * @param filedAt where the rule is said to answer nowhere, as it is for
+         *                {@link CutsNothing}
+         */
+        record AnswersNowhere(List<FilingCoordinate> filedAt) implements Read {
+
+            public AnswersNowhere {
                 filedAt = List.copyOf(filedAt);
             }
         }
@@ -476,6 +495,34 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * Where a run stops in the comparison, or null where none does: the rows on which an operation
+     * it is read through ends the run, so that it states nothing on either side.
+     *
+     * <p>Independent of the line it draws. A comparison whose ways divide by nought on some of them
+     * draws its line on the others, and the ways that stop are no part of that line; they are said
+     * as what they are, and whether a row reaches them is asked of the way to the comparison
+     * ({@link ComparisonAssessment#someRowArrives}). Asked of each application a closure is
+     * made on, where that application is made, since a run that never makes one is not stopped by
+     * it.
+     */
+    static Proposition whereTheRunStops(StatedComparison comparison, InputReading read,
+                                        InputReads reads, ClosureApplications applying,
+                                        WhatConditionsState conditions) {
+        List<WhereARunStops.OnOneReading> readings = new ArrayList<>();
+        switch (applying) {
+            case ClosureApplications.Each(var made) -> made.forEach(one -> readings.add(
+                    new WhereARunStops.OnOneReading(one.reached(),
+                            conditions.comparison(comparison, one.reads(), read).stated()
+                                    .meaning())));
+            case ClosureApplications.None _ -> { }
+            case ClosureApplications.Outside _, ClosureApplications.NotSaid _ ->
+                    readings.add(new WhereARunStops.OnOneReading(null,
+                            conditions.comparison(comparison, reads, read).stated().meaning()));
+        }
+        return WhereARunStops.across(readings);
+    }
+
+    /**
      * One line an application of a closure draws: which of the author's lines it is a place of,
      * and what reading it came to there.
      *
@@ -517,6 +564,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> stopped =
                 new LinkedHashMap<>();
         List<FilingCoordinate> settled = new ArrayList<>();
+        List<FilingCoordinate> answeringNowhere = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
         List<UndividedByARelation> relations = new ArrayList<>();
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
@@ -537,6 +585,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Read.CutsNothing alone -> alone.filedAt().forEach(at -> {
                     if (!settled.contains(at)) {
                         settled.add(at);
+                    }
+                });
+                case Read.AnswersNowhere alone -> alone.filedAt().forEach(at -> {
+                    if (!answeringNowhere.contains(at)) {
+                        answeringNowhere.add(at);
                     }
                 });
                 case Read.AgainstAnotherValue alone -> {
@@ -575,7 +628,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     : severalNotDrawn(comparison, read, statingNoRelation, answering);
         }
         if (lines.isEmpty()) {
-            return new Read.CutsNothing(settled);
+            return settled.isEmpty() && !answeringNowhere.isEmpty()
+                    ? new Read.AnswersNowhere(answeringNowhere)
+                    : new Read.CutsNothing(settled);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
         // A relation of a statement that is no line, and relates no other value, is read in no
@@ -650,20 +705,29 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read onARemainder(String behavior, Relation.Affine affine, boolean holds,
                                      InputReading read) {
-        if (affine.form().coefs().size() != 1
-                || !(affine.form().coefs().entrySet().iterator().next().getKey()
-                        instanceof Quantity.RemainderOfADividend remainder)) {
+        Quantity.RemainderOfADividend remainder = AStatementAtARow.remainderOfADividendIn(affine);
+        if (remainder == null) {
             return null;
         }
-        ExactRatio weight = affine.form().coefs().get(remainder);
-        BorderQuantity.RemainderOfAForm of = remainderOf(behavior, remainder, read.quantities());
-        if (of == null || !(affine.form().constant().negated().dividedBy(weight)
-                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+        // The sum of the remainder and the other numbers is the quantity, the remainder weighed
+        // once: scaled so, `c == r`, `r == c` and `2 * c == 2 * r` are one quantity and one line.
+        if (!(ExactRatio.ONE.dividedBy(affine.form().coefs().get(remainder))
+                instanceof ExactAnswer.Held<ExactRatio> scale)
+                || !(affine.form().times(scale.value())
+                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                                LinearForm<Quantity> scaled))) {
+            return null;
+        }
+        LinearForm<NumericTerm> added = AStatementAtARow.otherNumbersWithTheRemainder(scaled);
+        BorderQuantity.RemainderOfAForm of =
+                remainderOf(behavior, remainder, added, read.quantities());
+        if (of == null) {
             return null;
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
-        Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
+        Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
+                scale.value().signum() < 0 ? claim.turned() : claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
@@ -674,7 +738,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     static DividedForm remainderAtARow(String behavior, Quantity.RemainderOfADividend remainder,
                                        Quantities quantities) {
-        BorderQuantity.RemainderOfAForm of = remainderOf(behavior, remainder, quantities);
+        BorderQuantity.RemainderOfAForm of = remainderOf(behavior, remainder,
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), quantities);
         return of == null ? null : of.dividedForm();
     }
 
@@ -687,6 +752,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static BorderQuantity.RemainderOfAForm remainderOf(String behavior,
                                                        Quantity.RemainderOfADividend remainder,
+                                                       LinearForm<NumericTerm> added,
                                                        Quantities quantities) {
         if (!(remainder.dividend().constant().floor()
                 instanceof ExactAnswer.Held<BigInteger> shift)) {
@@ -700,10 +766,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             on.put(term, orders);
         }
+        Map<NumericTerm, TermOrders> addedOn = new LinkedHashMap<>();
+        for (NumericTerm term : added.coefs().keySet()) {
+            TermOrders orders = quantities.ordersOf(term);
+            if (orders == null || orders.answered() == null || !orders.answered().counts()) {
+                return null;
+            }
+            addedOn.put(term, orders);
+        }
         return new BorderQuantity.RemainderOfAForm(behavior,
                 new BorderQuantity.OverAForm(behavior,
                         new LinearForm<>(ExactRatio.ZERO, remainder.dividend().coefs()), on),
-                shift.value(), remainder.divisor());
+                shift.value(), remainder.divisor(), added, addedOn);
     }
 
     /**
@@ -937,6 +1011,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (stated.proposition()) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
+            case Proposition.WhereItAnswers nowhere when Proposition.answersNowhere(nowhere) ->
+                    new Read.AnswersNowhere(settledAt(stated, comparison, read, reads, answering));
             case Proposition.Compared _ when line != null -> line;
             case Proposition.Compared _ when related != null ->
                     against(related, stated.proposition());

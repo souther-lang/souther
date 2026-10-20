@@ -401,6 +401,29 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, the levels it was offered and the"
                             + " members of a class it left untried"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofARemainderAndAForm("
+                            + "Lsouther/compiler/partition/Standing$OfARemainderAndAForm;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "collects the levels it was offered, the remainders and the placements of the"
+                            + " added numbers it left untried, and the members of a class"),
+            Map.entry("souther.compiler.partition.LevelRealizer#dividendBeside("
+                            + "Lsouther/compiler/partition/Standing$OfARemainderAndAForm;"
+                            + "Lsouther/compiler/numeric/LinearForm;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/numeric/Congruences;"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/ValuesTried;"
+                            + "Ljava/util/Set;"
+                            + "Ljava/util/Set;"
+                            + "Lsouther/compiler/partition/LevelRealizer$Steps;)"
+                            + "Lsouther/compiler/partition/LevelRealizer$LevelWalk;",
+                    "collects what the walks of a class ran out of, and the members of the class"
+                            + " it left untried, for the caller that tries the next placement"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofAProduct("
                             + "Lsouther/compiler/partition/Standing$OfAProduct;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
