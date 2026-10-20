@@ -92,6 +92,15 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         return found == null ? null : subjectOf(found);
     }
 
+    /**
+     * What a dependency answered, or a place inside it, whose every element {@code e} holds, each
+     * as often — {@code e} itself, or a reordering of it — or null where it is no such thing.
+     */
+    DecisionSubject.AnAnswer anAnswerWhoseEveryElementIsHeldBy(Core e, InputReads at) {
+        InputReads.AnAnswerAt found = at.answerWhoseEveryElementIsHeldBy(e, symbols, newtypes);
+        return found == null ? null : subjectOf(found);
+    }
+
     private DecisionSubject.AnAnswer subjectOf(InputReads.AnAnswerAt found) {
         // What a report names the answer by is what it was asked about.
         List<DecisionArgument> arguments = new ArrayList<>();

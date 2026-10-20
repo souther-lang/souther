@@ -223,4 +223,76 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         assertFalse(report.contains("not read: comparison"), report);
         assertFalse(report.contains("not accounted for: comparison"), report);
     }
+
+    private static final String SUM_OF_THE_ROWS = "List.sum(List.map(.quantity, readSnap(order).rows))";
+
+    private static String summedAs(String module, String number) {
+        return SUMMED.replace("module example.summed", "module example." + module)
+                .replace(SUM_OF_THE_ROWS, number);
+    }
+
+    @Test
+    void aFoldAddingTheResponsesElementsIsReadAsTheirSum() {
+        String report = reportOf(summedAs("folded",
+                "List.fold((acc, x) -> acc + x.quantity, 0, readSnap(order).rows)"));
+
+        assertFalse(report.contains("not read: comparison"), report);
+        assertFalse(report.contains("not accounted for: comparison"), report);
+    }
+
+    @Test
+    void aSumOfTheResponsesElementsInAnotherOrderIsReadAsTheirSum() {
+        String report = reportOf(summedAs("sorted",
+                "List.sum(List.map(.quantity, List.sortBy(.sku, readSnap(order).rows)))"));
+
+        assertFalse(report.contains("not read: comparison"), report);
+        assertFalse(report.contains("not accounted for: comparison"), report);
+    }
+
+    @Test
+    void aFoldOverTheResponsesElementsInAnotherOrderIsReadAsTheirSum() {
+        String report = reportOf(summedAs("sortedfold",
+                "List.fold((acc, x) -> acc + x.quantity + 1, 5,"
+                        + " List.sortBy(.sku, List.sortBy(.quantity, readSnap(order).rows)))"));
+
+        assertFalse(report.contains("not read: comparison"), report);
+        assertFalse(report.contains("not accounted for: comparison"), report);
+    }
+
+    @Test
+    void aSumOverTheElementsTheResponseKeptIsNotTakenForASumOfTheResponse() {
+        String report = reportOf(summedAs("kept",
+                "List.sum(List.map(.quantity, List.filter(i -> i.active, readSnap(order).rows)))")
+                .replace("quantity: Int }", "quantity: Int, active: Bool }"));
+
+        assertTrue(report.contains("not read: comparison"), report);
+    }
+
+    @Test
+    void aFoldOverTheElementsTheResponseKeptIsNotTakenForASumOfTheResponse() {
+        String report = reportOf(summedAs("keptfold",
+                "List.fold((acc, x) -> acc + x.quantity, 0,"
+                        + " List.filter(i -> i.active, readSnap(order).rows))")
+                .replace("quantity: Int }", "quantity: Int, active: Bool }"));
+
+        assertTrue(report.contains("not read: comparison"), report);
+    }
+
+    @Test
+    void aFoldThatDoesNotOnlyAddIsNotTakenForASumOfTheResponse() {
+        String report = reportOf(summedAs("doubling",
+                "List.fold((acc, x) -> acc * 2 + x.quantity, 0, readSnap(order).rows)"));
+
+        assertTrue(report.contains("not read: comparison"), report);
+    }
+
+    @Test
+    void anInputNumberAddedForEachElementByAFoldIsNotTakenForASumOfTheResponse() {
+        String report = reportOf(summedAs("foldbeside",
+                "List.fold((acc, x) -> acc + x.quantity + order.extra, 0, readSnap(order).rows)")
+                .replace("data Cart = { items: List<Item> }",
+                        "data Cart = { items: List<Item>, extra: Int }"));
+
+        assertTrue(report.contains("not read: comparison"), report);
+    }
 }

@@ -1146,6 +1146,27 @@ public final class InputReads {
      */
     private AnAnswerAt answerHoldingTheElementsOf(Core container, Symbols symbols,
                                                   DeclarationNewtypes newtypes) {
+        return answerReachedThrough(container, symbols, newtypes,
+                InputPath::argumentWhoseElementsItHolds);
+    }
+
+    /**
+     * The answer of a dependency whose every element {@code container} holds, each as often, or
+     * null where it holds none's.
+     *
+     * <p>Only through the operations that put the elements of a list in another order
+     * ({@link InputPath#argumentWhoseElementsAreReordered}): a filtered list holds some of the
+     * elements of the answer, and what is added up over those is added up over no element of it.
+     */
+    public AnAnswerAt answerWhoseEveryElementIsHeldBy(Core container, Symbols symbols,
+                                                      DeclarationNewtypes newtypes) {
+        return answerReachedThrough(container, symbols, newtypes,
+                InputPath::argumentWhoseElementsAreReordered);
+    }
+
+    private AnAnswerAt answerReachedThrough(Core container, Symbols symbols,
+                                            DeclarationNewtypes newtypes,
+                                            Function<ValueName, DeclaredArgument> crossed) {
         Denotation at = standing(container, symbols, newtypes);
         while (true) {
             AnAnswerAt found = at.at().answerAt(at.value(), symbols, newtypes);
@@ -1167,7 +1188,7 @@ public final class InputReads {
                     return null;
                 }
             }
-            DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
+            DeclaredArgument holds = crossed.apply(operation);
             int position = holds == null ? -1 : CallArguments.positionOf(holds, operation);
             if (position < 0 || position >= args.size()) {
                 return null;

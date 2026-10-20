@@ -803,6 +803,14 @@ final class InputPath {
         return holds;
     }
 
+    /** The argument whose every element {@code operation}'s answer holds, each as often, or null
+     *  where it holds every element of none. */
+    static DeclaredArgument argumentWhoseElementsAreReordered(ValueName operation) {
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        return built == null ? null : built.permutesTheElementsOf();
+    }
+
     /** The argument whose elements {@code operation}'s answer holds, as far as this walk's question
      *  crosses, or null where it crosses to none. */
     private DeclaredArgument holdingTheElements(ValueName operation) {
