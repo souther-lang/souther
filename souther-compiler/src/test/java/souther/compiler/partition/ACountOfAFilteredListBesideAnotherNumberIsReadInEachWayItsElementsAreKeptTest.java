@@ -393,8 +393,12 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("read as f/#xs [xs[*] > 0] - k: = 0"), report);
-        assertTrue(report.lines().filter(line -> line.contains("not read"))
+        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
+        assertTrue(unread.stream()
                 .allMatch(line -> line.contains("not shown to reach every value here")), report);
+        assertEquals(Set.of("k", "xs[*]"), unread.stream()
+                .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
+                .collect(Collectors.toSet()), report);
     }
 
     /** What the way to the comparison leaves of {@code k} is read before the ways: where it is at

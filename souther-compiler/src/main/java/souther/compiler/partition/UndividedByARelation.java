@@ -280,7 +280,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * the region reads of it, and that is asked of the number.
          */
         NumericTerm.FromOnePosition atOnePosition() {
-            return number instanceof NumericTerm.FromOnePosition one ? one : null;
+            return number == null ? null : number.atOnePosition();
         }
 
         /** The number of the input what this side may be is read off — the order it stands on,

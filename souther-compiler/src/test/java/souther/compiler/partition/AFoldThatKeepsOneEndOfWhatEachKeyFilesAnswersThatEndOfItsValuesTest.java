@@ -251,9 +251,13 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                     Report { stale = Map.keys(Map.filterEntries((k, days) -> days >= staleAfter, since)) }
                 }
                 """);
-        assertTrue(report(compilation).lines().filter(line -> line.contains("not read"))
-                        .allMatch(line -> line.contains(NOT_SHOWN_TO_REACH)),
+        List<String> unread = report(compilation).lines()
+                .filter(line -> line.contains("not read")).toList();
+        assertTrue(unread.stream().allMatch(line -> line.contains(NOT_SHOWN_TO_REACH)),
                 () -> report(compilation));
+        assertEquals(Set.of("least(touches[*].days by account)", "staleAfter"), unread.stream()
+                .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
+                .collect(Collectors.toSet()), () -> report(compilation));
         assertEquals(1, bordersOf(compilation).size(), () -> report(compilation));
         assertTrue(json(compilation).contains("least(touches[*].days by account)"),
                 () -> report(compilation));
