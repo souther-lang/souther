@@ -164,7 +164,8 @@ public record ElementProjection(List<TermPath.Step> steps) {
                                          Map<BindingId, Core> held,
                                          DeclarationNewtypes newtypes) {
         ReadOff found = new Reading(standing, held, newtypes, Licence.PLACE).from(answer, element);
-        return found == null || found.placed() == null ? null : found.placed().at();
+        OnePerElement.Answered placed = found == null ? null : found.placed();
+        return placed == null ? null : placed.at();
     }
 
     /**

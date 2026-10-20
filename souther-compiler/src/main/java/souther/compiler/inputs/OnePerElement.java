@@ -10,29 +10,16 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * A container of the input a list holds one value for each element of, and where in the element
- * that value stands ({@link ElementQuestion#ONE_PER_ELEMENT}).
+ * What is read off each element of a list holding one value for each element of another
+ * ({@link ElementQuestion#ONE_PER_ELEMENT}): where in the element a value stands, and the way a
+ * reading takes a value out of what the list holds, which a walk may have built.
  *
- * <p>Each element is answered once, in the one occurrence of the container the list was made
- * from, so how often a value occurs among what the list holds is how often it occurs at that place
- * among the elements of that occurrence.
- *
- * @param container the position of the container
- * @param projected the way from an element of it to the value the list holds for that element
- * @param wrapped   whether some step answered a newtype wearing that value rather than the value:
- *                  which values are equal is kept, and nothing about their order is said
+ * <p>Which run the list is, and where each read stands in it, is the walk's answer
+ * ({@link InputReads#occurrencesOf}); these are what it is asked with and reads through.
  */
-public record OnePerElement(TermPath container, ElementProjection projected, boolean wrapped) {
+public final class OnePerElement {
 
-    public OnePerElement {
-        Objects.requireNonNull(container, "a run of one value for each element is over a container");
-        Objects.requireNonNull(projected, "and the value held for an element stands somewhere in"
-                + " it, the element itself at the least");
-    }
-
-    /** The position of what stands at {@code within} in the value held for an element. */
-    public TermPath placeOf(ElementProjection within) {
-        return projected.then(within).from(container.element());
+    private OnePerElement() {
     }
 
     /**

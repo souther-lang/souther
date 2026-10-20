@@ -5202,9 +5202,9 @@ final class Pullback {
      * each element of a key reads the same number and some entry meets a statement exactly where
      * some element does.
      *
-     * <p>The key and the value filed are read as places of the element the step is handed, and
-     * through the container of the input the list walked holds one value for each element of
-     * ({@link InputReads#onePerElementOf}) as places of that container's element. A key read
+     * <p>The key and the value filed are read off the element the step is handed, and down one walk
+     * of the list to the occurrences of the input it holds one value each of
+     * ({@link InputReads#occurrencesOf}) as places standing there. A key read
      * anywhere else — off another walk's element, say — is the same for every element, and how
      * often it occurs is how many elements there are, not how many share a value. A key may wear
      * the value as a newtype, which keeps which keys are equal; the value an end is kept of may
@@ -5441,21 +5441,10 @@ final class Pullback {
      * may be some of the occurrences, kept by a statement, and then counts only the ones it keeps.
      */
     private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed) {
-        return occurrencesOfTheKey(whole, filed, false);
-    }
-
-    /**
-     * The same, where {@code acrossOnly} asks for the count across containers of every
-     * occurrence and for nothing else: null for a list of one container, or of some occurrences.
-     */
-    private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed,
-                                            boolean acrossOnly) {
         InputReads.Occurrences every = keysOf(whole, filed);
         if (every == null
                 || !(every.reads().getFirst() instanceof InputReads.Occurrences.Read.At(
-                        TermPath place, var _))
-                || (acrossOnly && (!(every instanceof InputReads.Occurrences.AcrossContainers)
-                        || !every.keptBy().isEmpty()))) {
+                        TermPath place, var _))) {
             return null;
         }
         KeptOccurrences selection = null;
@@ -5470,12 +5459,8 @@ final class Pullback {
         return switch (every) {
             case InputReads.Occurrences.OfOneContainer(TermPath container, var _, var _) ->
                     selection == null ? NumericTerm.Multiplicity.of(container, place)
-                            // A statement keeping some elements is read of a container no other
-                            // holds, whose every element it is about.
-                            : place.containersHoldingIt().size() == 1
-                                    ? NumericTerm.OccurrencesOfItsValue.of(
-                                            RunSource.overTheOccurrencesAt(place), selection)
-                                    : null;
+                            : NumericTerm.OccurrencesOfItsValue.of(
+                                    RunSource.overTheOccurrencesAt(place), selection);
             case InputReads.Occurrences.AcrossContainers _ ->
                     RunSource.overEveryOccurrenceAt(place)
                             instanceof RunSource.FlattenedOccurrences flat
@@ -5500,9 +5485,15 @@ final class Pullback {
                 instanceof PathResolution.At(TermPath key))) {
             return null;
         }
-        return occurrencesOfTheKey(whole, filed, true)
-                instanceof NumericTerm.OccurrencesOfItsValue every
-                && every.run() instanceof RunSource.FlattenedOccurrences flat
+        // Every occurrence across the containers, since a count of a value asked for says nothing
+        // about which of them a statement kept.
+        return keysOf(whole, filed) instanceof InputReads.Occurrences.AcrossContainers(
+                        List<InputReads.Occurrences.Read> reads, List<Denotation> keptBy)
+                && keptBy.isEmpty()
+                && reads.getFirst() instanceof InputReads.Occurrences.Read.At(
+                        TermPath place, var _)
+                && RunSource.overEveryOccurrenceAt(place)
+                        instanceof RunSource.FlattenedOccurrences flat
                 ? NumericTerm.OccurrencesOfAKey.of(flat, key) : null;
     }
 

@@ -2268,25 +2268,6 @@ public final class InputReads {
     }
 
     /**
-     * The container of the input {@code list}, read here, holds one value for each element of,
-     * and where in the element that value stands — or null where it holds no such run of one
-     * ({@link ElementQuestion#ONE_PER_ELEMENT}).
-     */
-    public OnePerElement onePerElementOf(Core list, Symbols symbols,
-                                         DeclarationNewtypes newtypes) {
-        if (!(occurrencesOf(list, List.of(ReadOff.ITSELF), null, symbols, newtypes)
-                instanceof Occurrences.OfOneContainer(TermPath container,
-                        List<Occurrences.Read> reads, List<Denotation> keptBy))
-                || !keptBy.isEmpty()
-                || !(reads.getFirst() instanceof Occurrences.Read.At(TermPath at,
-                        boolean wrapped))) {
-            return null;
-        }
-        return new OnePerElement(container, ElementProjection.below(container.element(), at),
-                wrapped);
-    }
-
-    /**
      * Which occurrences of the input the list {@code list} holds one value each of, and where what
      * each of {@code reads} takes out of each element of it stands among the places of the input
      * — or null where the list is not shown to hold one value for each of some occurrences.
