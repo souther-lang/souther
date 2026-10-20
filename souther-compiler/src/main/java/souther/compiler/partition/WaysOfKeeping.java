@@ -106,20 +106,22 @@ final class WaysOfKeeping {
     }
 
     /**
-     * How many elements the tree reads in all, or {@code limit} where it reads that many or more:
-     * at each leaf the elements that are there, and one for a leaf that has none.
+     * How many readings the tree makes in all, or {@code limit} where it makes that many or more.
      *
-     * <p>The reading a leaf makes is one of each element there, as the sum of the elements of a
-     * container that is not kept by anything is. Counted only to {@code limit}, because what a
-     * caller asks is whether the work is within a budget, and a tree of independent truths has as
-     * many leaves as there are combinations of them. The truths {@code decided} already are not
-     * split again.
+     * <p>What a leaf reads is the reader's: a sum reads one of each element there, as the sum of
+     * the elements of a container that is not kept by anything does, so a leaf is the elements
+     * that are there and one for a leaf that has none. A count reads no element, only which are
+     * there, so a leaf is one. Counted only to {@code limit}, because what a caller asks is whether
+     * the work is within a budget, and a tree of independent truths has as many leaves as there
+     * are combinations of them. The truths {@code decided} already are not split again.
+     *
+     * @param readsTheElements whether a leaf reads each element that is there
      */
-    long work(Boolean[] decided, long limit) {
+    long work(Boolean[] decided, long limit, boolean readsTheElements) {
         int next = nextEvaluated(decided);
         if (next < 0) {
             long there = 0;
-            for (int i = 0; i < keptBy.length; i++) {
+            for (int i = 0; readsTheElements && i < keptBy.length; i++) {
                 there += isThere(i, decided) ? 1 : 0;
             }
             return Math.min(limit, Math.max(1, there));
@@ -127,7 +129,7 @@ final class WaysOfKeeping {
         long total = 0;
         for (boolean holds : new boolean[] {true, false}) {
             decided[next] = holds;
-            total += work(decided, limit - total);
+            total += work(decided, limit - total, readsTheElements);
             decided[next] = null;
             if (total >= limit) {
                 return limit;

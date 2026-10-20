@@ -5527,8 +5527,9 @@ final class Pullback {
         WaysOfKeeping ways = new WaysOfKeeping(total.occurrences());
         Boolean[] decided = alreadyDecided(ways);
         // The elements the leaves of the tree read, as a total of elements kept by nothing reads
-        // them ({@link #sumOfWrittenOut}).
-        WhyUnread past = splitInto(reads, limit -> ways.work(decided, limit));
+        // them ({@link #sumOfWrittenOut}); a count reads none of them.
+        WhyUnread past = splitInto(reads,
+                limit -> ways.work(decided, limit, !total.counted()));
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, fixed));
         }
@@ -7627,9 +7628,13 @@ final class Pullback {
                 case ReadMeaning.Position _, ReadMeaning.Element _, ReadMeaning.Unknown _ -> false;
             };
         }
-        // A closure's body is read where it is applied, and is no part of this value.
-        if (Core.withoutStanding(e) instanceof Core.Block) {
-            return false;
+        // What a closure is handed is the closure's own, applied wherever it is applied: reading
+        // its parameters is no reading of a value of the container. What it reads of the names
+        // outside it is.
+        if (Core.withoutStanding(e) instanceof Core.Block block) {
+            Set<BindingId> own = new HashSet<>(met);
+            block.params().forEach(each -> own.add(each.binding()));
+            return readOnceForEveryValue(block.body(), at, own);
         }
         boolean[] found = {false};
         Core.forEachChild(e, child -> found[0] = found[0] || readOnceForEveryValue(child, at, met));
