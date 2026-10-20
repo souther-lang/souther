@@ -17,6 +17,7 @@ import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
@@ -369,7 +370,10 @@ public final class InputNumber {
         // makes them is the same total: where the outermost operation is no walk over a place, the
         // one beneath it is asked.
         while (met != null) {
-            NumericTerm run = overTheRunWalkedBy(measured, met, inputs, source);
+            NumericTerm run = overTheRunWalkedBy(measured, met, null, inputs, source);
+            if (run == null) {
+                run = overTheElementsKeptBy(measured, met, inputs, source);
+            }
             if (run != null) {
                 return run;
             }
@@ -378,11 +382,92 @@ public final class InputNumber {
         return null;
     }
 
-    /** The number {@code measured} takes over the values the walk {@code met} was given
-     *  ({@link #overARun}), or null where those values are not read from a place. */
+    /**
+     * The total of the elements {@code met} keeps of a list by their index — the ones before a
+     * count, or the ones from it on — or null where it keeps none that way, or the count is no
+     * whole number written out, or what they are kept of is not read from a place in an order.
+     *
+     * <p>Some of the elements, so no total of the list ({@link #sourceOf} refuses it there), and
+     * which of them is fixed by where each stands: the total of each element weighed one where its
+     * position passes the test the library keeps it by and nought where it does not
+     * ({@link ElementValue.ByPosition}). That is a number of the elements in the order they were
+     * kept in, so it is read where that order is shown, as the row writes them or from the far end.
+     * A count past the last keeps every element on one side and none on the other, and a test of
+     * the position says so without a case of its own.
+     *
+     * <p>Kept from what a walk answered, the walk is handed the whole list and the test is of where
+     * its answers stand, which is where it was handed each element. Kept from what a walk is then
+     * handed, the walk would number the kept elements again from nought, so a selection under a
+     * walk is not read here.
+     */
+    private static NumericTerm overTheElementsKeptBy(NumericMeasures.Measured measured,
+                                                     Denotation met, InputDomain inputs,
+                                                     RuleReadingSource source) {
+        if (!(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        Symbols symbols = source.symbols();
+        InputReads where = met.at();
+        AnOperationApplied applied = AnOperationApplied.of(met.value());
+        BoundOperationFacts.KeptByIndex byIndex = applied == null ? null
+                : DefaultBoundOperationFacts.get().holdsTheElementsByIndex(applied.operation());
+        Core count = byIndex == null ? null : applied.argument(byIndex.count());
+        Core list = byIndex == null ? null : applied.argument(byIndex.list());
+        if (count == null || list == null
+                || !(where.folded(count, symbols, source.newtypes()).orElse(null)
+                        instanceof Long index)) {
+            return null;
+        }
+        ElementValue.PositionTest kept = new ElementValue.PositionTest(
+                ElementValue.PositionTest.THE_POSITION_ITSELF, byIndex.kept(), index);
+        Denotation listed = where.denotes(list, symbols, source.newtypes());
+        NumericTerm walked = overTheRunWalkedBy(measured, listed, kept, inputs, source);
+        if (walked != null) {
+            return walked;
+        }
+        for (TraversalDirection direction : TraversalDirection.values()) {
+            if (listed.at().inTheOrderOf(listed.value(), direction, source.newtypes())
+                    instanceof PathResolution.At(TermPath at)) {
+                Type each = inputs.typeAt(at, source);
+                ElementValue itself = new ElementValue.Affine(
+                        LinearForm.atom(new ElementProjection(List.of())));
+                RunSource over = each == null ? null
+                        : RunSource.computedOverTheElementsAt(at, keptBy(kept, itself), each,
+                                new RunSource.TraversalOrder(at, direction));
+                return over == null ? null
+                        : NumericTerm.TakenOver.of(measured.operation(), over, each,
+                                source.inners(), symbols);
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code walk} answers what its closure answered on each element, one for each and
+     *  put end to end in the order it was handed them ({@link PieceOfAnElement#THE_CLOSURES_ANSWER}). */
+    private static boolean answersInTheOrderHanded(Core walk) {
+        AnOperationApplied applied = AnOperationApplied.of(walk);
+        BoundOperationFacts.Assembled assembled = applied == null ? null
+                : DefaultBoundOperationFacts.get().assembles(applied.operation());
+        return assembled != null && assembled.piece() == PieceOfAnElement.THE_CLOSURES_ANSWER;
+    }
+
+    /** {@code computed} for an element whose position {@code kept} holds of, and nought for the
+     *  rest. */
+    private static ElementValue keptBy(ElementValue.PositionTest kept, ElementValue computed) {
+        return ElementValue.choosingByPosition(kept, computed,
+                new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO, Map.of())));
+    }
+
+    /**
+     * The number {@code measured} takes over the values the walk {@code met} was given
+     * ({@link #overARun}), or null where those values are not read from a place.
+     *
+     * @param kept the test of the position an answer of the walk is counted where, the rest
+     *             counting nought; null where every answer counts
+     */
     private static NumericTerm overTheRunWalkedBy(NumericMeasures.Measured measured,
-                                                  Denotation met, InputDomain inputs,
-                                                  RuleReadingSource source) {
+                                                  Denotation met, ElementValue.PositionTest kept,
+                                                  InputDomain inputs, RuleReadingSource source) {
         Symbols symbols = source.symbols();
         Core walk = met.value();
         InputReads where = met.at();
@@ -407,7 +492,24 @@ public final class InputNumber {
             return null;
         }
         ElementValue computed = null;
-        if (answered == null) {
+        if (kept != null) {
+            // Some of the answers by where they stand, and an answer stands where its element was
+            // handed only where the walk puts them in that order: one answer per element says
+            // nothing of which came first.
+            if (!answersInTheOrderHanded(walk) || where.answerAt(element) == null) {
+                return null;
+            }
+            // So the number is one computed of each element whatever the closure answered: its
+            // place where it answered one.
+            computed = answered != null ? new ElementValue.Affine(LinearForm.atom(answered))
+                    : computedOf(measured, where, element, source,
+                            new ElementValue.ElementsAt(at, where.declared()));
+            if (computed == null) {
+                return null;
+            }
+            computed = keptBy(kept, computed);
+            answered = null;
+        } else if (answered == null) {
             // A total of how many a container inside each element holds is how many occurrences
             // of its element there are — where the elements walked are those of a container no
             // other holds. One inside another is one of many, and every occurrence of the path is

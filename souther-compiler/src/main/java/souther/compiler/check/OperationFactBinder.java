@@ -524,16 +524,17 @@ final class OperationFactBinder {
                 yield new BoundOperationFact.AssemblesPieces(operation, source, closure,
                         assembles.piece());
             }
-            // The elements of a list from an index on are a list's, and the index is a number.
-            case OperationFact.HoldsTheElementsFrom from -> {
+            // The elements of a list kept by an index are a list's, and the index is a number.
+            case OperationFact.HoldsTheElementsByIndex byIndex -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
-                        "what holds the elements of a list from an index on");
-                yield new BoundOperationFact.HoldsTheElementsFrom(operation,
-                        holdToTheDeclaration(declaration, from.count(), from.count(),
-                                TypeRequirement.NUMBER, "the index the elements are kept from"),
-                        holdToTheDeclaration(declaration, from.list(),
+                        "what holds the elements of a list kept by an index");
+                yield new BoundOperationFact.HoldsTheElementsByIndex(operation,
+                        holdToTheDeclaration(declaration, byIndex.count(), byIndex.count(),
+                                TypeRequirement.NUMBER, "the index the elements are kept by"),
+                        holdToTheDeclaration(declaration, byIndex.list(),
                                 new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
-                                "the list the elements are kept of"));
+                                "the list the elements are kept of"),
+                        byIndex.kept());
             }
             // What a value is put in answers a container like it, and what is put in is one of what
             // such a container holds.
