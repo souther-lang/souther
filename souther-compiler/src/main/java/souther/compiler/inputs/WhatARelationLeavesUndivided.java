@@ -1317,6 +1317,27 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
+     * A run whose ends are where the representation stops, and not lines of anything compared.
+     *
+     * <p>The reading of two terms by their difference passes over the values beside the ends of
+     * what the terms take. That is the representation running out of partners and not a line the
+     * model draws, which holds of the ends of a type and of the year of a date, and does not hold
+     * of a month of twelve or a length of nought: a value at either settles the comparison for a
+     * reason of its own. The caller says which it has by handing the run over in this type, and so
+     * by having shown it.
+     *
+     * @param run the run the terms take, open on a side it does not stop on
+     */
+    public record WhereTheRepresentationStops(NumericDomain.Bounds run) {
+
+        public WhereTheRepresentationStops {
+            if (run == null) {
+                throw new IllegalArgumentException("a run the representation stops on is a run");
+            }
+        }
+    }
+
+    /**
      * The places of two terms, held against {@code constant} as {@code relation}, shown undivided
      * because the relation and everything {@code held} of the two are about their difference alone.
      *
@@ -1344,22 +1365,22 @@ public final class WhatARelationLeavesUndivided {
      * where its values are whole, and which a dense type holds as well: a difference left between
      * two whole numbers and at neither is passed over, and nothing is shown.
      *
-     * @param terms   two terms, each the value at its place, taking every value of its type and
-     *                the same values as the other — or nothing is shown
+     * @param terms   two terms, each the value at its place or a number taken of one, taking every
+     *                value of its type and the same values as the other — or nothing is shown
      * @param held    every statement the rows arriving hold of either term, each about their
      *                difference
-     * @param extent  where the type the two take stops, open on a side it does not
+     * @param extent  where the values the two take stop
      * @param overlap whether two places are one, or one is part of the other
      */
     public static <P> Set<P> ofTheirDifference(List<Term<P>> terms, ExactRatio constant,
                                                Rel relation, List<OnTheDifference> held,
-                                               NumericDomain.Bounds extent,
+                                               WhereTheRepresentationStops extent,
                                                BiPredicate<P, P> overlap) {
         if (terms.size() != 2 || constant == null || !apart(terms, 0, overlap)
-                || !moveTogether(terms.get(0), terms.get(1))) {
+                || !moveTogether(terms.get(0), terms.get(1), extent.run())) {
             return Set.of();
         }
-        WholeRun middle = WholeRun.reachedFromTheMiddleOf(extent);
+        WholeRun middle = WholeRun.reachedFromTheMiddleOf(extent.run());
         if (middle == null) {
             return Set.of();
         }
@@ -1410,14 +1431,25 @@ public final class WhatARelationLeavesUndivided {
      * its place, taking every value of its type and the same values as the other, weighed by one
      * weight and its negation.
      */
-    private static <P> boolean moveTogether(Term<P> one, Term<P> other) {
-        return one.itsPlace() && other.itsPlace()
-                && one.realizes() != null && one.realizes().saysNothing()
-                && other.realizes() != null && other.realizes().saysNothing()
+    private static <P> boolean moveTogether(Term<P> one, Term<P> other,
+                                            NumericDomain.Bounds extent) {
+        return reachesTheWholeType(one, extent) && reachesTheWholeType(other, extent)
+                && one.itsPlace() == other.itsPlace()
                 && one.takes() != null && one.takes().equals(other.takes())
                 && one.weight().plus(other.weight()) instanceof ExactAnswer.Held<ExactRatio>(
                         ExactRatio sum)
                 && sum.signum() == 0;
+    }
+
+    /**
+     * Whether the term is shown to take every value of the type it is a value of: the value at its
+     * place says nothing of where it lies, and what is taken of a place is shown to take all of
+     * {@code extent}.
+     */
+    private static <P> boolean reachesTheWholeType(Term<P> term, NumericDomain.Bounds extent) {
+        return term.realizes() != null
+                && (term.itsPlace() ? term.realizes().saysNothing()
+                        : term.realizes().equals(extent));
     }
 
     /**

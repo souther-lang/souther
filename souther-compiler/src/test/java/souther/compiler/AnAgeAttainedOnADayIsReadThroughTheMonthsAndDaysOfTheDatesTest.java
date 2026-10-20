@@ -53,7 +53,10 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     }
 
     private static String report(String source) {
-        Compilation compilation = compiled(source);
+        return report(compiled(source));
+    }
+
+    private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -126,18 +129,21 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     void theRowsOfferedAreAnsweredAsTheCalendarWorksTheAgeOut() {
         assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(
                 AGE + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n",
-                age -> age >= 60);
+                age -> age >= 60, 59, 60);
     }
 
-    /** The same of a way that states the age at two lines. */
+    /** The same of a way that states the age at two lines, with a row at each side of each. */
     @Test
     void theRowsOfferedForTwoComparisonsOfOneAgeAreAnsweredAsTheCalendarWorksTheAgeOut() {
         assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(BETWEEN_FORTY_AND_SIXTY_FIVE,
-                age -> age >= 40 && age < 65);
+                age -> age >= 40 && age < 65, 39, 40, 64, 65);
     }
 
+    /**
+     * @param reached the ages the rows offered must include, one at each side of each line
+     */
     private static void assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(
-            String behavior, IntPredicate expected) {
+            String behavior, IntPredicate expected, Integer... reached) {
         Compilation offering = compiled(behavior);
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
@@ -145,6 +151,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 .text();
 
         StringBuilder examples = new StringBuilder();
+        Set<Integer> ages = new HashSet<>();
         int rows = 0;
         for (String line : offered.lines().filter(each -> each.contains("Date(\"")).toList()) {
             List<LocalDate> dates = new ArrayList<>();
@@ -154,15 +161,17 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 dates.add(LocalDate.parse(line.substring(at + 6, end)));
                 at = end;
             }
+            ages.add(ageAttained(dates.get(0), dates.get(1)));
             examples.append("    | (Date(\"").append(dates.get(0)).append("\"), Date(\"")
                     .append(dates.get(1)).append("\")) -> ")
                     .append(expected.test(ageAttained(dates.get(0), dates.get(1)))).append('\n');
             rows++;
         }
         assertTrue(rows > 0, offered);
+        assertTrue(ages.containsAll(List.of(reached)), ages + "\n" + offered);
 
         Compilation answered = compiled(behavior + "\nexample f\n" + examples);
-        String report = report(behavior + "\nexample f\n" + examples);
+        String report = report(answered);
 
         assertEquals(0, answered.errors().size(), report + "\n" + examples);
         assertFalse(report.contains("no row is at"), report);
@@ -218,7 +227,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
      * Two comparisons of one age state the months and days of the dates, and their years, along
      * one way. The first comparison states the correction by the months and days that the second
      * asks again, so the way decides it and the months and days are read there. The years are
-     * stated at one level and asked at another, and are not read.
+     * stated at one level and asked at another, and are read by how far apart they are.
      */
     @Test
     void theCorrectionOneComparisonStatesAndAnotherAsksAgainIsReadAlongWaysThatStateYearsToo() {
@@ -228,6 +237,26 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 + " is not worked out, about `Date.month(on)`"), report);
         assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
                 + " is not worked out, about `Date.day(on)`"), report);
+        assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
+                + " is not worked out, about `Date.year(on)`"), report);
+        assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
+                + " is not worked out, about `Date.year((birthday -1 days))`"), report);
+    }
+
+    private static final String YEARS_UNREAD = NOT_REACHED
+            + ", so which values here settle it on their own is not worked out, about `Date.year(";
+
+    /** The age bound by a {@code let} and compared at the two lines of a band. */
+    @Test
+    void anAgeBoundByALetAndComparedAtTwoLinesIsReadInTheYears() {
+        String report = report(AGE + """
+                let f (birthday, on) = {
+                    let age = attainedAgeOn(birthday, on)
+                    if age >= 40 && age < 65 then true else false
+                }
+                """);
+
+        assertFalse(report.contains(YEARS_UNREAD), report);
     }
 
     /**

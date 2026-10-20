@@ -130,8 +130,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     }
 
     /** The days a date can be written on, which is where the type two dates take stops. */
-    private static final NumericDomain.Bounds DATES =
-            run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay());
+    private static final WhatARelationLeavesUndivided.WhereTheRepresentationStops DATES =
+            new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
+                    run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay()));
 
     private static Set<String> apart(List<WhatARelationLeavesUndivided.Term<String>> terms,
                                      long constant, Rel relation,
@@ -168,7 +169,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     void aTypeWithNoEndLeavesEveryDifference() {
         assertEquals(Set.of("a", "b"), WhatARelationLeavesUndivided.ofTheirDifference(
                 pair(1, -1, A_DATE), ExactRatio.of(-10_000_000_000_000L), Rel.GT, List.of(),
-                NumericDomain.Bounds.OPEN, String::equals));
+                new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
+                        NumericDomain.Bounds.OPEN), String::equals));
     }
 
     /**

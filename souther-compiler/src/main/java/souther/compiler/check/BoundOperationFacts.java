@@ -958,4 +958,10 @@ public final class BoundOperationFacts {
     public boolean everyAnswerItCanGiveHasASourceValue(ValueName operation) {
         return one(BoundOperationFact.EveryAnswerItCanGiveHasASourceValue.class, operation) != null;
     }
+
+    /** Whether the least and the greatest number {@code operation} answers are where what it is
+     *  read out of stops, and not lines of the operation. */
+    public boolean endsAreWhereTheRepresentationStops(ValueName operation) {
+        return one(BoundOperationFact.EndsAreWhereTheRepresentationStops.class, operation) != null;
+    }
 }
