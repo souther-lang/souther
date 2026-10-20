@@ -193,8 +193,8 @@ class ACountOfWhatACaseConversionAnswersIsAskedOfTheAnswerTest {
                 }
                 Predicate<String> holds = text -> each.made().apply(text).codePoints()
                         .anyMatch(code -> each.keeps().equals("[a-z0-9]")
-                                ? code >= '0' && code <= '9' || code >= 'a' && code <= 'z'
-                                : code >= '0' && code <= '9' || code >= 'A' && code <= 'Z');
+                                ? (code >= '0' && code <= '9') || (code >= 'a' && code <= 'z')
+                                : (code >= '0' && code <= '9') || (code >= 'A' && code <= 'Z'));
                 assertTrue(sides.get(0).stream().noneMatch(holds), said + ": " + sides.get(0));
                 assertTrue(sides.get(1).stream().allMatch(holds), said + ": " + sides.get(1));
             }
