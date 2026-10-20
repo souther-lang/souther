@@ -89,16 +89,20 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
     }
 
     /**
-     * The control: the relations an emptiness check over a filter states are each read off the
-     * comparison its closure writes, which draws them on each value, and the check draws none.
+     * An emptiness check over a filter of values written out states relations of those values and
+     * nothing else, which are lines the check holds across, as the same choices written out as
+     * {@code if}s are: the check draws them beside the comparison its closure writes on each value.
      */
     @Test
-    void anEmptinessCheckWhoseRelationsAComparisonInsideItDrawsDrawsNone() {
+    void anEmptinessCheckOfValuesWrittenOutDrawsItsRelationsBesideTheClosures() {
         Walked walked = walked("List.isEmpty(List.filter(x -> x > 5, [o.floor, o.ceil]))");
-        assertEquals(1, walked.comparisons().size(), () -> "the closure's comparison: " + walked);
-        assertInstanceOf(ComparisonReadings.Stated.AComparison.class,
-                walked.comparisons().getFirst().statement());
-        assertEquals(Set.of("o.floor", "o.ceil"), positions(walked.comparisons().getFirst()));
+        assertEquals(2, walked.comparisons().size(),
+                () -> "the closure's comparison and the check: " + walked);
+        for (ComparisonReadings.Reading each : walked.comparisons()) {
+            assertInstanceOf(ComparisonReadings.Stated.AComparison.class, each.statement());
+            assertEquals(Set.of("o.floor", "o.ceil"), positions(each));
+        }
+        assertEquals(List.of(), walked.leftToTheFork());
     }
 
     /**

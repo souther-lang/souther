@@ -573,9 +573,15 @@ final class Pullback {
      *
      * <p>Carried past where every part it was carried to was read — one that stopped on the way is
      * a rule about a value made from the input, which the comparison still is — and what it states
-     * is relations every one of which was read off another comparison: those are that
-     * comparison's lines, as {@code List.isEmpty(List.filter(x -> x > 5, [a, b]))} is the
-     * closure's on each value.
+     * turns on parts every one of which was read off another comparison, and is not relations
+     * alone: {@code List.isEmpty(List.filter(x -> x > 5, xs))} is whether some element of
+     * {@code xs} meets the closure, and the lines are the closure's on each element.
+     *
+     * <p>Not where what it states is relations and nothing else. Those are lines the check holds
+     * across, as the same choices written out as {@code if}s are, and the check draws them beside
+     * the lines of the comparisons it turns on: {@code List.isEmpty(List.filter(x -> x > 5, [a,
+     * b]))} holds where {@code a} and {@code b} are each at most five, which is a line of the
+     * check's on each, beside the closure's.
      *
      * <p>And not where some of the relations it states nothing else written there states. Those
      * are lines, and the comparison draws them: {@code List.isEmpty(List.take(n, xs))} holds where
@@ -625,9 +631,13 @@ final class Pullback {
             return read.turnsOn().stream()
                     .allMatch(leaf -> aTruthStatedWhereItIsWritten(leaf.from().value(), check));
         }
-        return (emptiness && !Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
-                || (!read.turnsOn().isEmpty() && read.turnsOn().stream()
-                        .allMatch(leaf -> anotherComparison(leaf.from().value(), check)));
+        // Relations and nothing else are lines on the input the check itself holds across, as
+        // the same choices written out as `if`s are, beside the lines of the comparisons it turns
+        // on.
+        return !Cutting.onlyRelations(stated)
+                && ((emptiness && !Cutting.drawsLines(stated))
+                        || (!read.turnsOn().isEmpty() && read.turnsOn().stream()
+                                .allMatch(leaf -> anotherComparison(leaf.from().value(), check))));
     }
 
     /** Whether {@code from} is a comparison or a call answering a truth other than {@code check},
