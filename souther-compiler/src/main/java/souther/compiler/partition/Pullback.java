@@ -6909,12 +6909,16 @@ final class Pullback {
                 return read.wayIn();
             }
             if (!read.notLinear().isEmpty()) {
-                return aCountToKeep((count, container) -> read.notLinear().stream()
+                return aCountToKeep((_, container) -> read.notLinear().stream()
                         .anyMatch(stopped -> Core.holds(stopped, container.value())));
             }
-            if (read.composed().size() < numbers.size()
-                    || countsMet.isEmpty() && !restMayCount.getAsBoolean()
-                    || !(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))
+            if (read.composed().size() < numbers.size()) {
+                return null;
+            }
+            if (countsMet.isEmpty() && !restMayCount.getAsBoolean()) {
+                return null;
+            }
+            if (!(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))
                     || countsMet.isEmpty()) {
                 return null;
             }
@@ -6929,7 +6933,7 @@ final class Pullback {
             }
             LinearForm<Quantity> relation = LinearForm.sum(weighed).orNull();
             return relation == null || relation.coefs().size() < 2 ? null
-                    : aCountToKeep((count, container) -> relation.coefs().containsKey(count));
+                    : aCountToKeep((count, _) -> relation.coefs().containsKey(count));
         } finally {
             countsMet = outer;
         }
