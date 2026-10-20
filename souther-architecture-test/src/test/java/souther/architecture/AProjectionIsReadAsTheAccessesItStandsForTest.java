@@ -334,10 +334,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "Ljava/util/Set;)L" + c + "reading/ValueChoices$Fork;", Reading.STRUCTURE,
                 "looks for a fork in a value and in what its names stand for, which no field read is:"
                         + " a projection is its base, and the base is a name followed the same way");
-        row(out, c + "check/ElementsWrittenOut", "choosesWithin", "(" + core + ")Z",
+        row(out, c + "reading/ElementEvaluations", "writes", "(" + core + core + ")Z",
                 Reading.STRUCTURE,
-                "asks whether a choice is written anywhere in an expression, which no field read"
-                        + " is: a projection is its base, and a choice in the base is one in it");
+                "asks whether an expression is written anywhere in another, which no field read"
+                        + " is: a projection is its base, and what is written in the base is"
+                        + " written in it");
         row(out, c + "reading/KeptElements", "collect", "(" + core + "L" + CORE
                 + "$Binary;Ljava/util/List;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/EmittedClassReferences", "visit", "(" + core + "L" + c + "types/Type;)V",

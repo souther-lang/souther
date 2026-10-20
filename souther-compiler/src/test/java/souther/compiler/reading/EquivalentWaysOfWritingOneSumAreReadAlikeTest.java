@@ -416,31 +416,53 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
     }
 
     /**
-     * A choice is made where it is written, and handing its value on through more closures is no
-     * more evaluations of it: a value passed through is made where it was made, and a value a
-     * closure makes is made by each application of that closure.
+     * What a closure does with a value it is handed, and what else it writes, change nothing about
+     * the choice the value came from: a choice is evaluated once for each application of the
+     * closure it is written in, however its result is used, transformed or passed through, and
+     * whatever else the closures it passes through choose and do not use.
+     */
+    private static final List<String> STAGES = List.of(
+            "List.flatMap(x -> [ x ], %s)",
+            "List.map(x -> x, %s)",
+            "List.flatMap(x -> [ x * 2 ], %s)",
+            "List.flatMap(x -> [ x + 0 ], %s)",
+            "List.map(x -> x * 2, %s)",
+            "List.flatMap(x -> [ x, x ], %s)",
+            "List.flatMap(x -> { let ignored = if flag then 1 else 0\n    [ x ] }, %s)",
+            "List.map(x -> { let ignored = if flag then 1 else 0\n    x }, %s)");
+
+    /**
+     * Every pipeline of up to two such stages after a choice made once and used twice is one
+     * decision, and the same after a choice made in each of two applications is two. The stages
+     * are crossed with each other, so that one added is tried after every other.
      */
     @Test
-    void handingAChoiceOnThroughMoreClosuresChangesNoDecisionCount() {
+    void whatIsDoneWithAChoiceAfterItIsMadeChangesNoDecisionCount() {
         String writes = "List.flatMap(r -> { let chosen = if r.active then 1 else 0\n"
                 + "    [ chosen, chosen ] }, %s)";
-        for (int layers = 0; layers < 3; layers++) {
-            for (String handed : List.of("List.flatMap(x -> [ x ], %s)", "List.map(x -> x, %s)",
-                    "List.flatMap(x -> [ x * 2 ], %s)", "List.flatMap(x -> [ x + 0 ], %s)",
-                    "List.map(x -> x * 2, %s)", "List.flatMap(x -> [ x, x ], %s)")) {
-                String once = writes.formatted("[ first ]");
-                String twice = writes.formatted("[ first, second ]");
-                for (int layer = 0; layer < layers; layer++) {
-                    once = handed.formatted(once);
-                    twice = handed.formatted(twice);
-                }
-                assertEquals(List.of(), readFlagged("List.sum(" + once + ")").notJoined(),
-                        layers + " layers of " + handed + ", one application");
-                assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ),
-                        readFlagged("List.sum(" + twice + ")").notJoined(),
-                        layers + " layers of " + handed + ", two applications");
+        List<List<String>> pipelines = new ArrayList<>();
+        pipelines.add(List.of());
+        for (String first : STAGES) {
+            pipelines.add(List.of(first));
+            for (String second : STAGES) {
+                pipelines.add(List.of(first, second));
             }
         }
+        List<String> differing = new ArrayList<>();
+        for (List<String> stages : pipelines) {
+            String once = writes.formatted("[ first ]");
+            String twice = writes.formatted("[ first, second ]");
+            for (String stage : stages) {
+                once = stage.formatted(once);
+                twice = stage.formatted(twice);
+            }
+            List<WhyNotJoined> one = readFlagged("List.sum(" + once + ")").notJoined();
+            List<WhyNotJoined> two = readFlagged("List.sum(" + twice + ")").notJoined();
+            if (!one.isEmpty() || !List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ).equals(two)) {
+                differing.add(stages + ": one " + one + ", two " + two);
+            }
+        }
+        assertEquals(List.of(), differing);
     }
 
     /**

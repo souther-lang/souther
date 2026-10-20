@@ -105,13 +105,15 @@ public final class ElementsWrittenOut {
      *                  {@code value} is no step's answer, and where an element before it may have
      *                  been dropped — past a drop a run applies the step to fewer, and which
      *                  application this is is not something the container says
-     * @param within    which application of each closure it was written out by, outermost first:
-     *                  what a flatMap's closure writes out is written once per application, and
-     *                  two occurrences with the same path are written by the same evaluation of
-     *                  everything above them. Empty where nothing above writes it out
+     * @param within    the applications that wrote it out: which application of which closure,
+     *                  for each step it passed through, outermost first. What is decided by a
+     *                  choice written in a closure is decided once for each application of that
+     *                  closure, so a choice is told apart from another evaluation of itself by
+     *                  the applications of the closures it is written in, and by no others.
+     *                  Empty where no step wrote it out
      */
     public record Occurrence<E>(Stood<E> value, List<Kept<E>> keptWhere, OptionalInt answered,
-                                List<Integer> within) {
+                                List<Applied> within) {
 
         public Occurrence {
             Objects.requireNonNull(value, "an occurrence is of some value");
@@ -132,8 +134,22 @@ public final class ElementsWrittenOut {
         }
 
         /** The same occurrence, written out by the applications {@code path} says. */
-        Occurrence<E> within(List<Integer> path) {
+        Occurrence<E> within(List<Applied> path) {
             return new Occurrence<>(value, keptWhere, answered, path);
+        }
+    }
+
+    /**
+     * One application of a closure: the body that was applied, and which application of it, counted
+     * in the order its step is handed the elements.
+     *
+     * <p>The body is the closure's own and not a copy, so that whether a choice is written in it
+     * is a question of where the choice is.
+     */
+    public record Applied(Core body, int application) {
+
+        public Applied {
+            Objects.requireNonNull(body, "an application is of some closure");
         }
     }
 
@@ -403,7 +419,9 @@ public final class ElementsWrittenOut {
                     if (++walked[0] > MOST_WALKED) {
                         return new Walked.PastTheFigure<>();
                     }
-                    out.add(new Occurrence<>(answered, each.keptWhere(), number, each.within()));
+                    List<Applied> path = new ArrayList<>(each.within());
+                    path.add(new Applied(pieces.step().body(), position));
+                    out.add(new Occurrence<>(answered, each.keptWhere(), number, path));
                 }
                 case THE_ELEMENT_WHERE_IT_HOLDS -> {
                     if (++walked[0] > MOST_WALKED) {
@@ -419,38 +437,17 @@ public final class ElementsWrittenOut {
                     if (!(inside instanceof Walked.Each<E>(List<Occurrence<E>> made))) {
                         return inside;
                     }
-                    int writtenIn = position;
-                    boolean chooses = choosesWithin(pieces.step().body());
+                    Applied here = new Applied(pieces.step().body(), position);
                     made.forEach(one -> {
-                        // What decides a value is evaluated where the choice is written. A
-                        // closure with no choice in it evaluates none, whatever it does with the
-                        // values it is handed, so what it writes out was decided where those
-                        // were; one with a choice in it evaluates it on each application, and
-                        // what it writes out is decided by this application as well.
-                        List<Integer> path = new ArrayList<>(each.within());
-                        if (chooses) {
-                            path.add(writtenIn);
-                            path.addAll(one.within());
-                        }
+                        List<Applied> path = new ArrayList<>(each.within());
+                        path.add(here);
+                        path.addAll(one.within());
                         out.add(one.keptAlsoWhere(each.keptWhere()).within(path));
                     });
                 }
             }
         }
         return new Walked.Each<>(out);
-    }
-
-    /** Whether a choice is written in {@code e} itself, and not in what a name in it stands for. */
-    private static boolean choosesWithin(Core e) {
-        switch (Core.withoutStanding(e)) {
-            case Core.If _, Core.Match _, Core.IfConstructed _ -> {
-                return true;
-            }
-            default -> { }
-        }
-        boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] = found[0] || choosesWithin(child));
-        return found[0];
     }
 
     /**

@@ -209,11 +209,11 @@ public sealed interface ReadMeaning {
      * @param answered which application of the step that made {@code value} this is, where that is
      *                 also the run's own count of the step's applications
      *                 ({@link ElementsWrittenOut.Occurrence#answered})
-     * @param within   which application of each closure it was written out by, outermost first
+     * @param within   the applications that wrote it out, outermost first
      *                 ({@link ElementsWrittenOut.Occurrence#within})
      */
     record Occurrence(Denotation value, List<Kept> keptWhere, OptionalInt answered,
-                      List<Integer> within) {
+                      List<ElementsWrittenOut.Applied> within) {
 
         public Occurrence {
             Objects.requireNonNull(value, "an occurrence is of some value");

@@ -1,6 +1,7 @@
 package souther.compiler.reading;
 
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.inputs.Denotation;
@@ -226,8 +227,15 @@ final class ElementEvaluations {
     private record Deciding(ReadMeaning.Occurrence occurrence,
                             List<ReadMeaning.Occurrence.Kept> keptBy, ValueChoices.Of choice) { }
 
-    /** The marker for a decision made once, whichever occurrence it is met in. */
-    private static final int ONCE = -1;
+    /** Whether {@code target}, which is not a copy, is written anywhere in {@code within}. */
+    private static boolean writes(Core within, Core target) {
+        if (Core.withoutStanding(within) == target) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(within, child -> found[0] = found[0] || writes(child, target));
+        return found[0];
+    }
 
     /**
      * {@code occurrence} as what varies it, or null where nothing does.
@@ -297,18 +305,26 @@ final class ElementEvaluations {
                 case ValueChoices.Of.Fixed _ -> { }
                 case ValueChoices.Of.Unread(Core origin, boolean viaNames,
                                             boolean perApplication) -> {
-                    // A choice held in a name is made where the name was written: once, unless
-                    // that is where an application is on, which makes it again on each
-                    // application. Of those, the occurrences written out by one application share
-                    // the one choice that application made, and no occurrence that says which
-                    // application wrote it out is told from another.
-                    List<Integer> within = one.occurrence().within();
-                    if (origin == null || (viaNames && perApplication && within.isEmpty())
+                    // A choice is evaluated once for each application of each closure it is
+                    // written in, and by nothing else: not by what is done with its result, nor
+                    // by what else is written in the closures the result passes through. A choice
+                    // held in a name is told by the applications that wrote the occurrence out,
+                    // of those closures that hold it. Where it is written in an application no
+                    // step that wrote the occurrence out accounts for, which application it is
+                    // is not something this knows, and it is counted as its own.
+                    List<Integer> evaluated = new ArrayList<>();
+                    if (origin != null) {
+                        for (ElementsWrittenOut.Applied applied : one.occurrence().within()) {
+                            if (writes(applied.body(), origin)) {
+                                evaluated.add(applied.application());
+                            }
+                        }
+                    }
+                    if (origin == null || (viaNames && perApplication && evaluated.isEmpty())
                             || (!viaNames && answered.isEmpty())) {
                         unplaced++;
                     } else {
-                        Object made = !viaNames ? answered.getAsInt()
-                                : perApplication ? within : ONCE;
+                        Object made = viaNames ? evaluated : answered.getAsInt();
                         placed.computeIfAbsent(origin, _ -> new HashSet<>()).add(made);
                     }
                 }
