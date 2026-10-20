@@ -48,17 +48,17 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
 
             data Pair = { first: Date, second: Date }
             data Chain = { a: Date, b: Date, c: Date }
-            data Shared = { lo: Int, hi: Int }
-            data A = { ...Shared, u: Int }
-            data B = { ...Shared, v: Int }
-            data Q = A | B
-            data Holder = { q: Q, n: Int }
+            data Stamp = { d: Date }
+            data SideA = { ...Stamp, u: Int }
+            data SideB = { ...Stamp, v: Int }
+            data Side = SideA | SideB
+            data Dated = { side: Side, m: Date }
 
             data Ok
 
+            behavior dated : (x: Dated) -> Ok
             behavior pair : (p: Pair) -> Ok
             behavior chain : (c: Chain) -> Ok
-            behavior holder : (h: Holder) -> Ok
             """;
 
     @Test
@@ -101,18 +101,17 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
     }
 
     @Test
-    void termsNoRowHasTogetherAddNothing() {
-        SearchRegion region = region("holder");
-        NumericTerm n = value("holder", "h.n");
-        NumericTerm underA = value("holder", "h.q@A.lo");
-        NumericTerm underB = value("holder", "h.q@B.lo");
+    void termsOfCasesNoRowHasTogetherLeaveTheTermAsWideAsItIsAlone() {
+        NumericTerm m = year("dated", "x.m");
+        NumericTerm underA = year("dated", "x.side@SideA.d");
+        NumericTerm underB = year("dated", "x.side@SideB.d");
+        SearchRegion region = apart(region("dated"), m, underA, 10);
 
-        NumericDomain.FormProjection alone = region.projectionOf(n);
+        NumericDomain.FormProjection alone = region.projectionOf(m);
 
-        assertEquals(alone, region.projectionOf(n, List.of(underA, underB)));
-        assertEquals(alone, region.projectionOf(n, List.of(underB, underA)));
-        // And a term of the other case is no row with the one asked about.
-        assertEquals(region.projectionOf(underA), region.projectionOf(underA, List.of(underB)));
+        assertNotEquals(alone, region.projectionOf(m, List.of(underA)));
+        assertEquals(alone, region.projectionOf(m, List.of(underA, underB)));
+        assertEquals(alone, region.projectionOf(m, List.of(underB, underA)));
     }
 
     @Test
@@ -144,10 +143,6 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
 
     private static NumericDomain.Bounds within(NumericDomain.FormProjection projection) {
         return assertInstanceOf(NumericDomain.FormProjection.Within.class, projection).bounds();
-    }
-
-    private static NumericTerm value(String behavior, String spelled) {
-        return new NumericTerm.ValueOf(pathOf(behavior, spelled));
     }
 
     /** The year of the date at {@code spelled}, which runs as far as the calendar does. */
