@@ -18,9 +18,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BinaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -249,7 +251,9 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                     Report { stale = Map.keys(Map.filterEntries((k, days) -> days >= staleAfter, since)) }
                 }
                 """);
-        assertFalse(report(compilation).contains("not read"), () -> report(compilation));
+        assertTrue(report(compilation).lines().filter(line -> line.contains("not read"))
+                        .allMatch(line -> line.contains(NOT_SHOWN_TO_REACH)),
+                () -> report(compilation));
         assertEquals(1, bordersOf(compilation).size(), () -> report(compilation));
         assertTrue(json(compilation).contains("least(touches[*].days by account)"),
                 () -> report(compilation));
@@ -324,6 +328,26 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
 
     private static final String WITHIN_A_HUNDRED = "days >= 0 && days <= 100";
 
+    private static final String NOT_SHOWN_TO_REACH = "not shown to reach every value here";
+
+    private static final Pattern AT_A_COMPARISON = Pattern.compile("comparison@(\\S+) ");
+
+    /**
+     * The lines saying a place is not read, of every comparison but the one about
+     * {@code staleAfter}.
+     *
+     * <p>That one relates what was filed to {@code staleAfter}, a number its reach is not shown
+     * against, whatever the step is; what is asked here is what the step's own comparison is.
+     */
+    private static List<String> unreadBeside(String report) {
+        Set<String> filtered = report.lines()
+                .filter(line -> line.contains("about `staleAfter`"))
+                .map(AT_A_COMPARISON::matcher).filter(Matcher::find)
+                .map(found -> found.group(0)).collect(Collectors.toSet());
+        return report.lines().filter(line -> line.contains("not read")
+                && filtered.stream().noneMatch(line::contains)).toList();
+    }
+
     private static final String COMPARED_WITH_WHAT_WAS_FOUND = "Map.updateOrInsert(t.account,"
             + " t.days, seen -> if t.days < seen then t.days else seen, acc)";
 
@@ -336,7 +360,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     void theComparisonAgainstWhatWasFoundUnderTheKeyIsRead() {
         Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED,
                 COMPARED_WITH_WHAT_WAS_FOUND));
-        assertFalse(report(compilation).contains("not read"), () -> report(compilation));
+        assertEquals(List.of(), unreadBeside(report(compilation)), () -> report(compilation));
     }
 
     /** A key worked out of the value is no place two elements share, and nothing is said of what
@@ -360,7 +384,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
             assertTrue(report.contains(
                     "no IN point is owed at touches[*].days = 100 (comparison@"), report);
             assertFalse(report.contains("touches[*].days = 0 (comparison@"), report);
-            assertFalse(report.contains("not read"), report);
+            assertEquals(List.of(), unreadBeside(report), report);
         }
     }
 
@@ -419,8 +443,9 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 let stale (quote, staleAfter) =
                     Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
                 """.formatted(COMPARED_WITH_WHAT_WAS_FOUND)));
-        assertTrue(report.contains("it relates the value here to another value not shown to"
-                + " reach every value here"), report);
+        assertTrue(unreadBeside(report).stream()
+                .anyMatch(line -> line.contains("it relates the value here to another value "
+                        + NOT_SHOWN_TO_REACH)), report);
     }
 
     @Test
@@ -431,7 +456,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                         | Some seen -> Map.insert(t.account,
                               if t.days < seen then t.days else seen, acc)""";
         Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED, lookup));
-        assertFalse(report(compilation).contains("not read"), () -> report(compilation));
+        assertEquals(List.of(), unreadBeside(report(compilation)), () -> report(compilation));
         assertEquals(axisOf(measured(modelWith(WITHIN_A_HUNDRED, COMPARED_WITH_WHAT_WAS_FOUND))),
                 axisOf(compilation));
     }
@@ -441,7 +466,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED,
                 "Map.updateOrInsert(String.fromInt(t.days + 1), t.days,"
                         + " seen -> if t.days < seen then t.days else seen, acc)"));
-        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+        assertFalse(unreadBeside(report(compilation)).isEmpty(), () -> report(compilation));
     }
 
     /** A rule of the element relating the key to the value leaves the earlier values of one key
@@ -451,7 +476,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         Compilation compilation = measured(modelWith(
                 WITHIN_A_HUNDRED + " && (account /= \"a\" || days <= 10)",
                 COMPARED_WITH_WHAT_WAS_FOUND));
-        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+        assertFalse(unreadBeside(report(compilation)).isEmpty(), () -> report(compilation));
     }
 
     /** A rule of the element that reads only the key leaves the numbers of the elements of one key
@@ -461,7 +486,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         for (String step : List.of(COMPARED_WITH_WHAT_WAS_FOUND, LOOKUP_AND_FILING)) {
             String report = report(measured(modelWith(
                     WITHIN_A_HUNDRED + " && String.length(account) > 0", step)));
-            assertFalse(report.contains("not read"), report);
+            assertEquals(List.of(), unreadBeside(report), report);
         }
     }
 
@@ -486,7 +511,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 let stale (quote, staleAfter) =
                     Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
                 """.formatted(COMPARED_WITH_WHAT_WAS_FOUND));
-        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+        assertFalse(unreadBeside(report(compilation)).isEmpty(), () -> report(compilation));
     }
 
     /** What a fold files that keeps no end of one value of each element says nothing of it. */

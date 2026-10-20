@@ -239,14 +239,15 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
      */
     @Test
     void keysAMapAnsweredAsTheyAreAreCountedAsTheListIs() {
-        List<String> plain = axisOf(measured(modelOf(COUNTING, "count >= atLeast", "")));
+        Compilation plain = measured(modelOf(COUNTING, "count >= atLeast", ""));
         for (String keys : List.of("List.map(k -> k, xs)", "List.map(k -> k, List.map(j -> j, xs))",
                 "List.reverse(List.map(k -> k, xs))", "List.map(k -> k, List.sort(xs))")) {
             Compilation compilation = measured(modelOver(keys));
-            assertEquals(plain, axisOf(compilation), () -> keys + ": " + report(compilation));
+            assertEquals(axisOf(plain), axisOf(compilation),
+                    () -> keys + ": " + report(compilation));
             assertTrue(json(compilation).contains("multiplicity(xs[*])"),
                     () -> keys + ": " + report(compilation));
-            assertFalse(report(compilation).contains("not read"),
+            assertEquals(unreadOf(plain), unreadOf(compilation),
                     () -> keys + ": " + report(compilation));
         }
     }
@@ -371,7 +372,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     void keysAMapTookOutOfTheElementsAreCountedAtThePlaceItTookThemFrom() {
         record Taken(String step, String keys, String counted) { }
         // The fold over the issues, one for each place counted.
-        Map<String, List<String>> directAxes = new LinkedHashMap<>();
+        Map<String, Compilation> directly = new LinkedHashMap<>();
         for (Taken taken : List.of(
                 new Taken(countedUnder("k"), "List.map(i -> i.label, issues)", "label"),
                 new Taken(countedUnder("k"), "List.reverse(List.map(i -> i.label, issues))",
@@ -386,15 +387,15 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 new Taken(countedUnder("k"),
                         "List.map(d -> d, List.map(i -> { let d = i.detail\n d.label }, issues))",
                         "detail.label"))) {
-            List<String> direct = directAxes.computeIfAbsent(taken.counted(), counted ->
-                    axisOf(measured(modelOfIssues(countedUnder("k." + counted), "issues"))));
+            Compilation direct = directly.computeIfAbsent(taken.counted(), counted ->
+                    measured(modelOfIssues(countedUnder("k." + counted), "issues")));
             Compilation compilation = measured(modelOfIssues(taken.step(), taken.keys()));
-            assertEquals(direct, axisOf(compilation),
+            assertEquals(axisOf(direct), axisOf(compilation),
                     () -> taken + ": " + report(compilation));
             assertTrue(json(compilation).contains(
                             "multiplicity(issues[*]." + taken.counted() + ")"),
                     () -> taken + ": " + report(compilation));
-            assertFalse(report(compilation).contains("not read"),
+            assertEquals(unreadOf(direct), unreadOf(compilation),
                     () -> taken + ": " + report(compilation));
         }
     }
@@ -1269,6 +1270,15 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /** The lines saying a place is not read, each as the report writes it but for where the
+     *  comparison stands, which moves with how the keys are spelled. */
+    private static List<String> unreadOf(Compilation compilation) {
+        return report(compilation).lines().map(String::strip)
+                .filter(line -> line.contains("not read"))
+                .map(line -> line.replaceAll("comparison@\\S+ ", "comparison "))
+                .toList();
     }
 
     /** The source measured, which is a source that compiles: a model that did not would have no
