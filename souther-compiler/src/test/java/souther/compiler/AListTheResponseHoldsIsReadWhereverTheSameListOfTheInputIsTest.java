@@ -103,17 +103,27 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 // is written, and the order of the elements has no part in it.
                 List.of("List.sum(NUMS)",
                         "List.sum(List.drop(0, NUMS))",
+                        "List.sum(List.drop(0, List.drop(0, NUMS)))",
                         "List.sum(List.mapIndexed((i, x) -> if i >= 0 then x else 0, NUMS))",
                         "List.sum(List.mapIndexed((i, x) -> x, List.sortBy(y -> y, NUMS)))",
                         "List.sum(List.mapIndexed((i, x) -> x, NUMS))",
                         "List.sum(List.map(x -> 1 * x, NUMS))",
                         "List.fold((acc, x) -> acc + x, 0, NUMS)"),
                 // And one that keeps none is nought.
-                List.of("List.sum(List.take(0, NUMS))"),
+                List.of("List.sum(List.take(0, NUMS))",
+                        "List.sum(List.take(0, List.drop(0, NUMS)))",
+                        "List.sum(List.drop(3, List.take(3, NUMS)))"),
                 List.of("List.sum(List.mapIndexed((i, x) -> if i < 0 then x else 0, NUMS))"),
                 // And a total of the elements a take or drop keeps is one chosen by position.
                 List.of("List.sum(List.take(1, List.reverse(NUMS)))"),
-                List.of("List.sum(List.drop(1, NUMS))"));
+                List.of("List.sum(List.drop(1, NUMS))"),
+                // Takes and drops stacked keep the positions from the furthest drop to the
+                // nearest take, however they are stacked.
+                List.of("List.sum(List.take(3, List.drop(1, NUMS)))",
+                        "List.sum(List.drop(1, List.take(4, NUMS)))",
+                        "List.sum(List.take(5, List.take(3, List.drop(1, NUMS))))",
+                        "List.sum(List.drop(1, List.drop(0, List.take(4, NUMS))))"),
+                List.of("List.sum(List.take(1, List.drop(1, List.reverse(NUMS))))"));
     }
 
     /**
@@ -128,6 +138,8 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 // Sorted, the position an element is at is no position it was written at.
                 "List.sum(List.mapIndexed((i, x) -> i * x, List.sortBy(x -> x, NUMS)))",
                 "List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))",
+                // A reversal between the selections puts their positions in another list.
+                "List.sum(List.take(1, List.reverse(List.drop(1, NUMS))))",
                 "List.sum(List.flatMap(i -> [i.quantity], ROWS))",
                 "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",
                 "List.fold((acc, x) -> acc + x, 0,"

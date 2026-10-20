@@ -18,6 +18,7 @@ import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
@@ -398,7 +399,7 @@ public final class InputNumber {
         // makes them is the same total: where the outermost operation is no walk over a place, the
         // one beneath it is asked.
         while (met != null) {
-            LinearForm<NumericTerm> run = overTheRunWalkedBy(measured, met, null, inputs, source);
+            LinearForm<NumericTerm> run = overTheRunWalkedBy(measured, met, List.of(), inputs, source);
             if (run == null) {
                 run = overTheElementsKeptBy(measured, met, inputs, source);
             }
@@ -424,6 +425,7 @@ public final class InputNumber {
      * the position says so without a case of its own. A count of nought or less keeps every
      * element or none whatever the length, which the test says of itself
      * ({@link ElementValue.PositionTest#holdsOfEveryPosition}): the total of the list, or nought.
+     * A take or drop of another is read the same way ({@link #selectionByIndex}).
      *
      * <p>Kept from what a walk answered, the walk is handed the whole list and the test is of where
      * its answers stand, which is where it was handed each element. Kept from what a walk is then
@@ -436,26 +438,17 @@ public final class InputNumber {
         if (!(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
-        Symbols symbols = source.symbols();
-        InputReads where = met.at();
-        AnOperationApplied applied = AnOperationApplied.of(met.value());
-        BoundOperationFacts.KeptByIndex byIndex = applied == null ? null
-                : DefaultBoundOperationFacts.get().holdsTheElementsByIndex(applied.operation());
-        Core count = byIndex == null ? null : applied.argument(byIndex.count());
-        Core list = byIndex == null ? null : applied.argument(byIndex.list());
-        if (count == null || list == null
-                || !(where.folded(count, symbols, source.newtypes()).orElse(null)
-                        instanceof Long index)) {
+        Selection selected = selectionByIndex(met, source);
+        if (selected == null) {
             return null;
         }
-        ElementValue.PositionTest kept = new ElementValue.PositionTest(
-                ElementValue.PositionTest.THE_POSITION_ITSELF, byIndex.kept(), index);
-        Denotation listed = where.denotes(list, symbols, source.newtypes());
-        LinearForm<NumericTerm> walked = overTheRunWalkedBy(measured, listed, kept, inputs, source);
+        Denotation listed = selected.list();
+        LinearForm<NumericTerm> walked =
+                overTheRunWalkedBy(measured, listed, selected.kept(), inputs, source);
         if (walked != null) {
             return walked;
         }
-        ElementValue computed = keptBy(kept, new ElementValue.Affine(
+        ElementValue computed = keptBy(selected.kept(), new ElementValue.Affine(
                 LinearForm.atom(new ElementProjection(List.of()))));
         // Kept by a test that holds of every position or of none, the number turns on no position
         // and is one of every element whatever order they stand in.
@@ -570,7 +563,7 @@ public final class InputNumber {
      *                 where it is not
      * @param each     what one computed value stands as
      */
-    public record KeptOfAList(Core list, ElementValue computed, Type each) {}
+    public record KeptOfAList(Denotation list, ElementValue computed, Type each) {}
 
     /**
      * What the operation {@code met} keeps of a list by index counts for, where the list is one a
@@ -583,22 +576,112 @@ public final class InputNumber {
      * with ({@link ElementValue#readsThePosition}).
      */
     public static KeptOfAList keptByIndexOfAnAnswer(Denotation met, RuleReadingSource source) {
-        Symbols symbols = source.symbols();
+        Selection selected = selectionByIndex(met, source);
+        if (selected == null) {
+            return null;
+        }
+        Type each = Type.elementOf(Core.withoutStanding(selected.list().value()).type());
+        ElementValue computed = keptBy(selected.kept(), new ElementValue.Affine(
+                LinearForm.atom(new ElementProjection(List.of()))));
+        return each == null ? null : new KeptOfAList(selected.list(), computed, each);
+    }
+
+    /** One take or drop: which side of the index it keeps, the index, and the list it is of. */
+    private record Cut(Rel kept, long index, Core list) {}
+
+    /**
+     * Every take and drop stacked over {@code list}, as the tests an element of {@code list} has
+     * to pass to be kept by all of them.
+     *
+     * @param list the list under all of them, which is not itself a take or drop by a count
+     *             written out
+     * @param kept the tests of where an element stands in {@code list}: the first position kept,
+     *             then the one past the last, each only where it keeps something less than the
+     *             whole; and the one test no position passes where nothing is left
+     */
+    private record Selection(Denotation list, List<ElementValue.PositionTest> kept) {}
+
+    /** The take or drop {@code met} is, or null where it is neither or its count is no whole
+     *  number written out. */
+    private static Cut cutBy(Denotation met, RuleReadingSource source) {
         AnOperationApplied applied = AnOperationApplied.of(met.value());
         BoundOperationFacts.KeptByIndex byIndex = applied == null ? null
                 : DefaultBoundOperationFacts.get().holdsTheElementsByIndex(applied.operation());
         Core count = byIndex == null ? null : applied.argument(byIndex.count());
         Core list = byIndex == null ? null : applied.argument(byIndex.list());
         if (count == null || list == null
-                || !(met.at().folded(count, symbols, source.newtypes()).orElse(null)
+                || !(met.at().folded(count, source.symbols(), source.newtypes()).orElse(null)
                         instanceof Long index)) {
             return null;
         }
-        Type each = Type.elementOf(Core.withoutStanding(list).type());
-        ElementValue computed = keptBy(new ElementValue.PositionTest(
-                        ElementValue.PositionTest.THE_POSITION_ITSELF, byIndex.kept(), index),
-                new ElementValue.Affine(LinearForm.atom(new ElementProjection(List.of()))));
-        return each == null ? null : new KeptOfAList(list, computed, each);
+        return new Cut(byIndex.kept(), index, list);
+    }
+
+    /**
+     * The takes and drops {@code met} is stacked of, as tests of the position in the list under
+     * all of them — or null where it is none.
+     *
+     * <p>An element is kept by all of them where it passes each, and the position a take or drop
+     * tests is its place in the list it is handed. A drop hands on the list from its index, so
+     * the positions after it are that many fewer than they stand at in the list under: the index
+     * of every selection outside a drop is read that much further on. What is kept comes to the
+     * positions from the furthest drop to the nearest take, so however the takes and drops are
+     * stacked, the same elements are the same tests. A count below nought keeps the elements as
+     * nought does, and the counts that would not sum in a whole number are no selection.
+     */
+    private static Selection selectionByIndex(Denotation met, RuleReadingSource source) {
+        List<Cut> cuts = new ArrayList<>();
+        Denotation under = met;
+        Cut cut = cutBy(under, source);
+        while (cut != null) {
+            cuts.add(cut);
+            under = under.at().denotes(cut.list(), source.symbols(), source.newtypes());
+            cut = cutBy(under, source);
+        }
+        if (cuts.isEmpty()) {
+            return null;
+        }
+        long from = 0;
+        Long before = null;
+        for (Cut each : cuts.reversed()) {
+            long index = Math.max(each.index(), 0);
+            if (index > Long.MAX_VALUE - from) {
+                return null;
+            }
+            if (each.kept() == Rel.GE) {
+                from += index;
+            } else {
+                before = before == null ? from + index : Math.min(before, from + index);
+            }
+        }
+        List<ElementValue.PositionTest> kept = new ArrayList<>();
+        if (before != null && before <= from) {
+            kept.add(positionTest(Rel.LT, 0));
+        } else {
+            if (from > 0) {
+                kept.add(positionTest(Rel.GE, from));
+            }
+            if (before != null) {
+                kept.add(positionTest(Rel.LT, before));
+            }
+        }
+        return new Selection(under, kept);
+    }
+
+    private static ElementValue.PositionTest positionTest(Rel relation, long against) {
+        return new ElementValue.PositionTest(ElementValue.PositionTest.THE_POSITION_ITSELF,
+                relation, against);
+    }
+
+    /** {@code computed} for an element whose position every test of {@code kept} holds of, and
+     *  nought for the rest. */
+    private static ElementValue keptBy(List<ElementValue.PositionTest> kept,
+                                       ElementValue computed) {
+        ElementValue chosen = computed;
+        for (ElementValue.PositionTest test : kept) {
+            chosen = keptBy(test, chosen);
+        }
+        return chosen;
     }
 
     /** {@code computed} for an element whose position {@code kept} holds of, and nought for the
@@ -612,12 +695,12 @@ public final class InputNumber {
      * The number {@code measured} takes over the values the walk {@code met} was given
      * ({@link #overARun}), or null where those values are not read from a place.
      *
-     * @param kept the test of the position an answer of the walk is counted where, the rest
-     *             counting nought; null where every answer counts
+     * @param kept the tests of the position an answer of the walk is counted where, the rest
+     *             counting nought; none where every answer counts
      */
     private static LinearForm<NumericTerm> overTheRunWalkedBy(NumericMeasures.Measured measured,
                                                               Denotation met,
-                                                              ElementValue.PositionTest kept,
+                                                              List<ElementValue.PositionTest> kept,
                                                               InputDomain inputs,
                                                               RuleReadingSource source) {
         Symbols symbols = source.symbols();
@@ -647,7 +730,7 @@ public final class InputNumber {
         // element there are — where the elements walked are those of a container no other holds.
         // One inside another is one of many, and every occurrence of the path is under every one
         // of them.
-        if (kept == null && answered == null) {
+        if (kept.isEmpty() && answered == null) {
             ElementProjection counted = countedOfEach(measured, where, element, source);
             if (counted != null && at.containersHoldingIt().size() == 1) {
                 return atomOf(howManyStandAt(counted.from(at).element(), inputs, source));
@@ -671,7 +754,7 @@ public final class InputNumber {
         if (computed == null) {
             return null;
         }
-        if (kept != null) {
+        if (!kept.isEmpty()) {
             computed = keptBy(kept, computed);
             // Some of the answers by where they stand, and an answer stands where its element was
             // handed only where the walk puts them in that order: one answer per element says

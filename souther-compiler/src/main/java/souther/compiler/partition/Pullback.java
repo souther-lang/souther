@@ -6477,18 +6477,19 @@ final class Pullback {
                     : InputNumber.computedOfAnAnswersElement(closure, walk.at(), read.rules());
             Type each = closure == null ? null : closure.body().type();
             LinearForm<Quantity> summed = computed == null || !computed.readsThePosition() ? null
-                    : sumOfWhatIsComputed(measured, walk, step.walked(), computed, each);
+                    : sumOfWhatIsComputed(measured, step.walked(), walk.at(), computed, each);
             if (summed == null) {
                 summed = sumOverTheStep(measured, walk, step);
             }
             if (summed == null && computed != null && !computed.readsThePosition()) {
-                summed = sumOfWhatIsComputed(measured, walk, step.walked(), computed, each);
+                summed = sumOfWhatIsComputed(measured, step.walked(), walk.at(), computed, each);
             }
             return summed;
         }
         InputNumber.KeptOfAList kept = InputNumber.keptByIndexOfAnAnswer(walk, read.rules());
         return kept == null ? null
-                : sumOfWhatIsComputed(measured, walk, kept.list(), kept.computed(), kept.each());
+                : sumOfWhatIsComputed(measured, kept.list().value(), kept.list().at(),
+                        kept.computed(), kept.each());
     }
 
     /**
@@ -6504,11 +6505,10 @@ final class Pullback {
      * case the same in any order the elements stand.
      */
     private LinearForm<Quantity> sumOfWhatIsComputed(NumericMeasures.Measured measured,
-                                                     Denotation walk, Core list,
+                                                     Core list, InputReads at,
                                                      ElementValue computed, Type each) {
         if (computed.readsThePosition()) {
-            DecisionSubjects.AnAnswerInOrder ordered =
-                    subjects.anAnswerHandedInOrder(list, walk.at());
+            DecisionSubjects.AnAnswerInOrder ordered = subjects.anAnswerHandedInOrder(list, at);
             return ordered == null || each == null ? null
                     : LinearForm.atom(new DecisionAtom.ComputedOverAnAnswer(measured.operation(),
                             ordered.list(), computed, each, ordered.direction()));
@@ -6516,8 +6516,7 @@ final class Pullback {
         if (!(computed instanceof ElementValue.Affine(var form))) {
             return null;
         }
-        Denotation listed = walk.at().standing(list, read.rules().symbols(),
-                read.rules().newtypes());
+        Denotation listed = at.standing(list, read.rules().symbols(), read.rules().newtypes());
         DecisionSubject.AnAnswer answer = answerWhoseEveryElementIsHeldBy(listed);
         return answer == null ? null : addedUpOverTheElementsOfAnAnswer(answer, listed.value(),
                 DecisionSubjects.overTheElementsOf(answer, form), measured.operation());
