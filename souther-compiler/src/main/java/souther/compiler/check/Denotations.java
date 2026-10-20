@@ -75,6 +75,22 @@ record Denotations(Map<BindingId, Means> bound) {
             // — so one value read twice would be two subjects, which is what a subject is for.
             java.util.Objects.requireNonNull(subject, "a binding entered is a binding to be about");
         }
+
+        // By identity. What a binding stands for is one object every environment it was carried
+        // into holds (standingOf), and an environment is told from another by which objects it
+        // holds. Compared by what they hold, two of them would each walk the environments readIn
+        // and the arithmetic carry, which nest as deep as the names a value was built from, and
+        // hash and compare once per path through them.
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
+        }
     }
 
     Denotations {

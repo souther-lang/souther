@@ -44,8 +44,8 @@ public final class InvariantStatements {
     }
 
     /**
-     * The calls a conjunct states, for a consumer that reads nothing else of it. Its comparisons
-     * are as the clause wrote them: reading the order a sign stands for takes a reading of the
+     * The calls a conjunct states, for a consumer that reads nothing else of it. A comparison is
+     * {@link InvariantStatement.Unread} here: what a comparison states takes a reading of the
      * declarations ({@link #of(RuleReadingContext)}), and a consumer of calls has no budget to
      * read under.
      */
@@ -106,43 +106,43 @@ public final class InvariantStatements {
         return List.copyOf(out);
     }
 
-    private static boolean isASignOfAnOrder(Core side) {
-        return Core.withoutStanding(side) instanceof Core.PreservedCall call
-                && !TheSignOfAnOrder.orderedArguments(call.declared().operation()).isEmpty();
-    }
-
     private InvariantStatement states(ConjunctStatements.Reached reached, Denotations at) {
         // What the names under the bindings mean, which is what entering them comes to here. A
         // consumer handed the bindings instead reads a rule about the helper's parameter and has to
         // work out which of the declaration's values that parameter stands for — which is the
         // reading that has no word for a helper, arriving one reader further on.
         Map<BindingId, Core> given = new LinkedHashMap<>();
+        Denotations inside = at;
         for (ClauseExpr.Scoped each : reached.crossed()) {
             Core.LetIn binding = each.binding();
             given.put(binding.binder().binding(), Clauses.substituted(binding.value(), given));
+            if (terms != null) {
+                inside = terms.inside(binding, inside);
+            }
         }
         // Of the part and its polarity together, so what comes back is the comparison the clause
         // states rather than the one its author spelled — the order of the arguments where it
-        // compares the sign of an order, read once the bindings are spent so that a sign bound by a
-        // helper is read as the sign it is.
-        Core said = Core.withoutStanding(Clauses.substituted(reached.said().of(), given));
-        if (said instanceof Core.Binary binary) {
-            StatedComparison compares = StatedComparison.of(binary, reached.said().positive());
-            // Only a side that is a call of an operation answering an order can be the sign of one.
-            // Asking the others what they come to reads them through, and a value named twice in a
-            // chain of names is a tree that doubles at every link.
-            if (terms != null && compares != null && (isASignOfAnOrder(compares.left())
-                    || isASignOfAnOrder(compares.right()))) {
-                compares = Conditions.statedBy(terms, binary, reached.said().positive(), at);
-            }
+        // compares the sign of an order. Read as it was written, in the environment the bindings
+        // make, as every other reader of a clause reads a name: a value named twice is then read
+        // once per name and not once per path through the tree its names spell. What comes back is
+        // spent afterwards, since it is handed on to readers with no environment of their own.
+        if (terms != null
+                && Core.withoutStanding(reached.said().of()) instanceof Core.Binary written) {
+            StatedComparison compares =
+                    Conditions.statedBy(terms, written, reached.said().positive(), inside);
             if (compares != null) {
-                return new InvariantStatement.Compares(reached.statement(), compares);
+                return new InvariantStatement.Compares(reached.statement(),
+                        new StatedComparison(compares.claim(),
+                                Clauses.substituted(compares.left(), given),
+                                Clauses.substituted(compares.right(), given), compares.reading()));
             }
         }
         // What the part states with the denials above it taken off, which is the operation itself
         // where one was kept standing. Stated only: what holds where an operation does not is not
         // that operation, and there is nothing here to name it by.
-        if (reached.said().positive() && said instanceof Core.PreservedCall call) {
+        if (reached.said().positive()
+                && Core.withoutStanding(Clauses.substituted(reached.said().of(), given))
+                        instanceof Core.PreservedCall call) {
             return new InvariantStatement.Applies(reached.statement(), call);
         }
         return new InvariantStatement.Unread(reached.statement());
