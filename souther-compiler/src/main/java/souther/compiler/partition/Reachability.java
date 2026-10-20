@@ -337,6 +337,27 @@ public sealed interface Reachability {
     }
 
     /**
+     * The statements of numbers on the way weigh one form of terms alike and leave no point of the
+     * line in common, so no row takes it.
+     *
+     * <p>A fact about the model like {@link NothingReaches}, and not that: no position is asked
+     * twice. The terms may be read from several positions, and it is the relation between them
+     * that the statements contradict, so there is no position to name. What proves it is the
+     * statements, which this carries.
+     *
+     * @param statements the statements of the way, of which some one form is held to no point
+     */
+    record NumbersLeaveNone(List<TakenConstraint.Affine> statements) implements Reachability {
+
+        public NumbersLeaveNone {
+            if (statements == null || statements.isEmpty()) {
+                throw new IllegalArgumentException("numbers that leave none are some statements");
+            }
+            statements = List.copyOf(statements);
+        }
+    }
+
+    /**
      * Which position a way asks to be two things, in the vocabulary it asked them in.
      *
      * <p>Two, because a position is asked two ways: to be a case, and to hold one of the two values

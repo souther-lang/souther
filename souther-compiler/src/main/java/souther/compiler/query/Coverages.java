@@ -1543,6 +1543,10 @@ final class Coverages {
                         return noRowTakes(label, within, Generator.UnresolvedCombination.Reason
                                 .A_CONDITION_NEVER_COMES_OUT_THAT_WAY);
                     }
+                    case Reachability.NumbersLeaveNone _ -> {
+                        return noRowTakes(label, within,
+                                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+                    }
                 }
                 // Where a condition on the way came out one of several ways, a row is looked for
                 // along each of them first, each narrower than the way whole. A row standing along

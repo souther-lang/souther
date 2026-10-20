@@ -4,16 +4,22 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.CompositionAccount;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ConditionGap;
 import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.ReachabilityGap;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
+import souther.compiler.query.RuleSettlement;
 import souther.compiler.query.SettledAcross;
 import souther.compiler.query.SettledAt;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +29,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -36,11 +43,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The amounts carry no bound, so a cap may be below nought and each of the eight ways the three
  * calls can go is some input's: none is closed as a way no input takes, and a row is owed at every
- * rule. The rules nothing settles are the ones that fit under a cap and then go past the last. On
- * those ways the last call's condition is one of several things, and the search for a row looks
- * past it along the whole way and not along each, which does not find one. With amounts of nought
- * or more the chain has a rule only for each of the four ways a run takes, and the examples settle
- * every one, so there is nothing left to tell apart.
+ * rule. What the search for a row finds at each of those is the search's, and a search that finds
+ * more is no reason for this page to say less, so the answer at every place is put as unsettled
+ * and the page is read for what it says of the model's own rules, the calls and the conditions.
+ * Each condition the composing went without is a condition of the way the rule is stated at, and
+ * the way is the real one.
  */
 class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
 
@@ -101,6 +108,8 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
             }
         }
 
+        assertEquals(settledAcross(compilation).size(), unsettled,
+                "the document says of every rule the search was put to that nothing settled it");
         assertTrue(unsettled > 1, "the model leaves more than one rule unsettled, which is what"
                 + " makes telling them apart the question");
         assertEquals(unsettled, entries(page(compilation)).size(),
@@ -108,9 +117,25 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
                         + page(compilation));
     }
 
+    /**
+     * Along the ways a rule is stated at, those whose numbers contradict each other are no ways,
+     * and the search for a row looks along the ones left. A row is found at every rule the
+     * examples leave untaken, which looked along the way whole was not.
+     */
+    @Test
+    void aRowIsFoundAtEveryRuleTheExamplesLeaveUntaken() {
+        Map<DecisionRule, SettledAcross> searched = compiled().db()
+                .ask(new Adequacy.DecisionSearch("example.draw", "draw")).value();
+
+        assertFalse(searched.isEmpty(), "the examples leave rules untaken");
+        searched.forEach((rule, across) -> assertInstanceOf(RuleRequirement.Required.class,
+                across.requirement(), () -> "a row is owed at " + rule + ": " + across));
+    }
+
     @Test
     void theRulesAreToldApartByWhichWayEachCallWent() {
         List<Entry> entries = entries(page(compiled()));
+        assertFalse(entries.isEmpty(), "there are rules nothing settled to tell apart");
         Set<List<String>> told = new HashSet<>();
         for (Entry entry : entries) {
             assertEquals(callsOfTake(), callsNamedIn(entry.conditions()),
@@ -124,8 +149,7 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
     @Test
     void whatASearchWentWithoutIsSaidOnceForEachThingToSay() {
         Compilation compilation = compiled();
-        Map<DecisionRule, SettledAcross> settled = compilation.db()
-                .ask(new Adequacy.DecisionSearch("example.draw", "draw")).value();
+        Map<DecisionRule, SettledAcross> settled = settledAcross(compilation);
         // An entry per place each rule nothing settled is stated at.
         List<SettledAt> unsettled = settled.values().stream()
                 .filter(each -> each.requirement() instanceof RuleRequirement.Unsettled)
@@ -157,7 +181,10 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
 
     @Test
     void aConditionLeftOutIsPlacedAtTheCallsItWasMetIn() {
-        for (Entry entry : entries(page(compiled()))) {
+        List<Entry> entries = entries(page(compiled()));
+        assertTrue(entries.stream().anyMatch(entry -> !entry.leftOut().isEmpty()),
+                "some entry says what its composing went without");
+        for (Entry entry : entries) {
             for (String line : entry.leftOut()) {
                 Set<String> named = callsNamedIn(List.of(line));
                 assertFalse(named.isEmpty(),
@@ -227,13 +254,69 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
     }
 
     private static String page(Compilation compilation) {
-        return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        return reported(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String json(Compilation compilation) {
-        return AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts()));
+        return reported(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /**
+     * What the search came to at each place of each rule the rows left untaken, with the answer
+     * put as one that composed a row short of the way, having left out every condition of the way
+     * for one reason. A reason the conditions of one helper share is the same sentence at each,
+     * which is what the page says once.
+     *
+     * <p>Made up, and not what a search came to: no search says this of these rules, which is the
+     * point. The places and their ways are the compiled ones, and the answer is put so that the
+     * page is read for what it says of them whatever a search finds.
+     */
+    private static Map<DecisionRule, SettledAcross> settledAcross(Compilation compilation) {
+        Map<DecisionRule, SettledAcross> searched = compilation.db()
+                .ask(new Adequacy.DecisionSearch("example.draw", "draw")).value();
+        assertFalse(searched.isEmpty(), "the rows leave rules untaken, which are searched");
+        Map<DecisionRule, SettledAcross> out = new LinkedHashMap<>();
+        searched.forEach((rule, across) -> out.put(rule, new SettledAcross(
+                across.places().stream().map(ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest
+                        ::unsettledAt).toList())));
+        return out;
+    }
+
+    private static SettledAt unsettledAt(SettledAt came) {
+        List<ReachabilityGap> gaps = new ArrayList<>();
+        for (OnTheWay each : came.at().states().onTheWay()) {
+            switch (each) {
+                case OnTheWay.TakenIn taken -> gaps.add(new ReachabilityGap.Uncomposed(taken,
+                        new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                case OnTheWay.OneOf several -> gaps.add(new ReachabilityGap.LookedAlongWhole(
+                        several, CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
+                case OnTheWay.Settled _, OnTheWay.Narrowed _, OnTheWay.Declined _ -> { }
+            }
+        }
+        return new SettledAt(came.at(), RuleSettlement.of(
+                new RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay(),
+                CompositionAccount.ofTheInput(gaps)), Set.of());
+    }
+
+    /** The report of the compilation, with the search put as {@link #settledAcross}. */
+    private static AdequacyReport reported(Compilation compilation) {
+        AdequacyReport real = AdequacyReport.of(compilation);
+        Map<DecisionRule, SettledAcross> unsettled = settledAcross(compilation);
+        List<AdequacyReport.ModuleReport> modules = new ArrayList<>();
+        for (AdequacyReport.ModuleReport module : real.modules()) {
+            List<AdequacyReport.BehaviorReport> behaviors = new ArrayList<>();
+            for (AdequacyReport.BehaviorReport each : module.behaviors()) {
+                behaviors.add(new AdequacyReport.BehaviorReport(each.name(), each.implementation(),
+                        each.evidence(), each.rowsOwed(), each.claimed(), each.reported(),
+                        each.armPlaces(), each.conditionPlaces(), each.rulePlaces(),
+                        each.partPlaces(), each.ruleReadings(), unsettled, each.reachShownWrong(),
+                        each.combinationReadings(), each.rowPlaces()));
+            }
+            modules.add(new AdequacyReport.ModuleReport(module.module(), module.declaredIn(),
+                    behaviors, module.declarations(), module.owedByDeclarations()));
+        }
+        return new AdequacyReport(real.schemaVersion(), real.compilerVersion(), real.weakenedBy(),
+                modules);
     }
 
     private static Compilation compiled() {

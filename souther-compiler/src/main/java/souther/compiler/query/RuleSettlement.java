@@ -60,7 +60,8 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
             case RuleRequirement.Excluded.OnePositionCannotBeBoth _,
                  RuleRequirement.Excluded.AnArmNothingReaches _,
                  RuleRequirement.Excluded.AComparisonOutcomeNothingReaches _,
-                 RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
+                 RuleRequirement.Excluded.AConditionNeverComesOutThatWay _,
+                 RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone _ ->
                     search instanceof RuleSearch.NotMade;
             // And the one the composings themselves proved, which is what they came back with.
             case RuleRequirement.Excluded.NoValueCanTakeIt _ ->

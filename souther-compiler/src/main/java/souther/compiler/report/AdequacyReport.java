@@ -4428,6 +4428,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     new Said(5, 0, readOff(outcome));
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay never ->
                     new Said(6, 0, readOff(never));
+            case RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone numbers ->
+                    new Said(6, 0, readOff(numbers));
             // In the words the composings were said in, which are the model's. The other two here
             // are read off the rules before anything is composed and have nothing of a search to
             // say; this one is what the composings themselves proved, so what they came back with
@@ -4464,6 +4466,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + NoValue.reaches("it coming out so");
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     "its way goes past a condition that comes out the other way for every row, so "
+                            + NoValue.goesThatWay();
+            case RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone _ ->
+                    "the statements of numbers on its way leave no value, so "
                             + NoValue.goesThatWay();
             case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
                     throw new IllegalArgumentException(
@@ -8212,7 +8217,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "a_comparison_outcome_nothing_reaches";
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     "a_condition_never_comes_out_that_way";
-            case RuleRequirement.Excluded.NoValueCanTakeIt _ -> "no_value_can_take_it";
+            // The document's word is the model's: that no value takes the way, whichever reading
+            // showed it. The two stay apart inside, where the one is a search's answer.
+            case RuleRequirement.Excluded.NoValueCanTakeIt _,
+                 RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone _ ->
+                    "no_value_can_take_it";
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
                     "a_composed_row_went_elsewhere";
             case RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _ ->
