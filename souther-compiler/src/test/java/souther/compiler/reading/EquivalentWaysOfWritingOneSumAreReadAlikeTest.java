@@ -425,7 +425,9 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
         String writes = "List.flatMap(r -> { let chosen = if r.active then 1 else 0\n"
                 + "    [ chosen, chosen ] }, %s)";
         for (int layers = 0; layers < 3; layers++) {
-            for (String handed : List.of("List.flatMap(x -> [ x ], %s)", "List.map(x -> x, %s)")) {
+            for (String handed : List.of("List.flatMap(x -> [ x ], %s)", "List.map(x -> x, %s)",
+                    "List.flatMap(x -> [ x * 2 ], %s)", "List.flatMap(x -> [ x + 0 ], %s)",
+                    "List.map(x -> x * 2, %s)", "List.flatMap(x -> [ x, x ], %s)")) {
                 String once = writes.formatted("[ first ]");
                 String twice = writes.formatted("[ first, second ]");
                 for (int layer = 0; layer < layers; layer++) {
@@ -438,6 +440,23 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
                         readFlagged("List.sum(" + twice + ")").notJoined(),
                         layers + " layers of " + handed + ", two applications");
             }
+        }
+    }
+
+    /**
+     * A closure that chooses again adds the decisions it makes to those it was handed, so a total
+     * through it is never read as the one choice it started from.
+     */
+    @Test
+    void aClosureThatChoosesAgainAddsItsDecisions() {
+        String chosen = "List.flatMap(r -> { let chosen = if r.active then 1 else 0\n"
+                + "    [ chosen, chosen ] }, [ first ])";
+        for (String again : List.of("List.flatMap(x -> [ if flag then x else 0 ], %s)",
+                "List.map(x -> if flag then x else 0, %s)",
+                "List.flatMap(x -> [ x, if flag then 1 else 0 ], %s)")) {
+            CoverageRead.Read read = readFlagged("List.sum(" + again.formatted(chosen) + ")");
+
+            assertFalse(read.interactions().isEmpty() && read.notJoined().isEmpty(), again);
         }
     }
 

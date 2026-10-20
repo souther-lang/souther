@@ -420,16 +420,15 @@ public final class ElementsWrittenOut {
                         return inside;
                     }
                     int writtenIn = position;
-                    Core handedOn = Core.withoutStanding(
-                            reading.standing(each.value().value(), each.value().at()).value());
+                    boolean chooses = choosesWithin(pieces.step().body());
                     made.forEach(one -> {
-                        // A value the closure only hands on was made where the element it was
-                        // handed was: the application writing it out again is no application
-                        // that made it. One the closure makes is made by this application.
-                        Core madeHere = Core.withoutStanding(reading.standing(
-                                one.value().value(), one.value().at()).value());
+                        // What decides a value is evaluated where the choice is written. A
+                        // closure with no choice in it evaluates none, whatever it does with the
+                        // values it is handed, so what it writes out was decided where those
+                        // were; one with a choice in it evaluates it on each application, and
+                        // what it writes out is decided by this application as well.
                         List<Integer> path = new ArrayList<>(each.within());
-                        if (madeHere != handedOn) {
+                        if (chooses) {
                             path.add(writtenIn);
                             path.addAll(one.within());
                         }
@@ -439,6 +438,19 @@ public final class ElementsWrittenOut {
             }
         }
         return new Walked.Each<>(out);
+    }
+
+    /** Whether a choice is written in {@code e} itself, and not in what a name in it stands for. */
+    private static boolean choosesWithin(Core e) {
+        switch (Core.withoutStanding(e)) {
+            case Core.If _, Core.Match _, Core.IfConstructed _ -> {
+                return true;
+            }
+            default -> { }
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || choosesWithin(child));
+        return found[0];
     }
 
     /**
