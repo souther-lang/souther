@@ -761,6 +761,8 @@ public final class Generator {
                              DIVISORS_OF_A_PRODUCT_TRIED,
                              // Likewise the divisors of a remainder past the ones it tried.
                              DIVISORS_OF_A_REMAINDER_TRIED,
+                             // And the remainders of a sum past the ones it tried.
+                             REMAINDERS_A_SUM_IS_TRIED_AT,
                              // The numbers past this one were never asked for, so what the search
                              // came to is about the numbers it tried and about nothing else. The
                              // word says that, where the word for a set walked to its end says the

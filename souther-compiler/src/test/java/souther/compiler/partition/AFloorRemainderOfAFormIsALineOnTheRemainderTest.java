@@ -409,6 +409,36 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     /**
+     * The remainder tried is the one the other number can make up the level with, wherever the
+     * divisor puts it: pinned to a hundred, the other number leaves nothing else, so the row at the
+     * line is found at the hundredth remainder and not only among the first few.
+     */
+    @Test
+    void theRemainderTriedIsTheOneTheOtherNumberLeaves() {
+        String condition = "c >= 100 && c <= 100 && Int.floorMod(a + b, 257) == c";
+        boolean met = false;
+        for (Row row : certifiedRows("a: Int, b: Int, c: Int", condition)) {
+            if (row.labels().stream().anyMatch(label -> label.endsWith(" = 0")
+                    && label.contains("floorMod(a + b, 257)"))) {
+                long a = Long.parseLong(row.inputs().get(0));
+                long b = Long.parseLong(row.inputs().get(1));
+                assertEquals(100, Math.floorMod(a + b, 257L), row.inputs().toString());
+                met = true;
+            }
+        }
+        assertTrue(met, "the line itself is owed a row");
+    }
+
+    /**
+     * The numbers a remainder shares with the form it is added to are not read, and are said not
+     * to be, rather than read as a relation they are not.
+     */
+    @Test
+    void aRemainderAddedToANumberOfItsOwnFormIsNotRead() {
+        assertEquals(List.of(), bordersOf("a: Int, b: Int", "a == Int.floorMod(a + b, 11)"));
+    }
+
+    /**
      * A check digit held against a remainder that a branch moves is the remainder against a number
      * on one arm and a constant on the other, and both are read.
      */
