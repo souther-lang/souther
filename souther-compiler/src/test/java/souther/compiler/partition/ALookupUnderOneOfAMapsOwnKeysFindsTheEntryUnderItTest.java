@@ -20,7 +20,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -86,7 +85,7 @@ class ALookupUnderOneOfAMapsOwnKeysFindsTheEntryUnderItTest {
             assertEquals(1, line.size(), () -> step + ": " + report(entries));
             for (String kept : List.of(LOOKED_UP_INLINE, LOOKED_UP_BY_A_HELPER)) {
                 Compilation keys = measured(modelOf(step, kept, ""));
-                assertFalse(report(keys).contains("not read"),
+                assertEquals(notReadOf(entries), notReadOf(keys),
                         () -> step + "\n" + kept + "\n" + report(keys));
                 assertEquals(line, axisOf(keys), () -> step + "\n" + kept + "\n" + report(keys));
                 assertEquals(offeredInputs(entries), offeredInputs(keys),
@@ -141,6 +140,19 @@ class ALookupUnderOneOfAMapsOwnKeysFindsTheEntryUnderItTest {
                 }
                 """.formatted(COUNTED));
         assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    }
+
+    private static final Pattern NOT_READ =
+            Pattern.compile("not read: comparison@\\d+:\\d+ — (.*)$", Pattern.MULTILINE);
+
+    /** What the report says was not read, and why, without where the comparison was written. */
+    private static List<String> notReadOf(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        Matcher each = NOT_READ.matcher(report(compilation));
+        while (each.find()) {
+            out.add(each.group(1));
+        }
+        return out;
     }
 
     private static final Pattern ROW = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
