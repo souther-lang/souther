@@ -4887,7 +4887,7 @@ final class Pullback {
                         }
                         case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                             if (abortsAt(stopped)) {
-                                return noRunAnswers();
+                                return new Derivation.TheRunStopsHere();
                             }
                             Derivation stop = new Derivation.Stopped(elementsMet.crowded()
                                     ? new WhyUnread.TwoElementsOfOneContainer()
@@ -4921,7 +4921,7 @@ final class Pullback {
                 }
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                     if (abortsAt(stopped)) {
-                        return noRunAnswers();
+                        return new Derivation.TheRunStopsHere();
                     }
                     // A comparison of two elements of one container is read of neither: they
                     // stand at one position, and a form would hold them as one number.
@@ -8966,16 +8966,6 @@ final class Pullback {
     /** Whether the arithmetic stopped where a run aborts, so that no number is there to compare. */
     private static boolean abortsAt(AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
         return stopped.why() instanceof AffineForms.Halt.NoNumberOnARun<Quantity, InputReads>;
-    }
-
-    /**
-     * A comparison on a way where a run aborts before it: it answers nowhere, so the way is no row
-     * of either side ({@link Proposition.WhereItAnswers}), and the denial of the comparison is no
-     * row there either.
-     */
-    private static Derivation noRunAnswers() {
-        return new Derivation.WhereItAnswers(new Derivation.NoRunTakesIt(),
-                new Derivation.NoRunTakesIt());
     }
 
     /**

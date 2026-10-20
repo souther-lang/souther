@@ -1389,6 +1389,22 @@ public sealed interface Proposition {
     }
 
     /**
+     * What a statement read through an operation no run gets past comes to: it answers on no row,
+     * so it holds on none and fails on none, and its denial is the same. Not {@code Always(false)},
+     * which fails on every row, and not an arm no run takes ({@link Derivation.NoRunTakesIt}),
+     * where no run arrives: here a run arrives and the operation stops it.
+     */
+    static Proposition answersNowhere() {
+        return new WhereItAnswers(new Always(false), new Always(false));
+    }
+
+    /** Whether {@code stated} answers on no row ({@link #answersNowhere}). */
+    static boolean answersNowhere(Proposition stated) {
+        return stated instanceof WhereItAnswers(Proposition answers, Proposition _, String _)
+                && answers instanceof Always(boolean everywhere) && !everywhere;
+    }
+
+    /**
      * The rows {@code stated} answers on, or null where it answers on every row: where each
      * operation a part of it is read through answers ({@link WhereItAnswers}), and past that, where
      * the parts that do answer decide it without the ones that do not.

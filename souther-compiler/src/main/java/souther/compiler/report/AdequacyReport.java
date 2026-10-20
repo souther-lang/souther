@@ -3713,6 +3713,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + " element of this position or of another and nothing says which";
             case RULE_CUTS_NOTHING ->
                     "it was read to the end and cuts nothing this position appears in";
+            case RULE_ANSWERS_NOWHERE ->
+                    "it was read to the end, and every run that reaches it stops in an operation"
+                            + " it is read through";
             case RULE_TELLS_NOTHING_APART ->
                     "it was read to the end and every value this position holds comes out one side"
                             + " of it";

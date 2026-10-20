@@ -170,6 +170,24 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
 
         /**
+         * Read to the end, and every run that reaches the comparison stops in an operation it is
+         * read through, such as a division by nought: it states nothing on either side.
+         *
+         * <p>A fact about the rule and not a reading that stopped, and not a comparison that
+         * settles the same for every row ({@link CutsNothing}): there a run gets past it, and here
+         * none does.
+         *
+         * @param filedAt where the rule is said to answer nowhere, as it is for
+         *                {@link CutsNothing}
+         */
+        record AnswersNowhere(List<FilingCoordinate> filedAt) implements Read {
+
+            public AnswersNowhere {
+                filedAt = List.copyOf(filedAt);
+            }
+        }
+
+        /**
          * Read to the end, a statement of which case, which truth or whether a value positions of
          * the input hold, or of some element of a container the input holds meeting that, with no
          * relation of numbers anywhere in it ({@link #statesNoRelation}).
@@ -517,6 +535,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> stopped =
                 new LinkedHashMap<>();
         List<FilingCoordinate> settled = new ArrayList<>();
+        List<FilingCoordinate> answeringNowhere = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
         List<UndividedByARelation> relations = new ArrayList<>();
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
@@ -537,6 +556,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Read.CutsNothing alone -> alone.filedAt().forEach(at -> {
                     if (!settled.contains(at)) {
                         settled.add(at);
+                    }
+                });
+                case Read.AnswersNowhere alone -> alone.filedAt().forEach(at -> {
+                    if (!answeringNowhere.contains(at)) {
+                        answeringNowhere.add(at);
                     }
                 });
                 case Read.AgainstAnotherValue alone -> {
@@ -575,7 +599,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     : severalNotDrawn(comparison, read, statingNoRelation, answering);
         }
         if (lines.isEmpty()) {
-            return new Read.CutsNothing(settled);
+            return settled.isEmpty() && !answeringNowhere.isEmpty()
+                    ? new Read.AnswersNowhere(answeringNowhere)
+                    : new Read.CutsNothing(settled);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
         // A relation of a statement that is no line, and relates no other value, is read in no
@@ -937,6 +963,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (stated.proposition()) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
+            case Proposition.WhereItAnswers nowhere when Proposition.answersNowhere(nowhere) ->
+                    new Read.AnswersNowhere(settledAt(stated, comparison, read, reads, answering));
             case Proposition.Compared _ when line != null -> line;
             case Proposition.Compared _ when related != null ->
                     against(related, stated.proposition());
