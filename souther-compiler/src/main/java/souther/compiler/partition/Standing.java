@@ -195,6 +195,41 @@ public sealed interface Standing {
     }
 
     /**
+     * What a division by a written number leaves of a form of several positions, together with
+     * what a form of other positions comes to, at a level of the two added up.
+     *
+     * <p>Two things a row has to be at: the form leaving a remainder, and the other numbers
+     * standing where they add up to what the level leaves of that remainder. Neither is the item
+     * alone. The two forms name no position in common, so the remainder is chosen and the added
+     * numbers are met against what it leaves.
+     *
+     * @param dividend the form the division is of, with the constant it is moved by
+     * @param on       the order each number of the dividend stands on
+     * @param divisor  the number it is divided by, above nought
+     * @param added    what is added to the remainder, with no constant
+     * @param addedOn  the order each number added stands on
+     * @param levels   the levels the sum takes
+     */
+    record OfARemainderAndAForm(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
+                                BigInteger divisor, LinearForm<NumericTerm> added,
+                                Map<NumericTerm, Carrier> addedOn, LevelSpace levels,
+                                Criterion where) implements Standing {
+
+        public OfARemainderAndAForm {
+            on = Map.copyOf(on);
+            addedOn = Map.copyOf(addedOn);
+            if (dividend.coefs().isEmpty() || !on.keySet().equals(dividend.coefs().keySet())
+                    || divisor.signum() <= 0 || added.coefs().isEmpty()
+                    || !addedOn.keySet().equals(added.coefs().keySet())
+                    || added.coefs().keySet().stream().anyMatch(dividend.coefs()::containsKey)) {
+                throw new IllegalArgumentException("a remainder is added to a form over other"
+                        + " numbers than its own, each on one order, and divided by a divisor"
+                        + " above nought: " + dividend + " by " + divisor + " plus " + added);
+            }
+        }
+    }
+
+    /**
      * How many elements of a container meet a statement, at a number or in a run of them.
      *
      * <p>What the row has to hold is elements: so many meeting the statement, and the rest

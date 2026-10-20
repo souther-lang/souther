@@ -74,7 +74,8 @@ class ARemainderOfAFormStandsWhereTheNumbersTheRowHoldsPutItTest {
         return new BorderQuantity.RemainderOfAForm("decide",
                 new BorderQuantity.OverAForm("decide",
                         new LinearForm<>(ExactRatio.ZERO, coefs), on),
-                BigInteger.ZERO, BigInteger.valueOf(7));
+                BigInteger.ZERO, BigInteger.valueOf(7),
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of());
     }
 
     private static BorderQuantity.Observation row(long a, long d) {

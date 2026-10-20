@@ -650,20 +650,29 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read onARemainder(String behavior, Relation.Affine affine, boolean holds,
                                      InputReading read) {
-        if (affine.form().coefs().size() != 1
-                || !(affine.form().coefs().entrySet().iterator().next().getKey()
-                        instanceof Quantity.RemainderOfADividend remainder)) {
+        Quantity.RemainderOfADividend remainder = AStatementAtARow.remainderOfADividendIn(affine);
+        if (remainder == null) {
             return null;
         }
-        ExactRatio weight = affine.form().coefs().get(remainder);
-        BorderQuantity.RemainderOfAForm of = remainderOf(behavior, remainder, read.quantities());
-        if (of == null || !(affine.form().constant().negated().dividedBy(weight)
-                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+        // The sum of the remainder and the other numbers is the quantity, the remainder weighed
+        // once: scaled so, `c == r`, `r == c` and `2 * c == 2 * r` are one quantity and one line.
+        if (!(ExactRatio.ONE.dividedBy(affine.form().coefs().get(remainder))
+                instanceof ExactAnswer.Held<ExactRatio> scale)
+                || !(affine.form().times(scale.value())
+                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                                LinearForm<Quantity> scaled))) {
+            return null;
+        }
+        LinearForm<NumericTerm> added = AStatementAtARow.otherNumbersWithTheRemainder(scaled);
+        BorderQuantity.RemainderOfAForm of =
+                remainderOf(behavior, remainder, added, read.quantities());
+        if (of == null) {
             return null;
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
-        Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
+        Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
+                scale.value().signum() < 0 ? claim.turned() : claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
@@ -674,7 +683,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     static DividedForm remainderAtARow(String behavior, Quantity.RemainderOfADividend remainder,
                                        Quantities quantities) {
-        BorderQuantity.RemainderOfAForm of = remainderOf(behavior, remainder, quantities);
+        BorderQuantity.RemainderOfAForm of = remainderOf(behavior, remainder,
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), quantities);
         return of == null ? null : of.dividedForm();
     }
 
@@ -687,6 +697,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static BorderQuantity.RemainderOfAForm remainderOf(String behavior,
                                                        Quantity.RemainderOfADividend remainder,
+                                                       LinearForm<NumericTerm> added,
                                                        Quantities quantities) {
         if (!(remainder.dividend().constant().floor()
                 instanceof ExactAnswer.Held<BigInteger> shift)) {
@@ -700,10 +711,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             on.put(term, orders);
         }
+        Map<NumericTerm, TermOrders> addedOn = new LinkedHashMap<>();
+        for (NumericTerm term : added.coefs().keySet()) {
+            TermOrders orders = quantities.ordersOf(term);
+            if (orders == null || orders.answered() == null || !orders.answered().counts()) {
+                return null;
+            }
+            addedOn.put(term, orders);
+        }
         return new BorderQuantity.RemainderOfAForm(behavior,
                 new BorderQuantity.OverAForm(behavior,
                         new LinearForm<>(ExactRatio.ZERO, remainder.dividend().coefs()), on),
-                shift.value(), remainder.divisor());
+                shift.value(), remainder.divisor(), added, addedOn);
     }
 
     /**

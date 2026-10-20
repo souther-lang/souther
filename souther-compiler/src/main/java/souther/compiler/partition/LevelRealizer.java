@@ -149,6 +149,8 @@ public final class LevelRealizer {
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
             case Standing.OfARemainder remainder -> ofARemainder(remainder, within, runs, tried);
+            case Standing.OfARemainderAndAForm both ->
+                    ofARemainderAndAForm(both, within, runs, tried);
             case Standing.OfAProduct product -> ofAProduct(product, within, runs, tried);
             case Standing.OfARemainderByAnInput remainder ->
                     ofARemainderByAnInput(remainder, within, runs, tried);
@@ -336,6 +338,12 @@ public final class LevelRealizer {
             case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
             case Standing.OfARemainder over ->
                     NumericTerms.inOrder(over.dividend().coefs().keySet());
+            case Standing.OfARemainderAndAForm over -> {
+                List<NumericTerm> out = new ArrayList<>(
+                        NumericTerms.inOrder(over.dividend().coefs().keySet()));
+                out.addAll(NumericTerms.inOrder(over.added().coefs().keySet()));
+                yield List.copyOf(out);
+            }
             case Standing.OfAProduct over -> List.of(over.one(), over.other());
             case Standing.OfARemainderByAnInput over -> List.of(over.dividend(), over.divisor());
             case Standing.OfACount count -> count.numbers().stream()
@@ -861,6 +869,21 @@ public final class LevelRealizer {
                                 Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried,
                                 Set<CompositionBudget> stoppedBy,
                                 Set<CompositionCapacity> unheld) {
+        return walkLevel(form, terms, on, target, within, runs, tried, stoppedBy, unheld, Map.of());
+    }
+
+    /**
+     * The same, for a form that is one part of an item: {@code alongside} is what the other parts
+     * were placed at, and a row is asked for at the two together.
+     */
+    private LevelWalk walkLevel(LinearForm<NumericTerm> form,
+                                List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms,
+                                Map<NumericTerm, Carrier> on, ExactRatio target,
+                                SearchRegion within,
+                                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried,
+                                Set<CompositionBudget> stoppedBy,
+                                Set<CompositionCapacity> unheld,
+                                Map<RealizationTarget, Place> alongside) {
         AtTheLevel here = atTheLevel(form, target, within, runs);
         if (here == null) {
             // The rules leave nothing at this level: a proof about it and about no other.
@@ -871,7 +894,9 @@ public final class LevelRealizer {
         stoppedBy.addAll(search.stoppedBy());
         unheld.addAll(search.unheld());
         if (reached == Reached.FOUND) {
-            Realization made = found(search.fixing(), within, tried);
+            Map<RealizationTarget, Place> fixing = new LinkedHashMap<>(alongside);
+            fixing.putAll(search.fixing());
+            Realization made = found(fixing, within, tried);
             if (made instanceof Realization.Found) {
                 return new LevelWalk(made, false);
             }
@@ -965,6 +990,132 @@ public final class LevelRealizer {
                 if (!walk.exhausted()
                         && stoppedBy.contains(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)) {
                     break;
+                }
+            }
+        }
+        if (bounded && over.where() instanceof Criterion.AtTheLevel) {
+            return new Realization.Impossible();
+        }
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), unheld);
+    }
+
+    /** How many remainders are tried as the part of a level the remainder takes. The remainders
+     *  past them are left untried. */
+    private static final int REMAINDERS_A_SUM_IS_TRIED_AT = 64;
+
+    /**
+     * A form whose remainder by a written number is added to a form of other numbers, held at a
+     * level of the sum.
+     *
+     * <p>A remainder is chosen, nought up to one below the divisor, and the other numbers are
+     * asked to come to what is left of the level. Where they do, the dividend is held at the
+     * values that leave the remainder, among those its coefficients reach, as {@link #ofARemainder}
+     * holds it; the other numbers having been placed first, the dividend is walked in what the
+     * rules leave it beside them.
+     *
+     * <p>A point is out of reach only where each remainder was refused before the added numbers
+     * were placed: no value of the dividend leaves it, the rules leave the added numbers nothing
+     * at what is left, or a walk of them was complete and found none. A remainder whose added
+     * numbers were placed and whose dividend was walked to no row says nothing of the other
+     * placements the rules could couple to it, and a side is never settled by looking.
+     */
+    private Realization ofARemainderAndAForm(Standing.OfARemainderAndAForm over,
+                                             SearchRegion within,
+                                             Map<NumericTerm, NumericDomain.Bounds> runs,
+                                             ValuesTried tried) {
+        LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
+        BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
+                .value();
+        Congruences reached = new Congruences(BigInteger.ZERO,
+                wholeStepOf(over.dividend().coefs().values()));
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> dividendTerms = targetsOf(form);
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> addedTerms =
+                targetsOf(over.added());
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        boolean bounded = true;
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), over.levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        int remainders = REMAINDERS_A_SUM_IS_TRIED_AT;
+        if (over.divisor().compareTo(BigInteger.valueOf(remainders)) <= 0) {
+            remainders = over.divisor().intValueExact();
+        } else {
+            stoppedBy.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE);
+            bounded = false;
+        }
+        for (Level level : offered.levels()) {
+            ExactRatio asked = level.asAnExactNumber();
+            if (asked == null) {
+                bounded = false;
+                continue;
+            }
+            for (int each = 0; each < remainders; each++) {
+                BigInteger remainder = BigInteger.valueOf(each);
+                if (!(asked.minus(ExactRatio.of(remainder))
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio rest))) {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT,
+                            UnheldNumber.NO_REPRESENTATION_EXISTS));
+                    bounded = false;
+                    continue;
+                }
+                Congruences wanted = new Congruences(remainder.subtract(moved), over.divisor())
+                        .meet(reached);
+                if (wanted == null) {
+                    continue;
+                }
+                AtTheLevel beside = atTheLevel(over.added(), rest, within, runs);
+                if (beside == null) {
+                    continue;
+                }
+                Search search = new Search(addedTerms, over.addedOn(), beside.region(),
+                        beside.runs(), tried);
+                Reached placedAt = search.solve(rest);
+                stoppedBy.addAll(search.stoppedBy());
+                unheld.addAll(search.unheld());
+                if (placedAt != Reached.FOUND) {
+                    bounded &= placedAt == Reached.EXHAUSTED;
+                    continue;
+                }
+                Map<RealizationTarget, Place> placed = search.fixing();
+                SearchRegion given = within;
+                for (Map.Entry<RealizationTarget, Place> number : placed.entrySet()) {
+                    if (number.getKey() instanceof RealizationTarget.OfANumber of) {
+                        given = given.given(of.term(), number.getValue());
+                    }
+                }
+                // The added numbers have a placement and the dividend is walked beside it: that
+                // none stands is about this placement.
+                bounded = false;
+                NumericDomain.Bounds reach = NumericDomain.Bounds.OPEN;
+                switch (given.projectionOf(form)) {
+                    case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                            reach = held == null ? NumericDomain.Bounds.OPEN : held;
+                    case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                        continue;
+                    }
+                    case null -> { }
+                }
+                ClassMembers members = ClassMembers.within(wanted, reach, null,
+                        VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+                if (members.stoppedShort()) {
+                    stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+                }
+                for (BigInteger at : members.values()) {
+                    LevelWalk walk = walkLevel(form, dividendTerms, over.on(), ExactRatio.of(at),
+                            given, runs, tried, stoppedBy, unheld, placed);
+                    if (walk.found() != null) {
+                        return walk.found();
+                    }
+                    if (!walk.exhausted()
+                            && stoppedBy.contains(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)) {
+                        break;
+                    }
                 }
             }
         }
