@@ -6072,10 +6072,11 @@ final class Pullback {
                 if (added != null) {
                     return added;
                 }
-                NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules(),
-                        elementsMet);
-                if (term != null) {
-                    return LinearForm.atom(new DecisionAtom.OfTheInput(term));
+                LinearForm<NumericTerm> numbers = InputNumber.formOf(node, read.domain(), at,
+                        read.rules(), elementsMet);
+                if (numbers != null) {
+                    return numbers.over(term ->
+                            LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(term)));
                 }
                 // A name for another element of a container the comparison is already read of is
                 // no number of the input, and what it is made of is not followed further.

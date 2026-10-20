@@ -255,6 +255,7 @@ public final class OperationFacts {
             // read from, and by {@link souther.compiler.numeric.DateTimes} for a date-time.
             about("Date", "year", bounded(Rel.GE, java.time.LocalDate.MIN.getYear())),
             about("Date", "year", bounded(Rel.LE, java.time.LocalDate.MAX.getYear())),
+            about("Date", "year", new OperationFact.EndsAreWhereTheRepresentationStops()),
             about("DateTime", "minutesBetween", bounded(Rel.GE, -minutesAcrossEveryDateTime())),
             about("DateTime", "minutesBetween", bounded(Rel.LE, minutesAcrossEveryDateTime())),
             // A date-time counts seconds and a minute is sixty of them. The answer drops what is
