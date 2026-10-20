@@ -284,9 +284,11 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         String total = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value))";
         for (String body : List.of(total + " >= on && on > 0", total + " >= on || on > 100",
                 "(" + total + " >= on && on > 0) || on > 100", "(" + total + " + on) >= 7")) {
+            int asked = 0;
             for (AnswersDemanded each : waysOf(body)) {
                 for (AnswerDemand stated : each.stated()) {
                     if (stated instanceof AnswerDemand.AStatement statement) {
+                        asked++;
                         assertNotNull(AnswerAsAnInput.onlyAnswerIn(statement.statement()),
                                 () -> body + ": " + statement.statement());
                         assertFalse(AnswerAsAnInput.inputNumbersIn(statement.statement())
@@ -294,6 +296,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                     }
                 }
             }
+            assertTrue(asked > 0, () -> body + " is stated as a statement in some way");
         }
     }
 
