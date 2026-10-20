@@ -149,6 +149,7 @@
         "levels_a_side_is_asked_at",
         "divisors_of_a_product_tried",
         "divisors_of_a_remainder_tried",
+        "remainders_a_sum_is_tried_at",
         "times_the_rules_are_asked_again",
         "values_a_position_on_the_way_is_tried_at",
         "places_a_position_on_the_way_is_looked_at",
