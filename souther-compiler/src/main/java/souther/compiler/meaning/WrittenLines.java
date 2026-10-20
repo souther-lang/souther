@@ -280,11 +280,13 @@ public final class WrittenLines {
         // and so does what a count of statements about values written out was written out as: the
         // reading faces the count, and the statements it counts are no side of the comparison's.
         // Nor are the statements counts held against nought come to, which some element of what
-        // they count meeting them is: the reading's relation is its own only where it is concluded.
+        // they count meeting them is: the reading's relation is its own only where it is what the
+        // reading concludes, and not where the statements a count was read as come to one.
         Derivation.AComparisonRead.Facing facing = null;
         String own = null;
         if (step instanceof Derivation.AComparisonRead read && !under.inAnother()
-                && conclusionOf(step) instanceof Proposition.Compared compared) {
+                && conclusionOf(step) instanceof Proposition.Compared compared
+                && compared.relation().equals(read.relation())) {
             facing = read.facing();
             own = compared.heldKey();
         }

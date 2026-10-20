@@ -240,6 +240,36 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
                         + " >= (if b > 0 then 1 else 0) + (if b > 0 then 1 else 0) + k", HELPER);
     }
 
+    /**
+     * A count held against nought, or an emptiness check, of values written out states relations
+     * of those values and nothing else: lines the comparison holds across, beside the lines of the
+     * filter's statement, as the same choices written out as {@code if}s are. Where those come to
+     * the denial of one statement, the relation is still no side of the comparison; so it is for a
+     * count left alone against a constant inside the ways of another.
+     */
+    @Test
+    void aCountWhoseStatementsComeToOneDenialIsOwedWhatTheChoicesWrittenOutAre() {
+        String one = "List.length(List.filter(v -> v > 0, [a]))";
+        String other = "List.length(List.filter(v -> v > 0, [b]))";
+        String chosen = "(if a > 0 then 1 else 0)";
+        String otherChosen = "(if b > 0 then 1 else 0)";
+        for (String comparison : List.of("%s <= 0", "%s < 1", "0 >= %s")) {
+            assertOwesTheSame(comparison.formatted(one), comparison.formatted(chosen), "");
+        }
+        assertOwesTheSame("List.isEmpty(List.filter(v -> v > 0, [a]))", chosen + " <= 0", "");
+        assertOwesTheSame("List.length(List.filter(v -> v > 0, [b, b])) == 0",
+                otherChosen + " + " + otherChosen + " == 0", "");
+        assertOwesTheSame(one + " <= " + other, chosen + " <= " + otherChosen, "");
+        assertOwesTheSame(one + " + k * " + other + " >= 1",
+                chosen + " + k * " + otherChosen + " >= 1", "");
+        // The comparison's own line, holding where a is at most nought, and the filter's,
+        // holding where it is above.
+        Set<String> owed = owedOfEveryRule(guarded(one + " <= 0"), "");
+        assertTrue(owed.containsAll(List.of("on f/a = 0", "off f/a = 1", "in f/a in a < 0",
+                "out f/a in 1 < a", "on f/a = 1", "off f/a = 0", "in f/a in 1 < a",
+                "out f/a in a < 0")), owed::toString);
+    }
+
     private static void assertOwesTheSame(String kept, String writtenOut, String after) {
         String counted = report(guarded(kept), after);
         assertFalse(counted.contains("not read"), counted);

@@ -197,13 +197,22 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
                 example pick
                     | "the row" : %s -> High
                 """.formatted(row));
+        // The comparison around the closure may draw a line at the same point, deciding only
+        // where the other values leave it to; the row is at the point where any reading has it.
+        boolean found = false;
         for (JsonNode obligation : obligationsOf(report, "comparison")) {
             for (JsonNode reading : obligation.path("readings")) {
                 if (reading.path("axis").asString().equals(axis)
                         && reading.path("against").asString().equals(against)) {
-                    return reading.path("hit").asBoolean();
+                    if (reading.path("hit").asBoolean()) {
+                        return true;
+                    }
+                    found = true;
                 }
             }
+        }
+        if (found) {
+            return false;
         }
         throw new AssertionError("a reading on " + axis + " has a point at " + against + ": "
                 + report);
