@@ -1637,6 +1637,12 @@ final class Coverages {
                         last = came.outcomes();
                         first = came.realized();
                     }
+                    // Short of a population at this value that it is short of at every value: the
+                    // next value is written as short, builds no row, and ends the asking with the
+                    // word this one did, so it is not asked for.
+                    if (came.outcomes().shortWhateverTheValue()) {
+                        return new Looked(last, first, Optional.empty());
+                    }
                     // Every way of standing the dependencies in was built and none of them stood,
                     // so this is the value that did not answer and not one of the rows it was built
                     // into. Charged here for that reason: a point with more ways to stand its
