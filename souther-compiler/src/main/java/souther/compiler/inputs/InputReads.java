@@ -414,6 +414,18 @@ public final class InputReads {
                         applied.given(), applied.entered()));
     }
 
+    /**
+     * Whether this reading is on an application of a closure: whether what is read here is
+     * evaluated again on each value the closure is applied to.
+     *
+     * <p>That is a fact about where a thing is written and not about what it reads. A choice
+     * written in a closure's body that reads nothing the closure was handed is still made on every
+     * application.
+     */
+    public boolean isOnAnApplication() {
+        return !applied.handed().isEmpty();
+    }
+
     /** Whether an application this reading is on handed {@code binding} one of the values a
      *  container was written with ({@link #handing}). */
     public boolean hands(BindingId binding) {

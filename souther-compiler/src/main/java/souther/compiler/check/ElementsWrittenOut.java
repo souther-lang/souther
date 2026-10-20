@@ -369,7 +369,11 @@ public final class ElementsWrittenOut {
             if (out.size() >= enough) {
                 break;
             }
-            everyOneReached &= each.keptWhere().isEmpty();
+            // Kept by something that comes out the way it was kept by on every run is still handed
+            // on every run: a condition that is there is not one that takes an element out.
+            // Kept by something that comes out the way it was kept by on every run is still handed
+            // on every run: a condition that is there is not one that takes an element out.
+            everyOneReached &= Boolean.TRUE.equals(onEveryRun(each, reading));
             // The step's body read on the application handing it this element.
             Stood<E> answered = new Stood<>(pieces.step().body(),
                     reading.handing(stepAt, element, each.value()));

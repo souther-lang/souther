@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -255,6 +256,84 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
         assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
                 "{ let a = if flag then 1 else 0\n    let b = if second.active then 1 else 0\n"
                         + "    List.sum(List.map(x -> x + 0, [ a, b ])) }").notJoined());
+    }
+
+    /** The ways the list a total is over can be handed to it without changing what it holds. */
+    private static final Map<String, UnaryOperator<String>> HANDED =
+            new LinkedHashMap<>();
+
+    static {
+        HANDED.put("as written", list -> list);
+        HANDED.put("past a filter that keeps all", list -> "List.filter(r -> true, " + list + ")");
+        HANDED.put("past a map that hands on", list -> "List.map(x -> x, " + list + ")");
+    }
+
+    /** What a total of two choices is made of, over a list: the choice made by a condition the
+     *  reading can name, and by one it cannot. */
+    private static final Map<String, UnaryOperator<String>> CHOOSING =
+            new LinkedHashMap<>();
+
+    static {
+        CHOOSING.put("a closure that chooses", list -> "List.sum(List.map(r -> if r.days >= 17"
+                + " then r.pay else 0, " + list + "))");
+        CHOOSING.put("a closure that chooses under its own let", list -> "List.sum(List.map(r -> {"
+                + " let s = if r.days >= 17 then r.pay else 0\n    s }, " + list + "))");
+        CHOOSING.put("a filter", list -> "List.sum(List.map(r -> r.pay, List.filter("
+                + "r -> r.days >= 17, " + list + ")))");
+    }
+
+    /** Choices made on each application by what the reading cannot name: the total is a function
+     *  of as many decisions as there are applications. */
+    private static final Map<String, UnaryOperator<String>> UNNAMED =
+            new LinkedHashMap<>();
+
+    static {
+        UNNAMED.put("a closure that chooses", list -> "List.sum(List.map(r -> if flag then 1"
+                + " else 0, " + list + "))");
+        UNNAMED.put("a closure that chooses under its own let", list -> "List.sum(List.map(r -> {"
+                + " let c = if flag then 1 else 0\n    c }, " + list + "))");
+        UNNAMED.put("a closure that writes a choice out", list -> "List.sum(List.flatMap(r -> {"
+                + " let c = if flag then 1 else 0\n    [ c ] }, " + list + "))");
+        UNNAMED.put("a closure that writes a choice out by a field", list ->
+                "List.sum(List.flatMap(r -> [ if r.active then 1 else 0 ], " + list + "))");
+    }
+
+    private static final String LIST = "[ first, second ]";
+
+    /**
+     * Nothing about how the list reaches the total changes what the total is made of: every way of
+     * choosing is the same meeting of two decisions however the list is handed on. The ways are
+     * crossed rather than listed, so that a way added to either side is tried with every one of
+     * the other.
+     */
+    @Test
+    void howAListIsHandedOnChangesNothingAboutTheMeeting() {
+        List<String> differing = new ArrayList<>();
+        CHOOSING.forEach((choosing, total) -> HANDED.forEach((handed, hand) -> {
+            CoverageRead.Read read = readFlagged(total.apply(hand.apply(LIST)));
+            if (!List.of(List.of(2, 2)).equals(shape(read.interactions()))
+                    || !read.notJoined().isEmpty()) {
+                differing.add(choosing + ", " + handed + ": " + shape(read.interactions())
+                        + " " + read.notJoined());
+            }
+        }));
+        assertEquals(List.of(), differing);
+    }
+
+    /**
+     * A total of choices made on each application is never read as if it decided nothing: it is a
+     * meeting or it is said not to be joined, however the list reaches it.
+     */
+    @Test
+    void aChoiceMadeOnEachApplicationIsNeverSilentHoweverTheListIsHandedOn() {
+        List<String> silent = new ArrayList<>();
+        UNNAMED.forEach((choosing, total) -> HANDED.forEach((handed, hand) -> {
+            CoverageRead.Read read = readFlagged(total.apply(hand.apply(LIST)));
+            if (read.interactions().isEmpty() && read.notJoined().isEmpty()) {
+                silent.add(choosing + ", " + handed);
+            }
+        }));
+        assertEquals(List.of(), silent);
     }
 
     /** A decision that nothing else is decided beside meets nothing, read or not. */

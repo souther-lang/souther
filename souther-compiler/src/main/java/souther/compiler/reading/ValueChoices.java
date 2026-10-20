@@ -65,9 +65,9 @@ final class ValueChoices {
          *                 choice have in common; null where the walk did not reach one
          * @param viaNames whether it was found beneath a name that stands for something written
          *                 elsewhere, as in {@link OneComparison}
-         * @param perApplication whether what the fork turns on is a value an application of a
-         *                 closure handed, so that it is made again on each application: a fork
-         *                 held in a name is one choice when it is not
+         * @param perApplication whether the fork is written where an application of a closure is
+         *                 on, so that it is made again on each application whatever it reads: a
+         *                 fork held in a name is one choice when it is not
          */
         record Unread(Core origin, boolean viaNames, boolean perApplication) implements Of { }
     }
@@ -97,8 +97,7 @@ final class ValueChoices {
         // The fork itself is what the choice is, and a fork held in a name is made where the name
         // was written, whichever expression handed it on.
         boolean perApplication = found.throughAName() ? found.perApplication()
-                : found.fork() == null || turnsOnAnApplicationIn(found.fork(), comes.at(), names,
-                        newtypes);
+                : found.fork() == null || comes.at().isOnAnApplication();
         return new Of.Unread(found.fork(), comes.viaNames() || found.throughAName(),
                 perApplication);
     }
@@ -186,22 +185,7 @@ final class ValueChoices {
         // Whether the fork is made again on each application is a fact about the fork, read
         // where it was written, and the name nearest it is the one to have said so.
         return new Fork(found.fork(), true, found.throughAName() ? found.perApplication()
-                : found.fork() == null
-                        || turnsOnAnApplicationIn(found.fork(), stands.at(), names, newtypes));
-    }
-
-    /** Whether {@code e} reads a name that an application of a closure handed a value, itself or
-     *  through the names it was given: whether it is made again on each application. */
-    private static boolean turnsOnAnApplicationIn(Core e, InputReads at,
-                                                  ElementsWrittenOut.Reading<InputReads> names,
-                                                  DeclarationNewtypes newtypes) {
-        if (Core.withoutStanding(e) instanceof Core.Read read) {
-            return at.turnsOnAnApplication(read, names.symbols(), newtypes);
-        }
-        boolean[] turns = {false};
-        Core.forEachChild(e, child -> turns[0] = turns[0]
-                || turnsOnAnApplicationIn(child, at, names, newtypes));
-        return turns[0];
+                : found.fork() == null || stands.at().isOnAnApplication());
     }
 
     /** The first fork in any part of {@code e}. */
