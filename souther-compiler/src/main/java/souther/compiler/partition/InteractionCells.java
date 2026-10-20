@@ -751,9 +751,10 @@ public final class InteractionCells {
                 if (states == null) {
                     return null;
                 }
-                Cut line = cutAt(axes.get(axis), states);
-                return line == null
-                        ? null : sideOf(axes, axis, line, guardOf(line, states), one.held());
+                boolean onAVisit = one.visit().isPresent();
+                Cut line = cutAt(axes.get(axis), states, onAVisit);
+                return line == null ? null
+                        : sideOf(axes, axis, line, guardOf(line, states, onAVisit), one.held());
             }
             // A fork this reading could not name a position for narrows nothing.
             case souther.compiler.reading.Condition.Arm _ -> {
@@ -893,9 +894,9 @@ public final class InteractionCells {
     }
 
     /** The cut the rule stated at {@code states} drew, or null where it drew none. */
-    private static Cut cutAt(Axis axis, ModelOccurrence states) {
+    private static Cut cutAt(Axis axis, ModelOccurrence states, boolean onAVisit) {
         for (Cut each : axis.cuts()) {
-            if (guardOf(each, states) != null) {
+            if (guardOf(each, states, onAVisit) != null) {
                 return each;
             }
         }
@@ -909,11 +910,17 @@ public final class InteractionCells {
      * <p>Not a line of a statement of several. Which way {@code Int.max(a, b) > 5} came out says
      * nothing about which side of {@code a = 5} the row was on, since {@code b} may have settled
      * it — so such a line names no class, and the condition narrows nothing here.
+     *
+     * <p>A decision about one visit to a comparison is about one application of it, and the line of
+     * the number that application compares is its own: a comparison applied to each element states
+     * a line per element, and which way the comparison came out on that application is which
+     * side of that application's line the row is on.
      */
-    private static LineOrigin.ComparisonOrigin guardOf(Cut cut, ModelOccurrence states) {
+    private static LineOrigin.ComparisonOrigin guardOf(Cut cut, ModelOccurrence states,
+                                                       boolean onAVisit) {
         for (LineOrigin origin : cut.origins()) {
             if (origin instanceof LineOrigin.ComparisonOrigin guard
-                    && guard.comesOutBySides()
+                    && (onAVisit ? guard.decidesItsApplication() : guard.comesOutBySides())
                     && guard.read().states().equals(states)) {
                 return guard;
             }

@@ -46,7 +46,7 @@ class ARunIsReadUnderTheNumberingItWasRecordedUnderTest {
         // A run of the other numbering, recorded at its own places: its arm is 1 and its
         // comparisons are 0 and 2, which is exactly what this numbering has the other way round.
         Observation seen = new Observation(elsewhere().identity(), Set.of(1),
-                Set.of(new RecordedConditionOutcome(0, true)));
+                Set.of(new RecordedConditionOutcome(0, true)), Set.of());
 
         IllegalArgumentException refused =
                 assertThrows(IllegalArgumentException.class, () -> here().align(seen));
@@ -67,7 +67,7 @@ class ARunIsReadUnderTheNumberingItWasRecordedUnderTest {
     @Test
     void aPlaceOfAnotherNumberingIsRefusedByARunThatWasRead() {
         AlignedObservation read = here().align(new Observation(here().identity(), Set.of(0, 2),
-                Set.of(new RecordedConditionOutcome(1, true))));
+                Set.of(new RecordedConditionOutcome(1, true)), Set.of()));
 
         assertThrows(IllegalArgumentException.class, () -> read.lit(elsewhere().arm(1)),
                 "an arm of another numbering is no arm this run can be asked about");
@@ -90,7 +90,7 @@ class ARunIsReadUnderTheNumberingItWasRecordedUnderTest {
     @Test
     void aRecordingIsReadUnderANumberingDerivedASecondTime() {
         Observation seen = new Observation(here().identity(), Set.of(0, 2),
-                Set.of(new RecordedConditionOutcome(1, false)));
+                Set.of(new RecordedConditionOutcome(1, false)), Set.of());
 
         AlignedObservation read = here().align(seen);
 

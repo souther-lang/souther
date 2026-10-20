@@ -58,6 +58,58 @@ class ARemainderOfAFormStandsWhereTheNumbersTheRowHoldsPutItTest {
         assertEquals(BorderQuantity.Stands.YES, stands(REMAINDER, remainder(4), row(0, 10)));
     }
 
+    /**
+     * With a number added, the row stands where the remainder and the number come to the level
+     * together, and at neither of them alone.
+     */
+    @Test
+    void aRemainderPlusANumberStandsWhereTheTwoComeTo() {
+        // 10 - 0 leaves three by seven, and the number is two.
+        assertEquals(BorderQuantity.Stands.YES,
+                stands(PLUS_E, remainder(5), row(10, 0, 2)));
+        assertEquals(BorderQuantity.Stands.NO, stands(PLUS_E, remainder(3), row(10, 0, 2)));
+        assertEquals(BorderQuantity.Stands.NO, stands(PLUS_E, remainder(2), row(10, 0, 2)));
+    }
+
+    /** {@code Int.floorMod(a - d, 7) - e}: the number is added with its weight. */
+    @Test
+    void aNumberAddedIsWeighed() {
+        assertEquals(BorderQuantity.Stands.YES,
+                stands(MINUS_E, remainder(1), row(10, 0, 2)));
+    }
+
+    private static final TermPath E = TermPath.of("e");
+
+    private static final BorderQuantity.RemainderOfAForm PLUS_E = remainderOfADifferencePlus(1);
+
+    private static final BorderQuantity.RemainderOfAForm MINUS_E = remainderOfADifferencePlus(-1);
+
+    /** {@code Int.floorMod(a - d, 7)} with {@code weight * e} added. */
+    private static BorderQuantity.RemainderOfAForm remainderOfADifferencePlus(long weight) {
+        BorderQuantity.RemainderOfAForm alone = remainderOfADifference();
+        NumericTerm e = new NumericTerm.ValueOf(E);
+        return new BorderQuantity.RemainderOfAForm("decide", alone.dividend(), alone.shift(),
+                alone.divisor(), new LinearForm<>(ExactRatio.ZERO, Map.of(e, ExactRatio.of(weight))),
+                Map.of(e, TermOrdersFixtures.itself(e, Carrier.WHOLE)));
+    }
+
+    private static BorderQuantity.Observation row(long a, long d, long e) {
+        return new AnObservationOfAForm() {
+
+            @Override
+            public WalkResult<ObservationAtPoint> at(TermPath path) {
+                long value = A.equals(path) ? a : D.equals(path) ? d : e;
+                return WalkResult.reached(new ObservationAtPoint.Value(
+                        new ObservedValue.Integer(value)));
+            }
+
+            @Override
+            public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+                throw new AssertionError("a number of one position is not read over a run");
+            }
+        };
+    }
+
     private static Criterion remainder(long at) {
         return new Criterion.AtTheLevel(Level.OfTheQuantity.of(at));
     }
@@ -74,7 +126,8 @@ class ARemainderOfAFormStandsWhereTheNumbersTheRowHoldsPutItTest {
         return new BorderQuantity.RemainderOfAForm("decide",
                 new BorderQuantity.OverAForm("decide",
                         new LinearForm<>(ExactRatio.ZERO, coefs), on),
-                BigInteger.ZERO, BigInteger.valueOf(7));
+                BigInteger.ZERO, BigInteger.valueOf(7),
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of());
     }
 
     private static BorderQuantity.Observation row(long a, long d) {

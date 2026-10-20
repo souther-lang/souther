@@ -334,6 +334,7 @@ public final class PublicationOrders {
                     // Beside it, as what one level is then tried at.
                     CompositionBudget.DIVISORS_OF_A_PRODUCT_TRIED,
                     CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED,
+                    CompositionBudget.REMAINDERS_A_SUM_IS_TRIED_AT,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     // Beside it: the rows that walk composes, as the choice of one is handed them.
                     CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
@@ -482,6 +483,7 @@ public final class PublicationOrders {
                 WeakeningWord.PAIR_SPACE_TRUNCATED,
                 WeakeningWord.MEETINGS_NOT_WALKED,
                 WeakeningWord.MEETINGS_NOT_PLACED,
+                WeakeningWord.MEETINGS_NOT_JOINED,
                 WeakeningWord.PROOF_CONTRADICTED,
                 WeakeningWord.ARMS_UNSETTLED,
                 WeakeningWord.DECISION_NOT_FULLY_READ,

@@ -65,6 +65,19 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
                 + PAYABLE + ")";
     }
 
+    /**
+     * The mean was read, and nothing of it was left unread.
+     *
+     * <p>Not that the measurement is complete. The total of the kept elements is one decision per
+     * element meeting at the sum, and these models start with a guard on how many are kept, which
+     * names no position a row can be steered by. A row cannot be steered to the meeting, so the
+     * measure says it is partial for that and for nothing in how the mean is read.
+     */
+    private static void assertReadToTheEnd(String report) {
+        assertFalse(report.contains(NO_QUOTIENT_READ), report);
+        assertFalse(report.contains("not read"), report);
+    }
+
     /** The line the report gives as what no input gets past, which is the way that is never taken. */
     private static String whatLeavesNoValue(String report) {
         List<String> lines = report.lines().map(String::strip).toList();
@@ -90,7 +103,7 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
         String report = report(guarded("List.length(" + PAYABLE + ") >= 1",
                 meanOfEach("100") + " >= 101"));
         assertEquals("· the comparison at  holds", whatLeavesNoValue(report), report);
-        assertTrue(report.contains("measurement: complete"), report);
+        assertReadToTheEnd(report);
     }
 
     /** The same mean against what it is: it is held wherever an element is kept, so the way that
@@ -100,7 +113,7 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
         String report = report(guarded("List.length(" + PAYABLE + ") >= 1",
                 meanOfEach("100") + " >= 100"));
         assertEquals("· the comparison at  does not hold", whatLeavesNoValue(report), report);
-        assertTrue(report.contains("measurement: complete"), report);
+        assertReadToTheEnd(report);
     }
 
     /**
@@ -140,10 +153,10 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
     void aMeanOverAHelpersListOfThreeIsReadAsWhatItIs() {
         String failed = overAHelpersListOfThree("100", "101");
         assertEquals("· the comparison at  holds", whatLeavesNoValue(failed), failed);
-        assertTrue(failed.contains("measurement: complete"), failed);
+        assertReadToTheEnd(failed);
         String held = overAHelpersListOfThree("100", "100");
         assertEquals("· the comparison at  does not hold", whatLeavesNoValue(held), held);
-        assertTrue(held.contains("measurement: complete"), held);
+        assertReadToTheEnd(held);
     }
 
     /**

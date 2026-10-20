@@ -75,6 +75,19 @@ public final class ComparedNumbers {
     }
 
     /**
+     * The reading of {@code comparison} as one application of the closure it stands in, where its
+     * names read {@code at}, or null where it names no number of this input.
+     *
+     * <p>Not held. A comparison in a closure is one node and is applied once per element, each
+     * application with a parameter that stands for its own element; reading it under the second
+     * element's names is not a second reader disagreeing with the first about where they are
+     * ({@link #of}), and no answer of one application is the answer of another.
+     */
+    public ComparedNumber ofOneApplication(Core.Binary comparison, InputReads at) {
+        return ComparedNumber.of(comparison, read, at);
+    }
+
+    /**
      * Which case of a sum {@code comparison} asks the value at a position to be where its names
      * read {@code at}, or null where it is no such comparison ({@link CaseCompared}).
      *
@@ -84,6 +97,11 @@ public final class ComparedNumbers {
      */
     public CaseCompared caseOf(Core.Binary comparison, InputReads at) {
         return once(cases, comparison, at, () -> CaseCompared.of(comparison, read, at));
+    }
+
+    /** The same, as {@link #ofOneApplication} is to {@link #of}. */
+    public CaseCompared caseOfOneApplication(Core.Binary comparison, InputReads at) {
+        return CaseCompared.of(comparison, read, at);
     }
 
     /** What {@code kept} holds of {@code comparison}, read by {@code reading} the first time it is
