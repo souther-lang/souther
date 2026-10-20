@@ -623,6 +623,50 @@ public sealed interface ElementValue {
             return relation.holds(Long.compare(compared, against));
         }
 
+        /** The test that holds of exactly the positions this does not. */
+        public PositionTest denied() {
+            return new PositionTest(divisor, relation.denied(), against);
+        }
+
+        /**
+         * Whether this holds of the element at every position a list has, whatever its length:
+         * then a choice made by it is the answer it takes where it holds, and no choice.
+         */
+        public boolean holdsOfEveryPosition() {
+            return comesOut(true);
+        }
+
+        /** Whether this holds of the element at no position a list has, whatever its length. */
+        public boolean holdsOfNoPosition() {
+            return comesOut(false);
+        }
+
+        /**
+         * Whether what is compared comes out {@code holding} at every position: each way it can
+         * stand to {@code against} over the positions there are — from nought up without end, or
+         * the remainders the divisor leaves — holds or fails alike.
+         */
+        private boolean comesOut(boolean holding) {
+            long least;
+            Long most;
+            if (divisor == THE_POSITION_ITSELF) {
+                least = 0;
+                most = null;
+            } else if (divisor > 0) {
+                least = 0;
+                most = divisor - 1;
+            } else {
+                least = divisor + 1;
+                most = 0L;
+            }
+            boolean below = least < against;
+            boolean at = least <= against && (most == null || against <= most);
+            boolean above = most == null || most > against;
+            return (!below || relation.holds(-1) == holding)
+                    && (!at || relation.holds(0) == holding)
+                    && (!above || relation.holds(1) == holding);
+        }
+
         @Override
         public String toString() {
             return (divisor == THE_POSITION_ITSELF ? "the position"
@@ -632,7 +676,8 @@ public sealed interface ElementValue {
 
     /**
      * The choice of {@code whenHolds} or {@code otherwise} by {@code test} of the position, with a
-     * choice between two answers that are one answer being that answer.
+     * choice between two answers that are one answer being that answer — and a test that holds of
+     * every position, or of none, choosing the one answer every element takes.
      *
      * <p>As {@link #choosing} is for a flag, and for more than tidiness: an answer that does not
      * turn on the position claims nothing about the order of the elements, and a run of it is
@@ -640,8 +685,10 @@ public sealed interface ElementValue {
      */
     static ElementValue choosingByPosition(PositionTest test, ElementValue whenHolds,
                                            ElementValue otherwise) {
-        return whenHolds.equals(otherwise) ? whenHolds
-                : new ByPosition(test, whenHolds, otherwise);
+        if (whenHolds.equals(otherwise) || test.holdsOfEveryPosition()) {
+            return whenHolds;
+        }
+        return test.holdsOfNoPosition() ? otherwise : new ByPosition(test, whenHolds, otherwise);
     }
 
     /**

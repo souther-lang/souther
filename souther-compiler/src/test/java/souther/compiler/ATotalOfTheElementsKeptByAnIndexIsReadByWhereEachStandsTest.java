@@ -132,6 +132,73 @@ class ATotalOfTheElementsKeptByAnIndexIsReadByWhereEachStandsTest {
                 field);
     }
 
+    /**
+     * Where the count reaches the length the elements kept are every one of them or none, and the
+     * rows at the border are read so: the first two of {@code [2, 3]} are the list, of {@code [4]}
+     * the one element, and of nothing nought.
+     */
+    @Test
+    void theFirstOfAListNoLongerThanTheCountAreTheList() {
+        String human = report(model("List.sum(List.take(2, xs))",
+                rows("[2, 3]", "[4]", "[3, 3, 100]", "[]")));
+        assertTrue(human.contains("obligations 4/4"), human);
+        assertFalse(human.contains("not read:"), human);
+    }
+
+    /** And from the count on, a list no longer than the count keeps nothing. */
+    @Test
+    void theElementsPastTheCountOfAListNoLongerThanItAreNone() {
+        String human = report(model("List.sum(List.drop(2, xs))",
+                rows("[100, 100, 5]", "[100, 100, 4]", "[0, 0, 6]", "[100, 100]")
+                        + "    | \"none\"   : ([], [], 0) -> No { n = 0 }\n"
+                        + "    | \"one\"    : ([100], [], 0) -> No { n = 0 }\n"));
+        assertTrue(human.contains("obligations 4/4"), human);
+        assertFalse(human.contains("does not hold"), human);
+    }
+
+    /**
+     * A count of nought or less keeps every element or none whatever the length, which is no
+     * choice by position: from it on is the total of the list, and before it nought.
+     */
+    @Test
+    void aCountOfNoughtOrLessKeepsTheWholeListOrNothing() {
+        for (String whole : List.of("List.sum(List.drop(0, xs))", "List.sum(List.drop(-1, xs))")) {
+            String human = report(model(whole, rows("[5]", "[4]", "[6]", "[3]")));
+            assertTrue(human.contains("obligations 4/4"), whole + "\n" + human);
+            assertFalse(human.contains("the position"), whole + "\n" + human);
+            assertTrue(cancels(whole + " - List.sum(xs)"), whole);
+        }
+        for (String none : List.of("List.sum(List.take(0, xs))", "List.sum(List.take(-1, xs))")) {
+            assertTrue(cancels(none), none);
+        }
+    }
+
+    /**
+     * The total of the elements kept and the same total weighed by a choice of the position
+     * written out are one number, so their difference is nought; and a total that turns on no
+     * position, written as a walk, is the total of the list.
+     */
+    @Test
+    void spellingsOfOneNumberAreOneTerm() {
+        assertTrue(cancels("List.sum(List.take(2, xs))"
+                + " - List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, xs))"));
+        assertTrue(cancels("List.sum(List.take(2, List.reverse(xs)))"
+                + " - List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0,"
+                + " List.reverse(xs)))"));
+        assertTrue(cancels("List.sum(xs) - List.sum(List.map(x -> 1 * x, xs))"));
+        assertTrue(cancels("List.sum(xs) - List.fold((a, x) -> a + x, 0, xs)"));
+        assertTrue(cancels("List.sum(List.map(x -> 3, xs)) - 3 * List.length(xs)"));
+        assertFalse(cancels("List.sum(List.take(2, xs)) - List.sum(xs)"));
+    }
+
+    /** Whether {@code difference} compared against a number is read as nought, a comparison that
+     *  cuts nothing, rather than as a line on a number of the input. */
+    private static boolean cancels(String difference) {
+        String human = report(model(difference, ""));
+        return human.contains("it was read to the end and cuts nothing")
+                && !human.contains("draws its line") && !human.contains("not read:");
+    }
+
     /** Two counts keep two runs, and neither is the whole list. */
     @Test
     void twoCountsAreTwoTotalsAndNeitherIsTheWholeList() {
@@ -139,7 +206,7 @@ class ATotalOfTheElementsKeptByAnIndexIsReadByWhereEachStandsTest {
                 "List.sum(List.take(1, xs)) + List.sum(List.take(2, xs))", ""));
         assertTrue(human.contains(FIRST_TWO), human);
         assertTrue(human.contains(FIRST_TWO.replace("< 2", "< 1")), human);
-        assertFalse(human.contains("List.sum(xs[*])"), human);
+        assertFalse(human.contains("List.sum(xs)"), human);
     }
 
     /**

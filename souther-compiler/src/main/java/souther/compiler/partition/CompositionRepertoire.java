@@ -32,6 +32,9 @@ public enum CompositionRepertoire {
      * equal share each as the order allows — and the arrangements of more than one element are
      * many. Which of them a rule tells apart is the rule's own business, so no reading of the two
      * says anything about the rest.
+     *
+     * <p>Elements the total leaves out — those at positions a total of some of them does not take —
+     * are written at one value each, which is one of the values they could hold.
      */
     WAYS_A_TOTAL_IS_SPREAD,
 
@@ -101,7 +104,9 @@ public enum CompositionRepertoire {
      * element and solving for it, where the computation is a form of that one field alone. A form of
      * several fields, or a choice between two by a flag, has more than one value to choose in an
      * element, and nothing here chooses the others so that the first can be solved for. A choice by
-     * the element's case none of whose arms is a form of one field of its case is the same. Raising
+     * the element's case none of whose arms is a form of one field of its case is the same, and so
+     * is a weight made of the position or a choice by it between two forms of the field, which
+     * weigh the positions apart. Raising
      * anything reaches none of them; what would is a way of choosing the rest of an element.
      *
      * <p>So a total of such a number is not a total no row comes to. Read as a figure, an author is

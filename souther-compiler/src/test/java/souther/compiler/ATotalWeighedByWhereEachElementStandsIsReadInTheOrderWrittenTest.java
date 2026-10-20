@@ -93,11 +93,13 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         assertTrue(human.contains(TERM), human);
     }
 
-    /** A choice whose answers are one answer turns on nothing, and is the total of the elements. */
+    /** A choice whose answers are one answer turns on nothing, and is the total of the list: the
+     *  number {@code List.sum(xs)} is, and no run of its elements beside it. */
     @Test
     void aChoiceThatAnswersAlikeIsNoChoice() {
         String human = report(model("(i, c) -> if Int.floorMod(i, 2) == 0 then c else c", "xs"));
-        assertTrue(human.contains("List.sum(xs[*])"), human);
+        assertTrue(human.contains("List.sum(xs)"), human);
+        assertFalse(human.contains("List.sum(xs[*])"), human);
         assertFalse(human.contains("the position"), human);
     }
 
