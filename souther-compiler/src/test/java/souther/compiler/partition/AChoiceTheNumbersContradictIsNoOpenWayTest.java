@@ -13,6 +13,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -118,6 +119,46 @@ class AChoiceTheNumbersContradictIsNoOpenWayTest {
         assertEquals(2, openWays(of(
                 oneOf(1, holds(X, 1, -71, Rel.GE), holds(X, 1, -71, Rel.LT)),
                 oneOf(2, holds(X, 1, -71, Rel.GE), holds(X, 1, -71, Rel.LT)))));
+    }
+
+    /** A choice of {@code levels} alternatives, the {@code k}-th of which holds {@code x == k}. */
+    private static OnTheWay.OneOf atEachLevelUpTo(int occurrence, int levels) {
+        List<List<OnTheWay>> alternatives = new ArrayList<>();
+        for (int level = 0; level < levels; level++) {
+            alternatives.add(List.of(holds(X, 1, -level, Rel.EQ)));
+        }
+        return new OnTheWay.OneOf(
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, occurrence),
+                WHERE, alternatives, Optional.empty());
+    }
+
+    /**
+     * More ways than are looked along, none of which the statements contradict, are looked along
+     * whole past the figure. Nothing here reads a declaration, so what the declarations leave of
+     * the type is no part of whether this holds.
+     */
+    @Test
+    void waysThatNothingClosesPastTheFigureAreLookedAlongWhole() {
+        int levels = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum() + 1;
+
+        Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
+                of(atEachLevelUpTo(1, levels)));
+
+        Reachability.Ways.Whole whole = assertInstanceOf(Reachability.Ways.Whole.class,
+                reaching.ways(), () -> "the ways past the figure: " + reaching.ways());
+        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, whole.figure());
+    }
+
+    /**
+     * The same number of ways, all but one of which the numbers close, are no more than are looked
+     * along: what is closed is not counted against the figure.
+     */
+    @Test
+    void waysTheNumbersCloseDoNotCountAgainstTheFigure() {
+        int levels = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum() + 1;
+
+        assertEquals(1, openWays(of(holds(X, 1, -3, Rel.EQ), atEachLevelUpTo(1, levels))),
+                "x == 3 leaves the alternative x == 3 alone");
     }
 
     private static SearchRegion region() {

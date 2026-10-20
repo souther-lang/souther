@@ -318,6 +318,8 @@ class EverySchemaWordIsAccountedForTest {
         spelling.put("AComparisonOutcomeNothingReaches", "a_comparison_outcome_nothing_reaches");
         spelling.put("AConditionNeverComesOutThatWay", "a_condition_never_comes_out_that_way");
         spelling.put("NoValueCanTakeIt", "no_value_can_take_it");
+        // The document says what the model settles and not which reading showed it.
+        spelling.put("TheNumbersOfTheWayLeaveNone", "no_value_can_take_it");
         spelling.put("AComposedRowWentElsewhere", "a_composed_row_went_elsewhere");
         spelling.put("AComposedRowWasShortOfTheWay", "a_composed_row_was_short_of_the_way");
         spelling.put("CouldNotTellWhereTheRowWent", "the_rule_the_row_took_could_not_be_told");

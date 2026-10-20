@@ -266,6 +266,10 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
      * put as one that composed a row short of the way, having left out every condition of the way
      * for one reason. A reason the conditions of one helper share is the same sentence at each,
      * which is what the page says once.
+     *
+     * <p>Made up, and not what a search came to: no search says this of these rules, which is the
+     * point. The places and their ways are the compiled ones, and the answer is put so that the
+     * page is read for what it says of them whatever a search finds.
      */
     private static Map<DecisionRule, SettledAcross> settledAcross(Compilation compilation) {
         Map<DecisionRule, SettledAcross> searched = compilation.db()

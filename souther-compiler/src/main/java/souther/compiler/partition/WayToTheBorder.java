@@ -453,11 +453,15 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     TakenConstraint.Affine affine)))) {
                 return new Step.Held<>(this);
             }
+            // The ones taken in before leave a point, since the way was open, so only the
+            // statements of this one's form can leave none now.
+            List<TakenConstraint.Affine> ofItsForm =
+                    WhatStatementsOfOneFormDecide.ofTheFormOf(numbers, affine);
+            if (WhatStatementsOfOneFormDecide.of(ofItsForm, null).noRowArrives()) {
+                return new Step.Closed<>(new Reachability.NumbersLeaveNone(ofItsForm));
+            }
             List<TakenConstraint.Affine> stated = new ArrayList<>(numbers);
             stated.add(affine);
-            if (WhatStatementsOfOneFormDecide.of(stated, null).noRowArrives()) {
-                return new Step.Closed<>(new Reachability.NumbersLeaveNone(stated));
-            }
             return new Step.Held<>(new HeldTogether(requirements, truths, counts, stated));
         }
 

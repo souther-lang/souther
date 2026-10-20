@@ -149,6 +149,25 @@ public sealed interface RuleRequirement {
         }
 
         /**
+         * The statements of numbers on the way leave no value.
+         *
+         * <p>{@link Reachability.NumbersLeaveNone} is where that is established and this carries
+         * what it established. Read off the rules before anything was
+         * composed, as the other readings here are, and so not the answer of a search
+         * ({@link NoValueCanTakeIt}): no composing was made, and none is recorded as made.
+         */
+        record TheNumbersOfTheWayLeaveNone(Reachability.NumbersLeaveNone why)
+                implements Excluded {
+
+            public TheNumbersOfTheWayLeaveNone {
+                if (why == null) {
+                    throw new IllegalArgumentException(
+                            "a way whose numbers leave no value is one something showed so");
+                }
+            }
+        }
+
+        /**
          * No value takes the way to the rule, and the composings are what proved it — whether a
          * rule on the way or a type with too few values is what leaves none.
          *
