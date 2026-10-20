@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
@@ -195,9 +196,13 @@ final class AStatementAtARow {
         if (remainder == null) {
             return null;
         }
+        // A number beside the remainder is apart from the form it is the remainder of, and not
+        // merely another number: one read off a place the form reads moves with it.
         for (NumericTerm term : otherNumbersWithTheRemainder(affine.form()).coefs().keySet()) {
-            if (remainder.dividend().coefs().containsKey(term)) {
-                return null;
+            for (NumericTerm of : remainder.dividend().coefs().keySet()) {
+                if (FilingCoordinate.of(term).overlaps(FilingCoordinate.of(of))) {
+                    return null;
+                }
             }
         }
         return remainder;

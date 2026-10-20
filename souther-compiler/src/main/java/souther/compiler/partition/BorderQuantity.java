@@ -1146,9 +1146,11 @@ public sealed interface BorderQuantity
                         + addedOn.keySet());
             }
             for (NumericTerm term : added.coefs().keySet()) {
-                if (dividend.form().coefs().containsKey(term)) {
-                    throw new IllegalArgumentException("a number added to a remainder is not one of"
-                            + " the form it is the remainder of: " + term);
+                for (NumericTerm of : dividend.form().coefs().keySet()) {
+                    if (FilingCoordinate.of(term).overlaps(FilingCoordinate.of(of))) {
+                        throw new IllegalArgumentException("a number added to a remainder is read"
+                                + " off no place the form it is the remainder of is: " + term);
+                    }
                 }
             }
             addedOn.forEach((term, orders) -> {

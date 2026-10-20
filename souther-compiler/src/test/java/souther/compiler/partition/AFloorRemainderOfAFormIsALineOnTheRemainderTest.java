@@ -408,6 +408,74 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     /**
+     * A number the form is moved by that is read off the same place moves with it, so the place is
+     * not taken through every remainder by being moved: {@code x + Int.floorMod(x, 3)} is a
+     * function of {@code x}, which stays divided by the relation however the weight of {@code x}
+     * leaves the remainders.
+     */
+    @Test
+    void aNumberReadOffTheSamePlaceIsNotWhatTakesTheFormThroughEveryRemainder() {
+        assertEquals(List.of(), reasonsEach("x: Int, c: Int",
+                "c == Int.floorMod(x + Int.floorMod(x, 3), 4)").stream()
+                .filter(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES::equals).toList());
+    }
+
+    /**
+     * A check digit held against a remainder that a branch moves — the digit against nought where
+     * the remainder is one at most, and against eleven less the remainder past it — is read
+     * through to the end: the line on the digit and the remainder added to it are drawn, no
+     * comparison of it is left as unread or as several lines held together, and a row at a line is
+     * what its label says.
+     */
+    @Test
+    void aCheckDigitAgainstABranchOnTheRemainderIsReadThroughToTheEnd() {
+        Compilation compilation = compiled("a: Int, b: Int, c: Int", List.of(
+                "let r = Int.floorMod(a + b, 11)",
+                "guard c == (if r <= 1 then 0 else 11 - r) else No", "Ok"), "");
+
+        assertTrue(bordersOf(linesOf(compilation)).containsAll(List.of("0", "11", "12")),
+                bordersOf(linesOf(compilation)).toString());
+        List<UndividedPosition.Reason> unread = compilation.db()
+                .ask(new Adequacy.Coverage("demo")).value().get("f").notRead().stream()
+                .map(PartitionEvidence.NotRead::reason).toList();
+        assertEquals(List.of(), unread.stream().filter(reason -> reason
+                == UndividedPosition.Reason.UNSUPPORTED_SYNTAX
+                || reason == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE
+                || reason == UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE).toList());
+        for (Row row : certifiedRows(linesOf(compilation))) {
+            long a = Long.parseLong(row.inputs().get(0));
+            long b = Long.parseLong(row.inputs().get(1));
+            long c = Long.parseLong(row.inputs().get(2));
+            for (String label : row.labels()) {
+                if (label.startsWith("c = ")) {
+                    assertEquals(c, Long.parseLong(label.substring("c = ".length())), label);
+                } else if (label.startsWith("Int.floorMod(a + b, 11) = ")) {
+                    assertEquals(Math.floorMod(a + b, 11L), Long.parseLong(
+                            label.substring(label.lastIndexOf(' ') + 1)), label);
+                }
+            }
+        }
+    }
+
+    /**
+     * A number beside the remainder that is read off a place the form is read at is not apart from
+     * it, and the relation is not read as a remainder beside a number.
+     */
+    @Test
+    void aNumberBesideTheRemainderReadOffAPlaceOfItsFormIsNotApartFromIt() {
+        assertEquals(List.of(), bordersOf("a: Int, b: Int",
+                "Int.floorMod(a + b, 11) == Int.floorMod(a, 3)"));
+    }
+
+    /** And one read off another place does, which is what the case above is told apart from. */
+    @Test
+    void aNumberReadOffAnotherPlaceIsWhatTakesTheFormThroughEveryRemainder() {
+        assertEquals(1, reasonsEach("x: Int, xs: List<Int>, c: Int",
+                "c == Int.floorMod(x + List.length(xs), 4)").stream()
+                .filter(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES::equals).count());
+    }
+
+    /**
      * And a number the remainder is of alone is divided by it: with {@code a} put at a value the
      * remainder is that value's, so the number is not said to leave the relation either way.
      */

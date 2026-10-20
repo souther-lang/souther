@@ -1086,7 +1086,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             Source source = sourceOf(value, read);
             if (source == null || !source.takes().every() || source.named()
-                    || wayOf(value, statingAnythingOf(value, conditions)) != Way.UNTOUCHED) {
+                    || wayOf(value, statingAnythingOf(value, conditions)) != Way.UNTOUCHED
+                    || sharesAPlaceWithAnotherNumberOfTheForm(value)) {
                 continue;
             }
             Carrier carrier = read.quantities().ordersOf(value).answered();
@@ -1094,6 +1095,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             BigInteger greatest = greatestOf(carrier);
             if (least == null || greatest == null || greatest.subtract(least)
                     .compareTo(remainder.divisor().subtract(BigInteger.ONE)) >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether another number of the form the remainder is of is read off a place {@code term} is,
+     * or one around it or under it.
+     *
+     * <p>Such a number moves with {@code term}: {@code x + Int.floorMod(x, 3)} is a function of
+     * {@code x} alone, and moving {@code x} through every value moves the other with it, so the
+     * form is not taken through a whole turn of the divisor by {@code x} however its weight leaves
+     * the remainders. Two numbers are apart only when no place of one is a place of the other, and
+     * two different numbers are not that for being different.
+     */
+    private boolean sharesAPlaceWithAnotherNumberOfTheForm(NumericTerm term) {
+        FilingCoordinate at = FilingCoordinate.of(term);
+        for (NumericTerm other : remainder.dividend().coefs().keySet()) {
+            if (!other.equals(term) && overlap(at, FilingCoordinate.of(other))) {
                 return true;
             }
         }
@@ -2323,7 +2344,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     private static boolean overlap(FilingCoordinate one, FilingCoordinate other) {
-        return overlap(one.path(), other.path());
+        return one.overlaps(other);
     }
 
     /** Whether two places are one, or one is inside the other. */

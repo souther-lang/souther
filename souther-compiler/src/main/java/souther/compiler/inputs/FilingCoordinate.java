@@ -30,6 +30,18 @@ public sealed interface FilingCoordinate {
     TermPath path();
 
     /**
+     * Whether the two sit at one place, or one inside the other.
+     *
+     * <p>What two numbers being apart comes to. Two numbers are different for being read by
+     * different operations, and are apart only when no place of one is a place of the other:
+     * {@code x} and {@code Int.floorMod(x, 3)} are two numbers, and the second moves with the
+     * first.
+     */
+    default boolean overlaps(FilingCoordinate other) {
+        return path().isAtOrUnder(other.path()) || other.path().isAtOrUnder(path());
+    }
+
+    /**
      * The number itself, where the reading named it.
      *
      * <p>Every reader that reached the canonical quantity has one, and so does one that named a
