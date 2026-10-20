@@ -246,6 +246,36 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
         }
     }
 
+    /** Where a total is in the range of {@code Int} and a product on the way is not, the model
+     *  aborts: "A" is 65, whose total is the limit asked for and whose product is past the range,
+     *  so no answer holds of it. "-(" has the same total with every product in range, and the
+     *  model answers 1. What the rows composed for it are says what the compiler wrote, not what
+     *  a string can do: it is silent on "-(" and says so, it does not say there is none. */
+    @Test
+    void aProductPastTheRangeAbortsWhereAnInRangeStringWithTheSameTotalAnswers() {
+        String model = PAST_THE_RANGE_ON_THE_WAY;
+        assertEquals(List.of(), errorsOf(model, "\"-(\"", 1), () -> "\"-(\" answers 1");
+        assertEquals(1, errorsOf(model, "\"-(\"", 0).size(), () -> "and not 0");
+        // An abort is no answer: of an `Int` answer that is 0 or 1, neither holds.
+        assertEquals(1, errorsOf(model, "\"A\"", 0).size(), () -> "\"A\" does not answer 0");
+        assertEquals(1, errorsOf(model, "\"A\"", 1).size(), () -> "and does not answer 1");
+
+        String report = report(measured(model));
+        assertTrue(report.contains("nothing could show a row can be written at a decision rule"),
+                () -> "a rule no row was composed for is undecided: " + report);
+    }
+
+    /** The errors of {@code model} given one example, the string {@code literal} answering
+     *  {@code answer}. */
+    private static List<String> errorsOf(String model, String literal, int answer) {
+        Compilation compilation = Compilation.ofSource(model + "example pick\n    | \"fixed\" : ("
+                + literal + ") -> " + answer + "\n", "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList();
+    }
+
     /** The rows composed for the decision rules no row takes, each as its inputs. */
     private static List<List<FixtureTemplate>> composedForTheRules(Compilation compilation) {
         List<List<FixtureTemplate>> out = new ArrayList<>();
