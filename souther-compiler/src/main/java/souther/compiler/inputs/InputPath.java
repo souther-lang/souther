@@ -892,10 +892,10 @@ final class InputPath {
             case EVERY_OCCURRENCE -> {
                 return built == null ? null : built.permutesTheElementsOf();
             }
-            // Stopped in `through` before any operation is asked of.
-            // Stopped in `through` before any operation is asked of.
+            // Answered in `through` by the operations that turn the order round, and stopped there
+            // at every other before it is asked of.
             case IN_THE_ORDER_WRITTEN -> throw new IllegalStateException("a walk after the order"
-                    + " crosses no operation here, and " + operation + " was asked of");
+                    + " asks no operation of what it holds, and " + operation + " was asked of");
             case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> { }
         }
         DeclaredArgument holds = argumentWhoseElementsItHolds(operation);

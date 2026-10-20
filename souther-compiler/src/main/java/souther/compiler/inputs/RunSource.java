@@ -337,7 +337,8 @@ public sealed interface RunSource {
 
         @Override
         public int hashCode() {
-            return 31 * elements.hashCode() + direction.ordinal();
+            // By name: an enum's own hash differs from one run of the compiler to the next.
+            return 31 * elements.hashCode() + direction.name().hashCode();
         }
 
         @Override
