@@ -5437,9 +5437,9 @@ final class Pullback {
     private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed,
                                             boolean acrossOnly) {
         InputReads.Occurrences every = keysOf(whole, filed);
-        if (every == null || acrossOnly
+        if (every == null || (acrossOnly
                 && (!(every instanceof InputReads.Occurrences.AcrossContainers)
-                        || !every.keptBy().isEmpty())) {
+                        || !every.keptBy().isEmpty()))) {
             return null;
         }
         TermPath place = every.keys();
