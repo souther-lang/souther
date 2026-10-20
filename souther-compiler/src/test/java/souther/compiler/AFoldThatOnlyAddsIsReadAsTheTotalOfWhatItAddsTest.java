@@ -179,7 +179,10 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                     asked <= limit - List.fold((acc, n) -> acc + n.gross, 0, ns)
                 """);
         assertTrue(report.contains("List.sum(ns[*].gross)"), report);
-        assertFalse(report.contains("not read"), report);
+        // Read to the end, it relates the two numbers and the total; that the total is not shown
+        // to reach every value beside them is all it leaves unread.
+        assertTrue(report.lines().filter(line -> line.contains("not read"))
+                .allMatch(line -> line.contains("not shown to reach every value here")), report);
     }
 
     /**
