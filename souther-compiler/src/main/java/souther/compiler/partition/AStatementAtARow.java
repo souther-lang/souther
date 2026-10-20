@@ -1457,11 +1457,17 @@ final class AStatementAtARow {
                         || rest instanceof ValuesAtARow.NoneHere) {
                     return Said.NOTHING_THERE;
                 }
+                // Whatever stopped either, since a row is not read for the stopping of any one of
+                // them and a reader is told all that did.
+                Set<ReadingGap> stopped = new LinkedHashSet<>();
                 if (dividend instanceof ValuesAtARow.CouldNotTell(var why)) {
-                    return new Said.NotRead(why);
+                    stopped.addAll(why);
                 }
                 if (rest instanceof ValuesAtARow.CouldNotTell(var why)) {
-                    return new Said.NotRead(why);
+                    stopped.addAll(why);
+                }
+                if (!stopped.isEmpty()) {
+                    return new Said.NotRead(stopped);
                 }
                 Map<NumericTerm, Place> values = new LinkedHashMap<>(
                         ((ValuesAtARow.Read) dividend).values());

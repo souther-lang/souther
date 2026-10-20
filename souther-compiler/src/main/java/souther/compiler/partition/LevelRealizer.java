@@ -202,7 +202,10 @@ public final class LevelRealizer {
                             UnheldNumber.NO_REPRESENTATION_EXISTS));
                     continue;
                 }
-                Search search = new Search(terms, over.on(), within, runs, tried, steps);
+                // The count and the numbers beside the elements are chosen after this walk, so the
+                // whole arrangement is not known here and the rows already tried are asked of it
+                // when it is ({@link #found}).
+                Search search = new Search(terms, over.on(), within, runs, tried, steps, Map.of());
                 Reached reached = search.solve(rest);
                 stoppedBy.addAll(search.stoppedBy());
                 unheld.addAll(search.unheld());
@@ -893,7 +896,8 @@ public final class LevelRealizer {
             // The rules leave nothing at this level: a proof about it and about no other.
             return new LevelWalk(null, true);
         }
-        Search search = new Search(terms, on, here.region(), here.runs(), tried, steps);
+        Search search = new Search(terms, on, here.region(), here.runs(), tried, steps,
+                alongside);
         Reached reached = search.solve(target);
         stoppedBy.addAll(search.stoppedBy());
         unheld.addAll(search.unheld());
@@ -1117,23 +1121,27 @@ public final class LevelRealizer {
                     continue;
                 }
                 // Each placement of the added numbers in turn: one the dividend cannot be walked
-                // beside is set aside, as an arrangement a row was built from is, and the next
-                // is asked for.
-                ValuesTried setAside = tried;
+                // beside is set aside, and the next is asked for. What is set aside is a placement
+                // of the added numbers alone, since the dividend's are not known when they are
+                // placed, so the arrangements a row was already built from are asked of the
+                // dividend's walk, which stands beside the whole of them.
+                ValuesTried setAside = new ValuesTried(List.of());
                 for (int placements = 0; ; placements++) {
-                    if (placements >= placementsMost) {
-                        stoppedBy.add(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES);
-                        bounded = false;
-                        break;
-                    }
                     Search search = new Search(addedTerms, over.addedOn(), beside.region(),
-                            beside.runs(), setAside, steps);
+                            beside.runs(), setAside, steps, Map.of());
                     Reached placedAt = search.solve(rest);
                     stoppedBy.addAll(search.stoppedBy());
                     unheld.addAll(search.unheld());
                     if (placedAt != Reached.FOUND) {
                         // A walk that set a placement aside gave it up, and proves nothing.
                         bounded &= placedAt == Reached.EXHAUSTED && placements == 0;
+                        break;
+                    }
+                    // There is a placement more than the figure allows, which is what the figure
+                    // then stopped.
+                    if (placements >= placementsMost) {
+                        stoppedBy.add(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES);
+                        bounded = false;
                         break;
                     }
                     Map<RealizationTarget, Place> placed = search.fixing();
@@ -1756,6 +1764,9 @@ public final class LevelRealizer {
         private final AdditiveImage[] fromHere;
         /** What this walk and the others of its item have spent. */
         private final Steps steps;
+        /** What the other parts of the item were placed at, which this walk's positions are
+         *  placed beside. */
+        private final Map<RealizationTarget, Place> alongside;
         private int asked;
         /** Which budgets of this compiler's this walk ran out of, recorded where each ran out. What
          *  it came back with says that nothing was reached and not what kept it from reaching. */
@@ -1783,9 +1794,11 @@ public final class LevelRealizer {
 
         Search(List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms,
                Map<NumericTerm, Carrier> on, SearchRegion within,
-               Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried, Steps steps) {
+               Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried, Steps steps,
+               Map<RealizationTarget, Place> alongside) {
             this.tried = tried;
             this.steps = steps;
+            this.alongside = Map.copyOf(alongside);
             this.terms = terms;
             this.carriers = new Carrier[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
@@ -1811,6 +1824,20 @@ public final class LevelRealizer {
 
         Reached solve(ExactRatio target) {
             return walk(0, target, within);
+        }
+
+        /**
+         * What the item stands at once this walk's positions do: what the other parts of the item
+         * were placed at, and this walk's own.
+         *
+         * <p>What {@link ValuesTried} holds is whole arrangements, and one is only the same as
+         * another with the same targets standing at the same places. A walk asking it of its own
+         * positions alone would match none of them wherever the item has other parts.
+         */
+        private Map<RealizationTarget, Place> wholeArrangement() {
+            Map<RealizationTarget, Place> whole = new LinkedHashMap<>(alongside);
+            whole.putAll(fixing());
+            return whole;
         }
 
         /**
@@ -2227,7 +2254,7 @@ public final class LevelRealizer {
             // value the rules leave nothing beside, and said as a walk that was cut short rather
             // than one that tried everything: what took this assignment away is this compiler
             // having looked, so a walk that gave it up proves nothing about the level.
-            if (tried.holds(fixing())) {
+            if (tried.holds(wholeArrangement())) {
                 at[i] = null;
                 return Reached.INCOMPLETE;
             }

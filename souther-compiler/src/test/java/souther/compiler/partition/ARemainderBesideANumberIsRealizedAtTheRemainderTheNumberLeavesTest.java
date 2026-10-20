@@ -31,6 +31,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * A remainder of a form beside a number the form does not name is realized at the remainder the
@@ -48,7 +49,7 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
 
             data Ok
 
-            behavior read : (x: Int, y: Int) -> Ok
+            behavior read : (x: Int, y: Int, z: Int) -> Ok
             """;
 
     private static final BigInteger DIVISOR = BigInteger.valueOf(257);
@@ -62,7 +63,7 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
                 Rel.EQ).taken();
 
         Realization made = new LevelRealizer().realize(remainderLessYAtNought(), yIsAHundred,
-                NothingTheDeclarationsRefuse.at(path("x"), path("y")));
+                NothingTheDeclarationsRefuse.at(path("x"), path("y"), path("z")));
 
         Realization.Found found = assertInstanceOf(Realization.Found.class, made);
         Place x = found.fixing().get(RealizationTarget.of(term("x")));
@@ -70,6 +71,56 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
         assertEquals(ExactRatio.of(100), Count.number(y).exactly());
         assertEquals(ExactAnswer.held(BigInteger.valueOf(100)),
                 Count.number(x).exactly().floor().map(whole -> whole.mod(DIVISOR)));
+    }
+
+    /**
+     * An arrangement a row was built from that did not stand is not offered again, whichever part
+     * of the item it is the other part's that is asked for: the dividend is {@code x + y}, held to
+     * a hundred and so to a remainder of a hundred, and the second asking is handed the whole of
+     * the first arrangement and is answered with a different split of the dividend.
+     */
+    @Test
+    void anArrangementTriedBeforeIsNotOfferedAgainForTheDividend() {
+        SearchRegion held = READ.region()
+                .assuming(new LinearForm<>(ExactRatio.of(-100), Map.of(term("x"), ExactRatio.ONE,
+                        term("y"), ExactRatio.ONE)), Rel.EQ).taken()
+                .assuming(new LinearForm<>(ExactRatio.of(-100),
+                        Map.of(term("z"), ExactRatio.ONE)), Rel.EQ).taken();
+        Standing standing = dividendIsXPlusYAndZIsAdded();
+        WitnessSearch looking = NothingTheDeclarationsRefuse.at(path("x"), path("y"), path("z"));
+
+        Realization first = new LevelRealizer().realize(standing, held, looking);
+        Realization.Found built = assertInstanceOf(Realization.Found.class, first);
+
+        Realization again = new LevelRealizer().realize(standing, held, looking,
+                new ValuesTried(List.of(built.fixing())));
+
+        Realization.Found other = assertInstanceOf(Realization.Found.class, again);
+        assertNotEquals(sameOnes(built), sameOnes(other),
+                "the arrangement that did not stand is not handed back");
+    }
+
+    /** What an arrangement puts at each of its targets, to compare two of them. */
+    private static Map<String, ExactRatio> sameOnes(Realization.Found found) {
+        Map<String, ExactRatio> out = new LinkedHashMap<>();
+        found.fixing().forEach((target, place) ->
+                out.put(target.toString(), Count.number(place).exactly()));
+        return out;
+    }
+
+    /** {@code Int.floorMod(x + y, 257) - z}, at nought. */
+    private static Standing dividendIsXPlusYAndZIsAdded() {
+        Map<NumericTerm, ExactRatio> dividend = new LinkedHashMap<>();
+        dividend.put(term("x"), ExactRatio.ONE);
+        dividend.put(term("y"), ExactRatio.ONE);
+        Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
+        on.put(term("x"), Carrier.WHOLE);
+        on.put(term("y"), Carrier.WHOLE);
+        return new Standing.OfARemainderAndAForm(new LinearForm<>(ExactRatio.ZERO, dividend), on,
+                DIVISOR, new LinearForm<>(ExactRatio.ZERO,
+                        Map.of(term("z"), ExactRatio.ONE.negated())),
+                Map.of(term("z"), Carrier.WHOLE), LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
     }
 
     /** {@code Int.floorMod(x, 257) - y}, at nought. */
