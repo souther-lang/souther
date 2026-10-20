@@ -6372,26 +6372,8 @@ final class Pullback {
         if (itself != null) {
             return itself;
         }
-        TermPath from = reorderedFrom(walked, reads);
+        TermPath from = reads.containerWhoseEveryElementIsIn(walked, read.rules().newtypes());
         return from == null ? null : new DecisionSubject.AnInput(from);
-    }
-
-    /**
-     * The list {@code walked} holds every element of, each as often, though it is no place a row
-     * writes — or null where it is no such thing.
-     *
-     * <p>Only a list that stands inside no other container. The elements of what a flattening made
-     * stand inside two, and some of them meeting a statement is some inner list holding one that
-     * does: no statement about the elements of one container says that.
-     */
-    private TermPath reorderedFrom(Core walked, InputReads reads) {
-        if (!(reads.everyElementOf(walked, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath elements))
-                || !(elements.steps().getLast() instanceof TermPath.Step.Element)) {
-            return null;
-        }
-        List<TermPath> holding = elements.containersHoldingIt();
-        return holding.size() == 1 ? holding.getFirst() : null;
     }
 
     /** What a dependency answered, or a place inside it, that {@code e} is — or null where it is
@@ -7324,7 +7306,8 @@ final class Pullback {
         }
         Core walked = args.get(walk.walked());
         TermPath list = reads.pathOf(walked, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at) ? at : reorderedFrom(walked, reads);
+                instanceof PathResolution.At(TermPath at) ? at
+                        : reads.containerWhoseEveryElementIsIn(walked, read.rules().newtypes());
         if (list == null) {
             return null;
         }

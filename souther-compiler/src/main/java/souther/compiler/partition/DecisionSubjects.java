@@ -5,6 +5,7 @@ import souther.compiler.cst.CstLexer;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.ExactRatio;
@@ -21,6 +22,7 @@ import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -129,10 +131,20 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     /**
      * The number {@code measured} takes of what a dependency answered, or null where the value it
      * is taken of is no answer. What this adds to the measure is only whose value it is taken of.
+     *
+     * <p>A number that does not turn on the order of the elements is the number of the answer
+     * whose every element the value holds, each as often, as the input's is of the container
+     * ({@code inputs.InputNumber}): what {@code List.reverse} answered of a list adds up to what the
+     * list does.
      */
     DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(NumericMeasures.Measured measured,
                                                  InputReads at) {
-        if (!(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer answer)) {
+        DecisionSubject.AnAnswer answer = anAnswer(measured.of(), at);
+        if (answer == null && DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                instanceof TakenAs how && how.theSameInEveryOrder()) {
+            answer = anAnswerWhoseEveryElementIsHeldBy(measured.of(), at);
+        }
+        if (answer == null) {
             return null;
         }
         return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),

@@ -29,9 +29,9 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
             data Few
             data Item = { sku: String, quantity: Int, active: Bool }
 
-            behavior decide : (xs: List<Item>) -> Many | Few
+            behavior decide : (xs: List<Item>, ns: List<Int>) -> Many | Few
 
-            let decide (xs) =
+            let decide (xs, ns) =
                 if <number> >= 4
                 then Many else Few
             """;
@@ -43,7 +43,7 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
             data Few
             data Item = { sku: String, quantity: Int, active: Bool }
             data Cart = { items: List<Item> }
-            data Snap = { rows: List<Item> }
+            data Snap = { rows: List<Item>, ns: List<Int> }
             behavior readSnap : (order: Cart) -> Snap
                 constructs Snap
             behavior decide : (order: Cart) -> Many | Few
@@ -87,6 +87,13 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         shapes.put("List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))", false);
         shapes.put("List.fold((acc, x) -> acc + x, 0,"
                 + " List.sortBy(x -> x, List.map(.quantity, ROWS)))", false);
+        // A total taken directly of a list in another order is the total of the list, and one of
+        // a list that kept some of the elements is not.
+        shapes.put("List.sum(NUMS)", true);
+        shapes.put("List.sum(List.reverse(NUMS))", true);
+        shapes.put("List.sum(List.sortBy(x -> x, NUMS))", true);
+        shapes.put("List.sum(List.take(2, NUMS))", false);
+        shapes.put("List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))", false);
         return shapes;
     }
 
@@ -104,11 +111,13 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         assertFalse(shapes().isEmpty());
         shapes().forEach((shape, read) -> {
             String ofTheInput = reportOf(
-                    OF_THE_INPUT.replace("<number>", shape.replace("ROWS", "xs")));
+                    OF_THE_INPUT.replace("<number>",
+                            shape.replace("ROWS", "xs").replace("NUMS", "ns")));
             assertEquals(read, !ofTheInput.contains("not read: comparison"),
                     () -> "over the input: " + shape + "\n" + ofTheInput);
             String ofTheResponse = reportOf(OF_THE_RESPONSE.replace("<number>",
-                    shape.replace("ROWS", "readSnap(order).rows")));
+                    shape.replace("ROWS", "readSnap(order).rows")
+                            .replace("NUMS", "readSnap(order).ns")));
             assertEquals(read, !ofTheResponse.contains("not read: comparison"),
                     () -> "over the response: " + shape + "\n" + ofTheResponse);
         });
