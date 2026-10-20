@@ -44,7 +44,7 @@ jobs:
       # Apart from the artifacts, so the notes are the release's text and not one of its assets.
       - name: Upload the release notes to the workflow run
         if: github.ref_type == 'tag'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: souther-release-notes
           path: notes/release-notes.md
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
           java-version: '25'
@@ -205,7 +205,7 @@ jobs:
           if ($entries -notcontains $control) { throw "the uninstall took $control off PATH" }
 
       - name: Upload the distributions to the workflow run
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: souther-windows
           path: souther-cli/target/dist/*.zip
@@ -220,7 +220,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
           java-version: '25'
@@ -245,7 +245,7 @@ jobs:
       # The Windows distributions are built on a runner of their own, and the checksums below cover
       # whatever this directory holds, so they are fetched into it before those are written.
       - name: Collect the Windows distributions
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: souther-windows
           path: artifacts/
@@ -260,7 +260,7 @@ jobs:
           mv SHA256SUMS artifacts/
 
       - name: Upload the artifacts to the workflow run
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: souther-release
           path: artifacts/*
@@ -278,19 +278,19 @@ jobs:
       attestations: write
     steps:
       - name: Fetch the artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: souther-release
           path: artifacts/
 
       - name: Fetch the release notes
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: souther-release-notes
           path: notes/
 
       - name: Attest the provenance of the artifacts
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: artifacts/*
 
