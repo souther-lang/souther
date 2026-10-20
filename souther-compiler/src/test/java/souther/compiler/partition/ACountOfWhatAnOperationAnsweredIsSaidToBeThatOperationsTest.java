@@ -35,11 +35,11 @@ class ACountOfWhatAnOperationAnsweredIsSaidToBeThatOperationsTest {
                 """.formatted(condition);
     }
 
-    /** The pieces of a split at one code point, of a string a case mapping wrote. */
+    /** The pieces of a split at one code point, of a string an operation put together. */
     @Test
-    void thePiecesOfALowercasedStringNameTheCaseMapping() {
-        assertStoppedAt(model("List.length(String.split(\"@\", String.lowercase(email))) >= 2"),
-                "String.lowercase");
+    void thePiecesOfAStringPutTogetherNameWhatPutItTogether() {
+        assertStoppedAt(model("List.length(String.split(\"@\", String.append(email, \"x\"))) >= 2"),
+                "String.append");
     }
 
     /** Whether what is left of a string put together holds something, once trimmed. */

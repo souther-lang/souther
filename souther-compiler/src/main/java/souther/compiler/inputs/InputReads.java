@@ -2627,6 +2627,32 @@ public final class InputReads {
     }
 
     /**
+     * {@code e} followed through the calls that handed it over, and nothing else: a parameter of a
+     * body a call entered is the value the call handed it, read where the call stands, and that
+     * value is followed in turn if it is one too.
+     *
+     * <p>Beside {@link #denotes}, which goes on through whatever a name stands for, an element of
+     * what a walk answered included. A reader asking which container a name is an element of
+     * needs the name that is one, and past it is the walk's answer, which is no longer an element.
+     */
+    public Denotation handedOver(Core e) {
+        Core at = Core.withoutStanding(e);
+        InputReads reads = this;
+        Set<BindingId> met = new HashSet<>();
+        while (at instanceof Core.Read read && met.add(read.binding())) {
+            if (reads.applied.given().get(read.binding()) instanceof Denotation given) {
+                at = Core.withoutStanding(given.value());
+                reads = given.at();
+            } else if (reads.names.roleOf(read.binding()) instanceof BindingRole.Alias(var value)) {
+                at = Core.withoutStanding(value);
+            } else {
+                break;
+            }
+        }
+        return new Denotation(at, reads);
+    }
+
+    /**
      * What {@code e} stands for, through however many names were given to it.
      *
      * <p>A name is a name and not another value: a closure bound once and read under a second name

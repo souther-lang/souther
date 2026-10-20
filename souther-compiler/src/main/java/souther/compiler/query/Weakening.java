@@ -95,7 +95,8 @@ public sealed interface Weakening {
                  BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
                  ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
                  DecisionOfRowUnreadable _, DecisionRunNotWatched _, DecisionRuleReadShort _,
-                 KeyedOverwriteCasesUnmeasured _, MeetingsNotPlaced _ -> List.of();
+                 KeyedOverwriteCasesUnmeasured _, ReachableNodeCasesUnmeasured _,
+                 MeetingsNotPlaced _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
             case BorderReadingsNotExhausted it -> it.limits();
             case ModelReadingIncomplete it -> it.cause().figures();
@@ -739,6 +740,29 @@ public sealed interface Weakening {
          * What is missing is a capacity: this compiler writes no row holding a key twice, and a
          * run allowed more of everything writes none either.
          */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A decision of a body turns on a search from a node for some node below it, and what that
+     * decides was not measured.
+     *
+     * <p>The search is read as it is: what it asks of the node it starts at, and of that node having
+     * nothing below. What is not established is what a node further down meeting what it asks does
+     * to the answer, because a value holding values of its own kind is written so deep and no
+     * deeper, so no row is written toward such a node. About the behavior and not about a rule:
+     * every decision downstream of the search rests on it.
+     */
+    record ReachableNodeCasesUnmeasured(String behavior) implements Weakening {
+
+        public ReachableNodeCasesUnmeasured {
+            Objects.requireNonNull(behavior, "a search is that of some body");
+        }
+
+        /** What is missing is a capacity to write rows, which a run allowed more of does not add. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;

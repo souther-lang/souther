@@ -158,7 +158,8 @@ sealed interface ConditionPlacement {
                     && there.transformation().equals(taken.transformation());
             case NumericTerm.CodePointClassCount count ->
                     measured instanceof NumericTerm.CodePointClassCount there
-                            && there.counted().equals(count.counted());
+                            && there.counted().equals(count.counted())
+                            && there.through().equals(count.through());
             case NumericTerm.CodePointValueSum _ ->
                     measured instanceof NumericTerm.CodePointValueSum;
             // No number a position answers is this one.

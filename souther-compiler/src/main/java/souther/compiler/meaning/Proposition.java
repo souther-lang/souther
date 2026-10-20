@@ -131,6 +131,9 @@ public sealed interface Proposition {
             // A piece of a string is whatever the statement it is read inside says it is, and
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
+            case Quantity.APieceOf piece -> mayBeAnElementOf(piece.string(), container);
+            case Quantity.IsAmongThePieces among -> mayBeAnElementOf(among.value(), container)
+                    || mayBeAnElementOf(among.string(), container);
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
@@ -1137,6 +1140,20 @@ public sealed interface Proposition {
     }
 
     /**
+     * Whether {@code stated} is, or holds, a search from a node for some node below it meeting
+     * something.
+     */
+    static boolean saysASearchReachesBelow(Proposition stated) {
+        return switch (stated) {
+            case SomeReachable _ -> true;
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _ ->
+                    stated.partsHeld().stream().anyMatch(Proposition::saysASearchReachesBelow);
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
+                 Carried _, LastToHold _ -> false;
+        };
+    }
+
+    /**
      * Whether some part of {@code stated} is about what a dependency answered, rather than about
      * the input alone.
      *
@@ -1215,7 +1232,8 @@ public sealed interface Proposition {
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
-                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _ -> false;
+                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _,
+                 Quantity.APieceOf _, Quantity.IsAmongThePieces _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     && namesNothingOfTheInput(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
@@ -1236,7 +1254,8 @@ public sealed interface Proposition {
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
-                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _ -> false;
+                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _,
+                 Quantity.APieceOf _, Quantity.IsAmongThePieces _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()

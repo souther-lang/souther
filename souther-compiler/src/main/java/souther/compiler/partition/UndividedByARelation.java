@@ -181,21 +181,43 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * every other value of each leaving it either way. A place in neither is one nothing is shown
      * of.
      *
-     * @param undivided the places shown undivided
-     * @param settled   each term shown to be settled by some of its values, and those values
+     * @param undivided  the places shown undivided
+     * @param settled    each term shown to be settled by some of its values, and those values
+     * @param rowsArrive whether any row comes along the way this is of; where none does it says
+     *                   nothing of any row, and a way put beside it is what the two come to
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm.FromOnePosition,
-                                WhatARelationLeavesUndivided.Leaves.Settled> settled) {
+                                WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                        boolean rowsArrive) {
 
         WhatItLeaves {
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
         }
 
+        WhatItLeaves(Set<FilingCoordinate> undivided,
+                     Map<NumericTerm.FromOnePosition,
+                             WhatARelationLeavesUndivided.Leaves.Settled> settled) {
+            this(undivided, settled, true);
+        }
+
+        /** What a way that no row comes along shows of {@code places}: every one of them, of the
+         *  rows there are none of. */
+        static WhatItLeaves ofAWayNoRowComesAlong(Set<FilingCoordinate> places) {
+            return new WhatItLeaves(places, Map.of(), false);
+        }
+
         /** What both this and {@code other} show, for rows that may come along either: a place
-         *  shown one way along one and another way along the other is shown nothing of. */
+         *  shown one way along one and another way along the other is shown nothing of. A way no
+         *  row comes along adds no row, so it adds nothing to what the other shows. */
         WhatItLeaves alongBoth(WhatItLeaves other) {
+            if (!rowsArrive) {
+                return other;
+            }
+            if (!other.rowsArrive) {
+                return this;
+            }
             Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
             both.retainAll(other.undivided);
             Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> alike =
@@ -254,6 +276,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         each.getValue());
                 case Quantity.WhatAnOperationAnswers answers -> new Side(
                         answers.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
+                        each.getValue(), null, null);
+                case Quantity.APieceOf piece -> new Side(
+                        piece.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
+                        each.getValue(), null, null);
+                case Quantity.IsAmongThePieces among -> new Side(
+                        among.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
                         each.getValue(), null, null);
                 case Quantity.OfABinding bound -> new Side(List.of(), each.getValue(), null,
                         bound.kept().orElse(null));
@@ -582,6 +610,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
+        WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
+                conditions.stream().map(OnAWay::affine).toList(), askedAsAStatement());
+        if (decided.noRowArrives()) {
+            return WhatItLeaves.ofAWayNoRowComesAlong(places());
+        }
+        if (decided.relationIsDecided()) {
+            out.addAll(places());
+            return new WhatItLeaves(out, settled);
+        }
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
         TiedOnTheWay tied = TiedOnTheWay.of(conditions, read);
@@ -678,6 +715,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? each.leavingAlone(OnAWay.PartsLeftAlone.MONTHS_AND_DAYS) : each);
         }
         return new LeftToTheCalendar(out, years);
+    }
+
+    /** The relation as a statement is held, the sides weighed and added to the constant and held
+     *  against nought, or null where it is not of terms of the input. A term the sides weigh to
+     *  nothing is not in the form, as in every form. */
+    private TakenConstraint.Affine askedAsAStatement() {
+        if (kind != Kind.AFFINE || constant == null || sides.isEmpty()) {
+            return null;
+        }
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        for (Side each : sides) {
+            if (each.term() == null || each.kept() != null
+                    || coefs.merge(each.term(), each.weight(),
+                            (one, other) -> one.plus(other).orNull()) == null) {
+                return null;
+            }
+        }
+        coefs.values().removeIf(ExactRatio::isZero);
+        return coefs.isEmpty() ? null
+                : new TakenConstraint.Affine(new LinearForm<>(constant, coefs), relation);
     }
 
     /** The conditions of a way, marked, and the years its statements of years put the dates in,

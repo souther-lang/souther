@@ -173,6 +173,9 @@ final class Reasons {
                         "the containers mixing the cases a computed number is chosen by";
                 case TREES_WRITTEN_FOR_A_COUNT ->
                         "the trees that hold a count of nodes deeper than one node below the root";
+                case STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR ->
+                        "the strings whose case conversion holds a count of code points of a"
+                                + " class by other code points than the class's own";
             });
         }
         return String.join(", ", out);

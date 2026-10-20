@@ -32,29 +32,26 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     /**
      * A position the walk could not reach into, which is a fact no question carries.
      *
-     * <p>Nothing was read there and so nothing was found wanting: what the list holds returns to the
-     * declaration the walk has already opened, so the walk stops there and raises no question this
-     * could be short of. Both measures are short of it, because what is not known about the
-     * position is not known for either.
+     * <p>Nothing was read there and so nothing was found wanting: the type of {@code c} comes back
+     * to itself with no base to read a shape from, so the walk cannot enter it and raises no
+     * question this could be short of. Both measures are short of it, because what is not known
+     * about the position is not known for either.
      *
      * <p><b>The {@code Bool} is what makes the model say two things.</b> This is about the two
      * measures answering apart, and a position has to be measured for one of them to be the answer
      * it is. Without it both measures say the same word for different reasons, and the test would
-     * pass over the two being merged. So the field is part of what is being said and is asserted
-     * below rather than left standing as scenery.
+     * pass over the two being merged. So the parameter is part of what is being said and is
+     * asserted below rather than left standing as scenery.
      */
     private static final String RULES_NOT_REACHED = """
             module example.notreached
 
-            data Req = { more: List<Req>, flag: Bool }
+            data Cyclic = Cyclic
             data Res = { n: Int }
 
-            behavior f : (r: Req) -> Res
+            behavior f : (c: Cyclic, flag: Bool) -> Res
                 constructs Res
-            let f (r) = Res { n = 0 }
-
-            example f
-                | "one" : (Req { more = [], flag = true }) -> Res { n = 0 }
+            let f (c, flag) = Res { n = 0 }
             """;
 
     /**
@@ -93,13 +90,9 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
         souther.compiler.query.Measure<List<souther.compiler.query.BorderAssessment>> reading =
                 readingFor(RULES_NOT_REACHED, "f");
 
-        // What the partition did measure, so that the two answers below are one model saying two
-        // things rather than one measure with nothing in it. A fixture whose every position is out
-        // of reach says `NOT_MEASURED` on both sides for two different reasons, and reading that as
-        // this would be the merge this exists to catch.
-        assertEquals(List.of("r.flag"),
+        assertEquals(List.of("flag"),
                 evidence.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList(),
-                () -> "the mapping divides nothing, so the `Bool` is the position measured here");
+                () -> "nothing divides the mapping, so the `Bool` is the position measured here");
 
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(evidence.partitioned()),
                 () -> "partition: " + evidence.partitioned());

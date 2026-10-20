@@ -493,11 +493,9 @@ public sealed interface BlockReason {
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                // A type nothing could interpret, a path returning to a declaration it has been
-                // through, and rules nothing reached. None of them is a figure anything was
-                // compared against.
-                case TypeUnresolved _, RecursiveExpansion _,
-                     ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
+                // A type nothing could interpret and rules nothing reached. Neither is a figure
+                // anything was compared against.
+                case TypeUnresolved _, ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
                 // And the one figure among them: a reading that stopped at the depth it could
                 // afford, which a run allowed to read further need not stop at.
                 case ValueRulesNotReachedPastDepthLimit _ -> RunSensitivity.MAY_CHANGE;
@@ -511,7 +509,7 @@ public sealed interface BlockReason {
         @Override
         default List<Figure> figures() {
             return switch (this) {
-                case TypeUnresolved _, RecursiveExpansion _, ValueRulesNotReached _ -> List.of();
+                case TypeUnresolved _, ValueRulesNotReached _ -> List.of();
                 case ValueRulesNotReachedPastDepthLimit _ -> List.of(
                         WorkFigure.FIELDS_A_RULE_IS_FOLLOWED_DOWN.at(GuaranteeWalk.FIELDS_SEEDED));
             };
@@ -740,30 +738,6 @@ public sealed interface BlockReason {
      * about such a model, so this is a position a report is asked about and cannot be answered for.
      */
     record TypeUnresolved() implements AboutThePosition {}
-
-    /**
-     * Reading on would open a declaration this path has already opened, so what is under the
-     * position is not unfolded again.
-     *
-     * <p><b>Not that the declaration is recursive.</b> A type that names itself is an ordinary
-     * thing to declare and an ordinary thing to hold a value of; what this says is that one
-     * derivation does not unfold one declaration twice on one path, which is a bound this reading
-     * puts on itself. Named the other way, an author would read a report of their model where there
-     * is a report of this compiler.
-     *
-     * @param declaration what the input returned to
-     * @param openedAt    where the path opened it the first time, which is the far end of the cycle
-     */
-    record RecursiveExpansion(souther.compiler.types.TypeSymbol declaration, TermPath openedAt)
-            implements AboutThePosition {
-
-        public RecursiveExpansion {
-            if (declaration == null || openedAt == null) {
-                throw new IllegalArgumentException(
-                        "a return to nowhere is not one: " + declaration + " at " + openedAt);
-            }
-        }
-    }
 
     /**
      * A comparison naming the position is written in a form no reader here takes apart: the

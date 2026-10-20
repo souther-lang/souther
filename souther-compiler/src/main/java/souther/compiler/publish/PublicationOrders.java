@@ -379,6 +379,7 @@ public final class PublicationOrders {
                             CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
                             CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
                             CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT,
+                            CompositionRepertoire.STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 
@@ -486,6 +487,7 @@ public final class PublicationOrders {
                 WeakeningWord.DECISION_NOT_FULLY_READ,
                 WeakeningWord.DECISION_RULE_READ_SHORT,
                 WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED,
+                WeakeningWord.REACHABLE_NODE_CASES_UNMEASURED,
                 WeakeningWord.DECISION_OF_ROW_UNREADABLE,
                 WeakeningWord.DECISION_RUN_NOT_WATCHED,
                 WeakeningWord.REWRITE_UNDECIDED)) {

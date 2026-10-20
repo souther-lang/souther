@@ -264,6 +264,7 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                         CompositionBudget.PATHS_OF_A_DECISION_READ)));
         out.put("DecisionRuleReadShort", new Weakening.DecisionRuleReadShort("b"));
         out.put("KeyedOverwriteCasesUnmeasured", new Weakening.KeyedOverwriteCasesUnmeasured("b"));
+        out.put("ReachableNodeCasesUnmeasured", new Weakening.ReachableNodeCasesUnmeasured("b"));
         Replacement rewrite = new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                 new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1)));
         for (ReplacementEvidence.Undecided.Way way : everyWayARewriteIsLeftOpen()) {

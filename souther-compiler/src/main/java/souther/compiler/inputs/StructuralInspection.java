@@ -138,13 +138,10 @@ public sealed interface StructuralInspection {
         /**
          * The continuation under the position was not made, and why.
          *
-         * <p>Not one reason but three kinds of reason, and they are not the same claim about the
-         * model. A traversal this compiler cannot express and a type it could not interpret say
-         * something about what is there; a {@link BlockReason.RecursiveExpansion} says the path
-         * returned to a declaration it had already opened, and the positions under it are the ones
-         * above it again. Read as "the model puts nothing reachable under this position", the third
-         * is a claim nobody made — and it is the one that had a second walk built beside this one,
-         * because everything the reading did not enter looked unreachable rather than unasked.
+         * <p>A traversal this compiler cannot express and a type it could not interpret say
+         * something about what is there. Read as "the model puts nothing reachable under this
+         * position", a stop is a claim nobody made, so the reason is kept for what the reading
+         * could not enter and not for where it chose to end a listing.
          *
          * <p>{@code why} is the reason this position is left with if nothing else answers for it,
          * not a verdict. A rule a body writes may still draw a line on this same position — a
@@ -194,9 +191,9 @@ public sealed interface StructuralInspection {
      *
      * <p><b>What is under a shape and how far one reading follows it are two questions, and only
      * the first is answered here.</b> A reading that has already opened the declaration this
-     * position names stops before it, and it stops there by answering {@link #stoppedAt} instead of
-     * asking this — so nothing about one walk's history is decided in the one statement of what a
-     * type structurally has.
+     * position names ends its listing there and does not follow what is under it, which is a
+     * matter of the walk's history and is decided by the walk — so nothing of it is in the one
+     * statement of what a type structurally has.
      *
      * @param shape    the position's shape, already proved to be one a partition is derived from
      * @param declared the distinctions the position's type states, as the one reading of them

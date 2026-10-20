@@ -49,9 +49,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * nothing produces is one to take out of the vocabulary or to give a way in, and an entry saying so
  * would make this test agree that a promise need not be kept.
  *
- * <p><b>Which is narrower than what the schema admits, by one word.</b> The field's vocabulary out
- * there also holds the walk stopping after a count of steps, which nothing writes any more and
- * which no reason of this compiler projects to — a word documents of this version carry because
+ * <p><b>Which is narrower than what the schema admits, by two words.</b> The field's vocabulary out
+ * there also holds the walk stopping after a count of steps and the input returning to a
+ * declaration already read, which nothing writes any more and which no reason of this compiler
+ * projects to — words documents of this version carry because
  * they were written before it stopped being written, kept and accounted for where the two surfaces
  * are held to their own producers
  * ({@code WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest}). Enumerated here as well, it
@@ -354,16 +355,6 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
 
                 behavior f : (n: N) -> Answer
                 let f (n) = Yes
-                """.formatted(ANSWER)));
-        // The walk reaches this declaration again under itself, so what stands below is what stands
-        // below the one it already read.
-        out.put(UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ, of("""
-                module m
-                %s
-                data Node = { next: Node?, n: Int }
-
-                behavior f : (node: Node) -> Answer
-                let f (node) = if node.n > 3 then Yes else No
                 """.formatted(ANSWER)));
         // A newtype spine that comes back to itself: the walk over the names ends with the name
         // still on, so there is no base to read a shape from.

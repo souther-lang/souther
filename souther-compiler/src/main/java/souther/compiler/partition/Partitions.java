@@ -305,8 +305,10 @@ public final class Partitions {
                 case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                         .everyAnswerItCanGiveHasASourceValue(taken.operation());
                 // A string holding any number of the code points of a class is written by
-                // repeating one of them, as a string of any length is.
-                case NumericTerm.CodePointClassCount _ -> true;
+                // repeating one of them, as a string of any length is — and, counted in what a
+                // conversion makes of it, by repeating one the conversion leaves as it is.
+                case NumericTerm.CodePointClassCount count ->
+                        TermRealizations.writesEveryCountOf(count.counted(), count.through());
                 // Every whole number from nought up is what the code points of some string come
                 // to: none for nought, and for any larger number code points that are no
                 // surrogates, chosen to add up to it.

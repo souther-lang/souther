@@ -22,6 +22,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -65,7 +66,7 @@ class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
             Map.of(DefaultBoundOperationFacts.get().piecesOf(CHARACTERS).string(), TITLE));
 
     private static NumericTerm.CodePointClassCount counting(TermPath of, CodePointClass counted) {
-        return NumericTerm.CodePointClassCount.of(of, counted, Type.STRING,
+        return NumericTerm.CodePointClassCount.of(of, counted, CaseMapping.NONE, Type.STRING,
                 ScopedDeclarations.wrapsOf(SYMBOLS));
     }
 

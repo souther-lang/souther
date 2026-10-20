@@ -2,7 +2,7 @@
   "schemaVersion" : 24,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "rule_unread", "position_not_read", "rewrite_undecided" ],
+  "weakening" : [ "rule_unread", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -8818,7 +8818,7 @@
   }, {
     "module" : "conformance.searching",
     "status" : "partial",
-    "weakening" : [ "position_not_read", "rewrite_undecided" ],
+    "weakening" : [ "reachable_node_cases_unmeasured", "rewrite_undecided" ],
     "incompleteness" : [ ],
     "declarations" : [ ],
     "behaviors" : [ {
@@ -10178,7 +10178,7 @@
       } ],
       "rowsThatDoNotHold" : [ ],
       "status" : "partial",
-      "weakening" : [ "position_not_read" ],
+      "weakening" : [ "reachable_node_cases_unmeasured" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -10211,13 +10211,11 @@
       "partition" : {
         "axesMeasure" : {
           "status" : "unavailable",
-          "reason" : "the_reading_did_not_run_out",
-          "weakening" : [ "position_not_read" ]
+          "reason" : "nothing_is_divided"
         },
         "boundariesMeasure" : {
           "status" : "unavailable",
-          "reason" : "the_reading_did_not_run_out",
-          "weakening" : [ "position_not_read" ]
+          "reason" : "no_rule_draws_a_line"
         },
         "axes" : [ ],
         "claimsOffAxis" : [ ],
@@ -10231,10 +10229,7 @@
           "unknown" : 0
         },
         "notDerivable" : [ "zone.count", "zone.zones" ],
-        "notRead" : [ {
-          "position" : "zone.zones[*]",
-          "reason" : "returns_to_a_declaration_already_read"
-        } ]
+        "notRead" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -10285,7 +10280,8 @@
       },
       "decision" : {
         "coverage" : {
-          "status" : "complete"
+          "status" : "partial",
+          "weakening" : [ "reachable_node_cases_unmeasured" ]
         },
         "obligations" : [ {
           "obligationId" : {
@@ -10345,11 +10341,6 @@
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "zone.zones"
-      }, {
-        "kind" : "partition_not_read",
-        "disposition" : "reported",
-        "subject" : "zone.zones[*]",
-        "reason" : "returns_to_a_declaration_already_read"
       } ]
     }, {
       "name" : "everyZoneStocked",
@@ -10404,7 +10395,7 @@
       } ],
       "rowsThatDoNotHold" : [ ],
       "status" : "partial",
-      "weakening" : [ "position_not_read" ],
+      "weakening" : [ "reachable_node_cases_unmeasured" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -10437,13 +10428,11 @@
       "partition" : {
         "axesMeasure" : {
           "status" : "unavailable",
-          "reason" : "the_reading_did_not_run_out",
-          "weakening" : [ "position_not_read" ]
+          "reason" : "nothing_is_divided"
         },
         "boundariesMeasure" : {
           "status" : "unavailable",
-          "reason" : "the_reading_did_not_run_out",
-          "weakening" : [ "position_not_read" ]
+          "reason" : "no_rule_draws_a_line"
         },
         "axes" : [ ],
         "claimsOffAxis" : [ ],
@@ -10457,10 +10446,7 @@
           "unknown" : 0
         },
         "notDerivable" : [ "zone.count", "zone.zones" ],
-        "notRead" : [ {
-          "position" : "zone.zones[*]",
-          "reason" : "returns_to_a_declaration_already_read"
-        } ]
+        "notRead" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -10511,7 +10497,8 @@
       },
       "decision" : {
         "coverage" : {
-          "status" : "complete"
+          "status" : "partial",
+          "weakening" : [ "reachable_node_cases_unmeasured" ]
         },
         "obligations" : [ {
           "obligationId" : {
@@ -10571,11 +10558,6 @@
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "zone.zones"
-      }, {
-        "kind" : "partition_not_read",
-        "disposition" : "reported",
-        "subject" : "zone.zones[*]",
-        "reason" : "returns_to_a_declaration_already_read"
       } ]
     } ]
   } ],
