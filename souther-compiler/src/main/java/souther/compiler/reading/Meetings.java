@@ -1,10 +1,12 @@
 package souther.compiler.reading;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.ValueArrivals;
+import souther.compiler.semantics.Accumulation;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -144,11 +146,35 @@ final class Meetings {
                 absorbed.addAll(inner);
                 yield operands;
             }
-            case Core.Call call -> call.args().size() > 1 ? call.args() : null;
+            case Core.Call call -> {
+                List<Core> written = numbersWrittenOutIn(call);
+                yield written != null ? written : call.args().size() > 1 ? call.args() : null;
+            }
             case Core.PreservedCall call -> call.args().size() > 1 ? call.args() : null;
             case Core.Apply apply -> apply.args().size() > 1 ? apply.args() : null;
             default -> null;
         };
+    }
+
+    /**
+     * The elements of the list written out in {@code call}, where the call adds or multiplies the
+     * elements of its only argument; null otherwise.
+     *
+     * <p>Which operations walk a container, and how, is the library's to say. Such a call consumes
+     * the elements into one value as an operator does its operands, so each element is a value
+     * making it. A list that is only built is no meeting, and neither is an operation that joins
+     * what it is given rather than combining it into a number.
+     */
+    private static List<Core> numbersWrittenOutIn(Core.Call call) {
+        if (!(call.fn() instanceof Core.Reached.OfKernel kernel) || call.args().size() != 1) {
+            return null;
+        }
+        Accumulation walk = DefaultBoundOperationFacts.get().accumulation(kernel.name().denotes());
+        if (walk == null || walk.combine() == Accumulation.Combine.APPEND) {
+            return null;
+        }
+        return Core.withoutStanding(call.args().getFirst()) instanceof Core.ListLit list
+                ? list.elements() : null;
     }
 
     /** The values one run of {@code op} is over, and the nodes the run is written as. */
