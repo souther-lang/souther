@@ -323,6 +323,24 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ClosureEntries", "visit", "(" + core + "L" + c
                 + "check/ClosureEntries$Standing;)V", Reading.STRUCTURE,
                 "finds the places a closure is used, which no field read is");
+        row(out, c + "reading/KeptElements", "callWritten",
+                "(" + core + "L" + c + "inputs/InputReads;L" + CORE + "$Call;)L" + c
+                        + "reading/KeptElements$Written;", Reading.STRUCTURE,
+                "finds the call of an operation that an expansion stands for, by the occurrence it"
+                        + " applies, entering each scope on the way, which no field read is");
+        row(out, c + "reading/ValueChoices", "forksInParts", "(" + core + "L" + c
+                + "inputs/InputReads;L" + c + "check/ElementsWrittenOut$Reading;L" + c
+                + "check/DeclarationNewtypes;I"
+                + "Ljava/util/Set;Ljava/util/List;)V", Reading.STRUCTURE,
+                "looks for a fork in a value and in what its names stand for, which no field read is:"
+                        + " a projection is its base, and the base is a name followed the same way");
+        row(out, c + "reading/ElementEvaluations", "writes", "(" + core + core + ")Z",
+                Reading.STRUCTURE,
+                "asks whether an expression is written anywhere in another, which no field read"
+                        + " is: a projection is its base, and what is written in the base is"
+                        + " written in it");
+        row(out, c + "reading/KeptElements", "collect", "(" + core + "L" + CORE
+                + "$Binary;Ljava/util/List;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/EmittedClassReferences", "visit", "(" + core + "L" + c + "types/Type;)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/EmittedClassReferences", "visitChildren",

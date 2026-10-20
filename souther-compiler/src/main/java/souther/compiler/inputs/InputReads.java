@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
@@ -412,6 +413,18 @@ public final class InputReads {
         return new InputReads(names.handing(binding, value.value()), narrower, declared,
                 dependencies, new Applied(handed, applied.readings(), applied.taken(),
                         applied.given(), applied.entered()));
+    }
+
+    /**
+     * Whether this reading is on an application of a closure: whether what is read here is
+     * evaluated again on each value the closure is applied to.
+     *
+     * <p>That is a fact about where a thing is written and not about what it reads. A choice
+     * written in a closure's body that reads nothing the closure was handed is still made on every
+     * application.
+     */
+    public boolean isOnAnApplication() {
+        return !applied.handed().isEmpty();
     }
 
     /** Whether an application this reading is on handed {@code binding} one of the values a
@@ -831,13 +844,16 @@ public final class InputReads {
     /** The same, of an occurrence: its value and each thing it was kept by. */
     private ReadMeaning.Occurrence carryingWhatIsTaken(ReadMeaning.Occurrence occurrence) {
         return new ReadMeaning.Occurrence(carryingWhatIsTaken(occurrence.value()),
-                occurrence.keptWhere().stream().map(this::carryingWhatIsTaken).toList());
+                occurrence.keptWhere().stream().map(this::carryingWhatIsTaken).toList(),
+                occurrence.answered(), occurrence.within());
     }
 
     private ReadMeaning.Occurrence.Kept carryingWhatIsTaken(ReadMeaning.Occurrence.Kept kept) {
         return switch (kept) {
-            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds) ->
-                    new ReadMeaning.Occurrence.Kept.ATruth(carryingWhatIsTaken(truth), holds);
+            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
+                                                    OptionalInt application) ->
+                    new ReadMeaning.Occurrence.Kept.ATruth(carryingWhatIsTaken(truth), holds,
+                            application);
             case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) ->
                     new ReadMeaning.Occurrence.Kept.AnArm(carryingWhatIsTaken(fork), part);
         };
@@ -3293,6 +3309,12 @@ public final class InputReads {
     public PathResolution inTheOrderAt(BindingId binding, TraversalDirection direction,
                                        DeclarationNewtypes newtypes) {
         return InputPath.inTheOrderAt(binding, direction, names, newtypes, this::taken);
+    }
+
+    /** The same, of the elements {@code e} holds ({@link InputPath#inTheOrderOf}). */
+    public PathResolution inTheOrderOf(Core e, TraversalDirection direction,
+                                       DeclarationNewtypes newtypes) {
+        return InputPath.inTheOrderOf(e, direction, names, newtypes, this::taken);
     }
 
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -193,7 +194,10 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                 + " when @B then 1·@B.amount + 1 | deductions[*]})"), named);
     }
 
-    /** Every arm answering the same is an answer the case does not change. */
+    /**
+     * Every arm answering the same is an answer the case does not change: one for each deduction
+     * is how many deductions there are, read as that count is wherever it is written.
+     */
     @Test
     void armsThatAllAnswerAlikeAreThatAnswer() {
         String report = report(guarded(TWO_CASES, """
@@ -201,7 +205,14 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                         | A { amount } -> 1
                         | B { amount } -> 1"""));
         assertFalse(report.contains("when @A"), report);
-        assertFalse(report.contains("not read"), report);
+        String counted = report(guarded(TWO_CASES, "1").replace(
+                "List.sum(List.map(d -> 1, deductions))", "List.length(deductions)"));
+        assertEquals(withoutWhere(counted), withoutWhere(report));
+    }
+
+    /** A report with where each part stands left out: the two spellings differ in length. */
+    private static String withoutWhere(String report) {
+        return report.replaceAll("\\d+:\\d+", "");
     }
 
     /** An arm that is no form of the case's fields leaves the walk a rule nothing read. */

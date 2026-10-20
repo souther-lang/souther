@@ -36,8 +36,8 @@ final class GenerationFixtures {
                            Generator.CandidateCheck check,
                            AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check,
-                new CoverageRead.Read(List.of(), new LinkedHashMap<>(), List.of(), List.of(),
-                        Map.of(),
+                new CoverageRead.Read(List.of(), List.of(), new LinkedHashMap<>(), List.of(),
+                        List.of(), Map.of(),
                         new LinkedHashMap<>(), List.of()),
                 budget);
     }

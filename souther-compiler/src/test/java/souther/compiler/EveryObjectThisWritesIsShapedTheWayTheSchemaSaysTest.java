@@ -263,6 +263,35 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
         assertEquals(List.of(), wrong, "an answer the schema shipped beside it refuses");
     }
 
+    /**
+     * And so is the document of a combination that turns on which element a comparison kept.
+     *
+     * <p>Its decisions are one construct apiece and differ by the visit, a key no other document
+     * carries. The check is of the document and of the key: a writer that stopped writing it would
+     * leave a document the schema accepts and two combinations under one identity.
+     */
+    @Test
+    void soIsTheDocumentOfCombinationsOfWhichElementsAreKept() {
+        JsonNode document = reportOf(Compilation.ofSource("""
+                module m
+
+                data Row = { days: Int, pay: Int }
+
+                behavior total : (first: Row, second: Row) -> Int
+
+                let total (first, second) =
+                    List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ first, second ])))
+
+                example total
+                    | (Row { days = 20, pay = 100 }, Row { days = 5, pay = 200 }) -> 100
+                """, "Main"));
+
+        assertEquals(List.of(), DocumentShape.of(document).wrong(),
+                "a document the schema shipped beside it refuses");
+        assertTrue(document.toString().contains("\"visit\":1"),
+                () -> "the second evaluation is named in an identity: " + document);
+    }
+
     private static JsonNode schema() {
         return DocumentShape.schema();
     }

@@ -470,7 +470,8 @@ final class Pullback {
      */
     private Derivation keeping(ReadMeaning.Occurrence.Kept kept) {
         return switch (kept) {
-            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds) -> {
+            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
+                                                    OptionalInt _) -> {
                 Derivation stated = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
                 yield holds ? stated : new Derivation.UnderADenial(stated, true);
             }
@@ -6435,6 +6436,9 @@ final class Pullback {
                         sumByPositionOverTheStep(measured, standing, step);
                 return byPosition != null ? byPosition : sumOverTheStep(standing, step);
             });
+            if (summed == null) {
+                summed = unlessUnread(() -> sumOfWhatIsKeptByIndex(measured, standing));
+            }
             if (summed != null) {
                 return summed;
             }
@@ -6482,6 +6486,26 @@ final class Pullback {
                 computed == null ? null : subjects.anAnswerHandedInOrder(step.walked(), where);
         return ordered == null ? null : LinearForm.atom(new DecisionAtom.ComputedOverAnAnswer(
                 measured.operation(), ordered.list(), computed, closure.body().type(),
+                ordered.direction()));
+    }
+
+    /**
+     * What {@code walk}, a take or drop, adds up to over the elements it keeps of the list a
+     * dependency answered — or null where it keeps none that way, or the elements are not shown to
+     * be handed in the order the answer lists them or the opposite.
+     *
+     * <p>Some of the elements, so no sum over the answer's own numbers: the sum of each element
+     * weighed one where its position is kept and nought where it is not, over the elements in the
+     * order they were kept in, which is the number the same selection is of a list of the input
+     * ({@link InputNumber#keptByIndexOfAnAnswer}).
+     */
+    private LinearForm<Quantity> sumOfWhatIsKeptByIndex(NumericMeasures.Measured measured,
+                                                        Denotation walk) {
+        InputNumber.KeptOfAList kept = InputNumber.keptByIndexOfAnAnswer(walk, read.rules());
+        DecisionSubjects.AnAnswerInOrder ordered = kept == null ? null
+                : subjects.anAnswerHandedInOrder(kept.list(), walk.at());
+        return ordered == null ? null : LinearForm.atom(new DecisionAtom.ComputedOverAnAnswer(
+                measured.operation(), ordered.list(), kept.computed(), kept.each(),
                 ordered.direction()));
     }
 

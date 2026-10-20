@@ -98,20 +98,21 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 List.of("List.sum(List.mapIndexed((i, x) -> i * x, NUMS))",
                         "List.sum(List.mapIndexed((i, x) -> i * x,"
                                 + " List.reverse(List.reverse(NUMS))))"),
-                List.of("List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, NUMS))"));
+                List.of("List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, NUMS))"),
+                // And a total of the elements a take or drop keeps is one chosen by position.
+                List.of("List.sum(List.take(1, List.reverse(NUMS)))"),
+                List.of("List.sum(List.drop(1, NUMS))"));
     }
 
     /**
-     * Shapes neither side reads. What keeps some of the elements is a sum over those and over no
-     * element of the list: {@code [4, 6]} reversed and taken one of comes to six where both come to
-     * ten. Nor is a sum over what a closure puts end to end, a fold over a map, or a reordering of
-     * the numbers a fold adds read.
+     * Shapes neither side reads. What a filter keeps is a sum over those and over no element of
+     * the list, and which of them turns on what each holds. Nor is a sum over what a closure puts
+     * end to end, a fold over a map, or a reordering of the numbers a fold adds read.
      */
     private static List<String> unread() {
         return List.of(
                 "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))",
                 "List.fold((acc, x) -> acc + x.quantity, 0, List.filter(i -> i.active, ROWS))",
-                "List.sum(List.take(1, List.reverse(NUMS)))",
                 // Sorted, the position an element is at is no position it was written at.
                 "List.sum(List.mapIndexed((i, x) -> i * x, List.sortBy(x -> x, NUMS)))",
                 "List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))",

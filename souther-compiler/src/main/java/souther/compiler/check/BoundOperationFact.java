@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.proof.Slot;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.Arithmetic;
@@ -249,10 +250,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                            DeclaredArgument closure, PieceOfAnElement piece)
             implements OneAboutAnOperation {}
 
-    /** The operation answers the elements of {@code list} from the index {@code count} names on, in
-     *  their order, each once and nothing else. */
-    record HoldsTheElementsFrom(DeclaredOperation operation, DeclaredArgument count,
-                                DeclaredArgument list) implements OneAboutAnOperation {}
+    /** The operation answers the elements of {@code list} whose index stands to the number
+     *  {@code count} names as {@code kept} says, before it or from it on, in their order, each once
+     *  and nothing else. */
+    record HoldsTheElementsByIndex(DeclaredOperation operation, DeclaredArgument count,
+                                   DeclaredArgument list, Rel kept)
+            implements OneAboutAnOperation {}
 
     /** The operation answers what {@code into} holds with {@code value} put in: at most one element
      *  more, each element one of {@code into}'s or {@code value}. */

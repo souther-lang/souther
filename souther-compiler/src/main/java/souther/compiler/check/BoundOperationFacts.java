@@ -467,11 +467,17 @@ public final class BoundOperationFacts {
     public record Assembled(DeclaredArgument source, DeclaredArgument closure,
                             PieceOfAnElement piece) {}
 
-    /** The count and the list {@code operation} answers the elements of that list from that index
-     *  on of, or null where nothing says it does. */
-    public BoundOperationFact.HoldsTheElementsFrom holdsTheElementsFrom(ValueName operation) {
-        return one(BoundOperationFact.HoldsTheElementsFrom.class, operation);
+    /** The count and the list {@code operation} answers the elements of that list kept by that
+     *  index of, and which side of it it keeps — or null where nothing says it does. */
+    public KeptByIndex holdsTheElementsByIndex(ValueName operation) {
+        BoundOperationFact.HoldsTheElementsByIndex held =
+                one(BoundOperationFact.HoldsTheElementsByIndex.class, operation);
+        return held == null ? null : new KeptByIndex(held.count(), held.list(), held.kept());
     }
+
+    /** The count an operation keeps the elements of a list by, that list, and how the index of
+     *  each element kept stands to the count. */
+    public record KeptByIndex(DeclaredArgument count, DeclaredArgument list, Rel kept) {}
 
     /** Which argument {@code operation} puts in which, or null where it puts nothing in. Read by
      *  the proofs of what the library's written operations build, and by no reader of a
@@ -868,6 +874,12 @@ public final class BoundOperationFacts {
     /** The operations that answer what a container holds accumulated. */
     public Set<ValueName> accumulates() {
         return ones(BoundOperationFact.AccumulatesItsContainer.class);
+    }
+
+    /** Whether {@code operation} answers how many elements the container it is given holds. */
+    public boolean answersHowManyItHolds(ValueName operation) {
+        BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven taken = numberTakenOf(operation);
+        return taken != null && taken.how() instanceof TakenAs.HowManyItHolds;
     }
 
     /** The number {@code operation} is declared to answer, taken of which of its arguments, or

@@ -1534,7 +1534,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static Citation whereItIsWritten(Db db, DecisionRuleReading read) {
         return switch (read) {
-            case DecisionRuleReading.AComparisonCameOut(var comparison, var _) -> comparison.at();
+            case DecisionRuleReading.AComparisonCameOut(var comparison, var _, var _) ->
+                    comparison.at();
             case DecisionRuleReading.AnApplicationAnswered(var application, var _) ->
                     application.writtenAt();
             case DecisionRuleReading.AForkTookAnArm(var _, var shownAt) ->
@@ -4578,12 +4579,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 + (calls.isEmpty() ? "" : " in " + String.join(", ", calls));
     }
 
+    /** {@code n} counted in words, as a person counts evaluations: 1st, 2nd, 3rd, 4th. */
+    private static String ordinal(int n) {
+        int lastTwo = n % 100;
+        String suffix = lastTwo >= 11 && lastTwo <= 13 ? "th" : switch (n % 10) {
+            case 1 -> "st";
+            case 2 -> "nd";
+            case 3 -> "rd";
+            default -> "th";
+        };
+        return n + suffix;
+    }
+
     private static String what(ShownCondition shown, SourceId declaredIn,
                                SourceRendering rendering) {
         return switch (shown.read()) {
-            case DecisionRuleReading.AComparisonCameOut(var _, var held) ->
+            case DecisionRuleReading.AComparisonCameOut(var _, var evaluation, var held) ->
                     "the comparison at " + shown.at().said(rendering, declaredIn)
-                            + (held ? " holds" : " does not hold");
+                            + (held ? " holds" : " does not hold")
+                            + (evaluation.isPresent()
+                                    ? " on its " + ordinal(evaluation.getAsInt() + 1)
+                                            + " evaluation" : "");
             case DecisionRuleReading.AnApplicationAnswered(var _, var held) ->
                     "the operation applied at " + shown.at().said(rendering, declaredIn)
                             + (held ? " answers true" : " answers false");
@@ -6180,9 +6196,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.put("at", one.at().toString());
                 out.put("outcome", one.spelled());
             }
-            case Condition.Side(var _, var statedAt, var held, var _) -> {
+            // The visit where the comparison is evaluated more than once: it is one construct and
+            // the decision of each application of a closure, so two combinations that differ in
+            // which application came out which way are the same construct with the same outcomes.
+            // Absent where it is evaluated once, which is every identity written before it.
+            case Condition.Side(var _, var statedAt, var visit, var held, var _) -> {
                 out.put("kind", "comparison");
                 constructId(out.putObject("construct"), statedAt);
+                visit.ifPresent(index -> out.put("visit", index));
                 out.put("outcome", held ? "held" : "denied");
             }
             // A fork the reading could not name a position for. There is nothing to name it by but
@@ -9498,6 +9519,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
             case Weakening.MeetingsNotPlaced _ -> WeakeningWord.MEETINGS_NOT_PLACED;
+            case Weakening.MeetingsNotJoined _ -> WeakeningWord.MEETINGS_NOT_JOINED;
             case Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _ ->
                     WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;
