@@ -9,6 +9,8 @@ import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.Weakening;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.Collections;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -77,6 +79,67 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
 
         assertEquals(4, made(evidence));
         assertEquals(0, evidence.notMadeByRows().size());
+    }
+
+    /** The same total after a flatMap that writes each kept element out twice. */
+    private static final String FLAT_MAPPED = """
+            module example.attendance
+
+            data Row = { days: Int, pay: Int }
+
+            behavior total : (first: Row, second: Row) -> Int
+
+            let total (first, second) =
+                List.sum(List.map(r -> r.pay,
+                    List.flatMap(r -> [ r, r ], List.filter(r -> r.days >= 17, [ first, second ]))))
+
+            example total
+            """;
+
+    /**
+     * Four occurrences of two applications are two decisions. The rows decide it, not the shape of
+     * the meeting: one row makes one combination, and four rows make four, each counted by which
+     * element it kept and not by how many times the kept element was written out.
+     */
+    @Test
+    void aFlatMapAfterTheFilterDoesNotMultiplyTheDecisionsRowsMake() {
+        String first = "    | (Row { days = 20, pay = 100 }, Row { days = 5, pay = 200 }) -> 200\n";
+        String second = "    | (Row { days = 5, pay = 100 }, Row { days = 20, pay = 200 }) -> 400\n";
+        String both = "    | (Row { days = 20, pay = 100 }, Row { days = 20, pay = 200 }) -> 600\n";
+        String neither = "    | (Row { days = 5, pay = 100 }, Row { days = 5, pay = 200 }) -> 0\n";
+
+        assertEquals(4, evidenceOf(FLAT_MAPPED + first).counted(), "two applications, kept or not");
+        assertEquals(1, made(evidenceOf(FLAT_MAPPED + first)));
+        assertEquals(2, made(evidenceOf(FLAT_MAPPED + first + second)));
+        InteractionEvidence all = evidenceOf(FLAT_MAPPED + first + second + both + neither);
+        assertEquals(4, made(all));
+        assertEquals(0, all.notMadeByRows().size());
+    }
+
+    /**
+     * More elements than a recording keeps visits of: the decisions are there, the sum is a
+     * meeting, and it is not joined — because no claim can name the evaluations past the ones kept.
+     * Nothing is claimed made, and nothing is reported as a combination no row makes.
+     */
+    @Test
+    void aListOfMoreApplicationsThanAreRecordedIsAMeetingNotJoined() {
+        String elements = String.join(", ", Collections.nCopies(40, "row"));
+        AdequacyReport.BehaviorReport behavior = behaviorOf("""
+                module example.attendance
+
+                data Row = { days: Int, pay: Int }
+
+                behavior total : (row: Row) -> Int
+
+                let total (row) =
+                    List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ %s ])))
+                """.formatted(elements));
+
+        assertEquals(1, behavior.evidence().interaction().asked().notJoined());
+        assertEquals(0, behavior.evidence().interaction().counted());
+        assertTrue(behavior.weakenedBy().causes().stream()
+                        .anyMatch(Weakening.MeetingsNotJoined.class::isInstance),
+                () -> "and the measure says it went without: " + behavior.weakenedBy());
     }
 
     /**

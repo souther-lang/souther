@@ -160,19 +160,34 @@ final class CoverageNaming implements Naming<Outcome> {
      * {@code run} is the same construct in the tree that runs, where a run is recorded. The number
      * is read of the first in {@code at}, and the place a claim is made at is the second's.
      */
-    Outcome sideOnVisit(Core.Binary stated, Core.Binary run, InputReads at, int visit,
+    OnVisit sideOnVisit(Core.Binary stated, Core.Binary run, InputReads at, int visit,
                         boolean held) {
         if (numbers.caseOfOneApplication(stated, at) != null) {
-            return null;
+            return new OnVisit.Unnamed(WhyNotJoined.A_COMPARISON_OF_CASES);
         }
         ComparedNumber drawn = numbers.ofOneApplication(stated, at);
+        if (drawn == null) {
+            return new OnVisit.Unnamed(WhyNotJoined.A_NUMBER_NO_INPUT_HOLDS);
+        }
         ControlPlace.Outcome outcome = plan.outcomeAt(run, held).orElse(null);
-        if (drawn == null || outcome == null) {
-            return null;
+        if (outcome == null) {
+            return new OnVisit.Unnamed(WhyNotJoined.NO_RUN_IS_RECORDED_AT_IT);
         }
         Condition condition = new Condition.Side(drawn.term(), outcome.occurrence(),
                 OptionalInt.of(visit), held, lineOf(drawn));
-        return one(new Decision(condition, ControlClaim.onVisit(outcome, visit)));
+        return new OnVisit.Named(one(new Decision(condition,
+                ControlClaim.onVisit(outcome, visit))));
+    }
+
+    /** A decision about one visit to a comparison, or why none could be named: a comparison this
+     *  reading cannot place is not one that is not there. */
+    sealed interface OnVisit {
+
+        /** The decision, said as what it takes of the input and what a run that made it did. */
+        record Named(Outcome outcome) implements OnVisit { }
+
+        /** No decision could be named, for this reason. */
+        record Unnamed(WhyNotJoined why) implements OnVisit { }
     }
 
     /**

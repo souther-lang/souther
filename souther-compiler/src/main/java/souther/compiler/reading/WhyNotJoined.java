@@ -20,8 +20,24 @@ public enum WhyNotJoined {
     /** An occurrence is kept by what is not a truth about it, such as the arm of a choice. */
     KEPT_BY_ANOTHER_KIND,
 
-    /** What keeps an occurrence is not a single comparison. */
+    /** What keeps an occurrence is not a comparison this reading places: a truth read off a field,
+     *  a conjunction, a call. It is a decision all the same, and no place of the tree that runs
+     *  records which way it came out apart from the others. */
     NOT_ONE_COMPARISON,
+
+    /** The comparison asks which case of a union a value is, which an arm of a choice records and
+     *  a visit to a comparison does not. */
+    A_COMPARISON_OF_CASES,
+
+    /** The comparison is of a number no input position holds, so no row can be steered by it. */
+    A_NUMBER_NO_INPUT_HOLDS,
+
+    /** No run is recorded at the comparison: the plan numbered no place for it. */
+    NO_RUN_IS_RECORDED_AT_IT,
+
+    /** A decision is of an evaluation past those a recording keeps, which is a claim no
+     *  observation could answer. */
+    MORE_VISITS_THAN_ARE_RECORDED,
 
     /** The occurrences are not all kept by the one comparison, so they are not one closure applied
      *  to each. */

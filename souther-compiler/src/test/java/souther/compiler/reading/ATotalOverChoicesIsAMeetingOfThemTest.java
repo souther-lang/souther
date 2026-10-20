@@ -6,6 +6,7 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.types.ConstructOccurrence;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -199,6 +200,80 @@ class ATotalOverChoicesIsAMeetingOfThemTest {
                 "which evaluation of the second comparison is whose depends on what the first kept");
         assertEquals(List.of(WhyNotJoined.KEPT_BY_SEVERAL), read.notJoined(),
                 "and the sum is a meeting this reading met and did not join");
+    }
+
+    private static String keptBy(String condition, String total) {
+        return """
+                module example.kept
+
+                data Row = { days: Int, pay: Int, active: Bool }
+
+                behavior total : (first: Row, second: Row) -> Int
+
+                let total (first, second) =
+                    %s
+                """.formatted(total.formatted(condition));
+    }
+
+    private static final String SUM_OF_KEPT =
+            "List.sum(List.map(r -> r.pay, List.filter(r -> %s, [ first, second ])))";
+
+    private static final String COUNT_OF_KEPT = "List.length(List.filter(r -> %s, [ first, second ]))";
+
+    /**
+     * That a decision exists is a fact about the container, and whether this reading can place it
+     * is a fact about this reading. A truth read off a field, or a conjunction, keeps an element as
+     * a comparison does; the sum is a meeting, one this does not join, and the measure says so.
+     */
+    @Test
+    void aConditionThatIsNoSingleComparisonIsADecisionNotJoinedAndNotAbsent() {
+        for (String condition : List.of("r.active", "r.days >= 17 && r.pay > 0")) {
+            CoverageRead.Read read = readAll(keptBy(condition, SUM_OF_KEPT), "total");
+
+            assertEquals(List.of(), read.interactions(), condition);
+            assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON), read.notJoined(), condition);
+        }
+    }
+
+    /** The number of the elements a comparison keeps is a function of what it kept, as their total
+     *  is; the number of a list written out whole is not. */
+    @Test
+    void theCountOfWhatAComparisonKeepsIsAMeetingOfTheDecisionsThatKeepIt() {
+        assertEquals(List.of(List.of(2, 2)),
+                shape(read(keptBy("r.days >= 17", COUNT_OF_KEPT), "total")));
+        assertEquals(List.of(), read(LENGTH_OF_CHOICES, "count"));
+    }
+
+    /**
+     * An evaluation past those a recording keeps is a claim nothing observed could answer. The
+     * decisions are there and the sum is a meeting; it is not joined, and says why.
+     */
+    @Test
+    void aDecisionAboutAnEvaluationNoRecordingKeepsIsNotJoined() {
+        String elements = String.join(", ", Collections.nCopies(40, "first"));
+        CoverageRead.Read read = readAll("""
+                module example.long
+
+                data Row = { days: Int, pay: Int }
+
+                behavior total : (first: Row) -> Int
+
+                let total (first) =
+                    List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ %s ])))
+                """.formatted(elements), "total");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(WhyNotJoined.MORE_VISITS_THAN_ARE_RECORDED), read.notJoined());
+    }
+
+    /** A comparison that is read, of a number no input position holds, is a decision a row cannot
+     *  be steered by. It does not vanish from the sum for that. */
+    @Test
+    void aComparisonOfANumberNoInputHoldsIsADecisionNotJoinedAndNotAbsent() {
+        CoverageRead.Read read = readAll(keptBy("r.days * 2 >= 34", SUM_OF_KEPT), "total");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(WhyNotJoined.A_NUMBER_NO_INPUT_HOLDS), read.notJoined());
     }
 
     @Test

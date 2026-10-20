@@ -60,8 +60,9 @@ public final class Probe {
          *  bits to a visit is why that many fit a {@code long}. */
         private long[] visits = new long[INITIAL_SITES];
 
-        /** How many times each condition has answered since the row began, indexed by site, which
-         *  is what says which visit the next answer is. */
+        /** How many visits of each condition are recorded, indexed by site, which is what says
+         *  which visit the next answer is. It stops at {@link RecordedVisit#MOST}, where nothing
+         *  more is recorded: a count that went on would come round to a visit already past. */
         private int[] answered = new int[INITIAL_SITES];
 
         private Recording(NumberingIdentity numbering) {
@@ -75,9 +76,10 @@ public final class Probe {
                 answered = Arrays.copyOf(answered, size);
                 visits = Arrays.copyOf(visits, size);
             }
-            int nth = answered[site]++;
+            int nth = answered[site];
             if (nth < RecordedVisit.MOST) {
                 visits[site] |= 1L << (2 * nth + (held ? 1 : 0));
+                answered[site] = nth + 1;
             }
         }
     }

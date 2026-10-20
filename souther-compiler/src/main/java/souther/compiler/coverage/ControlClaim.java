@@ -50,15 +50,17 @@ public record ControlClaim(ControlPlace at, Visit visit) {
         /**
          * The {@code index}th visit, counting from none, in the order the run makes them.
          *
-         * <p>Only the first {@link RecordedVisit#MOST} are recorded. A claim names one beyond
-         * that only in a group that is not measured, because the figure is out of reach of any
-         * budget a group of combinations can be offered under.
+         * <p>Only the first {@link RecordedVisit#MOST} are recorded, and a claim names only a visit
+         * that is: one past them is a question no observation can answer, and "the run did not
+         * make it" would be the wrong answer to give. A reading that has a decision about a later
+         * visit says that it has not asked, and makes no claim.
          */
         record Nth(int index) implements Visit {
 
             public Nth {
-                if (index < 0) {
-                    throw new IllegalArgumentException("visits are counted from none: " + index);
+                if (index < 0 || index >= RecordedVisit.MOST) {
+                    throw new IllegalArgumentException("a claim names one of the first "
+                            + RecordedVisit.MOST + " visits, counted from none: " + index);
                 }
             }
         }

@@ -56,6 +56,35 @@ class AConditionVisitedAgainIsRecordedPerVisitTest {
         assertFalse(ran(true).sawOnVisit(NUMBERING.outcome(0), 1, true));
     }
 
+    /** A claim names only a visit a recording could answer. */
+    @Test
+    void aClaimCannotNameAVisitPastThoseTheRecordingKeeps() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ControlClaim.Visit.Nth(RecordedVisit.MOST));
+        assertThrows(IllegalArgumentException.class, () -> new ControlClaim.Visit.Nth(-1));
+        assertEquals(RecordedVisit.MOST - 1,
+                new ControlClaim.Visit.Nth(RecordedVisit.MOST - 1).index());
+    }
+
+    /** The count of visits stops where the recording does, so it cannot come round to a visit
+     *  already past. */
+    @Test
+    void visitsAreNotRecordedAgainAfterTheCountHasPassedWhatIsKept() {
+        Probe.begin(NUMBERING.identity());
+        for (int i = 0; i < RecordedVisit.MOST; i++) {
+            Probe.condition(true, 0);
+        }
+        for (int i = 0; i < 10 * RecordedVisit.MOST; i++) {
+            Probe.condition(false, 0);
+        }
+        AlignedObservation seen = NUMBERING.align(Probe.snapshot());
+
+        for (int visit = 0; visit < RecordedVisit.MOST; visit++) {
+            assertTrue(seen.sawOnVisit(NUMBERING.outcome(0), visit, true));
+            assertFalse(seen.sawOnVisit(NUMBERING.outcome(0), visit, false));
+        }
+    }
+
     @Test
     void aVisitTheRecordingDoesNotKeepIsRefusedRatherThanAnsweredNo() {
         assertThrows(IllegalArgumentException.class,

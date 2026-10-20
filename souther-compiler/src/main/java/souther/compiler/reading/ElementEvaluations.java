@@ -71,9 +71,9 @@ final class ElementEvaluations {
         record Matched(Joined joined) implements Result { }
 
         /**
-         * No occurrence is kept by a comparison of its own: the container holds no decision to
-         * join, which is no shortfall. An occurrence kept by nothing among others that are kept is
-         * a constant in the sum, and takes no part.
+         * Nothing keeps any occurrence: the container holds no decision to join, which is no
+         * shortfall. An occurrence kept by nothing among others that are kept is a constant in the
+         * sum, and takes no part.
          */
         record NothingToJoin() implements Result { }
 
@@ -98,11 +98,10 @@ final class ElementEvaluations {
             if (keptBy.isEmpty()) {
                 continue;
             }
-            // Met wherever something keeps it by a comparison, however many things do: an
-            // occurrence kept by two comparisons is a decision this cannot join, not a constant.
-            aDecisionWasMet |= keptBy.stream().anyMatch(kept ->
-                    kept instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, var _, var _)
-                            && Core.withoutStanding(truth.value()) instanceof Core.Binary);
+            // Met wherever anything keeps an occurrence, whatever it is and however many things do.
+            // That a decision exists is a fact about the container; whether this reading can place
+            // it is a fact about this reading, and is said below when it cannot.
+            aDecisionWasMet = true;
             if (keptBy.size() > 1) {
                 failed = failed == null ? WhyNotJoined.KEPT_BY_SEVERAL : failed;
                 continue;
@@ -112,7 +111,10 @@ final class ElementEvaluations {
                 failed = failed == null ? WhyNotJoined.KEPT_BY_ANOTHER_KIND : failed;
                 continue;
             }
-            if (!(Core.withoutStanding(truth.value()) instanceof Core.Binary written)) {
+            // A conjunction is an operator and stands as a Binary, and is not one comparison: which
+            // of its parts came out which way is not which way it did.
+            if (!(Core.withoutStanding(truth.value()) instanceof Core.Binary written)
+                    || written.op().stopsWhenItsAnswerIsSettled()) {
                 failed = failed == null ? WhyNotJoined.NOT_ONE_COMPARISON : failed;
                 continue;
             }
@@ -127,9 +129,9 @@ final class ElementEvaluations {
                 failed = failed == null ? WhyNotJoined.AN_APPLICATION_SAID_TWO_THINGS : failed;
             }
         }
-        // A decision was met only where some occurrence is kept by a comparison. What else is in
-        // the container then fails the join, and is said; where none is, there is nothing here
-        // that was a decision and nothing to say.
+        // Where nothing keeps any occurrence there is no decision and nothing to say. Where
+        // something does, and this could not join it, that is said: a decision this reading has no
+        // words for is still one.
         if (!aDecisionWasMet) {
             return new Result.NothingToJoin();
         }

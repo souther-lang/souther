@@ -212,6 +212,24 @@ final class Meetings {
         return walk != null && walk.combine() != Accumulation.Combine.APPEND;
     }
 
+    /** Whether {@code call} answers how many elements its only argument holds. */
+    static boolean countsItsElements(Core.Call call) {
+        return call.fn() instanceof Core.Reached.OfKernel kernel && call.args().size() == 1
+                && DefaultBoundOperationFacts.get().answersHowManyItHolds(kernel.name().denotes());
+    }
+
+    /**
+     * Whether {@code call} answers a number that depends on which elements its only argument holds:
+     * what they add up to, or how many there are.
+     *
+     * <p>Of a list written out whose elements are all there, the second is no decision of any
+     * element — two is two however the choices come out — and only the first is a meeting. Of a
+     * list some comparison keeps, both are: which elements are there is what the keeping decides.
+     */
+    static boolean consumesItsElements(Core.Call call) {
+        return combinesItsElements(call) || countsItsElements(call);
+    }
+
     /** The values one run of {@code op} is over, and the nodes the run is written as. */
     private static void run(Core e, BinOp op, List<Core> operands, List<Core> inner) {
         if (Core.withoutStanding(e) instanceof Core.Binary binary && binary.op() == op) {

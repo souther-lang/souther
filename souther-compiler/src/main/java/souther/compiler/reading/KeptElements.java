@@ -6,6 +6,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.RecordedVisit;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.WrittenOutElements;
 
@@ -30,12 +31,18 @@ import java.util.List;
  * the tree that runs, where the same call stands expanded into a walk of the list. This puts them
  * together and reads nothing of what {@code filter} or {@code map} mean.
  *
- * <p><b>Read, or not joined, and never silently neither.</b> A call this recognises as a sum of
- * kept elements and cannot join is a meeting the measure did not ask about, and it is returned as
- * that with the reason, for the measure to say so. A call that is no sum of kept elements at all —
- * its list not written in the body, no element kept by a comparison — is not one. A list of more
- * elements than a recording keeps visits of is still a meeting; it is one the measure does not
- * walk, which the group's budget says.
+ * <p><b>Read, or not joined, and never silently neither.</b> Four things are apart here, and each
+ * has its own answer. That a decision exists: something keeps an element. That its decisions can be
+ * told apart: each element is kept by one comparison, applied once. That a run can be held to them:
+ * the comparison is a number of the input, and a place of the tree that runs records it. And that
+ * the evaluations are ones a recording keeps. A call where the first is true and any later one is
+ * not is a meeting the measure did not ask about, and it is returned as that with the reason, for
+ * the measure to say so. A call where the first is false — its list not written in the body, no
+ * element kept by anything — decides nothing for the sum to be a function of, and is not one.
+ *
+ * <p>What the sum consumes is the elements' values or their number. The number of a list some
+ * comparison keeps is as much a function of what it kept as their total is; the number of a list
+ * written out whole is not, and is no meeting.
  */
 final class KeptElements {
 
@@ -73,7 +80,7 @@ final class KeptElements {
      * that may be made again is one whose evaluations of the comparison are not the list's.
      */
     Read of(Core.Call call, CoverageNaming naming) {
-        if (analysis == null || !Meetings.combinesItsElements(call) || plan.mayRepeat(call)) {
+        if (analysis == null || !Meetings.consumesItsElements(call) || plan.mayRepeat(call)) {
             return null;
         }
         Core.PreservedCall written = callWritten(analysis.core(), call);
@@ -103,14 +110,27 @@ final class KeptElements {
         }
         List<Factor> factors = new ArrayList<>();
         for (ElementEvaluations.Keeping keeping : joined.byEvaluation()) {
-            Outcome kept = naming.sideOnVisit(joined.comparison(), run, keeping.truth().at(),
-                    keeping.evaluation(), keeping.holds());
-            Outcome dropped = naming.sideOnVisit(joined.comparison(), run, keeping.truth().at(),
-                    keeping.evaluation(), !keeping.holds());
-            // A decision no row can be held to is not one a sum can be asked for, which is how a
-            // sum of two choices written out is treated too: it names nothing to meet.
-            if (kept == null || dropped == null) {
-                return null;
+            // The evaluation is the application's place among the elements the closure was handed,
+            // which a recording keeps only so far: a claim about a later one is a question nothing
+            // observed can answer, so it is not made.
+            if (keeping.evaluation() >= RecordedVisit.MOST) {
+                return new Read.NotJoined(WhyNotJoined.MORE_VISITS_THAN_ARE_RECORDED);
+            }
+            Outcome kept;
+            switch (naming.sideOnVisit(joined.comparison(), run, keeping.truth().at(),
+                    keeping.evaluation(), keeping.holds())) {
+                case CoverageNaming.OnVisit.Named(var outcome) -> kept = outcome;
+                case CoverageNaming.OnVisit.Unnamed(var why) -> {
+                    return new Read.NotJoined(why);
+                }
+            }
+            Outcome dropped;
+            switch (naming.sideOnVisit(joined.comparison(), run, keeping.truth().at(),
+                    keeping.evaluation(), !keeping.holds())) {
+                case CoverageNaming.OnVisit.Named(var outcome) -> dropped = outcome;
+                case CoverageNaming.OnVisit.Unnamed(var why) -> {
+                    return new Read.NotJoined(why);
+                }
             }
             factors.add(new Factor(List.of(kept, dropped)));
         }

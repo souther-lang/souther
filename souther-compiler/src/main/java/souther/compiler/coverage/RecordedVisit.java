@@ -13,11 +13,11 @@ package souther.compiler.coverage;
  * visit: the nth is how many times this thread has recorded the condition since the row began.
  *
  * <p><b>Why this many.</b> The recording is bounded so that a loop over a long list cannot make a
- * recording as long as the list. A group of combinations is offered only under a budget that is an
- * {@code int}, and a group of more than thirty factors of two outcomes apiece is past every such
- * budget: it is held back without a run being asked about any of its claims. So no claim that is
- * asked of a recording names a visit this does not keep, and a list longer than this is a group not
- * measured rather than a group that does not exist.
+ * recording as long as the list. It is a bound on what a claim can name, and not a consequence of
+ * how many combinations a group is offered under: an evaluation's number is the application's
+ * place among the elements a closure was handed, which a flatMap or a filter can leave far past the
+ * count of decisions made of it. A claim is refused a visit past this ({@link ControlClaim.Visit}),
+ * and a reading with a decision about one says it did not ask.
  *
  * @param at    the number the run was recorded at
  * @param nth   which visit of the run, counting from none
