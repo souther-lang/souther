@@ -47,12 +47,12 @@ import java.util.Set;
  * whose rules were never enumerated and one the walk could not reach into leave both short, because
  * what is not known about them is not known for either.
  *
- * <p><b>One stop, one gap, and the fold is on where the gap came from.</b> Two of the things a
- * reading can be short of are one stop said from two ends: the walk could not go into a position,
- * and so the rules it handed on reached nobody. The second is a consequence of the first, and the
- * arm that says so is what this reads to leave it out ({@link #derived}). Never the path — a
- * position the reading did enter and lost a clause of its own is an independent finding sitting at
- * the same place, and a fold on "there is already something here" takes that one with it (#1084).
+ * <p><b>A stop and the rules left unread are findings of their own.</b> The walk could not go into
+ * a position, or it went on and lost a clause of its own, or it named a recipient for the rules it
+ * handed on and opened no reading at it. None of them is another said from the other end, so none
+ * is read to leave another out, and they sit at one path without hiding each other. Folded on
+ * "there is already something here", an independent finding would go with the one beside it
+ * (#1084).
  *
  * <p><b>And a question stands whatever else was found at its position.</b> A question comes off a
  * rule this compiler read and neither reader answered, so the rules a stop left unread raise none —

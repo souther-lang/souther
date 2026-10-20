@@ -87,8 +87,8 @@ public record PositionAccount(String behavior, TermPath path, Type type, Reading
         return switch (pending) {
             case StructuralInspection.Continuation.Blocked blocked -> blocked.why();
             // The walk went in, so what is left is whether this reading lost a clause of its own.
-            // A handing over nobody took over is the descent above said from the other end and is
-            // not one of these, for the reason it is not reported twice: the descent is the cause.
+            // A recipient nothing opened is not one of these: it is a finding of its own,
+            // {@code RulesNotReached}, and says nothing of whether the position was entered.
             case StructuralInspection.Continuation.None _,
                  StructuralInspection.Continuation.Elements _,
                  StructuralInspection.Continuation.Entries _,
