@@ -67,6 +67,25 @@ public final class InputNumber {
     }
 
     /**
+     * The numbers {@code e} is made of, as the one form they add up to, for a reader that puts
+     * numbers into one form: the number {@link #of} names, or — where it names none — the form of
+     * two numbers of a string that a total of its weighed code points comes to.
+     *
+     * <p>The one place that says which numbers an expression is made of, so that a reader of forms
+     * does not hold a case of its own. A reader of one number at a time ({@link #ofAlone}) draws
+     * a line on a single number and reads no form of two.
+     */
+    public static LinearForm<NumericTerm> formOf(Core e, InputDomain inputs, InputReads reads,
+                                                 RuleReadingSource source, ElementsMet met) {
+        NumericTerm term = of(e, inputs, reads, source, met);
+        if (term != null) {
+            return LinearForm.atom(term);
+        }
+        return met.admits(e, reads, source.newtypes())
+                ? codePointsWeighed(e, inputs, reads, source) : null;
+    }
+
+    /**
      * The number {@code e} names, for a reader that asks of a side by itself and combines no two
      * numbers into one form: a line drawn on one position against a value written out.
      *
@@ -229,13 +248,9 @@ public final class InputNumber {
      * The binding the closure is handed its element on says nothing of that: {@code List.sortBy}
      * hands its closure the elements too, and what it computes is a key, not a term of the total.
      */
-    public static LinearForm<NumericTerm> codePointsWeighed(Core e, InputDomain inputs,
-                                                            InputReads reads,
-                                                            RuleReadingSource source,
-                                                            ElementsMet met) {
-        if (!met.admits(e, reads, source.newtypes())) {
-            return null;
-        }
+    private static LinearForm<NumericTerm> codePointsWeighed(Core e, InputDomain inputs,
+                                                             InputReads reads,
+                                                             RuleReadingSource source) {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
                 each -> reads.folded(each, symbols, source.newtypes()));
@@ -266,8 +281,8 @@ public final class InputNumber {
         if (closure == null) {
             return null;
         }
-        ElementValue computed = ElementValue.read(closure, where.heldByTheBody(), source,
-                new ElementValue.ElementsAt(at, where.declared()));
+        ElementValue computed =
+                ElementValue.readWithoutAPlace(closure, where.heldByTheBody(), source);
         if (!(computed instanceof ElementValue.Affine(var form))) {
             return null;
         }

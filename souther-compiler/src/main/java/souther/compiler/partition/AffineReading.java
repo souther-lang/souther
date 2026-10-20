@@ -312,19 +312,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource, met);
-                if (term == null) {
-                    // A total over the code points of a string, each weighed, is no one term but
-                    // a form of two, so it is asked only of what no single term names.
-                    LinearForm<NumericTerm> weighed =
-                            InputNumber.codePointsWeighed(node, inputs, at, ruleSource, met);
-                    if (weighed != null) {
-                        named.addAll(weighed.coefs().keySet());
-                    }
-                    return weighed;
+                LinearForm<NumericTerm> numbers =
+                        InputNumber.formOf(node, inputs, at, ruleSource, met);
+                if (numbers != null) {
+                    named.addAll(numbers.coefs().keySet());
                 }
-                named.add(term);
-                return LinearForm.atom(term);
+                return numbers;
             }
 
             @Override

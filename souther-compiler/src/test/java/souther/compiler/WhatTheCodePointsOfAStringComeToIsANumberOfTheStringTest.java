@@ -11,6 +11,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -111,9 +112,24 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
             }
             """;
 
+    /** A weight at which the product leaves the range of {@code Int} for some code points: a row
+     *  holding one is a row the model aborts on, and none may be composed. */
+    private static final String NEAR_THE_LIMIT = """
+            module p
+            behavior pick : (s: String) -> Int
+            let pick (s) = {
+                guard List.sum(List.map((x) -> 100000000000000000 * x, String.codePoints(s)))
+                        >= 9200000000000000000 else 0
+                1
+            }
+            """;
+
     /** Each model, with what its condition works out to over the string a row holds and the
      *  answers some row of it is composed for. */
     private static final Map<String, Function<String, Integer>> ANSWERED = Map.of(
+            NEAR_THE_LIMIT, text -> BigInteger.valueOf(sumOf(text))
+                    .multiply(BigInteger.valueOf(100000000000000000L))
+                    .compareTo(new BigInteger("9200000000000000000")) >= 0 ? 1 : 0,
             SAME_FOR_EACH, text -> 5 * lengthOf(text) >= 20 ? 1 : 0,
             WEIGHED, text -> 3 * sumOf(text) >= 300 ? 1 : 0,
             WEIGHED_AND_MOVED, text -> 2 * sumOf(text) + lengthOf(text) >= 300 ? 1 : 0,
@@ -123,6 +139,7 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
             BESIDE_ITS_LENGTH, text -> lengthOf(text) < 2 ? 0 : sumOf(text) <= 200 ? 2 : 1);
 
     private static final Map<String, Set<Integer>> COMPOSED_FOR = Map.of(
+            NEAR_THE_LIMIT, Set.of(0, 1),
             SAME_FOR_EACH, Set.of(0, 1),
             WEIGHED, Set.of(0, 1),
             WEIGHED_AND_MOVED, Set.of(0, 1),
