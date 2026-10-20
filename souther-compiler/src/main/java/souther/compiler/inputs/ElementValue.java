@@ -934,7 +934,8 @@ public sealed interface ElementValue {
                 }
             }
             Affine base = new Affine(new LinearForm<>(constant, places));
-            return indexed(new Affine(new LinearForm<>(step, moved)), base);
+            return step.isZero() && moved.isEmpty() ? base
+                    : indexed(new Affine(new LinearForm<>(step, moved)), base);
         }
 
         /**
