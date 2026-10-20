@@ -212,6 +212,34 @@ sealed interface WhatATermRead {
     }
 
     /**
+     * What {@code on} reads of the value this reading chose at {@code key}, among every value the
+     * row wrote at {@code place}: how often that value occurs in all the containers the place
+     * stands in, which is nought where it occurs in none.
+     *
+     * <p>The key is outside the run, so the number is read for it and a row that wrote nothing at
+     * the key has no value for the number. The values counted are every occurrence's, whichever a
+     * reading chose.
+     */
+    static WhatATermRead ofAKey(TermOrders on, BorderQuantity.Observation row, TermPath place,
+                                TermPath key) {
+        return switch (row.at(key)) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue asked) -> switch (
+                        row.keptOf(new EveryValue(place))) {
+                    case WalkResult.CouldNotWalk<List<ObservedValue>> _ ->
+                            new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                    case WalkResult.Reached(List<ObservedValue> values) ->
+                            of(on.readAmong(asked, values));
+                };
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
+            };
+        };
+    }
+
+    /**
      * The same among the occurrences the elements are kept for, in the one occurrence of the
      * container the reading is in: the value this reading chose is counted among the values of
      * the elements that meet the statement, and it is itself one of them or the reading has no

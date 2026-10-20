@@ -875,6 +875,9 @@ final class ContainersAddingUp {
             case NumericTerm.OccurrencesOfItsValue among -> throw new IllegalStateException(
                     among + " is composed by repeating values across containers, and nothing here"
                             + " adds it up");
+            case NumericTerm.OccurrencesOfAKey ofAKey -> throw new IllegalStateException(
+                    ofAKey + " is composed by repeating a value across containers, and nothing"
+                            + " here adds it up");
             case NumericTerm.ExtremeOfItsKey extreme -> throw new IllegalStateException(
                     extreme + " is written as one value, and nothing here adds it up");
         };

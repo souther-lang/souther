@@ -1851,6 +1851,9 @@ public final class InputDomain {
                     throw new IllegalStateException("a clause of a declaration was read as a rule"
                             + " about how often the value at " + path
                             + " occurs in every container");
+            case NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey asked ->
+                    throw new IllegalStateException("a clause of a declaration was read as a rule"
+                            + " about how often the value at " + path + " equals " + asked.key());
             // Nor what the elements of a key come to.
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                     throw new IllegalStateException("a clause of a declaration was read as a rule"
@@ -1925,7 +1928,8 @@ public final class InputDomain {
                  NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
-                 NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ -> Carrier.WHOLE;
+                 NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
+                 NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _ -> Carrier.WHOLE;
             // One of the values standing there, so on their order.
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> carried;
         };
@@ -2047,6 +2051,9 @@ public final class InputDomain {
                 }
                 yield occurrences;
             }
+            case NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey asked ->
+                    throw new IllegalStateException("how often the value at " + path + " equals "
+                            + asked.key() + " was asked for by name, and no declaration names it");
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extremeOf -> {
                 NumericTerm.ExtremeOfItsKey extreme = NumericTerm.ExtremeOfItsKey.ofTheValueAt(
                         path, extremeOf.key(), extremeOf.extreme());
