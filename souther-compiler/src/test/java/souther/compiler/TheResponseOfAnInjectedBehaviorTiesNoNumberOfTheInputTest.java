@@ -259,6 +259,7 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
                         + " readSnap(order).rows))))",
                 "List.fold((acc, x) -> acc + x.quantity, 0, List.sortBy(.sku, readSnap(order).rows))",
                 "List.sum(List.sortBy(x -> x, List.map(.quantity, readSnap(order).rows)))",
+                "List.sum(List.map(x -> x, List.map(.quantity, readSnap(order).rows)))",
                 "List.sum(List.map(.quantity, List.map(x -> x, readSnap(order).rows)))",
                 "List.sum(List.map(.quantity, List.sortBy(.sku,"
                         + " List.map(x -> x, readSnap(order).rows))))",
@@ -311,6 +312,19 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
     void aMapThatAnswersEachElementAsItIsLeavesTheSumOfTheResponseRead() {
         String report = reportOf(summedAs("identity",
                 "List.sum(List.map(.quantity, List.map(x -> x, readSnap(order).rows)))"));
+
+        assertFalse(report.contains("not read: comparison"), report);
+        assertFalse(report.contains("not accounted for: comparison"), report);
+    }
+
+    /** A map that answers each element as it is can be what makes the numbers, where the response
+     *  is itself a list of them. */
+    @Test
+    void anIdentityMapOverAResponseOfNumbersIsWhatTheSumIsOver() {
+        String report = reportOf(summedAs("numbers",
+                "List.sum(List.map(x -> x, readSnap(order).values))")
+                .replace("data Snap = { rows: List<Item> }",
+                        "data Snap = { rows: List<Item>, values: List<Int> }"));
 
         assertFalse(report.contains("not read: comparison"), report);
         assertFalse(report.contains("not accounted for: comparison"), report);

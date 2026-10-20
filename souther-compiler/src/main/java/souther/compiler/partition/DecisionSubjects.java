@@ -94,7 +94,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
 
     /**
      * What a dependency answered, or a place inside it, whose every element {@code e} holds, each
-     * as often — {@code e} itself, or a reordering of it — or null where it is no such thing.
+     * as often — {@code e} itself, or what puts them in another order or answers each as it is —
+     * or null where it is no such thing.
      */
     DecisionSubject.AnAnswer anAnswerWhoseEveryElementIsHeldBy(Core e, InputReads at) {
         InputReads.AnAnswerAt found = at.answerWhoseEveryElementIsHeldBy(e, symbols, newtypes);

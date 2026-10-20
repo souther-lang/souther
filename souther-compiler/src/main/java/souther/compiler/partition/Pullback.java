@@ -6199,19 +6199,31 @@ final class Pullback {
         }
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
-        // Whatever puts the numbers in another order beside the map is the same sum.
+        // The outermost walk first, since it may be the one that makes the numbers; where it does
+        // not, what puts them in another order, or answers each as it is, beside it is the same
+        // sum, and the one beneath is asked.
         Denotation walk = at.standing(measured.of(), symbols, newtypes);
-        ElementBindings.StepOnEachElement step =
-                ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
-        while (step == null && walk != null) {
+        while (walk != null) {
+            ElementBindings.StepOnEachElement step =
+                    ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
+            Denotation standing = walk;
+            LinearForm<Quantity> summed =
+                    step == null ? null : unlessUnread(() -> sumOverTheStep(standing, step));
+            if (summed != null) {
+                return summed;
+            }
             walk = walk.at().stepKeepingEveryElement(walk, symbols, newtypes);
-            step = walk == null ? null
-                    : ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
         }
-        if (step == null) {
-            return null;
-        }
-        Denotation walked = walk.at().standing(step.walked(), symbols, newtypes);
+        return null;
+    }
+
+    /** What {@code step}, applied by {@code walk}, adds up to over every element of the list a
+     *  dependency answered ({@link #sumOverTheElementsOfAnAnswer}) — or null where it is not
+     *  handed one. */
+    private LinearForm<Quantity> sumOverTheStep(Denotation walk,
+                                                ElementBindings.StepOnEachElement step) {
+        Denotation walked = walk.at().standing(step.walked(), read.rules().symbols(),
+                read.rules().newtypes());
         DecisionSubject.AnAnswer list = answerWhoseEveryElementIsHeldBy(walked);
         if (list == null || !(AffineForms.outcome(step.step().body(), walk.at(), quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var each))) {
