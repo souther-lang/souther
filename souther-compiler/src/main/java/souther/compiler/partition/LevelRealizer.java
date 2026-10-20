@@ -202,10 +202,12 @@ public final class LevelRealizer {
                             UnheldNumber.NO_REPRESENTATION_EXISTS));
                     continue;
                 }
-                // The count and the numbers beside the elements are chosen after this walk, so the
-                // whole arrangement is not known here and the rows already tried are asked of it
-                // when it is ({@link #found}).
-                Search search = new Search(terms, over.on(), within, runs, tried, steps, Map.of());
+                // The count is the one being tried, and stands beside the form's numbers in the
+                // arrangement a row is built from. The numbers beside the elements are chosen after
+                // this walk, so an arrangement that has them is asked of the rows already tried
+                // when it is whole ({@link #found}).
+                Search search = new Search(terms, over.on(), within, runs, tried, steps,
+                        Map.of(counted, Count.of(many)));
                 Reached reached = search.solve(rest);
                 stoppedBy.addAll(search.stoppedBy());
                 unheld.addAll(search.unheld());
