@@ -1541,8 +1541,11 @@ final class Pullback {
          * ({@link KeyedAccumulation}): whichever element's key the entry is for. It is no value of
          * the input and stands at no position, so what a statement about it is about is what the
          * elements of its key come to.
+         *
+         * @param key where the key the entry is filed under stands among the places of the list's
+         *            elements, or null where the key is no place of an element
          */
-        record AnEntry() implements ElementAt {}
+        record AnEntry(DecisionSubject key) implements ElementAt {}
 
         /**
          * Any element of what {@code operation} answered, of which nothing is known but the side
@@ -2399,7 +2402,8 @@ final class Pullback {
                 // what the closure makes of that element.
                 case ElementAt.AFiledElement(DecisionSubject list, Core.Block key) ->
                         keyOfTheFiledElement(list, key);
-                case ElementAt.AValue _, ElementAt.APiece _, ElementAt.AnEntry _,
+                case ElementAt.AnEntry(DecisionSubject key) -> key;
+                case ElementAt.AValue _, ElementAt.APiece _,
                      ElementAt.OfAnAnswerEveryElementOfWhichIs _ -> null;
                 case null -> null;
             };
@@ -3089,14 +3093,77 @@ final class Pullback {
                                  ElementAt outerEach, Denotation outerHanded) {
             KeyedAccumulation filed = KeyedAccumulation.of(container.value(), container.at(),
                     sides(), blockIn(container));
-            if (filed == null || !(container.at().holdingSomethingWhere(filed.walked(),
-                    read.rules().symbols(), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath held))) {
+            if (filed == null) {
                 return null;
             }
-            ElementAt each = new ElementAt.AnEntry();
+            if (!(container.at().holdingSomethingWhere(filed.walked(),
+                    read.rules().symbols(), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath held))) {
+                return entriesOfWhatWasKept(container, filed, pending, located, outerEach,
+                        outerHanded);
+            }
+            ElementAt each = new ElementAt.AnEntry(keyOfTheEntries(container, filed, held));
             settle(pending, each, null, located);
             DecisionSubject heldAt = new DecisionSubject.AnInput(held);
+            return outerEach == null ? new Located(heldAt, null, each, null, located, null)
+                    : new Located(heldAt, null, outerEach, outerHanded, located, null);
+        }
+
+        /**
+         * Where the key the entries of {@code container} are filed under stands among the places
+         * of the elements of the list at {@code held} — a place of the element itself, or the
+         * component of a tuple a map built of each element, read where the map was given it — or
+         * null where it is neither.
+         */
+        private DecisionSubject keyOfTheEntries(Denotation container, KeyedAccumulation filed,
+                                                TermPath held) {
+            WhereFiled where = whereFiled(container, filed);
+            if (where != null) {
+                return new DecisionSubject.AnInput(where.key());
+            }
+            int component = container.at().tupleComponentRead(filed.key(),
+                    filed.element().binding());
+            if (component < 0) {
+                return null;
+            }
+            InputReads.Occurrences every = container.at().everyOccurrenceKeyedAt(filed.walked(),
+                    component, Pullback.this::theListAKeepingCallKeepsSomeOf,
+                    read.rules().symbols(), read.rules().newtypes());
+            if (every == null || !every.keptBy().isEmpty()) {
+                return null;
+            }
+            TermPath place = OnePerElement.Answered.ITSELF.at().from(every.keys());
+            return place.containersHoldingIt().equals(List.of(held))
+                    ? new DecisionSubject.AnInput(place) : null;
+        }
+
+        /**
+         * Where the entries of {@code container} stand, where it is a map filed under the key of
+         * each element of a list made of a position's elements by operations that keep the ones
+         * meeting a statement or put them in another order — or null where it is not.
+         *
+         * <p>An entry is there for some element the list holds, which is an element of the
+         * position meeting what it was kept by, so some entry is some such element's, and the key
+         * it is filed under is the key that element has.
+         */
+        private Located entriesOfWhatWasKept(Denotation container, KeyedAccumulation filed,
+                                             List<Kept> pending, List<Kept> located,
+                                             ElementAt outerEach, Denotation outerHanded) {
+            Denotation walked = container.at().standing(filed.walked(), read.rules().symbols(),
+                    read.rules().newtypes());
+            Beneath below = beneath(walked, true);
+            if (below == null || !(subjectOf(below.at()) instanceof DecisionSubject.AnInput(
+                    TermPath held))) {
+                return null;
+            }
+            OnePerElement.Answered key = below.at().at().answeredOf(filed.key(),
+                    filed.element().binding(), read.rules().newtypes());
+            DecisionSubject heldAt = new DecisionSubject.AnInput(held);
+            List<Kept> keptBy = new ArrayList<>(below.kept());
+            settle(keptBy, new ElementAt.AtASubject(heldAt), null, located);
+            ElementAt each = new ElementAt.AnEntry(key == null ? null
+                    : new DecisionSubject.AnInput(key.at().from(held.element())));
+            settle(pending, each, null, located);
             return outerEach == null ? new Located(heldAt, null, each, null, located, null)
                     : new Located(heldAt, null, outerEach, outerHanded, located, null);
         }
@@ -4868,6 +4935,113 @@ final class Pullback {
     }
 
     /**
+     * The value an arm of a lookup of a key opens, where the map is one a fold built by filing a
+     * counter under the key of each element of a list ({@link KeyedAccumulation}) — or null where
+     * it is not.
+     *
+     * <p>The key asked for is no key of an entry: it occurs among the elements as often as some of
+     * them have it for their key, which is none where the lookup answers nothing. The arm is
+     * opened where some element does, and the counter there is what it starts at, with the step
+     * added once for each occurrence after the first. The elements counted are the ones the
+     * lookup's own presence is read over, so the arm and the count are of one statement.
+     */
+    private LinearForm<Quantity> valueLookedUpUnderAKey(Core node, InputReads at) {
+        if (counting == null ||!(Core.withoutStanding(node) instanceof Core.Read name)
+                || at.lookupOpenedBy(name.binding()) == null) {
+            return null;
+        }
+        Core lookup = at.lookupOpenedBy(name.binding()).lookup();
+        Core map = AnOperationApplied.of(lookup) instanceof AnOperationApplied applied
+                ? KeyedAccumulation.mapOf(applied) : null;
+        if (map == null) {
+            return null;
+        }
+        Denotation whole = at.standing(map, read.rules().symbols(), read.rules().newtypes());
+        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(), sides(),
+                blocksAt(whole));
+        if (filed == null || !(filed.filed() instanceof KeyedAccumulation.Filed.Counted counted)) {
+            return null;
+        }
+        if (counted.step().signum() == 0) {
+            return LinearForm.constant(counted.first());
+        }
+        Derivation.SomeElementMeeting meeting = someElementMeetingIn(
+                observe(lookup, AnswerAspect.PRESENCE, at));
+        if (meeting == null || !meeting.holds()) {
+            return null;
+        }
+        Derivation ofTheElement = asAComparisonOfTwoOrderedValues(meeting.ofTheElement());
+        Proposition element = trying.of(ofTheElement);
+        if (Proposition.firstStopIn(element) != null
+                || !element.mayTurnOnAnElementOf(meeting.container())
+                || Proposition.mayAnswerNothing(element)) {
+            return null;
+        }
+        Quantity.HowManyMeet count = new Quantity.HowManyMeet(meeting.container(),
+                Proposition.whereItHolds(element));
+        counting.putIfAbsent(count,
+                new Derivation.AComparisonRead.Counted(meeting.container(), ofTheElement));
+        return counted.first().plus(counted.step().negated())
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio constant)
+                ? new LinearForm<>(constant, Map.of(count, counted.step())) : null;
+    }
+
+    /**
+     * {@code read}, where it says two positions of the input are one value and both stand on an
+     * order, as their difference being nought — the statement a row is composed for as it is for
+     * any other comparison of two values on an order, numbers and strings alike — and
+     * {@code read} itself where it says anything else, which a position on no order does.
+     */
+    private Derivation asAComparisonOfTwoOrderedValues(Derivation read) {
+        if (read instanceof Derivation.OfWhatWasKept(Derivation ofTheElement,
+                                                     List<Derivation> kept)) {
+            Derivation stated = asAComparisonOfTwoOrderedValues(ofTheElement);
+            return stated == ofTheElement ? read : new Derivation.OfWhatWasKept(stated, kept);
+        }
+        if (read instanceof Derivation.Joined(var how, Derivation left, Derivation right)) {
+            Derivation one = asAComparisonOfTwoOrderedValues(left);
+            Derivation other = asAComparisonOfTwoOrderedValues(right);
+            return one == left && other == right ? read
+                    : new Derivation.Joined(how, one, other);
+        }
+        if (!(trying.of(read) instanceof Proposition.SameValue(
+                DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath other),
+                boolean holds, var _))) {
+            return read;
+        }
+        NumericTerm left = new NumericTerm.ValueOf(one);
+        NumericTerm right = new NumericTerm.ValueOf(other);
+        if (!readOnAnOrder(left) || !readOnAnOrder(right)) {
+            return read;
+        }
+        return aRelation(Derivation.ComparisonReading.AS_A_CUT,
+                LinearForm.difference(new DecisionAtom.OfTheInput(left),
+                        new DecisionAtom.OfTheInput(right)),
+                holds ? Rel.EQ : Rel.NE, Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
+    }
+
+    /**
+     * The reading of some element meeting a statement that {@code read} comes to, where it is a
+     * law's reading of a lookup's presence — or null where it is none.
+     *
+     * <p>The wrappers a law's reading of {@code Map.get} comes in are the ones named here, and
+     * what a wrapper not named hides is not found: the count is then left unread, never read of
+     * another statement. {@code AFoldThatFilesACounterUnderEachKeyAnswersAnyKeyAskedOfItTest}
+     * holds the line a lookup draws to be there, so a wrapper added to that reading fails it.
+     */
+    private static Derivation.SomeElementMeeting someElementMeetingIn(Derivation read) {
+        return switch (read) {
+            case Derivation.AChoiceAt(var _, Derivation choice) -> someElementMeetingIn(choice);
+            case Derivation.ThroughABinding(Derivation value) -> someElementMeetingIn(value);
+            case Derivation.ByALaw(var _, var _, Derivation of) -> someElementMeetingIn(of);
+            case Derivation.ALawQuantifies(var _, Derivation meeting) ->
+                    someElementMeetingIn(meeting);
+            case Derivation.SomeElementMeeting meeting -> meeting;
+            default -> null;
+        };
+    }
+
+    /**
      * Where a fold that files under the key of each element of a list stands in the container of
      * the input the list walked holds one value for each element of.
      *
@@ -5451,6 +5625,10 @@ final class Pullback {
                 LinearForm<Quantity> filedUnder = valueOfAnEntry(node, at);
                 if (filedUnder != null) {
                     return filedUnder;
+                }
+                LinearForm<Quantity> lookedUp = valueLookedUpUnderAKey(node, at);
+                if (lookedUp != null) {
+                    return lookedUp;
                 }
                 LinearForm<Quantity> added = seedPlusWhatEachElementAdds(node, at);
                 if (added != null) {
