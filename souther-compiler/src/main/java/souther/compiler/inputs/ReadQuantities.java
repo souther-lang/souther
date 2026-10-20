@@ -1518,12 +1518,13 @@ final class ReadQuantities implements Quantities {
     public NumericDomain.FormProjection projectionOf(NumericTerm term,
                                                      Collection<? extends NumericTerm> alongside) {
         List<NumericTerm> together = new ArrayList<>();
+        StructuralContext standing = asking(List.of(term))
+                instanceof StructuralContext.Merge.Together(StructuralContext under) ? under : null;
         for (NumericTerm other : alongside) {
             held(other);
-            Collection<NumericTerm> asked = new ArrayList<>(together);
-            asked.add(term);
-            asked.add(other);
-            if (asking(asked) instanceof StructuralContext.Merge.Together) {
+            if (standing != null && standing.merge(StructuralContext.of(other.subjectPath()))
+                    instanceof StructuralContext.Merge.Together(StructuralContext under)) {
+                standing = under;
                 together.add(other);
             }
         }
