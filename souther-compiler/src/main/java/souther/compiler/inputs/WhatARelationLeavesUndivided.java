@@ -1317,6 +1317,27 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
+     * A run whose ends are where the representation stops, and not lines of anything compared.
+     *
+     * <p>The reading of two terms by their difference passes over the values beside the ends of
+     * what the terms take. That is the representation running out of partners and not a line the
+     * model draws, which holds of the ends of a type and of the year of a date, and does not hold
+     * of a month of twelve or a length of nought: a value at either settles the comparison for a
+     * reason of its own. The caller says which it has by handing the run over in this type, and so
+     * by having shown it.
+     *
+     * @param run the run the terms take, open on a side it does not stop on
+     */
+    public record WhereTheRepresentationStops(NumericDomain.Bounds run) {
+
+        public WhereTheRepresentationStops {
+            if (run == null) {
+                throw new IllegalArgumentException("a run the representation stops on is a run");
+            }
+        }
+    }
+
+    /**
      * The places of two terms, held against {@code constant} as {@code relation}, shown undivided
      * because the relation and everything {@code held} of the two are about their difference alone.
      *
@@ -1345,24 +1366,21 @@ public final class WhatARelationLeavesUndivided {
      * two whole numbers and at neither is passed over, and nothing is shown.
      *
      * @param terms   two terms, each the value at its place or a number taken of one, taking every
-     *                value of its type and the same values as the other — or nothing is shown. The
-     *                ends of what a term takes are passed over, so a number taken of a place is
-     *                given only where its ends are where the representation stops and not lines
-     *                of the operation that answers it
+     *                value of its type and the same values as the other — or nothing is shown
      * @param held    every statement the rows arriving hold of either term, each about their
      *                difference
-     * @param extent  where the type the two take stops, open on a side it does not
+     * @param extent  where the values the two take stop
      * @param overlap whether two places are one, or one is part of the other
      */
     public static <P> Set<P> ofTheirDifference(List<Term<P>> terms, ExactRatio constant,
                                                Rel relation, List<OnTheDifference> held,
-                                               NumericDomain.Bounds extent,
+                                               WhereTheRepresentationStops extent,
                                                BiPredicate<P, P> overlap) {
         if (terms.size() != 2 || constant == null || !apart(terms, 0, overlap)
-                || !moveTogether(terms.get(0), terms.get(1), extent)) {
+                || !moveTogether(terms.get(0), terms.get(1), extent.run())) {
             return Set.of();
         }
-        WholeRun middle = WholeRun.reachedFromTheMiddleOf(extent);
+        WholeRun middle = WholeRun.reachedFromTheMiddleOf(extent.run());
         if (middle == null) {
             return Set.of();
         }

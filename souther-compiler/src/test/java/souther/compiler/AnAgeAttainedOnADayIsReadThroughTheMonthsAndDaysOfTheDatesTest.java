@@ -227,7 +227,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
      * Two comparisons of one age state the months and days of the dates, and their years, along
      * one way. The first comparison states the correction by the months and days that the second
      * asks again, so the way decides it and the months and days are read there. The years are
-     * stated at one level and asked at another, and are not read.
+     * stated at one level and asked at another, and are read by how far apart they are.
      */
     @Test
     void theCorrectionOneComparisonStatesAndAnotherAsksAgainIsReadAlongWaysThatStateYearsToo() {
@@ -241,6 +241,22 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 + " is not worked out, about `Date.year(on)`"), report);
         assertFalse(report.contains(NOT_REACHED + ", so which values here settle it on their own"
                 + " is not worked out, about `Date.year((birthday -1 days))`"), report);
+    }
+
+    private static final String YEARS_UNREAD = NOT_REACHED
+            + ", so which values here settle it on their own is not worked out, about `Date.year(";
+
+    /** The age bound by a {@code let} and compared at the two lines of a band. */
+    @Test
+    void anAgeBoundByALetAndComparedAtTwoLinesIsReadInTheYears() {
+        String report = report(AGE + """
+                let f (birthday, on) = {
+                    let age = attainedAgeOn(birthday, on)
+                    if age >= 40 && age < 65 then true else false
+                }
+                """);
+
+        assertFalse(report.contains(YEARS_UNREAD), report);
     }
 
     /**

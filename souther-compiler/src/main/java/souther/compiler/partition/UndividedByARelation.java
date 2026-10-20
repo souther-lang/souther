@@ -1204,8 +1204,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * sides — {@code stating}, side by side — is about how far apart the two are
      * ({@link WhatARelationLeavesUndivided#ofTheirDifference}).
      *
-     * <p>Each side is the value at a position the declarations leave every value of its type, so
-     * nothing of them ties it and none is unread. What the way holds of either is taken only as a
+     * <p>Each side is the value at a position the declarations leave every value of its type, or a
+     * number taken of one whose operation declares that its ends are where the representation
+     * stops ({@code Date.year}) and that every answer it can give has a source value. So nothing
+     * of them ties it and none is unread. What the way holds of either is taken only as a
      * form over the two weighed one way and the other. A statement about either that is anything
      * else — an end on one of them alone, a form with a third number in it — leaves nothing shown,
      * since it may keep a side from values of its own.
@@ -1254,12 +1256,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             held.add(statement);
         }
-        // Values taken of a place stop where the operation does, which is short of the type.
-        NumericDomain.Bounds extent = sides.get(0).term() instanceof NumericTerm.TakenOf
+        // Values taken of a place stop where the operation does, short of the type, and an
+        // operation is given only when that is where the representation stops.
+        NumericDomain.Bounds run = sides.get(0).term() instanceof NumericTerm.TakenOf
                 ? terms.get(0).realizes()
                 : new NumericDomain.Bounds(on.extent().low(), on.extent().high());
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, constant, relation, held,
-                extent, UndividedByARelation::overlap);
+                new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
+                UndividedByARelation::overlap);
     }
 
     /**

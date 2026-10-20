@@ -3509,7 +3509,8 @@ public final class InvariantChecker {
         Set<RuleKey> out = new LinkedHashSet<>(WhatARelationLeavesUndivided.of(terms,
                 over.constant(), relation, overlap, (one, other) -> true));
         out.addAll(WhatARelationLeavesUndivided.ofTheirDifference(apart, over.constant(), relation,
-                List.of(), extent, overlap));
+                List.of(), new WhatARelationLeavesUndivided.WhereTheRepresentationStops(extent),
+                overlap));
         return out;
     }
 
