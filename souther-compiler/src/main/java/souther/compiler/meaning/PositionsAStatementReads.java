@@ -62,6 +62,7 @@ public final class PositionsAStatementReads {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(var term) -> reads(term, out);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
+                 DecisionAtom.ComputedOverAnAnswer _,
                  Quantity.OfABinding _, Quantity.HowManyCarried _ -> false;
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(each -> reads(each, out));

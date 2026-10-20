@@ -18,9 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * input or the answer of an injected behavior, and as the same number however it is spelled. Two
  * walks decide what keeps every element of a list once — the input's, down to a position, and the
  * answer's, down to a dependency's answer — and this is what keeps them from parting: each shape is
- * written over both, and has to come out read on both or unread on both. The shapes only the input
- * reads are listed by themselves ({@link #readOverTheInputOnly}), so that one side reading what the
- * other does not is never a shape that went unnoticed.
+ * written over both, and has to come out read on both or unread on both.
  *
  * <p>Read is not enough. Spellings of one number — a count and a fold adding one, a total of a list
  * and of the list reversed — are one term, so on each side every spelling in a group comes out with
@@ -94,7 +92,38 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                         "List.sum(YS)"),
                 // And a total of what each element comes to is the same over the list reversed.
                 List.of("List.sum(List.map(x -> 2 * x, NUMS))",
-                        "List.sum(List.map(x -> 2 * x, List.reverse(NUMS)))"));
+                        "List.sum(List.map(x -> 2 * x, List.reverse(NUMS)))"),
+                // A total that turns on where each element stands is of the elements in the order
+                // they were handed in, which two reversals leave as it was.
+                List.of("List.sum(List.mapIndexed((i, x) -> i * x, NUMS))",
+                        "List.sum(List.mapIndexed((i, x) -> i * x,"
+                                + " List.reverse(List.reverse(NUMS))))"),
+                List.of("List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, NUMS))"),
+                // A selection by position that keeps every element is the list, whichever way it
+                // is written, and the order of the elements has no part in it.
+                List.of("List.sum(NUMS)",
+                        "List.sum(List.drop(0, NUMS))",
+                        "List.sum(List.drop(0, List.drop(0, NUMS)))",
+                        "List.sum(List.mapIndexed((i, x) -> if i >= 0 then x else 0, NUMS))",
+                        "List.sum(List.mapIndexed((i, x) -> x, List.sortBy(y -> y, NUMS)))",
+                        "List.sum(List.mapIndexed((i, x) -> x, NUMS))",
+                        "List.sum(List.map(x -> 1 * x, NUMS))",
+                        "List.fold((acc, x) -> acc + x, 0, NUMS)"),
+                // And one that keeps none is nought.
+                List.of("List.sum(List.take(0, NUMS))",
+                        "List.sum(List.take(0, List.drop(0, NUMS)))",
+                        "List.sum(List.drop(3, List.take(3, NUMS)))"),
+                List.of("List.sum(List.mapIndexed((i, x) -> if i < 0 then x else 0, NUMS))"),
+                // And a total of the elements a take or drop keeps is one chosen by position.
+                List.of("List.sum(List.take(1, List.reverse(NUMS)))"),
+                List.of("List.sum(List.drop(1, NUMS))"),
+                // Takes and drops stacked keep the positions from the furthest drop to the
+                // nearest take, however they are stacked.
+                List.of("List.sum(List.take(3, List.drop(1, NUMS)))",
+                        "List.sum(List.drop(1, List.take(4, NUMS)))",
+                        "List.sum(List.take(5, List.take(3, List.drop(1, NUMS))))",
+                        "List.sum(List.drop(1, List.drop(0, List.take(4, NUMS))))"),
+                List.of("List.sum(List.take(1, List.drop(1, List.reverse(NUMS))))"));
     }
 
     /**
@@ -106,25 +135,15 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         return List.of(
                 "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))",
                 "List.fold((acc, x) -> acc + x.quantity, 0, List.filter(i -> i.active, ROWS))",
+                // Sorted, the position an element is at is no position it was written at.
+                "List.sum(List.mapIndexed((i, x) -> i * x, List.sortBy(x -> x, NUMS)))",
                 "List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))",
+                // A reversal between the selections puts their positions in another list.
+                "List.sum(List.take(1, List.reverse(List.drop(1, NUMS))))",
                 "List.sum(List.flatMap(i -> [i.quantity], ROWS))",
                 "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",
                 "List.fold((acc, x) -> acc + x, 0,"
                         + " List.sortBy(x -> x, List.map(.quantity, ROWS)))");
-    }
-
-    /**
-     * Shapes the input reads and the answer does not: a total chosen or weighed by where each
-     * element stands. {@code [4, 6]} reversed and taken one of comes to six where the list comes to
-     * ten, so it is read over the input as a total of each element by its position, and an answer
-     * has no number that turns on where its elements stand. Listed apart from what neither side
-     * reads, so that the answer reading one of them is a change this asks to be moved.
-     */
-    private static List<String> readOverTheInputOnly() {
-        return List.of(
-                "List.sum(List.take(1, List.reverse(NUMS)))",
-                "List.sum(List.drop(1, NUMS))",
-                "List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, NUMS))");
     }
 
     private static String overTheInput(String shape) {
@@ -165,19 +184,6 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 assertEquals(input, overTheInput(each), "over the input: " + each);
                 assertEquals(response, overTheResponse(each), "over the response: " + each);
             }
-        }
-    }
-
-    @Test
-    void whatOnlyTheInputReadsIsReadThereAndUnreadOverTheAnswer() {
-        for (String shape : readOverTheInputOnly()) {
-            String input = overTheInput(shape);
-            assertFalse(input.contains("not read: comparison"), "over the input: " + shape + "\n"
-                    + input);
-            assertTrue(input.contains("the position"), "over the input: " + shape + "\n" + input);
-            String response = overTheResponse(shape);
-            assertTrue(response.contains("not read: comparison"), "over the response: " + shape
-                    + "\n" + response);
         }
     }
 

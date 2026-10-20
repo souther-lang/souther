@@ -1207,6 +1207,64 @@ public final class InputReads {
     }
 
     /**
+     * The answer of a dependency whose elements {@code container} holds, once each, and the
+     * direction it holds them in: the order the answer lists them or the opposite. Null where
+     * {@code container} is no such answer.
+     *
+     * <p>Beside {@link #answerWhoseEveryElementIsHeldBy} and stronger again, as the input's
+     * {@link InputPath#inTheOrderAt} is beside its everyElementAt. The only operations crossed are
+     * those declared to answer a list the other way round, each turning the direction over; one that
+     * puts the elements in any other order, or answers each as it is, says nothing of the order and
+     * the walk stops at it.
+     */
+    public AnAnswerInOrder answerHandedInOrder(Core container, Symbols symbols,
+                                               DeclarationNewtypes newtypes) {
+        Denotation at = standing(container, symbols, newtypes);
+        TraversalDirection direction = TraversalDirection.FORWARD;
+        while (at != null) {
+            AnAnswerAt found = at.at().answerAt(at.value(), symbols, newtypes);
+            if (found != null) {
+                return new AnAnswerInOrder(found, direction);
+            }
+            if (!(applicationIn(at.value()) instanceof Application(var operation, var args))) {
+                return null;
+            }
+            int reversed = DefaultBoundOperationFacts.positionOfTheArgumentReversed(operation);
+            if (reversed < 0 || reversed >= args.size()) {
+                return null;
+            }
+            direction = direction.reversed();
+            at = at.at().standing(args.get(reversed), symbols, newtypes);
+        }
+        return null;
+    }
+
+    /** What {@link #answerHandedInOrder} found: the answer, and the direction its elements are
+     *  handed in relative to the order it lists them. */
+    public record AnAnswerInOrder(AnAnswerAt answer, TraversalDirection direction) {
+
+        public AnAnswerInOrder {
+            if (answer == null || direction == null) {
+                throw new IllegalArgumentException("elements in an order are those of some answer,"
+                        + " handed in some direction");
+            }
+        }
+    }
+
+    /** An operation and the arguments it was applied to. */
+    private record Application(ValueName operation, List<Core> args) {}
+
+    private static Application applicationIn(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Call call when call.fn() instanceof Core.Reached reached ->
+                    new Application(reached.denotes(), call.args());
+            case Core.PreservedCall kept ->
+                    new Application(kept.declared().operation(), kept.args());
+            default -> null;
+        };
+    }
+
+    /**
      * The list {@code at} is the answer of an operation that keeps every element of, each as often
      * — one it puts in another order, or the one a closure that answers each element as it is was
      * handed — standing where it is read, or null where {@code at} is no such answer.
