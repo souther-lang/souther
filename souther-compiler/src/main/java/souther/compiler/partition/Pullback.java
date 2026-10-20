@@ -138,7 +138,6 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.LongUnaryOperator;
@@ -6868,11 +6867,12 @@ final class Pullback {
      *                  into yet, or null
      * @param composed  the form of each number whose arithmetic composed, in the order of the
      *                  numbers: one for each of them where every one did
-     * @param notLinear each value it stopped at for being no linear form of what it was made of,
-     *                  which is a product or a quotient
+     * @param notLinear the atoms that kept a product or a quotient it stopped at from being a form
+     *                  ({@link AffineForms.Halt.NotLinear#over}), each of them a number of its
+     *                  own wherever it was read
      */
     private record NumbersRead(Inside wayIn, List<LinearForm<Quantity>> composed,
-                               List<Core> notLinear) {}
+                               Set<Quantity> notLinear) {}
 
     /**
      * A number of a comparison with its weight there: the comparison is the sum of its numbers so
@@ -6909,8 +6909,7 @@ final class Pullback {
                 return read.wayIn();
             }
             if (!read.notLinear().isEmpty()) {
-                return aCountToKeep((_, container) -> read.notLinear().stream()
-                        .anyMatch(stopped -> Core.holds(stopped, container.value())));
+                return aCountToKeep(read.notLinear()::contains);
             }
             if (read.composed().size() < numbers.size()) {
                 return null;
@@ -6931,28 +6930,39 @@ final class Pullback {
                 }
                 weighed.add(one);
             }
+            // Inside the ways of keeping, a count weighed alone is read in its ways too: its truths
+            // are a choice inside the choice being read, as an if inside an if is, and read as
+            // which of them hold they would be the comparison's own relations under that arm.
             LinearForm<Quantity> relation = LinearForm.sum(weighed).orNull();
-            return relation == null || relation.coefs().size() < 2 ? null
-                    : aCountToKeep((count, _) -> relation.coefs().containsKey(count));
+            if (relation == null) {
+                return null;
+            }
+            boolean alone = relation.coefs().size() < 2;
+            return alone && aggregatesInACase.isEmpty() ? null
+                    : aCountToKeep(relation.coefs()::containsKey);
         } finally {
             countsMet = outer;
         }
     }
 
     /**
-     * The first container a count met in {@link #countsMet} was asked of, among those
-     * {@code standsInTheWay} names, whose elements truths keep — read in each way they are kept,
-     * or null where there is none.
+     * The first container, of those a count {@code standsInTheWay} names was met as how many it
+     * holds ({@link #countsMet}), whose elements truths keep — read in each way they are kept, or
+     * null where there is none.
+     *
+     * <p>Named by the count and not by where it was written: a count is the same number wherever
+     * it was read, and a container read through a call or a closure's body is not written where
+     * the comparison is.
      */
-    private Inside.ATotalByKeeping aCountToKeep(
-            BiPredicate<Quantity.HowManyHold, Denotation> standsInTheWay) {
+    private Inside.ATotalByKeeping aCountToKeep(Predicate<Quantity.HowManyHold> standsInTheWay) {
         for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count : countsMet.entrySet()) {
+            if (!standsInTheWay.test(count.getKey())) {
+                continue;
+            }
             for (Denotation container : count.getValue()) {
-                if (standsInTheWay.test(count.getKey(), container)) {
-                    Inside.ATotalByKeeping kept = keptByTruths(container);
-                    if (kept != null) {
-                        return kept;
-                    }
+                Inside.ATotalByKeeping kept = keptByTruths(container);
+                if (kept != null) {
+                    return kept;
                 }
             }
         }
@@ -6967,7 +6977,7 @@ final class Pullback {
     /** What the arithmetic of {@code numbers} came to, read one after another. */
     private NumbersRead aStopIn(List<Denotation> numbers) {
         List<LinearForm<Quantity>> composed = new ArrayList<>();
-        List<Core> notLinear = new ArrayList<>();
+        Set<Quantity> notLinear = new LinkedHashSet<>();
         for (Denotation number : numbers) {
             AffineForms.Outcome<Quantity, InputReads> outcome =
                     AffineForms.outcome(number.value(), number.at(), quantities());
@@ -6976,9 +6986,9 @@ final class Pullback {
                 composed.add(form);
             }
             if (outcome instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
-                AffineForms.Outcome.StoppedAt<Quantity, InputReads> at = whereItStopped(stopped);
-                if (at.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>) {
-                    notLinear.add(at.node());
+                if (whereItStopped(stopped).why() instanceof AffineForms.Halt.NotLinear<Quantity,
+                        InputReads>(var _, Set<Quantity> over)) {
+                    notLinear.addAll(over);
                 }
                 Inside found = aWayInAt(stopped);
                 boolean goneInto = switch (found) {
@@ -8074,7 +8084,7 @@ final class Pullback {
                 || written.op() != BinOp.MUL || inside.node() != written
                 || written != sideAsWritten
                 || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
-                        NonAffineOperation operation))
+                        NonAffineOperation operation, var _))
                 || operation != NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES) {
             return null;
         }
@@ -8108,7 +8118,7 @@ final class Pullback {
                 || !(Core.withoutStanding(node) instanceof Core.PreservedCall written)
                 || inside.node() != written || written != sideAsWritten
                 || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
-                        NonAffineOperation operation))
+                        NonAffineOperation operation, var _))
                 || operation != NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE) {
             return null;
         }
@@ -8962,7 +8972,8 @@ final class Pullback {
         return switch (stopped.why()) {
             case AffineForms.Halt.NoRule<Quantity, InputReads> _ ->
                     noRuleFor(stopped.node(), stopped.at());
-            case AffineForms.Halt.NotLinear<Quantity, InputReads>(NonAffineOperation operation) ->
+            case AffineForms.Halt.NotLinear<Quantity, InputReads>(
+                    NonAffineOperation operation, var _) ->
                     new WhyUnread.OutsideTheLinearFragment(operation);
             case AffineForms.Halt.NoNumberOnARun<Quantity, InputReads> _ ->
                     new WhyUnread.NoNumberOnARun();

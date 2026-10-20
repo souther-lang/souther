@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -149,7 +150,8 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
     @Test
     void theOperationIsFoundThroughTheCallsAnArgumentStoppedUnder() {
         AffineForms.Halt<String, String> product =
-                new AffineForms.Halt.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
+                new AffineForms.Halt.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES,
+                        Set.of());
         AffineForms.Halt<String, String> once = new AffineForms.Halt.AnArgumentStopped<>(
                 new AffineForms.Outcome.StoppedAt<>(X, "at", product));
         AffineForms.Halt<String, String> twice = new AffineForms.Halt.AnArgumentStopped<>(

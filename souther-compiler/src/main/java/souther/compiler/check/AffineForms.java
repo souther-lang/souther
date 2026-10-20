@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
@@ -296,16 +297,26 @@ public final class AffineForms {
             while (at instanceof AnArgumentStopped<A, E>(var argument)) {
                 at = argument.why();
             }
-            return at instanceof NotLinear<A, E>(var operation)
+            return at instanceof NotLinear<A, E>(var operation, var _)
                     ? Optional.of(operation) : Optional.empty();
         }
 
         /** No rule here for the expression, and the caller named it nothing. */
         record NoRule<A, E>() implements Halt<A, E> {}
 
-        /** A product of two values neither of which is a constant, or a quotient by one that is
-         *  not: arithmetic, and none a form over the atoms says. */
-        record NotLinear<A, E>(NonAffineOperation operation) implements Halt<A, E> {}
+        /**
+         * A product of two values neither of which is a constant, or a quotient by one that is
+         * not: arithmetic, and none a form over the atoms says.
+         *
+         * @param over the atoms that keep it from being a form ({@link Terms.Operated.NotLinear}),
+         *             or none where what it was made of was not composed
+         */
+        record NotLinear<A, E>(NonAffineOperation operation, Set<A> over) implements Halt<A, E> {
+
+            public NotLinear {
+                over = Set.copyOf(over);
+            }
+        }
 
         /** A quotient by nought or the least whole number negated, which no run has a number
          *  for: the run aborts there. */
@@ -684,8 +695,8 @@ public final class AffineForms {
         }
         return switch (rule.apply(left, right)) {
             case Terms.Operated.Form<A>(LinearForm<A> form) -> form;
-            case Terms.Operated.NotLinear<A>(NonAffineOperation operation) ->
-                    halted(e, at, new Halt.NotLinear<>(operation), stopped);
+            case Terms.Operated.NotLinear<A>(NonAffineOperation operation, Set<A> over) ->
+                    halted(e, at, new Halt.NotLinear<>(operation, over), stopped);
             case Terms.Operated.NoNumberOnARun<A> _ ->
                     halted(e, at, new Halt.NoNumberOnARun<>(), stopped);
             case Terms.Operated.NotHeld<A>(UnheldNumber why) ->
@@ -793,7 +804,7 @@ public final class AffineForms {
             // is, and only where nothing names the call as an atom of its own.
             case Core.PreservedCall call when remainderByAValue(call, at, reading, following) ->
                     halted(e, at, new Halt.NotLinear<>(
-                            NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE), stopped);
+                            NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE, Set.of()), stopped);
             case Core.PreservedCall _ when reading.takenAsAForm(e, at) != null ->
                     overTheValues(e, reading.takenAsAForm(e, at), at, reading, following, stopped);
             case Core.PreservedCall _ when formSaidOf(e) != null ->

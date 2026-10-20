@@ -947,7 +947,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return right.past(both.op() == BinOp.AND ? leftAnswered : leftAnswered.denied());
         }
         if (e instanceof Core.Block) {
-            return Core.holds(e, target) ? Way.NOT_READ : null;
+            return holds(e, target) ? Way.NOT_READ : null;
         }
         Way[] found = {null};
         ScopeStep.forEachChild(e, (child, step) -> {
@@ -984,6 +984,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
         }
         return null;
+    }
+
+    /** Whether {@code target} stands in {@code e}. */
+    private static boolean holds(Core e, Core target) {
+        if (e == target) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || holds(child, target));
+        return found[0];
     }
 
     /** Whether {@code e} builds a value anywhere in it. */

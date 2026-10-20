@@ -2255,14 +2255,4 @@ public sealed interface Core {
         });
     }
 
-    /** Whether {@code target} stands in {@code e}: is it, or is a node somewhere inside it. */
-    static boolean holds(Core e, Core target) {
-        if (e == target) {
-            return true;
-        }
-        boolean[] found = {false};
-        forEachChild(e, child -> found[0] = found[0] || holds(child, target));
-        return found[0];
-    }
-
 }

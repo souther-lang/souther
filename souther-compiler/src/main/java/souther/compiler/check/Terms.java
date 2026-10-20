@@ -827,8 +827,19 @@ final class Terms {
         /** The form the parts come to. */
         record Form<A>(LinearForm<A> form) implements Operated<A> {}
 
-        /** Arithmetic no form over the atoms says: a product of two unknowns, a quotient by one. */
-        record NotLinear<A>(NonAffineOperation operation) implements Operated<A> {}
+        /**
+         * Arithmetic no form over the atoms says: a product of two unknowns, a quotient by one.
+         *
+         * @param over the atoms that keep it from being a form: either factor's of a product, the
+         *             divisor's of a quotient. Where every one of them is a constant it is
+         *             arithmetic a form says
+         */
+        record NotLinear<A>(NonAffineOperation operation, Set<A> over) implements Operated<A> {
+
+            public NotLinear {
+                over = Set.copyOf(over);
+            }
+        }
 
         /** A quotient by nought, which no run has a number for. */
         record NoNumberOnARun<A>() implements Operated<A> {}
@@ -855,8 +866,12 @@ final class Terms {
         if (a.coefs().isEmpty()) {
             return Operated.of(b.times(a.constant()));
         }
-        return b.coefs().isEmpty() ? Operated.of(a.times(b.constant()))
-                : new Operated.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
+        if (b.coefs().isEmpty()) {
+            return Operated.of(a.times(b.constant()));
+        }
+        Set<A> over = new HashSet<>(a.coefs().keySet());
+        over.addAll(b.coefs().keySet());
+        return new Operated.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES, over);
     }
 
     /**
@@ -881,7 +896,8 @@ final class Terms {
      */
     static <A> Operated<A> quotient(LinearForm<A> a, LinearForm<A> b) {
         if (!b.coefs().isEmpty()) {
-            return new Operated.NotLinear<>(NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE);
+            return new Operated.NotLinear<>(NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE,
+                    b.coefs().keySet());
         }
         if (b.constant().isZero()) {
             return new Operated.NoNumberOnARun<>();
