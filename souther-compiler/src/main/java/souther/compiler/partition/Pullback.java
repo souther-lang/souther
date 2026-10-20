@@ -6185,8 +6185,10 @@ final class Pullback {
      * that element's numbers, and the sum is those numbers' sums over the elements and the constant
      * times how many there are. Only a form of the element's own numbers is one: a number of the
      * input beside them is added once for each element, which no sum of the answer says. And only
-     * the walk handed the answer's list itself, since one handed a list that kept some of its
-     * elements is a sum over those and over no element of the answer.
+     * a walk handed every element of the answer's list, each as often, through the operations
+     * that keep every element: one handed a list that kept some of its elements is a sum over
+     * those and over no element of the answer. The same operations may stand between the sum and
+     * the walk, since a sum does not turn on the order of what it adds up.
      */
     private LinearForm<Quantity> sumOverTheElementsOfAnAnswer(NumericMeasures.Measured measured,
                                                               InputReads at) {
@@ -6197,9 +6199,15 @@ final class Pullback {
         }
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
+        // Whatever puts the numbers in another order beside the map is the same sum.
         Denotation walk = at.standing(measured.of(), symbols, newtypes);
         ElementBindings.StepOnEachElement step =
                 ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
+        while (step == null && walk != null) {
+            walk = walk.at().stepKeepingEveryElement(walk, symbols, newtypes);
+            step = walk == null ? null
+                    : ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
+        }
         if (step == null) {
             return null;
         }

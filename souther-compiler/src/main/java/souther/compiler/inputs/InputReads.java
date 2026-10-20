@@ -1146,55 +1146,82 @@ public final class InputReads {
      */
     private AnAnswerAt answerHoldingTheElementsOf(Core container, Symbols symbols,
                                                   DeclarationNewtypes newtypes) {
-        return answerReachedThrough(container, symbols, newtypes,
-                InputPath::argumentWhoseElementsItHolds);
-    }
-
-    /**
-     * The answer of a dependency whose every element {@code container} holds, each as often, or
-     * null where it holds none's.
-     *
-     * <p>Only through the operations that put the elements of a list in another order
-     * ({@code InputPath.argumentWhoseElementsAreReordered}): a filtered list holds some of the
-     * elements of the answer, and what is added up over those is added up over no element of it.
-     */
-    public AnAnswerAt answerWhoseEveryElementIsHeldBy(Core container, Symbols symbols,
-                                                      DeclarationNewtypes newtypes) {
-        return answerReachedThrough(container, symbols, newtypes,
-                InputPath::argumentWhoseElementsAreReordered);
-    }
-
-    private AnAnswerAt answerReachedThrough(Core container, Symbols symbols,
-                                            DeclarationNewtypes newtypes,
-                                            Function<ValueName, DeclaredArgument> crossed) {
         Denotation at = standing(container, symbols, newtypes);
         while (true) {
             AnAnswerAt found = at.at().answerAt(at.value(), symbols, newtypes);
             if (found != null) {
                 return found;
             }
-            ValueName operation;
-            List<Core> args;
-            switch (Core.withoutStanding(at.value())) {
-                case Core.Call call when call.fn() instanceof Core.Reached reached -> {
-                    operation = reached.denotes();
-                    args = call.args();
-                }
-                case Core.PreservedCall kept -> {
-                    operation = kept.declared().operation();
-                    args = kept.args();
-                }
-                default -> {
-                    return null;
-                }
-            }
-            DeclaredArgument holds = crossed.apply(operation);
-            int position = holds == null ? -1 : CallArguments.positionOf(holds, operation);
-            if (position < 0 || position >= args.size()) {
+            at = oneStepBeneath(at, symbols, newtypes,
+                    (operation, args, where) -> InputPath.argumentWhoseElementsItHolds(operation));
+            if (at == null) {
                 return null;
             }
-            at = at.at().standing(args.get(position), symbols, newtypes);
         }
+    }
+
+    /**
+     * The answer of a dependency whose every element {@code container} holds, each as often, or
+     * null where it holds none's.
+     *
+     * <p>Only through the operations that keep every element ({@link #stepKeepingEveryElement}): a
+     * filtered list holds some of the elements of the answer, and what is added up over those is
+     * added up over no element of it.
+     */
+    public AnAnswerAt answerWhoseEveryElementIsHeldBy(Core container, Symbols symbols,
+                                                      DeclarationNewtypes newtypes) {
+        Denotation at = standing(container, symbols, newtypes);
+        while (at != null) {
+            AnAnswerAt found = at.at().answerAt(at.value(), symbols, newtypes);
+            if (found != null) {
+                return found;
+            }
+            at = stepKeepingEveryElement(at, symbols, newtypes);
+        }
+        return null;
+    }
+
+    /**
+     * The list {@code at} is the answer of an operation that keeps every element of, each as often
+     * — one it puts in another order, or the one a closure that answers each element as it is was
+     * handed — standing where it is read, or null where {@code at} is no such answer.
+     */
+    public Denotation stepKeepingEveryElement(Denotation at, Symbols symbols,
+                                              DeclarationNewtypes newtypes) {
+        return oneStepBeneath(at, symbols, newtypes, (operation, args, where) ->
+                InputPath.argumentKeepingEveryElement(operation, args,
+                        closure -> Core.withoutStanding(
+                                where.standing(closure, symbols, newtypes).value())
+                                instanceof Core.Block block ? block : null,
+                        where.heldByTheBody(), newtypes));
+    }
+
+    /** Which argument of an operation applied to {@code args} a step goes down to. */
+    private interface Crossed {
+        DeclaredArgument of(ValueName operation, List<Core> args, InputReads where);
+    }
+
+    private Denotation oneStepBeneath(Denotation at, Symbols symbols, DeclarationNewtypes newtypes,
+                                      Crossed crossed) {
+        ValueName operation;
+        List<Core> args;
+        switch (Core.withoutStanding(at.value())) {
+            case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                operation = reached.denotes();
+                args = call.args();
+            }
+            case Core.PreservedCall kept -> {
+                operation = kept.declared().operation();
+                args = kept.args();
+            }
+            default -> {
+                return null;
+            }
+        }
+        DeclaredArgument holds = crossed.of(operation, args, at.at());
+        int position = holds == null ? -1 : CallArguments.positionOf(holds, operation);
+        return position < 0 || position >= args.size() ? null
+                : at.at().standing(args.get(position), symbols, newtypes);
     }
 
     /**

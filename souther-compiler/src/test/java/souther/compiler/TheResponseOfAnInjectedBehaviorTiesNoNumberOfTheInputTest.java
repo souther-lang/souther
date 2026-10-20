@@ -2,11 +2,16 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -231,6 +236,36 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
                 .replace(SUM_OF_THE_ROWS, number);
     }
 
+    private static String rowsOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return GeneratedRows.of(compilation, null, null,
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+    }
+
+    /** Every way of writing the sum of the response's quantities is the one number, down to the
+     *  rows written for it. */
+    @Test
+    void theSumOfTheResponsesElementsIsTheSameRowsHoweverItIsWritten() {
+        String rows = rowsOf(SUMMED);
+        assertFalse(rows.isBlank(), "rows are written for the sum");
+
+        for (String number : List.of(
+                "List.fold((acc, x) -> acc + x.quantity, 0, readSnap(order).rows)",
+                "List.fold((acc, x) -> x.quantity + acc, 0, readSnap(order).rows)",
+                "List.sum(List.map(.quantity, List.sortBy(.sku, readSnap(order).rows)))",
+                "List.sum(List.map(.quantity, List.sortBy(.sku, List.sortBy(.quantity,"
+                        + " readSnap(order).rows))))",
+                "List.fold((acc, x) -> acc + x.quantity, 0, List.sortBy(.sku, readSnap(order).rows))",
+                "List.sum(List.sortBy(x -> x, List.map(.quantity, readSnap(order).rows)))",
+                "List.sum(List.map(.quantity, List.map(x -> x, readSnap(order).rows)))",
+                "{ let sorted = List.sortBy(.sku, readSnap(order).rows)\n"
+                        + "  List.sum(List.map(.quantity, sorted)) }")) {
+            assertEquals(rows, rowsOf(summedAs("summed", number)), number);
+        }
+    }
+
     @Test
     void aFoldAddingTheResponsesElementsIsReadAsTheirSum() {
         String report = reportOf(summedAs("folded",
@@ -254,6 +289,24 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         String report = reportOf(summedAs("sortedfold",
                 "List.fold((acc, x) -> acc + x.quantity + 1, 5,"
                         + " List.sortBy(.sku, List.sortBy(.quantity, readSnap(order).rows)))"));
+
+        assertFalse(report.contains("not read: comparison"), report);
+        assertFalse(report.contains("not accounted for: comparison"), report);
+    }
+
+    @Test
+    void aReorderingOfTheNumbersMadeOfTheResponsesElementsLeavesTheirSumRead() {
+        String report = reportOf(summedAs("outer",
+                "List.sum(List.sortBy(x -> x, List.map(.quantity, readSnap(order).rows)))"));
+
+        assertFalse(report.contains("not read: comparison"), report);
+        assertFalse(report.contains("not accounted for: comparison"), report);
+    }
+
+    @Test
+    void aMapThatAnswersEachElementAsItIsLeavesTheSumOfTheResponseRead() {
+        String report = reportOf(summedAs("identity",
+                "List.sum(List.map(.quantity, List.map(x -> x, readSnap(order).rows)))"));
 
         assertFalse(report.contains("not read: comparison"), report);
         assertFalse(report.contains("not accounted for: comparison"), report);
