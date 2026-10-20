@@ -114,6 +114,19 @@ public sealed interface TakenAs {
     }
 
     /**
+     * Whether the number is one of the elements a container holds and not of the order they are
+     * held in, so that a container holding every element of another, each as often, has the
+     * number the other has.
+     *
+     * <p>Asked where a taking of a list in another order is read as a taking of the list it
+     * reorders ({@code inputs.InputNumber}). An account that takes its number of one value has no
+     * elements to put in another order.
+     */
+    default boolean theSameInEveryOrder() {
+        return false;
+    }
+
+    /**
      * How many a container holds: a string's length, a list's, the size of a set or a map.
      *
      * <p>Counted in what the library counts in — a string in code points, as {@code String.length}
@@ -126,6 +139,11 @@ public sealed interface TakenAs {
             return answered == Type.Prim.INT
                     && (source == Type.STRING || source instanceof Type.ListOf
                             || source instanceof Type.SetOf || source instanceof Type.MapOf);
+        }
+
+        @Override
+        public boolean theSameInEveryOrder() {
+            return true;
         }
     }
 
@@ -156,6 +174,13 @@ public sealed interface TakenAs {
             // what may be read as a number is asked of the answer afterwards.
             Type element = Type.elementOfAContainer(source);
             return element != null && element.equals(answered);
+        }
+
+        /** Every sum the library has is one sum of the elements and not a run of two-term sums,
+         *  so whether it is a value, and which, does not turn on their order. */
+        @Override
+        public boolean theSameInEveryOrder() {
+            return true;
         }
     }
 

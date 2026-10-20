@@ -100,7 +100,7 @@ public final class InputNumber {
         if (measured != null) {
             // A taking is of a location, or of what a location's value was moved into, so an
             // argument that is neither is one there is no location to take it of.
-            ObservationSource of = sourceOf(measured.of(), reads, source);
+            ObservationSource of = sourceOf(measured, reads, source);
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of, measured.arguments(),
                         inputs.typeAt(of.position(), source), source.inners(), symbols);
@@ -128,19 +128,30 @@ public final class InputNumber {
     }
 
     /**
-     * The value a taking is of: the one standing at a location, or one a chain of shifts of a date
-     * written out made of it. Null where it is neither.
+     * The value a taking is of: the one standing at a location, one a chain of shifts of a date
+     * written out made of it, or — for a number that does not turn on the order of the elements —
+     * the container whose every element it holds, each as often. Null where it is none of these.
      *
      * <p>A location is asked first and is what a taking is of wherever it is one. A call that is no
      * location is then asked what the library says of it ({@link DateShifts}), so that a date moved
      * by days is a value of the place it was moved from and not a place of its own: a name that
-     * only may stand at a location is still no one of them.
+     * only may stand at a location is still no one of them. And {@code List.reverse(xs)} adds up to
+     * what {@code xs} does, so its total is the term of {@code xs} and not a second one for the
+     * same number; a list that keeps some of the elements holds no container's every element.
      */
-    private static ObservationSource sourceOf(Core of, InputReads reads,
+    private static ObservationSource sourceOf(NumericMeasures.Measured measured, InputReads reads,
                                               RuleReadingSource source) {
+        Core of = measured.of();
         return switch (reads.pathOf(of, source.newtypes())) {
             case PathResolution.At(var at) -> ObservationSource.asItStands(at);
-            case PathResolution.NotAPosition _ -> movedFromALocation(of, reads, source);
+            case PathResolution.NotAPosition _ -> {
+                ObservationSource moved = movedFromALocation(of, reads, source);
+                if (moved != null || !measured.takenAs().theSameInEveryOrder()) {
+                    yield moved;
+                }
+                TermPath reordered = reads.containerWhoseEveryElementIsIn(of, source.newtypes());
+                yield reordered == null ? null : ObservationSource.asItStands(reordered);
+            }
             // A taking is of one location, and a name that only may stand at one is no one of
             // them. Taken of any, the number would be a size of a container the run it is on
             // never walked.
@@ -206,9 +217,8 @@ public final class InputNumber {
     private static NumericTerm codePointsAddedUp(NumericMeasures.Measured measured,
                                                  InputDomain inputs, InputReads reads,
                                                  RuleReadingSource source) {
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         if (!measured.arguments().none()
-                || !(facts.takenAs(measured.operation()) instanceof TakenAs.TheSumOfWhatItHolds)) {
+                || !(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         TermPath at = stringWhoseCodePointsAre(measured.of(), reads, source);
@@ -255,8 +265,7 @@ public final class InputNumber {
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
                 each -> reads.folded(each, symbols, source.newtypes()));
         if (measured == null || !measured.arguments().none()
-                || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                        instanceof TakenAs.TheSumOfWhatItHolds)) {
+                || !(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         Denotation walked = reads.denotes(measured.of(), symbols, source.newtypes());
@@ -653,8 +662,7 @@ public final class InputNumber {
     private static ElementProjection countedOfEach(NumericMeasures.Measured measured,
                                                    InputReads where, BindingId element,
                                                    RuleReadingSource source) {
-        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                instanceof TakenAs.TheSumOfWhatItHolds)) {
+        if (!(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         ElementAnswer closure = where.answerAt(element);
@@ -673,8 +681,7 @@ public final class InputNumber {
     private static ElementValue computedOf(NumericMeasures.Measured measured, InputReads where,
                                            BindingId element, RuleReadingSource source,
                                            ElementValue.ElementsAt elements) {
-        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                instanceof TakenAs.TheSumOfWhatItHolds)) {
+        if (!(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
         ElementAnswer closure = where.answerAt(element);

@@ -42,31 +42,55 @@ public record Reach(ExactCut least, ExactCut most) {
      */
     public static <A> Reach of(Map<A, ExactRatio> coefs, ExactRatio constant,
                                Function<A, Reach> positions) {
-        ExactRatio least = constant;
-        ExactRatio most = constant;
-        boolean leastReached = true;
-        boolean mostReached = true;
+        return new Reach(endOf(coefs, constant, positions, false),
+                endOf(coefs, constant, positions, true));
+    }
+
+    /**
+     * The upper end of {@link #of}, for a reader that asks for no other: the sums of the lower end
+     * are not taken, and nothing is summed past a position with no end that way.
+     */
+    public static <A> ExactCut mostOf(Map<A, ExactRatio> coefs, ExactRatio constant,
+                                      Function<A, Reach> positions) {
+        return endOf(coefs, constant, positions, true);
+    }
+
+    private static <A> ExactCut endOf(Map<A, ExactRatio> coefs, ExactRatio constant,
+                                      Function<A, Reach> positions, boolean upper) {
+        ExactRatio sum = constant;
+        boolean reached = true;
         for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
             ExactRatio weight = each.getValue();
             Reach runs = positions.apply(each.getKey());
             if (runs == null) {
                 runs = ANYWHERE;
             }
-            ExactCut low = weight.signum() > 0 ? runs.least() : runs.most();
-            ExactCut high = weight.signum() > 0 ? runs.most() : runs.least();
+            ExactCut end = runs.endWeighedBy(weight.signum(), upper);
+            if (end == null) {
+                return null;
+            }
             // A model's own run ends can put a term far enough apart in scale from the sum so far
             // that the exact arithmetic cannot hold it. Unheld here is the same answer as a position
             // with nothing for this direction: the sum runs unbounded that way rather than at a value
             // nothing composed.
-            least = least == null || low == null ? null
-                    : weight.times(low.at()).flatMap(least::plus).orNull();
-            leastReached &= low != null && low.inclusive();
-            most = most == null || high == null ? null
-                    : weight.times(high.at()).flatMap(most::plus).orNull();
-            mostReached &= high != null && high.inclusive();
+            ExactRatio before = sum;
+            sum = weight.times(end.at()).flatMap(before::plus).orNull();
+            if (sum == null) {
+                return null;
+            }
+            reached &= end.inclusive();
         }
-        return new Reach(least == null ? null : new ExactCut(least, leastReached),
-                most == null ? null : new ExactCut(most, mostReached));
+        return new ExactCut(sum, reached);
+    }
+
+    /**
+     * The end of this position a sum it is weighed in by a weight of sign {@code sign} reads for its
+     * own upper end, or its lower one: the same end where the weight pulls the sum up, the other
+     * where it pulls it down. A weight of nought reads the lower end for the upper and the upper for
+     * the lower, as a pull down does.
+     */
+    public ExactCut endWeighedBy(int sign, boolean upper) {
+        return (sign > 0) == upper ? most : least;
     }
 
     /** Whether either end was found. */

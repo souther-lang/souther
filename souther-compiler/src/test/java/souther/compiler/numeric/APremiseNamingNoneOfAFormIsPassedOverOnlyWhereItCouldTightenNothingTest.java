@@ -26,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The reading it replaces is written out here: every half-space of every rule, merged into the
  * form, and the residual bounded by the ends and the differences the way the reading bounds any form.
+ * So it holds every premise the reading passes over, and a premise leaving a residual of three
+ * positions or more with one that has no end is passed over too.
  */
 class APremiseNamingNoneOfAFormIsPassedOverOnlyWhereItCouldTightenNothingTest {
 
