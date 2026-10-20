@@ -946,6 +946,13 @@ final class InputPath {
                 return null;
             }
         }
+        // A set made a list holds each of its elements once, which no fact about what an
+        // operation builds says of a set; an operation that puts a list's in another order is
+        // listed so as well.
+        int listed = DefaultBoundOperationFacts.positionOfTheArgumentListedOnce(operation);
+        if (listed >= 0 && listed < args.size()) {
+            return new Beneath(args.get(listed), asTheyAre);
+        }
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
         if (built == null) {

@@ -7365,6 +7365,8 @@ public final class Generator {
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
             case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
             case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
+            case RealizationTarget.AmongEveryOccurrence(
+                    NumericTerm.OccurrencesOfItsValue term) -> term;
             case RealizationTarget.AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
                                                          TermPath root) -> {
                 NumericTerm moved = subject.quantities().namedAt(term, root);
@@ -7890,8 +7892,9 @@ public final class Generator {
         // elements of one container among those of another.
         TermPath readAt = switch (target.term()) {
             case NumericTerm.OfAnElementsNeighbours among -> among.container();
-            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _ ->
-                    target.term().subjectPath();
+            // Every value at the place across the containers, which is what the count is among.
+            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
+                 NumericTerm.OccurrencesOfItsValue _ -> target.term().subjectPath();
         };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
@@ -7926,7 +7929,8 @@ public final class Generator {
             case NumericTerm.OfAnElementsNeighbours _ -> values.stream().allMatch(each -> AnOccurrence.of(each)
                             instanceof AnOccurrence.Read(List<ObservedValue> held)
                             && held.isEmpty());
-            case NumericTerm.FromOnePosition _ -> values.isEmpty();
+            case NumericTerm.FromOnePosition _, NumericTerm.OccurrencesOfItsValue _ ->
+                    values.isEmpty();
             case NumericTerm.TakenOver _ -> false;
         };
         if (nothingToRead) {
@@ -7946,6 +7950,8 @@ public final class Generator {
         // no reading of it is made, which is neither the value standing elsewhere nor an
         // observation that came back short.
         boolean ofAnotherShape = false;
+        // An occurrence the statement keeping some of them could not be put to.
+        Set<ReadingGap> keptNotTold = new LinkedHashSet<>();
         boolean stands = switch (term) {
             // How often a value occurs, or the end of the values of a key, among the elements of
             // each container: a row stands at a point where some element's number comes to it.
@@ -7995,6 +8001,39 @@ public final class Generator {
                 }
                 yield any;
             }
+            // A row stands at a point where some value's count among all of them comes to it.
+            case NumericTerm.OccurrencesOfItsValue occurrences -> {
+                boolean any = false;
+                List<souther.compiler.observe.ObservedValue> counted = values;
+                KeptOccurrences kept = occurrences.selection();
+                if (kept != null) {
+                    // Only the values the statement keeps are counted. An occurrence the
+                    // statement cannot be put to may be one of them, so a count made without it
+                    // is a floor and no count: nothing is read back from the values alone.
+                    counted = new ArrayList<>();
+                    for (souther.compiler.observe.ObservedValue value : values) {
+                        switch (kept.perElement().at(new CardinalityComposer.AnElementRead(
+                                kept.position(), occurrences.subjectPath(), Map.of(),
+                                List.of(value)))) {
+                            case AStatementAtARow.Answer.Holds _ -> counted.add(value);
+                            case AStatementAtARow.Answer.Fails _ -> { }
+                            case AStatementAtARow.Answer.CouldNotTell(Set<ReadingGap> why) ->
+                                    keptNotTold.addAll(why);
+                        }
+                    }
+                }
+                for (NumericTerm.Reading read : on.readEachAmong(counted)) {
+                    switch (read) {
+                        case NumericTerm.Reading.Number number ->
+                                any |= number.value().compareTo(at) == 0;
+                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
+                        case NumericTerm.Reading.NotNumber _ -> { }
+                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                notWorkedOut.add(why);
+                    }
+                }
+                yield any;
+            }
             case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
                 case NumericTerm.Reading.Number number -> number.value().compareTo(at) == 0;
                 case NumericTerm.Reading.Missing missing -> {
@@ -8008,6 +8047,11 @@ public final class Generator {
                 }
             };
         };
+        // Before a stand is taken: the count that stands was made without an occurrence that may
+        // have been counted.
+        if (!keptNotTold.isEmpty()) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.KeptNotTold(keptNotTold));
+        }
         if (stands) {
             return new RealizationReadback.AtRequestedPlace();
         }
@@ -8138,6 +8182,10 @@ public final class Generator {
 
         /** The row wrote no value at the position the term names. */
         record NoValueAtThePosition() implements ReadbackGap {}
+
+        /** The statement keeping some of the occurrences could not be put to one of them, and
+         *  that one may be among those counted. */
+        record KeptNotTold(Set<ReadingGap> causes) implements ReadbackGap {}
 
         /** The observation of the value did not come back whole. */
         record Observation(Set<Incompleteness.Code> causes) implements ReadbackGap {}
@@ -12780,6 +12828,7 @@ public final class Generator {
                 // the values of a key, which another element of the key may hold.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.OccurrencesOfItsValue _,
                      NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.

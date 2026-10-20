@@ -21,6 +21,7 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -493,9 +494,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   anything else
      * @param elementsOf the container it asks what some or every element of meets, or null where
      *                   it asks nothing of the elements of one
+     * @param leavesAlone which parts of the dates it names it says nothing of: the years where it
+     *                   states months and days and some month and day it lets through stands in
+     *                   every year alike, the months and days where it states years and the dates
+     *                   have years that hold it together with the rest of the way
      */
     private record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
-                          TermPath elementsOf) {
+                          TermPath elementsOf, PartsLeftAlone leavesAlone) {
+
+        /** The parts of a date a statement of the other parts says nothing of. */
+        enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
+
+        OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+               TermPath elementsOf) {
+            this(positions, whatStands, relation, elementsOf, PartsLeftAlone.NONE);
+        }
+
+        OnAWay leavingAlone(PartsLeftAlone parts) {
+            return new OnAWay(positions, whatStands, relation, elementsOf, parts);
+        }
+
+        /** Whether this says nothing of {@code term} because it is a part of a date this leaves
+         *  alone. */
+        boolean leavesAlone(NumericTerm.FromOnePosition term) {
+            return term instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
+                    && switch (leavesAlone) {
+                        case NONE -> false;
+                        case YEARS -> part == TakenAs.DatePart.YEAR;
+                        case MONTHS_AND_DAYS -> part != TakenAs.DatePart.YEAR;
+                    };
+        }
 
         /** What it states as a form of the input's numbers held against nought, or null where it
          *  states anything else. */
@@ -550,7 +579,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
                                    List<Carrier> carriers, SearchRegion region,
-                                   List<OnAWay> conditions, boolean heldWhole) {
+                                   List<OnAWay> stated, boolean heldWhole) {
+        LeftToTheCalendar left = leavingPartsAlone(stated, read);
+        List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(read, sources, carriers, region, conditions, stating, heldWhole);
@@ -591,10 +622,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // Each side asked once: whether another reaches it, and where it does not, which of its
         // values settle the relation.
         List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
+        List<WhatARelationLeavesUndivided.JointSupport> supports =
+                datePartsTogether(sources, stating, heldWhole, left.years());
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = WhatARelationLeavesUndivided.leavesOf(
                     terms, at, constant, relation, UndividedByARelation::overlap, independent,
-                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)));
+                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), supports);
             leaves.add(each);
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 out.addAll(sides.get(at).madeOf());
@@ -610,6 +643,158 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return new WhatItLeaves(out, settled);
+    }
+
+    /**
+     * {@code conditions}, with the statements of one kind of part of a date marked that leave the
+     * other kind alone.
+     *
+     * <p>The way is asked whole ({@link WhatStatementsOfDatePartsLeaveAlone}): all its statements
+     * of months and days together leave the years alone, or none of them does, and likewise those
+     * of years. A statement is of one kind only where every term of it is a month or a day, or
+     * every term is a year, of a date the declarations leave every date and no rule names, so that
+     * no rule ties its parts to a number of another place. A statement of anything else is left
+     * unmarked, and a part it touches is then tied by it as before.
+     *
+     * <p>Where the months and days are left, the dates are in the years the statements of years
+     * were shown to hold at, and the combinations of months and days a date gives are those of
+     * its year ({@link #datePartsTogether}).
+     */
+    private LeftToTheCalendar leavingPartsAlone(List<OnAWay> conditions, InputReading read) {
+        List<TakenConstraint.Affine> ofMonthsAndDays = new ArrayList<>();
+        List<TakenConstraint.Affine> ofYears = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            if (statesOnlyParts(each, false, read)) {
+                ofMonthsAndDays.add(each.affine());
+            } else if (statesOnlyParts(each, true, read)) {
+                ofYears.add(each.affine());
+            }
+        }
+        boolean yearsAreLeft = !ofMonthsAndDays.isEmpty()
+                && WhatStatementsOfDatePartsLeaveAlone.leavesTheYears(ofMonthsAndDays,
+                        yearShiftsOfTheSides());
+        WhatStatementsOfDatePartsLeaveAlone.YearsChosen years = ofYears.isEmpty() ? null
+                : WhatStatementsOfDatePartsLeaveAlone.leavesTheMonthsAndDays(ofYears,
+                        monthsAndDaysTheSidesTake());
+        List<OnAWay> out = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            out.add(yearsAreLeft && statesOnlyParts(each, false, read)
+                    ? each.leavingAlone(OnAWay.PartsLeftAlone.YEARS)
+                    : years != null && statesOnlyParts(each, true, read)
+                    ? each.leavingAlone(OnAWay.PartsLeftAlone.MONTHS_AND_DAYS) : each);
+        }
+        return new LeftToTheCalendar(out, years);
+    }
+
+    /** The conditions of a way, marked, and the years its statements of years put the dates in,
+     *  or null where they leave the months and days to no years. */
+    private record LeftToTheCalendar(List<OnAWay> conditions,
+                                     WhatStatementsOfDatePartsLeaveAlone.YearsChosen years) {}
+
+    /** The months and the days the sides take of each date, after the move of each. */
+    private Map<TermPath, List<DatesThatStandInEveryYear.Part>> monthsAndDaysTheSidesTake() {
+        Map<TermPath, List<DatesThatStandInEveryYear.Part>> out = new LinkedHashMap<>();
+        for (Side side : sides) {
+            if (side.term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
+                    && part != TakenAs.DatePart.YEAR) {
+                out.computeIfAbsent(taken.position(), _ -> new ArrayList<>()).add(
+                        new DatesThatStandInEveryYear.Part(part,
+                                taken.transformation().translation()));
+            }
+        }
+        return out;
+    }
+
+    /** Whether {@code statement} is a form of years only, or of months and days only, of dates
+     *  nothing in the declarations restricts or names. */
+    private static boolean statesOnlyParts(OnAWay statement, boolean years, InputReading read) {
+        TakenConstraint.Affine affine = statement.affine();
+        if (affine == null || affine.form().coefs().isEmpty()) {
+            return false;
+        }
+        for (NumericTerm each : affine.form().coefs().keySet()) {
+            if (!(each instanceof NumericTerm.TakenOf taken)
+                    || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
+                    || (part == TakenAs.DatePart.YEAR) != years) {
+                return false;
+            }
+            Source source = sourceOf(taken, read);
+            if (source == null || !source.takes().every() || source.named()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The moves of each date whose year a side is, which a month and day must keep it in the
+     *  year of. */
+    private Map<TermPath, List<DateTranslation>> yearShiftsOfTheSides() {
+        Map<TermPath, List<DateTranslation>> out = new LinkedHashMap<>();
+        for (Side side : sides) {
+            if (side.term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
+                    && part == TakenAs.DatePart.YEAR) {
+                out.computeIfAbsent(taken.position(), _ -> new ArrayList<>())
+                        .add(taken.transformation().translation());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The sides that are the month or the day of one date, as the combinations that date gives.
+     *
+     * <p>A date is asked only where the declarations leave it every date and the way says nothing
+     * of any part taken of it, so the combinations are the calendar's whole and not those a rule
+     * lets through. A date only one side is taken of has no combination to give.
+     *
+     * <p>A date the way fixes the year of gives the combinations of that year, which are all it
+     * can be at; a support is made only where they give every number each side can be, so that no
+     * value of a side goes unasked.
+     *
+     * @param years the years the way puts dates in, or null where it puts none
+     */
+    private List<WhatARelationLeavesUndivided.JointSupport> datePartsTogether(
+            List<Source> sources, List<List<OnAWay>> stating, boolean heldWhole,
+            WhatStatementsOfDatePartsLeaveAlone.YearsChosen years) {
+        if (!heldWhole) {
+            return List.of();
+        }
+        Map<TermPath, List<Integer>> ofOneDate = new LinkedHashMap<>();
+        for (int i = 0; i < sides.size(); i++) {
+            if (sides.get(i).term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
+                    && part != TakenAs.DatePart.YEAR
+                    && sources.get(i) != null && sources.get(i).takes().every()
+                    && wayOf(taken, stating.get(i)) == Way.UNTOUCHED) {
+                ofOneDate.computeIfAbsent(taken.position(), _ -> new ArrayList<>()).add(i);
+            }
+        }
+        List<WhatARelationLeavesUndivided.JointSupport> out = new ArrayList<>();
+        for (Map.Entry<TermPath, List<Integer>> date : ofOneDate.entrySet()) {
+            List<Integer> members = date.getValue();
+            if (members.size() < 2) {
+                continue;
+            }
+            List<DatesThatStandInEveryYear.Part> parts = new ArrayList<>();
+            for (int i : members) {
+                NumericTerm.TakenOf taken = (NumericTerm.TakenOf) sides.get(i).term();
+                parts.add(new DatesThatStandInEveryYear.Part(
+                        ((TakenAs.PartOfDate) taken.takenAs()).part(),
+                        taken.transformation().translation()));
+            }
+            Integer year = years == null ? null : years.yearOf().get(date.getKey());
+            List<List<ExactRatio>> together = year == null
+                    ? MonthsAndDaysOfOneDate.ofAnyYear(parts)
+                    : MonthsAndDaysOfOneDate.inYear(parts, year,
+                            years.shiftsOf().get(date.getKey()));
+            if (together != null && !together.isEmpty()
+                    && MonthsAndDaysOfOneDate.coversEveryValue(together, parts)) {
+                out.add(new WhatARelationLeavesUndivided.JointSupport(members, together));
+            }
+        }
+        return out;
     }
 
     /** What {@code leaves} says of the side at {@code at}, put where it goes. */
@@ -723,8 +908,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Way way = each.term() == null || !heldWhole ? Way.TIES
                     : wayOf(each.term(), stating.get(i));
             Source source = way == Way.TIES ? null : sources.get(i);
+            // A statement shown to leave a part alone is taken into the region, which then does not
+            // answer for that part: it is answered by what the declarations leave it.
+            SearchRegion answering = way == Way.UNTOUCHED && conditions.stream()
+                    .anyMatch(statement -> statement.leavesAlone(each.term()))
+                    ? read.quantities().region() : region;
             NumericDomain.Bounds realizes = source == null ? null
-                    : asARelationReadsIt(realized(each.term(), source, region, way),
+                    : asARelationReadsIt(realized(each.term(), source, answering, way),
                             carriers.get(i));
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.term() instanceof NumericTerm.ValueOf ? source.takes() : null;
@@ -1054,7 +1244,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean saysNothingOfTheValuesOf(NumericTerm.FromOnePosition term,
                                                     OnAWay statement, boolean named) {
-        return statement.saysOnlyWhatStandsAround(term)
+        return statement.saysOnlyWhatStandsAround(term) || statement.leavesAlone(term)
                 || (!named && statement.asksOnlyOtherPlacesOfTheElement(term));
     }
 

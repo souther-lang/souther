@@ -492,6 +492,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + reads + "L" + c
                 + "partition/ComparisonReadings$Body;)L" + c + "partition/ComparisonReadings$Way;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonReadings", "collectWritten", "(" + core + "L" + c
+                + "partition/ComparisonReadings$Body;Ljava/util/Set;)V", Reading.STRUCTURE,
+                "which comparisons of the model are written in a condition, which no name read is");
         row(out, c + "partition/ComparisonReadings", "holds", "(" + core + core + ")Z",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/ComparisonReadings", "buildsAValue", "(" + core + ")Z",

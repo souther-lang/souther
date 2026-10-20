@@ -2403,10 +2403,12 @@ public final class Shapes {
             // What each part of a clause states, which is what says whether the boundary can state
             // it as a constraint.
             Answer<RuleReadingSource> reading = ruleReading(db, name);
-            if (!governing.present() || !reading.present()) {
+            Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
+            if (!governing.present() || !reading.present() || !policy.present()) {
                 return Answer.absent();
             }
-            InvariantStatements statements = InvariantStatements.of(reading.value());
+            InvariantStatements statements = InvariantStatements.of(
+                    RuleReadingContext.of(reading.value(), policy.value(), db.readings()));
             Map<TypeSymbol.AtModule, ValueShape> shapes = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.Def def : settled.value().defs()) {

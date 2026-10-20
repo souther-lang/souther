@@ -22,6 +22,7 @@ import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
 import souther.compiler.reading.WrittenWithout;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -214,8 +215,17 @@ final class WhatABodyTellsApart {
          *
          * @param admitted the classes it admits there, or null where it admits nothing this
          *                 reading can put to the classes
+         * @param explains the comparisons of the model all of whose lines at this position the
+         *                 classes it admits are the reading of, where it is a statement over
+         *                 them and not one comparison coming out one way
          */
-        record About(int at, List<Boolean> admitted) implements Placed {}
+        record About(int at, List<Boolean> admitted, Set<ModelOccurrence> explains)
+                implements Placed {
+
+            About(int at, List<Boolean> admitted) {
+                this(at, admitted, Set.of());
+            }
+        }
 
         /**
          * What one application of a closure an operation applies to the elements of a container
@@ -300,6 +310,12 @@ final class WhatABodyTellsApart {
             Optional<ForkDependencies.Dependency> turnsOn = dependencyOf(arm);
             if (turnsOn.orElse(null) instanceof ForkDependencies.Dependency.Known(var positions)) {
                 List<Integer> ats = axesReading(positions);
+                if (ats.size() == 1) {
+                    Placed.About statement = whereItsStatementHolds(arm, ats.getFirst());
+                    if (statement != null) {
+                        return statement;
+                    }
+                }
                 return ats.isEmpty() ? new Placed.AboutNoPosition() : new Placed.AboutThese(ats);
             }
         }
@@ -322,6 +338,35 @@ final class WhatABodyTellsApart {
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
         };
+    }
+
+    /**
+     * What {@code arm} of a fork the model wrote admits at the {@code at}th position, from the
+     * statement its condition makes: the classes it holds throughout where the arm is taken on its
+     * holding, and the others where on its failing. Null where the lines drawn on the position do
+     * not settle the statement, which leaves the arm about the position and putting nothing to
+     * classes.
+     */
+    private Placed.About whereItsStatementHolds(souther.compiler.reading.Condition.Arm arm,
+                                                int at) {
+        Optional<ForkDependencies.Statement> stated = ModelOccurrence.statedAt(arm.arm().fork())
+                .flatMap(dependencies::statedBy);
+        if (stated.isEmpty() || arm.arm().part() > 1) {
+            return null;
+        }
+        Proposition statement = stated.get().stated();
+        StatementsOnClasses.Evaluated where =
+                new StatementsOnClasses(axes, at, List.of(statement), null)
+                        .evaluate(statement, stated.get().within());
+        if (where == null) {
+            return null;
+        }
+        boolean taken = arm.arm().part() == 0;
+        List<Boolean> admitted = new ArrayList<>();
+        for (boolean holds : where.holds()) {
+            admitted.add(holds == taken);
+        }
+        return new Placed.About(at, List.copyOf(admitted), where.explained());
     }
 
     /**
@@ -456,6 +501,15 @@ final class WhatABodyTellsApart {
      */
     private Placed.About about(souther.compiler.reading.Condition each, int at,
                                TermPath standing) {
+        // A comparison in a closure applied to rows written out is stated once and decided on each
+        // application, so the line one of them drew is no more than one of its readings: what the
+        // decision admits is asked of every application the closure is handed.
+        if (each instanceof souther.compiler.reading.Condition.Side side) {
+            Placed.About applied = whereTheApplicationsLeave(side, at);
+            if (applied != null) {
+                return applied;
+            }
+        }
         InteractionCells.Cell cell = InteractionCells.admittedAt(each, axes, at, standing);
         if (cell != null) {
             List<Boolean> admitted = new ArrayList<>();
@@ -475,6 +529,45 @@ final class WhatABodyTellsApart {
                     Collections.nCopies(axes.get(at).classes().size(), true));
         }
         return new Placed.About(at, null);
+    }
+
+    /**
+     * What {@code side}, the comparison of a closure coming out one way, admits at the
+     * {@code at}th position, from every application the closure is handed: a class admits the way
+     * where some application comes out that way throughout it, and not where every application
+     * comes out the other way throughout it. Null where the comparison is not one a closure is
+     * handed; admitting nothing this reading can put to classes where some application, or some
+     * class, is not settled, or where an application is not made on every row.
+     */
+    private Placed.About whereTheApplicationsLeave(
+            souther.compiler.reading.Condition.Side side, int at) {
+        ModelOccurrence states = ModelOccurrence.statedAt(side.statedAt()).orElse(null);
+        List<ForkDependencies.Application> made = states == null
+                ? null : dependencies.appliedAt(states).orElse(null);
+        if (made == null) {
+            return null;
+        }
+        List<Proposition> statements = new ArrayList<>();
+        for (ForkDependencies.Application each : made) {
+            if (each.reached() instanceof Proposition.Always(boolean holds)) {
+                if (holds) {
+                    statements.add(each.stated());
+                }
+            } else {
+                return new Placed.About(at, null);
+            }
+        }
+        StatementsOnClasses.Evaluated admitted =
+                new StatementsOnClasses(axes, at, statements, states)
+                        .admittedBy(statements, side.held(), Set.of(states));
+        if (admitted == null) {
+            return new Placed.About(at, null);
+        }
+        List<Boolean> classes = new ArrayList<>();
+        for (boolean one : admitted.holds()) {
+            classes.add(one);
+        }
+        return new Placed.About(at, List.copyOf(classes), admitted.explained());
     }
 
     /** Whether the comparison of {@code side} is one the reading of the input found divides
@@ -1051,6 +1144,7 @@ final class WhatABodyTellsApart {
         if (each instanceof souther.compiler.reading.Condition.Side side) {
             ModelOccurrence.statedAt(side.statedAt()).ifPresent(statedHere.get(one.at())::add);
         }
+        statedHere.get(one.at()).addAll(one.explains());
     }
 
     /**

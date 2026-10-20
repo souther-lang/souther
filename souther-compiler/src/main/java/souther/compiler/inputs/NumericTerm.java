@@ -16,6 +16,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.KeptOccurrences;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConstantArguments;
@@ -60,7 +61,7 @@ import java.util.function.UnaryOperator;
  */
 public sealed interface NumericTerm
         permits NumericTerm.FromOnePosition, NumericTerm.TakenOver,
-                NumericTerm.OfAnElementsNeighbours {
+                NumericTerm.OfAnElementsNeighbours, NumericTerm.OccurrencesOfItsValue {
 
     /**
      * A number of an element read off the elements beside it in its container: how often its value
@@ -747,6 +748,111 @@ public sealed interface NumericTerm
     }
 
     /**
+     * How many of the values in every occurrence of a place inside more than one container equal
+     * the one an element stands at: how often a key occurs among the lists of an outer list put
+     * end to end.
+     *
+     * <p>A number of one value, as {@link Multiplicity} is, but counted among a run and not among
+     * the elements of one occurrence of a container. The lists of two orders are two sets of
+     * lines, and a line of one is no neighbour of a line of the other; a list made of the lines of
+     * every order holds them all, so the same value in two orders is two of its occurrences. The
+     * run is {@link RunSource.FlattenedOccurrences}, which is made only where a walk was shown to
+     * be over every occurrence of the place, so a count of it is a count of everything standing
+     * there and of nothing twice.
+     *
+     * <p>Equal as the place's order has them, and one for each value standing at the place: the
+     * value under consideration is whichever one a reading chose, and it is one of the values it
+     * counts.
+     */
+    final class OccurrencesOfItsValue implements NumericTerm {
+
+        private final RunSource run;
+        private final KeptOccurrences selection;
+
+        private OccurrencesOfItsValue(RunSource run, KeptOccurrences selection) {
+            this.run = Objects.requireNonNull(run, "counted among the values of a run");
+            this.selection = selection;
+        }
+
+        /** The number of times the value standing at a place of {@code run} occurs among all of
+         *  them. */
+        public static OccurrencesOfItsValue of(RunSource.FlattenedOccurrences run) {
+            return run == null ? null : new OccurrencesOfItsValue(run, null);
+        }
+
+        /**
+         * The number of times the value standing at a place of {@code run} occurs among those of
+         * its occurrences {@code selection} keeps — or null where the run is neither the values
+         * of one container's elements nor of many containers'.
+         *
+         * <p>Only a value that is kept has a number: an occurrence the selection drops is no
+         * entry of the map a fold files, so it has no count to be compared with. Every kept
+         * occurrence counts at least itself.
+         */
+        public static OccurrencesOfItsValue of(RunSource run, KeptOccurrences selection) {
+            return run instanceof RunSource.ProjectedOccurrences
+                    || run instanceof RunSource.FlattenedOccurrences
+                    ? new OccurrencesOfItsValue(run, selection) : null;
+        }
+
+        /** The run whose values are counted. */
+        public RunSource run() {
+            return run;
+        }
+
+        /**
+         * Which of the occurrences are counted, or null where every one is.
+         *
+         * <p>Held with the statement put to rows because the readers of a term — a read back
+         * value, a row's reading, a composed container — are given the term and a row and no
+         * reading of the input to build that statement from. What names the quantity is the
+         * container and the statement the selection keeps by, which is all its equality and its
+         * report coordinate use; the statement put to rows is derived from them and is no part of
+         * which quantity this is.
+         */
+        public KeptOccurrences selection() {
+            return selection;
+        }
+
+        /** Where the values counted stand, which is where a reader is sent and no place the number
+         *  stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return run.subjectPath();
+        }
+
+        /** The same number of the run read from where {@code moved} puts this one's — or null
+         *  where that is no run of every occurrence. */
+        @Override
+        public OccurrencesOfItsValue movedTo(UnaryOperator<TermPath> moved) {
+            // A selection names places of the input it was read in, and moves with none of them.
+            if (selection != null) {
+                return null;
+            }
+            RunSource at = run.movedTo(moved);
+            return at instanceof RunSource.FlattenedOccurrences flat
+                    ? new OccurrencesOfItsValue(flat, null) : null;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof OccurrencesOfItsValue that && run.equals(that.run)
+                    && Objects.equals(selection, that.selection);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(OccurrencesOfItsValue.class, run, selection);
+        }
+
+        @Override
+        public String toString() {
+            return selection == null ? "occurrences(" + run + ")"
+                    : "occurrences(" + run + " kept by " + selection.key() + ")";
+        }
+    }
+
+    /**
      * A number an operation took over a run of values, which no single position answers.
      *
      * <p>The dual of {@link TakenOf} and named for it: one takes a number of the value at a place,
@@ -940,6 +1046,8 @@ public sealed interface NumericTerm
             // And a number of an element read off its neighbours is read off all of them, so no
             // value standing at one place is it.
             case OfAnElementsNeighbours _ -> null;
+            // Counted among the values of every occurrence, so no one place answers it either.
+            case OccurrencesOfItsValue _ -> null;
         };
     }
 
@@ -978,6 +1086,8 @@ public sealed interface NumericTerm
             // A number of an element read off its neighbours is read off the container it stands
             // in, so a place moved alone is a number of some other container's elements.
             case OfAnElementsNeighbours _ -> null;
+            // Counted among every occurrence of a place, so a place moved alone is another run.
+            case OccurrencesOfItsValue _ -> null;
         };
     }
 
@@ -1020,6 +1130,9 @@ public sealed interface NumericTerm
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
             // An element is one of the elements it counts, so there is always at least one.
             case Multiplicity _ ->
+                    new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
+            // The same: a value is one of the values it counts.
+            case OccurrencesOfItsValue _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
             // One of the values the place holds, which is open where the place is.
             case ExtremeOfItsKey _ -> NumericDomain.Bounds.OPEN;

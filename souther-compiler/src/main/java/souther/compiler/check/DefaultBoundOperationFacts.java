@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.proof.AppliedClosures;
+import souther.compiler.types.ValueName;
 
 /**
  * The facts about the language's operations, held to the library this compiler ships, read once
@@ -37,5 +39,21 @@ public final class DefaultBoundOperationFacts {
     /** The facts, held to the shipped library. */
     public static BoundOperationFacts get() {
         return Holder.INSTANCE;
+    }
+
+    /**
+     * The position of the argument whose every element {@code operation}'s answer lists, each
+     * once and nothing else — the elements in another order, as {@code List.reverse} and
+     * {@code Set.toList} answer them — or -1 where it lists no argument so.
+     *
+     * <p>Read from what a kernel is declared to list ({@link Combinators#listing}), so a set
+     * made a list is the same elements, which a fact about what an operation builds does not say
+     * of a set.
+     */
+    public static int positionOfTheArgumentListedOnce(ValueName operation) {
+        return operation instanceof ValueName.Stdlib.Operation named
+                && Combinators.listing(DefaultStdlib.get(), get(), named)
+                instanceof AppliedClosures.Listing.EveryElementOf(int argument, boolean _)
+                ? argument : -1;
     }
 }

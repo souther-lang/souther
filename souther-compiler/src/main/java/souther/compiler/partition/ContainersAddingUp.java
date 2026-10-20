@@ -872,6 +872,9 @@ final class ContainersAddingUp {
             // choosing which elements repeat ({@link CardinalityComposer#composeAlike}).
             case NumericTerm.Multiplicity among -> throw new IllegalStateException(
                     among + " is composed by repeating elements, and nothing here adds it up");
+            case NumericTerm.OccurrencesOfItsValue among -> throw new IllegalStateException(
+                    among + " is composed by repeating values across containers, and nothing here"
+                            + " adds it up");
             case NumericTerm.ExtremeOfItsKey extreme -> throw new IllegalStateException(
                     extreme + " is written as one value, and nothing here adds it up");
         };
@@ -1204,6 +1207,22 @@ final class ContainersAddingUp {
         if (holding.kind() != Shape.Sequence.Kind.LIST) {
             return Proposals.NONE;
         }
+        return filledWith(split.stream().<Place>map(Count::of).toList(), holding, container,
+                filling, apart, elements, reading);
+    }
+
+    /**
+     * The same, of values on any order: each element is built around one of {@code split}, read on
+     * {@code elements}. A set is written too, of values no two of which are alike: it holds each of
+     * them, which is what the caller composed it for.
+     */
+    static Proposals filledWith(List<Place> split, Shape.Sequence holding, TypeView container,
+                                Filling filling, KeptApart apart, Carrier elements,
+                                RuleReadingContext reading) {
+        if (holding.kind() != Shape.Sequence.Kind.LIST
+                && split.stream().map(Place::canonical).distinct().count() != split.size()) {
+            return Proposals.NONE;
+        }
         RuleReadingSource ruleSource = reading.source();
         List<FixtureTemplate> values = new ArrayList<>();
         CompositionShortfall met = CompositionShortfall.NONE;
@@ -1216,7 +1235,7 @@ final class ContainersAddingUp {
             beside.putAll(filling.beside());
             Proposals one = PlanComposer.compose(filling.plan().root(),
                     new ValuesCarryingANumber(filling.fixed(),
-                            FixtureTemplate.on(elements, Count.of(split.get(i)),
+                            FixtureTemplate.on(elements, split.get(i),
                                     ruleSource.symbols().scope()::reach),
                             beside, filling.narrowed(), reading),
                     reading);

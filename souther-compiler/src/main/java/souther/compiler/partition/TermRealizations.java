@@ -325,6 +325,10 @@ final class TermRealizations {
         if (numbers.stream().anyMatch(each -> each.term() instanceof NumericTerm.Multiplicity)) {
             return amongTheElements(targets, numbers);
         }
+        if (numbers.stream()
+                .anyMatch(each -> each.term() instanceof NumericTerm.OccurrencesOfItsValue)) {
+            return amongEveryOccurrence(targets, numbers);
+        }
         if (targets.size() == 1) {
             return new JointRealization.Supported(
                     new JointBuilder.OneNumberOnItsOwn(numbers.getFirst()));
@@ -354,7 +358,7 @@ final class TermRealizations {
         for (RealizationTarget.OfANumber target : numbers) {
             switch (target.term()) {
                 // Composed with the elements around it, which the arm above has already taken.
-                case NumericTerm.Multiplicity _ -> {
+                case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _ -> {
                     return nothingSolvesAGroup();
                 }
                 // Written as the value it is the end of, alone: beside another number of the same
@@ -536,6 +540,26 @@ final class TermRealizations {
                         holding == null ? Stream.<RealizationTarget.OfANumber>empty()
                                 : Stream.of(holding)).toList(),
                 () -> new JointBuilder.ElementsAlikeAsOftenAsAsked(alike.getFirst(), holding));
+    }
+
+    /**
+     * How often a value occurs among every occurrence of its place, in the containers inside the
+     * elements of another.
+     *
+     * <p>One number and nothing beside it: how many the containers hold in all, or how many each
+     * holds, is another question about how the occurrences are shared out, which a group asking it
+     * beside this is one nothing here writes.
+     */
+    private static JointRealization amongEveryOccurrence(
+            Collection<RealizationTarget> group, List<RealizationTarget.OfANumber> numbers) {
+        RealizationTarget.OfANumber alike = numbers.getFirst();
+        for (RealizationTarget.OfANumber each : numbers) {
+            if (!each.term().equals(alike.term())) {
+                return nothingSolvesAGroup();
+            }
+        }
+        return wholly(group, List.of(alike),
+                () -> new JointBuilder.ValuesAlikeAcrossContainers(alike));
     }
 
     /**
@@ -1157,6 +1181,26 @@ final class TermRealizations {
         }
 
         /**
+         * Containers inside the elements of another holding some value as often as asked, in all
+         * of them put end to end ({@link CardinalityComposer#composeAcrossContainers}).
+         *
+         * @param alike how often some value occurs among every occurrence of its place
+         */
+        record ValuesAlikeAcrossContainers(RealizationTarget.OfANumber alike)
+                implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.composeAcrossContainers(sourceType, keptApart, alike,
+                        demands, measuring, within, reading);
+            }
+        }
+
+        /**
          * The carrier the group's root is observed on, or null where a term of it is not measured.
          *
          * <p>One root has one, so this is read off each term and is the same answer every time
@@ -1300,12 +1344,12 @@ final class TermRealizations {
                 // element of it is composed.
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
-                     NumericTerm.ExtremeOfItsKey _ -> false;
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.ExtremeOfItsKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
-            case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _ ->
-                    false;
+            case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _,
+                 JointBuilder.ValuesAlikeAcrossContainers _ -> false;
             case JointBuilder.StringsHoldingTheirNumbers _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
@@ -1528,6 +1572,9 @@ final class TermRealizations {
             case NumericTerm.Multiplicity among -> throw new IllegalStateException(
                     among + " is written by composing its container, and no value of one element"
                             + " is asked for it");
+            case NumericTerm.OccurrencesOfItsValue among -> throw new IllegalStateException(
+                    among + " is written by composing the containers its occurrences stand in,"
+                            + " and no value of one element is asked for it");
         };
     }
 
@@ -2877,7 +2924,8 @@ final class TermRealizations {
                         new InAClass(count.counted(), count.through());
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
-                     NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _ ->
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.ExtremeOfItsKey _,
+                     NumericTerm.TakenOver _ ->
                         throw new IllegalStateException(
                         term + " is no number a string is written for");
             };

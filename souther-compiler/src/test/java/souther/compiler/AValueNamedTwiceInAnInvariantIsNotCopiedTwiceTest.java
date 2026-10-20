@@ -133,6 +133,18 @@ class AValueNamedTwiceInAnInvariantIsNotCopiedTwiceTest {
     }
 
     @Test
+    void aChainHeldAgainstTheSignOfAnOrderIsCompiled() {
+        compilesAtTheCostOfTheSource(chainOf(30, "2", previous -> previous + " + " + previous,
+                "Int.compare(value, c30) <= 0", "Int"));
+    }
+
+    @Test
+    void aChainMovingTheSignOfAnOrderIsCompiled() {
+        compilesAtTheCostOfTheSource(chainOf(30, "2", previous -> previous + " + " + previous,
+                "Int.compare(value, 5) + c30 <= c30", "Int"));
+    }
+
+    @Test
     void anIntegerChainLongerThanACopyCouldBeBuiltIsCompiled() {
         String source = chain(30, "2", "+", "Int");
 

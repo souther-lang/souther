@@ -36,9 +36,11 @@ import souther.compiler.semantics.OperationLaw;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -648,8 +650,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 if (iff.occurrence() != null) {
                     ModelOccurrence.statedAt(in.context().of(iff.occurrence())).ifPresent(fork ->
                             in.dependencies().forkReads(fork, DemandReading.statedBy(condition,
-                                    in.read(), in.conditions())));
+                                    in.read(), in.conditions()),
+                                    comparisonsWritten(iff.cond(), in)));
                 }
+                appliedCondition(iff, applying, in);
                 Choice.Decides then = Choice.Decides.ofCondition(iff, true);
                 Choice.Decides els = Choice.Decides.ofCondition(iff, false);
                 walk(iff.then(), in, reads.choosing(then, symbols, in.newtypes()),
@@ -1219,6 +1223,49 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
 
     /**
+     * The constructs of the model written in {@code condition}, the closures it holds included.
+     *
+     * <p>Which comparisons a statement made of the condition can be a reading of: the source says
+     * it, and a relation that happens to be spelled the same elsewhere is another rule.
+     */
+    private static Set<ModelOccurrence> comparisonsWritten(Core condition, Body in) {
+        Set<ModelOccurrence> out = new LinkedHashSet<>();
+        collectWritten(condition, in, out);
+        return out;
+    }
+
+    private static void collectWritten(Core e, Body in, Set<ModelOccurrence> out) {
+        if (Core.withoutStanding(e) instanceof Core.Binary binary && binary.occurrence() != null) {
+            ModelOccurrence.statedAt(in.context().of(binary.occurrence())).ifPresent(out::add);
+        }
+        Core.forEachChild(e, child -> collectWritten(child, in, out));
+    }
+
+    /**
+     * What the condition of {@code iff} states on every application of the closure around it,
+     * filed under the construct that decides it. A comparison written as the condition of an
+     * {@code if} in a closure is stated once and decided on each application; what a decision of
+     * it admits is asked of all of them ({@link ForkDependencies#appliedAt}).
+     */
+    private static void appliedCondition(Core.If iff, ClosureApplications applying, Body in) {
+        Optional<ModelOccurrence> decides = souther.compiler.reading.Condition.Arm
+                .decidingConstructOf(iff.cond())
+                .flatMap(at -> ModelOccurrence.statedAt(in.context().of(at)));
+        if (decides.isEmpty()) {
+            return;
+        }
+        switch (applying) {
+            case ClosureApplications.Each(var each) -> each.forEach(one ->
+                    in.dependencies().applied(decides.get(), in.conditions()
+                            .truth(iff.cond(), one.reads(), in.read()).proposition(),
+                            one.reached()));
+            case ClosureApplications.None _ -> { }
+            case ClosureApplications.Outside _, ClosureApplications.NotSaid _ ->
+                    in.dependencies().appliedNotSaid(decides.get());
+        }
+    }
+
+    /**
      * What the answer of {@code block}, applied as {@code applied} says, may turn on, filed under
      * the construct it answers with: where an operation's own body forks on what the closure
      * answers, that construct is what decides the fork ({@link ForkDependencies}).
@@ -1239,9 +1286,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return;
         }
         switch (applied) {
-            case ClosureApplications.Each(var each) -> each.forEach(one ->
-                    in.dependencies().answerReads(answers.get(), in.conditions()
-                            .truth(block.body(), one.reads(), in.read()).proposition()));
+            case ClosureApplications.Each(var each) -> each.forEach(one -> {
+                Proposition stated = in.conditions()
+                        .truth(block.body(), one.reads(), in.read()).proposition();
+                in.dependencies().answerReads(answers.get(), stated);
+                in.dependencies().applied(answers.get(), stated, one.reached());
+            });
             case ClosureApplications.None _ -> { }
             case ClosureApplications.Outside _, ClosureApplications.NotSaid _ ->
                     in.dependencies().answerUnbounded(answers.get());
