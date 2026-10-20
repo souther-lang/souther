@@ -862,8 +862,9 @@ final class CardinalityComposer {
             for (int extra = 0; extra <= beside.size() && often + extra <= MOST_ELEMENTS;
                     extra++) {
                 TermRealizations.Realization one = nested.alike(sourceType, keptApart,
-                        candidates.getFirst(), often, beside.subList(0, extra), carrier,
-                        within, reading);
+                        List.of(new NestedContainersAddingUp.Counted(candidates.getFirst(),
+                                often)),
+                        beside.subList(0, extra), carrier, within, reading);
                 if (one instanceof TermRealizations.Realization.Built made) {
                     built.addAll(made.values());
                     rest = rest.and(made.rest());
@@ -895,23 +896,46 @@ final class CardinalityComposer {
      * Containers inside the elements of another holding the value of an input as often as asked,
      * in all of them put end to end.
      *
-     * <p>The value counted for is the key's, which the row fixed: it is not chosen here, and it
-     * occurs nought times where the containers hold other values or none. It is written as many
-     * times as asked, spread over the containers ({@link NestedContainersAddingUp#alike}), with
-     * values beside it that are not it where the containers need more leaves than it gives them.
+     * <p>The values counted for are the keys', which the row fixed: they are not chosen here, and
+     * each occurs nought times where the containers hold other values or none. Each is written as
+     * many times as asked, spread over the containers ({@link NestedContainersAddingUp#alike}),
+     * with values beside them that are none of them where the containers need more leaves than
+     * they give. Keys the row fixed at one value are one value, counted once, and a count asked of
+     * each of them is a count they all hold.
      */
     static TermRealizations.Realization composeAcrossContainersEqualToAKey(
-            Type sourceType, List<List<String>> keptApart, RealizationTarget.OfANumber alike,
+            Type sourceType, List<List<String>> keptApart,
+            List<RealizationTarget.OfANumber> targets,
             SequencedMap<RealizationTarget, AskedAt> demands, Quantities measuring,
             SearchRegion within, RuleReadingContext reading) {
-        NumericTerm.OccurrencesOfAKey term = (NumericTerm.OccurrencesOfAKey) alike.term();
-        TermPath place = term.subjectPath();
-        AskedAt asked = demands.get(alike);
-        if (asked == null || asked.walking() == null) {
-            return none("nothing says how often the value at `" + term.key() + "` is to occur at `"
-                    + place + "`");
+        TermPath place = ((NumericTerm.OccurrencesOfAKey) targets.getFirst().term())
+                .subjectPath();
+        // Each value counted for, with every count asked of it.
+        List<Place> values = new ArrayList<>();
+        List<List<NumericSet>> wanted = new ArrayList<>();
+        for (RealizationTarget.OfANumber each : targets) {
+            NumericTerm.OccurrencesOfAKey term = (NumericTerm.OccurrencesOfAKey) each.term();
+            AskedAt asked = demands.get(each);
+            if (asked == null || asked.walking() == null) {
+                return none("nothing says how often the value at `" + term.key()
+                        + "` is to occur at `" + place + "`");
+            }
+            Place value = within == null ? null
+                    : settled(within, new NumericTerm.ValueOf(term.key()));
+            if (value == null) {
+                return notChosen("`" + term.key() + "` stands at no one value, so what is counted"
+                        + " for is not known");
+            }
+            int at = 0;
+            while (at < values.size() && !values.get(at).sameAs(value)) {
+                at++;
+            }
+            if (at == values.size()) {
+                values.add(value);
+                wanted.add(new ArrayList<>());
+            }
+            wanted.get(at).add(asked.walking());
         }
-        NumericSet wanted = asked.walking();
         List<TermPath> chain = place.containersHoldingIt();
         if (chain.size() < 2 || !place.equals(chain.getLast().element())) {
             return notChosen("a value at `" + place + "` is not an element of the container it"
@@ -923,11 +947,6 @@ final class CardinalityComposer {
         if (carrier == null) {
             return notChosen("a value at `" + place + "` is on no order its values are chosen on");
         }
-        Place counted = within == null ? null : settled(within, new NumericTerm.ValueOf(term.key()));
-        if (counted == null) {
-            return notChosen("`" + term.key() + "` stands at no one value, so what is counted"
-                    + " for is not known");
-        }
         NumericDomain.Bounds run = switch (within.projectionOf(own)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
                     held == null ? NumericDomain.Bounds.OPEN : held;
@@ -937,49 +956,116 @@ final class CardinalityComposer {
         if (run == null) {
             return none("the rules leave no value at `" + place + "`");
         }
-        // The key occurs where the rules leave its value at the place, and nowhere else.
-        boolean mayOccur = run.admits(counted);
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        List<Place> beside = valuesBeside(counted, valuesTheRulesLeave(carrier, run, unheld, unnamed),
-                null, carrier, run, unheld, unnamed);
-        NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
-        List<FixtureTemplate> built = new ArrayList<>();
-        CompositionShortfall rest = CompositionShortfall.NONE;
-        TermRealizations.Realization unbuilt = null;
-        for (int often = 0; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
-            if (!wanted.holds(Count.of(often), Carrier.WHOLE) || often > 0 && !mayOccur) {
-                continue;
-            }
-            for (int extra = 0; extra <= beside.size() && often + extra <= MOST_ELEMENTS;
-                    extra++) {
-                TermRealizations.Realization one = nested.alike(sourceType, keptApart, counted,
-                        often, beside.subList(0, extra), carrier, within, reading);
-                if (one instanceof TermRealizations.Realization.Built made) {
-                    built.addAll(made.values());
-                    rest = rest.and(made.rest());
-                    break;
-                }
-                unbuilt = one;
+        List<Place> beside = new ArrayList<>();
+        for (Place each : valuesTheRulesLeave(carrier, run, unheld, unnamed)) {
+            if (values.stream().noneMatch(each::sameAs)) {
+                beside.add(each);
             }
         }
-        Endpoint mostOften = wanted.extent().max();
+        ValuesCountedFor search = new ValuesCountedFor(sourceType, keptApart, values, wanted,
+                run, beside, new NestedContainersAddingUp(place), carrier, within, reading);
+        search.counting(0, new ArrayList<>(), 0);
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
-        if (mostOften == null || mostOften.at().compareTo(Count.of(MOST_ELEMENTS)) > 0) {
+        if (search.cutShort) {
             refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
         }
-        rest = rest.and(CompositionShortfall.of(refused, unnamed, unheld));
-        if (!built.isEmpty()) {
-            return new TermRealizations.Realization.Built(built, rest);
+        CompositionShortfall rest = search.rest.and(
+                CompositionShortfall.of(refused, unnamed, unheld));
+        if (!search.built.isEmpty()) {
+            return new TermRealizations.Realization.Built(search.built, rest);
         }
         if (!rest.figures().isEmpty()) {
             return new TermRealizations.Realization.Stopped(rest);
         }
-        if (unbuilt != null) {
-            return unbuilt;
+        if (search.unbuilt != null) {
+            return search.unbuilt;
         }
-        return none("no containers of `" + place + "` this composed hold `" + term.key()
-                + "` as often as asked");
+        return none("no containers of `" + place + "` this composed hold the keys as often as"
+                + " asked");
+    }
+
+    /**
+     * The counts of several values tried one value at a time, each as often as every count asked of
+     * it allows and the rules leave it a place, the leaves between them no more than a container
+     * is composed with.
+     */
+    private static final class ValuesCountedFor {
+
+        private final Type sourceType;
+        private final List<List<String>> keptApart;
+        private final List<Place> values;
+        private final List<List<NumericSet>> wanted;
+        private final NumericDomain.Bounds run;
+        private final List<Place> beside;
+        private final NestedContainersAddingUp nested;
+        private final Carrier carrier;
+        private final SearchRegion within;
+        private final RuleReadingContext reading;
+        final List<FixtureTemplate> built = new ArrayList<>();
+        CompositionShortfall rest = CompositionShortfall.NONE;
+        TermRealizations.Realization unbuilt;
+        boolean cutShort;
+
+        ValuesCountedFor(Type sourceType, List<List<String>> keptApart, List<Place> values,
+                         List<List<NumericSet>> wanted, NumericDomain.Bounds run,
+                         List<Place> beside, NestedContainersAddingUp nested, Carrier carrier,
+                         SearchRegion within, RuleReadingContext reading) {
+            this.sourceType = sourceType;
+            this.keptApart = keptApart;
+            this.values = values;
+            this.wanted = wanted;
+            this.run = run;
+            this.beside = beside;
+            this.nested = nested;
+            this.carrier = carrier;
+            this.within = within;
+            this.reading = reading;
+        }
+
+        /** Value {@code at} and those after it counted, {@code leaves} already given to the ones
+         *  before. */
+        void counting(int at, List<NestedContainersAddingUp.Counted> counted, int leaves) {
+            if (built.size() >= MOST_OFFERED) {
+                return;
+            }
+            if (at == values.size()) {
+                composing(counted, leaves);
+                return;
+            }
+            // A value occurs where the rules leave it at the place, and nowhere else.
+            boolean mayOccur = run.admits(values.get(at));
+            for (int often = 0; leaves + often <= MOST_ELEMENTS; often++) {
+                final int asked = often;
+                if ((often > 0 && !mayOccur) || !wanted.get(at).stream()
+                        .allMatch(each -> each.holds(Count.of(asked), Carrier.WHOLE))) {
+                    continue;
+                }
+                counted.add(new NestedContainersAddingUp.Counted(values.get(at), often));
+                counting(at + 1, counted, leaves + often);
+                counted.removeLast();
+            }
+            // A count past the most a container is composed with is asked and not tried.
+            if (wanted.get(at).stream().anyMatch(each -> each.extent().max() == null
+                    || each.extent().max().at().compareTo(Count.of(MOST_ELEMENTS)) > 0)) {
+                cutShort = true;
+            }
+        }
+
+        private void composing(List<NestedContainersAddingUp.Counted> counted, int leaves) {
+            for (int extra = 0; extra <= beside.size() && leaves + extra <= MOST_ELEMENTS;
+                    extra++) {
+                TermRealizations.Realization one = nested.alike(sourceType, keptApart,
+                        List.copyOf(counted), beside.subList(0, extra), carrier, within, reading);
+                if (one instanceof TermRealizations.Realization.Built made) {
+                    built.addAll(made.values());
+                    rest = rest.and(made.rest());
+                    return;
+                }
+                unbuilt = one;
+            }
+        }
     }
 
     /**

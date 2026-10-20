@@ -2040,14 +2040,10 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.OccurrencesOfItsValue occurrences ->
                     NumberAt.occurrencesOf(at.named(), occurrences.selection() == null ? null
                             : occurrences.selection().key());
-            case NumericTerm.OccurrencesOfAKey asked -> {
-                UnderARoot key = rootOf(asked.key());
-                if (key == null) {
-                    throw new IllegalArgumentException("`" + asked.key() + "` is under no value"
-                            + " whose rules this reading holds and can name it by");
-                }
-                yield NumberAt.occurrencesOfAKey(at.named(), key.named().toString());
-            }
+            // The key by the whole place it stands at: what a rule calls a place is relative to the
+            // value it is a position of, and two parameters are both called the value.
+            case NumericTerm.OccurrencesOfAKey asked ->
+                    NumberAt.occurrencesOfAKey(at.named(), asked.key().discriminated());
             case NumericTerm.ExtremeOfItsKey extreme ->
                     NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().fields());
             case NumericTerm.TakenOver over ->

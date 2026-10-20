@@ -6184,16 +6184,16 @@ public final class Generator {
                         }
                     }
                 }
+                // Said against a condition on the way where there is one; a row held to none is
+                // composed with the key at no one value, which the composing says.
                 case NumericWitness.Standing.ProvedImpossible _ ->
-                        gaps.add(new ReachabilityGap.Uncomposed(
-                                reaching.boundedOnTheWay().isEmpty() ? null
-                                        : reaching.boundedOnTheWay().getFirst(),
-                                new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
+                                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                        new ReachabilityGap.Why.NoValueComposedForItsPositions())));
                 case NumericWitness.Standing.NotFound(CompositionShortfall met) ->
-                        gaps.add(new ReachabilityGap.Uncomposed(
-                                reaching.boundedOnTheWay().isEmpty() ? null
-                                        : reaching.boundedOnTheWay().getFirst(),
-                                ReachabilityGap.Why.ofAWalkThatFoundNothing(met)));
+                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
+                                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                        ReachabilityGap.Why.ofAWalkThatFoundNothing(met))));
             }
         }
         // The count the item itself asks for, which is the one count its level is — by which
@@ -7009,8 +7009,7 @@ public final class Generator {
         for (TakenConstraint one : stated) {
             if (one instanceof TakenConstraint.Affine affine
                     && within.projectionOf(affine.form())
-                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
-                return new Placed.AtNone(!composer.anyChosen()
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {                return new Placed.AtNone(!composer.anyChosen()
                         || unchosen.projectionOf(affine.form())
                                 instanceof NumericDomain.FormProjection.NothingIsLeft
                         ? new ReachabilityGap.ProvedImpossible(cut)

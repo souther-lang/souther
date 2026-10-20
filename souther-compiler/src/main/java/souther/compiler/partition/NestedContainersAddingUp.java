@@ -132,20 +132,21 @@ final class NestedContainersAddingUp {
      * all: the innermost containers hold {@code values} between them, one grouping of the leaves
      * for each way the counts of the levels allow.
      *
-     * <p>The leaves are shared out over the innermost containers so that the values {@code often}
-     * is asked of are spread across as many of them as hold room, one to a container before any
-     * holds a second. A count among every occurrence is a count across the containers, and a row
-     * that put them all in one would not tell the two readings apart.
+     * <p>The leaves are shared out over the innermost containers so that each value counted is
+     * spread across as many of them as hold room, one to a container before any holds a second. A
+     * count among every occurrence is a count across the containers, and a row that put them all
+     * in one would not tell the two readings apart.
      *
-     * @param counted  the value that occurs {@code often} times
-     * @param others   the other leaves, no two of them alike and none of them {@code counted}
+     * @param counted  the values that occur as often as asked, no two of them alike
+     * @param others   the other leaves, no two of them alike and none of them one of
+     *                 {@code counted}
      * @param carrier  the order the leaves are written on
      */
     TermRealizations.Realization alike(Type container, List<List<String>> keptApart,
-                                       Place counted, int often, List<Place> others,
+                                       List<Counted> counted, List<Place> others,
                                        Carrier carrier, SearchRegion within,
                                        RuleReadingContext reading) {
-        int leaves = often + others.size();
+        int leaves = others.size() + counted.stream().mapToInt(Counted::often).sum();
         ContainersAddingUp.WhatWasLeft left = new ContainersAddingUp.WhatWasLeft();
         Levels made = levelsOf(container, keptApart, within, reading, null, DemandsInside.NOTHING,
                 left);
@@ -171,7 +172,7 @@ final class NestedContainersAddingUp {
         List<FixtureTemplate> rows = new ArrayList<>();
         boolean oneEach = levels.getLast().holding().kind() != Shape.Sequence.Kind.LIST;
         for (Layout layout : layouts) {
-            List<List<Place>> shares = sharedOut(layout, counted, often, others, oneEach);
+            List<List<Place>> shares = sharedOut(layout, counted, others, oneEach);
             if (shares == null) {
                 continue;
             }
@@ -764,15 +765,15 @@ final class NestedContainersAddingUp {
 
     /**
      * What each innermost container of {@code layout} holds, in the order the layout lists them:
-     * {@code often} copies of {@code counted} spread over as many of them as hold room, one to a
-     * container before any holds a second, and {@code others} in the room that is left — or null
-     * where the copies cannot be placed.
+     * each value of {@code counted} as many times as it is counted, spread over as many of them as
+     * hold room, one to a container before any holds a second, and {@code others} in the room that
+     * is left — or null where the copies cannot be placed.
      *
      * <p>Spread, so that a count among every occurrence is a count across the containers and not
      * one inside a single container. Where the containers hold each value once, a container never
      * receives a second copy, so a layout with fewer containers than copies has no sharing out.
      */
-    private static List<List<Place>> sharedOut(Layout layout, Place counted, int often,
+    private static List<List<Place>> sharedOut(Layout layout, List<Counted> counted,
                                                List<Place> others, boolean oneEach) {
         List<Integer> room = new ArrayList<>();
         innermost(layout, room);
@@ -780,18 +781,20 @@ final class NestedContainersAddingUp {
         for (int at = 0; at < room.size(); at++) {
             shares.add(new ArrayList<>());
         }
-        int copies = often;
-        for (int round = 0; copies > 0; round++) {
-            boolean placed = false;
-            for (int at = 0; at < room.size() && copies > 0; at++) {
-                if (shares.get(at).size() < room.get(at)) {
-                    shares.get(at).add(counted);
-                    copies--;
-                    placed = true;
+        for (Counted each : counted) {
+            int copies = each.often();
+            for (int round = 0; copies > 0; round++) {
+                boolean placed = false;
+                for (int at = 0; at < room.size() && copies > 0; at++) {
+                    if (shares.get(at).size() < room.get(at)) {
+                        shares.get(at).add(each.value());
+                        copies--;
+                        placed = true;
+                    }
                 }
-            }
-            if (!placed || (oneEach && round == 0 && copies > 0)) {
-                return null;
+                if (!placed || (oneEach && round == 0 && copies > 0)) {
+                    return null;
+                }
             }
         }
         Iterator<Place> rest = others.iterator();
@@ -805,6 +808,14 @@ final class NestedContainersAddingUp {
         }
         return shares;
     }
+
+    /**
+     * A value and how often it occurs among the leaves.
+     *
+     * @param value the value
+     * @param often how many leaves hold it
+     */
+    record Counted(Place value, int often) { }
 
     /** How many leaves each innermost container of {@code layout} holds, in order. */
     private static void innermost(Layout layout, List<Integer> room) {

@@ -228,7 +228,47 @@ class AFoldOverTheListsOfAFlatMapAnswersAnyKeyAskedOfItTest {
                 () -> "the rows that find nothing take that arm: " + report(compilation));
     }
 
-    private static final Pattern ROW = Pattern.compile("^(\\[.*\\]), (\"(?:[^\"\\\\]|\\\\.)*\"|-?\\d+)$");
+    /**
+     * Two lookups of different keys in one fold's map are two counts over the same lists: neither
+     * is the other, so a row where one key occurs often and the other seldom is no contradiction,
+     * and no line is said to have no row on the strength of the two being read as one.
+     */
+    @Test
+    void lookupsOfDifferentKeysAreDifferentCountsAndNoLineOfEitherIsSaidToHaveNoRow() {
+        String model = """
+                module example.popular
+
+                let countsOf (xss: List<List<String>>): Map<String, Int> =
+                    List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty,
+                        List.flatMap(xs -> xs, xss))
+
+                behavior popular : (xss: List<List<String>>, one: String, other: String) -> Bool
+
+                let popular (xss, one, other) =
+                    match Map.get(one, countsOf(xss)) with
+                        | Some n ->
+                            match Map.get(other, countsOf(xss)) with
+                                | Some m -> n >= 3 && m >= 3
+                                | None -> false
+                        | None -> false
+                """;
+        Compilation compilation = measured(model);
+        String report = report(compilation);
+        assertTrue(report.contains("occurrences(xss[*][*] equal to one)")
+                && report.contains("occurrences(xss[*][*] equal to other)"), () -> report);
+        assertFalse(report.contains("no value can stand"), () -> report);
+        // A row for each key's line is composed, with the two keys at different values too.
+        List<List<String>> rows = Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("example.popular"))
+                .rowsByBehavior().getOrDefault("popular", List.of()).stream()
+                .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
+                .toList();
+        assertFalse(rows.isEmpty(), () -> report);
+        assertTrue(rows.stream().anyMatch(row -> !row.get(1).equals(row.get(2))),
+                () -> "a row whose keys differ: " + rows);
+    }
+
+    private static final Pattern ROW =Pattern.compile("^(\\[.*\\]), (\"(?:[^\"\\\\]|\\\\.)*\"|-?\\d+)$");
 
     /** The rows the block offers, each read back from how it is written; a row this cannot read
      *  back to its end fails, since a part left unread is one nothing checks. */

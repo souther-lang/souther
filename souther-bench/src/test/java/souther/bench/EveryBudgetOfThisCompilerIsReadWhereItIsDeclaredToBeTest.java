@@ -221,7 +221,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.CardinalityComposer"
                             + "#composeAcrossContainersEqualToAKey("
                             + "Lsouther/compiler/types/Type;Ljava/util/List;"
-                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
+                            + "Ljava/util/List;"
                             + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/Quantities;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
@@ -231,7 +231,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " comes back with"),
             Map.entry("souther.compiler.partition.NestedContainersAddingUp#alike("
                             + "Lsouther/compiler/types/Type;Ljava/util/List;"
-                            + "Lsouther/compiler/numeric/Place;ILjava/util/List;"
+                            + "Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"

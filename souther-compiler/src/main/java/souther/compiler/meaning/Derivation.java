@@ -1042,12 +1042,16 @@ public sealed interface Derivation {
                                     && reads(some.ofTheElement(), ofTheElement);
                     // The elements of the lists of an outer list put end to end, which stand at no
                     // one position: what is read is that the key occurs among them.
-                    case SomeElementEqualToAKey _ -> some.holds()
+                    // Counted for the value the call has at the argument the key is asked to be.
+                    case SomeElementEqualToAKey(var occurrences, var _) -> some.holds()
                             && some.ofTheElement() instanceof LawProposition.Same<
-                                    DeclaredArgument>(var one, var _, var alike)
+                                    DeclaredArgument>(var one, var asked, var alike)
                             && alike && one instanceof LawSubject.KeyOf<DeclaredArgument>(
                                     DeclaredArgument entries)
-                            && entries.equals(some.container());
+                            && entries.equals(some.container())
+                            && asked instanceof LawSubject.Argument<DeclaredArgument>(
+                                    DeclaredArgument argument)
+                            && occurrences.key().equals(call.standingAt().get(argument));
                     // The pieces of a string are the elements of a container an operation made,
                     // which stands at no position.
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->

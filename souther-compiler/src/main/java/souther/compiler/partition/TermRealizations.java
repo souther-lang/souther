@@ -570,18 +570,22 @@ final class TermRealizations {
      * How often the value of an input occurs among every occurrence of a place, in the containers
      * inside the elements of another.
      *
-     * <p>One number and nothing beside it, as {@link #amongEveryOccurrence} is.
+     * <p>Several keys, each counted over the same place: the keys are values the row fixed, and
+     * each is written as often as asked over the same containers. Nothing beside them — how many
+     * the containers hold in all is another question about how the occurrences are shared out.
      */
     private static JointRealization amongEveryOccurrenceEqualToAKey(
             Collection<RealizationTarget> group, List<RealizationTarget.OfANumber> numbers) {
-        RealizationTarget.OfANumber asked = numbers.getFirst();
+        TermPath place = null;
         for (RealizationTarget.OfANumber each : numbers) {
-            if (!each.term().equals(asked.term())) {
+            if (!(each.term() instanceof NumericTerm.OccurrencesOfAKey asked)
+                    || (place != null && !place.equals(asked.subjectPath()))) {
                 return nothingSolvesAGroup();
             }
+            place = asked.subjectPath();
         }
-        return wholly(group, List.of(asked),
-                () -> new JointBuilder.ValuesEqualToAKeyAcrossContainers(asked));
+        return wholly(group, numbers,
+                () -> new JointBuilder.ValuesEqualToAKeyAcrossContainers(numbers));
     }
 
     /**
@@ -1227,10 +1231,14 @@ final class TermRealizations {
          * asked, in all of them put end to end
          * ({@link CardinalityComposer#composeAcrossContainersEqualToAKey}).
          *
-         * @param asked how often the key's value occurs among every occurrence of its place
+         * @param asked how often each key's value occurs among every occurrence of their place
          */
-        record ValuesEqualToAKeyAcrossContainers(RealizationTarget.OfANumber asked)
+        record ValuesEqualToAKeyAcrossContainers(List<RealizationTarget.OfANumber> asked)
                 implements JointBuilder {
+
+            public ValuesEqualToAKeyAcrossContainers {
+                asked = List.copyOf(asked);
+            }
 
             @Override
             public Realization from(Type sourceType, List<List<String>> keptApart,
