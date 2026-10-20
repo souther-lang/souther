@@ -188,6 +188,27 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * Every place under this value that its rules name, whether or not a rule puts an end there.
+     *
+     * <p>The places a rule is read through, and not the places it owes an answer at: a rule
+     * relating two positions puts no end at either, so {@link #placed} never names them, and a
+     * reader that went only where an end was placed would stop short of the second. Read off what
+     * the rules came to: the places an end was put at and the places a rule was filed at because it
+     * drew no line there.
+     */
+    List<RuleKey> namedPlaces() {
+        java.util.Set<RuleKey> out = new java.util.LinkedHashSet<>();
+        for (PlacementSeed seed : placed()) {
+            out.add(seed.address().key());
+        }
+        for (FieldDomains.NoLine each : bounds().noLines()) {
+            out.add(each.path());
+        }
+        out.removeIf(RuleKey::isTheValueItself);
+        return List.copyOf(out);
+    }
+
+    /**
      * What is left for the position at {@code path}, which is read from the value this is of.
      *
      * <p>Nothing at a position inside a container, and nothing at the value's own path. The clauses
@@ -652,7 +673,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
                 .map(each -> new ClauseWithoutAnEnd(each.statement(), each.states(), each.wrote(),
                         each.root(),
                         root,
-                        bounds().named(), each.noFormSaysIt()))
+                        bounds().named(), each.noFormSaysIt(), false))
                 .toList();
     }
 

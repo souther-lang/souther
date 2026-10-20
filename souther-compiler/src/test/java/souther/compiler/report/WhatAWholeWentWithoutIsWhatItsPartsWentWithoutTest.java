@@ -45,9 +45,9 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
      * this is looking for — so a model producing only one kind would hold the rule over one path
      * and say nothing about the rest.
      *
-     * <p>The list of issues inside an issue is what leaves a reading short. What it holds returns to
-     * the declaration the walk has already opened, so the walk stops there — a reading that really
-     * did not happen, and nothing a row does reaches past it.
+     * <p>The rule of an issue about the issues it holds is what leaves a reading short. It names a
+     * path below the point where the type comes back to itself, which nothing lists — a reading
+     * that really did not happen, and nothing a row does reaches past it.
      */
     private static final String MODEL = """
             module example.whole
@@ -55,9 +55,8 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
             data Draft = { n: Int }
             data Done = { n: Int }
             data Small = { n: Int }
-            data Amount = Int
-                invariant ranged = value >= 0
-            data Issue = { cost: Amount, more: List<Issue> }
+            data Issue = { size: Int, more: List<Issue> }
+                invariant List.all(each -> each.size <= size, more)
 
             partial let spin (n: Int): Int = spin(n)
 

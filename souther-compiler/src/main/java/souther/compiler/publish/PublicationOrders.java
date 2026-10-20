@@ -486,6 +486,7 @@ public final class PublicationOrders {
                 WeakeningWord.DECISION_NOT_FULLY_READ,
                 WeakeningWord.DECISION_RULE_READ_SHORT,
                 WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED,
+                WeakeningWord.REACHABLE_NODE_CASES_UNMEASURED,
                 WeakeningWord.DECISION_OF_ROW_UNREADABLE,
                 WeakeningWord.DECISION_RUN_NOT_WATCHED,
                 WeakeningWord.REWRITE_UNDECIDED)) {

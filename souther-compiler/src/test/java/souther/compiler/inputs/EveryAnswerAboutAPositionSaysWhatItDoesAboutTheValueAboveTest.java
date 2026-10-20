@@ -123,6 +123,13 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                         + "value that is; answered by the caller, the root's ends were held "
                         + "against the numbers of whatever it was reading",
                 "ATypeWritingAboutBothOfItsNumbersChoosesNeitherTest"));
+        table.put("namedPlaces", new Decided(Above.NOT_ASKED,
+                "the places a rule of the value above names are asked for by the reading opened at "
+                        + "that value, when the listing opens it — asked here as well, one place "
+                        + "would be asked for twice, and a place under the case would be asked for "
+                        + "by a value that is not the one whose rule names it",
+                "ARecursiveInputOwesRowsWhereTheBodyReadsItTest"
+                        + ".aRuleAboutAPlaceUnderTheReturnIsOwedRowsThereAsWhereTheTypeDoesNotRecurse"));
         table.put("bounds", new Decided(Above.NOT_ASKED,
                 "what a reading holds of its own value, which is what the answers above are taken "
                         + "from — the value above is asked through them and not through this",

@@ -169,13 +169,11 @@ public sealed interface ClosureGap {
      * A position whose rules nothing enumerated. It raises no question, so it cannot be short of
      * one — which is why it is a gap of its own and not one of the two above.
      *
-     * <p><b>Not every way the rules go unread reaches this.</b> A handing over left standing because
-     * the walk could not go into the position is the same stop {@link PositionNotReachedInto}
-     * reports, and it is written there once. Which of the ways this is comes off the arm the reading
-     * settled and never off what else was found at the path
-     * ({@link souther.compiler.inputs.RulesLeftUnread}): a position the reading entered and lost a
-     * clause of its own is an independent finding, and a fold on the path would take it with the
-     * other (issue #1084).
+     * <p><b>Every way the rules go unread reaches this, and none hides another finding.</b> Which of
+     * the ways this is comes off the arm the reading settled and never off what else was found at
+     * the path ({@link souther.compiler.inputs.RulesLeftUnread}): a stop that
+     * {@link PositionNotReachedInto} reports is its own finding, and a fold on the path would take
+     * an independent one with it (issue #1084).
      *
      * <p><b>And two of those ways reach a document as this one word.</b> A reading that lost a
      * clause of its own and a recipient that got no reading are different causes and both are

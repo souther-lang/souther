@@ -4,7 +4,6 @@ import net.unit8.notation199x.pattern.Meter;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
@@ -146,8 +145,6 @@ class APatternPastItsFigureNamesTheFigureTest {
                 new BlockReason.ValueRulesNotReachedPastDepthLimit(),
                 new BlockReason.ValueRulesNotReached(),
                 new BlockReason.TypeUnresolved(),
-                new BlockReason.RecursiveExpansion(TypeSymbols.declared(new TypeKey("g", "Chain")),
-                        TermPath.of("c")),
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.LineAtANumberNoRatioHolds(),

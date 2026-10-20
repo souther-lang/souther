@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -25,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>What a decision rule is, is the search as a whole: whether some node at any depth meets the
  * statement. Which rule a row takes is what the row comes to when it is run, so a row that only a
  * grandchild settles takes the rule a row settled at the top does. And what the measures over the
- * input's positions read is as deep as a row is written and no deeper: the nodes under the top are
- * a place nothing read, said as such, so a search read whole is never what makes a behavior's
- * measurement complete.
+ * input's positions read is as deep as a row is written and no deeper: no row is written toward the
+ * nodes under the top, said as a weakening of the decision's measure and not as a position nobody
+ * read, so a search read whole is never what makes a behavior's measurement complete.
  */
 class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
 
@@ -129,15 +130,87 @@ class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
         }
     }
 
-    /** That {@code f} is no complete measurement, and says the nodes under {@code below} are why. */
+    /**
+     * That {@code f} is no complete measurement because of the search, and not because the input
+     * names its own type: the positions under {@code below} are read.
+     */
     private static void assertWentWithoutWhatIsBelow(JsonNode f, String below) {
         assertEquals("partial", f.get("status").asString(), () -> "measured as " + f);
-        List<String> notRead = new ArrayList<>();
-        f.get("partition").get("notRead").forEach(each -> notRead.add(each.get("position").asString()));
-        assertTrue(notRead.contains(below), () -> below + " is said to be not read: " + notRead);
-        List<String> weakening = new ArrayList<>();
-        f.get("weakening").forEach(each -> weakening.add(each.asString()));
-        assertTrue(weakening.contains("position_not_read"), () -> "weakened by " + weakening);
+        assertEquals(List.of(), notRead(f), below + " is a position the input returns to, and is read");
+        assertTrue(weakening(f).contains("reachable_node_cases_unmeasured"),
+                () -> "weakened by " + weakening(f));
+    }
+
+    @Test
+    void anInputThatNamesItsOwnTypeIsNotShortForThat() {
+        JsonNode f = behavior(DECLARATIONS + """
+                behavior f : (t: Node) -> Yes | No
+                let f (t) = if t.v > 5 then Yes else No
+                """);
+        assertEquals(List.of(), notRead(f));
+        assertFalse(weakening(f).contains("position_not_read"), () -> "weakened by " + weakening(f));
+        assertFalse(weakening(f).contains("reachable_node_cases_unmeasured"),
+                () -> "weakened by " + weakening(f));
+    }
+
+    /** A body that folds over what a node holds, with no search statement in the decision. */
+    @Test
+    void aFoldOverTheNodesBelowDoesNotMakeTheInputUnread() {
+        JsonNode f = behavior("""
+                module m
+                import List ( fold )
+
+                data Node = { id: Int, kids: List<Node> }
+
+                behavior count : (n: Node) -> Int
+
+                let walk (n: Node): Int = 1 + fold((acc, k) -> acc + walk(k), 0, n.kids)
+
+                let count (n) = walk(n)
+
+                example count
+                    | "leaf" : (Node { id = 1, kids = [] }) -> 1
+                    | "pair" : (Node { id = 1, kids = [Node { id = 2, kids = [] }] }) -> 2
+                """);
+        assertEquals(List.of(), notRead(f));
+        assertFalse(weakening(f).contains("position_not_read"), () -> "weakened by " + weakening(f));
+    }
+
+    /**
+     * A rule the type states about its own fields does not make the return unread, whatever the
+     * rule relates: one position, two positions, or the length of the list that comes back.
+     */
+    @Test
+    void aRuleOfTheTypeAboutItsOwnFieldsDoesNotMakeTheReturnUnread() {
+        String node = """
+                module m
+                data Yes
+                data No
+                data Node = { lo: Int, hi: Int, kids: List<Node> }
+                """;
+        String body = """
+                behavior f : (n: Node) -> Yes | No
+                let f (n) = if n.lo > 3 then Yes else No
+                """;
+        for (String rule : List.of("lo >= 0", "lo <= hi", "List.length(kids) <= 3")) {
+            JsonNode f = behavior(node + "    invariant " + rule + "\n" + body);
+            assertEquals("complete", f.get("status").asString(), () -> rule + ": " + weakening(f));
+            assertFalse(weakening(f).contains("position_not_read"), rule);
+        }
+    }
+
+    private static List<String> notRead(JsonNode f) {
+        List<String> out = new ArrayList<>();
+        f.get("partition").get("notRead").forEach(each -> out.add(each.get("position").asString()));
+        return out;
+    }
+
+    private static List<String> weakening(JsonNode f) {
+        List<String> out = new ArrayList<>();
+        if (f.has("weakening")) {
+            f.get("weakening").forEach(each -> out.add(each.asString()));
+        }
+        return out;
     }
 
     /** Whether the rule of the search coming out each way was taken, by that way. */

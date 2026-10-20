@@ -102,6 +102,10 @@ final class Subjects {
             // rest on the order of its repeated keys is not said: none was measured.
             case Weakening.KeyedOverwriteCasesUnmeasured it ->
                     new Subject.OfABehavior(it.behavior());
+            // The behavior whose body searches from a node for one below it. Which decisions rest
+            // on that search is not said: no node further down was measured.
+            case Weakening.ReachableNodeCasesUnmeasured it ->
+                    new Subject.OfABehavior(it.behavior());
             // The behavior whose body the rewrite is of. Which rewrite, and why it was left open,
             // is the rewrite's own entry under the replacement measure.
             case Weakening.RewriteUndecided it -> new Subject.OfABehavior(it.behavior());

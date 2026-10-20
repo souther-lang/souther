@@ -49,11 +49,18 @@ import souther.compiler.types.TypeSymbol;
  *                 is read as that one, and its reads are bound to that one's value
  * @param noFormSaysIt whether the reading of ends' arithmetic stopped at an operation it names as
  *                 one no form says
+ * @param ofACopyNothingListed whether the value the clause is written about is a copy of its type
+ *                 the listing of positions does not reach, read only because a path was named. Such
+ *                 a copy answers for what that naming reaches and for no more, so a line its clause
+ *                 draws between places the naming does not reach is a line nobody can be owed a
+ *                 row at — which is for whoever draws the line to see, and not for this to decide
+ *                 from the conjunct, since a conjunct holds several statements and each names its
+ *                 own places
  */
 public record ClauseWithoutAnEnd(InvariantStatementId statement, StatedComparison states,
                                  SourcePos wrote, souther.compiler.core.Core readOutOf,
                                  TermPath at, TypeSymbol.AtModule readUnder,
-                                 boolean noFormSaysIt) {
+                                 boolean noFormSaysIt, boolean ofACopyNothingListed) {
 
     public ClauseWithoutAnEnd {
         if (statement == null || states == null || wrote == null || readOutOf == null
@@ -61,6 +68,12 @@ public record ClauseWithoutAnEnd(InvariantStatementId statement, StatedCompariso
             throw new IllegalArgumentException("a clause is one of a declaration's, is written, is"
                     + " read out of a clause, and is about a value somewhere");
         }
+    }
+
+    /** The same clause, of a copy of its type the listing does not reach. */
+    public ClauseWithoutAnEnd readOnlyThroughANaming() {
+        return new ClauseWithoutAnEnd(statement, states, wrote, readOutOf, at, readUnder,
+                noFormSaysIt, true);
     }
 
     /** Which conjunct of the clause this statement is of. */

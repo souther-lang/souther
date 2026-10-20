@@ -303,10 +303,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         assertThrows(IllegalStateException.class, () -> new PendingPosition.Leaf(AT)
                 .complete(new BodyCutInspection.Evidence()));
         assertThrows(IllegalStateException.class, () -> new PendingPosition
-                .Blocked(AT, new BlockReason.RecursiveExpansion(
-                        souther.compiler.types.TypeSymbols.declared(
-                                new souther.compiler.types.TypeKey("g", "Chain")),
-                        souther.compiler.inputs.TermPath.of("c")))
+                .Blocked(AT, new BlockReason.TypeUnresolved())
                 .complete(new BodyCutInspection.Evidence()));
     }
 

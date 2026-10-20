@@ -39,20 +39,6 @@ public record ReadingResidue(BlockedDescent blockedDescent,
 
     public ReadingResidue {
         rulesLeftUnread = Collections.unmodifiableSet(new LinkedHashSet<>(rulesLeftUnread));
-        // What the arms say about themselves, held to — the same agreement the reader that settled
-        // them held, asked the same way ({@link RulesLeftUnread.HandoffUnread#namesABlockedDescent}).
-        // An arm naming a descent this does not carry would fold into a finding nothing writes and
-        // the stop would go unsaid; an arm denying one beside a descent that is reported puts the
-        // stop out twice. Both are a copy that dropped one of the pair, and this is where a copy is
-        // caught.
-        for (RulesLeftUnread each : rulesLeftUnread) {
-            if (each instanceof RulesLeftUnread.Handoff handoff
-                    && handoff.why().namesABlockedDescent() != (blockedDescent != null)) {
-                throw new IllegalArgumentException(
-                        "a handing over and the descent beside it disagree: " + handoff.why()
-                                + " with " + blockedDescent);
-            }
-        }
     }
 
     /** What one position's reading came to, as the reading itself answered it. */

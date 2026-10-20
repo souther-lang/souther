@@ -3749,9 +3749,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to, so no reason is written both ways.
             case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
-            case RETURNS_TO_A_DECLARATION_ALREADY_READ ->
-                    "the input returns here to a declaration already read above it, and what is"
-                            + " under it is not read again";
             case TYPE_UNRESOLVED -> "its type could not be worked out here";
         };
     }
@@ -9476,6 +9473,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.DecisionRuleReadShort _ -> WeakeningWord.DECISION_RULE_READ_SHORT;
             case Weakening.KeyedOverwriteCasesUnmeasured _ ->
                     WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED;
+            case Weakening.ReachableNodeCasesUnmeasured _ ->
+                    WeakeningWord.REACHABLE_NODE_CASES_UNMEASURED;
             case Weakening.RewriteUndecided _ -> WeakeningWord.REWRITE_UNDECIDED;
         };
     }

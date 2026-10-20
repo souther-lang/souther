@@ -335,15 +335,6 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS,
         /**
-         * The input returns here to a declaration it has already been through, and what is under
-         * this position was not read again.
-         *
-         * <p>A position whose values are values of a type the path has already met. What stands
-         * under it is what stands under that one, so a reader is told the return rather than a list
-         * of positions repeating for as long as anybody keeps reading.
-         */
-        RETURNS_TO_A_DECLARATION_ALREADY_READ,
-        /**
          * The type at this position could not be interpreted, so nothing about its values is
          * established. A report is written about a model carrying one, which is why this is a word
          * a report writes rather than a state nothing reaches.
