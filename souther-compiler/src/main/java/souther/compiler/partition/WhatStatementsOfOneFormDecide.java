@@ -2,11 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 
 /**
@@ -17,6 +17,10 @@ import java.util.TreeSet;
  * {@code h <= 0} and {@code h > 0} hold it nowhere. Where the set is empty no row comes along the
  * way, and where a relation of that form is the same at every point of the set, the way decides it.
  * Both are shown over the reals, which holds the integers too.
+ *
+ * <p>The relation asked is given as a statement is: a form and how it stands to nought. So the
+ * statements and the relation are read by one rule, and no level is converted from one reading to
+ * the other.
  *
  * <p>Only statements of terms read from a position outside every container are taken. Two
  * statements of a term at a position inside a container may be of two elements, which this does not
@@ -34,21 +38,18 @@ final class WhatStatementsOfOneFormDecide {
 
     /**
      * Whether some statements of {@code stated} that are one form leave no point of the line, and
-     * whether the statements of the form {@code asked} decide {@code asked} held against
-     * {@code level} as {@code relation}.
+     * whether the statements of the form of {@code asked} decide it.
      *
-     * @param asked the form the relation is of, or null where nothing is asked
+     * @param asked the relation asked, or null where nothing is asked
      */
-    static Verdict of(List<TakenConstraint.Affine> stated, Map<NumericTerm, ExactRatio> asked,
-                      ExactRatio level, Rel relation) {
-        List<TakenConstraint.Affine> taken = new ArrayList<>();
+    static Verdict of(List<TakenConstraint.Affine> stated, TakenConstraint.Affine asked) {
+        List<TakenConstraint.Affine> left = new ArrayList<>();
         for (TakenConstraint.Affine each : stated) {
             if (each != null && !each.form().coefs().isEmpty() && outsideEveryContainer(each)) {
-                taken.add(each);
+                left.add(each);
             }
         }
         boolean decided = false;
-        List<TakenConstraint.Affine> left = new ArrayList<>(taken);
         while (!left.isEmpty()) {
             TakenConstraint.Affine first = left.removeFirst();
             Map<NumericTerm, ExactRatio> form = first.form().coefs();
@@ -60,18 +61,19 @@ final class WhatStatementsOfOneFormDecide {
                     bounds.add(new Bound(factor, left.remove(i)));
                 }
             }
-            boolean ofTheAskedForm = asked != null && level != null
-                    && factorBetween(form, asked) != null;
+            ExactRatio askedFactor = asked == null ? null
+                    : factorBetween(form, asked.form().coefs());
+            Bound askedBound = askedFactor == null ? null : new Bound(askedFactor, asked);
             List<Boolean> askedAt = new ArrayList<>();
-            Boolean empty = pointsLeft(bounds, ofTheAskedForm ? asked : null, form, level,
-                    relation, askedAt);
+            Boolean empty = pointsLeft(bounds, askedBound, askedAt);
             if (empty == null) {
                 continue;
             }
             if (empty) {
                 return new Verdict(true, false);
             }
-            if (ofTheAskedForm && !askedAt.isEmpty() && askedAt.stream().distinct().count() == 1) {
+            if (askedBound != null && !askedAt.isEmpty()
+                    && askedAt.stream().distinct().count() == 1) {
                 decided = true;
             }
         }
@@ -79,82 +81,92 @@ final class WhatStatementsOfOneFormDecide {
     }
 
     /** One statement, as its form is {@code factor} times the form of its group. */
-    private record Bound(ExactRatio factor, TakenConstraint.Affine statement) {}
+    private record Bound(ExactRatio factor, TakenConstraint.Affine statement) {
+
+        /** Where the statement crosses the line of the group's form: where the form it is
+         *  {@code factor} times, held with its constant, comes to nought. */
+        ExactRatio crossing() {
+            return statement.form().constant().negated().dividedBy(factor).orNull();
+        }
+
+        /** Whether the statement holds where the group's form is {@code point}; null where it is
+         *  not worked out. */
+        Boolean holdsAt(ExactRatio point) {
+            ExactRatio value = factor.times(point)
+                    .flatMap(scaled -> scaled.plus(statement.form().constant())).orNull();
+            return value == null ? null : statement.rel().holds(value.signum());
+        }
+    }
 
     /**
      * Whether no point of the line holds every bound, or null where that is not worked out; and,
      * for the points that do, whether the asked relation holds at each.
      */
-    private static Boolean pointsLeft(List<Bound> bounds, Map<NumericTerm, ExactRatio> asked,
-                                      Map<NumericTerm, ExactRatio> form, ExactRatio level,
-                                      Rel relation, List<Boolean> askedAt) {
-        ExactRatio askedFactor = asked == null ? null : factorBetween(form, asked);
-        // Where each bound crosses the line, in the form of the group.
+    private static Boolean pointsLeft(List<Bound> bounds, Bound asked, List<Boolean> askedAt) {
         TreeSet<ExactRatio> crossings = new TreeSet<>(ExactRatio::compareTo);
         for (Bound each : bounds) {
-            ExactRatio at = each.statement().form().constant().negated()
-                    .dividedBy(each.factor()).orNull();
+            ExactRatio at = each.crossing();
             if (at == null) {
                 return null;
             }
             crossings.add(at);
         }
-        ExactRatio askedAtLevel = null;
-        if (askedFactor != null) {
-            askedAtLevel = level.dividedBy(askedFactor).orNull();
-            if (askedAtLevel == null) {
+        if (asked != null) {
+            ExactRatio at = asked.crossing();
+            if (at == null) {
                 return null;
             }
-            crossings.add(askedAtLevel);
+            crossings.add(at);
         }
-        List<ExactRatio> points = new ArrayList<>();
-        ExactRatio previous = null;
-        for (ExactRatio each : crossings) {
-            if (previous == null) {
-                ExactRatio below = each.minus(ExactRatio.ONE).orNull();
-                if (below == null) {
-                    return null;
-                }
-                points.add(below);
-            } else {
-                ExactRatio between = previous.plus(each).flatMap(
-                        sum -> sum.dividedBy(ExactRatio.of(2))).orNull();
-                if (between == null) {
-                    return null;
-                }
-                points.add(between);
-            }
-            points.add(each);
-            previous = each;
-        }
-        ExactRatio above = previous.plus(ExactRatio.ONE).orNull();
-        if (above == null) {
+        List<ExactRatio> points = pointsAround(crossings);
+        if (points == null) {
             return null;
         }
-        points.add(above);
         boolean any = false;
         for (ExactRatio point : points) {
             boolean holdsAll = true;
             for (Bound each : bounds) {
-                ExactRatio value = each.factor().times(point)
-                        .flatMap(scaled -> scaled.plus(each.statement().form().constant()))
-                        .orNull();
-                if (value == null) {
+                Boolean holds = each.holdsAt(point);
+                if (holds == null) {
                     return null;
                 }
-                holdsAll &= each.statement().rel().holds(value.signum());
+                holdsAll &= holds;
             }
             if (holdsAll) {
                 any = true;
-                if (askedAtLevel != null) {
-                    // The asked form is its factor times the group's, so a point of the group
-                    // stands that factor's sign from the level.
-                    int apart = askedFactor.signum() * point.compareTo(askedAtLevel);
-                    askedAt.add(relation.holds(apart));
+                if (asked != null) {
+                    Boolean holds = asked.holdsAt(point);
+                    if (holds == null) {
+                        return null;
+                    }
+                    askedAt.add(holds);
                 }
             }
         }
         return !any;
+    }
+
+    /** Each crossing, a point between each two, and one beyond each end: the line is the same
+     *  between crossings, so these show every way it can stand. Null where one is not worked out. */
+    private static List<ExactRatio> pointsAround(Set<ExactRatio> crossings) {
+        List<ExactRatio> points = new ArrayList<>();
+        ExactRatio previous = null;
+        for (ExactRatio each : crossings) {
+            ExactRatio before = previous == null ? each.minus(ExactRatio.ONE).orNull()
+                    : previous.plus(each).flatMap(sum -> sum.dividedBy(ExactRatio.of(2))).orNull();
+            if (before == null) {
+                return null;
+            }
+            points.add(before);
+            points.add(each);
+            previous = each;
+        }
+        ExactRatio beyond = previous.plus(ExactRatio.ONE).orNull();
+        if (beyond == null) {
+            return null;
+        }
+        points.add(beyond);
+        return points;
     }
 
     /** {@code other} as a number times {@code form}, or null where it is not one. */

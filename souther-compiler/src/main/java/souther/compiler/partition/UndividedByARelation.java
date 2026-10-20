@@ -691,21 +691,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * along it.
      */
     private boolean theWayLeavesNothingToDivide(List<OnAWay> conditions) {
-        Map<NumericTerm, ExactRatio> asked = null;
-        if (kind == Kind.AFFINE && constant != null && !sides.isEmpty()) {
-            asked = new LinkedHashMap<>();
-            for (Side each : sides) {
-                if (each.term() == null || each.kept() != null
-                        || asked.merge(each.term(), each.weight(),
-                                (one, other) -> one.plus(other).orNull()) == null) {
-                    asked = null;
-                    break;
-                }
+        WhatStatementsOfOneFormDecide.Verdict verdict = WhatStatementsOfOneFormDecide.of(
+                conditions.stream().map(OnAWay::affine).toList(), askedAsAStatement());
+        return verdict.noRowArrives() || verdict.relationIsDecided();
+    }
+
+    /** The relation as a statement is held, the sides weighed and added to the constant and held
+     *  against nought, or null where it is not of terms of the input. */
+    private TakenConstraint.Affine askedAsAStatement() {
+        if (kind != Kind.AFFINE || constant == null || sides.isEmpty()) {
+            return null;
+        }
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        for (Side each : sides) {
+            if (each.term() == null || each.kept() != null
+                    || coefs.merge(each.term(), each.weight(),
+                            (one, other) -> one.plus(other).orNull()) == null) {
+                return null;
             }
         }
-        WhatStatementsOfOneFormDecide.Verdict verdict = WhatStatementsOfOneFormDecide.of(
-                conditions.stream().map(OnAWay::affine).toList(), asked, constant, relation);
-        return verdict.noRowArrives() || verdict.relationIsDecided();
+        return new TakenConstraint.Affine(new LinearForm<>(constant, coefs), relation);
     }
 
     /** The conditions of a way, marked, and the years its statements of years put the dates in,
