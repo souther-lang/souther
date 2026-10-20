@@ -67,6 +67,25 @@ public final class InputNumber {
     }
 
     /**
+     * The numbers {@code e} is made of, as the one form they add up to, for a reader that puts
+     * numbers into one form: the number {@link #of} names, or — where it names none — the form of
+     * two numbers of a string that a total of its weighed code points comes to.
+     *
+     * <p>The one place that says which numbers an expression is made of, so that a reader of forms
+     * does not hold a case of its own. A reader of one number at a time ({@link #ofAlone}) draws
+     * a line on a single number and reads no form of two.
+     */
+    public static LinearForm<NumericTerm> formOf(Core e, InputDomain inputs, InputReads reads,
+                                                 RuleReadingSource source, ElementsMet met) {
+        NumericTerm term = of(e, inputs, reads, source, met);
+        if (term != null) {
+            return LinearForm.atom(term);
+        }
+        return met.admits(e, reads, source.newtypes())
+                ? codePointsWeighed(e, inputs, reads, source) : null;
+    }
+
+    /**
      * The number {@code e} names, for a reader that asks of a side by itself and combines no two
      * numbers into one form: a line drawn on one position against a value written out.
      *
@@ -192,16 +211,102 @@ public final class InputNumber {
                 || !(facts.takenAs(measured.operation()) instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
-        Denotation listed = reads.standing(measured.of(), source.symbols(), source.newtypes());
-        AnOperationApplied applied = AnOperationApplied.of(listed.value());
+        TermPath at = stringWhoseCodePointsAre(measured.of(), reads, source);
+        return at == null ? null
+                : NumericTerm.CodePointValueSum.of(at, inputs.typeAt(at, source), source.inners());
+    }
+
+    /** The location of the string whose code points {@code listed} lists, or null where it lists
+     *  those of no string standing at one. */
+    private static TermPath stringWhoseCodePointsAre(Core listed, InputReads reads,
+                                                     RuleReadingSource source) {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        Denotation standing = reads.standing(listed, source.symbols(), source.newtypes());
+        AnOperationApplied applied = AnOperationApplied.of(standing.value());
         DeclaredArgument string = applied == null ? null
                 : facts.codePointsListedOf(applied.operation());
         Core argument = string == null ? null : applied.argument(string);
-        if (argument == null || !(listed.at().pathOf(argument, source.newtypes())
-                instanceof PathResolution.At(var at))) {
+        return argument != null && standing.at().pathOf(argument, source.newtypes())
+                instanceof PathResolution.At(var at) ? at : null;
+    }
+
+    /**
+     * What a total of a closure applied to each code point of a string comes to, where the closure
+     * is {@code weight·x + constant} of the code point {@code x}: that weight times the total of the
+     * code points, and that constant times how many there are.
+     *
+     * <p>The code points are the elements of a list no row writes, so there is no position of an
+     * element to read the closure at, and the number is of the string at one position. What the
+     * closure makes of a code point is read as it is of an element of an input list, for elements
+     * that stand at no place ({@link ElementValue#readWithoutAPlace}). Null where the walk keeps some of the elements, where the closure
+     * turns on where an element stands or on anything but the code point, or where the total is of
+     * something else.
+     *
+     * <p>That the walk answers one value per code point is the licence the walk's closure carries
+     * ({@link InputReads#answerAt}), which the operation's declaration gives only to a walk whose
+     * result holds one answer of the closure per element ({@code BuiltFrom#mapsEachElementOf}).
+     * The binding the closure is handed its element on says nothing of that: {@code List.sortBy}
+     * hands its closure the elements too, and what it computes is a key, not a term of the total.
+     */
+    private static LinearForm<NumericTerm> codePointsWeighed(Core e, InputDomain inputs,
+                                                             InputReads reads,
+                                                             RuleReadingSource source) {
+        Symbols symbols = source.symbols();
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
+                each -> reads.folded(each, symbols, source.newtypes()));
+        if (measured == null || !measured.arguments().none()
+                || !(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                        instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
-        return NumericTerm.CodePointValueSum.of(at, inputs.typeAt(at, source), source.inners());
+        Denotation walked = reads.denotes(measured.of(), symbols, source.newtypes());
+        while (walked != null) {
+            LinearForm<NumericTerm> weighed = weighedByTheWalk(walked, inputs, source);
+            if (weighed != null) {
+                return weighed;
+            }
+            walked = walked.at().stepKeepingEveryElement(walked, symbols, source.newtypes());
+        }
+        return null;
+    }
+
+    private static LinearForm<NumericTerm> weighedByTheWalk(Denotation walked, InputDomain inputs,
+                                                            RuleReadingSource source) {
+        InputReads where = walked.at();
+        BindingId element = WalkElements.elementBindingOf(walked.value(), where, source.symbols(),
+                source.newtypes());
+        Core listed = element == null ? null : where.containerOfTheElementHandedTo(element);
+        TermPath at = listed == null ? null : stringWhoseCodePointsAre(listed, where, source);
+        ElementAnswer closure = at == null ? null : where.answerAt(element);
+        if (closure == null) {
+            return null;
+        }
+        ElementValue computed =
+                ElementValue.readWithoutAPlace(closure, where.heldByTheBody(), source);
+        if (!(computed instanceof ElementValue.Affine(var form))) {
+            return null;
+        }
+        ElementProjection codePoint = new ElementProjection(List.of());
+        if (!form.coefs().keySet().stream().allMatch(codePoint::equals)) {
+            return null;
+        }
+        Type string = inputs.typeAt(at, source);
+        NumericTerm sum = NumericTerm.CodePointValueSum.of(at, string, source.inners());
+        NumericTerm length = NumericTerm.TakenOf.howManyHeldAt(
+                ValueName.Stdlib.operation("String", "length"), at, string, source.inners(),
+                source.symbols());
+        if (sum == null || length == null) {
+            return null;
+        }
+        Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
+        ExactRatio weight = form.coefs().getOrDefault(codePoint, ExactRatio.ZERO);
+        if (!weight.isZero()) {
+            weights.put(sum, weight);
+        }
+        if (!form.constant().isZero()) {
+            weights.put(length, form.constant());
+        }
+        return new LinearForm<>(ExactRatio.ZERO, weights);
     }
 
     /**

@@ -312,12 +312,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource, met);
-                if (term == null) {
-                    return null;
+                LinearForm<NumericTerm> numbers =
+                        InputNumber.formOf(node, inputs, at, ruleSource, met);
+                if (numbers != null) {
+                    named.addAll(numbers.coefs().keySet());
                 }
-                named.add(term);
-                return LinearForm.atom(term);
+                return numbers;
             }
 
             @Override
