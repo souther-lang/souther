@@ -4946,7 +4946,7 @@ final class Pullback {
      * lookup's own presence is read over, so the arm and the count are of one statement.
      */
     private LinearForm<Quantity> valueLookedUpUnderAKey(Core node, InputReads at) {
-        if (counting == null || !(Core.withoutStanding(node) instanceof Core.Read name)
+        if (counting == null ||!(Core.withoutStanding(node) instanceof Core.Read name)
                 || at.lookupOpenedBy(name.binding()) == null) {
             return null;
         }
@@ -4970,7 +4970,7 @@ final class Pullback {
         if (meeting == null || !meeting.holds()) {
             return null;
         }
-        Derivation ofTheElement = asTheDifferenceOfTwoNumbers(meeting.ofTheElement());
+        Derivation ofTheElement = asAComparisonOfTwoOrderedValues(meeting.ofTheElement());
         Proposition element = trying.of(ofTheElement);
         if (Proposition.firstStopIn(element) != null
                 || !element.mayTurnOnAnElementOf(meeting.container())
@@ -4987,20 +4987,20 @@ final class Pullback {
     }
 
     /**
-     * {@code read}, where it says two positions of the input are one value and both are numbers
-     * on an order, as their difference being nought — the statement a row is composed for as it is
-     * for any other comparison of two numbers — and {@code read} itself where it says anything
-     * else.
+     * {@code read}, where it says two positions of the input are one value and both stand on an
+     * order, as their difference being nought — the statement a row is composed for as it is for
+     * any other comparison of two values on an order, numbers and strings alike — and
+     * {@code read} itself where it says anything else, which a position on no order does.
      */
-    private Derivation asTheDifferenceOfTwoNumbers(Derivation read) {
+    private Derivation asAComparisonOfTwoOrderedValues(Derivation read) {
         if (read instanceof Derivation.OfWhatWasKept(Derivation ofTheElement,
                                                      List<Derivation> kept)) {
-            Derivation stated = asTheDifferenceOfTwoNumbers(ofTheElement);
+            Derivation stated = asAComparisonOfTwoOrderedValues(ofTheElement);
             return stated == ofTheElement ? read : new Derivation.OfWhatWasKept(stated, kept);
         }
         if (read instanceof Derivation.Joined(var how, Derivation left, Derivation right)) {
-            Derivation one = asTheDifferenceOfTwoNumbers(left);
-            Derivation other = asTheDifferenceOfTwoNumbers(right);
+            Derivation one = asAComparisonOfTwoOrderedValues(left);
+            Derivation other = asAComparisonOfTwoOrderedValues(right);
             return one == left && other == right ? read
                     : new Derivation.Joined(how, one, other);
         }
@@ -5020,8 +5020,15 @@ final class Pullback {
                 holds ? Rel.EQ : Rel.NE, Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
     }
 
-    /** The reading of some element meeting a statement that {@code read} comes to, where it is a
-     *  law's reading of a lookup's presence — or null where it is none. */
+    /**
+     * The reading of some element meeting a statement that {@code read} comes to, where it is a
+     * law's reading of a lookup's presence — or null where it is none.
+     *
+     * <p>The wrappers a law's reading of {@code Map.get} comes in are the ones named here, and
+     * what a wrapper not named hides is not found: the count is then left unread, never read of
+     * another statement. {@code AFoldThatFilesACounterUnderEachKeyAnswersAnyKeyAskedOfItTest}
+     * holds the line a lookup draws to be there, so a wrapper added to that reading fails it.
+     */
     private static Derivation.SomeElementMeeting someElementMeetingIn(Derivation read) {
         return switch (read) {
             case Derivation.AChoiceAt(var _, Derivation choice) -> someElementMeetingIn(choice);
