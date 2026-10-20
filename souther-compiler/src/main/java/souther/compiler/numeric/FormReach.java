@@ -223,6 +223,7 @@ final class FormReach<A> {
         // than what is already held.
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
+        int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
         for (Premise<A> each : premises()) {
             if (each.rule().equals(without)) {
                 continue;
@@ -232,6 +233,9 @@ final class FormReach<A> {
                 continue;
             }
             if (ranges != null && heldAlready(each, coefs, weighs)) {
+                continue;
+            }
+            if (residualsAreRangedOnly && leavesNothing(premise, coefs, weighs, unbounded)) {
                 continue;
             }
             merged++;
@@ -253,6 +257,63 @@ final class FormReach<A> {
             }
         }
         return best;
+    }
+
+    /**
+     * Whether the residual {@code premise} leaves {@code coefs} is bounded nowhere above, read off
+     * the signs of the weights the merge leaves and which ends the positions have.
+     *
+     * <p>A residual weighing three positions or more is bounded by the ranges alone
+     * ({@link #fromTheEnds}), and the ranges bound nothing where one position the residual weighs
+     * has no end the way its weight runs it up. Such a premise tightens nothing, and merging it is
+     * a map built and a sum taken over every position of the form. Where the form's positions have
+     * no ends, as the bounds an {@code Int} puts on each partial sum of a long addition have none,
+     * that is most of the premises over it.
+     *
+     * <p>A residual of fewer than three, or one every position of which has its end, is merged the
+     * way every premise is, so what is answered here decides how much work is done and never what
+     * comes of it.
+     *
+     * @param unbounded how many of {@code coefs}' weighed positions have no end the way their
+     *                  weight runs them up ({@link #unboundedIn})
+     */
+    private boolean leavesNothing(AffineConstraint.HalfSpace<A> premise, Map<A, ExactRatio> coefs,
+                                  int weighs, int unbounded) {
+        int weighsAfter = weighs;
+        int unboundedAfter = unbounded;
+        // Which of the premise's positions the merge leaves weighed, and which way, is read off the
+        // order of the two weights and needs no sum of them.
+        for (Map.Entry<A, ExactRatio> each : premise.form().coefs().entrySet()) {
+            ExactRatio was = coefs.getOrDefault(each.getKey(), ExactRatio.ZERO);
+            int left = was.compareTo(each.getValue());
+            if (!was.isZero() && left == 0) {
+                weighsAfter--;
+            } else if (was.isZero() && left != 0) {
+                weighsAfter++;
+            }
+            unboundedAfter += (runsWithoutEnd(each.getKey(), left) ? 1 : 0)
+                    - (runsWithoutEnd(each.getKey(), was.signum()) ? 1 : 0);
+        }
+        return weighsAfter >= 3 && unboundedAfter > 0;
+    }
+
+    /** How many of {@code coefs}' weighed positions have no end the way their weight runs them
+     *  up. */
+    private int unboundedIn(Map<A, ExactRatio> coefs) {
+        int unbounded = 0;
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            if (runsWithoutEnd(each.getKey(), each.getValue().signum())) {
+                unbounded++;
+            }
+        }
+        return unbounded;
+    }
+
+    /** Whether a position weighed with the sign {@code sign} has no end the way that weight runs it
+     *  up — never where it is weighed nought. */
+    private boolean runsWithoutEnd(A position, int sign) {
+        return sign > 0 ? ends.mostOf(position) == null
+                : sign < 0 && ends.leastOf(position) == null;
     }
 
     /** How many of {@code coefs}' positions carry a weight. */
@@ -547,9 +608,31 @@ final class FormReach<A> {
         return withTheDifference(coefs, constant, fromTheRanges(coefs, constant));
     }
 
-    /** What the ends leave the form, each position read at its own end. */
+    /**
+     * What the ends leave the form, each position read at its own end.
+     *
+     * <p>The upper end of {@link Reach#of} over the ends, taken in the same order with the same
+     * sums and nothing of the lower end beside it: every route here asks for the highest, and a
+     * position with no end that way leaves the form none, so nothing after it is summed.
+     */
     private ExactCut fromTheRanges(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return Reach.of(coefs, constant, this::rangeOf).most();
+        ExactRatio most = constant;
+        boolean reached = true;
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            ExactRatio weight = each.getValue();
+            ExactCut high = weight.signum() > 0 ? ends.mostOf(each.getKey())
+                    : ends.leastOf(each.getKey());
+            if (high == null) {
+                return null;
+            }
+            ExactRatio sum = most;
+            most = weight.times(high.at()).flatMap(sum::plus).orNull();
+            if (most == null) {
+                return null;
+            }
+            reached &= high.inclusive();
+        }
+        return new ExactCut(most, reached);
     }
 
     private Reach rangeOf(A position) {
