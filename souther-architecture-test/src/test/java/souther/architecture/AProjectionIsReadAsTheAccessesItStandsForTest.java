@@ -480,10 +480,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/ElementProjection$Reading", "steps", "(" + core + "L" + c
                 + "types/BindingId;L" + c + "inputs/BindingTrail;)L" + c
-                + "inputs/ElementProjection$Found;", Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "inputs/ElementProjection$Reading", "givenTo", "(" + core
-                + "Ljava/lang/String;L" + c + "inputs/BindingTrail;)" + core, Reading.NAMES,
-                READS_THE_NAMES);
+                + "inputs/OnePerElement$ReadOff;", Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "inputs/ElementProjection$Reading", "given", "(" + core + "L" + c
+                + "inputs/OnePerElement$ReadOff$Taken;L" + c + "inputs/BindingTrail;)" + core,
+                Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputUses$Walk", "whole", "(" + core + reads + ")V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "takenOff", "(" + core + reads + ")V",
