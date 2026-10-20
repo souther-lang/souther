@@ -140,6 +140,25 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
     }
 
     /**
+     * What keeps an element can be a statement over a container rather than one comparison. A count
+     * of those is the count of statements that hold, which the statements' own reading answers for;
+     * a total of them is not, and is said not to be joined.
+     */
+    @Test
+    void whatAQuantifierKeepsIsCountedByTheStatementsAndNotTotalledByThem() {
+        String head = HEAD + "let total (first, second) =\n    %s\n";
+        String kept = "List.filter(r -> List.all(x -> x.days >= r.days, [ first, second ]),"
+                + " [ first, second ])";
+
+        CoverageRead.Read counted = readAll(head.formatted("List.length(" + kept + ")"), "total");
+        CoverageRead.Read totalled = readAll(
+                head.formatted("List.sum(List.map(r -> r.pay, " + kept + "))"), "total");
+
+        assertEquals(List.of(), counted.notJoined());
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON), totalled.notJoined());
+    }
+
+    /**
      * Branches that come to the same value are still a choice. A meeting is of the decisions that
      * settle a value, and a path through a body is one whatever the value at its end: the operands
      * of an operator, the elements of a list and the closure that chooses all count them alike.

@@ -132,6 +132,13 @@ final class ElementEvaluations {
                 continue;
             }
             List<ReadMeaning.Occurrence.Kept> keptBy = occurrence.keptWhere();
+            if (!valueMatters && isKeptByAStatementOverAContainer(keptBy)) {
+                // How many are kept, where each is kept by what a quantifier states of a
+                // container, is the count of statements that hold, and that is read as the
+                // statements are, with the reasons it cannot be that reading says itself. It is no
+                // evaluation of one comparison to join, and is not left unread here.
+                continue;
+            }
             if (!keptBy.isEmpty()) {
                 // Met wherever anything keeps an occurrence, whatever it is and however many things
                 // do. That a decision exists is a fact about the container; whether this reading
@@ -208,6 +215,15 @@ final class ElementEvaluations {
         }
         return decisions.isEmpty() ? new Result.NotJoined(WhyNotJoined.NOT_ONE_COMPARISON)
                 : new Result.Matched(new Joined(decisions));
+    }
+
+    /** Whether the one thing that keeps an occurrence is a truth that is not an operator's: a call
+     *  such as {@code all} or {@code any} over a container, or a match. */
+    private static boolean isKeptByAStatementOverAContainer(
+            List<ReadMeaning.Occurrence.Kept> keptBy) {
+        return keptBy.size() == 1
+                && keptBy.getFirst() instanceof ReadMeaning.Occurrence.Kept.ATruth truth
+                && !(Core.withoutStanding(truth.truth().value()) instanceof Core.Binary);
     }
 
     /** {@code decision} filed under its comparison and application, or the one already there. */
