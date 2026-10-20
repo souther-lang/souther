@@ -466,6 +466,61 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
     }
 
     /**
+     * What a decision is does not depend on how many times it is used or where: a choice made once
+     * and named is one decision however often the name is written, and two choices are two. The
+     * three come out the same in every way a total can use a list of them — the elements of a
+     * list written in the body, an identity map over it, a map that computes on each, and the
+     * operands of an operator — and whether or not the comparison can be read.
+     */
+    @Test
+    void aDecisionIsCountedOnceHoweverOftenItIsUsedAndWhicheverWayTheTotalUsesIt() {
+        // a choice, another that is not it, and whether the comparison of each is one a row can
+        // steer
+        List<String[]> choices = List.of(
+                new String[] {"if first.days >= 17 then 1 else 0",
+                        "if second.days >= 17 then 1 else 0", "readable"},
+                new String[] {"if first.days * first.days > 10 then 1 else 2",
+                        "if second.days * second.days > 10 then 1 else 2", "not readable"},
+                new String[] {"if flag then 1 else 0", "if first.active then 1 else 0",
+                        "not a comparison"});
+        List<String> uses = List.of("List.sum(%s)", "List.sum(List.map(x -> x, %s))",
+                "List.sum(List.map(x -> x * 2, %s))");
+        List<String> differing = new ArrayList<>();
+        for (String[] choice : choices) {
+            String lets = "{ let chosen = " + choice[0] + "\n    let other = " + choice[1] + "\n    ";
+            for (String use : uses) {
+                for (String names : List.of("[ chosen, chosen ]", "[ chosen, chosen, chosen ]")) {
+                    CoverageRead.Read one = readFlagged(lets + use.formatted(names) + " }");
+                    if (!one.interactions().isEmpty() || !one.notJoined().isEmpty()) {
+                        differing.add(choice[2] + " " + use + " " + names + ": one decision read as "
+                                + shape(one.interactions()) + " " + one.notJoined());
+                    }
+                }
+                CoverageRead.Read two = readFlagged(lets + use.formatted("[ chosen, other ]") + " }");
+                if (two.interactions().isEmpty() && two.notJoined().isEmpty()) {
+                    differing.add(choice[2] + " " + use + ": two decisions read as none");
+                }
+            }
+            CoverageRead.Read same = readFlagged(lets + "chosen + chosen + chosen }");
+            if (!same.interactions().isEmpty() || !same.notJoined().isEmpty()) {
+                differing.add(choice[2] + " operands: one decision read as "
+                        + shape(same.interactions()) + " " + same.notJoined());
+            }
+            CoverageRead.Read operands = readFlagged(lets + "chosen + other }");
+            if (operands.interactions().isEmpty() && operands.notJoined().isEmpty()) {
+                differing.add(choice[2] + " operands: two decisions read as none");
+            }
+        }
+        assertEquals(List.of(), differing);
+
+        for (String use : List.of("List.sum(%s)", "List.sum(List.map(x -> x, %s))")) {
+            assertEquals(List.of(List.of(2, 2)), shape(readFlagged("{ let chosen = if first.days >= 17"
+                    + " then 1 else 0\n    let other = if second.days >= 17 then 1 else 0\n    "
+                    + use.formatted("[ chosen, other ]") + " }").interactions()), use);
+        }
+    }
+
+    /**
      * One value decided by several choices has all of them, wherever they are written in it: side
      * by side, nested in an arm, in both arms, or each under a name. It is a meeting that this
      * cannot join and says so, as the same choices written as the elements of a list are one it

@@ -56,9 +56,11 @@ final class ValueChoices {
          *
          * @param viaNames whether it was found beneath a name that stands for something written
          *                 elsewhere, rather than in the value itself or under its own lets
+         * @param perApplication whether it is written where an application of a closure is on,
+         *                 as in {@link Origin}
          */
-        record OneComparison(Core.Binary comparison, InputReads at, boolean viaNames)
-                implements Of { }
+        record OneComparison(Core.Binary comparison, InputReads at, boolean viaNames,
+                             boolean perApplication) implements Of { }
 
         /**
          * Forks this does not read, every one that decides the value: a value that comes to a sum
@@ -103,7 +105,8 @@ final class ValueChoices {
                 && !decides(fork.cond(), comes.at(), names, newtypes, 0, newSeen())
                 && !decides(fork.then(), comes.at(), names, newtypes, 0, newSeen())
                 && !decides(fork.els(), comes.at(), names, newtypes, 0, newSeen())) {
-            return new Of.OneComparison(comparison, comes.at(), comes.viaNames());
+            return new Of.OneComparison(comparison, comes.at(), comes.viaNames(),
+                    comes.at().isOnAnApplication());
         }
         List<Fork> found = new ArrayList<>();
         forksIn(comes.core(), comes.at(), names, newtypes, 0, newSeen(), found);

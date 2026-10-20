@@ -11,6 +11,7 @@ import souther.compiler.semantics.Accumulation;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -119,12 +120,17 @@ final class Meetings {
         // What varies here is read once and the ways in are as many as they are: an operand is
         // settled the same ways whichever way round the forks above a row went, so the factors
         // are no part of what a way in decides and are not read again per way.
-        if (factors.size() > 1) {
+        // A meeting is of decisions, and an operand is only a place one is used. The same decision
+        // used in two operands — a choice named once and added to itself — is one factor: it
+        // cannot come out one way in the first and the other in the second, so a combination
+        // that says it does is one no row could make.
+        List<Factor> apart = new ArrayList<>(new LinkedHashSet<>(factors));
+        if (apart.size() > 1) {
             if (plan.mayRepeat(node)) {
                 notJoined.add(WhyNotJoined.THE_MEETING_IS_IN_CODE_RUN_AGAIN);
             } else {
                 for (List<Decision> reach : reaches) {
-                    found.add(new Interaction(reach, factors));
+                    found.add(new Interaction(reach, apart));
                 }
             }
         }

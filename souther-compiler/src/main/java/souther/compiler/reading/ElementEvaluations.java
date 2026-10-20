@@ -187,7 +187,7 @@ final class ElementEvaluations {
                     case ValueChoices.Of.Unread _ ->
                         failed = failed == null ? WhyNotJoined.A_VALUE_CHOICE_NOT_READ : failed;
                     case ValueChoices.Of.OneComparison(Core.Binary comparison, var at,
-                                                       boolean viaNames) -> {
+                                                       boolean viaNames, boolean _) -> {
                         // The number the walk gave the application is this comparison's only
                         // where the comparison is the closure's own. Found beneath a name it was
                         // evaluated where the name was written, which is another closure's
@@ -226,6 +226,33 @@ final class ElementEvaluations {
      *  what decides its worth, where that matters. */
     private record Deciding(ReadMeaning.Occurrence occurrence,
                             List<ReadMeaning.Occurrence.Kept> keptBy, ValueChoices.Of choice) { }
+
+    /**
+     * Which evaluation of {@code fork} decides {@code occurrence}, or null where that is not
+     * something this knows. Two occurrences decided by the same evaluation of the same fork are
+     * decided by one decision, however many times the value is used or what is done with it.
+     *
+     * <p>A fork is evaluated once for each application of each closure it is written in, and by
+     * nothing else: not by what is done with its result, nor by what else is written in the
+     * closures the result passes through. One the closure of the occurrence's own step writes is
+     * told by that step's application. One held in a name is told by the applications that wrote
+     * the occurrence out, of those closures that hold it. Where it is written in an application
+     * no step that wrote the occurrence out accounts for, which application it is is not known.
+     */
+    private static Object evaluatedAs(Core fork, boolean viaNames, boolean perApplication,
+                                      ReadMeaning.Occurrence occurrence) {
+        if (!viaNames) {
+            return occurrence.answered().isPresent() ? (Object) occurrence.answered().getAsInt()
+                    : null;
+        }
+        List<Integer> evaluated = new ArrayList<>();
+        for (ElementsWrittenOut.Applied applied : occurrence.within()) {
+            if (writes(applied.body(), fork)) {
+                evaluated.add(applied.application());
+            }
+        }
+        return perApplication && evaluated.isEmpty() ? null : evaluated;
+    }
 
     /** Whether {@code target}, which is not a copy, is written anywhere in {@code within}. */
     private static boolean writes(Core within, Core target) {
@@ -299,48 +326,34 @@ final class ElementEvaluations {
                     unplaced++;
                 }
             }
-            OptionalInt answered = one.occurrence().answered();
             switch (one.choice()) {
                 case null -> { }
                 case ValueChoices.Of.Fixed _ -> { }
                 case ValueChoices.Of.Unread(List<ValueChoices.Origin> origins) -> {
-                    // A choice is evaluated once for each application of each closure it is
-                    // written in, and by nothing else: not by what is done with its result, nor
-                    // by what else is written in the closures the result passes through. A choice
-                    // held in a name is told by the applications that wrote the occurrence out,
-                    // of those closures that hold it. Where it is written in an application no
-                    // step that wrote the occurrence out accounts for, which application it is
-                    // is not something this knows, and it is counted as its own. A value decided
-                    // by several choices has each of them, and a walk that gave up before it
-                    // found them all may have left two where it names one.
+                    // A value decided by several choices has each of them, and a walk that gave
+                    // up before it found them all may have left two where it names one.
                     for (ValueChoices.Origin each : origins) {
-                        Core origin = each.fork();
-                        List<Integer> evaluated = new ArrayList<>();
-                        if (origin != null) {
-                            for (ElementsWrittenOut.Applied applied : one.occurrence().within()) {
-                                if (writes(applied.body(), origin)) {
-                                    evaluated.add(applied.application());
-                                }
-                            }
-                        }
-                        if (origin == null) {
+                        if (each.fork() == null) {
                             unplaced += 2;
-                        } else if ((each.viaNames() && each.perApplication() && evaluated.isEmpty())
-                                || (!each.viaNames() && answered.isEmpty())) {
-                            unplaced++;
                         } else {
-                            Object made = each.viaNames() ? evaluated : answered.getAsInt();
-                            placed.computeIfAbsent(origin, _ -> new HashSet<>()).add(made);
+                            Object made = evaluatedAs(each.fork(), each.viaNames(),
+                                    each.perApplication(), one.occurrence());
+                            if (made == null) {
+                                unplaced++;
+                            } else {
+                                placed.computeIfAbsent(each.fork(), _ -> new HashSet<>()).add(made);
+                            }
                         }
                     }
                 }
                 case ValueChoices.Of.OneComparison(Core.Binary comparison, var _,
-                                                   boolean viaNames) -> {
-                    if (viaNames || answered.isEmpty()) {
+                                                   boolean viaNames, boolean perApplication) -> {
+                    Object made = evaluatedAs(comparison, viaNames, perApplication,
+                            one.occurrence());
+                    if (made == null) {
                         unplaced++;
                     } else {
-                        placed.computeIfAbsent(comparison, _ -> new HashSet<>())
-                                .add(answered.getAsInt());
+                        placed.computeIfAbsent(comparison, _ -> new HashSet<>()).add(made);
                     }
                 }
             }
