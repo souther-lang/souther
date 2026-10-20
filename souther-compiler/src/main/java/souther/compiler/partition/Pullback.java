@@ -143,6 +143,7 @@ import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import java.util.stream.IntStream;
 
 /**
  * What a condition states about the subjects it is finally about, read off the tree where the
@@ -337,26 +338,27 @@ final class Pullback {
      */
     private final Map<Core, LinearForm<Quantity>> sizedInACase = new HashMap<>();
     /**
-     * What each total over a container the body wrote out adds up to, in the way of keeping the
-     * comparison being read is read in ({@link #keepingOf}): the sum of the elements that way
-     * keeps. Newest last.
+     * What each total over a container the body wrote out adds up to, and each container it counts,
+     * in the way of keeping the comparison being read is read in ({@link #keepingOf}): the sum of
+     * the elements that way keeps, and how many of them there are. Newest last.
      */
-    private final List<ATotalInACase> totalsInACase = new ArrayList<>();
+    private final List<AnAggregateInACase> aggregatesInACase = new ArrayList<>();
 
     /**
-     * That the total {@code call}, standing in the names of {@code at}, adds up to {@code form} in
-     * the way of keeping being read.
+     * That {@code call}, standing in the names of {@code at}, is {@code form} in the way of
+     * keeping being read: the total call, which adds up to it, or the container, which holds that
+     * many.
      *
      * <p>The call and the names it stands in, and not the call alone: a closure's body is one node
      * however many elements it is applied to, and the total in it is a different total for each.
      */
-    private record ATotalInACase(Core call, InputReads at, LinearForm<Quantity> form) {}
+    private record AnAggregateInACase(Core call, InputReads at, LinearForm<Quantity> form) {}
 
-    /** What the total {@code call} standing at {@code at} adds up to in the way of keeping being
-     *  read, or null where no way is being read for it. */
-    private LinearForm<Quantity> totalInACase(Core call, InputReads at) {
+    /** What the total {@code call}, or the container it is, standing at {@code at} comes to in the
+     *  way of keeping being read, or null where no way is being read for it. */
+    private LinearForm<Quantity> aggregateInACase(Core call, InputReads at) {
         Core node = Core.withoutStanding(call);
-        for (ATotalInACase each : totalsInACase) {
+        for (AnAggregateInACase each : aggregatesInACase) {
             if (each.call() == node && each.at().standsInTheNamesOf(at)) {
                 return each.form();
             }
@@ -1920,6 +1922,12 @@ final class Pullback {
         if (written.isPresent()) {
             return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(written.getAsLong())));
         }
+        // How many of the container are kept in the way of keeping being read.
+        LinearForm<Quantity> kept = aggregateInACase(Core.withoutStanding(made.value()),
+                made.at());
+        if (kept != null) {
+            return new Sized.AsAForm(kept);
+        }
         Sized searched = sizeOfARecursion(Core.withoutStanding(made.value()), made.at());
         if (searched != null) {
             return searched;
@@ -2798,7 +2806,8 @@ final class Pullback {
             // has, for each element there, the step's answer on it.
             Located located = locate(container, over, in, kept, false);
             if (located == null) {
-                return unread(over, in,
+                Derivation across = acrossTheListsOfAFold(container, some);
+                return across != null ? across : unread(over, in,
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             if (located.pieces() != null) {
@@ -2836,6 +2845,40 @@ final class Pullback {
                             && located.each() instanceof ElementAt.AtASubject
                             && reads.orderLeftToTheRows());
             return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething, asked);
+        }
+
+        /**
+         * Whether a map holds the key the lookup asks for, where the map is one a fold built by
+         * filing under the key of each element of the lists of an outer list put end to end — or
+         * null where it is not.
+         *
+         * <p>The map has an entry under the key where the key occurs among those elements: one
+         * count ({@link NumericTerm.OccurrencesOfAKey}) at least one. The counter the entry holds
+         * is read of the same count, so the lookup finding something and what it finds are of one
+         * number ({@link #valueLookedUpUnderAKey}).
+         */
+        private Derivation acrossTheListsOfAFold(
+                Denotation map, LawProposition.SomeElement<DeclaredArgument> some) {
+            if (!some.holds()
+                    || !(some.ofTheElement() instanceof LawProposition.Same<DeclaredArgument>(
+                            LawSubject<DeclaredArgument> one, LawSubject<DeclaredArgument> other,
+                            boolean alike))
+                    || !alike
+                    || !(one instanceof LawSubject.KeyOf<DeclaredArgument>(
+                            DeclaredArgument entries))
+                    || !entries.equals(some.container())
+                    || !(other instanceof LawSubject.Argument<DeclaredArgument>(
+                            DeclaredArgument asked))) {
+                return null;
+            }
+            KeyedAccumulation filed = KeyedAccumulation.of(map.value(), map.at(), sides(),
+                    blocksAt(map));
+            NumericTerm.OccurrencesOfAKey occurrences = filed == null ? null
+                    : occurrencesOfTheKeyAskedFor(map, filed, applied.argument(asked), reads);
+            if (occurrences == null) {
+                return null;
+            }
+            return new Derivation.SomeElementEqualToAKey(occurrences);
         }
 
         /**
@@ -5164,8 +5207,8 @@ final class Pullback {
             return null;
         }
         Core lookup = at.lookupOpenedBy(name.binding()).lookup();
-        Core map = AnOperationApplied.of(lookup) instanceof AnOperationApplied applied
-                ? KeyedAccumulation.mapOf(applied) : null;
+        AnOperationApplied applied = AnOperationApplied.of(lookup);
+        Core map = applied == null ? null : KeyedAccumulation.mapOf(applied);
         if (map == null) {
             return null;
         }
@@ -5180,7 +5223,19 @@ final class Pullback {
         }
         Derivation.SomeElementMeeting meeting = someElementMeetingIn(
                 observe(lookup, AnswerAspect.PRESENCE, at));
-        if (meeting == null || !meeting.holds()) {
+        if (meeting == null) {
+            // The key asked for may occur among the lists of an outer list put end to end, which
+            // no one container holds: the counter is read of the count the lookup's presence is
+            // read of.
+            NumericTerm.OccurrencesOfAKey across = applied.args().size() == 2
+                    ? occurrencesOfTheKeyAskedFor(whole, filed, applied.args().getFirst(), at)
+                    : null;
+            return across != null && counted.first().plus(counted.step().negated())
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio constant)
+                    ? new LinearForm<>(constant,
+                            Map.of(new DecisionAtom.OfTheInput(across), counted.step())) : null;
+        }
+        if (!meeting.holds()) {
             return null;
         }
         Derivation ofTheElement = asAComparisonOfTwoOrderedValues(meeting.ofTheElement());
@@ -5298,6 +5353,15 @@ final class Pullback {
      * a count across containers where more than one does.
      */
     private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed) {
+        return occurrencesOfTheKey(whole, filed, false);
+    }
+
+    /**
+     * The same, where {@code acrossOnly} asks for the count across containers of every
+     * occurrence and for nothing else: null for a list of one container, or of some occurrences.
+     */
+    private NumericTerm occurrencesOfTheKey(Denotation whole, KeyedAccumulation filed,
+                                            boolean acrossOnly) {
         DeclarationNewtypes newtypes = read.rules().newtypes();
         // A key read out of a component of a tuple the walk built of each element is the place the
         // walk gave that component, and no place inside it.
@@ -5314,6 +5378,9 @@ final class Pullback {
         }
         TermPath place = key.at().from(every.keys());
         List<TermPath> holding = place.containersHoldingIt();
+        if (acrossOnly && (holding.size() < 2 || !every.keptBy().isEmpty())) {
+            return null;
+        }
         KeptOccurrences selection = null;
         if (!every.keptBy().isEmpty()) {
             selection = every.keptBy().size() == 1
@@ -5332,6 +5399,30 @@ final class Pullback {
                     ? (selection == null ? NumericTerm.OccurrencesOfItsValue.of(flat)
                             : NumericTerm.OccurrencesOfItsValue.of(flat, selection)) : null;
         };
+    }
+
+    /**
+     * How often the value {@code asked} stands for occurs among the keys of the elements of the
+     * list a fold walks, across the containers the list puts end to end — or null where the list
+     * is not so many containers, some of its elements are kept by a statement, or the value is no
+     * input standing outside every container.
+     *
+     * <p>The count of {@link #occurrencesOfTheKey}, read for a value that is not one of the
+     * elements': nought where it occurs among none.
+     */
+    private NumericTerm.OccurrencesOfAKey occurrencesOfTheKeyAskedFor(
+            Denotation whole, KeyedAccumulation filed, Core asked, InputReads at) {
+        // A list that holds one value for each element of a container is counted among that
+        // container's elements.
+        if (asked == null || whereFiled(whole, filed) != null
+                || !(at.pathOf(asked, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath key))) {
+            return null;
+        }
+        return occurrencesOfTheKey(whole, filed, true)
+                instanceof NumericTerm.OccurrencesOfItsValue every
+                && every.run() instanceof RunSource.FlattenedOccurrences flat
+                ? NumericTerm.OccurrencesOfAKey.of(flat, key) : null;
     }
 
     /**
@@ -5421,7 +5512,7 @@ final class Pullback {
         if (total == null) {
             return null;
         }
-        LinearForm<Quantity> inACase = totalInACase(node, at);
+        LinearForm<Quantity> inACase = aggregateInACase(node, at);
         if (inACase != null) {
             return inACase;
         }
@@ -5448,7 +5539,7 @@ final class Pullback {
      */
     private Inside.ATotalByKeeping totalByKeeping(Core node, InputReads at) {
         AnOperationApplied total = sumCall(node);
-        if (total == null || totalInACase(node, at) != null) {
+        if (total == null || aggregateInACase(node, at) != null) {
             return null;
         }
         Denotation container = at.standing(total.args().getFirst(), read.rules().symbols(),
@@ -5467,7 +5558,40 @@ final class Pullback {
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>)) {
             return null;
         }
-        return new Inside.ATotalByKeeping(Core.withoutStanding(node), at, occurrences);
+        return new Inside.ATotalByKeeping(Core.withoutStanding(node), at, occurrences, false);
+    }
+
+    /**
+     * The count {@code node} is, where it is a call of the operation that counts what a container
+     * holds, the container is one the body wrote out, and some of its elements are kept by truths:
+     * how many are there is then one number for each way of keeping. Null where it is none of
+     * these.
+     *
+     * <p>Keyed by the container, as a size is asked of it ({@link #sizeOf}), so that every count of
+     * it is the number of the way being read.
+     */
+    private Inside.ATotalByKeeping countByKeeping(Core node, InputReads at) {
+        if (!(AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied count
+                && count.operation() instanceof ValueName.Stdlib operation
+                && DefaultBoundOperationFacts.get().takenAs(operation)
+                        instanceof TakenAs.HowManyItHolds
+                && count.args().size() == 1)) {
+            return null;
+        }
+        Denotation container = at.standing(count.args().getFirst(), read.rules().symbols(),
+                read.rules().newtypes());
+        Core held = Core.withoutStanding(container.value());
+        if (aggregateInACase(held, container.at()) != null
+                || !(WrittenOutElements.of(container, read.rules().symbols(),
+                        read.rules().newtypes()) instanceof WrittenOutElements.Walked.Each each)) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
+        if (!WaysOfKeeping.allTruths(occurrences)
+                || occurrences.stream().allMatch(one -> one.keptWhere().isEmpty())) {
+            return null;
+        }
+        return new Inside.ATotalByKeeping(held, container.at(), occurrences, true);
     }
 
     /**
@@ -5484,15 +5608,39 @@ final class Pullback {
                                  boolean fixed,
                                  Function<UnaryOperator<InputReads>, Derivation> again) {
         WaysOfKeeping ways = new WaysOfKeeping(total.occurrences());
+        Boolean[] decided = alreadyDecided(ways);
         // The elements the leaves of the tree read, as a total of elements kept by nothing reads
-        // them ({@link #sumOfWrittenOut}).
-        WhyUnread past = splitInto(reads, ways::work);
+        // them ({@link #sumOfWrittenOut}); a count reads none of them.
+        WhyUnread past = splitInto(reads,
+                limit -> ways.work(decided, limit, !total.counted()));
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, fixed));
         }
         return new Derivation.AComparisonOfAChoice(
-                keptAs(total, ways, ways.undecided(), new Derivation[ways.truthCount()], at, fixed,
-                        again));
+                keptAs(total, ways, decided, new Derivation[ways.truthCount()], at, fixed, again));
+    }
+
+    /**
+     * What a truth that keeps an element decided, in the way of keeping being read: the total and
+     * the count of one list are given in the same ways, so a truth one of them decided is not
+     * decided again by the other.
+     */
+    private record ATruthDecided(Denotation truth, boolean holds) {}
+
+    /** The truths decided in the ways of keeping being read, newest last. */
+    private final List<ATruthDecided> truthsDecided = new ArrayList<>();
+
+    /** {@code ways} with the truths that are decided in the way being read decided as they are. */
+    private Boolean[] alreadyDecided(WaysOfKeeping ways) {
+        Boolean[] decided = ways.undecided();
+        for (int i = 0; i < decided.length; i++) {
+            for (ATruthDecided each : truthsDecided) {
+                if (each.truth().equals(ways.truth(i))) {
+                    decided[i] = each.holds();
+                }
+            }
+        }
+        return decided;
     }
 
     /**
@@ -5512,12 +5660,25 @@ final class Pullback {
                 Denotation truth = ways.truth(next);
                 conditions[next] = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
             }
-            decided[next] = true;
-            Derivation whenKept = keptAs(total, ways, decided, conditions, at, fixed, again);
-            decided[next] = false;
-            Derivation whenDropped = keptAs(total, ways, decided, conditions, at, fixed, again);
-            decided[next] = null;
-            return new Derivation.IfThenElse(conditions[next], whenKept, whenDropped);
+            Derivation[] each = new Derivation[2];
+            for (int way = 0; way < 2; way++) {
+                ATruthDecided now = new ATruthDecided(ways.truth(next), way == 0);
+                decided[next] = now.holds();
+                truthsDecided.add(now);
+                try {
+                    each[way] = keptAs(total, ways, decided, conditions, at, fixed, again);
+                } finally {
+                    truthsDecided.remove(now);
+                    decided[next] = null;
+                }
+            }
+            return new Derivation.IfThenElse(conditions[next], each[0], each[1]);
+        }
+        if (total.counted()) {
+            long there = IntStream.range(0, total.occurrences().size())
+                    .filter(i -> ways.isThere(i, decided)).count();
+            return readWithTheAggregate(total, LinearForm.constant(ExactRatio.of(there)),
+                    elementsMet.copied(), again);
         }
         ElementsMet metBefore = elementsMet.copied();
         List<LinearForm<Quantity>> forms = new ArrayList<>();
@@ -5544,12 +5705,20 @@ final class Pullback {
                 return partOf(at, new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
             }
         }
-        ATotalInACase inThisWay = new ATotalInACase(total.call(), total.at(), sum);
-        totalsInACase.add(inThisWay);
+        return readWithTheAggregate(total, sum, metBefore, again);
+    }
+
+    /** {@code again} read with what {@code total} adds up to, or counts, in this way of keeping
+     *  {@code form}. */
+    private Derivation readWithTheAggregate(Inside.ATotalByKeeping total,
+                                            LinearForm<Quantity> form, ElementsMet metBefore,
+                                            Function<UnaryOperator<InputReads>, Derivation> again) {
+        AnAggregateInACase inThisWay = new AnAggregateInACase(total.call(), total.at(), form);
+        aggregatesInACase.add(inThisWay);
         try {
             return again.apply(on -> on);
         } finally {
-            totalsInACase.remove(inThisWay);
+            aggregatesInACase.remove(inThisWay);
             // The ways are independent readings of one comparison: what one met of the container's
             // elements is no part of what the next meets.
             elementsMet = metBefore;
@@ -5668,7 +5837,9 @@ final class Pullback {
         InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(walk.value(), read.domain(),
                 walk.at(), read.rules(), blocksAt(walk));
         if (added == null) {
-            return unlessUnread(() -> foldOfWrittenOut(walk));
+            LinearForm<Quantity> ofAnAnswer =
+                    unlessUnread(() -> seedPlusWhatEachElementOfAnAnswerAdds(walk));
+            return ofAnAnswer != null ? ofAnAnswer : unlessUnread(() -> foldOfWrittenOut(walk));
         }
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         added.added().coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
@@ -6183,8 +6354,10 @@ final class Pullback {
      * that element's numbers, and the sum is those numbers' sums over the elements and the constant
      * times how many there are. Only a form of the element's own numbers is one: a number of the
      * input beside them is added once for each element, which no sum of the answer says. And only
-     * the walk handed the answer's list itself, since one handed a list that kept some of its
-     * elements is a sum over those and over no element of the answer.
+     * a walk handed every element of the answer's list, each as often, through the operations
+     * that keep every element: one handed a list that kept some of its elements is a sum over
+     * those and over no element of the answer. The same operations may stand between the sum and
+     * the walk, since a sum does not turn on the order of what it adds up.
      */
     private LinearForm<Quantity> sumOverTheElementsOfAnAnswer(NumericMeasures.Measured measured,
                                                               InputReads at) {
@@ -6195,26 +6368,105 @@ final class Pullback {
         }
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
+        // The outermost walk first, since it may be the one that makes the numbers; where it does
+        // not, what puts them in another order, or answers each as it is, beside it is the same
+        // sum, and the one beneath is asked.
         Denotation walk = at.standing(measured.of(), symbols, newtypes);
-        ElementBindings.StepOnEachElement step =
-                ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
-        if (step == null) {
-            return null;
+        while (walk != null) {
+            ElementBindings.StepOnEachElement step =
+                    ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
+            Denotation standing = walk;
+            LinearForm<Quantity> summed =
+                    step == null ? null : unlessUnread(() -> sumOverTheStep(standing, step));
+            if (summed != null) {
+                return summed;
+            }
+            walk = walk.at().stepKeepingEveryElement(walk, symbols, newtypes);
         }
-        Denotation walked = walk.at().standing(step.walked(), symbols, newtypes);
-        DecisionSubject.AnAnswer list = answerAt(walked.value(), walked.at());
+        return null;
+    }
+
+    /** What {@code step}, applied by {@code walk}, adds up to over every element of the list a
+     *  dependency answered ({@link #sumOverTheElementsOfAnAnswer}) — or null where it is not
+     *  handed one. */
+    private LinearForm<Quantity> sumOverTheStep(Denotation walk,
+                                                ElementBindings.StepOnEachElement step) {
+        Denotation walked = walk.at().standing(step.walked(), read.rules().symbols(),
+                read.rules().newtypes());
+        DecisionSubject.AnAnswer list = answerWhoseEveryElementIsHeldBy(walked);
         if (list == null || !(AffineForms.outcome(step.step().body(), walk.at(), quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var each))) {
             return null;
         }
+        return addedUpOverTheElementsOfAnAnswer(list, walked.value(), each);
+    }
+
+    /**
+     * What a dependency answered, or a place inside it, whose every element {@code walked} holds,
+     * each as often — or null where it is no such thing.
+     */
+    private DecisionSubject.AnAnswer answerWhoseEveryElementIsHeldBy(Denotation walked) {
+        return subjects.anAnswerWhoseEveryElementIsHeldBy(walked.value(), walked.at());
+    }
+
+    /**
+     * What {@code each}, a form over the numbers of each element of the list {@code list} is,
+     * adds up to over all of them, where it is over the elements' own numbers — or null where
+     * a number of the input stands beside them, or the size is not in hand.
+     */
+    private LinearForm<Quantity> addedUpOverTheElementsOfAnAnswer(
+            DecisionSubject.AnAnswer list, Core walked, LinearForm<Quantity> each) {
         DecisionSubject element = list.element();
         boolean ofTheElementsOwn = each.coefs().keySet().stream().allMatch(number ->
                 number instanceof DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer of)
                         && of.isAtOrUnder(element));
         DecisionAtom size = each.constant().signum() == 0 ? null
-                : sizeOfSubject(list, walked.value().type());
+                : sizeOfSubject(list, walked.type());
         return !ofTheElementsOwn || (size == null && each.constant().signum() != 0) ? null
                 : Quantity.SumOver.over(list, each, size);
+    }
+
+    /**
+     * What a walk from a seed ends with, where {@code call} is one over the elements of a list a
+     * dependency answered whose step adds a number of the element alone to what it carried: the
+     * seed and those numbers added up over the elements — or null where it is anything else.
+     *
+     * <p>By induction over the walk, which hands every element to the step once. The step is read
+     * once with what it carried standing for any number, and has to come to that number once and
+     * a form of the element's own numbers that does not read it: then it is so for every answer
+     * so far, and the walk is {@code seed + Σ w(x)}, which is what the sum of the same numbers
+     * is ({@link #sumOverTheElementsOfAnAnswer}).
+     */
+    private LinearForm<Quantity> seedPlusWhatEachElementOfAnAnswerAdds(Denotation call) {
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        if (walk == null) {
+            return null;
+        }
+        Denotation walked = call.at().standing(walk.container(), read.rules().symbols(),
+                read.rules().newtypes());
+        DecisionSubject.AnAnswer list = answerWhoseEveryElementIsHeldBy(walked);
+        ExactRatio seed = sides().constant(walk.seed(), call.at());
+        if (list == null || seed == null) {
+            return null;
+        }
+        Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
+        BindingId accumulator = walk.accumulator().binding();
+        carriedSoFar.put(accumulator, LinearForm.atom(soFar));
+        LinearForm<Quantity> stepped;
+        try {
+            if (!(AffineForms.outcome(walk.step().body(), call.at(), quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))) {
+                return null;
+            }
+            stepped = form;
+        } finally {
+            carriedSoFar.remove(accumulator);
+        }
+        LinearForm<Quantity> each = addedBesideOnce(stepped, soFar);
+        LinearForm<Quantity> added = each == null ? null
+                : addedUpOverTheElementsOfAnAnswer(list, walked.value(), each);
+        return added == null ? null
+                : LinearForm.<Quantity>constant(seed).plus(added).orNull();
     }
 
     /**
@@ -6394,11 +6646,13 @@ final class Pullback {
                 implements Inside {}
 
         /**
-         * A total over a container the body wrote out, which is no one form of the input's
-         * numbers: some of {@code occurrences} are there on some rows and not on others, each
-         * kept by truths, or one composes into no form ({@link #totalByKeeping}).
+         * A total, or a count, over a container the body wrote out, which is no one form of the
+         * input's numbers: some of {@code occurrences} are there on some rows and not on others,
+         * each kept by truths, or one composes into no form ({@link #totalByKeeping},
+         * {@link #countByKeeping}). For a count, {@code call} is the container.
          */
-        record ATotalByKeeping(Core call, InputReads at, List<ReadMeaning.Occurrence> occurrences)
+        record ATotalByKeeping(Core call, InputReads at, List<ReadMeaning.Occurrence> occurrences,
+                               boolean counted)
                 implements Inside {}
     }
 
@@ -6563,8 +6817,8 @@ final class Pullback {
                             number.at().taken(walk) != null;
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
                             number.at().isTaken(call);
-                    case Inside.ATotalByKeeping(Core call, InputReads where, var _) ->
-                            totalInACase(call, where) != null;
+                    case Inside.ATotalByKeeping(Core call, InputReads where, var _, var _) ->
+                            aggregateInACase(call, where) != null;
                     // A name an application handed a value is that one value, and stops nothing.
                     // Met again as several, it was reached through a value handed another name and
                     // read where that value was written, which no application handed it: handed
@@ -6652,7 +6906,11 @@ final class Pullback {
             return found[0];
         }
         Inside.ACallDefinedByCases byCases = definedByCases(e, stands.at());
-        return byCases != null ? byCases : totalByKeeping(e, stands.at());
+        if (byCases != null) {
+            return byCases;
+        }
+        Inside.ATotalByKeeping total = totalByKeeping(e, stands.at());
+        return total != null ? total : countByKeeping(e, stands.at());
     }
 
     /**
@@ -7535,6 +7793,14 @@ final class Pullback {
                      ReadMeaning.MoreThanAreWrittenOut _ -> true;
                 case ReadMeaning.Position _, ReadMeaning.Element _, ReadMeaning.Unknown _ -> false;
             };
+        }
+        // What a closure is handed is the closure's own, applied wherever it is applied: reading
+        // its parameters is no reading of a value of the container. What it reads of the names
+        // outside it is.
+        if (Core.withoutStanding(e) instanceof Core.Block block) {
+            Set<BindingId> own = new HashSet<>(met);
+            block.params().forEach(each -> own.add(each.binding()));
+            return readOnceForEveryValue(block.body(), at, own);
         }
         boolean[] found = {false};
         Core.forEachChild(e, child -> found[0] = found[0] || readOnceForEveryValue(child, at, met));

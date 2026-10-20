@@ -61,7 +61,8 @@ import java.util.function.UnaryOperator;
  */
 public sealed interface NumericTerm
         permits NumericTerm.FromOnePosition, NumericTerm.TakenOver,
-                NumericTerm.OfAnElementsNeighbours, NumericTerm.OccurrencesOfItsValue {
+                NumericTerm.OfAnElementsNeighbours, NumericTerm.OccurrencesOfItsValue,
+                NumericTerm.OccurrencesOfAKey {
 
     /**
      * A number of an element read off the elements beside it in its container: how often its value
@@ -853,6 +854,83 @@ public sealed interface NumericTerm
     }
 
     /**
+     * How many of the values of a run are equal to the value an input holds at {@code key}: the
+     * occurrences of a key asked for among the lists of an outer list put end to end.
+     *
+     * <p>Where {@link OccurrencesOfItsValue} counts the occurrences of a value that is one of the
+     * run's, and so counts at least that one, this counts the occurrences of a value that is
+     * outside it, and is nought where the key is among none. The two are one count only where the
+     * key is one of the values of the run.
+     *
+     * <p>The value of {@code key} is chosen with the rest of the row, and the run is the occurrences
+     * of a place no row holds as one position, so the number stands at neither: {@link
+     * #subjectPath} is where a reader is sent.
+     */
+    final class OccurrencesOfAKey implements NumericTerm {
+
+        private final RunSource.FlattenedOccurrences run;
+        private final TermPath key;
+
+        private OccurrencesOfAKey(RunSource.FlattenedOccurrences run, TermPath key) {
+            this.run = Objects.requireNonNull(run, "counted among the values of a run");
+            this.key = Objects.requireNonNull(key, "counted as often as a key occurs");
+        }
+
+        /** The number of values of {@code run} equal to the one at {@code key}, which stands
+         *  outside every container. */
+        public static OccurrencesOfAKey of(RunSource.FlattenedOccurrences run, TermPath key) {
+            return run == null || key == null || key.insideAContainer() ? null
+                    : new OccurrencesOfAKey(run, key);
+        }
+
+        /** The run whose values are counted. */
+        public RunSource.FlattenedOccurrences run() {
+            return run;
+        }
+
+        /** Where the value counted for stands. */
+        public TermPath key() {
+            return key;
+        }
+
+        /** Where the values counted stand, which is where a reader is sent and no place the number
+         *  stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return run.subjectPath();
+        }
+
+        /** The same number read from where {@code moved} puts the run and the key — or null where
+         *  that is no run of every occurrence, or the key stands inside a container. */
+        @Override
+        public OccurrencesOfAKey movedTo(UnaryOperator<TermPath> moved) {
+            return run.movedTo(moved) instanceof RunSource.FlattenedOccurrences flat
+                    ? of(flat, moved.apply(key)) : null;
+        }
+
+        @Override
+        public List<TermPath> placesReadOff() {
+            return List.of(run.subjectPath(), key);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof OccurrencesOfAKey that && run.equals(that.run)
+                    && key.equals(that.key);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(OccurrencesOfAKey.class, run, key);
+        }
+
+        @Override
+        public String toString() {
+            return "occurrences(" + run + " equal to " + key + ")";
+        }
+    }
+
+    /**
      * A number an operation took over a run of values, which no single position answers.
      *
      * <p>The dual of {@link TakenOf} and named for it: one takes a number of the value at a place,
@@ -1048,6 +1126,7 @@ public sealed interface NumericTerm
             case OfAnElementsNeighbours _ -> null;
             // Counted among the values of every occurrence, so no one place answers it either.
             case OccurrencesOfItsValue _ -> null;
+            case OccurrencesOfAKey _ -> null;
         };
     }
 
@@ -1088,6 +1167,8 @@ public sealed interface NumericTerm
             case OfAnElementsNeighbours _ -> null;
             // Counted among every occurrence of a place, so a place moved alone is another run.
             case OccurrencesOfItsValue _ -> null;
+            // The same, and the key it counts for is another place a moved place leaves behind.
+            case OccurrencesOfAKey _ -> null;
         };
     }
 
@@ -1134,6 +1215,9 @@ public sealed interface NumericTerm
             // The same: a value is one of the values it counts.
             case OccurrencesOfItsValue _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
+            // None of the values may be the key's, so the count starts at nought.
+            case OccurrencesOfAKey _ ->
+                    new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
             // One of the values the place holds, which is open where the place is.
             case ExtremeOfItsKey _ -> NumericDomain.Bounds.OPEN;
             // Asked of the operation, as a taking is. That a total of non-negative amounts is

@@ -100,6 +100,9 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
                     new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
                             occurrences.selection() == null ? null
                                     : occurrences.selection().key());
+            case NumericTerm.OccurrencesOfAKey asked ->
+                    new NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey(
+                            asked.key().discriminated());
             case NumericTerm.ExtremeOfItsKey extreme ->
                     new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme.extreme(),
                             extreme.keyField().fields());

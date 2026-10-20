@@ -1041,6 +1041,18 @@ public sealed interface Derivation {
                                             boolean holds, var _, var _) ->
                             holds && standsAt(some.container(), container)
                                     && reads(some.ofTheElement(), ofTheElement);
+                    // The elements of the lists of an outer list put end to end, which stand at no
+                    // one position: what is read is that the key occurs among them.
+                    // Counted for the value the call has at the argument the key is asked to be.
+                    case SomeElementEqualToAKey(var occurrences) -> some.holds()
+                            && some.ofTheElement() instanceof LawProposition.Same<
+                                    DeclaredArgument>(var one, var asked, var alike)
+                            && alike && one instanceof LawSubject.KeyOf<DeclaredArgument>(
+                                    DeclaredArgument entries)
+                            && entries.equals(some.container())
+                            && asked instanceof LawSubject.Argument<DeclaredArgument>(
+                                    DeclaredArgument argument)
+                            && occurrences.key().equals(call.standingAt().get(argument));
                     // The pieces of a string are the elements of a container an operation made,
                     // which stands at no position.
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->
@@ -1685,6 +1697,47 @@ public sealed interface Derivation {
         @Override
         public List<Derivation> oneOf() {
             return each;
+        }
+    }
+
+    /**
+     * Some element of a container no position holds being the key a lookup asks for, read as how
+     * often that key occurs among the elements being at least one.
+     *
+     * <p>The elements are the lists of an outer list put end to end, so there is no one container
+     * for {@link SomeElementMeeting} to be of: the elements are counted across the containers they
+     * stand in ({@link NumericTerm.OccurrencesOfAKey}), and a number that counts is what the
+     * statement about them is a comparison of. The same count is the one the counter an entry holds
+     * is read of, so the lookup finding something and what it finds are of one number.
+     *
+     * <p>It holds the count and nothing else: what it concludes is the count at least one, worked
+     * out from the count here, so no reading can hand it another statement to conclude.
+     * {@link ByALaw} holds it to the key the call was handed. That the elements counted are the
+     * ones the map the call was handed was filed from is the reading's, which makes this only of
+     * the fold that built that map ({@code Pullback.acrossTheListsOfAFold}).
+     *
+     * @param occurrences how often the key occurs among the elements
+     */
+    record SomeElementEqualToAKey(NumericTerm.OccurrencesOfAKey occurrences)
+            implements Derivation {
+
+        public SomeElementEqualToAKey {
+            Objects.requireNonNull(occurrences, "a key occurs as often as it does");
+        }
+
+        /** The count compared with one, which is all an element's being the key comes to. */
+        public Derivation atLeastOne() {
+            Relation.OneWay<Quantity> one = Relation.OneWay.of(new LinearForm<>(
+                    ExactRatio.of(-1), Map.of(new DecisionAtom.OfTheInput(occurrences),
+                            ExactRatio.ONE)), Rel.GE);
+            return new AComparisonRead(ComparisonReading.AS_A_CUT,
+                    new Relation.Affine(one.form(), one.proposition()), one.holds(),
+                    AComparisonRead.Facing.NOTHING_WRITTEN);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(atLeastOne());
         }
     }
 

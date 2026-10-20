@@ -44,8 +44,9 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyCarried, Quantity.APieceOf, Quantity.IsAmongThePieces {
 
     /**
-     * How many what a recursion carries holds, whatever that is: what a walk carried into the step
-     * being read, or what a call of a search answers one node down.
+     * What a recursion carries, whatever that is: how many what a walk carried into the step
+     * being read holds, the number a walk over the elements of an answer carried into its step, or
+     * how many what a call of a search answers one node down holds.
      *
      * <p>Made only while the step or the body is read for how many it answers, which a reading does
      * to show it is that many and a number of the element or the node, for every number there is:

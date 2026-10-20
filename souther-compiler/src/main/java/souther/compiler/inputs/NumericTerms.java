@@ -94,6 +94,7 @@ public final class NumericTerms {
             case NumericTerm.ExtremeOfItsKey _ -> "6";
             case NumericTerm.CodePointValueSum _ -> "7";
             case NumericTerm.OccurrencesOfItsValue _ -> "8";
+            case NumericTerm.OccurrencesOfAKey _ -> "9";
         };
     }
 }

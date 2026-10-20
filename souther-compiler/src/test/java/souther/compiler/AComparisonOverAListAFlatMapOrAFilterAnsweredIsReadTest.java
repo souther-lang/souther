@@ -11,6 +11,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -282,8 +283,9 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
         assertTrue(report.contains("read as f/n: in n < 3"), report);
     }
 
-    /** One kept or not by what the row is makes the sum turn on the row, and it is not read as
-     *  the sum of all of them. */
+    /** One kept or not by what the row is makes the count turn on the row: it is read in each way
+     *  the elements are kept, and not as the count of all of them, which would hold from 6. The
+     *  elements kept at {@code n} are those from {@code n} up, so it holds from 3. */
     @Test
     void aSumOverElementsKeptByTheRowIsNotReadAsASumOfThemAll() {
         String report = measured("""
@@ -295,8 +297,9 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
                     | "below" : (0) -> false
                     | "at" : (6) -> true
                 """);
-        assertTrue(report.contains("not read: comparison@3:15"), report);
-        assertTrue(headed(report, "border").contains("borders 3"),
-                () -> "the filter's own comparison is read at each element: " + report);
+        assertEquals(List.of(), notRead(report), report);
+        assertTrue(report.contains("read as f/n: = 3"), report);
+        assertTrue(report.contains("read as f/n: = 2"), report);
+        assertFalse(report.contains("read as f/n: = 6"), report);
     }
 }

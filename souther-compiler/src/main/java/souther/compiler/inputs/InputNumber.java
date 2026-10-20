@@ -251,6 +251,25 @@ public final class InputNumber {
         // helper stands for what the call handed over, and what is read of that afterwards is read
         // where it stands rather than where the name was.
         Denotation met = reads.denotes(measured.of(), symbols, source.newtypes());
+        // What puts the values in another order, or answers each as it is, beside the walk that
+        // makes them is the same total: where the outermost operation is no walk over a place, the
+        // one beneath it is asked.
+        while (met != null) {
+            NumericTerm run = overTheRunWalkedBy(measured, met, inputs, source);
+            if (run != null) {
+                return run;
+            }
+            met = met.at().stepKeepingEveryElement(met, symbols, source.newtypes());
+        }
+        return null;
+    }
+
+    /** The number {@code measured} takes over the values the walk {@code met} was given
+     *  ({@link #overARun}), or null where those values are not read from a place. */
+    private static NumericTerm overTheRunWalkedBy(NumericMeasures.Measured measured,
+                                                  Denotation met, InputDomain inputs,
+                                                  RuleReadingSource source) {
+        Symbols symbols = source.symbols();
         Core walk = met.value();
         InputReads where = met.at();
         BindingId element =

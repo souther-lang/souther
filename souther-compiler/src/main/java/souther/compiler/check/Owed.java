@@ -89,6 +89,8 @@ public sealed interface Owed {
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + where + ")";
                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
                         "occurrences(" + where + ")";
+                case NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey asked ->
+                        "occurrences(" + where + " equal to " + asked.key() + ")";
                 case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                         extreme.spelledAt(where);
             };

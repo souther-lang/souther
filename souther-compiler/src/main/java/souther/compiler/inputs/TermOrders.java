@@ -219,7 +219,8 @@ public final class TermOrders {
     /** How often {@code own}, one of the values of a run, occurs among {@code values}, all of
      *  them ({@link #readEachAmong}). */
     public NumericTerm.Reading readAmong(ObservedValue own, List<ObservedValue> values) {
-        if (!(term instanceof NumericTerm.OccurrencesOfItsValue)) {
+        if (!(term instanceof NumericTerm.OccurrencesOfItsValue
+                || term instanceof NumericTerm.OccurrencesOfAKey)) {
             throw new IllegalArgumentException(term + " is no count of how often a value occurs"
                     + " in a run");
         }

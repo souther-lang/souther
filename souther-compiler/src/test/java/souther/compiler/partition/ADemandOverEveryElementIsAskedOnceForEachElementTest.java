@@ -270,8 +270,8 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
 
         assertFalse(first.askedOfThePlan());
         assertTrue(every.askedOfThePlan());
-        assertEquals(List.of(first), resolved(new ContentsAsked(List.of(first), List.of()), "items",
-                ValuesHandedOn.NONE).leftOpen());
+        assertEquals(List.of(first), resolved(new ContentsAsked(List.of(first), List.of(),
+                List.of()), "items", ValuesHandedOn.NONE).leftOpen());
     }
 
     /**
@@ -282,7 +282,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     void aCountOfOneOfTwoHandsTheFirstAndKeepsTheSecondOut() {
         ContentsAsked asked = new ContentsAsked(new ACountHandedOn(KS,
                 new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(KS.element())))
-                .asked(1), List.of());
+                .asked(1), List.of(), List.of());
         ContainerContents contents = resolved(asked, "shelf", ksBuiltAs("a", "b"))
                 .contentsOf(SHELF, _ -> null);
 

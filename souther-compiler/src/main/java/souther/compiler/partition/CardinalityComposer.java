@@ -76,6 +76,9 @@ final class CardinalityComposer {
     private static final int MOST_SHARES =
             CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT.maximum();
 
+    private static final int MOST_COUNTS_OF_KEYS =
+            CompositionBudget.COUNTS_OF_KEYS_TRIED.maximum();
+
     /** Every count of elements: what is asked of a thing the values are grouped by and no count
      *  of which is asked. */
     private static final LevelRegion ANY_COUNT = LevelRegion.of(new LevelInterval(
@@ -188,7 +191,7 @@ final class CardinalityComposer {
                         + container + "`");
             }
             beside.put(term, at);
-            written.put(term.subjectPath(), on.valueOf(at));
+            writtenAt(term, at, measuring, written);
         }
         NumericDomain.Bounds run = switch (within.projectionOf(element.term())) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
@@ -479,8 +482,12 @@ final class CardinalityComposer {
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        // The numbers the statements read beside an element, each at the one value the row was
+        // fixed at, which the row an element is read in holds too.
+        Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
+        Map<NumericTerm, Place> beside = settledOutside(asked, measuring, within, written);
         ElementValues ofTheElement = ElementValues.of(container, holding.element(), reading,
-                at -> numbersAt(at, asked, measuring, within, distinct ? MOST_ELEMENTS : 1,
+                at -> numbersAt(at, asked, measuring, within, beside, distinct ? MOST_ELEMENTS : 1,
                         unheld, unnamed));
         if (ofTheElement == null) {
             return notChosen("an element of `" + container + "` has a part whose values are"
@@ -490,7 +497,8 @@ final class CardinalityComposer {
         Groups<ObservedValue> every = new Groups<>(new ArrayList<>(), new ArrayList<>(),
                 new LinkedHashSet<>());
         for (ObservedValue value : listed.values()) {
-            BorderQuantity.Observation row = ofTheElement.holding(sourceType, List.of(value));
+            BorderQuantity.Observation row = withNumbersBeside(
+                    ofTheElement.holding(sourceType, List.of(value)), written);
             every.add(value, i -> ofAnElement.get(i).apply(row), asked.size());
         }
         Groups<ObservedValue> groups = every.keptBy(asked);
@@ -510,7 +518,8 @@ final class CardinalityComposer {
                     return false;
                 }
                 List<ObservedValue> values = groups.drawn(share, distinct);
-                BorderQuantity.Observation whole = ofTheElement.holding(sourceType, values);
+                BorderQuantity.Observation whole = withNumbersBeside(
+                        ofTheElement.holding(sourceType, values), written);
                 for (Asked each : asked) {
                     // A count reads the container through the row and not the values handed it.
                     if (!(each.over(container, List.of(), whole)
@@ -589,7 +598,7 @@ final class CardinalityComposer {
      */
     private static List<ObservedValue> numbersAt(TermPath at, List<Asked> asked,
                                                  Quantities measuring, SearchRegion within,
-                                                 int each, Set<CompositionCapacity> unheld,
+                                                 Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
                                                  Set<CompositionRepertoire> unnamed) {
         NumericTerm term = new NumericTerm.ValueOf(at);
         TermOrders orders = measuring.ordersOf(term);
@@ -610,7 +619,7 @@ final class CardinalityComposer {
         if (carrier.counts()) {
             List<ExactRatio> turns = new ArrayList<>();
             for (Asked one : asked) {
-                List<ExactRatio> where = one.turnsAt(term, Map.of());
+                List<ExactRatio> where = one.turnsAt(term, beside);
                 if (where == null) {
                     return null;
                 }
@@ -620,7 +629,7 @@ final class CardinalityComposer {
         } else {
             List<Place> turns = new ArrayList<>();
             for (Asked one : asked) {
-                List<Place> where = one.placesTurnedAt(term, Map.of());
+                List<Place> where = one.placesTurnedAt(term, beside);
                 if (where == null) {
                     return null;
                 }
@@ -846,7 +855,7 @@ final class CardinalityComposer {
         NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
         List<FixtureTemplate> built = new ArrayList<>();
         CompositionShortfall rest = CompositionShortfall.NONE;
-        TermRealizations.Realization unbuilt = null;
+        UnbuiltAttempts unbuilt = new UnbuiltAttempts();
         for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
             if (!wanted.holds(Count.of(often), Carrier.WHOLE)) {
                 continue;
@@ -856,14 +865,15 @@ final class CardinalityComposer {
             for (int extra = 0; extra <= beside.size() && often + extra <= MOST_ELEMENTS;
                     extra++) {
                 TermRealizations.Realization one = nested.alike(sourceType, keptApart,
-                        candidates.getFirst(), often, beside.subList(0, extra), carrier,
-                        within, reading);
+                        List.of(new NestedContainersAddingUp.Counted(candidates.getFirst(),
+                                often)),
+                        beside.subList(0, extra), carrier, within, reading);
                 if (one instanceof TermRealizations.Realization.Built made) {
                     built.addAll(made.values());
                     rest = rest.and(made.rest());
                     break;
                 }
-                unbuilt = one;
+                unbuilt.add(one);
             }
         }
         Endpoint mostOften = wanted.extent().max();
@@ -875,14 +885,198 @@ final class CardinalityComposer {
         if (!built.isEmpty()) {
             return new TermRealizations.Realization.Built(built, rest);
         }
-        if (!rest.figures().isEmpty()) {
-            return new TermRealizations.Realization.Stopped(rest);
+        return unbuilt.came(rest, none("no containers of `" + place + "` this composed hold a"
+                + " value as often as asked"));
+    }
+
+    /**
+     * Containers inside the elements of another holding the value of an input as often as asked,
+     * in all of them put end to end.
+     *
+     * <p>The values counted for are the keys', which the row fixed: they are not chosen here, and
+     * each occurs nought times where the containers hold other values or none. Each is written as
+     * many times as asked, spread over the containers ({@link NestedContainersAddingUp#alike}),
+     * with values beside them that are none of them where the containers need more leaves than
+     * they give. Keys the row fixed at one value are one value, counted once, and a count asked of
+     * each of them is a count they all hold.
+     */
+    static TermRealizations.Realization composeAcrossContainersEqualToAKey(
+            Type sourceType, List<List<String>> keptApart,
+            List<RealizationTarget.OfANumber> targets,
+            SequencedMap<RealizationTarget, AskedAt> demands, Quantities measuring,
+            SearchRegion within, RuleReadingContext reading) {
+        TermPath place = ((NumericTerm.OccurrencesOfAKey) targets.getFirst().term())
+                .subjectPath();
+        // Each value counted for, with every count asked of it.
+        List<Place> values = new ArrayList<>();
+        List<List<NumericSet>> wanted = new ArrayList<>();
+        for (RealizationTarget.OfANumber each : targets) {
+            NumericTerm.OccurrencesOfAKey term = (NumericTerm.OccurrencesOfAKey) each.term();
+            AskedAt asked = demands.get(each);
+            if (asked == null || asked.walking() == null) {
+                return none("nothing says how often the value at `" + term.key()
+                        + "` is to occur at `" + place + "`");
+            }
+            Place value = within == null ? null
+                    : settled(within, new NumericTerm.ValueOf(term.key()));
+            if (value == null) {
+                return notChosen("`" + term.key() + "` stands at no one value, so what is counted"
+                        + " for is not known");
+            }
+            int at = 0;
+            while (at < values.size() && !values.get(at).sameAs(value)) {
+                at++;
+            }
+            if (at == values.size()) {
+                values.add(value);
+                wanted.add(new ArrayList<>());
+            }
+            wanted.get(at).add(asked.walking());
         }
-        if (unbuilt != null) {
-            return unbuilt;
+        List<TermPath> chain = place.containersHoldingIt();
+        if (chain.size() < 2 || !place.equals(chain.getLast().element())) {
+            return notChosen("a value at `" + place + "` is not an element of the container it"
+                    + " stands inside, so the elements are chosen at a place inside them");
         }
-        return none("no containers of `" + place + "` this composed hold a value as often as"
-                + " asked");
+        NumericTerm own = new NumericTerm.ValueOf(place);
+        TermOrders orders = measuring.ordersOf(own);
+        Carrier carrier = orders == null ? null : orders.observed();
+        if (carrier == null) {
+            return notChosen("a value at `" + place + "` is on no order its values are chosen on");
+        }
+        NumericDomain.Bounds run = switch (within.projectionOf(own)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case null -> NumericDomain.Bounds.OPEN;
+        };
+        if (run == null) {
+            return none("the rules leave no value at `" + place + "`");
+        }
+        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
+        Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        List<Place> beside = new ArrayList<>();
+        for (Place each : valuesTheRulesLeave(carrier, run, unheld, unnamed)) {
+            if (values.stream().noneMatch(each::sameAs)) {
+                beside.add(each);
+            }
+        }
+        NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
+        ValuesCountedFor search = new ValuesCountedFor(values, wanted, run, beside,
+                (counted, others) -> nested.alike(sourceType, keptApart, counted, others, carrier,
+                        within, reading));
+        search.counting(0, new ArrayList<>(), 0);
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        if (search.cutShort) {
+            refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+        }
+        if (search.spent) {
+            refused.add(CompositionBudget.COUNTS_OF_KEYS_TRIED);
+        }
+        CompositionShortfall rest = search.rest.and(
+                CompositionShortfall.of(refused, unnamed, unheld));
+        if (!search.built.isEmpty()) {
+            return new TermRealizations.Realization.Built(search.built, rest);
+        }
+        return search.unbuilt.came(rest, none("no containers of `" + place + "` this composed"
+                + " hold the keys as often as asked"));
+    }
+
+    /**
+     * The counts of several values tried one value at a time, each as often as every count asked of
+     * it allows and the rules leave it a place, the leaves between them no more than a container
+     * is composed with, and no more combinations than {@link #MOST_COUNTS_OF_KEYS}.
+     *
+     * <p>The combinations multiply with the keys, and a walk that built nothing is stopped by
+     * neither the leaves nor the containers offered, which count what was built; so the
+     * combinations tried are counted of their own.
+     */
+    static final class ValuesCountedFor {
+
+        /** How a container is composed with the values counted and the others beside them. */
+        interface Composes {
+
+            TermRealizations.Realization compose(List<NestedContainersAddingUp.Counted> counted,
+                                                 List<Place> others);
+        }
+
+        private final List<Place> values;
+        private final List<List<NumericSet>> wanted;
+        private final NumericDomain.Bounds run;
+        private final List<Place> beside;
+        private final Composes composes;
+        final List<FixtureTemplate> built = new ArrayList<>();
+        CompositionShortfall rest = CompositionShortfall.NONE;
+        final UnbuiltAttempts unbuilt = new UnbuiltAttempts();
+        boolean cutShort;
+        boolean spent;
+        int tried;
+
+        /**
+         * @param values the values counted for, no two alike
+         * @param wanted the counts asked of each, in the order of {@code values}
+         * @param run    the values the rules leave the place
+         * @param beside the values that may stand beside them
+         */
+        ValuesCountedFor(List<Place> values, List<List<NumericSet>> wanted,
+                         NumericDomain.Bounds run, List<Place> beside, Composes composes) {
+            this.values = values;
+            this.wanted = wanted;
+            this.run = run;
+            this.beside = beside;
+            this.composes = composes;
+        }
+
+        /** Value {@code at} and those after it counted, {@code leaves} already given to the ones
+         *  before. */
+        void counting(int at, List<NestedContainersAddingUp.Counted> counted, int leaves) {
+            if (built.size() >= MOST_OFFERED || spent) {
+                return;
+            }
+            if (tried++ >= MOST_COUNTS_OF_KEYS) {
+                spent = true;
+                return;
+            }
+            if (at == values.size()) {
+                composing(counted, leaves);
+                return;
+            }
+            // A value occurs where the rules leave it at the place, and nowhere else.
+            boolean mayOccur = run.admits(values.get(at));
+            for (int often = 0; leaves + often <= MOST_ELEMENTS; often++) {
+                final int asked = often;
+                if ((often > 0 && !mayOccur) || !wanted.get(at).stream()
+                        .allMatch(each -> each.holds(Count.of(asked), Carrier.WHOLE))) {
+                    continue;
+                }
+                counted.add(new NestedContainersAddingUp.Counted(values.get(at), often));
+                counting(at + 1, counted, leaves + often);
+                counted.removeLast();
+            }
+            // A count past the most a container is composed with is asked and not tried.
+            if (wanted.get(at).stream().anyMatch(each -> each.extent().max() == null
+                    || each.extent().max().at().compareTo(Count.of(MOST_ELEMENTS)) > 0)) {
+                cutShort = true;
+            }
+        }
+
+        private void composing(List<NestedContainersAddingUp.Counted> counted, int leaves) {
+            for (int extra = 0; extra <= beside.size() && leaves + extra <= MOST_ELEMENTS;
+                    extra++) {
+                if (tried++ >= MOST_COUNTS_OF_KEYS) {
+                    spent = true;
+                    return;
+                }
+                TermRealizations.Realization one =
+                        composes.compose(List.copyOf(counted), beside.subList(0, extra));
+                if (one instanceof TermRealizations.Realization.Built made) {
+                    built.addAll(made.values());
+                    rest = rest.and(made.rest());
+                    return;
+                }
+                unbuilt.add(one);
+            }
+        }
     }
 
     /**
@@ -1180,6 +1374,97 @@ final class CardinalityComposer {
                 return null;
             }
             return new Element(own, carrier, List.copyOf(beside), on);
+        }
+    }
+
+    /**
+     * What a row holds at the position of {@code term} once the number stands at {@code at}, put
+     * in {@code written} — nothing where the number is not what the position holds.
+     *
+     * <p>A position holds the number only of a term that is the position's own value. A number
+     * taken of the position, the year of a date, stands at a place on the order its answer is
+     * measured on, and a value written at the position from it would be a whole number where a date
+     * is: the value of such a position is another term's to construct, and a statement reading it
+     * is one the row cannot yet be asked.
+     */
+    private static void writtenAt(NumericTerm term, Place at, Quantities measuring,
+                                  Map<TermPath, ObservedValue> written) {
+        if (!(term instanceof NumericTerm.ValueOf)) {
+            return;
+        }
+        TermOrders orders = measuring.ordersOf(term);
+        Carrier on = orders == null ? null : orders.observed();
+        if (on != null) {
+            written.put(term.subjectPath(), on.valueOf(at));
+        }
+    }
+
+    /**
+     * The numbers {@code asked} reads that stand outside every container, each at the one value
+     * the region leaves it at, and the value it is written as in {@code written}; a number the
+     * region leaves at more or none, or that stands on no order, is in neither.
+     */
+    private static Map<NumericTerm, Place> settledOutside(List<Asked> asked,
+                                                          Quantities measuring,
+                                                          SearchRegion within,
+                                                          Map<TermPath, ObservedValue> written) {
+        Map<NumericTerm, Place> out = new LinkedHashMap<>();
+        for (Asked one : asked) {
+            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _))) {
+                continue;
+            }
+            for (NumericTerm term : perElement.numbers()) {
+                if (term.subjectPath().insideAContainer()) {
+                    continue;
+                }
+                Place at = settled(within, term);
+                if (at != null) {
+                    out.put(term, at);
+                    writtenAt(term, at, measuring, written);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** {@code row}, with {@code written} in it where there is any: a row asked once for each way
+     *  the elements are shared out is not wrapped for nothing. */
+    private static BorderQuantity.Observation withNumbersBeside(
+            BorderQuantity.Observation row, Map<TermPath, ObservedValue> written) {
+        return written.isEmpty() ? row : new WithNumbersBeside(row, written);
+    }
+
+    /**
+     * A row with the numbers beside its elements written at the values they were fixed at, which
+     * a row of the container alone does not hold.
+     */
+    private record WithNumbersBeside(BorderQuantity.Observation holding,
+                                     Map<TermPath, ObservedValue> written)
+            implements BorderQuantity.Observation {
+
+        @Override
+        public WalkResult<ObservationAtPoint> at(TermPath path) {
+            ObservedValue value = written.get(path);
+            return value == null ? holding.at(path)
+                    : WalkResult.reached(new ObservationAtPoint.Value(value));
+        }
+
+        @Override
+        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+            return holding.everyValueAt(path);
+        }
+
+        @Override
+        public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
+            return switch (holding.eachElementOf(of)) {
+                case WalkResult.CouldNotWalk<List<BorderQuantity.Observation>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached<List<BorderQuantity.Observation>>(var elements) ->
+                        WalkResult.reached(elements.stream()
+                                .<BorderQuantity.Observation>map(each ->
+                                        new WithNumbersBeside(each, written))
+                                .toList());
+            };
         }
     }
 

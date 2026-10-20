@@ -13,6 +13,7 @@ import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -237,6 +238,47 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                         truthAt(XS.element())), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         new Derivation.ByALaw(new Derivation.TheCall(LIST_ANY, Map.of()), AnswerAspect.TRUTH,
                 new Derivation.ALawQuantifies(some, overOtherElements));
+    }
+
+    /**
+     * A lookup finding something across the lists of an outer list is a reading of the key the call
+     * was handed: how often another key occurs is no reading of what {@code Map.get} states of
+     * this one, though the two are counted the same way over the same lists.
+     */
+    @Test
+    void aCountOfAnotherKeyThanTheCallsIsNoReadingOfItsLookup() {
+        LawProposition.SomeElement<?> some =
+                (LawProposition.SomeElement<?>) lawOf(MAP_GET, AnswerAspect.PRESENCE);
+        DeclaredArgument asked = (DeclaredArgument) ((LawSubject.Argument<?>)
+                ((LawProposition.Same<?>) some.ofTheElement()).other()).argument();
+        Derivation.TheCall call = callOf(MAP_GET, asked, A);
+        RunSource.FlattenedOccurrences lists =
+                new RunSource.FlattenedOccurrences(XS.element().element());
+        Derivation ofTheKeyAsked = new Derivation.SomeElementEqualToAKey(
+                NumericTerm.OccurrencesOfAKey.of(lists, A));
+        Derivation ofAnotherKey = new Derivation.SomeElementEqualToAKey(
+                NumericTerm.OccurrencesOfAKey.of(lists, B));
+        assertDoesNotThrow(() -> new Derivation.ByALaw(call, AnswerAspect.PRESENCE,
+                new Derivation.ALawQuantifies(some, ofTheKeyAsked)));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                AnswerAspect.PRESENCE, new Derivation.ALawQuantifies(some, ofAnotherKey)));
+    }
+
+    /**
+     * A lookup finding something concludes the count of its key at least one, whatever a reading
+     * says besides: the derivation holds the count and no statement of its own to conclude.
+     */
+    @Test
+    void aKeyBeingAmongTheElementsConcludesItsCountAtLeastOneAndNothingElse() {
+        NumericTerm.OccurrencesOfAKey count = NumericTerm.OccurrencesOfAKey.of(
+                new RunSource.FlattenedOccurrences(XS.element().element()), A);
+        Relation.OneWay<Quantity> atLeastOne = Relation.OneWay.of(new LinearForm<>(
+                ExactRatio.of(-1), Map.of(new DecisionAtom.OfTheInput(count), ExactRatio.ONE)),
+                Rel.GE);
+        assertEquals(new Proposition.Compared(
+                        new Relation.Affine(atLeastOne.form(), atLeastOne.proposition()),
+                        atLeastOne.holds()),
+                concluded(new Derivation.SomeElementEqualToAKey(count)));
     }
 
     /**
@@ -664,6 +706,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
 
     private static final ValueName.Stdlib LIST_ANY = new ValueName.Stdlib.Operation("List", "any");
     private static final ValueName.Stdlib LIST_GET = new ValueName.Stdlib.Operation("List", "get");
+    private static final ValueName.Stdlib MAP_GET = new ValueName.Stdlib.Operation("Map", "get");
     private static final ValueName.Stdlib OPTION_MAP =
             new ValueName.Stdlib.Operation("Option", "map");
     private static final ValueName.Stdlib SET_CONTAINS =

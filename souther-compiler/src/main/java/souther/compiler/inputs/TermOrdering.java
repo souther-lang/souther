@@ -62,8 +62,8 @@ final class TermOrdering {
             case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _ -> observed;
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                  NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
-                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.TakenOver _ ->
-                    answeredOn(term, positionType, symbols, declarations);
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.TakenOver _ -> answeredOn(term, positionType, symbols, declarations);
         };
         Map<ElementProjection, Carrier> fields = new LinkedHashMap<>();
         fieldTypes.forEach((field, type) -> {
@@ -122,8 +122,8 @@ final class TermOrdering {
             // What the code points come to is the whole number the list of them adds up to.
             case NumericTerm.CodePointValueSum _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // How often a value occurs is a whole number whatever the value is.
-            case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _ ->
-                    Carrier.ofValue(Type.Prim.INT, declarations);
+            case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
+                 NumericTerm.OccurrencesOfAKey _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // Asked of the operation as a taking is, and asked of what it was given: a run is a
             // container of the values standing at the place it is read from, so what the operation
             // answers of one is what it answers of a container of them. Written out here as the

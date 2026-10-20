@@ -69,6 +69,7 @@ public sealed interface RealizationTarget {
             case NumericTerm.Multiplicity among -> new AmongTheElements(among);
             case NumericTerm.ExtremeOfItsKey extreme -> new AtItsKey(extreme);
             case NumericTerm.OccurrencesOfItsValue among -> new AmongEveryOccurrence(among);
+            case NumericTerm.OccurrencesOfAKey asked -> new AmongEveryOccurrenceEqualToAKey(asked);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
             case NumericTerm.TakenOver over -> new OverARun(over);
         };
@@ -156,6 +157,28 @@ public sealed interface RealizationTarget {
      * the row that moves the number is one that rebuilds the outermost container.
      */
     record AmongEveryOccurrence(NumericTerm.OccurrencesOfItsValue term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.subjectPath().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * How often the value an input holds occurs among every occurrence of a place, realized by
+     * writing the outermost container the occurrences stand in with that many of them holding it.
+     *
+     * <p>As {@link AmongEveryOccurrence} is, except that the value counted for is not one of those
+     * at the place: it is the key's, which the row holds as another input and which is fixed with
+     * the rest of the row, so a count of nought is a row where none of them holds it.
+     */
+    record AmongEveryOccurrenceEqualToAKey(NumericTerm.OccurrencesOfAKey term)
+            implements OfANumber {
 
         @Override
         public TermPath writeRoot() {
