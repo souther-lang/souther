@@ -31,7 +31,7 @@ public interface RowTrials {
 
     /**
      * Which siblings the classes rows are run in carry, which are the rewrites a run here can be
-     * asked for ({@link OfBehavior#runReplacing}). Nothing, unless those classes say otherwise.
+     * asked for ({@link Prepared#runReplacing}). Nothing, unless those classes say otherwise.
      */
     default ArmReplacements carried() {
         return ArmReplacements.NONE;
