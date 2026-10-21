@@ -119,20 +119,28 @@ public sealed interface TakenConstraint {
             implements TakenConstraint, JointDemand {
 
         /**
-         * Every number of the form, and the value a count of how often a key occurs is counted for,
-         * ahead of the count: the count is composed once that value stands somewhere, so it is a
-         * number the condition is about though no coefficient names it.
+         * Every number of the form, and the value a count of how often a key occurs, or a total
+         * of what its elements come to, is for, ahead of the number: the number is composed once
+         * that value stands somewhere, so it is a number the condition is about though no
+         * coefficient names it.
          */
         @Override
         public java.util.Set<NumericTerm> terms() {
-            if (form.coefs().keySet().stream()
-                    .noneMatch(term -> term instanceof NumericTerm.OccurrencesOfAKey)) {
+            if (form.coefs().keySet().stream().noneMatch(term ->
+                    term instanceof NumericTerm.OccurrencesOfAKey
+                            || term instanceof NumericTerm.GatheredUnderAKey)) {
                 return form.coefs().keySet();
             }
             Set<NumericTerm> out = new LinkedHashSet<>();
             for (NumericTerm term : form.coefs().keySet()) {
-                if (term instanceof NumericTerm.OccurrencesOfAKey asked) {
-                    out.add(new NumericTerm.ValueOf(asked.key()));
+                switch (term) {
+                    case NumericTerm.OccurrencesOfAKey asked ->
+                            out.add(new NumericTerm.ValueOf(asked.key()));
+                    case NumericTerm.GatheredUnderAKey asked ->
+                            out.add(new NumericTerm.ValueOf(asked.asked()));
+                    case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
+                         NumericTerm.OfAnElementsNeighbours _, NumericTerm.OccurrencesOfItsValue _,
+                         NumericTerm.GatheredUnderItsKey _ -> { }
                 }
                 out.add(term);
             }

@@ -611,8 +611,12 @@ final class ContainersAddingUp {
                 case NumericTerm.GatheredUnderItsKey gathered
                         when gathered.value().asAPlace() == null ->
                         of(gathered.elements(), gathered.value(), null, orders);
+                case NumericTerm.GatheredUnderAKey asked
+                        when asked.gathered().value().asAPlace() == null ->
+                        of(asked.gathered().elements(), asked.gathered().value(), null, orders);
                 case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
-                     NumericTerm.GatheredUnderItsKey _, NumericTerm.OfAnElementsNeighbours _,
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
+                     NumericTerm.OfAnElementsNeighbours _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> null;
             };
         }
@@ -1046,15 +1050,18 @@ final class ContainersAddingUp {
                     extreme + " is written as one value, and nothing here adds it up");
             // The place of each element the number is, where it is one; a number made of the
             // element is solved for through a field of it ({@link FieldSolved}).
-            case NumericTerm.GatheredUnderItsKey gathered -> {
-                ElementProjection place = gathered.value().asAPlace();
-                if (place == null) {
-                    throw new IllegalStateException(gathered + " is made of each element, and is"
-                            + " solved for through a field of it");
-                }
-                yield place.from(gathered.elements());
-            }
+            case NumericTerm.GatheredUnderItsKey gathered -> placeOfEach(gathered);
+            case NumericTerm.GatheredUnderAKey asked -> placeOfEach(asked.gathered());
         };
+    }
+
+    private static TermPath placeOfEach(NumericTerm.GatheredUnderItsKey gathered) {
+        ElementProjection place = gathered.value().asAPlace();
+        if (place == null) {
+            throw new IllegalStateException(gathered + " is made of each element, and is"
+                    + " solved for through a field of it");
+        }
+        return place.from(gathered.elements());
     }
 
     /**

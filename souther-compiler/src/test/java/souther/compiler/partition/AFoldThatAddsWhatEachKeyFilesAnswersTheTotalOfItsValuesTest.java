@@ -407,34 +407,6 @@ class AFoldThatAddsWhatEachKeyFilesAnswersTheTotalOfItsValuesTest {
     }
 
     /**
-     * A total looked up under a key asked for, rather than under one of the map's own keys, is
-     * whether some element has that key and what the elements that have it come to — a number
-     * this does not read yet. It is said to be unread, and no total of a key is drawn for it.
-     */
-    @Test
-    void aTotalLookedUpUnderAKeyAskedForIsLeftUnread() {
-        Compilation compilation = measured("""
-                module example.ledger
-
-                data Posting = { account: String, amount: Int }
-
-                let totals (ps: List<Posting>): Map<String, Int> =
-                    List.fold((acc, p) -> Map.updateOrInsert(p.account, p.amount,
-                                              n -> n + p.amount, acc), Map.empty, ps)
-
-                behavior large : (ps: List<Posting>, account: String) -> Bool
-
-                let large (ps, account) =
-                    match Map.get(account, totals(ps)) with
-                        | Some amount -> amount >= 100
-                        | None -> false
-                """);
-        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
-        assertFalse(json(compilation).contains("gathered_under_its_key"),
-                () -> report(compilation));
-    }
-
-    /**
      * A total of nought is written as elements of the key coming to nought, and not as no element:
      * none files no key, so the comparison of what a key comes to is never made.
      */

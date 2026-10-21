@@ -6165,10 +6165,11 @@ public final class Generator {
         // The value a number of how often it occurs is counted for, placed before the occurrences
         // are composed: they are composed holding it, and it is another input's.
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
-            if (!(each.getKey() instanceof RealizationTarget.AmongEveryOccurrenceEqualToAKey keyed)) {
+            TermPath keyAsked = each.getKey().keyAskedFor();
+            if (keyAsked == null) {
                 continue;
             }
-            NumericTerm.FromOnePosition key = new NumericTerm.ValueOf(keyed.term().key());
+            NumericTerm.FromOnePosition key = new NumericTerm.ValueOf(keyAsked);
             if (out.containsKey(RealizationTarget.of(key))) {
                 continue;
             }
@@ -7406,6 +7407,7 @@ public final class Generator {
             case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
             case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
             case RealizationTarget.UnderItsKey(NumericTerm.GatheredUnderItsKey term) -> term;
+            case RealizationTarget.UnderAKey(NumericTerm.GatheredUnderAKey term) -> term;
             case RealizationTarget.AmongEveryOccurrence(
                     NumericTerm.OccurrencesOfItsValue term) -> term;
             case RealizationTarget.AmongEveryOccurrenceEqualToAKey(
@@ -7925,9 +7927,11 @@ public final class Generator {
         if (on == null) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.NoOrdersOnTheEdge());
         }
-        // How often a key occurs is read with the key's value, which is another parameter's and
-        // is no part of the one candidate; the whole-row reading that follows is what reads it.
-        if (target.term() instanceof NumericTerm.OccurrencesOfAKey) {
+        // How often a key occurs, or what its elements come to, is read with the key's value, which
+        // is another parameter's and is no part of the one candidate; the whole-row reading that
+        // follows is what reads it.
+        if (target.term() instanceof NumericTerm.OccurrencesOfAKey
+                || target.term() instanceof NumericTerm.GatheredUnderAKey) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.TurnsOnAnotherParameter());
         }
         // Only this parameter's value is filled in: the walk reads the one the path names, and the
@@ -7947,6 +7951,7 @@ public final class Generator {
             // Every element of every container, which is what a key's elements are gathered
             // from.
             case NumericTerm.GatheredUnderItsKey gathered -> gathered.elements();
+            case NumericTerm.GatheredUnderAKey asked -> asked.subjectPath();
         };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
@@ -7983,7 +7988,8 @@ public final class Generator {
                             && held.isEmpty());
             case NumericTerm.FromOnePosition _, NumericTerm.OccurrencesOfItsValue _,
                  NumericTerm.GatheredUnderItsKey _ -> values.isEmpty();
-            case NumericTerm.TakenOver _, NumericTerm.OccurrencesOfAKey _ -> false;
+            case NumericTerm.TakenOver _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.GatheredUnderAKey _ -> false;
         };
         if (nothingToRead) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
@@ -8115,6 +8121,8 @@ public final class Generator {
             // entry point answers before this is reached.
             case NumericTerm.OccurrencesOfAKey _ -> throw new IllegalStateException(
                     "how often a key occurs is read back from a whole row");
+            case NumericTerm.GatheredUnderAKey _ -> throw new IllegalStateException(
+                    "what a key's elements come to is read back from a whole row");
             case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
                 case NumericTerm.Reading.Number number -> number.value().compareTo(at) == 0;
                 case NumericTerm.Reading.Missing missing -> {
@@ -8312,7 +8320,7 @@ public final class Generator {
         for (RealizationTarget each : group.keySet()) {
             if (each instanceof RealizationTarget.ACount
                     || each instanceof RealizationTarget.ElementsMeetingTogether
-                    || each instanceof RealizationTarget.AmongEveryOccurrenceEqualToAKey) {
+                    || each.keyAskedFor() != null) {
                 Map<NumericTerm, Place> fixed = new LinkedHashMap<>();
                 standing.forEach((target, place) -> {
                     if (target instanceof RealizationTarget.OfANumber number
@@ -12921,7 +12929,7 @@ public final class Generator {
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _,
-                     NumericTerm.GatheredUnderItsKey _ -> null;
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.
             case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;

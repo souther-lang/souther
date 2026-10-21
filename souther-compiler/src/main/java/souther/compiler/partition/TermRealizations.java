@@ -369,7 +369,8 @@ final class TermRealizations {
                 // Written as the value it is the end of, alone: beside another number of the same
                 // place it would be two numbers asked of one value that need not be one. The same
                 // for what the elements of a key come to.
-                case NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _ -> {
+                case NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
+                     NumericTerm.GatheredUnderAKey _ -> {
                     return nothingSolvesAGroup();
                 }
                 case NumericTerm.ValueOf _ -> itself = target;
@@ -1398,7 +1399,8 @@ final class TermRealizations {
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                     NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _ -> false;
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
+                     NumericTerm.GatheredUnderAKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
@@ -1604,6 +1606,8 @@ final class TermRealizations {
             // Written as the container of the elements, holding elements of one key that come to
             // the number ({@link RealizationTarget.UnderItsKey}).
             case NumericTerm.GatheredUnderItsKey _ -> underItsKey(sourceType, keptApart, orders,
+                    asked, within, reading, inside);
+            case NumericTerm.GatheredUnderAKey _ -> underAKey(sourceType, keptApart, orders,
                     asked, within, reading, inside);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(),
                     taken.transformation(), sourceType, keptApart, orders, asked, within,
@@ -1908,7 +1912,9 @@ final class TermRealizations {
                                            TermOrders orders, AskedAt asked,
                                            SearchRegion within, RuleReadingContext reading,
                                            DemandsInside inside) {
-        NumericTerm.GatheredUnderItsKey gathered = (NumericTerm.GatheredUnderItsKey) orders.term();
+        NumericTerm.GatheredUnderItsKey gathered =
+                orders.term() instanceof NumericTerm.GatheredUnderAKey ofAKey ? ofAKey.gathered()
+                        : (NumericTerm.GatheredUnderItsKey) orders.term();
         if (orders.answered() == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -1924,6 +1930,47 @@ final class TermRealizations {
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
                         reading, elements, inside));
+    }
+
+    /**
+     * Containers of the elements whose key an input holds, each element written holding that key
+     * and the elements coming to one number of the set asked for, as {@link #underItsKey} writes
+     * them.
+     *
+     * <p>The key is the row's other parameter, fixed with the rest of the row before the container
+     * is composed, so the elements are written holding the one value the region leaves it at. A
+     * key the region leaves at more than one is not chosen here.
+     */
+    private static Realization underAKey(Type sourceType, List<List<String>> keptApart,
+                                         TermOrders orders, AskedAt asked, SearchRegion within,
+                                         RuleReadingContext reading, DemandsInside inside) {
+        NumericTerm.GatheredUnderAKey term = (NumericTerm.GatheredUnderAKey) orders.term();
+        NumericTerm.GatheredUnderItsKey gathered = term.gathered();
+        Place key = within == null ? null
+                : CardinalityComposer.settled(within, new NumericTerm.ValueOf(term.asked()));
+        if (key == null) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(
+                    Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                    "`" + term.asked() + "` stands at no one value, so what is gathered for it is"
+                            + " not known");
+        }
+        Carrier keyedOn = orders.fieldCarrier(gathered.key());
+        if (keyedOn == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        TermPath keyAt = gathered.key().from(gathered.elements());
+        List<FixtureTemplate> held = List.of(FixtureTemplate.on(keyedOn, key,
+                reading.source().symbols().scope()::reach));
+        Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
+        List<FixtureTemplate> had = among.put(keyAt, held);
+        if (had != null && !had.equals(held)) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(
+                    Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                    "`" + keyAt + "` is asked to hold another value than the key");
+        }
+        return underItsKey(sourceType, keptApart, orders, asked, within, reading,
+                new DemandsInside(among, inside.required()));
     }
 
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
@@ -3020,7 +3067,7 @@ final class TermRealizations {
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _,
-                     NumericTerm.GatheredUnderItsKey _ ->
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->
                         throw new IllegalStateException(
                         term + " is no number a string is written for");
             };

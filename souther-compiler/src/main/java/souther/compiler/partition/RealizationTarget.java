@@ -52,6 +52,18 @@ public sealed interface RealizationTarget {
     TermPath writeRoot();
 
     /**
+     * Where the value this target is for stands, where it is for a value an input holds that is
+     * not the target's own to write — the key a count or a total is asked for — and null where
+     * it is not.
+     *
+     * <p>Another parameter's, and fixed with the rest of the row before the container is
+     * composed holding it.
+     */
+    default TermPath keyAskedFor() {
+        return null;
+    }
+
+    /**
      * The target of a number, which every number has.
      *
      * <p>Exhaustive over the terms there are, with no {@code default} and no null. Read off a
@@ -69,6 +81,7 @@ public sealed interface RealizationTarget {
             case NumericTerm.Multiplicity among -> new AmongTheElements(among);
             case NumericTerm.ExtremeOfItsKey extreme -> new AtItsKey(extreme);
             case NumericTerm.GatheredUnderItsKey gathered -> new UnderItsKey(gathered);
+            case NumericTerm.GatheredUnderAKey asked -> new UnderAKey(asked);
             case NumericTerm.OccurrencesOfItsValue among -> new AmongEveryOccurrence(among);
             case NumericTerm.OccurrencesOfAKey asked -> new AmongEveryOccurrenceEqualToAKey(asked);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
@@ -187,6 +200,11 @@ public sealed interface RealizationTarget {
         }
 
         @Override
+        public TermPath keyAskedFor() {
+            return term.key();
+        }
+
+        @Override
         public String toString() {
             return term.toString();
         }
@@ -284,6 +302,32 @@ public sealed interface RealizationTarget {
         @Override
         public TermPath writeRoot() {
             return term.elements().containersHoldingIt().getLast();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * What the elements of the key an input holds come to, realized as {@link UnderItsKey} is,
+     * with every element written holding that key.
+     *
+     * <p>The key is another parameter's and is fixed with the rest of the row, so the elements
+     * are written holding it; elements of other keys are the row's other containers', and a key
+     * no element holds is a row none of them holds it at, which the number is not read for.
+     */
+    record UnderAKey(NumericTerm.GatheredUnderAKey term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.subjectPath().containersHoldingIt().getLast();
+        }
+
+        @Override
+        public TermPath keyAskedFor() {
+            return term.asked();
         }
 
         @Override

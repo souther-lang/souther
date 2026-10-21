@@ -1233,6 +1233,41 @@
           }
         },
         {
+          "description": "What the elements standing at `elements` come to, among those holding at `key` what the input holds at `asked`: the total of what `computation` makes of each, or the least or the greatest of it. The elements are every occurrence of the place, as for `gathered_under_its_key`. It is no number where no element holds the key, and no one position holds it.",
+          "required": [
+            "gathering",
+            "elements",
+            "key",
+            "asked",
+            "computation"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "gathered_under_a_key"
+            },
+            "gathering": {
+              "enum": [
+                "total",
+                "least",
+                "greatest"
+              ]
+            },
+            "elements": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "asked": {
+              "type": "string"
+            },
+            "computation": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
           "description": "What the code points of the string a position holds come to, each added as the number it is.",
           "required": [
             "position"

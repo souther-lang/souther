@@ -1469,7 +1469,7 @@ final class CardinalityComposer {
     }
 
     /** The one place the region leaves {@code term} at, or null where it leaves more or none. */
-    private static Place settled(SearchRegion within, NumericTerm term) {
+    static Place settled(SearchRegion within, NumericTerm term) {
         if (!(within.projectionOf(term)
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held))
                 || held == null || held.min() == null || held.max() == null

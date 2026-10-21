@@ -6498,6 +6498,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("key", it.key().from(it.elements()).discriminated());
                 elementComputation(into.putObject("computation"), it.value());
             }
+            // The same number for the key an input holds, which is the number of the elements of
+            // that key alone.
+            case NumericTerm.GatheredUnderAKey it -> {
+                NumericTerm.GatheredUnderItsKey gathered = it.gathered();
+                into.put("kind", "gathered_under_a_key");
+                into.put("gathering", switch (gathered.gathering()) {
+                    case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> "total";
+                    case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) ->
+                            switch (extreme) {
+                                case Extreme.Least _ -> "least";
+                                case Extreme.Greatest _ -> "greatest";
+                            };
+                });
+                into.put("elements", gathered.elements().discriminated());
+                into.put("key", gathered.key().from(gathered.elements()).discriminated());
+                into.put("asked", it.asked().discriminated());
+                elementComputation(into.putObject("computation"), gathered.value());
+            }
             case NumericTerm.TakenOver it -> {
                 into.put("kind", "taken_over");
                 operationId(into.putObject("operation"), it.operation());
