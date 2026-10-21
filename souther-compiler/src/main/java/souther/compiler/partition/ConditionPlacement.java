@@ -165,7 +165,7 @@ sealed interface ConditionPlacement {
             // No number a position answers is this one.
             case NumericTerm.OfAnElementsNeighbours _ -> false;
             case NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> false;
-            case NumericTerm.GatheredUnderItsKey _ -> false;
+            case NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> false;
             case NumericTerm.TakenOver _ -> false;
         };
     }

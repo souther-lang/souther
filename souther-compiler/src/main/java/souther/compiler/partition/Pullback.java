@@ -5293,9 +5293,44 @@ final class Pullback {
 
     /**
      * What the elements a fold files under each key come to by {@code gathering}, each as what
-     * {@code value} computes of it — or null where something in {@code alike} is another number of
-     * the element, the list is not every occurrence of elements standing at a place of the input,
-     * or the key is no way of fields from where they stand.
+     * {@code value} computes of it — or null where {@link #elementsGathered} reads none.
+     */
+    private NumericTerm.GatheredUnderItsKey gatheredUnderItsKey(
+            Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
+            NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        ElementsGathered read = elementsGathered(whole, filed, value, alike);
+        return read == null ? null : NumericTerm.GatheredUnderItsKey.of(read.elements(),
+                read.key(), read.number(), read.each(), gathering);
+    }
+
+    /**
+     * The same elements gathered for the key an input holds at {@code asked}, which is the number
+     * the lookup of that key finds ({@link #valueLookedUpUnderAKey}) — or null where
+     * {@link #elementsGathered} reads none.
+     */
+    private NumericTerm.GatheredUnderAKey gatheredUnderAKey(
+            Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
+            NumericTerm.GatheredUnderItsKey.Gathering gathering, TermPath asked) {
+        ElementsGathered read = elementsGathered(whole, filed, value, alike);
+        return read == null ? null : NumericTerm.GatheredUnderAKey.of(read.elements(),
+                read.key(), read.number(), read.each(), gathering, asked);
+    }
+
+    /**
+     * Where the elements a fold files stand, the way from one to its key, and the number each
+     * contributes.
+     *
+     * @param number what each element contributes, read of it where it stands
+     * @param each   what one element's number stands as
+     */
+    private record ElementsGathered(TermPath elements, ElementProjection key,
+                                    ElementValue number, Type each) {}
+
+    /**
+     * Where the elements a fold files stand, and the key and the number of each — or null where
+     * something in {@code alike} is another number of the element, the list is not every
+     * occurrence of elements standing at a place of the input, or the key is no way of fields
+     * from where they stand.
      *
      * <p>Where the elements stand is the walk's answer about the element itself ({@link
      * OnePerElement.ReadOff#ITSELF}, read down {@link InputReads#occurrencesOf} with the key), and
@@ -5310,9 +5345,8 @@ final class Pullback {
      * @param alike what the step files or compares as the same number of each element as
      *              {@code value}: a total adds it, an end is chosen against it
      */
-    private NumericTerm.GatheredUnderItsKey gatheredUnderItsKey(
-            Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
-            NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+    private ElementsGathered elementsGathered(Denotation whole, KeyedAccumulation filed,
+                                              Core value, List<Core> alike) {
         OnePerElement.ReadOff key = readOff(whole, filed, filed.key());
         InputReads.Occurrences placed = key == null ? null
                 : occurrencesOf(whole, filed, List.of(OnePerElement.ReadOff.ITSELF, key));
@@ -5338,23 +5372,25 @@ final class Pullback {
             }
         }
         ElementProjection keyed = ElementProjection.below(elements, keyAt);
-        return keyed == null ? null : NumericTerm.GatheredUnderItsKey.of(elements, keyed, number,
-                TypeOps.base(value.type(), read.rules().inners()), gathering);
+        return keyed == null ? null : new ElementsGathered(elements, keyed, number,
+                TypeOps.base(value.type(), read.rules().inners()));
     }
 
     /**
      * The value an arm of a lookup of a key opens, where the map is one a fold built by filing a
-     * counter under the key of each element of a list ({@link KeyedAccumulation}) — or null where
-     * it is not.
+     * counter, a total or an end under the key of each element of a list ({@link
+     * KeyedAccumulation}) — or null where it is not.
      *
      * <p>The key asked for is no key of an entry: it occurs among the elements as often as some of
      * them have it for their key, which is none where the lookup answers nothing. The arm is
      * opened where some element does, and the counter there is what it starts at, with the step
      * added once for each occurrence after the first. The elements counted are the ones the
      * lookup's own presence is read over, so the arm and the count are of one statement.
+     * A total or an end is what the elements of that key come to ({@link
+     * #gatheredLookedUp}), and no number where none has it.
      */
     private LinearForm<Quantity> valueLookedUpUnderAKey(Core node, InputReads at) {
-        if (counting == null ||!(Core.withoutStanding(node) instanceof Core.Read name)
+        if (!(Core.withoutStanding(node) instanceof Core.Read name)
                 || at.lookupOpenedBy(name.binding()) == null) {
             return null;
         }
@@ -5367,9 +5403,49 @@ final class Pullback {
         Denotation whole = at.standing(map, read.rules().symbols(), read.rules().newtypes());
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(), sides(),
                 blocksAt(whole));
-        if (filed == null || !(filed.filed() instanceof KeyedAccumulation.Filed.Counted counted)) {
+        if (filed == null) {
             return null;
         }
+        return switch (filed.filed()) {
+            case KeyedAccumulation.Filed.Counted counted ->
+                    counting == null ? null
+                            : counterLookedUp(lookup, applied, whole, filed, counted, at);
+            case KeyedAccumulation.Filed.Kept kept -> gatheredLookedUp(applied, whole, filed,
+                    kept.value(), kept.compared(),
+                    new NumericTerm.GatheredUnderItsKey.Gathering.End(kept.extreme()), at);
+            case KeyedAccumulation.Filed.Summed summed -> gatheredLookedUp(applied, whole, filed,
+                    summed.value(), List.of(summed.added()),
+                    NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, at);
+        };
+    }
+
+    /**
+     * What the elements of the key asked for come to by {@code gathering}, where the map is one a
+     * fold built by filing what each element holds under its key and keeping the total or an end
+     * of it ({@link KeyedAccumulation}) — or null where that is not read.
+     *
+     * <p>The key asked for is no key of an entry, and the number is of the elements holding it
+     * ({@link NumericTerm.GatheredUnderAKey}): none where the lookup answers nothing. The arm
+     * finding something is opened by the lookup's own presence, which is read over the same
+     * elements, so the arm and what it opens are of one statement.
+     */
+    private LinearForm<Quantity> gatheredLookedUp(
+            AnOperationApplied applied, Denotation whole, KeyedAccumulation filed, Core value,
+            List<Core> alike, NumericTerm.GatheredUnderItsKey.Gathering gathering, InputReads at) {
+        if (applied.args().size() != 2
+                || !(at.pathOf(applied.args().getFirst(), read.rules().newtypes())
+                        instanceof PathResolution.At(TermPath asked))) {
+            return null;
+        }
+        NumericTerm.GatheredUnderAKey term =
+                gatheredUnderAKey(whole, filed, value, alike, gathering, asked);
+        return term != null && readOnAnOrder(term)
+                ? LinearForm.atom(new DecisionAtom.OfTheInput(term)) : null;
+    }
+
+    private LinearForm<Quantity> counterLookedUp(
+            Core lookup, AnOperationApplied applied, Denotation whole, KeyedAccumulation filed,
+            KeyedAccumulation.Filed.Counted counted, InputReads at) {
         if (counted.step().signum() == 0) {
             return LinearForm.constant(counted.first());
         }

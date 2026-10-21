@@ -57,7 +57,7 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
                 constructs No
 
             let f (xs, n) = {
-                guard List.sum(List.map(x -> x.a, xs)) + List.sum(List.map(x -> x.b, xs)) > 0
+                guard List.sum(List.map(x -> x.a, xs)) + List.sum(List.map(x -> x.a + x.b, xs)) > 0
                     else No { why = 0 }
                 guard n < 10 else No { why = 1 }
                 Yes { v = 1 }

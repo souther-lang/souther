@@ -62,8 +62,10 @@ public enum CompositionRepertoire {
      * and one read off a value the group already asks for is read off the values that demand
      * admits, and one it is composed out of is composed for. Which groups those are is the
      * realizer's to say and is not spelled out here; what this names is the values left over, whose
-     * numbers are reached none of those ways — two totals of one container are two spreadings of
-     * one list of elements at once, and nothing here writes that.
+     * numbers are reached none of those ways. Totals of the fields of their own of one container's
+     * elements are composed together, one share of each for each element; what is left over is
+     * totals that read one field, a total computed of several fields beside another, and a choice
+     * among forms of a field solved for beside another total.
      *
      * <p>So a group nothing built a value for is not a group no value answers. Raising anything
      * reaches none of them; what would is somebody writing the solving.
@@ -95,6 +97,47 @@ public enum CompositionRepertoire {
      * is a way of choosing such elements, and raising no figure does.
      */
     ELEMENTS_CHOSEN_FOR_A_COUNT,
+
+    /**
+     * The keys placed beside the number their own elements come to, where the key is a field that
+     * number is made of.
+     *
+     * <p>The key is another parameter's and is fixed before the elements are composed, while the
+     * elements of a key come to a number that turns on the key. Where each element adds the key
+     * itself, the key is placed at the number asked for and a row holds one element of it; a key
+     * that divides the number, with that many elements, is one of the others, and so is a size
+     * of the container that asks for more elements than one. Where the number is made of the
+     * key and something more, the key is a value the rules leave and nothing relates it to the
+     * number. All of them are written by none of these. Raising no figure reaches them; what
+     * would is a way of choosing the key and the elements of it together.
+     */
+    KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
+
+    /**
+     * The keys of one fold asked for together, at the values and with the numbers this tries.
+     *
+     * <p>Each key is another parameter's and is fixed before the elements are composed. Two keys
+     * are held at different values where they can be, and a key only counted — asked how many
+     * elements have it, with no number asked of them — is written to come to the number the first
+     * total of the group asks, since the composer of counts stops at a figure of its own where the
+     * elements are the fields of a record. A key counted beside a number it need not come to, and
+     * a count that asks more of a key than that number allows, are written by none of these.
+     * Raising no figure reaches them; what would is a way of choosing the keys and the elements
+     * of each together.
+     */
+    KEYS_OF_ONE_FOLD_ASKED_TOGETHER,
+
+    /**
+     * The elements of a key whose least or greatest value is asked for, written as one element.
+     *
+     * <p>One element is its own least and its own greatest, so an end is written as one. A
+     * container that must hold more of that key's elements — its type holds two, or a count of the
+     * key's elements asks for more than one — has the end among several, and so does a key whose
+     * end is not any one element's number; they are written by none of these. Raising no figure
+     * reaches them; what would is a way of writing the end with the other elements of the key
+     * around it.
+     */
+    ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
 
     /**
      * The elements whose computed number is made of the fields of one element in ways this
@@ -166,7 +209,9 @@ public enum CompositionRepertoire {
             case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR -> true;
             case WAYS_A_TOTAL_IS_SPREAD, PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
                  VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
-                 ELEMENTS_CHOSEN_FOR_A_COUNT, MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                 ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
+                 KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
+                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
                  TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
         };
     }

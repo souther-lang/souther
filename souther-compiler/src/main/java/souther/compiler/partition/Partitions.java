@@ -328,7 +328,7 @@ public final class Partitions {
                 case NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> false;
                 // Nor is what the elements of a key come to: elements holding it are written by a
                 // container that holds them.
-                case NumericTerm.GatheredUnderItsKey _ -> false;
+                case NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> false;
                 // A run has as many values as a row wrote and each of them is chosen, so whether
                 // some run adds up to a given total is a question about what the elements may hold
                 // and how many there may be — not one the operation answers about itself. Nothing

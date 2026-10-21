@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -1529,6 +1530,43 @@ public sealed interface Proposition {
             return inside == null ? answers : all(List.of(answers, inside));
         }
         return any(List.of(stated, stated.denied()));
+    }
+
+    /**
+     * The two positions of the input {@code stated} says hold one value, or null where it says
+     * anything else.
+     *
+     * <p>Said two ways and read as one: {@link SameValue} of two positions, and the difference of
+     * two positions held at nought ({@link Compared}), which is how a statement that two ordered
+     * values are one is stated once a count is made of it.
+     */
+    public static List<TermPath> positionsHeldEqual(Proposition stated) {
+        if (stated instanceof SameValue(DecisionSubject one, DecisionSubject other, boolean holds,
+                var _)) {
+            return holds && one instanceof DecisionSubject.AnInput(TermPath at)
+                    && other instanceof DecisionSubject.AnInput(TermPath alsoAt)
+                    ? List.of(at, alsoAt) : null;
+        }
+        if (!(stated instanceof Compared(Relation relation, boolean holds, var _))
+                || !holds
+                || !(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
+                || rel != Rel.EQ || form.constant().signum() != 0 || form.coefs().size() != 2) {
+            return null;
+        }
+        List<TermPath> positions = new ArrayList<>();
+        List<ExactRatio> weights = new ArrayList<>();
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(
+                    NumericTerm.ValueOf(TermPath position)))) {
+                return null;
+            }
+            positions.add(position);
+            weights.add(each.getValue());
+        }
+        // One minus the other, whichever way round.
+        return weights.get(0).negated().compareTo(weights.get(1)) == 0
+                && (weights.get(0).compareTo(ExactRatio.ONE) == 0
+                        || weights.get(1).compareTo(ExactRatio.ONE) == 0) ? positions : null;
     }
 
     /**
