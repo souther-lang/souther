@@ -9,11 +9,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
@@ -239,6 +241,94 @@ public final class HeldWholeAndTakenOut {
         List<Set<CompositionBudget>> holder = new ArrayList<>();
         holder.add(Set.copyOf(values));
         return holder.toString();
+    }
+
+    /** The arguments of a format are handed over as one array, and each is made text. */
+    public static String saidByAFormatOfTheCopy(Set<CompositionBudget> values) {
+        return String.format("%s", Set.copyOf(values));
+    }
+
+    public static String saidByAFormattedOfTheCopy(Set<CompositionBudget> values) {
+        return "%s".formatted(Set.copyOf(values));
+    }
+
+    public static String saidByAFormatOfAContainerOfTheCopy(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        return String.format("%s", holder);
+    }
+
+    /** An array inside an array says what it is, unless the text goes down into the arrays. */
+    public static String saidByTheDeepTextOfAnArrayInAnArray(Set<CompositionBudget> values) {
+        Object[] inner = new Object[1];
+        inner[0] = Set.copyOf(values);
+        Object[][] outer = new Object[1][];
+        outer[0] = inner;
+        return Arrays.deepToString(outer);
+    }
+
+    @SuppressWarnings("JdkObsolete")
+    public static List<CompositionBudget> theValueAHashtableForEachIsGiven(
+            Set<CompositionBudget> values) {
+        Hashtable<String, Set<CompositionBudget>> holder = new Hashtable<>();
+        holder.put("k", Set.copyOf(values));
+        List<CompositionBudget> out = new ArrayList<>();
+        holder.forEach((_, value) -> out.addAll(value));
+        return out;
+    }
+
+    @SuppressWarnings({"JdkObsolete", "unchecked"})
+    public static List<CompositionBudget> theValueAPropertiesForEachIsGiven(
+            Set<CompositionBudget> values) {
+        Properties holder = new Properties();
+        holder.put("k", Set.copyOf(values));
+        List<CompositionBudget> out = new ArrayList<>();
+        holder.forEach((_, value) -> out.addAll((Set<CompositionBudget>) value));
+        return out;
+    }
+
+    public static List<CompositionBudget> addedThroughACursorAHelperIsGiven(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        addedThroughACursorAHelperIsGivenStores(holder.listIterator(), Set.copyOf(values));
+        return new ArrayList<>(holder.getFirst());
+    }
+
+    private static void addedThroughACursorAHelperIsGivenStores(
+            ListIterator<Set<CompositionBudget>> cursor, Set<CompositionBudget> given) {
+        cursor.add(given);
+    }
+
+    public static List<CompositionBudget> setThroughAnEntryAHelperIsGiven(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new HashMap<>();
+        holder.put("k", Set.of());
+        setThroughAnEntryAHelperIsGivenStores(holder.entrySet().iterator().next(),
+                Set.copyOf(values));
+        return new ArrayList<>(holder.get("k"));
+    }
+
+    private static void setThroughAnEntryAHelperIsGivenStores(
+            Map.Entry<String, Set<CompositionBudget>> entry, Set<CompositionBudget> given) {
+        entry.setValue(given);
+    }
+
+    /** Where a cursor comes from is something nothing here reads, and is a view of something. */
+    public interface Source {
+
+        ListIterator<Set<CompositionBudget>> cursor();
+    }
+
+    public static List<CompositionBudget> addedThroughACursorNothingHereMade(Source source,
+                                                                              Set<CompositionBudget> values) {
+        source.cursor().add(Set.copyOf(values));
+        return new ArrayList<>(source.cursor().next());
+    }
+
+    public static List<CompositionBudget> addedThroughASublist(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.subList(0, 0).add(Set.copyOf(values));
+        return new ArrayList<>(holder.getFirst());
     }
 
     /** Unlike the array's own text, this says each element, and an element is a set. */

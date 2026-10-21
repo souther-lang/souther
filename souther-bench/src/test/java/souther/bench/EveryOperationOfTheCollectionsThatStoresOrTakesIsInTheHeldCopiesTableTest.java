@@ -2,9 +2,11 @@ package souther.bench;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.TypeVariable;
+import java.text.MessageFormat;
 import java.util.AbstractMap;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -14,6 +16,7 @@ import java.util.Collections;
 import java.util.Objects;
 import java.util.Deque;
 import java.util.Enumeration;
+import java.util.Formatter;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -98,7 +101,7 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
     private static final Set<String> IN_NEWER_JDKS_ONLY = Set.of("ofLazy");
 
     private static Map<String, String> notFollowed() {
-        Map<String, String> out = new java.util.TreeMap<>();
+        Map<String, String> out = new TreeMap<>();
         String bulk = "a bulk operation of a concurrent map, which runs a function over entries in"
                 + " parallel and answers what a function returns";
         for (String name : List.of("forEach", "forEachEntry", "forEachKey", "forEachValue",
@@ -289,7 +292,7 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
     /** The control: what is said not to be followed is a method that is given a function. */
     @Test
     void whatIsSaidNotToBeFollowedIsGivenAFunction() {
-        Set<String> given = new java.util.TreeSet<>();
+        Set<String> given = new TreeSet<>();
         methodsWithFunctions().forEach(each -> given.add(each.getName()));
 
         List<String> notGiven = new ArrayList<>();
@@ -301,6 +304,78 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
 
         assertEquals(List.of(), notGiven.stream().sorted().toList(),
                 "a method said not to be followed is not given a function by any class read here");
+    }
+
+    /**
+     * Every method that is handed an object, or an array of them, to make text of or to ask
+     * something of is one the reading has a word for.
+     *
+     * <p>The text of a container is the text of what it holds, and a call that makes text is known
+     * by its name. The library has more of them than anyone lists, so they are put to the table the
+     * way the collections are: a method added to these classes fails until it is read.
+     */
+    @Test
+    void everyMethodThatIsHandedAnObjectToMakeTextOfIsOneTheReadingKnows() {
+        List<String> unread = new ArrayList<>();
+        for (Class<?> host : List.of(String.class, StringBuilder.class, StringBuffer.class,
+                Objects.class, PrintStream.class, Formatter.class, MessageFormat.class)) {
+            for (Method each : host.getMethods()) {
+                boolean handedAnObject = Arrays.stream(each.getParameterTypes()).anyMatch(
+                        type -> type == Object.class || type == Object[].class);
+                if (handedAnObject && !HeldCopies.understands(each.getName(),
+                        each.getParameterCount())
+                        && !NOT_TEXT_AND_NOT_ASKING.containsKey(each.getName())) {
+                    unread.add(host.getSimpleName() + "." + each.getName() + "/"
+                            + each.getParameterCount());
+                }
+            }
+        }
+
+        assertEquals(List.of(), unread.stream().distinct().sorted().toList(),
+                "a method is handed an object and is not one the reading knows: if it makes text of"
+                        + " it a container that holds a copy says the copy, and if it does not it"
+                        + " is listed here");
+    }
+
+    /**
+     * What a method of these classes does with an object it is handed that is not text and not a
+     * question about it: it stores it, which is read where the class is a collection.
+     */
+    private static final Map<String, String> NOT_TEXT_AND_NOT_ASKING = Map.of(
+            "contentEquals", "asks whether the characters are the same, which is a question",
+            "indexOf", "asks where, which is a question",
+            "lastIndexOf", "asks where, which is a question",
+            "compare", "orders two, and answers a number",
+            "compareTo", "orders two, and answers a number",
+            "requireNonNullElse", "hands back one of the two",
+            "toIdentityString", "says the class and the identity of the object, and nothing of"
+                    + " what it holds");
+
+    /**
+     * The families the wrappers of {@code Collections} are named in take the container they wrap
+     * first, so that the name is enough to know what they hand back.
+     */
+    @Test
+    void everyWrapperOfCollectionsTakesTheContainerItWrapsFirst() {
+        List<String> others = new ArrayList<>();
+        for (Method each : Collections.class.getMethods()) {
+            String name = each.getName();
+            boolean aWrapper = name.startsWith("unmodifiable") || name.startsWith("synchronized")
+                    || name.startsWith("checked");
+            if (!aWrapper) {
+                continue;
+            }
+            Class<?> first = each.getParameterTypes()[0];
+            boolean wrapsAContainer = Collection.class.isAssignableFrom(first)
+                    || Map.class.isAssignableFrom(first);
+            if (!wrapsAContainer || !HeldCopies.understands(name, each.getParameterCount())) {
+                others.add(describe(each));
+            }
+        }
+
+        assertEquals(List.of(), others.stream().distinct().sorted().toList(),
+                "a method of Collections is named like a wrapper and does not wrap a container, so"
+                        + " the reading that takes the name for the wrapper reads it wrongly");
     }
 
     /** The control: the tables hold the cases that are known to be easy to get wrong. */

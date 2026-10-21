@@ -64,6 +64,13 @@ public final class AskedOrNamedInOrder {
                 .filter(each -> !each.isEmpty()).sorted().toList();
     }
 
+    /** A stream and a cursor over a copy say what they are, and nothing of the copy's order. */
+    @SuppressWarnings("StreamToString")
+    public static String theTextOfAStreamAndACursorOverACopy(Held held) {
+        return "walks: " + held.figures().stream() + String.valueOf(held.figures().iterator())
+                + held.figures().stream().toString();
+    }
+
     public static int summedOverAWalk(Held held) {
         int total = 0;
         for (CompositionBudget each : held.figures()) {

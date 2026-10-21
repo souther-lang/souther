@@ -13,6 +13,7 @@ import souther.bench.readings.orders.HeldWholeAndTakenOut;
 import souther.bench.readings.orders.HeldWholeInAField;
 import souther.bench.readings.orders.HeldWholeAndOverwritten;
 import souther.bench.readings.orders.ReachedThroughAField;
+import souther.bench.readings.orders.ReferenceNeverRun;
 import souther.bench.readings.orders.ReachedThroughAFunction;
 import souther.bench.readings.orders.ReachedThroughATextOfAClass;
 import souther.bench.readings.orders.ReachedThroughWhatACallHandsBack;
@@ -224,6 +225,17 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
                 CopiedByAReference.class.getName() + "#aSetMadeByAReferenceAndListed:Set.copyOf@");
         assertFoundOnlyIn(reading, CopiedByAReference.class, "aMapMadeByAReferenceAndListed",
                 CopiedByAReference.class.getName() + "#aMapMadeByAReferenceAndListed:Map.copyOf@");
+    }
+
+    /** Making a reference to the method that copies is no copy: only running it is. */
+    @Test
+    void aReferenceToTheMethodThatCopiesIsNoCopyUntilItIsRun() {
+        Reading reading = readingOfOnly(ReferenceNeverRun.class);
+
+        assertEquals(Set.of(), reading.roots(),
+                () -> "a copy was made by a reference nothing runs: " + reading.roots());
+        assertEquals(List.of(), reading.described(),
+                "a reference nothing runs was read as a copy that reaches somewhere");
     }
 
     /**

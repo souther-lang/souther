@@ -5,10 +5,12 @@ import souther.compiler.publish.PublicationOrders;
 
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -124,6 +126,43 @@ public final class HeldWholeAndNotTakenOut {
     public static String theTextOfACursorOverACopy(Set<CompositionBudget> values) {
         Iterator<Set<CompositionBudget>> cursor = List.of(Set.copyOf(values)).iterator();
         return "cursor: " + cursor + String.valueOf(cursor);
+    }
+
+    /** The text of an array in an array is the inner array's name, and the shallow text stops. */
+    public static String theShallowTextOfAnArrayInAnArray(Set<CompositionBudget> values) {
+        Object[] inner = new Object[1];
+        inner[0] = Set.copyOf(values);
+        Object[][] outer = new Object[1][];
+        outer[0] = inner;
+        return Arrays.toString(outer);
+    }
+
+    /** What is handed to a helper keeps what it is: the text of an array or a stream is its name. */
+    @SuppressWarnings({"ArrayToString", "StreamToString"})
+    public static String theTextOfWhatAHelperIsHanded(Set<CompositionBudget> values) {
+        Object[] array = new Object[1];
+        array[0] = Set.copyOf(values);
+        return theTextOfWhatAHelperIsHandedSaysAStream(Stream.of(Set.copyOf(values)))
+                + theTextOfWhatAHelperIsHandedSaysAnArray(array);
+    }
+
+    @SuppressWarnings("StreamToString")
+    private static String theTextOfWhatAHelperIsHandedSaysAStream(
+            Stream<Set<CompositionBudget>> stream) {
+        return String.valueOf(stream) + stream;
+    }
+
+    @SuppressWarnings("ArrayToString")
+    private static String theTextOfWhatAHelperIsHandedSaysAnArray(Object[] array) {
+        return String.valueOf(array) + array;
+    }
+
+    /** A copy given to a cursor and nothing else is asked of: no put reaches what is held. */
+    public static int aCursorOnlyAskedWhereItIs(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        ListIterator<Set<CompositionBudget>> cursor = holder.listIterator();
+        return cursor.nextIndex() + (cursor.hasNext() ? 1 : 0);
     }
 
     public static List<String> aComputeWhoseFunctionIsGivenOnlyTheKey(

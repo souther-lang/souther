@@ -55,6 +55,12 @@ final class SaltedOrder {
          */
         HELD,
 
+        /**
+         * An object that writes through to the container it is a view of. It holds no copy and is
+         * no order; it says that a put to it is a put to something else.
+         */
+        VIEW,
+
         /** A list, an array or a text put together in the order a traversal gave. */
         SEQUENCE,
 
@@ -214,7 +220,33 @@ final class SaltedOrder {
          * second is what the first is taken out of.
          */
         boolean travels() {
-            return cameOutOfACopy() || isHeld();
+            return cameOutOfACopy() || isHeld() || isAView();
+        }
+
+        private static final String ENTRIES_OF_A_MAP = "entries";
+
+        /**
+         * Something that writes through to the container it is of: the cursor of a list, a sublist,
+         * a key set, an entry of a map. It is a tag, and not a mark on the value, so that it is
+         * known wherever the object goes: into a method that is handed it, into a field, out of a
+         * call. Where two ways of reaching a place meet and only one of them is a view, the place
+         * may be one, which is what holding both tags says.
+         */
+        static Tag view() {
+            return new Tag(Kind.VIEW, "");
+        }
+
+        /** The entries of a map, or a walk over them: each is a view of the map. */
+        static Tag entriesOfAMap() {
+            return new Tag(Kind.VIEW, "", ENTRIES_OF_A_MAP);
+        }
+
+        boolean isAView() {
+            return kind == Kind.VIEW;
+        }
+
+        boolean isEntriesOfAMap() {
+            return kind == Kind.VIEW && site.equals(ENTRIES_OF_A_MAP);
         }
     }
 
@@ -240,19 +272,6 @@ final class SaltedOrder {
          * what is put into it is put into the map. Whether it is one is settled by what it is cast to.
          */
         static final String HELD_IN_A_MAP = "held in a map";
-
-        /**
-         * The {@code alloc} of a view, an iterator or an entry of another container: an object that
-         * writes through to what it is of, which is not followed. A put to it is a put to that, and
-         * so is not a put to any object this tracks.
-         */
-        static final int A_VIEW = -2;
-
-        /** The {@code alloc} of the entries of a map, or a walk over them: each is a view. */
-        static final int ENTRIES = -3;
-
-        /** What {@code made} says of a stream or a cursor: text of it is its own name. */
-        static final String A_WALK = "a walk";
 
         static final Val CLEAN = new Val(Set.of(), false, -1, null, null, Set.of());
 
@@ -282,16 +301,6 @@ final class SaltedOrder {
 
         boolean isHeldInAMap() {
             return HELD_IN_A_MAP.equals(made);
-        }
-
-        /** Whether this is a view, an iterator or an entry of another container. */
-        boolean isAView() {
-            return alloc == A_VIEW;
-        }
-
-        /** Whether this is the entries of a map, or a walk over them. */
-        boolean isEntries() {
-            return alloc == ENTRIES;
         }
 
         /** The same, as an object of no place in particular. */
@@ -368,10 +377,7 @@ final class SaltedOrder {
             all.addAll(other.tags);
             Set<String> eitherType = types.containsAll(other.types) ? types
                     : union(types, other.types);
-            // Where one way of reaching a place is a view, the place may be one.
-            int object = alloc == other.alloc ? alloc
-                    : (isAView() || other.isAView()) ? A_VIEW : -1;
-            return new Val(all, wide || other.wide, object,
+            return new Val(all, wide || other.wide, alloc == other.alloc ? alloc : -1,
                     made != null && made.equals(other.made) ? made : null,
                     home != null && home.equals(other.home) ? home : null, eitherType);
         }

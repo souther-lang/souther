@@ -1536,8 +1536,7 @@ final class SaltedOrderFlow {
                 kept = Val.of(kept).madeOfTheElement().tags();
             }
             boolean heldInAMap = made != null && made.isHeldInAMap();
-            boolean aView = made != null && made.alloc() < -1;
-            int object = (heldInAMap || aView) ? made.alloc()
+            int object = heldInAMap ? made.alloc()
                     : SaltedOrderVocabulary.makesAFreshNode(owner, name) ? index + 1 : -1;
             state.push(new Val(narrowed(kept, returns), isWide(type.returnType()), object,
                     made == null ? null : made.made(), heldInAMap ? made.home() : null, Set.of())
@@ -1662,6 +1661,8 @@ final class SaltedOrderFlow {
                 returns.startsWith("L") || returns.startsWith("["), false);
         Set<Tag> made = new LinkedHashSet<>(effectsOf(state, call, where, here).result().tags());
         if (ref.copyOrigin() != null) {
+            roots.add(ref.copyOrigin());
+            reached.computeIfAbsent(ref.copyOrigin(), k -> new LinkedHashSet<>());
             made.add(new Tag(Kind.COLLECTION, ref.copyOrigin()));
         }
         return made;
@@ -1882,15 +1883,14 @@ final class SaltedOrderFlow {
                     String refKey = "ref|" + bodyOwner + "#" + body.methodName()
                             + body.lookupDescriptor() + "|" + unit.method() + ":" + index;
                     // What the reference makes, where it is the method that makes a copy, is a
-                    // copy made here: named as a call at this place would name it.
+                    // copy made where it is run, and is named as a call at this place would name
+                    // it. Making the reference makes none: it is only where the reading may begin.
                     String copyOrigin = null;
                     if (makesACopyWhenRun(unit.method().owner(), body)) {
                         copyOrigin = unit.method().owner().replace('/', '.') + "#"
                                 + unit.method().name() + ":"
                                 + bodyOwner.substring(bodyOwner.lastIndexOf('/') + 1) + "."
                                 + body.methodName() + "@" + index;
-                        roots.add(copyOrigin);
-                        reached.computeIfAbsent(copyOrigin, k -> new LinkedHashSet<>());
                     }
                     libraryRefs.put(refKey, new LibraryRef(handle,
                             kind == DirectMethodHandleDesc.Kind.STATIC
@@ -1903,12 +1903,16 @@ final class SaltedOrderFlow {
             String here = unit + ":" + index + " joins into a text";
             for (int each = 0; each < args.size(); each++) {
                 for (Tag tag : args.get(each).tags()) {
+                    if (tag.kind() == Kind.TRAVERSAL) {
+                        // A stream or a cursor says what it is and not what it walks.
+                        continue;
+                    }
                     if (tag.cameOutOfACopy()) {
                         result.add(tag.kind() == Kind.PICKED || tag.kind() == Kind.CHOSEN ? tag
                                 : new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
-                    } else if (tag.isHeld() && !HeldCopies.namesItself(args.get(each))) {
-                        // The text of a container says the copies it holds, in their order; an
-                        // array says what it is.
+                    } else if (tag.isHeld() && HeldCopies.textReaches(tag.site(), false)) {
+                        // The text of a container says the copies it holds, in their order,
+                        // down to an array or a stream, which say what they are.
                         result.add(new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
                     }
                 }

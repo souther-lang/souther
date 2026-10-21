@@ -911,7 +911,7 @@ final class SaltedOrderVocabulary {
         }
         if (name.equals("toString") && call.descriptor().startsWith("()")
                 && walked.cameOutOfACopy()) {
-            return Outcome.returning(Val.of(walked.as(Kind.SEQUENCE)));
+            return Outcome.returning(Val.of(textFrom(walked.tags())));
         }
         boolean leastOrGreatest = name.equals("min") || name.equals("max");
         if (leastOrGreatest && byAComparator(call) && hasATotalOrder(call.args())
@@ -1171,6 +1171,10 @@ final class SaltedOrderVocabulary {
     private static Set<Tag> textFrom(Set<Tag> came) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag tag : came) {
+            // A stream or a cursor says what it is, and a tag that is no copy says nothing.
+            if (tag.kind() == Kind.TRAVERSAL || !tag.cameOutOfACopy()) {
+                continue;
+            }
             out.add(tag.kind() == Kind.PICKED || tag.kind() == Kind.CHOSEN ? tag
                     : new Tag(Kind.SEQUENCE, tag.origin()));
         }
@@ -1193,7 +1197,7 @@ final class SaltedOrderVocabulary {
         // What a map answers in the order of is its keys, and a value put beside a key is that key's
         // and takes no place of its own.
         boolean keyed = !many && call.args().size() == 2
-                && (call.owner().endsWith("Map") || (made != null && made.endsWith("Map")));
+                && (HeldCopies.isAMap(call.owner()) || (made != null && HeldCopies.isAMap(made)));
         Set<Tag> into;
         if (ownOrder) {
             // Kept in its own order, but which one of several an order chose stays what it was.
@@ -1236,10 +1240,19 @@ final class SaltedOrderVocabulary {
      * on, as against one that makes something else of each.
      */
     static boolean keepsTheElementsOfAWalk(String name) {
-        return STARTS_A_TRAVERSAL.contains(name) || CUTS_BY_POSITION.contains(name)
-                || (KEEPS_TRAVERSING.contains(name) && !name.startsWith("map")
-                && !name.startsWith("flatMap") && !name.startsWith("as"));
+        return CUTS_BY_POSITION.contains(name)
+                || (KEEPS_TRAVERSING.contains(name) && !MAKES_SOMETHING_ELSE_OF_EACH.contains(name));
     }
+
+    /** Whether a call of this name starts a walk, a stream or a cursor, over what it is made on. */
+    static boolean startsATraversal(String name) {
+        return STARTS_A_TRAVERSAL.contains(name);
+    }
+
+    /** The steps of a walk that make something else of each element than the element it was. */
+    private static final Set<String> MAKES_SOMETHING_ELSE_OF_EACH = Set.of(
+            "map", "mapToObj", "mapToInt", "mapToLong", "mapToDouble", "flatMap", "flatMapToInt",
+            "flatMapToLong", "flatMapToDouble", "mapMulti", "asLongStream", "asDoubleStream");
 
     /**
      * Whether a call hands back the very element it is given, or takes the one a walk is at, as
@@ -1301,7 +1314,7 @@ final class SaltedOrderVocabulary {
     }
 
     private static boolean isAMap(Call call) {
-        return call.owner().endsWith("Map");
+        return HeldCopies.isAMap(call.owner());
     }
 
     /**
