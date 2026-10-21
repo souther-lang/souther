@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
@@ -17,7 +18,7 @@ import java.util.function.UnaryOperator;
  * rule an author wrote about their input leaves the measurement without a word; held as one of them,
  * it is filed where the model may say nothing.
  *
- * <p>None of the three stands for a shape the reading declined. That was an answer here once,
+ * <p>None of these stands for a shape the reading declined. That was an answer here once,
  * because a walk refused shapes for being shapes and a reader could not tell "this expression names
  * no position" from "this walk did not follow that". The walk now refuses a step for what a binding
  * is, and a binding that is nothing this can place is a fact about the model as much as arithmetic
@@ -93,6 +94,52 @@ public sealed interface PathResolution {
     }
 
     /**
+     * The expression is made of what stands at each of {@code together}, all of them at once.
+     *
+     * <p>A reading of where a value came from, and never of where it stands ({@link
+     * InputReads#cameFrom}). A fold from a map the input holds answers that map's entries on an
+     * empty list and entries made of the list's elements otherwise, so what it answers came from
+     * both places, and a rule about it is about a value made of them. Held apart from {@link
+     * MayStandAt}, which says the value is at one of its places on the run it is on: this says it
+     * is made of every one of them, and a reader that files a rule at the places a value came from
+     * files it at all of these.
+     *
+     * <p>Not a position, so a reader that needs one place reads it as none, as it does a value
+     * that may stand at several.
+     */
+    record MadeOf(List<TermPath> together) implements PathResolution {
+
+        public MadeOf {
+            together = List.copyOf(together);
+            if (together.size() < 2) {
+                throw new IllegalArgumentException(
+                        "a value made of several is made of more than one place");
+            }
+        }
+    }
+
+    /**
+     * Where a value made of every one of {@code these} came from: the one place where they are the
+     * same, those places together where they differ, and no position where any of them is no
+     * position — a part of what a value is made of that came from nowhere the input holds is one
+     * the answer cannot name.
+     */
+    static PathResolution madeOf(List<PathResolution> these) {
+        List<TermPath> together = new ArrayList<>();
+        for (PathResolution each : these) {
+            if (!(each instanceof At(var at))) {
+                return new NotAPosition();
+            }
+            if (!together.contains(at)) {
+                together.add(at);
+            }
+        }
+        return together.isEmpty() ? new NotAPosition()
+                : together.size() == 1 ? new At(together.getFirst())
+                : new MadeOf(together);
+    }
+
+    /**
      * Where a value that is any one of {@code these} stands.
      *
      * <p>One place where every one of them is that place, and the places among them otherwise. What
@@ -107,7 +154,7 @@ public sealed interface PathResolution {
      * would leave the measurement — which is what "all of them or none" came to.
      */
     static PathResolution anyOf(List<PathResolution> these) {
-        List<TermPath> among = new java.util.ArrayList<>();
+        List<TermPath> among = new ArrayList<>();
         boolean everyOne = true;
         for (PathResolution each : these) {
             switch (each) {
@@ -124,7 +171,7 @@ public sealed interface PathResolution {
                         }
                     });
                 }
-                case NotAPosition _ -> everyOne = false;
+                case NotAPosition _, MadeOf _ -> everyOne = false;
             }
         }
         return among.isEmpty() ? new NotAPosition()
@@ -167,6 +214,8 @@ public sealed interface PathResolution {
         return switch (this) {
             case At(var at) -> new At(at.position());
             case NotAPosition _ -> this;
+            case MadeOf(var together) ->
+                    new MadeOf(together.stream().map(TermPath::position).distinct().toList());
             // Each place it may stand at, as a place: the same answer about the run, whatever the
             // narrowings on the way to any one of them. Kept as the places it may be even where
             // they come to one, since what this says is that no read of it is settled as one.
@@ -194,6 +243,9 @@ public sealed interface PathResolution {
         return switch (this) {
             case At(var at) -> new At(step.apply(at));
             case NotAPosition _ -> this;
+            // A part of what is made of several places is made of that part of each.
+            case MadeOf(var together) -> PathResolution.madeOf(together.stream()
+                    .<PathResolution>map(at -> new At(step.apply(at))).toList());
             // Still may, and still at each of them: a step taken at a place a value may stand is a
             // place a step of it may stand. Two of them the step takes to one place are one place
             // among the ones it may be, and it may still be none of them.

@@ -512,6 +512,10 @@ final class InputPath {
      * filed under it. Any other pair says nothing about where its places stand.
      */
     private PathResolution placeOf(Core.TupleGet get, BindingEnvironment names) {
+        Held written = componentOf(get.tuple(), get.index(), names);
+        if (written != null) {
+            return named(written.value(), written.names());
+        }
         if (!(Core.withoutStanding(get.tuple()) instanceof Core.Read r)) {
             return new PathResolution.NotAPosition();
         }
@@ -600,6 +604,8 @@ final class InputPath {
                         ? new PathResolution.NotAPosition() : among.deeper(part::of);
                 case Wanted.APlaceOfAnElement _ -> new PathResolution.NotAPosition();
             };
+            // Nothing a walk after a position reads names a value made of several.
+            case PathResolution.MadeOf made -> made;
         };
     }
 
@@ -642,6 +648,11 @@ final class InputPath {
                             : trail.through(r.binding(), () -> heldAt(held, wanted, names));
                 }
             };
+        }
+        // A place of a pair written in this tree holds what the value written there holds.
+        if (e instanceof Core.TupleGet get
+                && componentOf(get.tuple(), get.index(), names) instanceof Held written) {
+            return heldAt(written.value(), wanted, written.names());
         }
         // What a binding's body answers is read with the binding in scope, as a body a call was
         // expanded into binds its parameters around what it answers.
@@ -823,20 +834,54 @@ final class InputPath {
      * <p>For the walk after where a value came from and no other. What the step made is not the
      * elements, and a rule about it is about a value made of them.
      *
-     * <p>Not where the seed reads a name. What the answer holds is then made of the seed as well,
-     * over an empty list of the seed alone, and one position is not where it came from: said to be
-     * the elements, a rule about a value the seed handed over would be said of a list it is not
-     * made of.
+     * <p>Where the seed reads a name, what the answer holds is made of the seed as well, over an
+     * empty list of the seed alone, so one position is not where it came from: said to be the
+     * elements, a rule about a value the seed handed over would be said of a list it is not made
+     * of. It came from the elements and from what the seed holds, together
+     * ({@link PathResolution.MadeOf}), and from nowhere that can be named where the seed's elements
+     * stand at no position.
      */
     private PathResolution throughAWalkFromASeed(Core e, BindingEnvironment names) {
         SeededWalk walk = SeededWalk.enteredHoweverFar(e, InputPath::blockStanding);
-        if (walk == null || WhatABodyReads.anyBinding(walk.seed())) {
+        if (walk == null) {
             return null;
         }
-        PathResolution from =
-                heldAt(walk.container(), new Wanted.APart(HeldIn.Part.ELEMENT), names);
-        return from instanceof PathResolution.NotAPosition ? null : from;
+        Wanted elements = new Wanted.APart(HeldIn.Part.ELEMENT);
+        PathResolution from = heldAt(walk.container(), elements, names);
+        if (from instanceof PathResolution.NotAPosition) {
+            return null;
+        }
+        if (!WhatABodyReads.anyBinding(walk.seed())) {
+            return from;
+        }
+        PathResolution together =
+                PathResolution.madeOf(List.of(heldAt(walk.seed(), elements, names), from));
+        return together instanceof PathResolution.NotAPosition ? null : together;
     }
+
+    /**
+     * The value at {@code index} of the pair {@code tuple} stands for, and the names it is read
+     * under, or null where {@code tuple} stands for no pair written in this tree.
+     *
+     * <p>A pair and the projection of one of its places cancel, the way a construction and the
+     * projection of a field do ({@link #introducing}): a helper that answers {@code (a, b)} and a
+     * destructuring that reads the second place read {@code b}, wherever the helper's answer is
+     * bound on the way.
+     */
+    private Held componentOf(Core tuple, int index, BindingEnvironment names) {
+        return switch (Core.withoutStanding(tuple)) {
+            case Core.Tuple pair -> index < pair.elements().size()
+                    ? new Held(pair.elements().get(index), names) : null;
+            case Core.Read r when names.roleOf(r.binding()) instanceof BindingRole.Alias(var held) ->
+                    trail.through(r.binding(), () -> componentOf(held, index, names));
+            case Core.LetIn let ->
+                    componentOf(let.body(), index, names.inside(let.binder(), let.value()));
+            case null, default -> null;
+        };
+    }
+
+    /** A value and the names it is read under. */
+    private record Held(Core value, BindingEnvironment names) {}
 
     private static Core.Block blockStanding(Core closure) {
         return Core.withoutStanding(closure) instanceof Core.Block block ? block : null;

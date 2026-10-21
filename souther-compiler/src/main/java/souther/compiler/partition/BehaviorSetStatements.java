@@ -368,7 +368,7 @@ public final class BehaviorSetStatements {
                                                    souther.compiler.coverage.Arrivals answering) {
         return switch (stands) {
             case PathResolution.MayStandAt(var among) -> mayStandAt(among);
-            case PathResolution.NotAPosition _ ->
+            case PathResolution.NotAPosition _, PathResolution.MadeOf _ ->
                     whereItsValueCameFrom(each, symbols, newtypes, answering);
             // The caller asks this only where the subject stands at no one place.
             case PathResolution.At at -> throw new IllegalArgumentException(

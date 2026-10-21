@@ -137,7 +137,7 @@ public final class InputNumber {
             // And a number of the input is the value at one position. A name standing at one of
             // several would be a number at whichever of them a reader picked, and a line drawn on
             // it would fall at a place the rule may say nothing about.
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
     }
 
@@ -184,7 +184,7 @@ public final class InputNumber {
             // A taking is of one location, and a name that only may stand at one is no one of
             // them. Taken of any, the number would be a size of a container the run it is on
             // never walked.
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
     }
 
@@ -721,7 +721,7 @@ public final class InputNumber {
             case PathResolution.NotAPosition _ -> null;
             // A run is over the values at one position, and a walk whose elements come from more
             // than one container is no one run.
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
         if (at == null) {
             return null;

@@ -1466,7 +1466,7 @@ public final class InputReads {
             // A scrutinee that only may stand at a position narrows nothing here either. What an
             // arm narrows is one position, and narrowing each of the ones it may be would say a
             // value under this arm is a case of every one of them at once.
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
         if (standing == null) {
             return admitting(scrutinee, arm, symbols, newtypes);
@@ -3038,7 +3038,7 @@ public final class InputReads {
             // A name that only may stand at a position is not the name of one, and what it is
             // instead is what the answers below say — an element, which is what it is however many
             // containers it is an element of.
-            case PathResolution.MayStandAt _ -> { }
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> { }
         }
         // What a call handed a parameter of the body it entered, read where the call stands.
         Denotation given = applied.given().get(read.binding());

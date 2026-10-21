@@ -247,7 +247,7 @@ final class CoverageNaming implements Naming<Outcome> {
             case PathResolution.NotAPosition _ -> null;
             // A name that only may stand at a position names no one position for a fork to be on,
             // and a name built out of the ones it may be would be a place no reader could look up.
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
         if (at == null) {
             return null;

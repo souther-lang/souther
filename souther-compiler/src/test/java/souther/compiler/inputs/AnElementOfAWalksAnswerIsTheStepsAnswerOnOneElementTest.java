@@ -262,14 +262,10 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     /**
      * A fold starting from a map the input holds is made of that map as well as of the list it
      * walked — over an empty list it answers the map itself — so a value of it is not said to have
-     * come from the list.
-     *
-     * <p>And where a value came from is said as one place, so a value made of two has no place:
-     * the rule about it is filed nowhere and goes unreported. What this pins is that state as it
-     * is, the rule absent from what is not read rather than said of the list.
+     * come from the list alone: a rule about it is about a value made of both.
      */
     @Test
-    void aValueAFoldFromAnInputMapWorkedOutIsNotSaidToComeFromTheListAlone() {
+    void aValueAFoldFromAnInputMapWorkedOutIsSaidToBeMadeOfBothTheMapAndTheList() {
         List<String> notRead = notReadIn(compiled("""
                 let countsOf (start: Map<String, Int>, xs: List<String>): Map<String, Int> =
                     List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), start, xs)
@@ -281,7 +277,31 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 example busy
                     | "nothing walked, the start kept" : ([("a", 5), ("b", 1)], []) -> [("a", 5)]
                 """));
-        assertEquals(List.of(), notRead);
+        assertEquals(List.of("start[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE,
+                        "xs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                notRead, () -> notRead.toString());
+    }
+
+    /** A value taken out of a pair a helper built is the component the helper put there. */
+    @Test
+    void aValueTakenOutOfAPairAHelperBuiltComesFromWhereTheHelperGotIt() {
+        List<String> notRead = notReadIn(compiled("""
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> 127 - n, acc), Map.empty, xs)
+
+                let split (m: Map<String, Int>): (List<String>, Map<String, Int>) = (Map.keys(m), m)
+
+                behavior busy : (xs: List<String>, ys: List<String>) -> List<String>
+                let busy (xs, ys) = {
+                    let (ka, _) = split(countsOf(xs))
+                    let (_, mb) = split(countsOf(ys))
+                    List.filter(a -> match Map.get(a, mb) with
+                                        | Some n -> n > 1
+                                        | None -> false, ka)
+                }
+                """));
+        assertEquals(List.of("ys[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                notRead, () -> notRead.toString());
     }
 
     /** A rule about the strings such a fold worked out is a rule all the same, and is said to be
