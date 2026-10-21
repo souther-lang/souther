@@ -2251,6 +2251,11 @@ public final class InputReads {
         return symbols == null ? there : there.choosing(decidedBy, symbols, newtypes);
     }
 
+    /** Whether a name was given a value on the way to this reading ({@link #handedOver}). */
+    boolean hasGiven() {
+        return !applied.given().isEmpty();
+    }
+
     /** This reading, standing in the names {@code at}. */
     InputReads withNames(BindingEnvironment at) {
         return at == names ? this

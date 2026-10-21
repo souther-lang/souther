@@ -495,13 +495,18 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     }
 
     /**
-     * A name an arm binds to a value worked out, not to a place of the input, is measured out of
-     * the arm as it is inside it: the pair a helper answers says what the rule written in the arm
-     * says, whatever that is. What the arm adds to the reading is held whole and not only in its
-     * names, so a reader of it that asks for the rest is answered the same.
+     * A name an arm binds to a value worked out, not to a place of the input, stands for that value
+     * and is followed to where it came from. The rule written in the arm is measured as the same
+     * rule written over the value itself is — the line it draws at the place of the input — and
+     * the pair a helper answers out of the arm is told at that place.
      */
     @Test
-    void aNameAnArmBindsToAValueWorkedOutIsMeasuredOutOfTheArmAsInIt() {
+    void aNameAnArmBindsToAValueWorkedOutIsFollowedToThePlaceOfTheInputItCameFrom() {
+        String direct = measured("""
+                behavior busy : (xs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (xs, atLeast) = List.filter(n -> n >= atLeast, List.reverse(xs))
+                """);
+        assertTrue(direct.startsWith("[xs[*] = atLeast]"), direct);
         String inTheArm = measured("""
                 behavior busy : (xs: List<Int>, atLeast: Int) -> List<Int>
                 let busy (xs, atLeast) =
@@ -521,8 +526,17 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                     List.filter(n -> n >= atLeast, s)
                 }
                 """);
-        assertEquals(inTheArm, viaPair);
+        assertEquals(direct, inTheArm, "in the arm");
+        assertEquals(mayBeAt("xs[*]"), viaPair, "out of the arm");
 
+        String directOption = measured("""
+                behavior busy : (outer: Map<String, List<Int>>, atLeast: Int) -> List<Int>
+                let busy (outer, atLeast) =
+                    match Map.get("k", outer) with
+                    | Some xs -> List.filter(n -> n >= atLeast, List.reverse(xs))
+                    | None -> []
+                """);
+        assertTrue(directOption.startsWith("[outer[*][*] = atLeast]"), directOption);
         String optionInTheArm = measured("""
                 behavior busy : (outer: Map<String, List<Int>>, atLeast: Int) -> List<Int>
                 let busy (outer, atLeast) =
@@ -542,7 +556,8 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                     List.filter(n -> n >= atLeast, selected)
                 }
                 """);
-        assertEquals(optionInTheArm, optionViaPair);
+        assertEquals(directOption, optionInTheArm, "in the arm");
+        assertEquals(mayBeAt("outer[*][*]"), optionViaPair, "out of the arm");
     }
 
     /** The same where the arm opens what a lookup in a map found under its key. */

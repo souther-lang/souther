@@ -115,10 +115,35 @@ final class InputPath {
         if (as == null || Core.withoutStanding(as.value()) == Core.withoutStanding(e)) {
             return null;
         }
-        InputPath there = new InputPath(newtypes, asked, as.at(), arrivingAs);
+        return readWhereGiven(as, wanted);
+    }
+
+    /**
+     * {@code given} read on the reading it was given on, by a walk asking the same question there:
+     * where it stands, or where what it holds does when {@code wanted} says so.
+     */
+    private PathResolution readWhereGiven(Denotation given, Wanted wanted) {
+        InputPath there = new InputPath(newtypes, asked, given.at(), arrivingAs);
         there.walking = walking;
-        return wanted == null ? there.named(as.value(), as.at().names())
-                : there.heldAt(as.value(), wanted, as.at().names());
+        return wanted == null ? there.named(given.value(), given.at().names())
+                : there.heldAt(given.value(), wanted, given.at().names());
+    }
+
+    /**
+     * What the reading was given for the name {@code name}, followed through the names it was given
+     * under, or null where it was given nothing.
+     *
+     * <p>A name an arm bound to a value worked out, or a parameter a call handed one, stands for
+     * that value and at no position of its own ({@link InputReads#handedOver}). The role of the name
+     * says nothing then, and what it stands for is what a walk after where a value stands or came
+     * from has to follow, the way it follows a node the reading takes as another value.
+     */
+    private Denotation givenTo(Core.Read name) {
+        if (!reads.hasGiven()) {
+            return null;
+        }
+        Denotation handed = reads.handedOver(name);
+        return Core.withoutStanding(handed.value()) == Core.withoutStanding(name) ? null : handed;
     }
 
     /**
@@ -274,7 +299,8 @@ final class InputPath {
                         oneOfTheElementsOf(r.binding(), containers, names);
                 case BindingRole.Alias(var held) ->
                         trail.through(r.binding(), () -> named(held, names));
-                case BindingRole.Unknown _ -> new PathResolution.NotAPosition();
+                case BindingRole.Unknown _ -> givenTo(r) instanceof Denotation given
+                        ? readWhereGiven(given, null) : new PathResolution.NotAPosition();
             };
             // A projection out of a construction is the value that field was given, and it is that
             // value's position that is asked for. The construction and the projection cancel: what
@@ -743,8 +769,11 @@ final class InputPath {
                 // closure that reads it rather than above it.
                 case ElementStep.NoEdge _ -> {
                     Core held = names.heldAnywhereBy(r.binding());
-                    yield held == null ? new PathResolution.NotAPosition()
-                            : trail.through(r.binding(), () -> heldAt(held, wanted, names));
+                    yield held != null
+                            ? trail.through(r.binding(), () -> heldAt(held, wanted, names))
+                            : givenTo(r) instanceof Denotation given
+                                    ? readWhereGiven(given, wanted)
+                                    : new PathResolution.NotAPosition();
                 }
             };
         }
