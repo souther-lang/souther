@@ -168,8 +168,7 @@ final class SaltedOrder {
         /** Whether this is one of the kinds of thing that came out of a copy. */
         boolean cameOutOfACopy() {
             return kind == Kind.COLLECTION || kind == Kind.TRAVERSAL || isPositional();
-        }
-    }
+        }    }
 
     /**
      * A value the analysis holds on the stack or in a local.
@@ -178,9 +177,15 @@ final class SaltedOrder {
      * is seen by every place the same object is held. {@code home} says where it was last read
      * from, a local or a field, which is how a call on a value taken out of a field is written back
      * to it. {@code made} is the class it was made from, since a call that only names an interface
-     * cannot say whether {@code add} on it keeps an order.
+     * cannot say whether {@code add} on it keeps an order. {@code types} are the classes the code
+     * may hold it as, of those the program declares, each named by an instruction that put it
+     * there: what it was made as, cast to, or read through a field, a parameter or a return, and
+     * what a caller handed a parameter as. Where two ways of reaching a place meet, it may be what
+     * either way held. A call that makes text of any object it is handed says what the fields of
+     * each of them hold, and the call itself names only {@code Object}.
      */
-    record Val(Set<Tag> tags, boolean wide, int alloc, String made, String home) {
+    record Val(Set<Tag> tags, boolean wide, int alloc, String made, String home,
+               Set<String> types) {
 
         /**
          * What {@code made} says of a value taken out of a map: the object it was held in, so that
@@ -188,9 +193,9 @@ final class SaltedOrder {
          */
         static final String HELD_IN_A_MAP = "held in a map";
 
-        static final Val CLEAN = new Val(Set.of(), false, -1, null, null);
+        static final Val CLEAN = new Val(Set.of(), false, -1, null, null, Set.of());
 
-        static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null);
+        static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null, Set.of());
 
         Val {
             // Held in the order they were put in, so that walking them says the same twice: a copy
@@ -199,7 +204,7 @@ final class SaltedOrder {
         }
 
         static Val of(Set<Tag> tags) {
-            return new Val(tags, false, -1, null, null);
+            return new Val(tags, false, -1, null, null, Set.of());
         }
 
         static Val of(Tag... tags) {
@@ -220,27 +225,58 @@ final class SaltedOrder {
 
         /** The same, as an object of no place in particular. */
         Val apartFromAnyPlace() {
-            return new Val(tags, wide, -1, null, null);
+            return new Val(tags, wide, -1, null, null, types);
         }
 
         Val withTags(Set<Tag> other) {
-            return new Val(other, wide, alloc, made, home);
+            return new Val(other, wide, alloc, made, home, types);
         }
 
         Val withHome(String at) {
-            return new Val(tags, wide, alloc, made, at);
+            return new Val(tags, wide, alloc, made, at, types);
         }
 
-        Val withMade(String type) {
-            return new Val(tags, wide, alloc, type, home);
+        Val withMade(String madeAs) {
+            return new Val(tags, wide, alloc, madeAs, home, types);
         }
 
         Val withAlloc(int id) {
-            return new Val(tags, wide, id, made, home);
+            return new Val(tags, wide, id, made, home, types);
         }
 
         Val asWide(boolean isWide) {
-            return new Val(tags, isWide, alloc, made, home);
+            return new Val(tags, isWide, alloc, made, home, types);
+        }
+
+        /**
+         * The same, which may also be held as the class a descriptor names, if it names one the
+         * program declares. A class of the library has no fields of the program's to say, so it is
+         * not carried.
+         */
+        Val alsoHeldAs(String descriptor) {
+            if (!descriptor.startsWith("L") || descriptor.startsWith("Ljava/")
+                    || descriptor.startsWith("Ljavax/") || descriptor.startsWith("Ljdk/")) {
+                return this;
+            }
+            return alsoHeldAs(Set.of(descriptor.substring(1, descriptor.length() - 1)));
+        }
+
+        /** The same, which may also be held as any of these classes. */
+        Val alsoHeldAs(Set<String> classes) {
+            if (types.containsAll(classes)) {
+                return this;
+            }
+            return new Val(tags, wide, alloc, made, home, union(types, classes));
+        }
+
+        /** Both sets of classes, as one that nothing changes afterwards. */
+        private static Set<String> union(Set<String> one, Set<String> other) {
+            if (one.isEmpty()) {
+                return Set.copyOf(other);
+            }
+            Set<String> all = new TreeSet<>(one);
+            all.addAll(other);
+            return Collections.unmodifiableSet(all);
         }
 
         Val plus(Collection<Tag> more) {
@@ -259,9 +295,11 @@ final class SaltedOrder {
             }
             Set<Tag> all = new LinkedHashSet<>(tags);
             all.addAll(other.tags);
+            Set<String> eitherType = types.containsAll(other.types) ? types
+                    : union(types, other.types);
             return new Val(all, wide || other.wide, alloc == other.alloc ? alloc : -1,
                     made != null && made.equals(other.made) ? made : null,
-                    home != null && home.equals(other.home) ? home : null);
+                    home != null && home.equals(other.home) ? home : null, eitherType);
         }
 
         /** The copies any of what is here came out of. */

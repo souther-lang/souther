@@ -7,6 +7,10 @@ import souther.bench.SaltedOrder.Reading;
 import souther.bench.readings.orders.AskedOrNamedInOrder;
 import souther.bench.readings.orders.Held;
 import souther.bench.readings.orders.HeldClasses;
+import souther.bench.readings.orders.ReachedThroughAField;
+import souther.bench.readings.orders.ReachedThroughAFunction;
+import souther.bench.readings.orders.ReachedThroughATextOfAClass;
+import souther.bench.readings.orders.ReachedThroughWhatACallHandsBack;
 import souther.bench.readings.orders.ReadersAfter;
 import souther.bench.readings.orders.ReadersBefore;
 import souther.bench.readings.orders.WalkedIntoAnAnswer;
@@ -156,6 +160,124 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
                         .allMatch(each -> each.startsWith(Held.class.getName() + "#<init>")
                                 || each.startsWith(HeldClasses.class.getName() + "#<init>")),
                 () -> "a copy from somewhere other than the model was read: " + reading.roots());
+    }
+
+    /*
+     * The reading begins at the methods that make a copy, and reads a method handed nothing only
+     * when something it could read comes to hold what a copy made. Each reader below is handed
+     * nothing, called by nothing and calls nothing with a copy in it, so it is found only if the
+     * one way a copy reaches it is one the reading follows back to it.
+     */
+
+    @Test
+    void aReaderHandedNothingIsReadWhenAFieldItReadsHoldsACopy() {
+        Reading reading = readingOfOnly(ReachedThroughAField.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughAField.class, "listed",
+                ReachedThroughAField.class.getName() + "#keep:Set.copyOf@");
+    }
+
+    @Test
+    void aReaderHandedNothingIsReadWhenWhatACallReturnsHoldsACopy() {
+        Reading reading = readingOfOnly(ReachedThroughWhatACallHandsBack.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughWhatACallHandsBack.class,
+                "listedFromWhatIsReturned",
+                ReachedThroughWhatACallHandsBack.class.getName() + "#made:Set.copyOf@");
+    }
+
+    @Test
+    void aReaderHandedNothingIsReadWhenWhatACallFillsInHoldsACopy() {
+        Reading reading = readingOfOnly(ReachedThroughWhatACallHandsBack.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughWhatACallHandsBack.class,
+                "listedFromWhatIsFilledIn",
+                ReachedThroughWhatACallHandsBack.class.getName() + "#fill:Set.copyOf@");
+    }
+
+    @Test
+    void aReaderHandedNothingIsReadWhenAFunctionItMakesReturnsACopy() {
+        Reading reading = readingOfOnly(ReachedThroughAFunction.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughAFunction.class, "listed",
+                ReachedThroughAFunction.class.getName() + "#lambda$listed$0:Set.copyOf@");
+    }
+
+    @Test
+    void aReaderHandedNothingIsReadWhenTheTextOfAClassItAsksForSaysACopy() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "said",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
+    void aReaderHandedAnObjectByNothingIsReadWhenTheTextOfItsClassSaysACopy() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "saidOfOneItIsHanded",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
+    void anObjectMadeOnOneOfTwoWaysSaysWhatTheClassItMayBeHolds() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "saidThroughMerge",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
+    void anObjectThatIsOneOfTwoRecordsSaysWhatEachOfThemHolds() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "saidOfEitherThroughMerge",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@",
+                ReachedThroughATextOfAClass.KeptBeside.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
+    void anObjectHandedToAHelperAsAnyObjectSaysWhatItsCallerMadeItAs() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class,
+                "saidByAHelperHandedAnyObject",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
+    void aReaderHandedNothingIsReadWhenTheTextItAsksAnObjectForSaysACopy() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "saidByItsOwnText",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    private static Reading readingOfOnly(Class<?> readers) {
+        return SaltedOrderFlow.read(fixtures(readers),
+                TheReadingOfWhereAnUnorderedCopysOrderGoesTest::madeInTheFixtures);
+    }
+
+    /**
+     * That {@code reader} is named once, for handing out what came out of the one copy whose
+     * origin begins {@code copy}.
+     */
+    private static void assertFoundOnlyIn(Reading reading, Class<?> holder, String reader,
+                                          String... copies) {
+        List<Finding> found = findingsIn(reading, holder, reader + "(");
+        assertEquals(1, found.size(), () -> holder.getSimpleName() + "#" + reader + " was not"
+                + " named once, so the copy that reaches it was not followed to it: "
+                + reading.described());
+        Finding finding = found.get(0);
+        assertTrue(finding.what().startsWith("returns an order the run gave"),
+                () -> "the reader was named for something else: " + reading.described());
+        assertEquals(copies.length, finding.origins().size(), () -> "the reader was not named"
+                + " for exactly the copies " + Arrays.toString(copies) + ": " + finding.origins());
+        for (String copy : copies) {
+            assertTrue(finding.origins().stream().anyMatch(each -> each.startsWith(copy)),
+                    () -> "the order the reader hands out was not traced to " + copy + ": "
+                            + finding.origins());
+        }
     }
 
     private static Reading readingOver(Class<?> readers) {
