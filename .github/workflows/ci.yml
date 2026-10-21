@@ -11,6 +11,14 @@ on:
 permissions:
   contents: read
 
+env:
+  # What Maven is told about the repositories a dependency's pom names. Asked first what each of
+  # them holds, it fetches a list of prefixes from every one of them on the first artifact it
+  # resolves there, and two of those named by poms this build reads answer that fetch with an
+  # error after a wait — every runner, on the path a change waits on, for artifacts the cache
+  # already holds. Told not to ask, it resolves what it resolved before.
+  REPOSITORIES: -Daether.remoteRepositoryFilter.prefixes=false
+
 jobs:
   # What a pull request and a push wait on: everything except the tests written `@Nightly`. A test
   # is left out only where its class says both that no cheaper way to ask the same question was
@@ -90,7 +98,8 @@ jobs:
         # the tags are named here again.
         run: |
           echo "forks: ${{ matrix.shard.forks }}"
-          mvn -B --no-transfer-progress verify ${{ matrix.shard.modules }} \
+          mvn --version | head -1
+          mvn -B --no-transfer-progress verify ${{ matrix.shard.modules }} $REPOSITORIES \
             -P '!lint' \
             -DforkCount=${{ matrix.shard.forks }} \
             ${{ matrix.shard.tags }} \
@@ -111,7 +120,7 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Compile with Error Prone
-        run: mvn -B --no-transfer-progress test-compile
+        run: mvn -B --no-transfer-progress test-compile $REPOSITORIES
 
   # And the slow ones, asked where waiting for them costs nobody an edit: once a night, and nowhere
   # a change is on its way in. Emptying the property is what asks them; everything the job above
@@ -141,4 +150,5 @@ jobs:
       - name: Build and test ${{ matrix.branch }}, the slow tests included
         run: |
           echo "forks: $(nproc)"
-          mvn -B --no-transfer-progress verify -DforkCount=$(nproc) -Dtest.excluded.groups=
+          mvn -B --no-transfer-progress verify $REPOSITORIES -DforkCount=$(nproc) \
+            -Dtest.excluded.groups=
