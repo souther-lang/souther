@@ -480,13 +480,12 @@ public final class GuardThresholds {
                 continue;
             }
             // Where a side's values came from, and nothing where they came from nowhere.
-            switch (reads.cameFrom(side, newtypes)) {
-                case PathResolution.At(var at) -> out.putIfAbsent(FilingCoordinate.at(at),
-                        new BlockReason.RuleAboutADerivedValue());
-                case PathResolution.NotAPosition _ -> { }
-                case PathResolution.MayStandAt(var among) -> among.forEach(each ->
-                        out.putIfAbsent(FilingCoordinate.at(each),
-                                new BlockReason.RuleAboutAnElementOfSeveralContainers()));
+            PathResolution came = reads.cameFrom(side, newtypes);
+            if (came instanceof PathResolution.At(var at)) {
+                out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
+            } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
+                owed.places().forEach(each ->
+                        out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
             }
         }
     }
@@ -564,7 +563,7 @@ public final class GuardThresholds {
                     // A name that only may stand at a position is a term over no one of them. What
                     // this answers for is a number a line can be drawn on, and a line drawn on this
                     // would be drawn at whichever place was picked out of the ones it may be.
-                    case PathResolution.MayStandAt _ -> null;
+                    case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
                 };
             }
 
@@ -573,7 +572,8 @@ public final class GuardThresholds {
                 return switch (at.cameFrom(here, newtypes)) {
                     case PathResolution.At(var from) -> from;
                     case PathResolution.NotAPosition _ -> null;
-                    case PathResolution.MayStandAt _ -> null;
+                    // One place is what a line is drawn on, and a value made of several is at none.
+                    case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
                 };
             }
 

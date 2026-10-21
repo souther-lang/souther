@@ -1,5 +1,6 @@
 package souther.cli;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -22,9 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * cannot be the unit's own form without the discriminated sum disagreeing with it.
  */
 class AUnitIsWrittenByThePositionItStandsInTest {
-
-    @TempDir
-    Path dir;
 
     private static final String MODEL = """
             module demo
@@ -69,10 +67,18 @@ class AUnitIsWrittenByThePositionItStandsInTest {
             let enumerated (n) = if n > 0 then Pending else Closed
             """;
 
-    private String run(String behavior, String input) throws Exception {
+    /** {@link #MODEL}, compiled once: every position here is a behavior of the one module. */
+    private static Runner.Program demo;
+
+    @BeforeAll
+    static void compile(@TempDir Path dir) throws Exception {
         Path file = dir.resolve("demo.sou");
         Files.writeString(file, MODEL);
-        return Runner.run(file, behavior, input).trim();
+        demo = Runner.compile(file);
+    }
+
+    private static String run(String behavior, String input) {
+        return demo.run(behavior, input).trim();
     }
 
     @Test

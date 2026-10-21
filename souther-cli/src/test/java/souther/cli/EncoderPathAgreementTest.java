@@ -72,14 +72,15 @@ class EncoderPathAgreementTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("everyTypeAndAValueOfIt")
     void aValueIsWrittenTheSameBothWays(String type, String value) throws Exception {
-        String bare = written(type, value, "bare");
-        String wrapped = written(type, value, "wrapped");
+        Runner.Program program = compiled(type, value);
+        String bare = program.run("bare", "1").trim();
+        String wrapped = program.run("wrapped", "1").trim();
         assertEquals("{\"v\":" + bare + "}", wrapped,
                 "a " + type + " writes the same whether `run` composes it or the derived codec does");
     }
 
-    /** Runs one of the two behaviors and returns the JSON it wrote. */
-    private String written(String type, String value, String behavior) throws Exception {
+    /** The module declaring both behaviors over {@code type}, each answering {@code value}. */
+    private Runner.Program compiled(String type, String value) throws Exception {
         Path file = dir.resolve(
                 "w" + Integer.toUnsignedString((type + value).hashCode()) + ".sou");
         String built = builtBy(value);
@@ -96,7 +97,7 @@ class EncoderPathAgreementTest {
                 let wrapped (n) = Holder { v = %s }
                 """.formatted(type, type, built.isEmpty() ? "" : " constructs " + built,
                         value, built.isEmpty() ? "" : ", " + built, value));
-        return Runner.run(file, behavior, "1").trim();
+        return Runner.compile(file);
     }
 
     /** What the value expression builds that belongs in `constructs`, for the clause both behaviors
