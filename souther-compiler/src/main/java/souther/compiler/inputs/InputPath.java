@@ -961,6 +961,13 @@ final class InputPath {
     /**
      * The answers on each of {@code cases} a value is chosen between, put together
      * ({@link #alongEachCase}), or null where one case is not one this walk reduces.
+     *
+     * <p>Each case is read in the names the choice stands in, not in the names its arm enters. A
+     * name a {@code match} arm binds stands for nothing here, so a value that reads one is no
+     * position, and one that reads none is read as it is written. Entering an arm is the walks'
+     * ({@code ScopeStep.Chosen}, {@link InputReads#choosing}) and needs the symbols and the
+     * declared input that a query for a position does not hold; the answer a name bound by an arm
+     * gets is the absence of one and never another name's place.
      */
     private PathResolution acrossCases(List<Core> cases, Function<Core, PathResolution> each) {
         List<PathResolution> answers = new ArrayList<>();

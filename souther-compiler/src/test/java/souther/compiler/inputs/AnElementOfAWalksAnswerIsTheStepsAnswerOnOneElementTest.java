@@ -428,6 +428,69 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 || each.startsWith("ys[*] ")).count(), () -> notRead.toString());
     }
 
+    private static final String WHICH = """
+            data Left = { items: Map<String, Int> }
+            data Right = { count: Int }
+            data Which = Left | Right
+
+            """;
+
+    /** What is left unread when the rule's own number is all that is: no position it is about. */
+    private static final String ONLY_THE_NUMBER_UNREAD =
+            "[atLeast " + UndividedPosition.Reason.UNSUPPORTED_SYNTAX + "]";
+
+    /**
+     * A name an arm of a match binds is read where the arm is entered, and a value that reads one
+     * is followed no further out. Entering an arm is the walks' own
+     * ({@code ScopeStep.Chosen}, {@code InputReads#choosing}), and it needs what a position's
+     * query does not hold. So a pair or a record a helper answers out of such an arm is no
+     * position, where the same rule written inside the arm draws its line. Pinned so that the
+     * limit is a fact somebody wrote down, and so that the day a query can enter an arm it is a
+     * test that changes.
+     */
+    @Test
+    void aNameAMatchArmBindsIsNotFollowedOutOfTheArmItWasBoundIn() {
+        assertEquals(List.of("w@Left.items[*] = atLeast"), linesOf(WHICH + """
+                behavior busy : (w: Which, atLeast: Int) -> Map<String, Int>
+                let busy (w, atLeast) =
+                    match w with
+                    | Left as l -> Map.filterEntries((_, count) -> count >= atLeast, l.items)
+                    | Right -> Map.empty
+                """), "inside the arm the rule draws its line");
+
+        Compilation pair = compiled(WHICH + """
+                let select (w: Which): (Int, Map<String, Int>) =
+                    match w with
+                    | Left as l -> (1, l.items)
+                    | Right -> (0, Map.empty)
+
+                behavior busy : (w: Which, atLeast: Int) -> Map<String, Int>
+                let busy (w, atLeast) = {
+                    let (_, selected) = select(w)
+                    Map.filterEntries((_, count) -> count >= atLeast, selected)
+                }
+                """);
+        assertEquals(List.of(), linesOf(pair));
+        assertEquals(ONLY_THE_NUMBER_UNREAD, notReadIn(pair).stream().sorted().toList().toString());
+
+        Compilation record = compiled(WHICH + """
+                data Box = { m: Map<String, Int> }
+
+                let select (w: Which): Box =
+                    match w with
+                    | Left as l -> Box { m = l.items }
+                    | Right -> Box { m = Map.empty }
+
+                behavior busy : (w: Which, atLeast: Int) -> Map<String, Int> constructs Box
+                let busy (w, atLeast) = {
+                    let box = select(w)
+                    Map.filterEntries((_, count) -> count >= atLeast, box.m)
+                }
+                """);
+        assertEquals(List.of(), linesOf(record));
+        assertEquals(ONLY_THE_NUMBER_UNREAD, notReadIn(record).stream().sorted().toList().toString());
+    }
+
     /** Which pair a match chose is read in every arm, one of which binds a name of its own. */
     @Test
     void aValueTakenOutOfAPairAMatchChoseBetweenComesFromEitherArm() {
