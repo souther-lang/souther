@@ -16,6 +16,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
+import souther.compiler.query.UnderABudget;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -282,10 +283,14 @@ class AGroupTooWideToWalkSaysSoTest {
      * differing, so what the two answers are is the rows' and not the model's — and the group is
      * past the budget in both, which is what says the difference is the obligation and not the
      * limit.
+     *
+     * <p>Two decisions under a budget one choice short of their four: the group past the limit is
+     * what is asked, and not how wide a group the standard budget holds, which the tests above ask
+     * without a compilation.
      */
     @Test
     void whatIsOwedIsAnsweredWhateverTheLimitDidToTheGroup() {
-        Adequacy.Filling oneRow = fillingFor(modelWithRows(13, false));
+        Adequacy.Filling oneRow = fillingFor(modelWithRows(2, false));
         List<ArmDisposition> owed = armsIn(oneRow);
         assertFalse(owed.isEmpty(),
                 "one row leaves the other arm of each helper owed, and each is answered");
@@ -294,7 +299,7 @@ class AGroupTooWideToWalkSaysSoTest {
         assertEquals(1, groupsNotOfferedIn(oneRow).size(),
                 "and the group the limit held back is named, its combinations not being looked in");
 
-        Adequacy.Filling twoRows = fillingFor(modelWithRows(13, true));
+        Adequacy.Filling twoRows = fillingFor(modelWithRows(2, true));
         assertEquals(List.of(), armsIn(twoRows),
                 "two rows take every arm, so nothing is owed at all");
         assertEquals(List.of(), groupsNotOfferedIn(twoRows),
@@ -313,8 +318,11 @@ class AGroupTooWideToWalkSaysSoTest {
                 .map(GenerationReason.GroupsNotOffered.class::cast).toList();
     }
 
+    /** What the generation of {@code source} came to, under a budget one choice short of the four
+     *  two decisions make. */
     private static Adequacy.Filling fillingFor(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = UnderABudget.of(Compilation.ofSource(source, "Main"),
+                new AdequacyPolicy(Budgets.measures(), atMost(3)));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         // The rows have to have run for what is owed to be what the arms established. A model whose
