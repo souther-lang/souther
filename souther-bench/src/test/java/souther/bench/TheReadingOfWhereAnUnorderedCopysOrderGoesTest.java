@@ -7,6 +7,9 @@ import souther.bench.SaltedOrder.Reading;
 import souther.bench.readings.orders.AskedOrNamedInOrder;
 import souther.bench.readings.orders.Held;
 import souther.bench.readings.orders.HeldClasses;
+import souther.bench.readings.orders.HeldWholeAndNotTakenOut;
+import souther.bench.readings.orders.HeldWholeAndTakenOut;
+import souther.bench.readings.orders.HeldWholeInAField;
 import souther.bench.readings.orders.ReachedThroughAField;
 import souther.bench.readings.orders.ReachedThroughAFunction;
 import souther.bench.readings.orders.ReachedThroughATextOfAClass;
@@ -160,6 +163,52 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
                         .allMatch(each -> each.startsWith(Held.class.getName() + "#<init>")
                                 || each.startsWith(HeldClasses.class.getName() + "#<init>")),
                 () -> "a copy from somewhere other than the model was read: " + reading.roots());
+    }
+
+    /**
+     * A copy held whole in a container is followed to the answer it reaches when it is taken out,
+     * and named for the copy the reader made, not for another the container happens to hold.
+     */
+    @Test
+    void aCopyHeldWholeInAContainerIsFollowedToTheAnswerItIsTakenOutInto() {
+        Reading reading = readingOfOnly(HeldWholeAndTakenOut.class);
+        Set<String> readers = publicMethodsOf(HeldWholeAndTakenOut.class);
+        assertFalse(readers.isEmpty(), "the class of readers to be refused holds none");
+
+        List<String> wrong = new ArrayList<>();
+        for (String reader : readers) {
+            String own = HeldWholeAndTakenOut.class.getName() + "#" + reader + ":Set.copyOf@";
+            List<Finding> found = findingsIn(reading, HeldWholeAndTakenOut.class, reader);
+            Set<String> named = new LinkedHashSet<>();
+            found.forEach(each -> named.addAll(each.origins()));
+            boolean ownCopiesOnly = !named.isEmpty()
+                    && named.stream().allMatch(each -> each.startsWith(own));
+            int made = reader.equals("heldBesideTheElementsOfAnotherCopy") ? 2 : 1;
+            if (!ownCopiesOnly || named.size() != made) {
+                wrong.add(reader + " named " + named);
+            }
+        }
+
+        assertEquals(List.of(), wrong, "a copy held whole was lost on the way out of its"
+                + " container, or an answer was traced to a copy the reader did not make");
+    }
+
+    @Test
+    void aCopyHeldWholeInAContainerIsNotTakenForAnOrderOfTheContainerOrOfAnotherSlot() {
+        Reading reading = readingOfOnly(HeldWholeAndNotTakenOut.class);
+
+        assertEquals(List.of(), reading.described(),
+                "a reader that holds a copy whole, and takes out something else or takes the copy"
+                        + " out to ask it or put it in an order, was refused");
+        assertFalse(reading.roots().isEmpty(), "the walk did not begin at the copies held");
+    }
+
+    @Test
+    void aCopyHeldWholeInAListAFieldHoldsIsFollowedToTheReaderThatTakesItOut() {
+        Reading reading = readingOfOnly(HeldWholeInAField.class);
+
+        assertFoundOnlyIn(reading, HeldWholeInAField.class, "takenOutElsewhere",
+                HeldWholeInAField.class.getName() + "#keep:Set.copyOf@");
     }
 
     /*

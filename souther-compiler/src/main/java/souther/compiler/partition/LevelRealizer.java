@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1574,12 +1575,20 @@ public final class LevelRealizer {
                             ? List.of(divisor, divisor.negate())
                             : List.of(divisor, divisor.negate(), over, over.negate());
                     for (BigInteger first : firsts) {
-                        out.add(Map.of(0, first, 1, product.divide(first)));
+                        out.add(theFactors(first, product.divide(first)));
                     }
                 }
                 divisor = divisor.add(BigInteger.ONE);
             }
             return new PairsMultiplyingTo(out, true);
+        }
+
+        /** The first factor then the second, in that order wherever the pair is walked. */
+        private static Map<Integer, BigInteger> theFactors(BigInteger first, BigInteger second) {
+            Map<Integer, BigInteger> pair = new LinkedHashMap<>();
+            pair.put(0, first);
+            pair.put(1, second);
+            return pair;
         }
     }
 
@@ -1800,7 +1809,7 @@ public final class LevelRealizer {
                Map<RealizationTarget, Place> alongside) {
             this.tried = tried;
             this.steps = steps;
-            this.alongside = Map.copyOf(alongside);
+            this.alongside = Collections.unmodifiableMap(new LinkedHashMap<>(alongside));
             this.terms = terms;
             this.carriers = new Carrier[terms.size()];
             for (int i = 0; i < terms.size(); i++) {

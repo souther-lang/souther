@@ -19,6 +19,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -54,28 +55,13 @@ public final class AskedOrNamedInOrder {
                 && held.named().get("b") == one;
     }
 
-    public static boolean aCopyHeldWholeInAListAndOnlyAskedWhatItHolds(Held held,
-                                                                       CompositionBudget one) {
-        List<Set<CompositionBudget>> into = new ArrayList<>();
-        into.add(held.figures());
-        return into.getFirst().contains(one) && into.getFirst().size() > 1;
+    public static List<String> madeTextByAReferenceAndSortedAsText(Held held) {
+        return held.figures().stream().map(Enum::name).sorted().toList();
     }
 
-    public static int theListThatHoldsACopyWholeWalkedForItsOwnSize(Held held) {
-        List<Set<CompositionBudget>> into = new ArrayList<>();
-        into.add(held.figures());
-        int total = 0;
-        for (Set<CompositionBudget> each : into) {
-            total += each.size();
-        }
-        return total;
-    }
-
-    public static List<CompositionBudget> aCopyHeldWholeInAListAndPutInAnOrderWhenTakenOut(
-            Held held) {
-        List<Set<CompositionBudget>> into = new ArrayList<>();
-        into.add(held.figures());
-        return PublicationOrders.COMPOSITION_BUDGETS.keep(into.getFirst()).written();
+    public static List<String> madeTextByALambdaKeptAndSortedAsText(Held held) {
+        return held.figures().stream().map(each -> each.name().toLowerCase(Locale.ROOT))
+                .filter(each -> !each.isEmpty()).sorted().toList();
     }
 
     public static int summedOverAWalk(Held held) {

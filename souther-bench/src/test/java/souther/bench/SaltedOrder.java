@@ -48,9 +48,10 @@ final class SaltedOrder {
         TRAVERSAL,
 
         /**
-         * A container, or a view or an iterator over one, that holds one of those whole as an
-         * element or a value. The container's own order is not the copy's, so it is no answer and
-         * no walk of it is a walk of the copy; what is taken out of it is the copy.
+         * A container, or a view or an iterator over one, that holds one of those whole, as an
+         * element, a key or a value, at the depth the tag's site says. The container's own order is
+         * not the copy's, so it is no answer and no walk of it is a walk of the copy; what is taken
+         * out of it at that depth is the copy.
          */
         HELD,
 
@@ -175,7 +176,47 @@ final class SaltedOrder {
         /** Whether this is one of the kinds of thing that came out of a copy. */
         boolean cameOutOfACopy() {
             return kind == Kind.COLLECTION || kind == Kind.TRAVERSAL || isPositional();
-        }    }
+        }
+
+        private static final String OF_TEXTS = "of texts";
+
+        /**
+         * A walk over one of those whose every element is a {@link String}, which a function says by
+         * returning one. It is a tag of its own rather than a mark on the walk, so that where two
+         * ways of reaching a place meet and only one of them was of texts, the place holds both and
+         * is not taken for a walk of texts.
+         */
+        static Tag traversalOfTexts(String origin) {
+            return new Tag(Kind.TRAVERSAL, origin, OF_TEXTS);
+        }
+
+        /** Whether this is a walk whose every element is a text. */
+        boolean isATraversalOfTexts() {
+            return kind == Kind.TRAVERSAL && site.equals(OF_TEXTS);
+        }
+
+        /**
+         * A copy held whole in what carries the tag, {@code path} slots down: each {@code e} an
+         * element or a value, each {@code k} a key, outermost first.
+         */
+        static Tag held(String origin, String path) {
+            return new Tag(Kind.HELD, origin, path);
+        }
+
+        /** Whether this says a copy is held whole somewhere inside what carries it. */
+        boolean isHeld() {
+            return kind == Kind.HELD;
+        }
+
+        /**
+         * Whether this is carried from method to method, to fields and into containers: what came
+         * out of a copy, and what holds one whole. Only the first is an order to be read; the
+         * second is what the first is taken out of.
+         */
+        boolean travels() {
+            return cameOutOfACopy() || isHeld();
+        }
+    }
 
     /**
      * A value the analysis holds on the stack or in a local.

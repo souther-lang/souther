@@ -483,7 +483,7 @@ final class SaltedOrderFlow {
     private boolean joinFact(String key, Set<Tag> given) {
         Set<Tag> tags = new LinkedHashSet<>();
         for (Tag each : given) {
-            if (each.cameOutOfACopy()) {
+            if (each.travels()) {
                 tags.add(each);
             }
         }
@@ -1192,7 +1192,7 @@ final class SaltedOrderFlow {
                 Set<Tag> kept = new LinkedHashSet<>();
                 for (Tag each : value.tags()) {
                     if (each.kind() == Kind.COLLECTION || each.kind() == Kind.TRAVERSAL
-                            || (carriesIt && each.isAnAnswer())) {
+                            || each.isHeld() || (carriesIt && each.isAnAnswer())) {
                         kept.add(each);
                     }
                 }
@@ -1244,21 +1244,44 @@ final class SaltedOrderFlow {
      * a method builds a text out of the parts of the one element it was given.
      */
     private static boolean carriesACopy(Val receiver, List<Val> args) {
-        if (!withoutElements(receiver.tags()).isEmpty()) {
+        if (receiver.cameOutOfACopy() && !walkables(receiver.tags()).isEmpty()) {
             return true;
         }
         for (Val each : args) {
-            if (!withoutElements(each.tags()).isEmpty()) {
+            if (!walkables(each.tags()).isEmpty()) {
                 return true;
             }
         }
         return false;
     }
 
-    private static Set<Tag> withoutElements(Set<Tag> tags) {
+    /** Whether a call is handed a container that holds a copy whole, and nothing else of one. */
+    private static boolean holdsACopy(Val receiver, List<Val> args) {
+        if (receiver.has(Kind.HELD)) {
+            return true;
+        }
+        for (Val each : args) {
+            if (each.has(Kind.HELD)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<Tag> walkables(Set<Tag> tags) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag each : tags) {
             if (each.cameOutOfACopy() && each.kind() != Kind.PICKED) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    private static Set<Tag> withoutElements(Set<Tag> tags) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Tag each : tags) {
+            if (each.travels() && each.kind() != Kind.PICKED) {
                 out.add(each);
             }
         }
@@ -1393,7 +1416,7 @@ final class SaltedOrderFlow {
             }
             // Read with nothing handed, the callee is read once something it reads holds what came
             // out of a copy, and this call is read again when what it hands back changes.
-            if (tainted) {
+            if (tainted || holdsACopy(receiver, args)) {
                 enqueueOnce(callee);
             }
             if (returnsAValue) {
@@ -1417,6 +1440,13 @@ final class SaltedOrderFlow {
             Outcome outcome = effectsOf(state, jdk, where, here);
             result.addAll(madeAt(outcome.result().tags(), here));
             made = outcome.result();
+            // A function handed to the call may run in it, whatever the call is made on, and what
+            // it puts in what it captured is then in it.
+            for (Val each : args) {
+                for (Tag function : each.functions()) {
+                    handBackWhatItFilled(unit, state, function.origin());
+                }
+            }
             for (Feed feed : outcome.feeds()) {
                 for (Tag function : feed.functions()) {
                     Set<Tag> back = function.origin().startsWith("ref|")
@@ -1627,7 +1657,13 @@ final class SaltedOrderFlow {
             return;
         }
         for (int at = 0; at < made.values().size(); at++) {
-            place(state, made.values().get(at), readFact("O:" + body + "#" + at, here));
+            Set<Tag> filled = new LinkedHashSet<>(readFact("O:" + body + "#" + at, here));
+            if (!body.context().isEmpty()) {
+                // The body is also read on its own, where it makes a copy it puts in what it
+                // captured.
+                filled.addAll(readFact("O:" + new Unit(body.method(), "") + "#" + at, here));
+            }
+            place(state, made.values().get(at), filled);
         }
     }
 
