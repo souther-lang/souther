@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallArguments;
+import souther.compiler.check.Choice;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -76,8 +77,9 @@ final class InputPath {
 
     private final DeclarationNewtypes newtypes;
     private final ElementQuestion asked;
-    /** What the reading this walk is asked on takes a node as ({@link InputReads#taking}). */
-    private final Function<Core, Denotation> taken;
+    /** The reading this walk is asked on: what it takes a node as ({@link InputReads#taking}), and
+     *  the names inside an arm a choice has ({@link InputReads#namesInside}). */
+    private final InputReads reads;
     private final BindingTrail trail = new BindingTrail();
     /** The direction a walk after the order must come out walking ({@link TraversalDirection});
      *  the other questions say nothing of it. */
@@ -88,15 +90,15 @@ final class InputPath {
     private TraversalDirection walking = TraversalDirection.FORWARD;
 
     private InputPath(DeclarationNewtypes newtypes, ElementQuestion asked,
-                      Function<Core, Denotation> taken) {
-        this(newtypes, asked, taken, TraversalDirection.FORWARD);
+                      InputReads reads) {
+        this(newtypes, asked, reads, TraversalDirection.FORWARD);
     }
 
     private InputPath(DeclarationNewtypes newtypes, ElementQuestion asked,
-                      Function<Core, Denotation> taken, TraversalDirection arrivingAs) {
+                      InputReads reads, TraversalDirection arrivingAs) {
         this.newtypes = newtypes;
         this.asked = asked;
-        this.taken = taken;
+        this.reads = reads;
         this.arrivingAs = arrivingAs;
     }
 
@@ -107,11 +109,11 @@ final class InputPath {
      * the arm a reading is on is the container an element handed from it is in.
      */
     private PathResolution whereTaken(Core e, Wanted wanted) {
-        Denotation as = taken.apply(e);
+        Denotation as = reads.taken(e);
         if (as == null || Core.withoutStanding(as.value()) == Core.withoutStanding(e)) {
             return null;
         }
-        InputPath there = new InputPath(newtypes, asked, as.at()::taken, arrivingAs);
+        InputPath there = new InputPath(newtypes, asked, as.at(), arrivingAs);
         there.walking = walking;
         return wanted == null ? there.named(as.value(), as.at().names())
                 : there.heldAt(as.value(), wanted, as.at().names());
@@ -137,8 +139,8 @@ final class InputPath {
      * nothing here can name.
      */
     static PathResolution of(Core e, BindingEnvironment names, DeclarationNewtypes newtypes,
-                             Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, taken).named(e, names);
+                             InputReads reads) {
+        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, reads).named(e, names);
     }
 
     /**
@@ -158,8 +160,8 @@ final class InputPath {
      */
     static PathResolution cameFrom(Core e, BindingEnvironment names,
                                    DeclarationNewtypes newtypes,
-                                   Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN, taken).named(e, names);
+                                   InputReads reads) {
+        return new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN, reads).named(e, names);
     }
 
     /**
@@ -172,8 +174,8 @@ final class InputPath {
      */
     static PathResolution elementAt(BindingId binding, BindingEnvironment names,
                                     DeclarationNewtypes newtypes,
-                                    Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, taken)
+                                    InputReads reads) {
+        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, reads)
                 .elementOf(binding, names);
     }
 
@@ -193,16 +195,16 @@ final class InputPath {
      */
     static PathResolution everyElementOf(Core e, BindingEnvironment names,
                                          DeclarationNewtypes newtypes,
-                                         Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE, taken)
+                                         InputReads reads) {
+        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE, reads)
                 .heldAt(e, new Wanted.APart(HeldIn.Part.ELEMENT), names).heldAt();
     }
 
     /** The same, of the elements handed to {@code binding}. */
     static PathResolution everyElementAt(BindingId binding, BindingEnvironment names,
                                          DeclarationNewtypes newtypes,
-                                         Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE, taken)
+                                         InputReads reads) {
+        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE, reads)
                 .elementOf(binding, names).heldAt();
     }
 
@@ -218,16 +220,16 @@ final class InputPath {
      */
     static PathResolution inTheOrderAt(BindingId binding, TraversalDirection direction,
                                        BindingEnvironment names, DeclarationNewtypes newtypes,
-                                       Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, taken, direction)
+                                       InputReads reads) {
+        return new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, reads, direction)
                 .elementOf(binding, names).heldAt();
     }
 
     /** The same, of the elements {@code e} holds rather than those handed to a binding. */
     static PathResolution inTheOrderOf(Core e, TraversalDirection direction,
                                        BindingEnvironment names, DeclarationNewtypes newtypes,
-                                       Function<Core, Denotation> taken) {
-        return new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, taken, direction)
+                                       InputReads reads) {
+        return new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, reads, direction)
                 .heldAt(e, new Wanted.APart(HeldIn.Part.ELEMENT), names).heldAt();
     }
 
@@ -392,11 +394,10 @@ final class InputPath {
                     introducing(let.body(), names.inside(let.binder(), let.value()), found);
             // A value chosen between constructions is read in each case, and the answers come
             // together the way those of any choice do.
-            case Core.If iff when asksAcrossCases() -> acrossCases(List.of(iff.then(), iff.els()),
-                    arm -> introducing(arm, names, found));
-            case Core.Match match when asksAcrossCases() -> acrossCases(
-                    match.cases().stream().map(Core.Case::body).toList(),
-                    arm -> introducing(arm, names, found));
+            case Core.If iff when asksAcrossCases() -> acrossCases(armsOf(iff, names),
+                    arm -> introducing(arm.body(), arm.names(), found));
+            case Core.Match match when asksAcrossCases() -> acrossCases(armsOf(match, names),
+                    arm -> introducing(arm.body(), arm.names(), found));
             // A projection of a construction whose field was given another construction, which is
             // what a value built out of values written where they stand looks like.
             case Core.FieldAccess fa -> introducing(fa.target(), names,
@@ -534,6 +535,29 @@ final class InputPath {
     private PathResolution placeOf(Core.TupleGet get, BindingEnvironment names) {
         PathResolution written = inComponent(get.tuple(), get.index(), names, this::named);
         return written != null ? written : placeOfAnElementsPair(get, names);
+    }
+
+    /** An arm of a choice: what it answers, and the names in force inside it. */
+    private record Arm(Core body, BindingEnvironment names) {}
+
+    /**
+     * The arms of the choice {@code e} is, each with the names inside it, or null where {@code e}
+     * is no choice.
+     *
+     * <p>The one place a walk across a choice takes its arms, so that none reads an arm in the
+     * names outside it. A name a {@code match} arm binds means what {@link InputReads#choosing}
+     * says it does, and a walk that read the arm without it would take the name for no position
+     * and the rule about it for one nobody wrote. A condition binds nothing.
+     */
+    private List<Arm> armsOf(Core e, BindingEnvironment names) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.If iff -> List.of(new Arm(iff.then(), names), new Arm(iff.els(), names));
+            case Core.Match match -> match.cases().stream()
+                    .map(arm -> new Arm(arm.body(), reads.namesInside(names,
+                            new Choice.Decides.ACase(arm, match.scrutinee()), newtypes)))
+                    .toList();
+            default -> null;
+        };
     }
 
     /**
@@ -725,20 +749,16 @@ final class InputPath {
         }
         // A container chosen by cases holds, on each run, what the one the case taken answers
         // holds. How the cases come together is the question's.
-        List<Core> arms = switch (e) {
-            case Core.If iff -> List.of(iff.then(), iff.els());
-            case Core.Match match -> match.cases().stream().map(Core.Case::body).toList();
-            default -> null;
-        };
+        List<Arm> arms = armsOf(e, names);
         if (arms != null) {
             List<PathResolution> each = new ArrayList<>();
-            for (Core arm : arms) {
+            for (Arm arm : arms) {
                 // Where a value stands or came from, a list written empty holds none for it to
                 // be; every occurrence of a position is held on every run or by none.
-                boolean holdsNone = Core.withoutStanding(arm) instanceof Core.ListLit written
+                boolean holdsNone = Core.withoutStanding(arm.body()) instanceof Core.ListLit written
                         && written.elements().isEmpty();
                 if (!holdsNone || asksEveryOccurrence()) {
-                    each.add(heldAt(arm, wanted, names));
+                    each.add(heldAt(arm.body(), wanted, arm.names()));
                 }
             }
             return alongEachCase(each);
@@ -947,11 +967,10 @@ final class InputPath {
                     trail.through(r.binding(), () -> inComponent(held, index, names, read));
             case Core.LetIn let -> inComponent(let.body(), index,
                     names.inside(let.binder(), let.value()), read);
-            case Core.If iff when asksAcrossCases() -> acrossCases(List.of(iff.then(), iff.els()),
-                    arm -> inComponent(arm, index, names, read));
-            case Core.Match match when asksAcrossCases() -> acrossCases(
-                    match.cases().stream().map(Core.Case::body).toList(),
-                    arm -> inComponent(arm, index, names, read));
+            case Core.If iff when asksAcrossCases() -> acrossCases(armsOf(iff, names),
+                    arm -> inComponent(arm.body(), index, arm.names(), read));
+            case Core.Match match when asksAcrossCases() -> acrossCases(armsOf(match, names),
+                    arm -> inComponent(arm.body(), index, arm.names(), read));
             case Core.TupleGet inner -> inComponent(inner.tuple(), inner.index(), names,
                     (value, at) -> inComponent(value, index, at, read));
             case null, default -> null;
@@ -959,19 +978,16 @@ final class InputPath {
     }
 
     /**
-     * The answers on each of {@code cases} a value is chosen between, put together
-     * ({@link #alongEachCase}), or null where one case is not one this walk reduces.
+     * The answers on each of {@code arms} a value is chosen between, put together
+     * ({@link #alongEachCase}), or null where one arm is not one this walk reduces.
      *
-     * <p>Each case is read in the names the choice stands in, not in the names its arm enters. A
-     * name a {@code match} arm binds stands for nothing here, so a value that reads one is no
-     * position, and one that reads none is read as it is written. Entering an arm is the walks'
-     * ({@code ScopeStep.Chosen}, {@link InputReads#choosing}) and needs the symbols and the
-     * declared input that a query for a position does not hold; the answer a name bound by an arm
-     * gets is the absence of one and never another name's place.
+     * <p>Each arm is read in the names inside it ({@link #armsOf}). Where the declarations of the
+     * input carry no symbols to enter an arm under, a name the arm binds stands for nothing and a
+     * value that reads one is no position, and never another name's place.
      */
-    private PathResolution acrossCases(List<Core> cases, Function<Core, PathResolution> each) {
+    private PathResolution acrossCases(List<Arm> arms, Function<Arm, PathResolution> each) {
         List<PathResolution> answers = new ArrayList<>();
-        for (Core one : cases) {
+        for (Arm one : arms) {
             PathResolution answer = each.apply(one);
             if (answer == null) {
                 return null;

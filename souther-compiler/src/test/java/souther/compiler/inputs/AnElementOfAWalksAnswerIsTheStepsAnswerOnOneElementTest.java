@@ -435,30 +435,37 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
 
             """;
 
-    /** What is left unread when the rule's own number is all that is: no position it is about. */
-    private static final String ONLY_THE_NUMBER_UNREAD =
-            "[atLeast " + UndividedPosition.Reason.UNSUPPORTED_SYNTAX + "]";
+    /** What a measurement draws and leaves unread, to be compared between two spellings. */
+    private static String measured(String source) {
+        Compilation compilation = compiled(source);
+        return linesOf(compilation) + " / " + notReadIn(compilation).stream().sorted().toList();
+    }
+
+    /** What a rule is left as when its value may be at one place or at none: no line, and the
+     *  place it may be at is told, beside the number the rule was written over. */
+    private static String mayBeAt(String place) {
+        return "[] / [atLeast " + UndividedPosition.Reason.UNSUPPORTED_SYNTAX + ", " + place + " "
+                + UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS + "]";
+    }
 
     /**
-     * A name an arm of a match binds is read where the arm is entered, and a value that reads one
-     * is followed no further out. Entering an arm is the walks' own
-     * ({@code ScopeStep.Chosen}, {@code InputReads#choosing}), and it needs what a position's
-     * query does not hold. So a pair or a record a helper answers out of such an arm is no
-     * position, where the same rule written inside the arm draws its line. Pinned so that the
-     * limit is a fact somebody wrote down, and so that the day a query can enter an arm it is a
-     * test that changes.
+     * A name an arm of a match binds means, out of the arm, what it means inside it. A pair or a
+     * record a helper answers out of such an arm is a value that is at the place the name stands
+     * for on one run and elsewhere on the other, and a rule about it is told at that place — where
+     * the same rule written inside the arm draws its line there.
      */
     @Test
-    void aNameAMatchArmBindsIsNotFollowedOutOfTheArmItWasBoundIn() {
-        assertEquals(List.of("w@Left.items[*] = atLeast"), linesOf(WHICH + """
+    void aNameAMatchArmBindsIsFollowedOutOfTheArmItWasBoundIn() {
+        String inTheArm = measured(WHICH + """
                 behavior busy : (w: Which, atLeast: Int) -> Map<String, Int>
                 let busy (w, atLeast) =
                     match w with
                     | Left as l -> Map.filterEntries((_, count) -> count >= atLeast, l.items)
                     | Right -> Map.empty
-                """), "inside the arm the rule draws its line");
+                """);
+        assertTrue(inTheArm.startsWith("[w@Left.items[*] = atLeast]"), inTheArm);
 
-        Compilation pair = compiled(WHICH + """
+        assertEquals(mayBeAt("w@Left.items[*]"), measured(WHICH + """
                 let select (w: Which): (Int, Map<String, Int>) =
                     match w with
                     | Left as l -> (1, l.items)
@@ -469,11 +476,9 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                     let (_, selected) = select(w)
                     Map.filterEntries((_, count) -> count >= atLeast, selected)
                 }
-                """);
-        assertEquals(List.of(), linesOf(pair));
-        assertEquals(ONLY_THE_NUMBER_UNREAD, notReadIn(pair).stream().sorted().toList().toString());
+                """), "a pair out of the arm");
 
-        Compilation record = compiled(WHICH + """
+        assertEquals(mayBeAt("w@Left.items[*]"), measured(WHICH + """
                 data Box = { m: Map<String, Int> }
 
                 let select (w: Which): Box =
@@ -486,9 +491,33 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                     let box = select(w)
                     Map.filterEntries((_, count) -> count >= atLeast, box.m)
                 }
+                """), "a record out of the arm");
+    }
+
+    /** The same where the arm opens what a lookup in a map found under its key. */
+    @Test
+    void aNameAnArmOpensOutOfALookupIsFollowedOutOfTheArmItWasBoundIn() {
+        String inTheArm = measured("""
+                behavior busy : (outer: Map<String, Map<String, Int>>, atLeast: Int) -> Map<String, Int>
+                let busy (outer, atLeast) =
+                    match Map.get("k", outer) with
+                    | Some m -> Map.filterEntries((_, count) -> count >= atLeast, m)
+                    | None -> Map.empty
                 """);
-        assertEquals(List.of(), linesOf(record));
-        assertEquals(ONLY_THE_NUMBER_UNREAD, notReadIn(record).stream().sorted().toList().toString());
+        assertTrue(inTheArm.startsWith("[outer[*][*] = atLeast]"), inTheArm);
+
+        assertEquals(mayBeAt("outer[*][*]"), measured("""
+                let select (outer: Map<String, Map<String, Int>>): (Int, Map<String, Int>) =
+                    match Map.get("k", outer) with
+                    | Some m -> (1, m)
+                    | None -> (0, Map.empty)
+
+                behavior busy : (outer: Map<String, Map<String, Int>>, atLeast: Int) -> Map<String, Int>
+                let busy (outer, atLeast) = {
+                    let (_, selected) = select(outer)
+                    Map.filterEntries((_, count) -> count >= atLeast, selected)
+                }
+                """));
     }
 
     /** Which pair a match chose is read in every arm, one of which binds a name of its own. */

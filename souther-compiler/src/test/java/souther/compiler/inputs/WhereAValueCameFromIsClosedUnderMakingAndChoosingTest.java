@@ -8,6 +8,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -166,6 +167,72 @@ class WhereAValueCameFromIsClosedUnderMakingAndChoosingTest {
         List<TermPath> every = new ArrayList<>(((PathResolution.MayStandAt) first).among());
         every.addAll(((PathResolution.MayStandAt) second).among());
         assertEquals(Set.copyOf(every), Set.copyOf(made.alternatives().getFirst()));
+    }
+
+    /** One answer of every kind, and of each kind the shapes that tell it apart. */
+    private static List<PathResolution> everyKindOfAnswer() {
+        return List.of(
+                at(A),
+                at(B),
+                new PathResolution.NotAPosition(),
+                new PathResolution.MayStandAt(List.of(A)),
+                new PathResolution.MayStandAt(List.of(A, B)),
+                together(A, B),
+                new PathResolution.MadeOf(List.of(List.of(A, B), List.of(C))));
+    }
+
+    /** Every place an answer names, however it names them. */
+    private static Set<TermPath> placesOf(PathResolution answer) {
+        return switch (answer) {
+            case PathResolution.At(var at) -> Set.of(at);
+            case PathResolution.MayStandAt(var among) -> Set.copyOf(among);
+            case PathResolution.MadeOf made -> Set.copyOf(made.places());
+            case PathResolution.NotAPosition _ -> Set.of();
+        };
+    }
+
+    @Test
+    void makingOutOfOneAnswerOrChoosingAmongOneIsThatAnswer() {
+        for (PathResolution each : everyKindOfAnswer()) {
+            assertEquals(each, PathResolution.madeOf(List.of(each)), "made of " + each);
+            assertEquals(each, PathResolution.anyOf(List.of(each)), "chosen from " + each);
+        }
+    }
+
+    @Test
+    void takingNoStepOrTakingTheNarrowingsOutTwiceChangesNothingMore() {
+        for (PathResolution each : everyKindOfAnswer()) {
+            assertEquals(each, each.deeper(path -> path), "no step on " + each);
+            assertEquals(each.heldAt(), each.heldAt().heldAt(), "held twice " + each);
+        }
+    }
+
+    @Test
+    void makingAndChoosingNameTheSamePlacesInWhateverOrderTheyAreGiven() {
+        for (PathResolution first : everyKindOfAnswer()) {
+            for (PathResolution second : everyKindOfAnswer()) {
+                assertEquals(placesOf(PathResolution.madeOf(List.of(first, second))),
+                        placesOf(PathResolution.madeOf(List.of(second, first))),
+                        "made of " + first + " and " + second);
+                assertEquals(placesOf(PathResolution.anyOf(List.of(first, second))),
+                        placesOf(PathResolution.anyOf(List.of(second, first))),
+                        "chosen from " + first + " and " + second);
+            }
+        }
+    }
+
+    @Test
+    void makingAndChoosingNameEveryPlaceTheirPartsNameAndNoOther() {
+        for (PathResolution first : everyKindOfAnswer()) {
+            for (PathResolution second : everyKindOfAnswer()) {
+                Set<TermPath> every = new HashSet<>(placesOf(first));
+                every.addAll(placesOf(second));
+                assertEquals(every, placesOf(PathResolution.madeOf(List.of(first, second))),
+                        "made of " + first + " and " + second);
+                assertEquals(every, placesOf(PathResolution.anyOf(List.of(first, second))),
+                        "chosen from " + first + " and " + second);
+            }
+        }
     }
 
     private static TypeSymbol leaf(String name) {

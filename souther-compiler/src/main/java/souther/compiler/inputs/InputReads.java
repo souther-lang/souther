@@ -2232,6 +2232,25 @@ public final class InputReads {
     }
 
     /**
+     * The names in force inside the arm {@code decidedBy} took, for a walk that stands in the names
+     * {@code at} and not in the ones here.
+     *
+     * <p>A query for where a value came from crosses bindings on the way to a choice, and reads the
+     * choice's arms in those. An arm that binds a name opens it on top of them ({@link #choosing}),
+     * which is the one place that says what such a name stands for. {@code at} itself where the
+     * declarations of this input carry no symbols to read an arm under.
+     */
+    BindingEnvironment namesInside(BindingEnvironment at, Choice.Decides decidedBy,
+                                   DeclarationNewtypes newtypes) {
+        Symbols symbols = declared.symbols();
+        if (symbols == null) {
+            return at;
+        }
+        return new InputReads(at, alternatives, declared, dependencies, applied)
+                .choosing(decidedBy, symbols, newtypes).names;
+    }
+
+    /**
      * The reading a child is read in, {@code step} being the way from its parent into it
      * ({@link ScopeStep#forEachChild}).
      *
@@ -2295,11 +2314,11 @@ public final class InputReads {
             paths = new IdentityHashMap<>();
             pathsUnder = newtypes;
         } else if (pathsUnder != newtypes) {
-            return InputPath.of(e, names, newtypes, this::taken).heldAt();
+            return InputPath.of(e, names, newtypes, this).heldAt();
         }
         PathResolution held = paths.get(e);
         if (held == null) {
-            held = InputPath.of(e, names, newtypes, this::taken).heldAt();
+            held = InputPath.of(e, names, newtypes, this).heldAt();
             paths.put(e, held);
         }
         return held;
@@ -2319,7 +2338,7 @@ public final class InputReads {
      * the position afresh ({@link DeclaredInput#taking}).
      */
     public PathResolution forkedOn(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.of(e, names, newtypes, this::taken);
+        return InputPath.of(e, names, newtypes, this);
     }
 
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
@@ -3399,13 +3418,13 @@ public final class InputReads {
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}), at a
      *  position and never at a narrowing of one to several cases ({@link PathResolution#heldAt}). */
     public PathResolution elementAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.elementAt(binding, names, newtypes, this::taken).heldAt();
+        return InputPath.elementAt(binding, names, newtypes, this).heldAt();
     }
 
     /** Where the elements {@code e} holds stand, where it holds every occurrence of that position
      *  and each as often ({@link InputPath#everyElementOf}). */
     public PathResolution everyElementOf(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.everyElementOf(e, names, newtypes, this::taken);
+        return InputPath.everyElementOf(e, names, newtypes, this);
     }
 
     /**
@@ -3428,26 +3447,26 @@ public final class InputReads {
 
     /** The same, of the elements handed to {@code binding} ({@link InputPath#everyElementAt}). */
     public PathResolution everyElementAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.everyElementAt(binding, names, newtypes, this::taken);
+        return InputPath.everyElementAt(binding, names, newtypes, this);
     }
 
     /** The same, where the elements handed to {@code binding} are also handed in {@code direction}
      *  ({@link InputPath#inTheOrderAt}). */
     public PathResolution inTheOrderAt(BindingId binding, TraversalDirection direction,
                                        DeclarationNewtypes newtypes) {
-        return InputPath.inTheOrderAt(binding, direction, names, newtypes, this::taken);
+        return InputPath.inTheOrderAt(binding, direction, names, newtypes, this);
     }
 
     /** The same, of the elements {@code e} holds ({@link InputPath#inTheOrderOf}). */
     public PathResolution inTheOrderOf(Core e, TraversalDirection direction,
                                        DeclarationNewtypes newtypes) {
-        return InputPath.inTheOrderOf(e, direction, names, newtypes, this::taken);
+        return InputPath.inTheOrderOf(e, direction, names, newtypes, this);
     }
 
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.cameFrom(e, names, newtypes, this::taken).heldAt();
+        return InputPath.cameFrom(e, names, newtypes, this).heldAt();
     }
 
     /**

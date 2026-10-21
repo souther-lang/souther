@@ -170,14 +170,17 @@ public sealed interface PathResolution {
     static PathResolution madeOf(List<PathResolution> these) {
         List<List<TermPath>> ways = List.of(List.of());
         boolean any = false;
+        boolean settled = true;
         for (PathResolution each : these) {
             List<List<TermPath>> cases = alternativesOf(each);
             if (cases != null) {
                 ways = together(ways, cases);
                 any = true;
+                // A part that only may stand at a place keeps the value from being settled there.
+                settled &= each instanceof At;
             }
         }
-        return any ? of(ways, true) : new NotAPosition();
+        return any ? of(ways, settled) : new NotAPosition();
     }
 
     /** Every alternative of {@code ways} with every one of {@code cases}, or all their places in
