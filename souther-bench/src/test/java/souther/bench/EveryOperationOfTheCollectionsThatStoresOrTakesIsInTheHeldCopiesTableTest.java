@@ -2,7 +2,20 @@ package souther.bench;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
+import java.io.CharArrayWriter;
+import java.io.DataOutputStream;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.ObjectOutputStream;
+import java.io.OutputStreamWriter;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.TypeVariable;
@@ -24,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
@@ -48,6 +62,7 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.zip.GZIPOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -474,6 +489,41 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
                 HeldCopies.placementOf("offer", 3).orElseThrow());
         assertTrue(HeldCopies.placementOf("replace", 4).isEmpty(),
                 "an operation that no method of the library has was given a place");
+    }
+
+    /**
+     * A writer, a stream or a formatter made over a place to write says what it is told there, and
+     * one that keeps what it is told itself does not: every constructor of the library's is read as
+     * the one or the other.
+     */
+    @Test
+    void everyConstructorOfAWriterIsOverAPlaceExceptThoseOfTheOnesThatKeepTheirOwnText() {
+        List<Class<?>> writers = List.of(Formatter.class, PrintWriter.class, PrintStream.class,
+                BufferedWriter.class, OutputStreamWriter.class, FileWriter.class,
+                FileOutputStream.class, BufferedOutputStream.class, DataOutputStream.class,
+                ObjectOutputStream.class, GZIPOutputStream.class, StringWriter.class,
+                CharArrayWriter.class, ByteArrayOutputStream.class);
+        List<String> wrong = new ArrayList<>();
+        int over = 0;
+        for (Class<?> each : writers) {
+            for (Constructor<?> made : each.getConstructors()) {
+                boolean keepsItsOwn = each == StringWriter.class || each == CharArrayWriter.class
+                        || each == ByteArrayOutputStream.class
+                        || (each == Formatter.class && Arrays.stream(made.getParameterTypes())
+                                .allMatch(type -> type == Locale.class));
+                String descriptor = MethodType.methodType(void.class, made.getParameterTypes())
+                        .descriptorString();
+                boolean read = HeldCopies.writesWhereItWasMadeOver(
+                        each.getName().replace('.', '/'), descriptor);
+                over += read ? 1 : 0;
+                if (read == keepsItsOwn) {
+                    wrong.add(each.getSimpleName() + Arrays.toString(made.getParameterTypes())
+                            + " is read as " + (read ? "over a place" : "keeping its own text"));
+                }
+            }
+        }
+        assertEquals(List.of(), wrong, "a constructor was read as the wrong kind");
+        assertTrue(over > 0, "no constructor over a place was read");
     }
 
     /** The control: the sweep reads the collections of the library and is not empty. */

@@ -2,6 +2,14 @@ package souther.bench.readings.orders;
 
 import souther.compiler.partition.CompositionBudget;
 
+import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
 import java.util.AbstractMap;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -273,6 +281,103 @@ public final class HeldWholeAndTakenOut {
 
     public static String saidByAFormatterAskedByTheCall(Set<CompositionBudget> values) {
         return new Formatter().format("%s", Set.copyOf(values)).toString();
+    }
+
+    /** What a formatter says it says into where it was made to write, which is read from there. */
+    public static String saidThroughAFormatterOverABuilder(Set<CompositionBudget> values) {
+        StringBuilder out = new StringBuilder();
+        Formatter formatter = new Formatter(out);
+        formatter.format("%s", Set.copyOf(values));
+        return out.toString();
+    }
+
+    public static void saidThroughAFormatterOverStandardOut(Set<CompositionBudget> values) {
+        Formatter formatter = new Formatter(System.out);
+        formatter.format("%s", Set.copyOf(values));
+    }
+
+    public static String saidThroughAFormatterOverAWriter(Set<CompositionBudget> values) {
+        StringWriter out = new StringWriter();
+        new Formatter(out).format("%s", Set.copyOf(values));
+        return out.toString();
+    }
+
+    public static String printedThroughAPrintWriterOverAWriter(Set<CompositionBudget> values) {
+        StringWriter out = new StringWriter();
+        PrintWriter printer = new PrintWriter(out);
+        printer.print(Set.copyOf(values));
+        printer.flush();
+        return out.toString();
+    }
+
+    public static String printedThroughAPrintWriterOverABufferedWriter(
+            Set<CompositionBudget> values) {
+        StringWriter out = new StringWriter();
+        PrintWriter printer = new PrintWriter(new BufferedWriter(out));
+        printer.printf("%s", Set.copyOf(values));
+        printer.flush();
+        return out.toString();
+    }
+
+    public static String writtenTextOfTheCopyToAWriter(Set<CompositionBudget> values) {
+        StringWriter out = new StringWriter();
+        out.write(Set.copyOf(values).toString());
+        return out.toString();
+    }
+
+    public static String appendedTextOfTheCopyToAnAppendable(Set<CompositionBudget> values) {
+        StringBuilder out = new StringBuilder();
+        Appendable into = out;
+        try {
+            into.append(String.valueOf(Set.copyOf(values)));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return out.toString();
+    }
+
+    public static String printedThroughAPrintStreamOverABuffer(Set<CompositionBudget> values) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        PrintStream printer = new PrintStream(out);
+        printer.print(Set.copyOf(values));
+        printer.flush();
+        return out.toString();
+    }
+
+    /** A writer nothing here made is a window onto wherever whoever made it wrote to. */
+    public static void saidThroughAWriterHandedIn(PrintWriter out,
+                                                  Set<CompositionBudget> values) {
+        out.printf("%s", Set.copyOf(values));
+    }
+
+    public static void saidThroughAFormatterHandedIn(Formatter out,
+                                                     Set<CompositionBudget> values) {
+        out.format("%s", Set.copyOf(values));
+    }
+
+    public static void saidThroughAFormatterOverAFile(Set<CompositionBudget> values)
+            throws FileNotFoundException {
+        try (Formatter out = new Formatter("said.txt")) {
+            out.format("%s", Set.copyOf(values));
+        }
+    }
+
+    public static String saidThroughAFormatterTheTextOfTheCopyWasMadeFor(
+            Set<CompositionBudget> values) {
+        StringBuilder out = new StringBuilder();
+        new Formatter(out).format("%s", String.valueOf(Set.copyOf(values)));
+        return out.toString();
+    }
+
+    public static String saidThroughAFormatterHandedToAHelper(Set<CompositionBudget> values) {
+        StringBuilder out = new StringBuilder();
+        saidThroughAFormatterHandedToAHelperSays(new Formatter(out), Set.copyOf(values));
+        return out.toString();
+    }
+
+    private static void saidThroughAFormatterHandedToAHelperSays(Formatter into,
+                                                                 Set<CompositionBudget> copy) {
+        into.format("%s", copy);
     }
 
     public static String saidByObjectsToStringOfTheContainer(Set<CompositionBudget> values) {

@@ -8,6 +8,8 @@ import souther.bench.SaltedOrderVocabulary.Feed;
 import souther.bench.SaltedOrderVocabulary.Outcome;
 import souther.bench.SaltedOrderVocabulary.Push;
 
+import java.io.OutputStream;
+import java.io.Writer;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
@@ -409,7 +411,7 @@ final class HeldCopies {
 
     /** What the call does to held copies, joined to what the order reading made of it. */
     static Outcome through(Call call, Outcome order) {
-        Outcome out = withText(call, order);
+        Outcome out = madeAWindow(call, withText(call, order));
         List<Push> intoArguments = putIntoArguments(call);
         if (!intoArguments.isEmpty()) {
             out = SaltedOrderVocabulary.alsoPushing(out, intoArguments);
@@ -503,6 +505,70 @@ final class HeldCopies {
             out = SaltedOrderVocabulary.alsoPushing(out, List.of(new Push(call.receiver(), said)));
         }
         return call.returnsAReference() ? out.holding(said) : out;
+    }
+
+    /**
+     * A writer, a stream or a formatter made over where it writes is a window onto that place: what
+     * is said into it is said there, and read from there by whatever holds the place. The window
+     * is marked by a tag so that this is known wherever it goes.
+     */
+    private static Outcome madeAWindow(Call call, Outcome out) {
+        if (call.isStatic() || !call.name().equals("<init>")
+                || !writesWhereItWasMadeOver(call.owner(), call.descriptor())) {
+            return out;
+        }
+        return SaltedOrderVocabulary.alsoPushing(out,
+                List.of(new Push(call.receiver(), Set.of(Tag.window()))));
+    }
+
+    /**
+     * Whether a constructor of this class makes it over a place to write to. A class that keeps
+     * what it is told itself is made over none: its constructors take a size, a locale or a
+     * charset and nothing to write into.
+     */
+    static boolean writesWhereItWasMadeOver(String owner, String descriptor) {
+        if (!isASink(owner)) {
+            return false;
+        }
+        for (ClassDesc each : MethodTypeDesc.ofDescriptor(descriptor).parameterList()) {
+            String type = each.descriptorString();
+            if (!type.startsWith("L")) {
+                continue;
+            }
+            String named = type.substring(1, type.length() - 1);
+            if (WRITTEN_TO_BY_NAME.contains(named) || isA(named, Appendable.class)
+                    || isA(named, OutputStream.class)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** What a class that writes to a place is given to name it, other than another to write to. */
+    private static final Set<String> WRITTEN_TO_BY_NAME = Set.of(
+            "java/lang/String", "java/io/File", "java/nio/file/Path", "java/io/FileDescriptor");
+
+    /** Whether the type says what it is told into a place, which it may have been made over. */
+    private static boolean isASink(String internalName) {
+        return isA(internalName, Formatter.class) || isA(internalName, Writer.class)
+                || isA(internalName, OutputStream.class);
+    }
+
+    /**
+     * Whether the call is made on a window: one marked as such, or one that something handed in
+     * and nothing here made, which is a window onto wherever its holder made it.
+     */
+    private static boolean onAWindow(Call call) {
+        if (call.isStatic() || call.name().equals("<init>")) {
+            return false;
+        }
+        Val receiver = call.receiver();
+        for (Tag each : receiver.tags()) {
+            if (each.isAWindow()) {
+                return true;
+            }
+        }
+        return receiver.alloc() < 0 && receiver.home() != null && isASink(call.owner());
     }
 
     /** Whether what is of this type keeps the text it is told, to say it when it is asked. */
@@ -703,6 +769,11 @@ final class HeldCopies {
                 }
             }
         }
+        if (onAWindow(call)) {
+            for (Tag said : textOfHeld(call)) {
+                out.add(said.origin());
+            }
+        }
         return out;
     }
 
@@ -744,6 +815,10 @@ final class HeldCopies {
     /** What the reading says of a call that holds a copy whole and is not followed. */
     static String unresolvedSaid(Call call) {
         String what = call.owner().replace('/', '.') + "." + call.name();
+        if (onAWindow(call) && !textOfHeld(call).isEmpty()) {
+            return "says a copy held whole into " + what + "'s receiver, which writes to the place"
+                    + " it was made over, and what is read there is not followed back";
+        }
         return storesIntoSomethingUntracked(call)
                 ? "stores a copy whole in " + what + "'s receiver, which is a view of or came from"
                         + " another container, and what is stored there is not followed back"

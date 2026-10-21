@@ -220,7 +220,7 @@ final class SaltedOrder {
          * second is what the first is taken out of.
          */
         boolean travels() {
-            return cameOutOfACopy() || isHeld() || isAView();
+            return cameOutOfACopy() || isHeld() || kind == Kind.VIEW;
         }
 
         private static final String ENTRIES_OF_A_MAP = "entries";
@@ -242,7 +242,22 @@ final class SaltedOrder {
         }
 
         boolean isAView() {
-            return kind == Kind.VIEW;
+            return kind == Kind.VIEW && !site.equals(WINDOW);
+        }
+
+        private static final String WINDOW = "window";
+
+        /**
+         * Something that writes what it is told to where it was made to write: a formatter or a
+         * writer made over another, a stream made over a file. What is said into it is said where
+         * that is read, which is not followed back from here.
+         */
+        static Tag window() {
+            return new Tag(Kind.VIEW, "", WINDOW);
+        }
+
+        boolean isAWindow() {
+            return kind == Kind.VIEW && site.equals(WINDOW);
         }
 
         boolean isEntriesOfAMap() {

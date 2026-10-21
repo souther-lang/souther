@@ -3,7 +3,11 @@ package souther.bench.readings.orders;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.publish.PublicationOrders;
 
+import java.io.BufferedWriter;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.AbstractMap;
+import java.util.Formatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -133,6 +137,29 @@ public final class HeldWholeAndNotTakenOut {
         List<Set<CompositionBudget>> holder = new ArrayList<>();
         holder.add(Set.copyOf(values));
         return Objects.toIdentityString(holder);
+    }
+
+    /** A window that is only told what the copy holds a count of says nothing of its order. */
+    public static String saidThroughAFormatterOnlyTheSizeOfTheCopy(
+            Set<CompositionBudget> values) {
+        StringBuilder out = new StringBuilder();
+        new Formatter(out).format("%d of %s", Set.copyOf(values).size(), "them");
+        return out.toString();
+    }
+
+    public static String saidThroughAPrintWriterOnlyWhatIsTheSameInAnyOrder(
+            Set<CompositionBudget> values) {
+        StringWriter out = new StringWriter();
+        PrintWriter printer = new PrintWriter(new BufferedWriter(out));
+        printer.printf("%s", values.isEmpty());
+        printer.flush();
+        return out.toString();
+    }
+
+    /** A formatter that keeps its own text, told one thing after another, is not over a place. */
+    public static String saidByAFormatterThatKeepsItsOwnTextInAChain(
+            Set<CompositionBudget> values) {
+        return new Formatter().format("%s", "a").format("%s", values.size()).toString();
     }
 
     /** The text of an array in an array is the inner array's name, and the shallow text stops. */
