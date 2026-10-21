@@ -2,9 +2,6 @@ package souther.architecture;
 
 import org.junit.jupiter.api.Test;
 
-import java.lang.classfile.ClassModel;
-import java.lang.classfile.MethodModel;
-import java.lang.classfile.instruction.InvokeInstruction;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -12,7 +9,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -127,6 +123,29 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
     private static final CompiledOutputs AND_WHAT_IS_COMPILED_BESIDE_IT =
             CompiledOutputs.ofEverythingCompiledHere();
 
+    /**
+     * What the rule finds among the classes compiled beside the test, read once for both controls.
+     *
+     * <p>In a class of its own so that it is read when a control first asks and not before: the
+     * rule over the published classes reads nothing of it.
+     */
+    private static final class FoundBesideIt {
+
+        private static final List<String> FOUND =
+                whoReadsOneByWhereItIs(AND_WHAT_IS_COMPILED_BESIDE_IT);
+
+        private FoundBesideIt() {
+        }
+    }
+
+    /**
+     * Every reader the rule finds is one read and settled above, and every one settled above is
+     * still found.
+     *
+     * <p>Equal and not contained, which is also what says the rule was asked of classes that read a
+     * block: the list above is not empty, so a walk that read no reader of a block would find none
+     * and fail here rather than pass while answering about nothing.
+     */
     @Test
     void everyReaderThatReadsABlockForWhereItsPositionsAreHasBeenRead() {
         assertEquals(READ_AND_SETTLED.keySet().stream().sorted().toList(),
@@ -147,7 +166,7 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
      */
     @Test
     void andTheTwoShapesThatDoTakeOneAreBothFound() {
-        List<String> found = whoReadsOneByWhereItIs(AND_WHAT_IS_COMPILED_BESIDE_IT);
+        List<String> found = FoundBesideIt.FOUND;
         String here = ABlockReadByWhereItsPositionsAre.class.getName().replace('.', '/');
 
         assertTrue(isAmong(found, here, "theFirstTheIteratorGives"),
@@ -183,7 +202,7 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
      */
     @Test
     void andAReadingThatKeepsNoWalkInItsAnswerIsNotFound() {
-        List<String> found = whoReadsOneByWhereItIs(AND_WHAT_IS_COMPILED_BESIDE_IT);
+        List<String> found = FoundBesideIt.FOUND;
         String here = ABlockReadCommutatively.class.getName().replace('.', '/');
 
         assertEquals(List.of(),
@@ -198,27 +217,6 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
      *  what it is called — two methods of one name are two methods. */
     private static boolean isAmong(List<String> found, String owner, String called) {
         return found.stream().anyMatch(each -> each.startsWith(owner + "#" + called + "("));
-    }
-
-    /**
-     * And the rule was asked of classes that were read.
-     *
-     * <p>A walk finding no reader of a block would find none taking a position by where it is, and
-     * would pass while answering about nothing.
-     */
-    @Test
-    void andTheClassesThatReadABlockWereRead() {
-        List<String> reading = new ArrayList<>();
-        for (ClassModel read : COMPILED.all()) {
-            if (read.methods().stream().anyMatch(NoReaderOfABlockObservesWhichPositionCameFirstTest
-                    ::asksABlockForItsPositions)) {
-                reading.add(read.thisClass().name().stringValue());
-            }
-        }
-
-        assertFalse(reading.isEmpty(),
-                "nothing here reads a block's positions at all, which is not what this repository"
-                        + " holds");
     }
 
     /**
@@ -322,14 +320,6 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
             }
         }
         return reading.stream().sorted().distinct().toList();
-    }
-
-    /** Whether this method asks a block for the positions it holds. */
-    private static boolean asksABlockForItsPositions(MethodModel method) {
-        return method.code().stream().flatMap(code -> code.elementStream())
-                .anyMatch(element -> element instanceof InvokeInstruction call
-                        && call.owner().asInternalName().equals(THE_BLOCK)
-                        && call.name().stringValue().equals("members"));
     }
 
 }

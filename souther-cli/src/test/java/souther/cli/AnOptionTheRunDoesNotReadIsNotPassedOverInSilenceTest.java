@@ -69,29 +69,23 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
         }
     }
 
+    /**
+     * A module every command here can be run on to the end: one behavior for {@code --behavior} to
+     * name and a row for {@code examples} to run. What is asked is what became of the line, and
+     * nothing here reads what the compile made of the model, so it is no larger than that.
+     */
     private static final String MODEL = """
             module example.timesheet
-
-            data MinuteOfDay = Int
-                invariant withinDay = value >= 0 && value <= 1440
-
-            data Shift =
-                { startsAt: MinuteOfDay
-                , endsAt: MinuteOfDay
-                }
-                invariant endsAfterStart = startsAt < endsAt
 
             data Short
             data Long
 
-            behavior classify : (shift: Shift) -> Short | Long
+            behavior classify : (minutes: Int) -> Short | Long
 
-            let classify (shift) =
-                if shift.endsAt.value - shift.startsAt.value >= 480 then Long else Short
+            let classify (minutes) = if minutes >= 480 then Long else Short
 
             example classify
-                | "short" : (Shift { startsAt = MinuteOfDay(540), endsAt = MinuteOfDay(600) })
-                    -> Short
+                | "short" : (60) -> Short
             """;
 
     private Path model() throws Exception {
@@ -446,15 +440,18 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
      * And a tag is accepted whether or not this compiler answers in it. {@code fr} names a language
      * somebody reads; that nobody has translated the messages into it yet is what the fallback to
      * the base catalog is for, and is not a mistake in what they wrote.
+     *
+     * <p>One tag, because the line holds the value to the one question every tag is asked
+     * ({@code Messages.namesALanguage}), and which tags that answers for — a region, a POSIX
+     * spelling, a language with a catalog — is {@code ALanguageIsNamedByATagAndNotByACatalogTest}'s.
+     * What is asked here is that the line does not ask for a catalog besides.
      */
     @Test
     void aLanguageThisCompilerHasNoCatalogForIsAccepted() throws Exception {
-        for (String tag : List.of("ja", "en", "fr", "fr-CA", "ja_JP")) {
-            Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
-                    "--lang", tag);
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--lang", "fr");
 
-            assertEquals(0, said.code(), tag + ": " + said.err());
-        }
+        assertEquals(0, said.code(), said.err());
     }
 
     /**
