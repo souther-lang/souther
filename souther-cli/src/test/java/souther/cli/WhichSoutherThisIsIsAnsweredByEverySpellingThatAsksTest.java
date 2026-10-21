@@ -1,12 +1,9 @@
 package souther.cli;
 
+import souther.cli.CliProcess.Ran;
 import souther.compiler.meta.ModuleMetadata;
 
 import org.junit.jupiter.api.Test;
-
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,20 +26,8 @@ class WhichSoutherThisIsIsAnsweredByEverySpellingThatAsksTest {
 
     /** Runs the command line and answers with its exit code and what it wrote. */
     private Said run(String... args) {
-        PrintStream originalErr = System.err;
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            int code = Main.dispatch(args);
-            return new Said(code, err.toString(StandardCharsets.UTF_8),
-                    out.toString(StandardCharsets.UTF_8));
-        } finally {
-            System.setErr(originalErr);
-            System.setOut(originalOut);
-        }
+        Ran ran = CliInProcess.run(args);
+        return new Said(ran.code(), ran.err(), ran.out());
     }
 
     /** What every spelling has to write, read where the compiler reads it. */

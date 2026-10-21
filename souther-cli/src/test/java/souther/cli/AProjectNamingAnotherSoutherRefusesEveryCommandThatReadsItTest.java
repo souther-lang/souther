@@ -26,6 +26,12 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
 
     private static final String OTHER = "0.0.1-not-this-one";
 
+    /**
+     * What {@code fmt} answers on a file that is not there: the command went past the project's
+     * version and on to the file, which a refusal of the line ({@code 2}) would not have.
+     */
+    private static final int ABSENT_FILE = 1;
+
     private record Said(int code, String err, String out) {}
 
     private static Said run(Path workingDirectory, String... args) {
@@ -102,6 +108,7 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
 
         Said said = run(project, "fmt", project.resolve("absent.sou").toString());
 
+        assertEquals(ABSENT_FILE, said.code(), said.err());
         assertFalse(said.err().contains(ProjectVersion.FILE), said.err());
     }
 
@@ -118,6 +125,7 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
         assertEquals(2, refused.code(), refused.err());
         assertTrue(refused.err().contains(root.resolve(ProjectVersion.FILE).toString()),
                 refused.err());
+        assertEquals(ABSENT_FILE, accepted.code(), accepted.err());
         assertFalse(accepted.err().contains(ProjectVersion.FILE), accepted.err());
     }
 
@@ -144,6 +152,7 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
 
             Said said = run(project, "fmt", project.resolve("absent.sou").toString());
 
+            assertEquals(ABSENT_FILE, said.code(), "'" + content + "': " + said.err());
             assertFalse(said.err().contains(ProjectVersion.FILE), "'" + content + "': " + said.err());
         }
     }
@@ -178,6 +187,7 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
     void noFileIsNoConstraint(@TempDir Path project) {
         Said said = run(project, "fmt", project.resolve("absent.sou").toString());
 
+        assertEquals(ABSENT_FILE, said.code(), said.err());
         assertFalse(said.err().contains(ProjectVersion.FILE), said.err());
     }
 }

@@ -11,9 +11,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.jvm.ClassFileImage;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -200,15 +197,7 @@ class ANameIsCanonicalWhereverItEntersTest {
         Files.writeString(file, source);
         List<String> argv = new ArrayList<>(List.of("examples", file.toString()));
         argv.addAll(List.of(args));
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(argv.toArray(String[]::new));
-        } finally {
-            System.setOut(originalOut);
-        }
-        return out.toString(StandardCharsets.UTF_8);
+        return CliInProcess.printed(argv.toArray(String[]::new));
     }
 
     @Test

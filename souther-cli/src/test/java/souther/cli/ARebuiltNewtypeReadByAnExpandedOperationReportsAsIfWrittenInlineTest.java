@@ -3,9 +3,8 @@ package souther.cli;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -121,21 +120,7 @@ class ARebuiltNewtypeReadByAnExpandedOperationReportsAsIfWrittenInlineTest {
     private static Run examples(String source) throws Exception {
         Path file = Files.createTempDirectory(sources, "run").resolve("probe.sou");
         Files.writeString(file, source);
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        int code;
-        try {
-            code = Main.run(new String[] {"examples", file.toString()},
-                    Environment.ofThisProcess());
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
-        return new Run(code, out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+        Ran ran = CliInProcess.run("examples", file.toString());
+        return new Run(ran.code(), ran.out(), ran.err());
     }
 }
