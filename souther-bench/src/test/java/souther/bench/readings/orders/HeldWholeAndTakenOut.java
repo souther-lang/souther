@@ -241,6 +241,19 @@ public final class HeldWholeAndTakenOut {
         return holder.toString();
     }
 
+    /** Unlike the array's own text, this says each element, and an element is a set. */
+    public static String saidByTheTextOfTheElementsOfAnArray(Set<CompositionBudget> values) {
+        Object[] array = new Object[1];
+        array[0] = Set.copyOf(values);
+        return Arrays.toString(array);
+    }
+
+    public static String saidByTheDeepTextOfTheElementsOfAnArray(Set<CompositionBudget> values) {
+        Object[] array = new Object[1];
+        array[0] = Set.copyOf(values);
+        return Arrays.deepToString(array);
+    }
+
     public static String saidInAConcatenationWithTheContainer(Set<CompositionBudget> values) {
         List<Set<CompositionBudget>> holder = new ArrayList<>();
         holder.add(Set.copyOf(values));

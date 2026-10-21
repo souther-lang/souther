@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.bench.SaltedOrder.Finding;
 import souther.bench.SaltedOrder.Reading;
 import souther.bench.readings.orders.AskedOrNamedInOrder;
+import souther.bench.readings.orders.CopiedByAReference;
 import souther.bench.readings.orders.Held;
 import souther.bench.readings.orders.HeldClasses;
 import souther.bench.readings.orders.HeldWholeAndNotTakenOut;
@@ -206,6 +207,23 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
                 "a reader that holds a copy whole, and takes out something else or takes the copy"
                         + " out to ask it or put it in an order, was refused");
         assertFalse(reading.roots().isEmpty(), "the walk did not begin at the copies held");
+    }
+
+    /**
+     * A copy made by a reference to the method that makes it is a copy the reading begins at, and
+     * is named by the place that made the reference.
+     */
+    @Test
+    void aCopyThatNoCallInTheReaderMakesIsOneWhenAReferenceToItIsRun() {
+        Reading reading = readingOfOnly(CopiedByAReference.class);
+
+        assertEquals(2, reading.roots().size(),
+                () -> "the copies the references make are where the reading begins: "
+                        + reading.roots());
+        assertFoundOnlyIn(reading, CopiedByAReference.class, "aSetMadeByAReferenceAndListed",
+                CopiedByAReference.class.getName() + "#aSetMadeByAReferenceAndListed:Set.copyOf@");
+        assertFoundOnlyIn(reading, CopiedByAReference.class, "aMapMadeByAReferenceAndListed",
+                CopiedByAReference.class.getName() + "#aMapMadeByAReferenceAndListed:Map.copyOf@");
     }
 
     /**

@@ -83,6 +83,9 @@ final class HeldCopies {
 
     private static final String KEY = "k";
 
+    /** What an array is made as, by the instruction that makes one. */
+    private static final String ARRAY = "array";
+
     /**
      * Where what a function returns goes, in the call that was given the function: nowhere, as a
      * predicate's answer does; an element of what the call hands back, as the function of a
@@ -339,7 +342,25 @@ final class HeldCopies {
         if (handedToTheFunctions != null) {
             out = out.feeding(List.of(handedToTheFunctions), false);
         }
-        return markedAsAView(call, out);
+        return markedAsAWalk(call, markedAsAView(call, out));
+    }
+
+    /**
+     * What a call answers that is a stream or a cursor is marked, by the type it is declared to
+     * answer and not by its name, so that its text is known to be its own name.
+     */
+    private static Outcome markedAsAWalk(Call call, Outcome out) {
+        String returns = call.descriptor().substring(call.descriptor().indexOf(')') + 1);
+        boolean walk = (returns.startsWith("Ljava/util/stream/") && returns.endsWith("Stream;"))
+                || returns.equals("Ljava/util/Iterator;")
+                || returns.equals("Ljava/util/ListIterator;")
+                || returns.equals("Ljava/util/Enumeration;")
+                || returns.equals("Ljava/util/Spliterator;");
+        if (!walk) {
+            return out;
+        }
+        return new Outcome(out.result().withMade(Val.A_WALK), out.pushes(), out.clears(),
+                out.feeds(), out.crossedBy(), out.unmodeled(), out.endsAs());
     }
 
     /**
@@ -402,28 +423,32 @@ final class HeldCopies {
         if (!ofTheReceiver && !MAKES_TEXT_OF_ITS_ARGUMENTS.contains(name)) {
             return Set.of();
         }
+        // Only these say the elements of an array: the text of an array is its own name.
+        boolean elementsOfAnArray = call.isStatic() && call.owner().equals("java/util/Arrays")
+                && (name.equals("toString") || name.equals("deepToString"));
         Set<Tag> out = new LinkedHashSet<>();
         for (Val each : call.args()) {
-            addTextOf(each, out);
+            addTextOf(each, out, elementsOfAnArray);
         }
-        if (ofTheReceiver && !saysWhatItIsAndNotWhatItHolds(call.owner())) {
-            addTextOf(call.receiver(), out);
+        if (ofTheReceiver) {
+            addTextOf(call.receiver(), out, false);
         }
         return out;
     }
 
     /**
-     * Whether what is of this class gives text that is not made of what it holds: a stream and a
-     * cursor name themselves, and so does an array, which is known by how it was made.
+     * Whether the text of this is what it is and not what it holds: a stream and a cursor name
+     * themselves, and so does an array. Which it is was settled where it was made, by what the call
+     * that made it was declared to answer.
      */
-    private static boolean saysWhatItIsAndNotWhatItHolds(String owner) {
-        return owner.startsWith("java/util/stream/") || owner.equals("java/util/Iterator")
-                || owner.equals("java/util/ListIterator") || owner.equals("java/util/Enumeration")
-                || owner.equals("java/util/Spliterator");
+    static boolean namesItself(Val value) {
+        return ARRAY.equals(value.made()) || Val.A_WALK.equals(value.made());
     }
 
-    private static void addTextOf(Val value, Set<Tag> into) {
-        if ("array".equals(value.made())) {
+    private static void addTextOf(Val value, Set<Tag> into, boolean arrayIsItsElements) {
+        boolean saysWhatItHolds = !namesItself(value)
+                || (arrayIsItsElements && ARRAY.equals(value.made()));
+        if (!saysWhatItHolds) {
             return;
         }
         for (Tag each : value.tags()) {

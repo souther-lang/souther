@@ -90,6 +90,13 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
     private static final Map<String, String> NOT_FOLLOWED_THOUGH_GIVEN_A_FUNCTION =
             notFollowed();
 
+    /**
+     * Methods that only some of the JDKs this is built on have. What the sweep reads is the library
+     * it runs on, so a method a newer one added fails until it is listed, and one listed here is not
+     * required of an older one.
+     */
+    private static final Set<String> IN_NEWER_JDKS_ONLY = Set.of("ofLazy");
+
     private static Map<String, String> notFollowed() {
         Map<String, String> out = new java.util.TreeMap<>();
         String bulk = "a bulk operation of a concurrent map, which runs a function over entries in"
@@ -287,7 +294,7 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
 
         List<String> notGiven = new ArrayList<>();
         for (String name : NOT_FOLLOWED_THOUGH_GIVEN_A_FUNCTION.keySet()) {
-            if (!given.contains(name)) {
+            if (!given.contains(name) && !IN_NEWER_JDKS_ONLY.contains(name)) {
                 notGiven.add(name);
             }
         }

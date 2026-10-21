@@ -5,12 +5,14 @@ import souther.compiler.publish.PublicationOrders;
 
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Readers that hold a copy whole in a container and put nothing of its order in an answer.
@@ -110,6 +112,18 @@ public final class HeldWholeAndNotTakenOut {
         Object[] array = new Object[1];
         array[0] = Set.copyOf(values);
         return array.toString() + array;
+    }
+
+    /** A stream and a cursor name themselves too, which is the point of asking for their text. */
+    @SuppressWarnings("StreamToString")
+    public static String theTextOfAStreamThatHoldsACopy(Set<CompositionBudget> values) {
+        Stream<Set<CompositionBudget>> stream = Stream.of(Set.copyOf(values));
+        return new StringBuilder().append(stream).toString();
+    }
+
+    public static String theTextOfACursorOverACopy(Set<CompositionBudget> values) {
+        Iterator<Set<CompositionBudget>> cursor = List.of(Set.copyOf(values)).iterator();
+        return "cursor: " + cursor + String.valueOf(cursor);
     }
 
     public static List<String> aComputeWhoseFunctionIsGivenOnlyTheKey(

@@ -251,6 +251,9 @@ final class SaltedOrder {
         /** The {@code alloc} of the entries of a map, or a walk over them: each is a view. */
         static final int ENTRIES = -3;
 
+        /** What {@code made} says of a stream or a cursor: text of it is its own name. */
+        static final String A_WALK = "a walk";
+
         static final Val CLEAN = new Val(Set.of(), false, -1, null, null, Set.of());
 
         static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null, Set.of());

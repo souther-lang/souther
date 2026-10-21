@@ -319,6 +319,11 @@ final class SaltedOrderFlow {
                     functionsMadeIn.computeIfAbsent(new MethodKey(
                             bodyOwner.substring(1, bodyOwner.length() - 1), body.methodName(),
                             body.lookupDescriptor()), k -> new LinkedHashSet<>()).add(in);
+                    // A reference to the method that makes a copy is the call, made where the
+                    // library runs it, so the reading begins here as it does at a written call.
+                    if (makesACopyWhenRun(in.owner(), body)) {
+                        makesACopy.add(in);
+                    }
                 }
             }
         } else if (owner.equals("StringConcatFactory") || owner.equals("ObjectMethods")) {
@@ -1602,7 +1607,7 @@ final class SaltedOrderFlow {
 
     /** What is a reference to a method of the library, and the values it was made over. */
     private record LibraryRef(Signature method, boolean isStatic, boolean isConstructor,
-                              List<Val> captured) {}
+                              List<Val> captured, String copyOrigin) {}
 
     private final Map<String, LibraryRef> libraryRefs = new HashMap<>();
 
@@ -1655,7 +1660,11 @@ final class SaltedOrderFlow {
         Call call = new Call(ref.method().owner(), ref.method().name(), ref.method().descriptor(),
                 receiver, args, ref.isStatic(), !returns.equals("V"),
                 returns.startsWith("L") || returns.startsWith("["), false);
-        return effectsOf(state, call, where, here).result().tags();
+        Set<Tag> made = new LinkedHashSet<>(effectsOf(state, call, where, here).result().tags());
+        if (ref.copyOrigin() != null) {
+            made.add(new Tag(Kind.COLLECTION, ref.copyOrigin()));
+        }
+        return made;
     }
 
     private static boolean keepsPositionInAnInt(String name) {
@@ -1669,6 +1678,16 @@ final class SaltedOrderFlow {
                  "hashCode", "toString" -> true;
             default -> false;
         };
+    }
+
+    /** Whether a reference to this method, made in a class the reading begins at, is a copy. */
+    private boolean makesACopyWhenRun(String madeIn, DirectMethodHandleDesc handle) {
+        String owner = handle.owner().descriptorString();
+        boolean isStatic = handle.kind() == DirectMethodHandleDesc.Kind.STATIC
+                || handle.kind() == DirectMethodHandleDesc.Kind.INTERFACE_STATIC;
+        return isStatic && beginsAt.test(madeIn)
+                && isACopy(owner.substring(1, owner.length() - 1), handle.methodName(),
+                        MethodTypeDesc.ofDescriptor(handle.lookupDescriptor()).parameterCount());
     }
 
     private static boolean isACopy(String owner, String name, int count) {
@@ -1862,10 +1881,21 @@ final class SaltedOrderFlow {
                     DirectMethodHandleDesc.Kind kind = body.kind();
                     String refKey = "ref|" + bodyOwner + "#" + body.methodName()
                             + body.lookupDescriptor() + "|" + unit.method() + ":" + index;
+                    // What the reference makes, where it is the method that makes a copy, is a
+                    // copy made here: named as a call at this place would name it.
+                    String copyOrigin = null;
+                    if (makesACopyWhenRun(unit.method().owner(), body)) {
+                        copyOrigin = unit.method().owner().replace('/', '.') + "#"
+                                + unit.method().name() + ":"
+                                + bodyOwner.substring(bodyOwner.lastIndexOf('/') + 1) + "."
+                                + body.methodName() + "@" + index;
+                        roots.add(copyOrigin);
+                        reached.computeIfAbsent(copyOrigin, k -> new LinkedHashSet<>());
+                    }
                     libraryRefs.put(refKey, new LibraryRef(handle,
                             kind == DirectMethodHandleDesc.Kind.STATIC
                                     || kind == DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
-                            kind == DirectMethodHandleDesc.Kind.CONSTRUCTOR, args));
+                            kind == DirectMethodHandleDesc.Kind.CONSTRUCTOR, args, copyOrigin));
                     result.add(new Tag(Kind.FUNCTION, refKey));
                 }
             }
@@ -1876,7 +1906,7 @@ final class SaltedOrderFlow {
                     if (tag.cameOutOfACopy()) {
                         result.add(tag.kind() == Kind.PICKED || tag.kind() == Kind.CHOSEN ? tag
                                 : new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
-                    } else if (tag.isHeld() && !"array".equals(args.get(each).made())) {
+                    } else if (tag.isHeld() && !HeldCopies.namesItself(args.get(each))) {
                         // The text of a container says the copies it holds, in their order; an
                         // array says what it is.
                         result.add(new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));

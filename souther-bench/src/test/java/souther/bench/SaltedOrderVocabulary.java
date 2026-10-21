@@ -745,6 +745,28 @@ final class SaltedOrderVocabulary {
         return out;
     }
 
+    /**
+     * What something made without an order of the elements it is given holds. A copy given as an
+     * element is held and is not the set's own order, so it is not carried; what a walk gave, and
+     * what an order chose, is.
+     */
+    private static Set<Tag> unorderedFromElements(List<Val> given) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Val each : given) {
+            for (Tag tag : each.tags()) {
+                switch (tag.kind()) {
+                    case SEQUENCE, PICKED -> out.add(new Tag(Kind.COLLECTION, tag.origin()));
+                    case CHOSEN -> {
+                        out.add(new Tag(Kind.COLLECTION, tag.origin()));
+                        out.add(tag);
+                    }
+                    default -> { }
+                }
+            }
+        }
+        return out;
+    }
+
     private static Outcome sorted(Call call, Set<Tag> came) {
         if (!tiesNothing(call)) {
             // A stable sort leaves what it ties as the walk gave it, so what comes out is still the
@@ -965,11 +987,17 @@ final class SaltedOrderVocabulary {
             return Outcome.returning(call.returnsAReference() ? everything : Val.CLEAN);
         }
         if (library && materializesInOrder(call)) {
-            return Outcome.returning(Val.of(orderedFrom(List.of(walkedOrArgs(call)), true)));
+            // A list made of a copy walks it; a list made of elements holds them, and a copy given
+            // as an element is held by it and is not walked.
+            return Outcome.returning(Val.of(orderedFrom(List.of(walkedOrArgs(call)),
+                    !holdsItsArguments(name))));
         }
-        if (library && (name.equals("copyOf") || name.equals("of") || name.equals("ofEntries")
-                || name.equals("toSet") || name.equals("toUnmodifiableSet"))) {
+        if (library && (name.equals("copyOf") || name.equals("toSet")
+                || name.equals("toUnmodifiableSet"))) {
             return Outcome.returning(Val.of(unorderedFrom(call.everything())));
+        }
+        if (library && (name.equals("of") || name.equals("ofEntries"))) {
+            return Outcome.returning(Val.of(unorderedFromElements(call.everything())));
         }
         if (library && (putsOneIn(call) || PUTS_MANY_IN.contains(name)
                 || HeldCopies.putsAllIn(name))) {
@@ -999,6 +1027,11 @@ final class SaltedOrderVocabulary {
                 || owner.equals("java/lang/Iterable") || owner.equals("java/lang/StringBuilder")
                 || owner.equals("java/lang/StringBuffer") || owner.equals("java/lang/Appendable")
                 || owner.equals("java/lang/CharSequence");
+    }
+
+    /** Whether what the call of this name makes holds what it is given as its elements. */
+    private static boolean holdsItsArguments(String name) {
+        return name.equals("of") || name.equals("asList");
     }
 
     private static boolean materializesInOrder(Call call) {
