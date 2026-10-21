@@ -290,9 +290,11 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
             """;
 
     /**
-     * A mean over a list the body wrote out is read as far as the sum of it is: the way where the
-     * list holds nothing divides by nought and is no row, and what is left unsaid is what the sum
-     * beside a number leaves unsaid, which is a fact of its own and not about the quotient.
+     * A mean over a list the body wrote out is read as the sum of it is: the way where the list
+     * holds nothing divides by nought and is no row, and what is left unsaid is said for the reason
+     * the sum beside a number leaves something unsaid, which is a fact of its own and not about the
+     * quotient. The sum leaves less: its halves weigh one each and stand at the bar's own value,
+     * and a mean's weigh a half.
      */
     @Test
     void aMeanOverAFilteredListIsUnreadForNoReasonItsSumIsNot() {
@@ -300,8 +302,16 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         String sum = human(LIST.formatted("List.sum(xs)"));
         assertFalse(mean.contains("quotient by nought"), mean);
         assertFalse(notRead(sum).isEmpty(), sum);
-        assertEquals(notRead(sum), notRead(mean));
+        assertEquals(withoutWhatTheyAreAbout(notRead(sum)),
+                withoutWhatTheyAreAbout(notRead(mean)));
+        assertTrue(notRead(mean).containsAll(notRead(sum)), mean);
         assertTrue(mean.contains("border      borders"), mean);
+    }
+
+    /** {@code lines}, each without the place it is about. */
+    private static Set<String> withoutWhatTheyAreAbout(Set<String> lines) {
+        return lines.stream().map(each -> each.substring(0, each.lastIndexOf(", about `")))
+                .collect(Collectors.toSet());
     }
 
     private static Set<String> notRead(String report) {

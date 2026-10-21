@@ -46,6 +46,12 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
             let mix (order) =
                 if Int.add(order.straw.value, order.choco.value) <= 150 then Ok else No
 
+            data LooseParcel = { length: Int, width: Int }
+                invariant Int.add(length, width) <= 150
+
+            behavior quoteLoose : (parcel: LooseParcel) -> Ok | No
+            let quoteLoose (parcel) = Ok
+
             data Loose = { straw: Int, choco: Int }
 
             behavior mixLoose : (order: Loose) -> Ok | No
@@ -151,12 +157,12 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         assertTrue(notReadAbout(block, "parcel.width"), block);
     }
 
-    /** In the same words as the guard that names its positions, since what stopped each of them is
-     *  the same fact about this compiler. */
+    /** In the same words as the guard of the same rule over the same {@code Int}s, since what
+     *  each says of its positions is the same fact about this compiler. */
     @Test
     void andInTheSameWords() {
         assertEquals(saidAbout(blockOf("mixLoose"), "order.straw"),
-                saidAbout(blockOf("quote"), "parcel.length"));
+                saidAbout(blockOf("quoteLoose"), "parcel.length"));
     }
 
     /**

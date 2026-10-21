@@ -71,9 +71,10 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * separates the two is one {@code invariant value >= 0} on the fields' own type, which is not a
      * fact about this clause.
      *
-     * <p>What it is named as is a relation of the two, with neither shown to reach every value of
-     * the other: a sum held against a number has a length at the least {@code Int} that needs a
-     * width past the greatest. A form over two fields says nothing about where either of them stops
+     * <p>What it is named as is a relation of the two, each reaching every value of the other: a
+     * length near the least {@code Int} holds the sum below the number whatever the width is, only
+     * because no width is past the greatest, which is where the type stops and no line the model
+     * draws. A form over two fields says nothing about where either of them stops
      * on its own — counted a side at a time, a rule naming both of its positions on one side came
      * back as a form nobody could read.
      */
@@ -81,9 +82,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     void aClauseNoEndCameOutOfIsNamedAtEveryFieldItCompares() {
         FieldDomains read = readingOf(BARE, "Parcel");
 
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "width"));
     }
 

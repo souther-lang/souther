@@ -336,8 +336,10 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
     /**
      * A count another input supplies is no shift of one position: it is a number of two, and the
-     * comparison relates them. A count at either end of {@code Int} moves every date past the ones
-     * that can be written, so it settles the comparison whatever the date is.
+     * comparison relates them. The counts that settle the comparison whatever the date is are the
+     * ones moving the least date past the year or the greatest short of it, which is where the
+     * dates stop and no line the model draws, so the count is read with no line on it. What the
+     * date is shown is still not every value: a count moving it past the last date there is.
      */
     @Test
     void aShiftByACountAnotherInputSuppliesIsNotAShiftOfOnePosition() {
@@ -351,8 +353,10 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
         assertFalse(report.contains("Date.year((birthday"), report);
         assertTrue(report.contains("read as f/birthday + days"), report);
+        assertTrue(report.contains("it relates the value here to another value rather than"
+                + " dividing the values here, about `days`"), report);
         assertTrue(report.contains("relates the value here to another value not shown to reach"
                 + " every value here, so which values here settle it on their own is not worked"
-                + " out, about `days`"), report);
+                + " out, about `birthday`"), report);
     }
 }

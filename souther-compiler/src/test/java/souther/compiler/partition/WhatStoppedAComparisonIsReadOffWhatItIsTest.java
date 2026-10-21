@@ -28,14 +28,15 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
 
     /**
      * The language's own arithmetic over two positions, read as the relation of the two it is and
-     * not as a value made of them. What the other reaches is asked of it as of any relation: at
-     * the least {@code Int}, {@code a} needs a {@code b} past the greatest. A difference is about
-     * how far apart the two are, which moving both together leaves as it was, so it divides
-     * neither.
+     * not as a value made of them. What the other reaches is asked of it as of any relation: near
+     * the least {@code Int}, {@code a} fails it whatever {@code b} is, only because no {@code b} is
+     * past the greatest, which is where the type stops and no line the model draws. A difference
+     * is about how far apart the two are, which moving both together leaves as it was, so it
+     * divides neither.
      */
     @Test
     void arithmeticOverTwoPositionsRelatesThem() {
-        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                 whyAt(guard("a: Int, b: Int", "Int.add(a, b) > 10"), "a"));
         assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                 whyAt(guard("a: Int, b: Int", "Int.subtract(b, a) > 10"), "b"));
