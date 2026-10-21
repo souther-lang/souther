@@ -513,9 +513,16 @@ final class InputPath {
      */
     private PathResolution placeOf(Core.TupleGet get, BindingEnvironment names) {
         Held written = componentOf(get.tuple(), get.index(), names);
-        if (written != null) {
-            return named(written.value(), written.names());
-        }
+        return written != null ? named(written.value(), written.names())
+                : placeOfAnElementsPair(get, names);
+    }
+
+    /**
+     * Where a place of the pair an element is stands, following the names the pair is read under.
+     * Asked only once no pair written in this tree stands behind them, which {@link #componentOf}
+     * has followed to the end, so it is not asked again at each name.
+     */
+    private PathResolution placeOfAnElementsPair(Core.TupleGet get, BindingEnvironment names) {
         if (!(Core.withoutStanding(get.tuple()) instanceof Core.Read r)) {
             return new PathResolution.NotAPosition();
         }
@@ -535,8 +542,8 @@ final class InputPath {
                 yield PathResolution.anyOf(each);
             }
             case BindingRole.Alias(var value) -> trail.through(r.binding(),
-                    () -> placeOf(new Core.TupleGet(value, get.index(), get.arity(), get.type(),
-                            get.pos()), names));
+                    () -> placeOfAnElementsPair(new Core.TupleGet(value, get.index(), get.arity(),
+                            get.type(), get.pos()), names));
             case BindingRole.Root _, BindingRole.Unknown _ -> new PathResolution.NotAPosition();
         };
     }
