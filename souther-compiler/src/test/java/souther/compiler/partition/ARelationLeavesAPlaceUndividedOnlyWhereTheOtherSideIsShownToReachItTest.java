@@ -281,7 +281,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * not nought; where it may lie is still read from nought, so a gross of nought is neither
      * shown to fail nor shown to be left either way, and nothing is shown of the gross. Elements
      * that are even are not every value from nought, and the total is shown to take nothing, so
-     * nothing is shown of either.
+     * nothing is shown of the gross; the total is left either way by a gross taking every value,
+     * wherever it may lie, as the totals above are.
      */
     @Test
     void aTotalTakesWhatOneElementTakesAndNoughtWhereTheListMayBeEmpty() {
@@ -291,7 +292,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(NOT_SHOWN, leftAt("gross: Int, ns: Ps",
                 positive + "data Ps = List<Pos> invariant List.length(value) >= 1",
                 "gross >= List.sum(List.map(n -> n.value, ns.value))", 27).get("gross"));
-        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Even>",
                         "data Even = Int invariant Int.floorMod(value, 2) == 0",
                         "gross >= " + TOTAL, 27));

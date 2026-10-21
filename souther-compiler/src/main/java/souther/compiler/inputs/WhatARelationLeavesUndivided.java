@@ -481,14 +481,14 @@ public final class WhatARelationLeavesUndivided {
         if (free == null) {
             return shownFree;
         }
-        // Asked again of the values each term's order holds, a value of the term may settle the
-        // relation that the free terms left either way: no greater value of the other is there to
-        // fail it. That is a line of the orders' ends and none of the model's. The model's lines
-        // are those the free terms' settling runs draw, whether or not the values between them
-        // were shown reached: that is a second question, and one the type's ends may be all that
-        // kept from being shown.
+        // Asked again of the values each term takes in a row that is computed, a value of the term
+        // may settle the relation that the free terms left either way: no greater value of the
+        // other is there to fail it. That is a line of the orders' ends and the arithmetic's, and
+        // none of the model's. The model's lines are those the free terms' settling runs draw,
+        // whether or not the values between them were shown reached: that is a second question,
+        // and one those ends may be all that kept from being shown.
         List<Term<P>> withinTheirOrders = terms.stream()
-                .map(WhatARelationLeavesUndivided::withinItsOrder).toList();
+                .map(term -> withinItsOrder(term, arithmetic)).toList();
         Settling bounded = withinTheirOrders.equals(terms) ? null
                 : settlingOf(withinTheirOrders, at, constant, asking, granularity, arithmetic);
         List<Line> model = free.lines();
@@ -502,22 +502,35 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
-     * {@code term}, holding only the whole values the order it is counted on holds: the values it
-     * holds, cut where that order stops. A term whose order or values are no whole numbers is
-     * left as it is.
+     * {@code term}, holding only the whole values it takes in a row that is computed: the values
+     * it holds, cut where the order it is counted on stops and where its value weighed passes
+     * {@code arithmetic} ({@link Arithmetic}). {@code a >= 100 * b} has no false row at an
+     * {@code a} within a hundred of the greatest {@code Int}, since a {@code b} past it weighed
+     * passes the type, and that value is settled by the arithmetic alone. A term whose values are
+     * no whole numbers is left as it is.
      */
-    private static <P> Term<P> withinItsOrder(Term<P> term) {
-        NumericDomain.Bounds order = term.runsTo();
-        if (term.spacing() != Granularity.DISCRETE || !endsAtNumbers(order)
-                || !endsAtNumbers(term.holds())) {
+    private static <P> Term<P> withinItsOrder(Term<P> term, Arithmetic arithmetic) {
+        if (term.spacing() != Granularity.DISCRETE || !endsAtNumbers(term.holds())) {
             return term;
         }
-        NumericDomain.Bounds both = term.holds().meet(order);
-        if (both.equals(term.holds()) || !both.holdsAValue()) {
+        NumericDomain.Bounds cut = term.holds();
+        if (endsAtNumbers(term.runsTo())) {
+            cut = cut.meet(term.runsTo());
+        }
+        BigInteger weighed = arithmetic.stopsAtASize()
+                ? ExactRatio.of(arithmetic.greatest()).dividedBy(term.weight().abs())
+                        .flatMap(ExactRatio::floor).orNull()
+                : null;
+        if (weighed != null) {
+            cut = cut.meet(new NumericDomain.Bounds(
+                    Endpoint.inclusive(Count.of(new BigDecimal(weighed.negate()))),
+                    Endpoint.inclusive(Count.of(new BigDecimal(weighed)))));
+        }
+        if (cut.equals(term.holds()) || !cut.holdsAValue()) {
             return term;
         }
-        return new Term<>(term.madeOf(), term.weight(), both, term.realizes(), term.takes(),
-                term.itsPlace(), term.spacing(), order);
+        return new Term<>(term.madeOf(), term.weight(), cut, term.realizes(), term.takes(),
+                term.itsPlace(), term.spacing(), term.runsTo());
     }
 
     /** Whether {@code bounds} is there and each end it has is a number. */
@@ -583,16 +596,16 @@ public final class WhatARelationLeavesUndivided {
                 }
             }
         }
-        // Each run's row: the run's value nearest nought, each other number at its own.
-        ExactRatio[] sizes = new ExactRatio[terms.size() + 1];
-        sizes[terms.size()] = constant.abs();
+        // Each run's row: the run's value nearest nought, each other number at its own, weighed.
+        ExactRatio[] row = new ExactRatio[terms.size() + 1];
+        row[terms.size()] = constant;
         for (int i = 0; i < terms.size(); i++) {
-            sizes[i] = i == at ? null : nearestOf(Interval.of(terms.get(i).holds()),
+            row[i] = i == at ? null : weighedAt(nearestValue(Interval.of(terms.get(i).holds())),
                     terms.get(i).weight());
         }
         for (SettledRun each : runs) {
-            sizes[at] = nearestOf(new Interval(each.from(), each.to()), it.weight());
-            if (!arithmetic.computes(sizes)) {
+            row[at] = weighedAt(nearestValue(new Interval(each.from(), each.to())), it.weight());
+            if (!arithmetic.computes(row)) {
                 return null;
             }
         }
@@ -730,12 +743,12 @@ public final class WhatARelationLeavesUndivided {
                 return null;
             }
         }
-        ExactRatio nearOther = nearestNought(lies);
+        ExactRatio nearOther = nearestValue(lies);
         for (SettledRun each : runs) {
             // The least product of the run's: each factor at its value nearest nought.
-            ExactRatio near = nearestNought(new Interval(each.from(), each.to()));
+            ExactRatio near = nearestValue(new Interval(each.from(), each.to()));
             if (!arithmetic.computes(near == null || nearOther == null ? null
-                    : near.times(nearOther).orNull())) {
+                    : weighedAt(near, nearOther))) {
                 return null;
             }
         }
@@ -1140,25 +1153,9 @@ public final class WhatARelationLeavesUndivided {
                 List.of());
     }
 
-    /** How far from nought the value of {@code run} nearest it is, or null where the run is no
-     *  run of numbers. */
-    private static ExactRatio nearestNought(Interval run) {
-        if (run == null) {
-            return null;
-        }
-        if (run.low() != null && run.low().signum() > 0) {
-            return run.low();
-        }
-        if (run.high() != null && run.high().signum() < 0) {
-            return run.high().abs();
-        }
-        return ExactRatio.ZERO;
-    }
-
-    /** The weighed size of {@code run}'s value nearest nought, or null where that is no number. */
-    private static ExactRatio nearestOf(Interval run, ExactRatio weight) {
-        ExactRatio near = nearestNought(run);
-        return near == null ? null : near.times(weight.abs()).orNull();
+    /** {@code value} weighed {@code weight}, or null where either is no number. */
+    private static ExactRatio weighedAt(ExactRatio value, ExactRatio weight) {
+        return value == null || weight == null ? null : value.times(weight).orNull();
     }
 
     /** {@code runs} in order of their values, each joined to the one beside it where the two
@@ -1208,7 +1205,7 @@ public final class WhatARelationLeavesUndivided {
         }
         for (int other = 0; other < terms.size(); other++) {
             if (free[other] && (reaches(terms, other, at, within, constant, relation,
-                    ExactRatio.ZERO, arithmetic)
+                    List.of(), arithmetic)
                     || reachesWithTheRestHeld(terms, other, at, within, constant, relation,
                             free, arithmetic))) {
                 return true;
@@ -1229,7 +1226,7 @@ public final class WhatARelationLeavesUndivided {
      * <p>The rest are held at nought but one, which is held where it brings the constant to
      * nought. Every one of those values is one the term is shown to take. Brought to nought, the
      * constant and the term held against it are still in every row the two are reached with, so
-     * their sizes are what a witness of the two is computed beside ({@link #reaches}).
+     * they are what a witness of the two is computed beside ({@link #reaches}).
      */
     private static <P> boolean reachesWithTheRestHeld(List<Term<P>> terms, int by, int of,
                                                       Interval within, ExactRatio constant,
@@ -1253,10 +1250,9 @@ public final class WhatARelationLeavesUndivided {
             if (held != null && takesTheValue(terms.get(last), held) && rest.stream()
                     .allMatch(i -> i == last || takesTheValue(terms.get(i), ExactRatio.ZERO))) {
                 ExactRatio beside = held.times(terms.get(last).weight()).orNull();
-                ExactRatio spent = beside == null ? null
-                        : constant.abs().plus(beside.abs()).orNull();
-                return spent != null && reaches(List.of(terms.get(of), terms.get(by)), 1, 0,
-                        within, ExactRatio.ZERO, relation, spent, arithmetic);
+                return beside != null && reaches(List.of(terms.get(of), terms.get(by)), 1, 0,
+                        within, ExactRatio.ZERO, relation, List.of(constant, beside),
+                        arithmetic);
             }
         }
         return false;
@@ -1324,12 +1320,15 @@ public final class WhatARelationLeavesUndivided {
      * Where the arithmetic of the form stops, which every witness stays inside: a row is a witness
      * only where it is computed, whichever way it shows a value taken.
      *
-     * <p>For whole numbers that is past the greatest value of the type. What a row adds up — the
-     * constant, and each number it holds weighed — comes to no more than the type's greatest
-     * value when the sizes of those, added, do, which no order of adding passes; and a product is
-     * computed where its size is. Which value of each number a row stands at is the witness's own
-     * to say, and the sizes it hands here are of those. A type with no greatest ({@link #ENDLESS})
-     * holds no row to a size.
+     * <p>For whole numbers that is past the type's greatest value, either way: a number weighed
+     * may be worked out with its weight's sign or the other, so a size past the greatest is past
+     * the type whichever sign it comes with. What a row adds up — the constant, and each number it
+     * holds weighed — stays inside in whatever order it is added where its positive addends
+     * together and its negative ones together are no further from nought than the greatest:
+     * every sum along the way lies between those two. So addends that cancel are computed, and a
+     * size handed in is an addend that might lie either way. Which value of each number a row
+     * stands at is the witness's own to say. A type with no greatest ({@link #ENDLESS}) holds no
+     * row to a size.
      *
      * @param greatest the greatest value of the type, or null where it has none
      */
@@ -1347,17 +1346,26 @@ public final class WhatARelationLeavesUndivided {
             return greatest != null;
         }
 
-        /** Whether a row adding up values of {@code sizes} is computed; a size that is no number
-         *  is no row, where the arithmetic stops at a size. */
-        boolean computes(ExactRatio... sizes) {
+        /** Whether a row adding up {@code addends} is computed; an addend that is no number is
+         *  no row, where the arithmetic stops at a size. */
+        boolean computes(ExactRatio... addends) {
             if (greatest == null) {
                 return true;
             }
-            ExactRatio total = ExactRatio.ZERO;
-            for (ExactRatio each : sizes) {
-                total = each == null || total == null ? null : total.plus(each).orNull();
+            ExactRatio up = ExactRatio.ZERO;
+            ExactRatio down = ExactRatio.ZERO;
+            for (ExactRatio each : addends) {
+                if (each == null || up == null || down == null) {
+                    return false;
+                }
+                if (each.signum() > 0) {
+                    up = up.plus(each).orNull();
+                } else {
+                    down = down.plus(each).orNull();
+                }
             }
-            return total != null && total.compareTo(ExactRatio.of(greatest)) <= 0;
+            return up != null && down != null && up.compareTo(ExactRatio.of(greatest)) <= 0
+                    && down.negated().compareTo(ExactRatio.of(greatest)) <= 0;
         }
     }
 
@@ -1745,19 +1753,33 @@ public final class WhatARelationLeavesUndivided {
      * where its values are whole, and which a dense type holds as well: a difference left between
      * two whole numbers and at neither is passed over, and nothing is shown.
      *
-     * @param terms   two terms, each the value at its place or a number taken of one, taking every
-     *                value of its type and the same values as the other — or nothing is shown
-     * @param held    every statement the rows arriving hold of either term, each about their
-     *                difference
-     * @param extent  where the values the two take stop
-     * @param overlap whether two places are one, or one is part of the other
+     * <p><b>Beside the ends, and no further in.</b> A row at a value is computed where its addends
+     * are ({@link Arithmetic}). Weighed by one, the two are the values themselves and the row
+     * comes to the difference and the constant, so a row passes the type only at a value within
+     * those of an end, which is beside it. Any other weight multiplies the values, and the rows
+     * passing the type are those of every value whose weighed size does — half the type at a
+     * weight of two. So under any other weight the rows are asked at both ends of the run, and
+     * nothing is shown where one of them is not computed.
+     *
+     * @param terms    two terms, each the value at its place or a number taken of one, taking
+     *                 every value of its type and the same values as the other — or nothing is
+     *                 shown
+     * @param held     every statement the rows arriving hold of either term, each about their
+     *                 difference
+     * @param extent   where the values the two take stop
+     * @param overlap  whether two places are one, or one is part of the other
+     * @param greatest the greatest value the type the form is worked out in holds, or null where
+     *                 it holds no greatest
      */
     public static <P> Set<P> ofTheirDifference(List<Term<P>> terms, ExactRatio constant,
                                                Rel relation, List<OnTheDifference> held,
                                                WhereTheRepresentationStops extent,
-                                               BiPredicate<P, P> overlap) {
+                                               BiPredicate<P, P> overlap, BigInteger greatest) {
         if (terms.size() != 2 || constant == null || !apart(terms, 0, overlap)
-                || !moveTogether(terms.get(0), terms.get(1), extent.run())) {
+                || !moveTogether(terms.get(0), terms.get(1), extent.run())
+                || !(terms.get(0).weight().abs().equals(ExactRatio.ONE)
+                        || rowsComputeAtTheEnds(terms.get(0).weight(), constant, extent.run(),
+                                Arithmetic.upTo(greatest)))) {
             return Set.of();
         }
         WholeRun middle = WholeRun.reachedFromTheMiddleOf(extent.run());
@@ -1779,6 +1801,38 @@ public final class WhatARelationLeavesUndivided {
         Set<P> out = new LinkedHashSet<>(terms.get(0).madeOf());
         out.addAll(terms.get(1).madeOf());
         return out;
+    }
+
+    /**
+     * Whether the rows of two terms weighed {@code weight} and its negation, held against
+     * {@code constant}, are computed at both ends of {@code run}: the first at the end, the second
+     * a difference from it a step either side of where the relation turns. Each addend is a
+     * straight function of the value, so rows computed at both ends are computed between them.
+     */
+    private static boolean rowsComputeAtTheEnds(ExactRatio weight, ExactRatio constant,
+                                                NumericDomain.Bounds run,
+                                                Arithmetic arithmetic) {
+        if (!arithmetic.stopsAtASize()) {
+            return true;
+        }
+        Interval ends = Interval.of(run);
+        ExactRatio turns = constant.negated().dividedBy(weight).orNull();
+        if (ends == null || ends.low() == null || ends.high() == null || turns == null) {
+            return false;
+        }
+        for (ExactRatio value : List.of(ends.low(), ends.high())) {
+            for (ExactRatio apart : new ExactRatio[] {turns.minus(ExactRatio.ONE).orNull(),
+                    turns.plus(ExactRatio.ONE).orNull()}) {
+                ExactRatio first = value.times(weight).orNull();
+                ExactRatio second = apart == null ? null
+                        : value.minus(apart).flatMap(other -> other.times(weight.negated()))
+                                .orNull();
+                if (!arithmetic.computes(first, second, constant)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**
@@ -1839,18 +1893,18 @@ public final class WhatARelationLeavesUndivided {
      * <p>A witness is a row that is computed ({@link #aWitnessComputes}), asked last, of an
      * answer that would otherwise be yes: most terms are refused by something cheaper first.
      *
-     * @param spent      the size of what the row holds besides the two and the constant — the
-     *                   terms held still beside them — or nought
+     * @param beside     the addends the row holds besides the two and the constant — the terms
+     *                   held still beside them, each weighed — or none
      * @param arithmetic where the arithmetic of the form stops
      */
     private static <P> boolean reaches(List<Term<P>> terms, int by, int of, Interval within,
-                                       ExactRatio constant, Rel relation, ExactRatio spent,
+                                       ExactRatio constant, Rel relation, List<ExactRatio> beside,
                                        Arithmetic arithmetic) {
         Term<P> reaching = terms.get(by);
         boolean exactly = relation == Rel.EQ || relation == Rel.NE;
         boolean itsValue = standsAtTheOthersValue(terms, constant);
         if (exactly && itsValue && sameValues(terms, by, of)) {
-            return aWitnessComputes(terms, by, of, within, constant, spent, arithmetic);
+            return aWitnessComputes(terms, by, of, within, constant, relation, beside, arithmetic);
         }
         if (reaching.realizes() == null) {
             return false;
@@ -1876,7 +1930,7 @@ public final class WhatARelationLeavesUndivided {
         }
         if (exactly) {
             return needed.within(reaching.realizes(), spacings)
-                    && aWitnessComputes(terms, by, of, within, constant, spent, arithmetic);
+                    && aWitnessComputes(terms, by, of, within, constant, relation, beside, arithmetic);
         }
         boolean strictlyBelow = strictlyBelow(relation, reaching.weight());
         if ((strictlyBelow ? needed.runsDown() : needed.runsUp())
@@ -1884,7 +1938,7 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         return needed.around(reaching.realizes(), strictlyBelow, spacings)
-                && aWitnessComputes(terms, by, of, within, constant, spent, arithmetic);
+                && aWitnessComputes(terms, by, of, within, constant, relation, beside, arithmetic);
     }
 
     /**
@@ -2091,29 +2145,108 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
-     * Whether a row the term at {@code by} reaches the one at {@code of} in is computed
-     * ({@link Arithmetic}): the constant, {@code spent}, and each of the two at its value nearest
-     * nought — the one at {@code of} among the values asked of it, the one at {@code by} where it
-     * has to stand. {@code x - y > M}, {@code M} the greatest {@code Int}, needs a {@code y} whose
-     * distance from {@code x} passes the type, and is no row on the true side at any {@code x}.
+     * Whether, at every value of the term at {@code of} asked of, the rows the term at {@code by}
+     * reaches it in are computed ({@link Arithmetic}) — a row on each side of the line, which is
+     * what a value left either way is.
+     *
+     * <p>At a value of the one, the other stands at the last value on one side of the line and the
+     * first on the other ({@link #acrossTheLine}), every other term at its value nearest nought,
+     * and {@code beside} with them. Each addend of such a row is a value of the one weighed, or
+     * the line over it a fixed way off, so each is the same straight function of the value, and
+     * so is the sum of the positive ones and of the negative ones. Those are computed at every
+     * value of a run where they are at its two ends, and there the rows are asked.
+     * {@code 2^62 x - 2^62 y < 0}, {@code x} from nought to one, has both
+     * rows at nought and none on the true side at one, where a {@code y} of two weighed passes the
+     * type; {@code x - y > M}, {@code M} the greatest {@code Int}, has a true row at no {@code x}.
+     * A run open on a side has no end to ask, and nothing is shown.
      *
      * <p>Two terms standing at each other's value with nothing besides are compared and not
      * added, and are asked nothing of it.
+     *
+     * @param beside the addends a row holds besides the two and the constant — the terms held
+     *               still beside them, each weighed
      */
     private static <P> boolean aWitnessComputes(List<Term<P>> terms, int by, int of,
                                                 Interval within, ExactRatio constant,
-                                                ExactRatio spent, Arithmetic arithmetic) {
-        if (!arithmetic.stopsAtASize()
-                || (standsAtTheOthersValue(terms, constant) && spent.signum() == 0)) {
+                                                Rel relation, List<ExactRatio> beside,
+                                                Arithmetic arithmetic) {
+        if (!arithmetic.stopsAtASize() || (standsAtTheOthersValue(terms, constant)
+                && beside.stream().allMatch(each -> each.signum() == 0))) {
             return true;
         }
-        if (constant == null) {
+        Interval asked = within != null ? within : Interval.of(terms.get(of).holds());
+        if (constant == null || asked == null || asked.low() == null || asked.high() == null) {
             return false;
         }
-        return arithmetic.computes(constant.abs(), spent,
-                nearestOf(within != null ? within : Interval.of(terms.get(of).holds()),
-                        terms.get(of).weight()),
-                nearestOf(neededAt(terms, by, of, within, constant), terms.get(by).weight()));
+        List<ExactRatio> fixed = new ArrayList<>(beside);
+        fixed.add(constant);
+        for (int i = 0; i < terms.size(); i++) {
+            if (i != by && i != of) {
+                fixed.add(weighedAt(nearestValue(Interval.of(terms.get(i).holds())),
+                        terms.get(i).weight()));
+            }
+        }
+        for (ExactRatio value : List.of(asked.low(), asked.high())) {
+            List<ExactRatio> row = new ArrayList<>(fixed);
+            row.add(weighedAt(value, terms.get(of).weight()));
+            ExactRatio rest = ExactRatio.ZERO;
+            for (ExactRatio each : row) {
+                rest = each == null || rest == null ? null : rest.plus(each).orNull();
+            }
+            ExactRatio line = rest == null ? null
+                    : rest.negated().dividedBy(terms.get(by).weight()).orNull();
+            List<ExactRatio> across = line == null ? null
+                    : acrossTheLine(line, relation, terms.get(by));
+            if (across == null) {
+                return false;
+            }
+            for (ExactRatio at : across) {
+                List<ExactRatio> witness = new ArrayList<>(row);
+                witness.add(at.times(terms.get(by).weight()).orNull());
+                if (!arithmetic.computes(witness.toArray(ExactRatio[]::new))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Where {@code reaching} stands in a row on each side of {@code line} for {@code relation}:
+     * the last value of its spacing on one side and the first on the other — or null where they
+     * are no number. A whole term weighed so that the side strictly past the line is below it
+     * stands one below the least whole number at or past the line, and at it; otherwise at the
+     * greatest at or before the line, and one above it. Held equal or unequal, the line is a value
+     * and one beside it; a term whose values are dense stands as near the line as asked.
+     */
+    private static <P> List<ExactRatio> acrossTheLine(ExactRatio line, Rel relation,
+                                                      Term<P> reaching) {
+        if (reaching.spacing() != Granularity.DISCRETE) {
+            return List.of(line);
+        }
+        if (relation == Rel.EQ || relation == Rel.NE) {
+            ExactRatio next = line.plus(ExactRatio.ONE).orNull();
+            return next == null ? null : List.of(line, next);
+        }
+        BigInteger from = strictlyBelow(relation, reaching.weight())
+                ? line.ceiling().map(at -> at.subtract(BigInteger.ONE)).orNull()
+                : line.floor().orNull();
+        return from == null ? null
+                : List.of(ExactRatio.of(from), ExactRatio.of(from.add(BigInteger.ONE)));
+    }
+
+    /** The value of {@code run} nearest nought, or null where the run is no run of numbers. */
+    private static ExactRatio nearestValue(Interval run) {
+        if (run == null) {
+            return null;
+        }
+        if (run.low() != null && run.low().signum() > 0) {
+            return run.low();
+        }
+        if (run.high() != null && run.high().signum() < 0) {
+            return run.high();
+        }
+        return ExactRatio.ZERO;
     }
 
     /** Whether no place of the term at {@code at} is one any other term is made of. */

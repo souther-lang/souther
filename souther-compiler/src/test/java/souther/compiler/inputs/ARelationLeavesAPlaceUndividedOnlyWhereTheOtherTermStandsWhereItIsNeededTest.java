@@ -242,7 +242,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                                      long constant, Rel relation,
                                      WhatARelationLeavesUndivided.OnTheDifference... held) {
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, ExactRatio.of(constant),
-                relation, List.of(held), DATES, String::equals);
+                relation, List.of(held), DATES, String::equals, GREATEST_INT);
     }
 
     /**
@@ -274,7 +274,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
         assertEquals(Set.of("a", "b"), WhatARelationLeavesUndivided.ofTheirDifference(
                 pair(1, -1, A_DATE), ExactRatio.of(-10_000_000_000_000L), Rel.GT, List.of(),
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
-                        NumericDomain.Bounds.OPEN), String::equals));
+                        NumericDomain.Bounds.OPEN), String::equals, GREATEST_INT));
     }
 
     /**
@@ -373,6 +373,43 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
         var inside = term("x", 2, run(0, 100), run(0, 100), null, true);
         assertFalse(undivided(List.of(weighedPast, y), ExactRatio.ZERO, Rel.LT).contains("x"));
         assertTrue(undivided(List.of(inside, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+    }
+
+    /**
+     * {@code 2^62 x - 2^62 y < 0}, {@code y} any {@code Int}: at an {@code x} of nought a {@code y}
+     * of one makes it true and one of nought false, and both rows are computed; at one, the true
+     * side needs a {@code y} of two, which weighed passes the type. So {@code x} from nought to one
+     * is not left either way at every value, and {@code x} at nought alone is.
+     */
+    @Test
+    void aWitnessIsComputedAtEveryValueItIsAskedOfAndNotAtOne() {
+        long k = 1L << 62;
+        var y = term("y", -k, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true);
+        var upToOne = term("x", k, run(0, 1), run(0, 1), null, true);
+        var nought = term("x", k, run(0, 0), run(0, 0), null, true);
+        assertFalse(undivided(List.of(upToOne, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+        assertTrue(undivided(List.of(nought, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+    }
+
+    /**
+     * Read by their difference, two terms weighed one leave rows past the type only beside its
+     * ends; weighed two, every value past half the type has no row on one side, and weighed
+     * {@code 2^62} nearly every value. Two dates weighed two are inside an {@code Int} at every
+     * day, and stay shown.
+     */
+    @Test
+    void aDifferenceUnderAWeightIsShownOnlyWhereItsRowsAreComputedAtEveryValue() {
+        for (long weight : new long[] {1, 2, 1L << 62}) {
+            var a = term("a", weight, INTS, NumericDomain.Bounds.OPEN, "same", true);
+            var b = term("b", -weight, INTS, NumericDomain.Bounds.OPEN, "same", true);
+            assertEquals(weight == 1 ? Set.of("a", "b") : Set.of(),
+                    WhatARelationLeavesUndivided.ofTheirDifference(List.of(a, b), ExactRatio.ZERO,
+                            Rel.LT, List.of(),
+                            new WhatARelationLeavesUndivided.WhereTheRepresentationStops(INTS),
+                            String::equals, GREATEST_INT),
+                    "Ints weighed " + weight);
+        }
+        assertEquals(Set.of("a", "b"), apart(pair(2, -2, A_DATE), 0, Rel.LT));
     }
 
     /**

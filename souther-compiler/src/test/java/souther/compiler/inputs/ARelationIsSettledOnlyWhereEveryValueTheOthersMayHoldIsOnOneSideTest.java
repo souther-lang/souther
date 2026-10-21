@@ -855,6 +855,23 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 Granularity.DISCRETE, run(0L, 100L)));
     }
 
+    /**
+     * {@code a - 100b >= 0}, {@code b} from one: below a hundred it fails whatever {@code b} is,
+     * the model's line. Within a hundred of the greatest {@code Int} it holds whatever {@code b}
+     * is, because a {@code b} past it weighed passes the type: a line of the arithmetic, and none
+     * of the model's.
+     */
+    @Test
+    void aValueSettledOnlyBecauseTheOtherWeighedPassesTheTypeIsTheArithmeticsLine() {
+        var a = term("a", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN);
+        var b = term("b", -100, run(1L, null), run(1L, null));
+        Leaves.Settled settled = (Leaves.Settled) leavesOf(List.of(a, b), 0, 0, Rel.GE);
+        long lastWhole = Long.MAX_VALUE / 100 * 100;
+        assertEquals(List.of(new Line(Rel.GE, ExactRatio.of(lastWhole))),
+                settled.ofTheTypeAlone());
+        assertEquals(List.of(new Line(Rel.LE, ExactRatio.of(99))), settled.linesOfTheModel());
+    }
+
     /** Runs a point apart are lines apart: a point both leave out is not covered. */
     @Test
     void aPointNoRunTakesIsAGapBetweenTwoDenseRuns() {

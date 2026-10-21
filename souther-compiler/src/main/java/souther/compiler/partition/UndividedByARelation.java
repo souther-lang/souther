@@ -1580,7 +1580,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : on.whereItStops();
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, constant, relation, held,
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
-                UndividedByARelation::overlap);
+                UndividedByARelation::overlap, greatestOf(on));
     }
 
     /**
