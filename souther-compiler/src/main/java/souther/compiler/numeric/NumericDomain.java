@@ -5,7 +5,9 @@ import souther.compiler.collect.AppendOnly;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,18 +93,29 @@ public final class NumericDomain<A> {
      * need not work out again ({@link ClosedStates.Parted}). What this domain is, it never decides.
      */
     private final ClosedStates.Parted<A> closedBefore;
-    private List<AffineConstraint<A>> distinctRules;
+
+    /**
+     * The rules the domain this one was made from had read by then, or the one before it — or null
+     * where none had.
+     *
+     * <p>Carried like {@link #closedBefore}: what was said since is read onto them
+     * ({@link #rules}), and what that comes to is what reading every rule said comes to.
+     */
+    private final RulesRead<A> readBefore;
+    private RulesRead<A> read;
     private ClosedStates.Parted<A> closed;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, Granularity> kinds,
                           boolean readARuleNothingSatisfies, CanonicalOrder<A> order,
-                          ClosedStates closedStates, ClosedStates.Parted<A> closedBefore) {
+                          ClosedStates closedStates, ClosedStates.Parted<A> closedBefore,
+                          RulesRead<A> readBefore) {
         this.stated = stated;
         this.kinds = kinds;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
         this.order = order;
         this.closedStates = closedStates;
         this.closedBefore = closedBefore;
+        this.readBefore = readBefore;
     }
 
     /**
@@ -115,6 +128,12 @@ public final class NumericDomain<A> {
     private ClosedStates.Parted<A> lent() {
         ClosedStates.Parted<A> had = closed;
         return had != null ? had : closedBefore;
+    }
+
+    /** The same for the rules read: this one's where they have been, and otherwise its loan. */
+    private RulesRead<A> readLent() {
+        RulesRead<A> had = read;
+        return had != null ? had : readBefore;
     }
 
     /**
@@ -137,7 +156,7 @@ public final class NumericDomain<A> {
      */
     public static <A> NumericDomain<A> top(CanonicalOrder<A> order, ClosedStates closedStates) {
         return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(), false, order,
-                closedStates, null);
+                closedStates, null, null);
     }
 
     /**
@@ -145,12 +164,94 @@ public final class NumericDomain<A> {
      *
      * <p>Here rather than at each saying, for the reason {@link StatedRules} gives. Everything below
      * reads this and not what was said, so what any of them sees is a rule said twice said once.
+     *
+     * <p>Read onto what the domain this was made from had read, where its rules are the first of
+     * these: what was said since is taken a rule at a time ({@link #readOnto}). Read from the start
+     * at every step, a path stating a rule per step would read every rule it had stated at each one.
      */
     private List<AffineConstraint<A>> rules() {
-        if (distinctRules == null) {
-            distinctRules = tightest(stated.distinct());
+        RulesRead<A> had = read;
+        if (had == null) {
+            had = new RulesRead<>(stated, readFrom(stated, readBefore));
+            read = had;
         }
-        return distinctRules;
+        return had.rules();
+    }
+
+    /**
+     * The rules as every reader here reads them, for a test holding what is read onto an earlier
+     * reading to what reading every rule said from the start comes to.
+     */
+    List<AffineConstraint<A>> rulesRead() {
+        return rules();
+    }
+
+    /**
+     * What a set of rules was read to, with the composition it was read from.
+     *
+     * <p>Held by the composition itself and not by one equal to it: a domain made from another by
+     * saying more holds the other's composition at the left of its own, which is how the rules said
+     * since are found without comparing anything.
+     */
+    private record RulesRead<A>(StatedRules<A> of, List<AffineConstraint<A>> rules) {}
+
+    /**
+     * {@code stated} read, onto {@code before} where {@code stated} is {@code before}'s rules
+     * followed by others, and from the start otherwise.
+     */
+    private static <A> List<AffineConstraint<A>> readFrom(StatedRules<A> stated,
+                                                          RulesRead<A> before) {
+        if (before != null) {
+            Deque<StatedRules<A>> since = new ArrayDeque<>();
+            StatedRules<A> at = stated;
+            while (at != before.of() && at instanceof StatedRules.Both<A> both) {
+                since.push(both.right());
+                at = both.left();
+            }
+            if (at == before.of()) {
+                List<AffineConstraint<A>> out = before.rules();
+                while (!since.isEmpty()) {
+                    for (AffineConstraint<A> rule : since.pop().distinct()) {
+                        out = readOnto(out, rule);
+                    }
+                }
+                return out;
+            }
+        }
+        return tightest(stated.distinct());
+    }
+
+    /**
+     * {@code rules}, which are {@link #tightest} of the distinct rules said so far, with
+     * {@code rule} said after them — what {@link #tightest} of the distinct rules with it comes to.
+     *
+     * <p>A rule other than a sum held below a bound is in the distinct rules exactly where it is in
+     * these, since only such sums are left out, so asking these is asking whether it was said. A
+     * sum held below a bound needs no asking: its form has one bound here, the tightest of those
+     * said, and the tighter of that and one already among them is that one.
+     */
+    private static <A> List<AffineConstraint<A>> readOnto(List<AffineConstraint<A>> rules,
+                                                          AffineConstraint<A> rule) {
+        if (rule instanceof AffineConstraint.HalfSpace<A> half) {
+            for (int at = 0; at < rules.size(); at++) {
+                if (rules.get(at) instanceof AffineConstraint.HalfSpace<A> held
+                        && held.form().equals(half.form())) {
+                    ExactCut kept = ExactCut.tighterUpper(held.bound(), half.bound());
+                    if (kept.equals(held.bound())) {
+                        return rules;
+                    }
+                    List<AffineConstraint<A>> out = new ArrayList<>(rules);
+                    out.set(at, new AffineConstraint.HalfSpace<>(half.form(), kept));
+                    return List.copyOf(out);
+                }
+            }
+        } else if (rules.contains(rule)) {
+            return rules;
+        }
+        List<AffineConstraint<A>> out = new ArrayList<>(rules.size() + 1);
+        out.addAll(rules);
+        out.add(rule);
+        return List.copyOf(out);
     }
 
     /**
@@ -236,7 +337,7 @@ public final class NumericDomain<A> {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
                     new NumericDomain<>(StatedRules.none(), knowing.kinds, true, knowing.order,
-                            closedStates, null);
+                            closedStates, null, null);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
@@ -256,7 +357,7 @@ public final class NumericDomain<A> {
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
         return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false, order,
-                closedStates, lent());
+                closedStates, lent(), readLent());
     }
 
     /**
@@ -308,7 +409,7 @@ public final class NumericDomain<A> {
         }
         return next == kinds ? this
                 : new NumericDomain<>(stated, next, readARuleNothingSatisfies, order,
-                        closedStates, lent());
+                        closedStates, lent(), readLent());
     }
 
     // --- renaming and joining ---------------------------------------------------------------------
@@ -352,7 +453,7 @@ public final class NumericDomain<A> {
         // Nothing is lent across either: rules under other names are another reader's rules, and
         // they join the closures of the reading they are met into.
         return new NumericDomain<>(out, AppendOnly.of(spacing), readARuleNothingSatisfies, order,
-                ClosedStates.NONE, null);
+                ClosedStates.NONE, null, null);
     }
 
     /**
@@ -392,7 +493,8 @@ public final class NumericDomain<A> {
         return new NumericDomain<>(stated.and(other.stated), both,
                 readARuleNothingSatisfies || other.readARuleNothingSatisfies, order, closedStates,
                 // The rules said first are this one's, unless it has none and they are the other's.
-                stated.isNothing() ? other.lent() : lent());
+                stated.isNothing() ? other.lent() : lent(),
+                stated.isNothing() ? other.readLent() : readLent());
     }
 
     // --- what the rules leave, worked out once ----------------------------------------------------

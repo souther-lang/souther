@@ -8,10 +8,12 @@ import souther.compiler.revision.StoreWork;
 import souther.compiler.types.TypeKey;
 import souther.compiler.values.StringMachineAnswers;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 
 /**
  * Every model this repository carries, compiled and answered.
@@ -36,7 +38,9 @@ import java.util.Map;
  */
 public final class RepositoryModels {
 
-    private static final List<Compilation> ALL = compileEverything();
+    private static final SequencedMap<String, Compilation> BY_CORPUS = compileEverything();
+
+    private static final List<Compilation> ALL = List.copyOf(BY_CORPUS.values());
 
     /** What each of them has worked out about where its sets stop, made when first asked. */
     private static final Map<Compilation, DeclarationReadings> KNOWN = new IdentityHashMap<>();
@@ -47,6 +51,14 @@ public final class RepositoryModels {
     /** Every model this repository carries, each with everything about it answered. */
     public static List<Compilation> all() {
         return ALL;
+    }
+
+    /**
+     * The same models by the name the manifest gives each corpus, in the manifest's order — for a
+     * reader whose answer names one of them.
+     */
+    public static SequencedMap<String, Compilation> byCorpus() {
+        return BY_CORPUS;
     }
 
     /**
@@ -90,20 +102,21 @@ public final class RepositoryModels {
         };
     }
 
-    private static List<Compilation> compileEverything() {
-        List<Compilation> out = new ArrayList<>();
+    private static SequencedMap<String, Compilation> compileEverything() {
+        SequencedMap<String, Compilation> out = new LinkedHashMap<>();
         for (Map.Entry<String, String> corpus : ConformanceCorpus.manifest().entrySet()) {
             if (corpus.getValue().equals(ConformanceCorpus.CONFORMANCE)) {
                 // The analysing entry point, which is what says a conformance corpus was analysed:
                 // it puts the adequacy questions as well as compiling.
-                out.add(ConformanceCorpus.load(corpus.getKey()).analyse().compilation());
+                out.put(corpus.getKey(),
+                        ConformanceCorpus.load(corpus.getKey()).analyse().compilation());
             } else {
                 Compilation compilation = Compilation.ofSources(
                         ConformanceCorpus.sourcesOf(corpus.getKey()), ModulePath.EMPTY);
                 compilation.answerEverything();
-                out.add(compilation);
+                out.put(corpus.getKey(), compilation);
             }
         }
-        return List.copyOf(out);
+        return Collections.unmodifiableSequencedMap(out);
     }
 }
