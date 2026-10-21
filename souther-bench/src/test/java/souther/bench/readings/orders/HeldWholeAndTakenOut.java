@@ -358,8 +358,8 @@ public final class HeldWholeAndTakenOut {
 
     public static List<CompositionBudget> aSplitCursorSplitOff(Set<CompositionBudget> values) {
         List<Set<CompositionBudget>> got = new ArrayList<>();
-        Objects.requireNonNull(Stream.of(Set.copyOf(values)).spliterator().trySplit())
-                .tryAdvance(got::add);
+        Objects.requireNonNull(Stream.of(Set.copyOf(values), Set.<CompositionBudget>of())
+                .spliterator().trySplit()).tryAdvance(got::add);
         return new ArrayList<>(got.getFirst());
     }
 

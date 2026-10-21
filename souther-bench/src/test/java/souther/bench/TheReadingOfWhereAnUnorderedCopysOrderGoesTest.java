@@ -27,8 +27,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -169,6 +171,43 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
     }
 
     /**
+     * The readers that are refused because a copy is handed to what nothing says what it does with,
+     * and not because the copy was followed to an answer. Each says why it is not followed, and
+     * the test fails when one is, so that a reading that learns it is not left listed here.
+     */
+    private static final Map<String, String> NOT_FOLLOWED = notFollowed();
+
+    private static Map<String, String> notFollowed() {
+        Map<String, String> out = new HashMap<>();
+        String view = "a store into a view of another container is reported, and not followed back"
+                + " into the container it is a view of";
+        for (String reader : List.of("addedThroughACursorAHelperIsGiven",
+                "addedThroughACursorNothingHereMade", "addedThroughAListIterator",
+                "addedThroughASublist", "setThroughAnEntryAHelperIsGiven",
+                "setThroughAnEntryOfAMap")) {
+            out.put(reader, view);
+        }
+        String collector = "a collector that no row of the table reads is reported where a copy is"
+                + " handed to it";
+        for (String reader : List.of("handedToACollectorNothingFollows",
+                "returnedByTheValueFunctionOfACollectorNobodyReads")) {
+            out.put(reader, collector);
+        }
+        String window = "what is said into a writer is read from the place it was made over, which"
+                + " is reported where it is said and not followed back";
+        for (String reader : List.of("printedThroughAPrintWriterOverABufferedWriter",
+                "printedThroughAPrintWriterOverAWriter", "saidThroughAFormatterHandedIn",
+                "saidThroughAFormatterHandedToAHelper", "saidThroughAFormatterOverABuilder",
+                "saidThroughAFormatterOverAFile", "saidThroughAFormatterOverAWriter",
+                "saidThroughAFormatterOverStandardOut",
+                "saidThroughAFormatterTheTextOfTheCopyWasMadeFor", "saidThroughAWriterHandedIn",
+                "writtenTextOfTheCopyToAWriter")) {
+            out.put(reader, window);
+        }
+        return out;
+    }
+
+    /**
      * A copy held whole in a container is followed to the answer it reaches when it is taken out,
      * and named for the copy the reader made, not for another the container happens to hold.
      */
@@ -194,8 +233,17 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
             if (!ownCopiesOnly || named.size() != made) {
                 wrong.add(reader + " named " + named);
             }
+            // What is refused for a copy it followed to an answer is told apart from what is
+            // refused for a copy handed to something nothing says what it does with.
+            boolean followed = found.stream().anyMatch(Finding::followed);
+            if (followed == NOT_FOLLOWED.containsKey(reader)) {
+                wrong.add(reader + (followed ? " is followed, and is listed as not followed"
+                        : " is not followed to an answer, and is not listed"));
+            }
         }
 
+        assertTrue(readers.containsAll(NOT_FOLLOWED.keySet()),
+                "a reader is listed as not followed and is not one of the class");
         assertEquals(List.of(), wrong, "a copy held whole was lost on the way out of its"
                 + " container, or an answer was traced to a copy the reader did not make");
     }

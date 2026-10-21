@@ -473,7 +473,8 @@ final class SaltedOrderVocabulary {
             "ifPresentOrElse", "orElseGet", "getOrDefault");
 
     private static final Set<String> VISITS = Set.of(
-            "forEach", "forEachOrdered", "forEachRemaining", "ifPresent", "ifPresentOrElse",
+            "forEach", "forEachOrdered", "forEachRemaining", "tryAdvance", "ifPresent",
+            "ifPresentOrElse",
             "removeIf", "replaceAll", "anyMatch", "allMatch", "noneMatch", "computeIfAbsent",
             "computeIfPresent", "compute", "merge");
 
@@ -1039,6 +1040,7 @@ final class SaltedOrderVocabulary {
         String owner = call.owner();
         return name.equals("toArray") || name.equals("toList") || name.equals("asList")
                 || name.equals("toUnmodifiableList")
+                || (name.equals("list") && owner.equals("java/util/Collections"))
                 || ((name.equals("copyOf") || name.equals("of")) && owner.equals("java/util/List"));
     }
 

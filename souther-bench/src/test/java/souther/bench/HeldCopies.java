@@ -328,7 +328,8 @@ final class HeldCopies {
         List<Source> keyAndValue = List.of(Source.KEY, Source.ELEMENT);
         out.add(new Callback("forEach", 1, 0, -1, On.NOT_MAPS, element, Into.NOTHING));
         out.add(new Callback("forEach", 1, 0, -1, On.MAPS, keyAndValue, Into.NOTHING));
-        for (String name : List.of("forEachRemaining", "forEachOrdered", "removeIf", "ifPresent",
+        for (String name : List.of("forEachRemaining", "tryAdvance", "forEachOrdered", "removeIf",
+                "ifPresent",
                 "filter", "peek", "takeWhile", "dropWhile", "anyMatch", "allMatch", "noneMatch")) {
             out.add(new Callback(name, 1, 0, -1, On.ANY, element, Into.NOTHING));
         }
@@ -1035,6 +1036,10 @@ final class HeldCopies {
             // does a cursor made of a spliterator, a spliterator made of a cursor or an array, and
             // an enumeration of a container.
             out.addAll(retargeted(held(args.get(0)), "aew", WALK_ELEMENT));
+        } else if (!args.isEmpty() && name.equals("list")
+                && call.owner().equals("java/util/Collections")) {
+            // The list made of an enumeration holds what the enumeration walked.
+            out.addAll(retargeted(held(args.get(0)), "w", ELEMENT));
         } else if (!args.isEmpty() && (HANDS_BACK_ITS_ARGUMENT.contains(name)
                 || wrapsItsArgument(name))) {
             out.addAll(held(args.get(0)));

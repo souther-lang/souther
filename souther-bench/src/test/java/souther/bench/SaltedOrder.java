@@ -516,8 +516,10 @@ final class SaltedOrder {
      * @param reader the method that did, with the class it is in
      * @param what   the step that made it an answer, in words
      * @param origins the copies the order came out of
+     * @param followed whether the order was followed to where it is taken into an answer, as against
+     *                 a call that is handed a copy and nothing here says what it does with it
      */
-    record Finding(String reader, String what, Set<String> origins) {}
+    record Finding(String reader, String what, Set<String> origins, boolean followed) {}
 
     /**
      * How big the reading was, which a reading that follows too much shows before it fails.

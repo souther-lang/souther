@@ -664,7 +664,8 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
     /** Every method, static or not, of these and of the streams, that has a function parameter. */
     private static List<Method> methodsWithFunctions() {
         List<Class<?>> hosts = new ArrayList<>(COLLECTIONS);
-        hosts.addAll(List.of(Stream.class, Collections.class, Arrays.class, Objects.class));
+        hosts.addAll(List.of(Stream.class, Collections.class, Arrays.class, Objects.class,
+                Spliterator.class));
         List<Method> out = new ArrayList<>();
         for (Class<?> each : hosts) {
             for (Method method : each.getMethods()) {

@@ -185,7 +185,7 @@ final class SaltedOrderFlow {
     private final Map<String, Set<String>> reached = new LinkedHashMap<>();
 
     /** One thing that was found, of one reader. */
-    private record Reported(String reader, String what) {}
+    private record Reported(String reader, String what, boolean followed) {}
 
     private SaltedOrderFlow(List<ClassModel> universe, Predicate<String> beginsAt) {
         this.beginsAt = beginsAt;
@@ -453,7 +453,8 @@ final class SaltedOrderFlow {
         for (HandedFunction each : handedToUnread) {
             Set<String> origins = copiesReturnedBy(each.function());
             if (!origins.isEmpty()) {
-                note(each.where(), "hands a function that returns a copy to " + each.call()
+                noteNotFollowed(each.where(), "hands a function that returns a copy to "
+                        + each.call()
                         + ", which nothing says where it goes", origins);
             }
         }
@@ -472,7 +473,8 @@ final class SaltedOrderFlow {
         }
         List<Finding> out = new ArrayList<>();
         for (var each : findings.entrySet()) {
-            out.add(new Finding(each.getKey().reader(), each.getKey().what(), each.getValue()));
+            out.add(new Finding(each.getKey().reader(), each.getKey().what(), each.getValue(),
+                    each.getKey().followed()));
         }
         return new Reading(roots, out, reached, measured());
     }
@@ -488,7 +490,13 @@ final class SaltedOrderFlow {
     }
 
     private void note(String reader, String what, Set<String> origins) {
-        findings.computeIfAbsent(new Reported(reader, what), k -> new TreeSet<>())
+        findings.computeIfAbsent(new Reported(reader, what, true), k -> new TreeSet<>())
+                .addAll(origins);
+    }
+
+    /** A copy handed to what nothing says what it does with: reported, and not followed on. */
+    private void noteNotFollowed(String reader, String what, Set<String> origins) {
+        findings.computeIfAbsent(new Reported(reader, what, false), k -> new TreeSet<>())
                 .addAll(origins);
     }
 
@@ -1556,7 +1564,7 @@ final class SaltedOrderFlow {
         Set<String> origins = originsOf(call.tainted());
         Set<String> unresolved = HeldCopies.unresolvedBy(call);
         if (!unresolved.isEmpty()) {
-            note(where, HeldCopies.unresolvedSaid(call), unresolved);
+            noteNotFollowed(where, HeldCopies.unresolvedSaid(call), unresolved);
         }
         for (Tag function : HeldCopies.functionsNotRun(call)) {
             handedToUnread.add(new HandedFunction(where,
@@ -1581,7 +1589,7 @@ final class SaltedOrderFlow {
             }
         } else if (outcome.unmodeled()) {
             Set<String> sites = sitesOf(Val.of(call.tainted()));
-            note(where, (isJava(owner) ? "calls " : "hands what came out of a copy to ")
+            noteNotFollowed(where, (isJava(owner) ? "calls " : "hands what came out of a copy to ")
                     + owner.replace('/', '.') + "." + name
                     + (isJava(owner) ? " on what came out of a copy, and nothing says what that"
                             + " does with its order" : ", which is not read here")
