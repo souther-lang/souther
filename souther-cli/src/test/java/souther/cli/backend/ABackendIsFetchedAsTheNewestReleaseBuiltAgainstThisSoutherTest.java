@@ -557,16 +557,17 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
                 "socks5://proxy:1080", Central.Failure.Misread.Scheme.class,
                 "http://alice:se/cret@proxy:8080", Central.Failure.Misread.NotAnAddress.class,
                 "http://", Central.Failure.Misread.NotAnAddress.class).entrySet()) {
-            Configured configured = Repository.configured(Map.of("HTTPS_PROXY", named.getKey()));
+            Configured configured = Repository.configured(Map.of("HTTPS_PROXY", named.getKey()),
+                    Map.of());
 
             assertInstanceOf(named.getValue(), assertInstanceOf(Configured.Unusable.class,
                     configured).why().why(), named.getKey());
         }
         assertInstanceOf(Repository.class,
-                Repository.configured(Map.of("HTTPS_PROXY", "proxy:3128")));
+                Repository.configured(Map.of("HTTPS_PROXY", "proxy:3128"), Map.of()));
         assertInstanceOf(Repository.class,
                 Repository.configured(Map.of("HTTPS_PROXY", "http://alice:secret@proxy:8080",
-                        "NO_PROXY", "repo.maven.apache.org")));
+                        "NO_PROXY", "repo.maven.apache.org"), Map.of()));
     }
 
     @Test

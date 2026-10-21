@@ -2,15 +2,14 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import souther.cli.CliProcess.Ran;
 import souther.compiler.meta.ModuleMetadata;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,20 +29,9 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
     private record Said(int code, String err, String out) {}
 
     private static Said run(Path workingDirectory, String... args) {
-        PrintStream originalErr = System.err;
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            int code = Main.dispatch(args, workingDirectory);
-            return new Said(code, err.toString(StandardCharsets.UTF_8),
-                    out.toString(StandardCharsets.UTF_8));
-        } finally {
-            System.setErr(originalErr);
-            System.setOut(originalOut);
-        }
+        Ran ran = CliInProcess.run(workingDirectory, workingDirectory, Map.of(), Map.of(), "",
+                args);
+        return new Said(ran.code(), ran.err(), ran.out());
     }
 
     private static void declare(Path directory, String content) throws IOException {

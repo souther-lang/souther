@@ -15,9 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@code souther compile --target <target>} hands everything after the target to the installed
- * backend, and what the backend does is what the command does. The CLI is run as a process here,
- * because arguments, standard streams, the working directory, the environment and the exit status
- * are facts about a process, and a backend is one.
+ * backend, and what the backend does is what the command does.
+ *
+ * <p>That everything is handed over is asked of the CLI run as a process, because arguments,
+ * standard streams, the working directory, the environment and the exit status are facts about a
+ * process, and the backend inherits the CLI's: only a process started from a shell has them to
+ * pass on. Which backend is run, or why none is, is a question about what the CLI does with its
+ * environment, and is asked of it in this JVM.
  */
 class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
 
@@ -27,8 +31,8 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
     Path scratch;
 
     private Ran cli(Path workingDirectory, Map<String, String> environment,
-                    List<String> jvmProperties, String stdin, String... args) throws Exception {
-        return CliProcess.run(scratch, workingDirectory, environment, jvmProperties, stdin, args);
+                    Map<String, String> properties, String... args) throws Exception {
+        return CliInProcess.run(scratch, workingDirectory, environment, properties, "", args);
     }
 
     private static Map<String, String> home(Path home) {
@@ -41,14 +45,37 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
             throws Exception {
         FakeBackend.write(home.resolve("backends/fake.jar"), "fake", HERE, "the-backend");
 
-        Ran ran = cli(work, Map.of("SOUTHER_HOME", home.toString(), "FAKE_ENV", "carried"),
-                List.of(), "typed in", "compile", "--target", "fake", "--exit", "7", "--help",
-                "-d", "out", "--component", "a.sou");
+        Ran ran = CliProcess.run(scratch, work,
+                Map.of("SOUTHER_HOME", home.toString(), "FAKE_ENV", "carried"), List.of(),
+                "typed in", "compile", "--target", "fake", "--exit", "7", "--help", "-d", "out",
+                "--component", "a.sou");
 
         assertEquals(7, ran.code(), ran.err());
         assertTrue(ran.out().contains("marker=the-backend\n"), ran.out());
         assertTrue(ran.out().contains("args=--exit|7|--help|-d|out|--component|a.sou\n"),
                 ran.out());
+        assertTrue(ran.out().contains("cwd=" + work.toRealPath() + "\n"), ran.out());
+        assertTrue(ran.out().contains("env=carried\n"), ran.out());
+        assertTrue(ran.out().contains("stdin=typed in\n"), ran.out());
+        assertEquals("said-on-stderr", ran.err().strip());
+    }
+
+    /**
+     * The same, from a run whose streams are not the process's: the backend is given pipes, and
+     * what passes through them is what it would have read and written on inherited ones.
+     */
+    @Test
+    void aRunOnStreamsOfItsOwnHandsTheBackendTheSame(@TempDir Path home, @TempDir Path work)
+            throws Exception {
+        FakeBackend.write(home.resolve("backends/fake.jar"), "fake", HERE, "the-backend");
+
+        Ran ran = CliInProcess.run(scratch, work,
+                Map.of("SOUTHER_HOME", home.toString(), "FAKE_ENV", "carried"), Map.of(),
+                "typed in", "compile", "--target", "fake", "--exit", "7", "a.sou");
+
+        assertEquals(7, ran.code(), ran.err());
+        assertTrue(ran.out().contains("marker=the-backend\n"), ran.out());
+        assertTrue(ran.out().contains("args=--exit|7|a.sou\n"), ran.out());
         assertTrue(ran.out().contains("cwd=" + work.toRealPath() + "\n"), ran.out());
         assertTrue(ran.out().contains("env=carried\n"), ran.out());
         assertTrue(ran.out().contains("stdin=typed in\n"), ran.out());
@@ -66,8 +93,8 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
         FakeBackend.write(home.resolve("backends/fake.jar"), "fake", HERE, "from-home");
         FakeBackend.write(packaged.resolve("fake.jar"), "fake", HERE, "from-package");
 
-        Ran both = cli(work, home(home), List.of("-Dsouther.backends=" + packaged), "", "compile",
-                "--target", "fake");
+        Ran both = cli(work, home(home), Map.of("souther.backends", packaged.toString()),
+                "compile", "--target", "fake");
 
         assertTrue(both.out().contains("marker=from-home\n"), both.out() + both.err());
     }
@@ -78,7 +105,7 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
             throws Exception {
         FakeBackend.write(home.resolve("backends/fake.jar"), "fake", "0.0.1-other", "never");
 
-        Ran ran = cli(work, home(home), List.of(), "", "compile", "--target", "fake");
+        Ran ran = cli(work, home(home), Map.of(), "compile", "--target", "fake");
 
         assertEquals(2, ran.code());
         assertEquals("", ran.out());
@@ -90,7 +117,7 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
                                                            @TempDir Path work) throws Exception {
         FakeBackend.write(home.resolve("backends/fake.jar"), "fake", HERE, "never");
 
-        Ran ran = cli(work, home(home), List.of(), "", "compile", "--target", "absent");
+        Ran ran = cli(work, home(home), Map.of(), "compile", "--target", "absent");
 
         assertEquals(2, ran.code());
         assertTrue(ran.err().contains("absent") && ran.err().contains("fake"), ran.err());

@@ -108,7 +108,7 @@ class AnImportedHelperIsMeasuredAsItWouldBeBesideTheBehaviorTest {
         System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
         int code;
         try {
-            code = Main.guarded(() -> Main.dispatch(args.toArray(String[]::new)));
+            code = Main.run(args.toArray(String[]::new), Environment.ofThisProcess());
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);

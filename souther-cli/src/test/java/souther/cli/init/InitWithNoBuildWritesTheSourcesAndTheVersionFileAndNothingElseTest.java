@@ -30,7 +30,7 @@ class InitWithNoBuildWritesTheSourcesAndTheVersionFileAndNothingElseTest {
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         int code = InitCommand.run(args, Locale.ENGLISH,
                 new PrintStream(out, true, StandardCharsets.UTF_8),
-                new PrintStream(err, true, StandardCharsets.UTF_8), here, souther);
+                new PrintStream(err, true, StandardCharsets.UTF_8), here, souther, null);
         return new Run(code, out.toString(StandardCharsets.UTF_8),
                 err.toString(StandardCharsets.UTF_8));
     }
@@ -59,6 +59,19 @@ class InitWithNoBuildWritesTheSourcesAndTheVersionFileAndNothingElseTest {
         assertEquals("9.9.9\n", Files.readString(project.resolve(".souther-version")));
         assertTrue(Files.readString(project.resolve("src/main/souther/my_app.sou"))
                 .contains("module my_app"));
+    }
+
+    /** A directory named by a relative path is under the one the command is run in, which is not
+     *  this JVM's. */
+    @Test
+    void aRelativeDirectoryIsUnderTheOneItIsRunIn(@TempDir Path parent) throws IOException {
+        Path here = project(parent, "here");
+
+        Run run = run(here, "9.9.9", "--build", "none", "-d", "made");
+
+        assertEquals(0, run.code(), run.err());
+        assertTrue(Files.isRegularFile(here.resolve("made").resolve(".souther-version")),
+                run.out());
     }
 
     @Test
