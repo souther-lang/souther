@@ -112,6 +112,20 @@ public enum CompositionRepertoire {
     KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
 
     /**
+     * The keys of one fold asked for together, at the values and with the numbers this tries.
+     *
+     * <p>Each key is another parameter's and is fixed before the elements are composed. Two keys
+     * are held at different values where they can be, and a key only counted — asked how many
+     * elements have it, with no number asked of them — is written to come to the number the first
+     * total of the group asks, since the composer of counts stops at a figure of its own where the
+     * elements are the fields of a record. A key counted beside a number it need not come to, and
+     * a count that asks more of a key than that number allows, are written by none of these.
+     * Raising no figure reaches them; what would is a way of choosing the keys and the elements
+     * of each together.
+     */
+    KEYS_OF_ONE_FOLD_ASKED_TOGETHER,
+
+    /**
      * The elements whose computed number is made of the fields of one element in ways this
      * compiler solves for.
      *
@@ -182,7 +196,7 @@ public enum CompositionRepertoire {
             case WAYS_A_TOTAL_IS_SPREAD, PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
                  VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
                  ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
-                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                 KEYS_OF_ONE_FOLD_ASKED_TOGETHER, MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
                  TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
         };
     }

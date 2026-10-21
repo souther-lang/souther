@@ -169,6 +169,10 @@ final class Reasons {
                         "the keys a number their elements come to turns on, other than the one"
                                 + " placed at it, and the containers that ask for more elements"
                                 + " of a key than one";
+                case KEYS_OF_ONE_FOLD_ASKED_TOGETHER ->
+                        "the keys of one fold asked for together at values other than the ones"
+                                + " tried, and a key only counted at a number other than the"
+                                + " first total's";
                 case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
                         "the elements whose computed number is made of several fields, chosen"
                                 + " by a flag, chosen by their case or chosen by where they"

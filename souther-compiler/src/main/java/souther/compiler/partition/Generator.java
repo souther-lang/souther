@@ -6114,11 +6114,6 @@ public final class Generator {
             if (out.containsKey(RealizationTarget.of(key))) {
                 continue;
             }
-            for (Map.Entry<RealizationTarget, Place> earlier : keysPlaced.entrySet()) {
-                if (each.getKey().keyIsToldApartFrom(earlier.getKey())) {
-                    here = here.apartFrom(key, earlier.getValue());
-                }
-            }
             Function<NumericTerm, Carrier> on = term -> {
                 TermOrders orders = subject.quantities().ordersOf(term);
                 return orders == null ? null : orders.observed();
@@ -6126,7 +6121,20 @@ public final class Generator {
             if (each.getKey().keyIsTheNumber()) {
                 here = here.given(key, each.getValue());
             }
-            switch (NumericWitness.of(here, List.of(key), on, looking)) {
+            // Held away from the keys of the same fold placed already where that can be, which is
+            // a way to try and not a rule: the rules and the way here may say the two are one value,
+            // and a row at which they are is as much a row.
+            SearchRegion apart = here;
+            for (Map.Entry<RealizationTarget, Place> earlier : keysPlaced.entrySet()) {
+                if (each.getKey().keyIsToldApartFrom(earlier.getKey())) {
+                    apart = apart.apartFrom(key, earlier.getValue());
+                }
+            }
+            NumericWitness.Standing placing = NumericWitness.of(apart, List.of(key), on, looking);
+            if (apart != here && !(placing instanceof NumericWitness.Standing.Found)) {
+                placing = NumericWitness.of(here, List.of(key), on, looking);
+            }
+            switch (placing) {
                 case NumericWitness.Standing.Found beside -> {
                     for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
                         RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
@@ -7255,14 +7263,26 @@ public final class Generator {
             // assignment that composes and asks nothing after it, so the last one asked about is
             // the one it took.
             List<ComposedAt> composedWith = new ArrayList<>();
-            NumericWitness.Standing found = NumericWitness.of(
-                    keysApart(here.given(remaindersStanding(alreadyStanding)), owing.keySet()),
-                    numbers, term -> carrierOf(term, subject.quantities()), looking,
+            SearchRegion within = here.given(remaindersStanding(alreadyStanding));
+            SearchRegion apart = keysApart(within, owing.keySet());
+            NumericWitness.Standing found = NumericWitness.of(apart, numbers,
+                    term -> carrierOf(term, subject.quantities()), looking,
                     assignment -> {
                         composedWith.clear();
                         return composer.composes(alreadyStanding, some, asked, owing,
                                 assignment, composedWith);
                     });
+            // The keys held apart are a way to try: where nothing stands that way, they are tried
+            // as the rules leave them.
+            if (apart != within && !(found instanceof NumericWitness.Standing.Found)) {
+                found = NumericWitness.of(within, numbers,
+                        term -> carrierOf(term, subject.quantities()), looking,
+                        assignment -> {
+                            composedWith.clear();
+                            return composer.composes(alreadyStanding, some, asked, owing,
+                                    assignment, composedWith);
+                        });
+            }
             // What the rules settle before what this compiler managed, because a reader may act on
             // the first and on none of the rest. A proof is the region's alone: an assignment no
             // row composed with is what this compiler built, and says nothing of the rules.

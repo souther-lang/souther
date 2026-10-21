@@ -3,9 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -415,16 +415,14 @@ public sealed interface RealizationTarget {
          *  input holds for the field that is their key. */
         @Override
         public AskedKey askedKey() {
-            if (!(count.meeting() instanceof Proposition.SameValue(DecisionSubject one,
-                    DecisionSubject other, boolean holds, var _)) || !holds
-                    || !(one instanceof DecisionSubject.AnInput(TermPath oneAt))
-                    || !(other instanceof DecisionSubject.AnInput(TermPath otherAt))
-                    || oneAt.insideAContainer() == otherAt.insideAContainer()) {
+            List<TermPath> equal = Proposition.positionsHeldEqual(count.meeting());
+            if (equal == null
+                    || equal.get(0).insideAContainer() == equal.get(1).insideAContainer()) {
                 return null;
             }
-            TermPath inside = oneAt.insideAContainer() ? oneAt : otherAt;
+            TermPath inside = equal.get(0).insideAContainer() ? equal.get(0) : equal.get(1);
             return new AskedKey(count.container().element(), inside,
-                    inside == oneAt ? otherAt : oneAt);
+                    inside == equal.get(0) ? equal.get(1) : equal.get(0));
         }
 
         @Override

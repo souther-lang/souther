@@ -3,8 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DocumentShape;
+import souther.compiler.check.Carrier;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
@@ -383,7 +385,102 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                 () -> "an emptiness no one established is not said: " + report(compilation));
     }
 
-    private static String twoKeys(String more) {
+    private static String totalBesideACount(String more) {
+        return """
+                module example.ledger
+
+                data Posting = { account: String, amount: Int }
+
+                let totals (ps: List<Posting>): Map<String, Int> =
+                    List.fold((acc, p) -> %s, Map.empty, ps)
+
+                behavior few : (ps: List<Posting>, key: String) -> Bool
+
+                let few (ps, key) =
+                    match Map.get(key, totals(ps)) with
+                        | Some n -> n >= 100
+                                && List.length(List.filter(p -> p.account == key, ps)) <= 2
+                        | None -> false
+                %s""".formatted(ADDING, more);
+    }
+
+    /**
+     * How many elements a key has is asked beside what they come to: a total of a hundred in at
+     * most two elements is composed with one element or two, and a count the total has nothing to
+     * say of is composed with the total.
+     */
+    @Test
+    void aTotalBesideTheCountOfTheElementsOfItsKeyIsComposedTogether() {
+        Compilation before = measured(totalBesideACount(""));
+        Pattern row = Pattern.compile("^(.*), \"((?:[^\"\\\\]|\\\\.)*)\"$");
+        StringBuilder examples = new StringBuilder("\nexample few\n");
+        int named = 0;
+        for (String each : offeredInputs(before, "few")) {
+            Matcher matched = row.matcher(each);
+            assertTrue(matched.matches(), () -> "an offered row is one this reads back: " + each);
+            String written = matched.group(1);
+            Row read = new Row(List.of(postingsIn(written.substring(1, written.length() - 1))),
+                    matched.group(2));
+            long counted = read.lists().getFirst().stream()
+                    .filter(posting -> posting.account().equals(read.account())).count();
+            Integer total = read.found(Integer::sum);
+            examples.append("    | \"offered ").append(named++).append("\" : (").append(each)
+                    .append(") -> ").append(total != null && total >= 100 && counted <= 2)
+                    .append("\n");
+        }
+        assertTrue(named > 0, () -> "rows are offered: " + report(before));
+        Compilation after = measured(totalBesideACount(examples.toString()));
+        assertEquals(List.of(), unmetOf(after),
+                () -> "the rows that were offered meet the lines: " + report(after));
+        assertFalse(report(after).contains("no row takes a decision rule"),
+                () -> "every way through the lookup and the count is taken: " + report(after));
+    }
+
+    /**
+     * A key filed in a map has an element, so a container asked how many it holds is asked the
+     * counts of that from one, whether or not the set has nought in it: every size but three has
+     * one and two in it, and has no key's.
+     */
+    @Test
+    void aSetOfSizesWithNoughtInItIsAskedFromOneForAKeyFiledInAMap() {
+        NumericSet butThree = new NumericSet.AwayFrom(List.of(Count.of(3)));
+        ContainersAddingUp.HowManyIsAskedFor many =
+                new ContainersAddingUp.HowManyIsAskedFor(butThree, Carrier.WHOLE, 1);
+        assertFalse(many.holds(0), "none is no size of a key filed in a map");
+        assertTrue(many.holds(1) && many.holds(2), "the sizes of the set from one stand");
+        assertFalse(many.holds(3), "and the one it leaves out does not");
+        assertTrue(new ContainersAddingUp.HowManyIsAskedFor(butThree, Carrier.WHOLE).holds(0),
+                "a container asked nothing of it besides the set is asked its sizes as they are");
+    }
+
+    /**
+     * The end of a key's values is written as one element, which is a way of writing it and not
+     * what an end is: a key asked to have two elements is an end this does not write, and is said
+     * to be one — not to be a count no key has.
+     */
+    @Test
+    void anEndOfAKeyAskedToHaveMoreThanOneElementIsSaidNotToBeComposed() {
+        Compilation compilation = measured("""
+                module example.ledger
+
+                data Posting = { account: String, amount: Int }
+
+                let least (ps: List<Posting>): Map<String, Int> =
+                    List.fold((acc, p) -> %s, Map.empty, ps)
+
+                behavior few : (ps: List<Posting>, key: String) -> Bool
+
+                let few (ps, key) =
+                    match Map.get(key, least(ps)) with
+                        | Some n -> n >= 100
+                                && List.length(List.filter(p -> p.account == key, ps)) == 2
+                        | None -> false
+                """.formatted(LEAST));
+        assertFalse(report(compilation).contains("no row can stand at the"),
+                () -> "an emptiness no one established is not said: " + report(compilation));
+    }
+
+    private static String twoKeys(String arm, String more) {
         return """
                 module example.ledger
 
@@ -398,21 +495,25 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                     match Map.get(one, totals(ps)) with
                         | Some a ->
                             match Map.get(other, totals(ps)) with
-                                | Some b -> a >= 100 && b < 50
+                                | Some b -> %s
                                 | None -> false
                         | None -> false
-                %s""".formatted(ADDING, more);
+                %s""".formatted(ADDING, arm, more);
+    }
+
+    /** What the arm of two lookups answers of what each found and of whether the keys are one. */
+    private interface TwoKeysAnswer {
+
+        boolean of(int one, int other, boolean sameKey);
     }
 
     /**
-     * Two keys asked for of one fold are two totals of one container, and the container is
-     * composed for both at once: the elements of each key are written holding it, the totals of
-     * the two are what each line is drawn on, and a row at the point of one holds the other where
-     * the way to it asks.
+     * The rows offered for a lookup under two keys, written back as examples against what
+     * {@code answer} says of them: every point of the lines drawn is met by them, and every way
+     * through the two lookups is taken.
      */
-    @Test
-    void severalKeysAskedForOfOneFoldAreComposedTogether() {
-        Compilation before = measured(twoKeys(""));
+    private static void assertTwoKeysAreComposedTogether(String arm, TwoKeysAnswer answer) {
+        Compilation before = measured(twoKeys(arm, ""));
         Pattern row = Pattern.compile(
                 "^(.*), \"((?:[^\"\\\\]|\\\\.)*)\", \"((?:[^\"\\\\]|\\\\.)*)\"$");
         StringBuilder examples = new StringBuilder("\nexample both\n");
@@ -426,16 +527,108 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
             Row other = new Row(read.lists(), matched.group(3));
             Integer one = read.found(Integer::sum);
             Integer two = other.found(Integer::sum);
+            boolean holds = one != null && two != null
+                    && answer.of(one, two, matched.group(2).equals(matched.group(3)));
             examples.append("    | \"offered ").append(named++).append("\" : (").append(each)
-                    .append(") -> ").append(one != null && one >= 100 && two != null && two < 50)
-                    .append("\n");
+                    .append(") -> ").append(holds).append("\n");
         }
         assertTrue(named > 0, () -> "rows are offered: " + report(before));
-        Compilation after = measured(twoKeys(examples.toString()));
+        Compilation after = measured(twoKeys(arm, examples.toString()));
         assertEquals(List.of(), unmetOf(after),
                 () -> "the rows that were offered meet the lines: " + report(after));
         assertFalse(report(after).contains("no row takes a decision rule"),
                 () -> "every way through the two lookups is taken: " + report(after));
+    }
+
+    /**
+     * Two keys asked for of one fold are two totals of one container, and the container is
+     * composed for both at once: the elements of each key are written holding it, the totals of
+     * the two are what each line is drawn on, and a row at the point of one holds the other where
+     * the way to it asks.
+     */
+    @Test
+    void severalKeysAskedForOfOneFoldAreComposedTogether() {
+        assertTwoKeysAreComposedTogether("a >= 100 && b < 50",
+                (one, other, sameKey) -> one >= 100 && other < 50);
+    }
+
+    /**
+     * Two parameters are not two keys: the same value held by both is one key, whose elements
+     * come to one number for both. A lookup under each, held to be one key by the arm, is
+     * composed with the keys at one value, as it is with them apart where the arm asks that.
+     */
+    @Test
+    void twoParametersHoldingOneKeyAreOneKey() {
+        assertTwoKeysAreComposedTogether("a >= 100 && b >= 100 && one == other",
+                (one, other, sameKey) -> one >= 100 && other >= 100 && sameKey);
+    }
+
+    /**
+     * One key asked two numbers that no elements come to together — a hundred or more and under
+     * fifty, of one key — is a row no one writes. It is said to be a combination nothing
+     * composed, and not to be one the model has no row at: the keys could stand apart.
+     */
+    @Test
+    void twoNumbersAskedOfOneKeyThatNothingComesToAreSaidNotToBeComposed() {
+        Compilation compilation = measured(twoKeys("a >= 100 && b < 50 && one == other", ""));
+        assertFalse(report(compilation).contains("no row can stand at the"),
+                () -> "an emptiness no one established is not said: " + report(compilation));
+    }
+
+    /**
+     * Keys are held apart where they can be, which is a way to try and not a rule: where the rules
+     * leave two parameters one value, the lookups under them are of one key and the row is
+     * composed with them at that value.
+     */
+    @Test
+    void parametersTheRulesLeaveOneValueAreComposedAsOneKey() {
+        String model = """
+                module example.ledger
+
+                data Posting = { account: String, amount: Int }
+
+                data Account = String
+                    invariant value == "A"
+
+                let totals (ps: List<Posting>): Map<String, Int> =
+                    List.fold((acc, p) -> %s, Map.empty, ps)
+
+                behavior both : (ps: List<Posting>, one: Account, other: Account) -> Bool
+
+                let both (ps, one, other) =
+                    match Map.get(one.value, totals(ps)) with
+                        | Some a ->
+                            match Map.get(other.value, totals(ps)) with
+                                | Some b -> a >= 100 && b >= 100
+                                | None -> false
+                        | None -> false
+                %s""".formatted(ADDING, "");
+        Compilation compilation = measured(model);
+        assertFalse(report(compilation).contains("no row can stand at the"),
+                () -> "an emptiness no one established is not said: " + report(compilation));
+        assertFalse(unmetOf(compilation).isEmpty(), () -> report(compilation));
+        Pattern row = Pattern.compile("^(\\[.*\\]), Account\\(\"A\"\\), Account\\(\"A\"\\)$");
+        StringBuilder examples = new StringBuilder("\nexample both\n");
+        int named = 0;
+        for (String each : offeredInputs(compilation, "both")) {
+            Matcher matched = row.matcher(each);
+            assertTrue(matched.matches(), () -> "an offered row is one this reads back: " + each);
+            String postings = matched.group(1);
+            Integer found = new Row(List.of(postingsIn(
+                    postings.substring(1, postings.length() - 1))), "A").found(Integer::sum);
+            examples.append("    | \"offered ").append(named++).append("\" : (").append(each)
+                    .append(") -> ").append(found != null && found >= 100).append("\n");
+        }
+        assertTrue(named > 0, () -> "rows are offered: " + report(compilation));
+        Compilation after = measured(model + examples);
+        // The second lookup finds what the first does, so it is under a hundred only where the
+        // first is, and the points below a hundred of the second are rows the first refuses: they
+        // are the two left, and are not said to have no row.
+        assertEquals(List.of("OFF", "OUT"), unmetOf(after),
+                () -> "the rows that were offered meet the lines the keys at one value reach: "
+                        + report(after));
+        assertFalse(report(after).contains("no row can stand at the"),
+                () -> "an emptiness no one established is not said: " + report(after));
     }
 
     private static String posting(String amount) {

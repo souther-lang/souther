@@ -17,8 +17,6 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.DecisionSubject;
-import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
@@ -324,11 +322,14 @@ final class TermRealizations {
         // What the elements of keys an input holds come to, with how many elements each key has
         // where that is counted beside it: the counts are the keys' own, which is a statement the
         // elements of a key meet by being its elements.
-        if (together.isEmpty() && !numbers.isEmpty() && (numbers.size() > 1 || !counts.isEmpty())
-                && numbers.stream()
-                        .allMatch(each -> each.term() instanceof NumericTerm.GatheredUnderAKey)
-                && counts.stream().allMatch(count -> countsTheElementsOfAKeyOf(count, numbers))) {
-            return underSeveralKeys(targets, counts, numbers);
+        List<RealizationTarget.OfANumber> totals = numbers.stream()
+                .filter(each -> each.term() instanceof NumericTerm.GatheredUnderAKey).toList();
+        if (together.isEmpty() && !totals.isEmpty()
+                && (totals.size() > 1 || numbers.size() > 1 || !counts.isEmpty())
+                && numbers.stream().allMatch(each -> totals.contains(each)
+                        || standsAtTheKeyOfTheTotals(each, totals))
+                && counts.stream().allMatch(count -> countsTheElementsOfAKeyOf(count, totals))) {
+            return underSeveralKeys(targets, counts, totals, numbers);
         }
         if (!counts.isEmpty() || !together.isEmpty()) {
             return countsOf(targets, counts, together, numbers);
@@ -612,10 +613,11 @@ final class TermRealizations {
      */
     private static JointRealization underSeveralKeys(Collection<RealizationTarget> group,
                                                      List<RealizationTarget.ACount> counts,
+                                                     List<RealizationTarget.OfANumber> totals,
                                                      List<RealizationTarget.OfANumber> numbers) {
         NumericTerm.GatheredUnderItsKey first =
-                ((NumericTerm.GatheredUnderAKey) numbers.getFirst().term()).gathered();
-        for (RealizationTarget.OfANumber each : numbers) {
+                ((NumericTerm.GatheredUnderAKey) totals.getFirst().term()).gathered();
+        for (RealizationTarget.OfANumber each : totals) {
             NumericTerm.GatheredUnderItsKey gathered =
                     ((NumericTerm.GatheredUnderAKey) each.term()).gathered();
             if (!gathered.elements().equals(first.elements())
@@ -625,7 +627,20 @@ final class TermRealizations {
         }
         List<RealizationTarget> owned = new ArrayList<>(numbers);
         owned.addAll(counts);
-        return wholly(group, owned, () -> new JointBuilder.UnderSeveralKeys(counts, numbers));
+        return wholly(group, owned, () -> new JointBuilder.UnderSeveralKeys(counts, totals));
+    }
+
+    /**
+     * Whether {@code number} is the value of the key field of the elements the totals are
+     * gathered of: what a statement counting the elements of a key reads of each, which the
+     * elements are written holding and the row is read back for.
+     */
+    private static boolean standsAtTheKeyOfTheTotals(RealizationTarget.OfANumber number,
+                                                     List<RealizationTarget.OfANumber> totals) {
+        NumericTerm.GatheredUnderItsKey gathered =
+                ((NumericTerm.GatheredUnderAKey) totals.getFirst().term()).gathered();
+        return number.term() instanceof NumericTerm.ValueOf value
+                && value.position().equals(gathered.key().from(gathered.elements()));
     }
 
     /**
@@ -646,19 +661,10 @@ final class TermRealizations {
      */
     private static TermPath keyAskedOfTheCount(RealizationTarget.ACount count,
                                                NumericTerm.GatheredUnderItsKey gathered) {
-        TermPath keyAt = gathered.key().from(gathered.elements());
-        if (!count.count().container().element().equals(gathered.elements())
-                || !(count.count().meeting() instanceof Proposition.SameValue(
-                        DecisionSubject one, DecisionSubject other, boolean holds, var _))
-                || !holds
-                || !(one instanceof DecisionSubject.AnInput(TermPath oneAt))
-                || !(other instanceof DecisionSubject.AnInput(TermPath otherAt))) {
-            return null;
-        }
-        if (oneAt.equals(keyAt) && !otherAt.insideAContainer()) {
-            return otherAt;
-        }
-        return otherAt.equals(keyAt) && !oneAt.insideAContainer() ? oneAt : null;
+        RealizationTarget.AskedKey key = count.askedKey();
+        return key != null && key.elements().equals(gathered.elements())
+                && key.keyAt().equals(gathered.key().from(gathered.elements())) ? key.asked()
+                : null;
     }
 
     /**
@@ -1360,10 +1366,11 @@ final class TermRealizations {
                                     RuleReadingContext reading, DemandsInside inside) {
                 List<Place> keys = new ArrayList<>();
                 List<RealizationTarget.OfANumber> ofEachKey = new ArrayList<>();
+                List<AskedAt> askedOfEachKey = new ArrayList<>();
                 List<NumericSet> howManyOfEachKey = new ArrayList<>();
-                // The keys only counted: no number is asked of their elements, so they are written
-                // as the elements of a key are for a number the first one asks.
+                // The keys only counted: no number is asked of their elements.
                 List<Boolean> onlyCounted = new ArrayList<>();
+                List<List<RealizationTarget.ACount>> countsOfEachKey = new ArrayList<>();
                 for (RealizationTarget.OfANumber number : numbers) {
                     NumericTerm.GatheredUnderAKey term =
                             (NumericTerm.GatheredUnderAKey) number.term();
@@ -1382,14 +1389,27 @@ final class TermRealizations {
                     if (at == keys.size()) {
                         keys.add(key);
                         ofEachKey.add(number);
+                        askedOfEachKey.add(demands.get(number));
                         howManyOfEachKey.add(null);
                         onlyCounted.add(false);
-                    } else if (!askedTheSameOfTheSameElements(ofEachKey.get(at), number,
-                            demands)) {
+                        countsOfEachKey.add(new ArrayList<>());
+                        continue;
+                    }
+                    // Two parameters holding one value are one key, whose elements come to what
+                    // both ask: one number where the two asked are, or the point of the one that
+                    // the other holds.
+                    NumericTerm.GatheredUnderItsKey held =
+                            ((NumericTerm.GatheredUnderAKey) ofEachKey.get(at).term()).gathered();
+                    TermOrders orders = measuring.ordersOf(number.term());
+                    AskedAt agreed = !held.equals(term.gathered()) ? null
+                            : agreed(askedOfEachKey.get(at), demands.get(number),
+                                    orders == null ? null : orders.answered());
+                    if (agreed == null) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
                                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
                                 "two numbers are asked of the elements of one key");
                     }
+                    askedOfEachKey.set(at, agreed);
                 }
                 // How many elements a key has, asked of the key whose elements the count is of; two
                 // counts of one key's elements are one question, asked alike or not at all.
@@ -1410,15 +1430,21 @@ final class TermRealizations {
                         at++;
                     }
                     if (at == keys.size()) {
+                        // Nothing says what its elements come to, so they are written to come to
+                        // what the first total of the group asks of its own: one of the numbers
+                        // they may come to, and the way this composes them at all.
                         keys.add(key);
                         ofEachKey.add(numbers.getFirst());
+                        askedOfEachKey.add(demands.get(numbers.getFirst()));
                         howManyOfEachKey.add(null);
                         onlyCounted.add(true);
+                        countsOfEachKey.add(new ArrayList<>());
                     }
+                    countsOfEachKey.get(at).add(count);
                     AskedAt asked = demands.get(count);
                     NumericSet wanted = asked == null ? null : asked.walking();
                     NumericSet had = howManyOfEachKey.get(at);
-                    if (had != null && !had.equals(wanted)) {
+                    if (!onlyCounted.get(at) && had != null && !had.equals(wanted)) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
                                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
                                 "two counts are asked of the elements of one key");
@@ -1427,20 +1453,24 @@ final class TermRealizations {
                 }
                 List<List<FixtureTemplate>> ways = new ArrayList<>();
                 CompositionShortfall rest = CompositionShortfall.NONE;
-                for (int each = 0; each < ofEachKey.size(); each++) {
+                for (int each = 0; each < keys.size(); each++) {
                     NumericSet howMany = howManyOfEachKey.get(each);
                     // A key asked to have no element is written with none.
-                    if (onlyCounted.get(each) && howMany != null
-                            && howMany.holds(Count.of(0), Carrier.WHOLE)
-                            && !howMany.holds(Count.of(1), Carrier.WHOLE)) {
+                    if (onlyCounted.get(each) && countsOfEachKey.get(each).stream()
+                            .allMatch(count -> {
+                                AskedAt wanted = demands.get(count);
+                                return wanted != null
+                                        && wanted.walking().holds(Count.of(0), Carrier.WHOLE)
+                                        && !wanted.walking().holds(Count.of(1), Carrier.WHOLE);
+                            })) {
                         continue;
                     }
-                    RealizationTarget.OfANumber number = ofEachKey.get(each);
                     Realization one = underAKey(sourceType, keptApart,
-                            measuring.ordersOf(number.term()), demands.get(number), within,
-                            reading, inside, howMany, keys.get(each));
+                            measuring.ordersOf(ofEachKey.get(each).term()),
+                            askedOfEachKey.get(each), within, reading, inside, howMany,
+                            keys.get(each));
                     if (!(one instanceof Realization.Built built)) {
-                        return one;
+                        return asked(one, keys, onlyCounted);
                     }
                     ways.add(built.values());
                     rest = rest.and(built.rest());
@@ -1461,19 +1491,47 @@ final class TermRealizations {
                     }
                     together.add(joined);
                 }
-                return new Realization.Built(together, rest.and(CompositionShortfall.writing(
-                        Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD))));
+                return asked(new Realization.Built(together, rest.and(
+                        CompositionShortfall.writing(
+                                Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)))),
+                        keys, onlyCounted);
             }
 
-            private static boolean askedTheSameOfTheSameElements(
-                    RealizationTarget.OfANumber one, RealizationTarget.OfANumber other,
-                    SequencedMap<RealizationTarget, AskedAt> demands) {
-                AskedAt asked = demands.get(one);
-                AskedAt alsoAsked = demands.get(other);
-                return ((NumericTerm.GatheredUnderAKey) one.term()).gathered()
-                        .equals(((NumericTerm.GatheredUnderAKey) other.term()).gathered())
-                        && (asked == null ? alsoAsked == null
-                                : alsoAsked != null && asked.walking().equals(alsoAsked.walking()));
+            /**
+             * What came of the keys, said to be some of the ways they may be asked together
+             * where there is more than one key or one is only counted: the values they were
+             * placed at and the number a key only counted came to are a way to try, and a row not
+             * written is not a row there is none of.
+             */
+            private static Realization asked(Realization made, List<Place> keys,
+                                              List<Boolean> onlyCounted) {
+                return keys.size() > 1 || onlyCounted.contains(true)
+                        ? someOf(made, CompositionRepertoire.KEYS_OF_ONE_FOLD_ASKED_TOGETHER)
+                        : made;
+            }
+
+            /**
+             * What two parameters holding one key ask of its elements, as one asking: the one asked
+             * where they ask alike, or the point of the one that the other's set holds — and null
+             * where they ask what no one set of elements is chosen for.
+             */
+            private static AskedAt agreed(AskedAt one, AskedAt other, Carrier on) {
+                if (one == null || other == null) {
+                    return one == null ? other : one;
+                }
+                NumericSet asked = one.walking();
+                NumericSet alsoAsked = other.walking();
+                if (asked.equals(alsoAsked)) {
+                    return one;
+                }
+                if (on == null) {
+                    return null;
+                }
+                if (asked instanceof NumericSet.At point && alsoAsked.holds(point.value(), on)) {
+                    return one;
+                }
+                return alsoAsked instanceof NumericSet.At point && asked.holds(point.value(), on)
+                        ? other : null;
             }
         }
 
@@ -2150,14 +2208,19 @@ final class TermRealizations {
         boolean anEnd = gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End;
         NumericSet some = anEnd ? new NumericSet.At(Count.of(1))
                 : new NumericSet.AwayFrom(List.of(Count.of(0)));
-        if (howMany != null && !(anEnd ? howMany.holds(Count.of(1), Carrier.WHOLE)
-                : !howMany.holds(Count.of(0), Carrier.WHOLE))) {
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                    "a key whose elements are counted at a size no key filed in a map has");
+        // An end is written as one element, which is a way of writing it and not what an end is: a
+        // count of its key's elements that has no one in it asks for an end this does not write,
+        // and is not a count no key has.
+        if (anEnd && howMany != null && !howMany.holds(Count.of(1), Carrier.WHOLE)) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                    CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO)),
+                    "an end of the elements of a key is written as one element, and the key is"
+                            + " asked to have more");
         }
+        // A key filed in a map has some element, so whatever count of them is asked, one or more
+        // of the counts in it is the size.
         ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
-                howMany == null || anEnd ? some : howMany, Carrier.WHOLE);
+                howMany == null || anEnd ? some : howMany, Carrier.WHOLE, 1);
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
@@ -2226,8 +2289,15 @@ final class TermRealizations {
      * written is not a row there is none of.
      */
     private static Realization someOfTheKeys(Realization made) {
-        CompositionShortfall some = CompositionShortfall.writing(
-                Set.of(CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO));
+        return someOf(made, CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO);
+    }
+
+    /**
+     * {@code made} said to be an offer of some of a population {@code population} names and not
+     * all of it: the nothing it came to is a nothing this tried, and never that none exists.
+     */
+    private static Realization someOf(Realization made, CompositionRepertoire population) {
+        CompositionShortfall some = CompositionShortfall.writing(Set.of(population));
         return switch (made) {
             case Realization.Built built -> new Realization.Built(built.values(),
                     built.rest().and(some));
