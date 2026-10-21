@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -41,13 +42,39 @@ class EveryAnswerThisCompilerDeclaresIsSettledTest {
      * <p>Asked here as well as where the vocabulary is counted, because a scan that fell short
      * leaves this checking a world one question smaller and saying so nowhere.
      */
-    private static List<Class<?>> questions() throws Exception {
-        Covered<Class<?>> scanned = DeclaredQuestions.scan();
-        assertEquals(List.of(), switch (scanned) {
-            case Covered.Whole<Class<?>> _ -> List.of();
-            case Covered.Partly<Class<?>>(List<Class<?>> _, List<Gap> gaps) -> gaps;
-        }, "a class the scan could not load, so what is checked below is not the vocabulary");
-        return DeclaredQuestions.found(scanned);
+    private static synchronized List<Class<?>> questions() throws Exception {
+        if (asked == null) {
+            Covered<Class<?>> scanned = DeclaredQuestions.scan();
+            assertEquals(List.of(), switch (scanned) {
+                case Covered.Whole<Class<?>> _ -> List.of();
+                case Covered.Partly<Class<?>>(List<Class<?>> _, List<Gap> gaps) -> gaps;
+            }, "a class the scan could not load, so what is checked below is not the vocabulary");
+            asked = DeclaredQuestions.found(scanned);
+        }
+        return asked;
+    }
+
+    /**
+     * The questions and the walk of what they declare, made once for the class: both tests read
+     * the one walk, and neither changes it.
+     */
+    private static List<Class<?>> asked;
+
+    private static DeclaredAnswerWalk.Walked walk;
+
+    private static synchronized DeclaredAnswerWalk.Walked walked() throws Exception {
+        if (walk == null) {
+            walk = DeclaredAnswerWalk.of(questions());
+        }
+        return walk;
+    }
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static synchronized void released() {
+        asked = null;
+        walk = null;
     }
 
     /**
@@ -63,7 +90,7 @@ class EveryAnswerThisCompilerDeclaresIsSettledTest {
     @Test
     void theWalkGoesIntoWhatTheseQuestionsDeclare() throws Exception {
         List<Class<?>> questions = questions();
-        DeclaredAnswerWalk.Walked walked = DeclaredAnswerWalk.of(questions);
+        DeclaredAnswerWalk.Walked walked = walked();
 
         assertTrue(questions.size() > 100,
                 () -> "a vocabulary of " + questions.size() + " is not this compiler's");
@@ -82,7 +109,7 @@ class EveryAnswerThisCompilerDeclaresIsSettledTest {
     @Test
     void theOnlyDeclarationsThatSettleNothingAreTheOnesWrittenDown() throws Exception {
         Map<TypePath.Place, Traversal.Why> found = new LinkedHashMap<>();
-        DeclaredAnswerWalk.of(questions()).found()
+        walked().found()
                 .forEach(each -> found.put(each.place(), each.why()));
         Map<TypePath.Place, String> reasons = AnswerClosure.declaredReasons();
 
