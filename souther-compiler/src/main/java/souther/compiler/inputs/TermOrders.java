@@ -138,15 +138,16 @@ public final class TermOrders {
 
     /**
      * The elements of one occurrence of the container a term read off an element's neighbours is
-     * taken over, put together once for the number of any of them.
+     * taken over, put together once for the number of any of them — or every element of the run a
+     * term gathers under keys ({@link NumericTerm.GatheredUnderItsKey}), every occurrence's.
      *
      * <p>Each element is handed as what it holds at each way into it. Whatever is asked of it is
      * what the number of an element asks and no more, and an element is asked only when some
      * number needs it: how often a value occurs reads every element's value, and the end of a
-     * key's values reads every element's key and the values of that key's elements alone, the
-     * first time that key is asked about.
+     * key's values, or what they come to, reads every element's key and the values of that key's
+     * elements alone, the first time that key is asked about.
      *
-     * @param each every element of the occurrence, in the order the container holds them
+     * @param each every element of the occurrence, or of the run, in the order they are held
      */
     public <G> ElementsTogether<G> together(List<Function<ElementProjection, Holding<G>>> each) {
         return TermReading.together(this, each);

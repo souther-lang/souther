@@ -311,6 +311,41 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     }
 
     /**
+     * A case taken of a place beside the field each arm reads — a line's amount, taken off where it
+     * is a refund — is written by asking every element to be of that case: amounts are never below
+     * nought, so the points below nought are written as refunds and come to the totals they are
+     * for.
+     */
+    @Test
+    void aCaseTakenBesideTheFieldIsWrittenAsElementsOfThatCase() {
+        String rows = rowsOf(thresholded("""
+                data Kind = Charge | Refund
+                data Deduction = { kind: Kind, amount: Int }
+                    invariant amount >= 0
+                """, """
+                match d.kind with
+                        | Charge -> d.amount
+                        | Refund -> 0 - d.amount""", -3));
+        Pattern element = Pattern.compile("kind = (Charge|Refund), amount = (-?\\d+)");
+        List<Long> totals = new ArrayList<>();
+        for (String row : rows.split("\n    \\| ")) {
+            Matcher found = element.matcher(row);
+            long total = 0;
+            boolean any = false;
+            while (found.find()) {
+                long held = Long.parseLong(found.group(2));
+                total += found.group(1).equals("Refund") ? -held : held;
+                any = true;
+            }
+            if (any) {
+                totals.add(total);
+            }
+        }
+        assertTrue(totals.contains(-3L), () -> "the point on the line: " + rows);
+        assertTrue(totals.contains(-4L), () -> "the point just off it: " + rows);
+    }
+
+    /**
      * A point only a container mixing the cases reaches is said as one this compiler did not try,
      * not as one no row comes to: an even number of each {@code A} and a multiple of three of each
      * {@code B} come to five only together.

@@ -155,18 +155,17 @@ sealed interface InputAtom {
     }
 
     /**
-     * A number taken over what a walk computed of each element, which is no number at any place of
-     * the input.
+     * A number no place of the input names ({@link NumericTerm#atItsPlace}): what a walk computed
+     * of each element added up or gathered under a key, a total over the nodes of a tree.
      *
      * <p>Named by the term itself. A place says where a number sits and which number of it is meant,
      * and a total of {@code q * 2} over the elements of a list sits nowhere: spelled as a place, it
      * would be one name for the totals of every computation over that list. What makes two of these
-     * one number is that they are the same operation over the same elements computing the same
-     * thing, which is what the term is equal by.
+     * one number is everything the term is equal by.
      *
      * <p>The parameter is part of it for the reason {@link Anonymous} gives.
      */
-    record Computed(String root, NumericTerm.TakenOver term) implements InputAtom {
+    record Computed(String root, NumericTerm term) implements InputAtom {
 
         public Computed {
             if (root == null || term == null) {

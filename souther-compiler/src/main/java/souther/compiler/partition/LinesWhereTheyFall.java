@@ -318,7 +318,8 @@ public final class LinesWhereTheyFall {
                                                  NewtypeInners inners, Symbols symbols,
                                                  RuleEvidenceOrigin origin) {
         TermPath path = term.subjectPath();
-        if (inputs.at(path) != null) {
+        // A term no place names is written as itself: there is no name of a place to have filed.
+        if (inputs.at(path) != null || term.atItsPlace() == null) {
             return new WhereTheNameStands.AsWritten(term);
         }
         // The value a rule naming this location is read of, which the reading answers. A location

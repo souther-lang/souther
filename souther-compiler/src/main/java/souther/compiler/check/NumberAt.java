@@ -263,7 +263,15 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                     case Extreme.Least _ -> "least";
                     case Extreme.Greatest _ -> "greatest";
                 };
-                return end + "(" + position + " by " + String.join(".", key) + ")";
+                return end + "(" + position + " by " + keySpelled(key) + ")";
+            }
+
+            /**
+             * The key, the fields read from an element to reach it, as a report writes it: the
+             * element itself where it is read through none, which is a key as much as a field is.
+             */
+            public static String keySpelled(List<String> key) {
+                return key.isEmpty() ? "itself" : String.join(".", key);
             }
         }
     }
