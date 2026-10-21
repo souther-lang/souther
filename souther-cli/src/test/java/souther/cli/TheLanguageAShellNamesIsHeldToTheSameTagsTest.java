@@ -1,14 +1,12 @@
 package souther.cli;
 
-import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import souther.cli.CliProcess.Ran;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,16 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * name a language and failing, which is the case an answer in English hides: nothing named a
  * language and something named one that says nothing come back identical.
  *
- * <p>In a process of its own, because the environment is what is being varied and a test cannot set
- * one for the JVM it is running in. This is also the only reading of it that goes through everything
- * a shell's value passes on the way in.
+ * <p>In this JVM, with an environment that holds the variable and nothing else. The value a shell
+ * exports reaches the command line as one entry of the environment {@link Main#main} reads once,
+ * and from there the run is the same whether that environment was the process's or a test's.
  */
 class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
 
     @TempDir
     Path dir;
-
-    private record Answer(int code, String out, String err) {}
 
     private static final String MODEL = """
             module example.ok
@@ -53,26 +49,9 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
         return file;
     }
 
-    /**
-     * Runs the command line in a process whose environment is the one named here.
-     *
-     * <p>Through {@code Main} on this test's own class path rather than through the shipped jar,
-     * which is built a module later. What is being read is the environment, and it arrives the same
-     * way either side of the packaging.
-     */
-    private Answer souther(Map<String, String> environment, String... args)
-            throws IOException, InterruptedException {
-        List<String> command = new java.util.ArrayList<>(List.of(
-                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-                "-cp", System.getProperty("java.class.path"),
-                Main.class.getName()));
-        command.addAll(List.of(args));
-        ProcessBuilder builder = new ProcessBuilder(command);
-        builder.environment().putAll(environment);
-        Process process = builder.start();
-        String out = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        String err = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-        return new Answer(process.waitFor(), out, err);
+    /** Runs the command line with {@code environment} as the whole of its environment. */
+    private Ran souther(Map<String, String> environment, String... args) {
+        return CliInProcess.run(dir, environment, args);
     }
 
     /**
@@ -81,7 +60,7 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
      */
     @Test
     void theVariableNamesTheLanguageTheAnswerIsWrittenIn() throws Exception {
-        Answer answer = souther(Map.of("SOUTHER_LANG", "ja"),
+        Ran answer = souther(Map.of("SOUTHER_LANG", "ja"),
                 "compile", source(BROKEN, "broken.sou").toString(), "-d", dir.resolve("out").toString());
 
         assertEquals(1, answer.code(), answer.err());
@@ -90,7 +69,7 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
 
     @Test
     void aValueThatIsNotATagIsRefused() throws Exception {
-        Answer answer = souther(Map.of("SOUTHER_LANG", "en-!!"),
+        Ran answer = souther(Map.of("SOUTHER_LANG", "en-!!"),
                 "compile", source(MODEL, "ok.sou").toString(), "-d", dir.resolve("out").toString());
 
         assertEquals(2, answer.code(), answer.err());
@@ -103,7 +82,7 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
      *  sent to fix something they did not write. */
     @Test
     void theRefusalNamesTheVariableAndNotTheOption() throws Exception {
-        Answer answer = souther(Map.of("SOUTHER_LANG", "!!"),
+        Ran answer = souther(Map.of("SOUTHER_LANG", "!!"),
                 "compile", source(MODEL, "ok.sou").toString(), "-d", dir.resolve("out").toString());
 
         assertEquals(2, answer.code(), answer.err());
@@ -113,7 +92,7 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
     /** A language with no catalog is named, here as on the line. */
     @Test
     void aLanguageThisCompilerHasNoCatalogForIsAccepted() throws Exception {
-        Answer answer = souther(Map.of("SOUTHER_LANG", "fr"),
+        Ran answer = souther(Map.of("SOUTHER_LANG", "fr"),
                 "compile", source(MODEL, "ok.sou").toString(), "-d", dir.resolve("out").toString());
 
         assertEquals(0, answer.code(), answer.err());
@@ -125,7 +104,7 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
      */
     @Test
     void aVariableExportedBlankIsAVariableNobodySet() throws Exception {
-        Answer answer = souther(Map.of("SOUTHER_LANG", ""),
+        Ran answer = souther(Map.of("SOUTHER_LANG", ""),
                 "compile", source(MODEL, "ok.sou").toString(), "-d", dir.resolve("out").toString());
 
         assertEquals(0, answer.code(), answer.err());
@@ -138,7 +117,7 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
      */
     @Test
     void aBlankValueOnTheLineDoesNotFallBackToTheVariable() throws Exception {
-        Answer answer = souther(Map.of("SOUTHER_LANG", "ja"),
+        Ran answer = souther(Map.of("SOUTHER_LANG", "ja"),
                 "compile", source(BROKEN, "broken.sou").toString(), "-d", dir.resolve("out").toString(),
                 "--lang", "");
 
@@ -158,7 +137,7 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
      */
     @Test
     void aLineThatNamesALanguageIsNotRefusedForWhatTheShellSet() throws Exception {
-        Answer answer = souther(Map.of("SOUTHER_LANG", "!!"),
+        Ran answer = souther(Map.of("SOUTHER_LANG", "!!"),
                 "compile", source(BROKEN, "broken.sou").toString(), "-d", dir.resolve("out").toString(),
                 "--lang", "ja");
 

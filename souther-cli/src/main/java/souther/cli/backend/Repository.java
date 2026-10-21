@@ -57,9 +57,13 @@ public final class Repository implements Configured {
         this.route = route;
     }
 
-    /** The repository this run's settings name, or the setting that names none it can use. */
-    public static Configured configured(Map<String, String> environment) {
-        String named = System.getProperty(SETTING);
+    /**
+     * The repository this run's settings name, or the setting that names none it can use: the
+     * environment {@code variables} and system {@code properties} the run is given.
+     */
+    public static Configured configured(Map<String, String> variables,
+                                        Map<String, String> properties) {
+        String named = properties.get(SETTING);
         boolean central = named == null || named.isBlank();
         URI at;
         switch (central ? new Named.At<>(MAVEN_CENTRAL) : root(named)) {
@@ -74,11 +78,11 @@ public final class Repository implements Configured {
         // Called by what the setting was read as, rebuilt, and never by what it was written as.
         String name = central ? "Maven Central" : Shown.address(at);
         if (loopback(at) || bypassed(at.getHost(),
-                either(environment, "NO_PROXY", "no_proxy").orElse(""))) {
+                either(variables, "NO_PROXY", "no_proxy").orElse(""))) {
             return new Repository(at, name, new Route.Direct());
         }
-        Optional<String> proxy = either(environment, "HTTPS_PROXY", "https_proxy");
-        if (System.getProperty("https.proxyHost") != null || proxy.isEmpty()) {
+        Optional<String> proxy = either(variables, "HTTPS_PROXY", "https_proxy");
+        if (properties.get("https.proxyHost") != null || proxy.isEmpty()) {
             return new Repository(at, name, new Route.AsJavaSays());
         }
         return switch (proxyNamed(proxy.get())) {

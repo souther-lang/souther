@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.TreeSet;
@@ -136,13 +137,17 @@ public final class Backends {
      * manager's launcher names with {@code souther.backends}. The first comes before the packaged
      * one so that a build under development, or a backend fetched for this Souther, stands in for
      * what was installed with it. No install prefix is worked out from where this runs.
+     *
+     * <p>Read from the {@code variables} and {@code properties} a run is given, and never from the
+     * process: the run is what was told where its backends are.
      */
-    public static Backends installed() {
+    public static Backends installed(Map<String, String> variables,
+                                     Map<String, String> properties) {
         List<Path> directories = new ArrayList<>();
-        String home = System.getenv("SOUTHER_HOME");
+        String home = variables.get("SOUTHER_HOME");
         directories.add(home != null && !home.isBlank() ? Path.of(home, "backends")
-                : Path.of(System.getProperty("user.home"), ".souther", "backends"));
-        String packaged = System.getProperty("souther.backends");
+                : Path.of(properties.get("user.home"), ".souther", "backends"));
+        String packaged = properties.get("souther.backends");
         if (packaged != null && !packaged.isBlank()) {
             directories.add(Path.of(packaged));
         }

@@ -62,8 +62,8 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
     }
 
     private Ran cli(Map<String, String> environment, String... args) throws Exception {
-        return CliProcess.run(scratch, work, environment,
-                List.of("-Dsouther.repository=" + repository.uri()), "", args);
+        return CliInProcess.run(scratch, work, environment,
+                Map.of("souther.repository", repository.uri().toString()), "", args);
     }
 
     private void released(String marker) throws IOException {
@@ -118,15 +118,15 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
             throws Exception {
         Path packaged = Files.createDirectories(work.resolve("packaged"));
         FakeBackend.write(packaged.resolve("native.jar"), "native", HERE, "never");
-        List<String> properties = List.of("-Dsouther.repository=" + repository.uri(),
-                "-Dsouther.backends=" + packaged);
+        Map<String, String> properties = Map.of("souther.repository", repository.uri().toString(),
+                "souther.backends", packaged.toString());
         String metadata = repository.uri().resolve(
                 "org/souther-lang/" + WASM + "/maven-metadata.xml").toString();
 
-        Ran english = CliProcess.run(scratch, work, Map.of(), properties, "", "compile",
+        Ran english = CliInProcess.run(scratch, work, Map.of(), properties, "", "compile",
                 "--target", "wasm");
-        Ran japanese = CliProcess.run(scratch, work, Map.of("SOUTHER_LANG", "ja"), properties, "",
-                "compile", "--target", "wasm");
+        Ran japanese = CliInProcess.run(scratch, work, Map.of("SOUTHER_LANG", "ja"), properties,
+                "", "compile", "--target", "wasm");
 
         for (Ran ran : List.of(english, japanese)) {
             assertEquals(2, ran.code());
@@ -144,7 +144,7 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
     void aRepositoryNamedOverPlainHttpElsewhereIsNotAskedAndNamedAsItWasRead() throws Exception {
         String named = "http://repository.example/maven2/";
 
-        Ran ran = CliProcess.run(scratch, work, Map.of(), List.of("-Dsouther.repository=" + named),
+        Ran ran = CliInProcess.run(scratch, work, Map.of(), Map.of("souther.repository", named),
                 "", "compile", "--target", "wasm");
 
         assertEquals(2, ran.code());
@@ -155,7 +155,7 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
 
     /** A setting written one way, as a run is given it. */
     private record Written(String setting, Map<String, String> environment,
-                           List<String> properties) {}
+                           Map<String, String> properties) {}
 
     @Test
     void aPasswordInASettingIsNeverRepeatedHoweverTheSettingIsWritten() throws Exception {
@@ -168,9 +168,9 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
                 "alice:" + password + "@proxy.example:8080");
         List<Written> settings = new ArrayList<>();
         for (String value : values) {
-            settings.add(new Written("HTTPS_PROXY", Map.of("HTTPS_PROXY", value), List.of()));
-            settings.add(new Written("souther.repository", Map.of(), List.of("-Dsouther.repository="
-                    + value.replace("proxy.example:8080", "nexus.example/maven2/"))));
+            settings.add(new Written("HTTPS_PROXY", Map.of("HTTPS_PROXY", value), Map.of()));
+            settings.add(new Written("souther.repository", Map.of(), Map.of("souther.repository",
+                    value.replace("proxy.example:8080", "nexus.example/maven2/"))));
         }
         // What a run says of a setting it cannot use is the lines below, in either language, and
         // they are asked of every spelling here; each command is run once for each kind of
@@ -191,19 +191,8 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
      * {@code lang}; the ones {@code backend fetch} says are among them.
      */
     private static String unusable(Written written, String lang) {
-        String named = written.properties().isEmpty() ? null
-                : written.properties().getFirst().substring("-Dsouther.repository=".length());
-        Configured configured;
-        if (named == null) {
-            configured = Repository.configured(written.environment());
-        } else {
-            System.setProperty("souther.repository", named);
-            try {
-                configured = Repository.configured(written.environment());
-            } finally {
-                System.clearProperty("souther.repository");
-            }
-        }
+        Configured configured = Repository.configured(written.environment(),
+                written.properties());
         Configured.Unusable unusable = assertInstanceOf(Configured.Unusable.class, configured);
         Locale locale = Messages.resolveLocale(new Messages.Named(lang, false));
         StringBuilder said = new StringBuilder();
@@ -219,7 +208,7 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
         Map<String, String> environment = new HashMap<>(written.environment());
         environment.put("SOUTHER_LANG", lang);
 
-        Ran ran = CliProcess.run(scratch, work, environment, written.properties(), "", args);
+        Ran ran = CliInProcess.run(scratch, work, environment, written.properties(), "", args);
 
         String said = ran.out() + ran.err();
         assertEquals(2, ran.code(), said);

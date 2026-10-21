@@ -161,7 +161,8 @@ class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
         System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
         int code;
         try {
-            code = Main.guarded(() -> Main.dispatch(new String[] {"examples", file.toString()}));
+            code = Main.run(new String[] {"examples", file.toString()},
+                    Environment.ofThisProcess());
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);

@@ -272,8 +272,9 @@ public final class Central implements BackendFetch.Source {
      * Where this run's settings say to ask, waited for as long as a run usually is. Reading the
      * settings asks nothing, so this is what a run that is told to ask nothing names too.
      */
-    public static BackendFetch.Source configured(Map<String, String> environment) {
-        return switch (Repository.configured(environment)) {
+    public static BackendFetch.Source configured(Map<String, String> variables,
+                                                 Map<String, String> properties) {
+        return switch (Repository.configured(variables, properties)) {
             case Repository repository -> new Central(repository, Patience.USUAL);
             case Configured.Unusable unusable -> unusable;
         };

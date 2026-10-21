@@ -30,7 +30,7 @@ class InitWithNoBuildWritesTheSourcesAndTheVersionFileAndNothingElseTest {
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         int code = InitCommand.run(args, Locale.ENGLISH,
                 new PrintStream(out, true, StandardCharsets.UTF_8),
-                new PrintStream(err, true, StandardCharsets.UTF_8), here, souther);
+                new PrintStream(err, true, StandardCharsets.UTF_8), here, souther, null);
         return new Run(code, out.toString(StandardCharsets.UTF_8),
                 err.toString(StandardCharsets.UTF_8));
     }

@@ -89,7 +89,7 @@ class MainExamplesSubcommandTest {
         System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
         int exitCode;
         try {
-            exitCode = Main.guarded(() -> Main.dispatch(args.toArray(String[]::new)));
+            exitCode = Main.run(args.toArray(String[]::new), Environment.ofThisProcess());
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);

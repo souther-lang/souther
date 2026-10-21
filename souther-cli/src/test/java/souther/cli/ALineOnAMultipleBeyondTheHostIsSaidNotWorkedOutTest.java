@@ -56,7 +56,7 @@ class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
         System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
         System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
         try {
-            Main.guarded(() -> Main.dispatch(new String[] {"examples", file.toString()}));
+            Main.run(new String[] {"examples", file.toString()}, Environment.ofThisProcess());
         } finally {
             System.setOut(wasOut);
             System.setErr(wasErr);

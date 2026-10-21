@@ -43,16 +43,19 @@ import souther.cli.backend.Shown;
 import souther.cli.backend.Unavailable;
 import souther.cli.init.InitCommand;
 
-import java.io.Console;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.IntSupplier;
 
 /**
  * The command line's entry point: it resolves the command a line names, holds the line against what
@@ -67,7 +70,7 @@ import java.util.Optional;
 public final class Main {
 
     /** Every option this compiler knows, for the test that holds the table against the parsers. */
-    static java.util.Set<String> knownOptions() {
+    static Set<String> knownOptions() {
         return CliOption.everySpelling();
     }
 
@@ -76,23 +79,36 @@ public final class Main {
         return CliOption.owners(option);
     }
 
+    /**
+     * Where a run reads the process: its environment is taken here, once, and the run is given it.
+     * Everything below answers from what it was given.
+     */
     public static void main(String[] args) {
-        int code = guarded(() -> dispatch(args));
+        int code = run(args, Environment.ofThisProcess());
         if (code != 0) {
             System.exit(code);
         }
     }
 
     /**
+     * The whole of a run in {@code environment}: the command the line names, inside the last
+     * boundary this compiler has around it, answered with the exit code {@link #main} ends the
+     * process with.
+     */
+    static int run(String[] args, Environment environment) {
+        return guarded(environment.err(), () -> dispatch(args, environment));
+    }
+
+    /**
      * Runs the command with the last boundary this compiler has around it, and answers with the exit
-     * code.
+     * code; what the boundary catches is said on {@code err}.
      *
      * <p>Around the whole command and not around the compile inside it: reading the arguments builds
      * paths and options, and a failure there is as much this compiler's as one from the emitter. A
      * {@link CompileException} is not one of these — it is an answer about the source and is rendered
      * as one where it is caught — so it goes on rather than being reported as a fault of the compiler.
      */
-    static int guarded(java.util.function.IntSupplier command) {
+    static int guarded(PrintStream err, IntSupplier command) {
         try {
             return command.getAsInt();
         } catch (RuntimeException e) {
@@ -100,9 +116,17 @@ public final class Main {
             if (said == null) {
                 throw e;
             }
-            System.err.println(said);
+            err.println(said);
             return 1;
         }
+    }
+
+    /**
+     * As {@link #dispatch(String[], Environment)}, in this process's environment and on its standard
+     * streams as they stand when this is called.
+     */
+    static int dispatch(String[] args) {
+        return dispatch(args, Environment.ofThisProcess());
     }
 
     /**
@@ -113,17 +137,25 @@ public final class Main {
      * own, that a file is not formatted — is unreachable from anywhere but a shell. Read as a number
      * here, each of those is an ordinary result.
      */
-    static int dispatch(String[] args) {
-        return dispatch(args, Path.of(""));
+    static int dispatch(String[] args, Environment environment) {
+        return new Main(environment).answer(args);
     }
 
-    /**
-     * As {@link #dispatch(String[])}, with a project's version file looked for from
-     * {@code workingDirectory}.
-     */
-    static int dispatch(String[] args, Path workingDirectory) {
+    private final Environment environment;
+    private final PrintStream out;
+    private final PrintStream err;
+
+    private Main(Environment environment) {
+        this.environment = environment;
+        this.out = environment.out();
+        this.err = environment.err();
+    }
+
+    private int answer(String[] args) {
+        Path workingDirectory = environment.workingDirectory();
         String named = args.length == 0 ? "" : args[0];
-        String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);        // Written where a command goes, `--help` asks what `help` asks. Read as an option it would
+        String[] rest = args.length == 0 ? args : Arrays.copyOfRange(args, 1, args.length);
+        // Written where a command goes, `--help` asks what `help` asks. Read as an option it would
         // be an option of no command, since which command's options are read is what has not been
         // said yet; read as its own shape it would be a line whose remaining arguments nothing
         // looks at, and `souther --help compile` would answer with the listing.
@@ -137,8 +169,8 @@ public final class Main {
                     ? "no command given — did you mean `souther compile " + named
                             + " …` or `souther run " + named + " …`?"
                     : named.isEmpty() ? "no command given" : "unknown command `" + named + "`";
-            System.err.println(hint);
-            System.err.println(Usage.all());
+            err.println(hint);
+            err.println(Usage.all());
             return 2;
         }
         // Before the check below, which reads the arguments as the CLI's own: an installed target's
@@ -146,9 +178,9 @@ public final class Main {
         if (command == CliCommand.COMPILE) {
             switch (CompileInvocation.read(rest)) {
                 case CompileInvocation.Unnamed unnamed -> {
-                    System.err.println(Messages.get("cli.target.unnamed",
-                            RenderOptions.asking(null).locale()));
-                    System.err.println(Usage.of(command));
+                    err.println(Messages.get("cli.target.unnamed",
+                            asking(null).locale()));
+                    err.println(Usage.of(command));
                     return 2;
                 }
                 case CompileInvocation.Target target -> {
@@ -166,25 +198,25 @@ public final class Main {
         // know, so answering it with what is wrong with the line — and then not answering it — is
         // the one reply that leaves its author where they started.
         if (read.help()) {
-            System.out.println(Usage.of(command));
+            out.println(Usage.of(command));
             return 0;
         }
         // Before the refusal as well, and for a reason of its own: which compiler is reading the
         // line is not a question about the line, so nothing wrong with the line changes the answer.
         if (read.version()) {
-            System.out.println(version());
+            out.println(version());
             return 0;
         }
         if (read.refusal() != null) {
-            System.err.println(Messages.get(read.refusal().key(),
-                    RenderOptions.asking(read.lang()).locale(), read.refusal().args()));
-            System.err.println(Usage.of(command));
+            err.println(Messages.get(read.refusal().key(),
+                    asking(read.lang()).locale(), read.refusal().args()));
+            err.println(Usage.of(command));
             return 2;
         }
         // After everything the line itself says, and before anything runs: what a project asks of
         // the Souther is a fact about where the command is run, which no word of the line changes.
         if (command.scope() == CliCommand.Scope.PROJECT
-                && refusedByProject(workingDirectory, RenderOptions.asking(read.lang()))) {
+                && refusedByProject(workingDirectory, asking(read.lang()))) {
             return 2;
         }
         return work(command, rest).getAsInt();
@@ -197,13 +229,13 @@ public final class Main {
      * <p>Held to the project's version like every compile, and to nothing else the CLI reads: the
      * backend's arguments, {@code --help} among them, are its own.
      */
-    private static int delegated(CompileInvocation.Target target, Path workingDirectory) {
-        RenderOptions render = RenderOptions.asking(null);
+    private int delegated(CompileInvocation.Target target, Path workingDirectory) {
+        RenderOptions render = asking(null);
         if (refusedByProject(workingDirectory, render)) {
             return 2;
         }
         Locale locale = render.locale();
-        Backends backends = Backends.installed();
+        Backends backends = Backends.installed(environment.variables(), environment.properties());
         try {
             Optional<Backends.Backend> backend = switch (backends.find(target.name(),
                     ModuleMetadata.compilerVersion())) {
@@ -213,12 +245,12 @@ public final class Main {
             if (backend.isEmpty()) {
                 return 2;
             }
-            return BackendProcess.run(backend.get(), target.arguments());
+            return BackendProcess.run(backend.get(), target.arguments(), environment);
         } catch (Backends.Refused e) {
-            System.err.println(Messages.get(e.key(), locale, e.arguments()));
+            err.println(Messages.get(e.key(), locale, e.arguments()));
             return 2;
         } catch (IOException e) {
-            System.err.println("io error: " + e.getMessage());
+            err.println("io error: " + e.getMessage());
             return 1;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -235,20 +267,21 @@ public final class Main {
      * {@code NO_COLOR} is read; it is not an argument, since from the target's name on the line is
      * the backend's.
      */
-    private static Optional<Backends.Backend> fetchedFor(Backends backends,
-                                                         Backends.Absent absent, Locale locale)
+    private Optional<Backends.Backend> fetchedFor(Backends backends, Backends.Absent absent,
+                                                  Locale locale)
             throws Backends.Refused, IOException, InterruptedException {
-        BackendFetch.Source source = Central.configured(System.getenv());
+        BackendFetch.Source source = Central.configured(environment.variables(),
+                environment.properties());
         Central.Failure failure;
-        String offline = System.getenv(OFFLINE);
+        String offline = environment.variable(OFFLINE);
         if (offline != null && !offline.isEmpty()) {
             failure = new Central.Failure.NotAsked();
         } else {
             switch (BackendFetch.whereAbsent(backends, source, absent.target(),
                     absent.southerVersion(),
-                    release -> fetching(System.err, locale, release))) {
+                    release -> fetching(err, locale, release))) {
                 case BackendFetch.Fetched fetched -> {
-                    System.err.println(fetched(locale, fetched));
+                    err.println(fetched(locale, fetched));
                     return Optional.of(fetched.backend());
                 }
                 case BackendFetch.Present present -> {
@@ -259,7 +292,7 @@ public final class Main {
         }
         List<Unavailable.Line> lines = Unavailable.of(absent, failure, source.name());
         for (int i = 0; i < lines.size(); i++) {
-            System.err.println((i == 0 ? "" : "  ")
+            err.println((i == 0 ? "" : "  ")
                     + Messages.get(lines.get(i).key(), locale, lines.get(i).array()));
         }
         return Optional.empty();
@@ -286,46 +319,48 @@ public final class Main {
      * release than the one fetched before. It is held to no project's version: what it fetches is
      * for the Souther that runs it.
      */
-    private static int backendSubcommand(String[] args) {
-        Locale locale = RenderOptions.asking(null).locale();
+    private int backendSubcommand(String[] args) {
+        Locale locale = asking(null).locale();
         if (args.length != 2 || !args[0].equals("fetch") || args[1].startsWith("-")) {
-            System.err.println(Messages.get("cli.backend.arguments", locale,
+            err.println(Messages.get("cli.backend.arguments", locale,
                     String.join(" ", args)));
-            System.err.println(Usage.of(CliCommand.BACKEND));
+            err.println(Usage.of(CliCommand.BACKEND));
             return 2;
         }
         String target = args[1];
         if (target.equals("jvm")) {
-            System.err.println(Messages.get("cli.backend.jvm", locale));
+            err.println(Messages.get("cli.backend.jvm", locale));
             return 2;
         }
         String version = ModuleMetadata.compilerVersion();
-        BackendFetch.Source source = Central.configured(System.getenv());
+        BackendFetch.Source source = Central.configured(environment.variables(),
+                environment.properties());
+        Backends backends = Backends.installed(environment.variables(), environment.properties());
         try {
-            return switch (BackendFetch.again(Backends.installed(), source, target, version,
-                    release -> fetching(System.out, locale, release))) {
+            return switch (BackendFetch.again(backends, source, target, version,
+                    release -> fetching(out, locale, release))) {
                 case BackendFetch.Fetched fetched -> {
-                    System.out.println(fetched(locale, fetched));
+                    out.println(fetched(locale, fetched));
                     yield 0;
                 }
                 case BackendFetch.Current current -> {
-                    System.out.println(Messages.get("cli.backend.fetch.current", locale,
+                    out.println(Messages.get("cli.backend.fetch.current", locale,
                             current.release().artifactId(), current.release().version(),
                             current.backend().jar()));
                     yield 0;
                 }
                 case BackendFetch.Failed failed -> {
-                    System.err.println(Messages.get("cli.backend.fetch.failed", locale, target,
+                    err.println(Messages.get("cli.backend.fetch.failed", locale, target,
                             version));
                     for (Unavailable.Line line : Unavailable.repository(failed.failure(),
                             source.name())) {
-                        System.err.println("  " + Messages.get(line.key(), locale, line.array()));
+                        err.println("  " + Messages.get(line.key(), locale, line.array()));
                     }
                     yield 2;
                 }
             };
         } catch (Backends.Refused e) {
-            System.err.println(Messages.get(e.key(), locale, e.arguments()));
+            err.println(Messages.get(e.key(), locale, e.arguments()));
             return 2;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -334,10 +369,10 @@ public final class Main {
     }
 
     /** Whether the project this command is run in refuses this Souther, which is then said. */
-    private static boolean refusedByProject(Path workingDirectory, RenderOptions render) {
+    private boolean refusedByProject(Path workingDirectory, RenderOptions render) {
         String refusal = projectRefusal(workingDirectory, render);
         if (refusal != null) {
-            System.err.println(refusal);
+            err.println(refusal);
         }
         return refusal != null;
     }
@@ -372,7 +407,7 @@ public final class Main {
      * names used to be matched a second time in this method, which made the table and the dispatch
      * two lists to keep in step — the drift a test would then have to go looking for.
      */
-    private static java.util.function.IntSupplier work(CliCommand command, String[] rest) {
+    private IntSupplier work(CliCommand command, String[] rest) {
         return switch (command) {
             case INIT -> () -> initSubcommand(rest);
             case RUN -> () -> runSubcommand(rest);
@@ -380,9 +415,9 @@ public final class Main {
             case BACKEND -> () -> backendSubcommand(rest);
             case FMT -> () -> fmtSubcommand(rest);
             case EXAMPLES -> () -> examplesSubcommand(rest);
-            case DOC -> () -> DocCommand.run(rest, System.out, System.err);
-            case API -> () -> ApiCommand.run(rest, System.out, System.err);
-            case JAPI -> () -> JapiCommand.run(rest, System.out, System.err);
+            case DOC -> () -> DocCommand.run(rest, out, err);
+            case API -> () -> ApiCommand.run(rest, out, err);
+            case JAPI -> () -> JapiCommand.run(rest, out, err);
             case MCP -> () -> mcpSubcommand(rest);
             case LSP -> () -> lspSubcommand(rest);
             case TOOLING -> () -> toolingSubcommand(rest);
@@ -410,7 +445,7 @@ public final class Main {
     }
 
     /** {@code souther compile <file.sou>... -d <outdir>}: writes the generated {@code .class} files. */
-    private static int compileSubcommand(String[] rawArgs) {
+    private int compileSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
         if (args == null) {
@@ -426,7 +461,7 @@ public final class Main {
                 case "--adequacy" -> {
                     Adequacy.Asked named = adequacyAsked(args[++i]);
                     if (named == null) {
-                        System.err.println("`--adequacy` takes "
+                        err.println("`--adequacy` takes "
                                 + CliOption.adequacyLevels(", "));
                         return 2;
                     }
@@ -434,14 +469,14 @@ public final class Main {
                 }
                 case "--warnings" -> {
                     if (!(args[++i].equals("report") || args[i].equals("error"))) {
-                        System.err.println("`--warnings` takes report or error");
+                        err.println("`--warnings` takes report or error");
                         return 2;
                     }
                     refuseWarnings = args[i].equals("error");
                 }
                 case "-d", "--dir" -> outDir = Path.of(args[++i]);
                 case "-cp", "--class-path" -> {
-                    for (String entry : args[++i].split(java.io.File.pathSeparator)) {
+                    for (String entry : args[++i].split(File.pathSeparator)) {
                         if (!entry.isBlank()) {
                             classPath.add(Path.of(entry));
                         }
@@ -451,15 +486,15 @@ public final class Main {
             }
         }
         if (sources.isEmpty()) {
-            System.err.println("compile takes at least one .sou file");
-            System.err.println(Usage.of(CliCommand.COMPILE));
+            err.println("compile takes at least one .sou file");
+            err.println(Usage.of(CliCommand.COMPILE));
             return 2;
         }
         CompilationSources read;
         try {
             read = read(sources);
         } catch (IOException e) {
-            System.err.println("io error: " + e.getMessage());
+            err.println("io error: " + e.getMessage());
             return 1;
         }
         SourceContextResolver contexts = read.contexts();
@@ -474,7 +509,7 @@ public final class Main {
                 return refused(render);
             }
             for (Path file : writeClasses(classes, outDir)) {
-                System.out.println("wrote " + file);
+                out.println("wrote " + file);
             }
             return 0;
         } catch (CompileException e) {
@@ -484,7 +519,7 @@ public final class Main {
             // The compile itself finished — these warnings are the whole set, and what stopped the
             // command was writing the classes out, which says nothing about the source.
             report(warnings, contexts, render);
-            System.err.println("io error: " + e.getMessage());
+            err.println("io error: " + e.getMessage());
             return 1;
         }
     }
@@ -497,13 +532,13 @@ public final class Main {
      * refused here the way it is everywhere else. No other rendering flag is one of this command's:
      * what it writes is a list of files rather than a diagnostic.
      */
-    private static int initSubcommand(String[] rawArgs) {
+    private int initSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
         if (args == null) {
             return 2;
         }
-        return InitCommand.run(args, render.locale(), System.out, System.err);
+        return InitCommand.run(args, render.locale(), environment);
     }
 
     /**
@@ -522,7 +557,7 @@ public final class Main {
      * unreachable — all but one of the reasons that field carries arrive with a diagnostic beside
      * them, so the fail-fast path hid the whole of it.
      */
-    private static int examplesSubcommand(String[] rawArgs) {
+    private int examplesSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
         if (args == null) {
@@ -545,7 +580,7 @@ public final class Main {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-cp", "--class-path" -> {
-                    for (String entry : args[++i].split(java.io.File.pathSeparator)) {
+                    for (String entry : args[++i].split(File.pathSeparator)) {
                         if (!entry.isBlank()) {
                             classPath.add(Path.of(entry));
                         }
@@ -559,15 +594,15 @@ public final class Main {
             }
         }
         if (sources.isEmpty()) {
-            System.err.println("examples takes at least one .sou file");
-            System.err.println(Usage.of(CliCommand.EXAMPLES));
+            err.println("examples takes at least one .sou file");
+            err.println(Usage.of(CliCommand.EXAMPLES));
             return 2;
         }
         CompilationSources read;
         try {
             read = read(sources);
         } catch (IOException e) {
-            System.err.println("io error: " + e.getMessage());
+            err.println("io error: " + e.getMessage());
             return 1;
         }
         SourceContextResolver contexts = read.contexts();
@@ -591,7 +626,7 @@ public final class Main {
             // what was measured, and nothing measured anything.
             Selection.Refusal refused = new Selection(module, behavior).unresolved(compilation);
             if (refused != null) {
-                System.err.println(Messages.get(refused.key(), render.locale(), refused.args()));
+                err.println(Messages.get(refused.key(), render.locale(), refused.args()));
                 return 2;
             }
             // What this run offers, where rows were asked for. Before the report and not after it:
@@ -614,7 +649,7 @@ public final class Main {
                 String rendered = render.json()
                         ? report.json(rendering) + System.lineSeparator()
                         : report.human(rendering);
-                System.out.print(rendered);
+                out.print(rendered);
                 // After the report, because the rows are what to do about what the report just said.
                 // Beside it rather than in it where the report is JSON: the rows are source, and
                 // source in the middle of a JSON document is not a document.
@@ -624,7 +659,7 @@ public final class Main {
                     // row is offered for a meeting of the body's decisions no row makes, and
                     // nothing can say a meeting was missed of a run that recorded nothing.
                     String rows = GeneratedRows.of(compilation, rendering, offered).text();
-                    (render.json() ? System.err : System.out).print(rows);
+                    (render.json() ? err : out).print(rows);
                 }
             }
             // The report is written either way; whether the command succeeded is a separate answer,
@@ -641,7 +676,7 @@ public final class Main {
                 // them differently: a person reads a mark and a consumer reads a field. Pointing at
                 // the mark whatever was printed sent a reader of a JSON document looking for a
                 // character that is nowhere in it.
-                System.err.println(Messages.get(render.json()
+                err.println(Messages.get(render.json()
                                 ? "cli.examples.strict.refused.json"
                                 : "cli.examples.strict.refused",
                         render.locale(), report.adequacyGaps().size()));
@@ -666,14 +701,14 @@ public final class Main {
      * {@code souther mcp model.sou}. What a command takes no arguments at all is a fact about its
      * own grammar, which is where it is now stated.
      */
-    private static int mcpSubcommand(String[] args) {
+    private int mcpSubcommand(String[] args) {
         if (args.length > 0) {
-            System.err.println(Messages.get("cli.mcp.arguments",
-                    RenderOptions.asking(null).locale(), String.join(", ", args)));
-            System.err.println(Usage.of(CliCommand.MCP));
+            err.println(Messages.get("cli.mcp.arguments",
+                    asking(null).locale(), String.join(", ", args)));
+            err.println(Usage.of(CliCommand.MCP));
             return 2;
         }
-        return McpServer.serve(System.in, System.out);
+        return McpServer.serve(environment.in(), out);
     }
 
     /**
@@ -684,14 +719,14 @@ public final class Main {
      * stdio has the whole of stdout, so nothing this command line writes for a reader may be
      * written under it, and the refusal above goes to stderr like every other one.
      */
-    private static int lspSubcommand(String[] args) {
+    private int lspSubcommand(String[] args) {
         if (args.length > 0) {
-            System.err.println(Messages.get("cli.lsp.arguments",
-                    RenderOptions.asking(null).locale(), String.join(", ", args)));
-            System.err.println(Usage.of(CliCommand.LSP));
+            err.println(Messages.get("cli.lsp.arguments",
+                    asking(null).locale(), String.join(", ", args)));
+            err.println(Usage.of(CliCommand.LSP));
             return 2;
         }
-        return LspServer.serve(System.in, System.out);
+        return LspServer.serve(environment.in(), out);
     }
 
     /**
@@ -702,14 +737,14 @@ public final class Main {
      * this, and a command that assembled its own answer would be a second statement of it that could
      * say something else.
      */
-    private static int toolingSubcommand(String[] args) {
+    private int toolingSubcommand(String[] args) {
         if (args.length > 0) {
-            System.err.println(Messages.get("cli.tooling.arguments",
-                    RenderOptions.asking(null).locale(), String.join(", ", args)));
-            System.err.println(Usage.of(CliCommand.TOOLING));
+            err.println(Messages.get("cli.tooling.arguments",
+                    asking(null).locale(), String.join(", ", args)));
+            err.println(Usage.of(CliCommand.TOOLING));
             return 2;
         }
-        System.out.print(ToolingMetadata.text());
+        out.print(ToolingMetadata.text());
         return 0;
     }
 
@@ -722,16 +757,16 @@ public final class Main {
      * author who wanted to read it had to write a line they knew this compiler would refuse, and a
      * reader piping the answer anywhere got an empty pipe.
      */
-    private static int helpSubcommand(String[] args) {
-        Locale locale = RenderOptions.asking(null).locale();
+    private int helpSubcommand(String[] args) {
+        Locale locale = asking(null).locale();
         if (args.length == 0) {
-            System.out.println(Usage.all());
+            out.println(Usage.all());
             return 0;
         }
         if (args.length > 1) {
-            System.err.println(Messages.get("cli.help.arguments", locale,
+            err.println(Messages.get("cli.help.arguments", locale,
                     String.join(", ", args)));
-            System.err.println(Usage.of(CliCommand.HELP));
+            err.println(Usage.of(CliCommand.HELP));
             return 2;
         }
         CliCommand about = helpTarget(args);
@@ -739,11 +774,11 @@ public final class Main {
             // Not answered with the listing as though nothing had been asked: a word that is no
             // command of this compiler's is a thing its author believes exists, and being shown
             // every command without being told that is not one of them leaves them looking for it.
-            System.err.println(Messages.get("cli.help.command", locale, args[0]));
-            System.err.println(Usage.all());
+            err.println(Messages.get("cli.help.command", locale, args[0]));
+            err.println(Usage.all());
             return 2;
         }
-        System.out.println(Usage.of(about));
+        out.println(Usage.of(about));
         return 0;
     }
 
@@ -766,14 +801,14 @@ public final class Main {
      * {@code current} link a Windows distribution leaves beside its version-named directories, has
      * nothing else to ask.
      */
-    private static int versionSubcommand(String[] args) {
+    private int versionSubcommand(String[] args) {
         if (args.length > 0) {
-            System.err.println(Messages.get("cli.version.arguments",
-                    RenderOptions.asking(null).locale(), String.join(", ", args)));
-            System.err.println(Usage.of(CliCommand.VERSION));
+            err.println(Messages.get("cli.version.arguments",
+                    asking(null).locale(), String.join(", ", args)));
+            err.println(Usage.of(CliCommand.VERSION));
             return 2;
         }
-        System.out.println(version());
+        out.println(version());
         return 0;
     }
 
@@ -813,7 +848,7 @@ public final class Main {
      * write the file over with {@code -w} against a copy, or run the formatter again into a scratch
      * file, to be told what the gate already knew.
      */
-    private static int fmtSubcommand(String[] args) {
+    private int fmtSubcommand(String[] args) {
         // Through the CLI's one resolution rather than beside it: a syntax error is the one thing
         // `fmt` says to a reader, and the language it says it in is the same policy as everywhere
         // else this command answers in.
@@ -829,13 +864,13 @@ public final class Main {
             }
         }
         if (files.isEmpty()) {
-            System.err.println("fmt takes at least one .sou file");
-            System.err.println(Usage.of(CliCommand.FMT));
+            err.println("fmt takes at least one .sou file");
+            err.println(Usage.of(CliCommand.FMT));
             return 2;
         }
         if (!write && !check && files.size() > 1) {
             // Concatenating several files to stdout gives an unattributable blob; make the intent explicit.
-            System.err.println("formatting multiple files needs `-w` (write in place) or `--check`");
+            err.println("formatting multiple files needs `-w` (write in place) or `--check`");
             return 2;
         }
         boolean unformatted = false;
@@ -845,7 +880,7 @@ public final class Main {
             try {
                 source = Files.readString(file);
             } catch (IOException e) {
-                System.err.println("io error: " + file + ": " + e.getMessage());
+                err.println("io error: " + file + ": " + e.getMessage());
                 failed = true;
                 continue;
             }
@@ -854,7 +889,7 @@ public final class Main {
                 CstParser.Result parsed = CstParser.parse(source);
                 if (!parsed.errors().isEmpty()) {
                     CstError<?> first = parsed.errors().get(0);
-                    System.err.println(file + ": syntax error: "
+                    err.println(file + ": syntax error: "
                             + Messages.render(first.said(), locale));
                     failed = true;
                     continue;   // the formatter assumes a clean parse; leave a broken file untouched
@@ -865,11 +900,11 @@ public final class Main {
                 // author's screen. Reading is a walk down the source and a walk down the tree it
                 // made, and either can find a limit; a `fmt` that answered those with a stack trace
                 // told the author about the compiler rather than about their file.
-                System.err.println(file + ": " + e.getMessage());
+                err.println(file + ": " + e.getMessage());
                 failed = true;
                 continue;
             } catch (RuntimeException e) {
-                System.err.println(file + ": " + internalFailure(e));
+                err.println(file + ": " + internalFailure(e));
                 failed = true;
                 continue;
             }
@@ -889,24 +924,24 @@ public final class Main {
                         // A rule that could not answer says so and is left out of the report. This
                         // is anything else: a defect, and one this file is told about rather than
                         // being judged as though the rules had been asked.
-                        System.err.println(file + ": " + internalFailure(e));
-                        System.out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
+                        err.println(file + ": " + internalFailure(e));
+                        out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
                                 source, formatted));
                         failed = true;
                         continue;
                     }
                     for (Deviations.Deviation d : report.deviations()) {
-                        System.out.println(file + ":" + d.line() + ":" + d.column() + ": "
+                        out.println(file + ":" + d.line() + ":" + d.column() + ": "
                                 + d.rule());
-                        System.out.println("    the canonical form: " + d.canonical()
+                        out.println("    the canonical form: " + d.canonical()
                                 + "; this source: " + d.source());
                     }
                     if (!report.whole()) {
                         // Said rather than left out, and shown. A list that named what it can and
                         // stopped reads as a file with these deviations and no others, and a
                         // reader still has to see the rest of what differs.
-                        System.out.println(file + ": and more that no rule accounts for yet:");
-                        System.out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
+                        out.println(file + ": and more that no rule accounts for yet:");
+                        out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
                                 source, formatted));
                     }
                 }
@@ -915,12 +950,12 @@ public final class Main {
                     try {
                         Files.writeString(file, formatted);
                     } catch (IOException e) {
-                        System.err.println("io error: " + file + ": " + e.getMessage());
+                        err.println("io error: " + file + ": " + e.getMessage());
                         failed = true;
                     }
                 }
             } else {
-                System.out.print(formatted);
+                out.print(formatted);
             }
         }
         return failed || unformatted ? 1 : 0;
@@ -929,7 +964,7 @@ public final class Main {
     /** {@code souther run <file.sou> [-cp <path>] [--behavior <name>] [--input <json>]}: compiles the
      * file in memory against the modules on the path and drives one behavior, printing its output as
      * JSON (see {@link Runner}). */
-    private static int runSubcommand(String[] rawArgs) {
+    private int runSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
         if (args == null) {
@@ -942,7 +977,7 @@ public final class Main {
             read = invocation.sources();
         } catch (Runner.RunException e) {
             // Raised before anything is compiled, so there is nothing to report beside it.
-            System.err.println(e.localized(render.locale()));
+            err.println(e.localized(render.locale()));
             return e.exitCode;
         }
         SourceContextResolver contexts = read.contexts();
@@ -952,14 +987,14 @@ public final class Main {
             // The warnings go to stderr and the behavior's output to stdout, so a caller piping the
             // result reads JSON and nothing else.
             report(warnings, contexts, render);
-            System.out.println(output);
+            out.println(output);
             return 0;
         } catch (Runner.RunException e) {
             // The compile finished before the run began, so these warnings are the whole set — and a
             // run that aborted on an invariant is where a warning that the construction was unproven
             // is worth most.
             report(warnings, contexts, render);
-            System.err.println(e.localized(render.locale()));
+            err.println(e.localized(render.locale()));
             return e.exitCode;
         } catch (CompileException e) {
             reportCompileError(e, contexts, render);
@@ -989,14 +1024,14 @@ public final class Main {
      * remediation JSON carries is a field of the diagnostic schema, which is a thing to design rather
      * than a line to print.
      */
-    private static void sayHowRunReachesAModule(CompileException e, RenderOptions render) {
+    private void sayHowRunReachesAModule(CompileException e, RenderOptions render) {
         if (render.json()) {
             return;
         }
         for (Diagnostic d : e.diagnostics()) {
             if (DiagnosticCode.E1504.name().equals(d.code())) {
                 Locale locale = render.locale();
-                System.err.println(Messages.get("diag.hint.label", locale) + " "
+                err.println(Messages.get("diag.hint.label", locale) + " "
                         + Messages.get("cli.run.classpath", locale));
                 return;
             }
@@ -1006,10 +1041,10 @@ public final class Main {
     /** Renders a compile error: an Elm-style snippet (or JSON) in the chosen locale, or the legacy
      * one-line form when the error is not yet structured. An error that carries several diagnostics
      * — every failing {@code example} row — prints each, so none of the reasons is lost. */
-    private static void reportCompileError(CompileException e, SourceContextResolver contexts,
-                                           RenderOptions render) {
+    private void reportCompileError(CompileException e, SourceContextResolver contexts,
+                                    RenderOptions render) {
         if (e.diagnostic() == null) {
-            System.err.println(e.getMessage());
+            err.println(e.getMessage());
             return;
         }
         report(e.locatedDiagnostics(), contexts, render);
@@ -1024,9 +1059,9 @@ public final class Main {
      * line that parses as nothing, and a reader given it cannot tell that from output it should have
      * understood. There the exit code is what says it, which is what a tool reads anyway.
      */
-    private static int refused(RenderOptions render) {
+    private int refused(RenderOptions render) {
         if (!render.json()) {
-            System.err.println(Messages.get("cli.warnings.refused", render.locale()));
+            err.println(Messages.get("cli.warnings.refused", render.locale()));
         }
         return 1;
     }
@@ -1039,14 +1074,28 @@ public final class Main {
      * diagnostic's position is a position in the text the compile read, and a file read a second
      * time may no longer be that text.
      */
-    private static void report(List<Located> located, SourceContextResolver contexts,
-                               RenderOptions render) {
+    private void report(List<Located> located, SourceContextResolver contexts,
+                        RenderOptions render) {
         Locale locale = render.locale();
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
         for (String line : DiagnosticRenderer.renderAll(located, contexts, renderer, locale)) {
-            System.err.println(line);
+            err.println(line);
         }
+    }
+
+    /**
+     * The rendering flags of a line that wrote {@code --lang} and nothing else, for the refusal
+     * raised before any subcommand has parsed its arguments.
+     *
+     * <p>Through {@link RenderOptions} rather than resolving beside it. A usage error is one of the
+     * answers this command line gives, and which language it is written in is that class's
+     * question — asking it twice is two policies that happen to agree.
+     */
+    private RenderOptions asking(String lang) {
+        RenderOptions options = new RenderOptions();
+        options.lang = lang;
+        return options;
     }
 
     /**
@@ -1068,7 +1117,7 @@ public final class Main {
      * exit code the JSON run gives. Each command's own options already refuse a value they do not
      * have — {@code --warnings}, {@code --adequacy} — and these are the ones that did not.
      */
-    private static final class RenderOptions {
+    private final class RenderOptions {
 
         /** The values {@code --format} has, in the order the usage text writes them. */
         private static final List<String> FORMATS = List.of("human", "json");
@@ -1095,22 +1144,8 @@ public final class Main {
         }
 
         /**
-         * These flags as a line that wrote {@code --lang} and nothing else, for the refusal raised
-         * before any subcommand has parsed its arguments.
-         *
-         * <p>Through here rather than resolving beside it. A usage error is one of the answers this
-         * command line gives, and which language it is written in is this class's question — asking
-         * it twice is two policies that happen to agree.
-         */
-        static RenderOptions asking(String lang) {
-            RenderOptions options = new RenderOptions();
-            options.lang = lang;
-            return options;
-        }
-
-        /**
          * What named the language for this invocation: the option where the line wrote it, and
-         * {@code SOUTHER_LANG} where the line did not.
+         * {@code SOUTHER_LANG} in the run's environment where the line did not.
          *
          * <p>Whether the option was written is what this class has and the value alone does not.
          * {@code lang} is null until {@code --lang} is read, so a blank value is a line writing one
@@ -1119,7 +1154,9 @@ public final class Main {
          * shell to be answered in a language the line did not ask for.
          */
         private Messages.Named named() {
-            return lang != null ? new Messages.Named(lang, false) : Messages.namedLanguage(null);
+            return lang != null ? new Messages.Named(lang, false)
+                    : Messages.namedLanguage(null,
+                            environment.variable(Messages.ENVIRONMENT_VARIABLE));
         }
 
         /**
@@ -1138,12 +1175,7 @@ public final class Main {
             return switch (color) {
                 case "always" -> true;
                 case "never" -> false;
-                // Two things have to hold, and the check below knows only the second. A runtime
-                // built without a console provider answers none at all, so the null stands; and
-                // where there is one it exists whether or not the output is a terminal, so it is
-                // asked which — colour written into a pipe is escape codes in a file.
-                default -> System.console() instanceof Console c && c.isTerminal()
-                        && System.getenv("NO_COLOR") == null;
+                default -> environment.terminal() && environment.variable("NO_COLOR") == null;
             };
         }
 
@@ -1170,7 +1202,7 @@ public final class Main {
             }
             String refusal = refusal();
             if (refusal != null) {
-                System.err.println(refusal);
+                err.println(refusal);
                 return null;
             }
             return kept.toArray(new String[0]);
@@ -1308,6 +1340,4 @@ public final class Main {
         }
         return written;
     }
-
-    private Main() {}
 }

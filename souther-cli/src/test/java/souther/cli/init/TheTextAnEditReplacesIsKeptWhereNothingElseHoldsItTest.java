@@ -91,7 +91,7 @@ class TheTextAnEditReplacesIsKeptWhereNothingElseHoldsItTest {
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         int code = InitCommand.run(new String[0], Locale.ENGLISH,
                 new PrintStream(out, true, StandardCharsets.UTF_8),
-                new PrintStream(err, true, StandardCharsets.UTF_8), here, "9.9.9");
+                new PrintStream(err, true, StandardCharsets.UTF_8), here, "9.9.9", null);
         assertEquals(0, code, err.toString(StandardCharsets.UTF_8));
         return out.toString(StandardCharsets.UTF_8);
     }
