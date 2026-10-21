@@ -264,6 +264,14 @@ class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
     void theSchemaRefusesARegionNamedWithAnotherArmsKey() {
         List<String> wrong = new ArrayList<>();
         NAMED_BY.forEach((site, keys) -> {
+            // The control: written as it is, the region is one the schema takes, so a refusal below
+            // is the stray key's and not the document's.
+            List<String> asWritten = DocumentShape.of(spliced(
+                    written(site).get("through").get(0).get("at"))).wrong();
+            if (!asWritten.isEmpty()) {
+                wrong.add(site + " is refused as it is written: " + asWritten);
+                return;
+            }
             for (String stray : EVERY_REGION_KEY) {
                 if (keys.contains(stray) || isTheOptionalClauseOfItsOwnArm(site, stray)) {
                     continue;
@@ -304,9 +312,14 @@ class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
      * partition, everything the schema demands elsewhere — and would be answering none of what this
      * test is about. So this takes a document {@code soIsEveryAnswerCheckedIn} already holds to the
      * schema, and touches only the one array whose shape is in question.
+     *
+     * <p>Of that document, the way down to the array and nothing beside it: every array on the way
+     * keeps the one element the way goes through. What else the document holds is held to the
+     * schema where the document is checked in, and walking it again for every key asked about
+     * here would be asking that again.
      */
     private static JsonNode spliced(JsonNode at) {
-        ObjectNode document = (ObjectNode) checkedInDocument().deepCopy();
+        ObjectNode document = (ObjectNode) CHECKED_IN.deepCopy();
         ObjectNode step = JsonNodeFactory.instance.objectNode();
         step.put("kind", "materialisation");
         step.put("materialised", "m.v");
@@ -341,8 +354,10 @@ class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** A document {@code TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest} already
-     *  holds the shipped schema to. Read fresh, since a caller of {@link #spliced} deep-copies it
-     *  before mutating anything. */
+     *  holds the shipped schema to, cut down to the way to its first {@code through} array. Read
+     *  once, since {@link #spliced} deep-copies it before changing anything. */
+    private static final JsonNode CHECKED_IN = theWayToTheThroughArray(checkedInDocument());
+
     private static JsonNode checkedInDocument() {
         try (var in = ABuildIsWrittenInTheWordsTheSchemaNamesTest.class.getResourceAsStream(
                 "/souther/compiler/conformance/catalog/expected.report.json")) {
@@ -350,5 +365,43 @@ class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** {@code node} with every array on the way to the first {@code through} array left holding
+     *  only the element that way goes through. */
+    private static JsonNode theWayToTheThroughArray(JsonNode node) {
+        if (!holdsAThroughArray(node)) {
+            throw new IllegalStateException("the checked-in document holds no `through` array");
+        }
+        cutToTheWay(node);
+        return node;
+    }
+
+    private static void cutToTheWay(JsonNode node) {
+        if (node.isObject()) {
+            if (node.has("through") && node.get("through").isArray()) {
+                return;
+            }
+            for (JsonNode child : node.properties().stream().map(Map.Entry::getValue).toList()) {
+                if (holdsAThroughArray(child)) {
+                    cutToTheWay(child);
+                    return;
+                }
+            }
+        } else if (node.isArray()) {
+            ArrayNode array = (ArrayNode) node;
+            for (JsonNode element : toList(array)) {
+                if (holdsAThroughArray(element)) {
+                    array.removeAll();
+                    array.add(element);
+                    cutToTheWay(element);
+                    return;
+                }
+            }
+        }
+    }
+
+    private static boolean holdsAThroughArray(JsonNode node) {
+        return throughArrayOf(node) != null;
     }
 }

@@ -352,8 +352,8 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
      */
     @Test
     void nothingChangesWhereNoNameCrosses() throws Exception {
-        assertEquals(report(guarded("A")), report(guarded("A")));
         String report = report(guarded("A"));
+        assertEquals(report, report(guarded("A")));
         assertFalse(report.contains("@A") || report.contains("@B"),
                 () -> "no narrowing is named anywhere in this one:\n" + report);
     }

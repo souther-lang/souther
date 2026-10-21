@@ -93,11 +93,10 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
     void everyCitationNamesASectionAReaderCanRead() {
         SpecDocument spec = SpecDocument.bundled();
         List<String> dangling = new ArrayList<>();
-        for (Map.Entry<String, String> file : sources().entrySet()) {
-            Matcher cited = CITATION.matcher(file.getValue());
-            while (cited.find()) {
-                if (spec.section(cited.group(1)) == null) {
-                    dangling.add(file.getKey() + " cites `" + cited.group(1) + "`");
+        for (Map.Entry<String, List<String>> file : citations().entrySet()) {
+            for (String name : file.getValue()) {
+                if (spec.section(name) == null) {
+                    dangling.add(file.getKey() + " cites `" + name + "`");
                 }
             }
         }
@@ -111,19 +110,26 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
         SortedMap<String, Integer> written = new TreeMap<>();
         for (Map.Entry<String, String> file : sources().entrySet()) {
             String path = file.getKey();
-            // What each pattern finds contains a word that is asked for as text first: most files
-            // and most lines are ruled out by that, and the pattern is for the rest.
-            Matcher cited = BY_NUMBER.matcher(file.getValue().contains("pec") ? file.getValue() : "");
-            while (cited.find()) {
-                written.merge(path, 1, Integer::sum);
+            String text = file.getValue();
+            // What each pattern finds opens with text that is looked for first — the word for the
+            // one, the parenthesis on a comment line for the other — and the pattern is asked only
+            // where that text stands.
+            Matcher cited = BY_NUMBER.matcher(text).useTransparentBounds(true);
+            for (int at = text.indexOf("pec", 1); at >= 0; at = text.indexOf("pec", at + 1)) {
+                if (cited.region(at - 1, text.length()).lookingAt()) {
+                    written.merge(path, 1, Integer::sum);
+                }
             }
             if (!elidable(path)) {
                 continue;
             }
-            for (String line : file.getValue().split("\n", -1)) {
-                Matcher elided = line.indexOf('(') >= 0 && COMMENT.matcher(line).find()
-                        ? ELIDED.matcher(line) : ELIDED.matcher("");
-                while (elided.find()) {
+            Matcher comment = COMMENT.matcher(text);
+            Matcher elided = ELIDED.matcher(text);
+            for (int at = text.indexOf('('); at >= 0; at = text.indexOf('(', at + 1)) {
+                int end = text.indexOf('\n', at);
+                end = end < 0 ? text.length() : end;
+                if (elided.region(at, end).lookingAt()
+                        && comment.region(text.lastIndexOf('\n', at) + 1, end).lookingAt()) {
                     written.merge(path, 1, Integer::sum);
                 }
             }
@@ -170,15 +176,37 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
      */
     @Test
     void theWalkReachesTheCitationsThereAreToCheck() {
-        int found = 0;
-        for (String text : sources().values()) {
-            Matcher cited = CITATION.matcher(text);
-            while (cited.find()) {
-                found++;
-            }
-        }
+        int found = citations().values().stream().mapToInt(List::size).sum();
 
         assertTrue(found > 400, "the walk found only " + found + " citations — it missed the tree");
+    }
+
+    private static Map<String, List<String>> cited;
+
+    /**
+     * The names each file cites, in the order it cites them, found once for the class: two checks
+     * ask of the same citations, one whether each resolves and one how many there are.
+     *
+     * <p>Looked for at each section sign and nowhere else, since that is where a citation opens.
+     */
+    private static Map<String, List<String>> citations() {
+        if (cited != null) {
+            return cited;
+        }
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        for (Map.Entry<String, String> file : sources().entrySet()) {
+            String text = file.getValue();
+            Matcher citation = CITATION.matcher(text);
+            List<String> names = new ArrayList<>();
+            for (int at = text.indexOf('§'); at >= 0; at = text.indexOf('§', at + 1)) {
+                if (citation.region(at, text.length()).lookingAt()) {
+                    names.add(citation.group(1));
+                }
+            }
+            out.put(file.getKey(), names);
+        }
+        cited = out;
+        return cited;
     }
 
     /**

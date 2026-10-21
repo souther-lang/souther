@@ -119,8 +119,10 @@ class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
         for (Map<String, String> byId : workspaces) {
             wide = byId.containsKey("wide.sou");
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-            c.answerEverything();
+            // What is read below is asked where it is read. The module written here is asked
+            // everything, since what it is held to is that it compiles.
             if (wide) {
+                c.answerEverything();
                 assertEquals(List.of(), c.db().allReports().stream().map(Object::toString).toList(),
                         "the module written to reach the rest of the kinds compiles");
             }

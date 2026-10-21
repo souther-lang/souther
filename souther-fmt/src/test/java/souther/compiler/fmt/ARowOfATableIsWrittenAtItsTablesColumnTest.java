@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
@@ -141,8 +142,7 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
     void everyRowWrittenToAColumnIsAtIt() {
         List<String> wrong = new ArrayList<>();
         int held = 0;
-        for (String source : sources()) {
-            Written written = Written.of(source);
+        for (Written written : writtenSources()) {
             Map<Columns.Unit, Integer> settled = new LinkedHashMap<>();
             for (ColumnDecision decision : written.form().layout().columns()) {
                 settled.put(decision.unit(), decision.column());
@@ -177,8 +177,7 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
      */
     @Test
     void theColumnIsTheGreatestTheRowsNeed() {
-        for (String source : sources()) {
-            Written written = Written.of(source);
+        for (Written written : writtenSources()) {
             Map<Columns.Unit, List<Integer>> natural = new LinkedHashMap<>();
             for (ColumnOccurrence stop : written.form().layout().stops()) {
                 natural.computeIfAbsent(stop.unit(), _ -> new ArrayList<>())
@@ -428,8 +427,8 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
     @Test
     void everyStopIsReached() {
         Set<Columns.Stop> reached = new LinkedHashSet<>();
-        for (String source : sources()) {
-            for (ColumnOccurrence stop : Written.of(source).form().layout().stops()) {
+        for (Written written : writtenSources()) {
+            for (ColumnOccurrence stop : written.form().layout().stops()) {
                 reached.add(stop.unit().stop());
             }
         }
@@ -455,6 +454,25 @@ class ARowOfATableIsWrittenAtItsTablesColumnTest {
 
     private static List<String> sources() {
         return SOURCES;
+    }
+
+    /**
+     * Each of them written in canonical form, once for the class: the three checks that hold a
+     * property over all of them read the same forms.
+     */
+    private static synchronized List<Written> writtenSources() {
+        if (written == null) {
+            written = sources().stream().map(Written::of).toList();
+        }
+        return written;
+    }
+
+    private static List<Written> written;
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static synchronized void released() {
+        written = null;
     }
 
     /**

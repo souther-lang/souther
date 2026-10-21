@@ -38,6 +38,11 @@ import java.util.SequencedMap;
  */
 public final class RepositoryModels {
 
+    /** The conformance corpora among them, as their analysis came out, by name and in the
+     *  manifest's order. Filled while {@link #BY_CORPUS} is made, which is why it is declared
+     *  first. */
+    private static final Map<String, ConformanceCorpus.Analysed> ANALYSED = new LinkedHashMap<>();
+
     private static final SequencedMap<String, Compilation> BY_CORPUS = compileEverything();
 
     private static final List<Compilation> ALL = List.copyOf(BY_CORPUS.values());
@@ -59,6 +64,36 @@ public final class RepositoryModels {
      */
     public static SequencedMap<String, Compilation> byCorpus() {
         return BY_CORPUS;
+    }
+
+    /**
+     * The conformance corpora among them, each with the compilation {@link #all()} holds for it.
+     *
+     * <p>For a test whose subject is what the language declares it accepts and nothing written to be
+     * worked with: each of these was compiled the way {@link ConformanceCorpus#analyse()} compiles
+     * one, so the report built of it is the report that analysis writes.
+     */
+    public static Map<ConformanceCorpus, Compilation> conformance() {
+        Map<ConformanceCorpus, Compilation> out = new LinkedHashMap<>();
+        ANALYSED.values().forEach(each -> out.put(each.corpus(), each.compilation()));
+        return Collections.unmodifiableMap(out);
+    }
+
+    /**
+     * A conformance corpus as {@link #all()} holds it: the same compilation, with what its analysis
+     * said and the report it measured.
+     *
+     * <p>For a test whose subject is the conformance corpora and not every model. It reads the
+     * analysis the population already holds rather than making one of its own, which would be the
+     * same answers worked out again.
+     */
+    public static ConformanceCorpus.Analysed analysed(ConformanceCorpus corpus) {
+        ConformanceCorpus.Analysed held = ANALYSED.get(corpus.name());
+        if (held == null) {
+            throw new IllegalArgumentException(corpus + " is not a conformance corpus the manifest"
+                    + " names");
+        }
+        return held;
     }
 
     /**
@@ -108,8 +143,9 @@ public final class RepositoryModels {
             if (corpus.getValue().equals(ConformanceCorpus.CONFORMANCE)) {
                 // The analysing entry point, which is what says a conformance corpus was analysed:
                 // it puts the adequacy questions as well as compiling.
-                out.put(corpus.getKey(),
-                        ConformanceCorpus.load(corpus.getKey()).analyse().compilation());
+                ConformanceCorpus.Analysed analysed = ConformanceCorpus.load(corpus.getKey()).analyse();
+                ANALYSED.put(corpus.getKey(), analysed);
+                out.put(corpus.getKey(), analysed.compilation());
             } else {
                 Compilation compilation = Compilation.ofSources(
                         ConformanceCorpus.sourcesOf(corpus.getKey()), ModulePath.EMPTY);

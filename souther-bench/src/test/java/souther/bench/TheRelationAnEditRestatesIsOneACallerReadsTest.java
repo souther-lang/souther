@@ -12,6 +12,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ValueName;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,8 +38,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * takes it in is checked against it. The rewrite changes what that body may assume, so the store has
  * an answer to re-establish rather than one it finds unchanged. And it leaves the other readings the
  * corpus is held to where they were, so the round times one edit and not two.
+ *
+ * <p>Asked once a night, for the reason {@link CorpusTest} is. Every claim here is of the corpus
+ * the edit is timed over, so there is no smaller input to ask it of: a fixture written to take the
+ * rule in would say the compiler can reach that walk, and not that the timed corpus does. The last
+ * claim reads everything the compiler says about the corpus and how well its rows cover it, before
+ * the edit and after, and that is two whole compiles of a model the size somebody writes. What it
+ * finds is a figure that stopped measuring what it is named after, and that is as well found by
+ * the morning as by the change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 class TheRelationAnEditRestatesIsOneACallerReadsTest {
 
     private static final String MODULE = "example.crm";

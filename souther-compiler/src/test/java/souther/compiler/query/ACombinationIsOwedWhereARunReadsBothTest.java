@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -19,6 +20,7 @@ import souther.compiler.semantics.HowAClosureIsApplied;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1374,9 +1376,22 @@ class ACombinationIsOwedWhereARunReadsBothTest {
         }
     }
 
-    private static Measured measured(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        return measured(compilation, compilation.modules().get(0), behavior);
+    /** Each model measured once for the class: some are asked about by more than one question,
+     *  and none of the questions changes what was answered. Keyed by the model and the behavior
+     *  asked about, which is what a measure is read for. */
+    private static final Map<List<String>, Measured> MEASURED = new HashMap<>();
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static synchronized void released() {
+        MEASURED.clear();
+    }
+
+    private static synchronized Measured measured(String source, String behavior) {
+        return MEASURED.computeIfAbsent(List.of(source, behavior), _ -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            return measured(compilation, compilation.modules().get(0), behavior);
+        });
     }
 
     private static Measured measured(Compilation compilation, String module, String behavior) {

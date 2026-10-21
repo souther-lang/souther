@@ -37,14 +37,27 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
             let f (on, xs) = if BODY then Yes else No
             """;
 
+    /**
+     * As many choices over one number as come, walked whole, to more ways than are read: every
+     * way that mixes an end under a hundred with one past it is closed as soon as the two meet,
+     * so the walk reaches its end within the figure and nothing is said to have stopped it — and
+     * the two ways left are composed along.
+     */
     @Test
     void choicesNoElementMeetsTogetherAreLeftOutAndTheRestComposed() {
         List<String> parts = new ArrayList<>();
-        for (int each = 0; each < 20; each++) {
+        for (int each = 0; each < CHOICES_PAST_THE_FIGURE; each++) {
             parts.add("(x <= " + each + " || x >= " + (100 + each) + ")");
         }
-        Compilation compilation = compiled(
-                "List.any(x -> " + String.join(" && ", parts) + ", xs)");
+        String body = "List.any(x -> " + String.join(" && ", parts) + ", xs)";
+        for (DecisionReading.Ruled each
+                : DecisionReadings.of(THE_INPUT.replace("BODY", body), "f").found()) {
+            assertTrue(each.states().declined().stream().noneMatch(declined -> declined.whys()
+                            .contains(new WhyNotTaken.MoreWaysThanAreRead())),
+                    () -> "the closed ways are left out, and the walk is not stopped: "
+                            + each.states().declined());
+        }
+        Compilation compilation = compiled(body);
         String module = compilation.modules().getFirst();
 
         assertEquals(List.of(true, true), compilation.db()
@@ -123,17 +136,21 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
     }
 
     /**
+     * The fewest choices of two that, every way of them walked, come to more readings than one
+     * condition is read in. Every choice taken at every depth is one reading, so {@code n} choices
+     * of two are {@code 2^(n+1) - 2} readings.
+     */
+    private static final int CHOICES_PAST_THE_FIGURE = 31 - Integer.numberOfLeadingZeros(
+            CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() + 2);
+
+    /**
      * A conjunction of choices between the two numbers of an element, every way of which an
-     * element meets, and more of them than a reading of one condition makes.
-     *
-     * <p>Every choice taken at every depth is one reading, so {@code n} choices of two are
-     * {@code 2^(n+1) - 2} readings: the fewest past the figure.
+     * element meets, and more of them than a reading of one condition makes: the fewest past the
+     * figure.
      */
     static String pastTheFigure() {
-        int choices = 31 - Integer.numberOfLeadingZeros(
-                CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() + 2);
         List<String> parts = new ArrayList<>();
-        for (int each = 0; each < choices; each++) {
+        for (int each = 0; each < CHOICES_PAST_THE_FIGURE; each++) {
             parts.add("(x.a >= " + (10 + each) + " || x.b >= " + (10 + each) + ")");
         }
         return "(" + String.join(" && ", parts) + ")";

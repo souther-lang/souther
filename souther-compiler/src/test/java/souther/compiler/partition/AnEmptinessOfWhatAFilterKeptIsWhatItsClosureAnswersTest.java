@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.ControlPlace;
@@ -11,6 +12,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -558,11 +560,24 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
         return coverage.values().iterator().next();
     }
 
+    /** Each model measured once for the class: several tests read the same model, and only read
+     *  it. */
+    private static final Map<String, Compilation> COMPILED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        COMPILED.clear();
+    }
+
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource("module demo\n\n" + model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles and its rows hold");
-        return compilation;
+        return COMPILED.computeIfAbsent(model, text -> {
+            Compilation compilation = Compilation.ofSource("module demo\n\n" + text, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            assertEquals(List.of(), compilation.errors(), "the model compiles and its rows hold");
+            return compilation;
+        });
     }
 }

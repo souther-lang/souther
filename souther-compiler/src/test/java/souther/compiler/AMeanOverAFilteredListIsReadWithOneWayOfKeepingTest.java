@@ -130,11 +130,11 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
         assertEquals("· the comparison at  holds", whatLeavesNoValue(failed), failed);
     }
 
-    private static String overAHelpersListOfThree(String element, String held) {
+    private static String overAHelpersList(String element, String held) {
         return report("""
-                data Win = { first: Month, second: Month, third: Month }
+                data Win = { first: Month, second: Month }
                 let payable (w: Win): List<Month> =
-                    List.filter(r -> r.days >= 17, [ w.first, w.second, w.third ])
+                    List.filter(r -> r.days >= 17, [ w.first, w.second ])
                 behavior g : (w: Win) -> Ok | No
                 let g (w) = {
                     guard List.length(payable(w)) >= 1 else No
@@ -146,15 +146,15 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
     }
 
     /**
-     * The mean as the shape the helper gives it, over three elements, with every kept element
+     * The mean as the shape the helper gives it, over two elements, with every kept element
      * worth 100: read to the end, and as the mean of 100 it is.
      */
     @Test
-    void aMeanOverAHelpersListOfThreeIsReadAsWhatItIs() {
-        String failed = overAHelpersListOfThree("100", "101");
+    void aMeanOverAHelpersListIsReadAsWhatItIs() {
+        String failed = overAHelpersList("100", "101");
         assertEquals("· the comparison at  holds", whatLeavesNoValue(failed), failed);
         assertReadToTheEnd(failed);
-        String held = overAHelpersListOfThree("100", "100");
+        String held = overAHelpersList("100", "100");
         assertEquals("· the comparison at  does not hold", whatLeavesNoValue(held), held);
         assertReadToTheEnd(held);
     }
@@ -164,11 +164,12 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
      * reading does not divide the input by, as it does not for the same comparison written out
      * without a filter. What it stops at is that, and no longer the quotient: in each way of
      * keeping, the count is the number of months that way keeps, and the line relates the pay of
-     * one month to the pay of another.
+     * one month to the pay of another — which two months are enough to have.
      */
     @Test
     void aMeanOverTheirPayStopsAtTheLineOverSeveralValuesAndNotAtTheQuotient() {
-        String report = overAHelpersListOfThree("r.pay", "300");
+        String report = report(guarded("List.length(" + PAYABLE + ") >= 1",
+                meanOfEach("r.pay") + " >= 300"));
         assertFalse(report.contains(NO_QUOTIENT_READ), report);
         assertTrue(report.contains("relates the value here to another value"), report);
     }

@@ -49,7 +49,7 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
         Thread worker = new Thread(() -> {
             try {
                 handoff.installedFor(() -> {
-                    Thread.sleep(300);
+                    Thread.sleep(60);
                     return "the row's own work";
                 });
             } catch (Exception _) {
@@ -58,10 +58,10 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
         });
         worker.setDaemon(true);
         worker.start();
-        Thread.sleep(600);
+        Thread.sleep(150);
 
         assertEquals(Handoff.Serviced.WAIT_SPENT,
-                handoff.serviceUntilDone(Duration.ofMillis(100)),
+                handoff.serviceUntilDone(Duration.ofMillis(20)),
                 "the row's own work is the compile's time whenever it was run");
     }
 
@@ -133,7 +133,7 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
     /** A row of the compile's own that will not come back is given up on. */
     @Test
     void aRowThatStopsAnsweringSpendsTheWait() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(200));
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(20));
 
         Deadline.Outcome<String> came = deadline.given(WORK, () -> {
             Thread.sleep(30_000);
@@ -146,11 +146,11 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
     /** An application taking three times the wait spends none of it. */
     @Test
     void whatTheApplicationTakesIsNotTheCompilesToSpend() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(250));
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100));
 
         Deadline.Outcome<Object> came = deadline.given(WORK,
                 () -> Handoff.onTheThreadThatAsked().call(() -> {
-                    slept(750);
+                    slept(300);
                     return "answered";
                 }));
 
@@ -169,13 +169,13 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
      */
     @Test
     void whatTheCompileSpendsAroundCrossingsIsOneWait() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(400));
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100));
 
         Deadline.Outcome<Object> came = deadline.given(WORK, () -> {
             for (int each = 0; each < 5; each++) {
-                Thread.sleep(120);
+                Thread.sleep(30);
                 Handoff.onTheThreadThatAsked().call(() -> {
-                    slept(150);
+                    slept(40);
                     return null;
                 });
             }

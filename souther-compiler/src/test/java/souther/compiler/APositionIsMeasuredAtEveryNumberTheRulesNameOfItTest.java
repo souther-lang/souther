@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.SourceRendering;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -62,10 +63,29 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
                 if box.s == "x" && String.length(box.s) > 3 then Late else Early
             """;
 
+    private static Compilation measured;
+
+    /** The model measured once for the class: every test reads one behavior of it, and only
+     *  reads it. */
+    private static Compilation measured() {
+        if (measured == null) {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            measured = compilation;
+        }
+        return measured;
+    }
+
+    /** And given back when the class is done with it: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        measured = null;
+    }
+
     private static String blockOf(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured();
         String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
         StringBuilder block = new StringBuilder();
         boolean inside = false;
@@ -169,9 +189,7 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
 
     /** The lines one behavior of this model draws, as they were measured. */
     private static List<BorderAssessment> linesOf(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured();
         return Adequacy.boundariesOf(compilation.db(), "example.gate").get(behavior);
     }
 }

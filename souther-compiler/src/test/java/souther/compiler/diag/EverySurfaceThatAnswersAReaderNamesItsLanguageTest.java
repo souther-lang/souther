@@ -95,6 +95,11 @@ class EverySurfaceThatAnswersAReaderNamesItsLanguageTest {
                 continue;
             }
             String text = Files.readString(source, StandardCharsets.UTF_8);
+            // Every way of picking is spelled with the word, so a file without it picks nothing and
+            // the pattern is asked only of the rest.
+            if (!text.contains("Locale")) {
+                continue;
+            }
             Map<String, Integer> counts = new TreeMap<>();
             Matcher found = PICKING.matcher(text);
             while (found.find()) {
