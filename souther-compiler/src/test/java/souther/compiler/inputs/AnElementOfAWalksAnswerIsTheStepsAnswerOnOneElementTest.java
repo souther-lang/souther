@@ -560,6 +560,46 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
         assertEquals(mayBeAt("outer[*][*]"), optionViaPair, "out of the arm");
     }
 
+    /**
+     * A record or a pair handed to a helper and taken apart in it is measured as the value it was
+     * built of is, written directly: the rule is told at the place of the input the value came
+     * from.
+     */
+    @Test
+    void aRecordOrAPairHandedToAHelperAndTakenApartInItKeepsWhereItsValuesCameFrom() {
+        String direct = measured(COUNTS_OF + """
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast, countsOf(xs))
+                """);
+        assertTrue(direct.contains("xs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                direct);
+        String record = measured(COUNTS_OF + """
+                data Box = { m: Map<String, Int> }
+
+                let extract (box: Box): Map<String, Int> = box.m
+
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int> constructs Box
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast,
+                        extract(Box { m = countsOf(xs) }))
+                """);
+        assertEquals(direct, record, "a record");
+
+        String pair = measured(COUNTS_OF + """
+                let second (pair: (Int, Map<String, Int>)): Map<String, Int> = {
+                    let (_, m) = pair
+                    m
+                }
+
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast,
+                        second((0, countsOf(xs))))
+                """);
+        assertEquals(direct, pair, "a pair");
+    }
+
     /** The same where the arm opens what a lookup in a map found under its key. */
     @Test
     void aNameAnArmOpensOutOfALookupIsFollowedOutOfTheArmItWasBoundIn() {

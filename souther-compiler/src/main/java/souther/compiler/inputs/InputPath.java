@@ -80,7 +80,7 @@ final class InputPath {
     private final ElementQuestion asked;
     /** The reading this walk is asked on: what it takes a node as ({@link InputReads#taking}), and
      *  the reading inside an arm a choice has ({@link InputReads#insideArm}). Put in place of
-     *  while an arm is read ({@link #inArm}). */
+     *  while an arm, or a value given, is read ({@link #under}). */
     private InputReads reads;
     private final BindingTrail trail = new BindingTrail();
     /** The direction a walk after the order must come out walking ({@link TraversalDirection});
@@ -416,8 +416,9 @@ final class InputPath {
     private PathResolution introducing(Core e, BindingEnvironment names, OfAConstruction found) {
         return switch (Core.withoutStanding(e)) {
             case Core.Construct construct -> found.of(construct, names);
-            case Core.Read r when names.roleOf(r.binding()) instanceof BindingRole.Alias(var held) ->
-                    trail.through(r.binding(), () -> introducing(held, names, found));
+            case Core.Read r when standsFor(r, names) instanceof Denotation stands ->
+                    trail.through(r.binding(), () -> under(stands.at(),
+                            () -> introducing(stands.value(), stands.at().names(), found)));
             case Core.LetIn let ->
                     introducing(let.body(), names.inside(let.binder(), let.value()), found);
             // A value chosen between constructions is read in each case, and the answers come
@@ -575,19 +576,35 @@ final class InputPath {
     }
 
     /**
-     * What {@code read} makes of {@code arm}, read on the reading inside it.
+     * What {@code read} makes of what it reads, on the reading {@code inside}: inside an arm, or
+     * where a value was given.
      *
      * <p>The reading is the walk's to put back, so that the binding trail the walk keeps stays one
-     * across the arms, as a walk into any other expression's children does.
+     * across the arms and the values given, as a walk into any other expression's children does.
      */
-    private <T> T inArm(Arm arm, Supplier<T> read) {
+    private <T> T under(InputReads inside, Supplier<T> read) {
         InputReads outside = reads;
-        reads = arm.reads();
+        reads = inside;
         try {
             return read.get();
         } finally {
             reads = outside;
         }
+    }
+
+    /**
+     * What the name {@code name} stands for, with the reading it stands in: the value an alias is,
+     * in the names it is read under here, or the value the reading was given for it, in the reading
+     * it was given on. Null where it stands for neither.
+     *
+     * <p>The one place a reduction that goes through a name asks what the name stands for, so that
+     * a way for a name to stand for a value is learned by every one of them together.
+     */
+    private Denotation standsFor(Core.Read name, BindingEnvironment names) {
+        if (names.roleOf(name.binding()) instanceof BindingRole.Alias(var held)) {
+            return new Denotation(held, reads.withNames(names));
+        }
+        return givenTo(name);
     }
 
     /**
@@ -812,7 +829,7 @@ final class InputPath {
                 boolean holdsNone = Core.withoutStanding(arm.body()) instanceof Core.ListLit written
                         && written.elements().isEmpty();
                 if (!holdsNone || asksEveryOccurrence()) {
-                    each.add(inArm(arm, () -> heldAt(arm.body(), wanted, arm.names())));
+                    each.add(under(arm.reads(), () -> heldAt(arm.body(), wanted, arm.names())));
                 }
             }
             return alongEachCase(each);
@@ -1017,8 +1034,9 @@ final class InputPath {
         return switch (Core.withoutStanding(tuple)) {
             case Core.Tuple pair -> index < pair.elements().size()
                     ? read.of(pair.elements().get(index), names) : null;
-            case Core.Read r when names.roleOf(r.binding()) instanceof BindingRole.Alias(var held) ->
-                    trail.through(r.binding(), () -> inComponent(held, index, names, read));
+            case Core.Read r when standsFor(r, names) instanceof Denotation stands ->
+                    trail.through(r.binding(), () -> under(stands.at(),
+                            () -> inComponent(stands.value(), index, stands.at().names(), read)));
             case Core.LetIn let -> inComponent(let.body(), index,
                     names.inside(let.binder(), let.value()), read);
             case Core.If iff when asksAcrossCases() -> acrossCases(armsOf(iff, names),
@@ -1042,7 +1060,7 @@ final class InputPath {
     private PathResolution acrossCases(List<Arm> arms, Function<Arm, PathResolution> each) {
         List<PathResolution> answers = new ArrayList<>();
         for (Arm one : arms) {
-            PathResolution answer = inArm(one, () -> each.apply(one));
+            PathResolution answer = under(one.reads(), () -> each.apply(one));
             if (answer == null) {
                 return null;
             }
