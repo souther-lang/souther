@@ -104,7 +104,6 @@ import souther.compiler.semantics.LawArguments;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
-import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenArguments;
@@ -1080,7 +1079,8 @@ final class Pullback {
                 () -> byALaw(applied, e, AnswerAspect.PRESENCE, reads, new Denotation(e, reads)),
                 // After the law, which says which element the entry is where the map stands at a
                 // position: this says only that there is one.
-                () -> applied != null && mapLookedUpUnderOneOfItsOwnKeys(applied, reads) != null
+                () -> reads.mapLookedUpUnderOneOfItsOwnKeys(e, read.rules().symbols(),
+                        read.rules().newtypes()) != null
                         ? leaf(new Derivation.UnderOneOfItsOwnKeys(), e, reads) : null,
                 () -> acrossAWalk(e, AnswerAspect.PRESENCE, reads),
                 () -> acrossARecursion(e, AnswerAspect.PRESENCE, reads),
@@ -5230,79 +5230,18 @@ final class Pullback {
      * a map built so finds under one of that map's own keys — or null where it is anything else.
      *
      * <p>The key was read off the map, so the lookup finds the entry filed under it
-     * ({@link #mapLookedUpUnderOneOfItsOwnKeys}): the value is the entry's
+     * ({@link InputReads#mapLookedUpUnderOneOfItsOwnKeys}): the value is the entry's
      * ({@link #valueOfAnEntry}), and the arm finding nothing is never taken.
      */
     private LinearForm<Quantity> valueUnderOneOfItsOwnKeys(Core node, InputReads at) {
         if (!(Core.withoutStanding(node) instanceof Core.Read name)
-                || at.lookupOpenedBy(name.binding()) == null
-                || !(AnOperationApplied.of(at.lookupOpenedBy(name.binding()).lookup())
-                        instanceof AnOperationApplied lookup)) {
+                || at.lookupOpenedBy(name.binding()) == null) {
             return null;
         }
-        Denotation looked = mapLookedUpUnderOneOfItsOwnKeys(lookup, at);
+        Denotation looked = at.mapLookedUpUnderOneOfItsOwnKeys(
+                at.lookupOpenedBy(name.binding()).lookup(), read.rules().symbols(),
+                read.rules().newtypes());
         return looked == null ? null : valueOfAnEntryOf(looked);
-    }
-
-    /**
-     * The map {@code lookup} looks a key up in, read where it stands, where the key is one the map
-     * holds an entry under — or null where {@code lookup} is no lookup, or the key is not known to
-     * be one of the map's.
-     *
-     * <p>The key is one of the map's where the list it was handed from holds only keys of the map
-     * — a list of them, or one keeping or reordering some of such a list's elements — and the
-     * lookup is in the same map, which is the same name read.
-     */
-    private Denotation mapLookedUpUnderOneOfItsOwnKeys(AnOperationApplied lookup, InputReads at) {
-        if (!lookup.operation().equals(GET) || lookup.args().size() != 2) {
-            return null;
-        }
-        Symbols symbols = read.rules().symbols();
-        DeclarationNewtypes newtypes = read.rules().newtypes();
-        Core keyedBy = at.containerOfTheElement(
-                at.standing(lookup.args().getFirst(), symbols, newtypes).value());
-        Denotation listing = keyedBy == null ? null
-                : elementsAmong(at.standing(keyedBy, symbols, newtypes));
-        Denotation keyed = listing == null ? null : mapWhoseKeysAreListedBy(listing);
-        Denotation looked = new Denotation(lookup.args().get(1), at);
-        return keyed != null && InputReads.oneNamedValue(keyed, looked, symbols, newtypes)
-                ? at.standing(looked.value(), symbols, newtypes) : null;
-    }
-
-    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
-
-    /** The container whose elements {@code container} holds some of, in any order, beneath every
-     *  operation that answers only elements of what it was handed. */
-    private Denotation elementsAmong(Denotation container) {
-        Denotation at = container;
-        while (Core.withoutStanding(at.value()) instanceof Core.PreservedCall call) {
-            BuiltFrom<DeclaredArgument> built =
-                    DefaultBoundOperationFacts.get().buildsItsResultFrom(call.declared().operation());
-            DeclaredArgument from = built == null ? null
-                    : built.permutesTheElementsOf() != null ? built.permutesTheElementsOf()
-                    : built.holdsTheElementsOf();
-            if (from == null) {
-                return at;
-            }
-            at = at.at().standing(call.args().get(from.position()), read.rules().symbols(),
-                    read.rules().newtypes());
-        }
-        return at;
-    }
-
-    /**
-     * The map {@code listing} answers the keys of, where it is a call of an operation listing a
-     * map's keys — or null where it is not.
-     *
-     * <p>The map as it was handed, not read past its name, so that a lookup asking of the same
-     * name is known to ask of the same map.
-     */
-    private static Denotation mapWhoseKeysAreListedBy(Denotation listing) {
-        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(listing.value()));
-        BoundOperationFacts.Listed listed = applied == null ? null
-                : DefaultBoundOperationFacts.get().listsAPartOf(applied.operation());
-        return listed == null || listed.part() != MapPart.KEYS ? null
-                : new Denotation(applied.argument(listed.map()), listing.at());
     }
 
     /** The value filed under the key of an entry of {@code whole}, where it is a map built by

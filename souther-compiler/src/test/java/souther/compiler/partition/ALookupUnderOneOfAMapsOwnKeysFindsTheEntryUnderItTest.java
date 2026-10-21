@@ -20,6 +20,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -116,30 +117,68 @@ class ALookupUnderOneOfAMapsOwnKeysFindsTheEntryUnderItTest {
         assertEquals(List.of(), unmetOf(after), () -> report(after));
     }
 
-    /** A key of one map looked up in another finds whatever that one holds under it, which is
-     *  no entry of the first: the comparison is not read as one. */
+    private static final String OVER_TWO_MAPS = """
+            module example.stale
+
+            data Touch = { account: String, days: Int }
+
+            let sinceOf (touches: List<Touch>): Map<String, Int> =
+                List.fold((acc, t) -> %s, Map.empty, touches)
+
+            let over (keysOf: Map<String, Int>, lookIn: Map<String, Int>, staleAfter: Int)
+                : List<String> =
+                List.filter(a -> match Map.get(a, lookIn) with
+                                    | Some d -> d >= staleAfter
+                                    | None -> false, Map.keys(keysOf))
+
+            behavior stale : (touches: List<Touch>, others: List<Touch>, staleAfter: Int)
+                -> List<String>
+
+            let stale (touches, others, staleAfter) = {
+                let since = sinceOf(touches)
+                let elsewhere = sinceOf(others)
+                %s
+            }
+            """;
+
+    /** Where the call {@code over(elsewhere, elsewhere, staleAfter)} is written in the model
+     *  {@link #oneHelperHandedTwoMapsAndOneMapIsReadForWhatEachCallHanded} measures. */
+    private static final String SECOND_CALL = "20:53";
+
+    /** What the entries of the map built from {@code touches} would be read as. */
+    private static final String AN_ENTRY_OF_SINCE = "multiplicity(touches[*].account)";
+
+    /**
+     * A key of one map looked up in another finds whatever that one holds under it, which is no
+     * entry of the first, and need not be any: the lookup is not read as finding one, and nothing
+     * is said of the first map's entries.
+     */
     @Test
     void aKeyOfOneMapLookedUpInAnotherIsNotItsEntry() {
-        Compilation compilation = measured("""
-                module example.stale
+        Compilation compilation = measured(OVER_TWO_MAPS.formatted(COUNTED,
+                "over(since, elsewhere, staleAfter)"));
+        assertEquals(List.of(), axisOf(compilation), () -> report(compilation));
+        assertFalse(report(compilation).contains(AN_ENTRY_OF_SINCE), () -> report(compilation));
+    }
 
-                data Touch = { account: String, days: Int }
-
-                let sinceOf (touches: List<Touch>): Map<String, Int> =
-                    List.fold((acc, t) -> %s, Map.empty, touches)
-
-                behavior stale : (touches: List<Touch>, others: List<Touch>, staleAfter: Int)
-                    -> List<String>
-
-                let stale (touches, others, staleAfter) = {
-                    let since = sinceOf(touches)
-                    let elsewhere = sinceOf(others)
-                    List.filter(a -> match Map.get(a, elsewhere) with
-                                        | Some d -> d >= staleAfter
-                                        | None -> false, Map.keys(since))
-                }
-                """.formatted(COUNTED));
-        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+    /**
+     * One helper handed the keys of one map and a lookup in another, and handed one map for both:
+     * each call is read for the maps it was handed, so the second is the entries of the map it
+     * looks in and the first is no entry of the map whose keys it walks.
+     */
+    @Test
+    void oneHelperHandedTwoMapsAndOneMapIsReadForWhatEachCallHanded() {
+        Compilation compilation = measured(OVER_TWO_MAPS.formatted(COUNTED,
+                "List.append(over(since, elsewhere, staleAfter),"
+                        + " over(elsewhere, elsewhere, staleAfter))"));
+        assertFalse(report(compilation).contains(AN_ENTRY_OF_SINCE), () -> report(compilation));
+        // About the entries of the map looked in, and at the second call alone: the report names
+        // every call a reading of the rule was made at.
+        assertEquals(List.of("multiplicity(others[*].account) in over@" + SECOND_CALL),
+                notReadOf(compilation).stream()
+                        .filter(each -> each.contains("multiplicity("))
+                        .map(each -> each.replaceAll(".*about `([^`]*)`", "$1")).toList(),
+                () -> report(compilation));
     }
 
     private static final Pattern NOT_READ =

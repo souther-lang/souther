@@ -10,6 +10,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.MapPart;
@@ -814,18 +815,22 @@ final class InputPath {
     }
 
     /**
-     * Where what a walk from a seed answers came from, where {@code e} is one: the elements it
-     * walked, since what its answer holds is what its step made of them, beside whatever the seed
-     * brought — or null where {@code e} is no such walk, or the elements stand nowhere.
+     * Where what a walk from a seed answers came from, where {@code e} is one whose seed reads no
+     * name: the elements it walked, since what its answer holds is the seed's, which is written
+     * where it stands, or what its step made of them — or null where {@code e} is no such walk, or
+     * the elements stand nowhere.
      *
      * <p>For the walk after where a value came from and no other. What the step made is not the
-     * elements, and a rule about it is about a value made of them. A seed the input holds is
-     * another thing the value may be made of, and is not one more container the value is an
-     * element of, so it is not offered as a place the value may stand.
+     * elements, and a rule about it is about a value made of them.
+     *
+     * <p>Not where the seed reads a name. What the answer holds is then made of the seed as well,
+     * over an empty list of the seed alone, and one position is not where it came from: said to be
+     * the elements, a rule about a value the seed handed over would be said of a list it is not
+     * made of.
      */
     private PathResolution throughAWalkFromASeed(Core e, BindingEnvironment names) {
         SeededWalk walk = SeededWalk.enteredHoweverFar(e, InputPath::blockStanding);
-        if (walk == null) {
+        if (walk == null || WhatABodyReads.anyBinding(walk.seed())) {
             return null;
         }
         PathResolution from =
