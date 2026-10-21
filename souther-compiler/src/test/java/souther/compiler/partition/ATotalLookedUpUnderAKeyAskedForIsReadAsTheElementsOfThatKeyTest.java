@@ -360,31 +360,6 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                 () -> "an example that does not hold is refused: " + report(compilation));
     }
 
-    /**
-     * What several keys come to is composed together because the elements of each key are the
-     * elements of that key alone. Two totals of different fields of the same elements are not:
-     * one element holds both, and nothing here chooses it for both. They are said to be not
-     * composed together, and not to have no row.
-     */
-    @Test
-    void severalTotalsOfDifferentFieldsOfOneContainerAreSaidNotToBeComposedTogether() {
-        Compilation compilation = measured("""
-                module example.ledger
-
-                data Posting = { amount: Int, fee: Int }
-
-                behavior both : (ps: List<Posting>) -> Bool
-
-                let both (ps) =
-                    List.sum(List.map(p -> p.amount, ps)) >= 100
-                            && List.sum(List.map(p -> p.fee, ps)) >= 5
-                """);
-        assertTrue(report(compilation).contains("a condition on another number taken where this"
-                + " row is already being written for one"), () -> report(compilation));
-        assertFalse(report(compilation).contains("no row can stand at the"),
-                () -> "an emptiness no one established is not said: " + report(compilation));
-    }
-
     private static String totalBesideACount(String more) {
         return """
                 module example.ledger

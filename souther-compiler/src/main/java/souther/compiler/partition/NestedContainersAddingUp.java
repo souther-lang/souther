@@ -183,7 +183,7 @@ final class NestedContainersAddingUp {
                 Proposals one = built(levels, 0, layout,
                         (level, filling, innermost) -> ContainersAddingUp.filledWith(
                                 next.removeFirst(), level.holding(), level.view(), filling,
-                                level.apart(), carrier, reading),
+                                level.apart(), carrier, List.of(), reading),
                         way, reading);
                 left.met(one.met());
                 one.values().forEach(rows::add);
@@ -323,7 +323,7 @@ final class NestedContainersAddingUp {
             ContainersAddingUp.KeptApart apart = ContainersAddingUp.KeptApart.of(view, held,
                     holding.element(), here.element(), demand, asked.required(), reading);
             ContainersAddingUp.Ways ways = ContainersAddingUp.waysDown(holding.element(),
-                    here.element(), demand, asked, apart, reading);
+                    here.element(), demand, asked, List.of(), apart, reading);
             if (ways.filled().isEmpty()) {
                 return refusing(ways.cutBy().isEmpty()
                         ? new TermRealizations.Realization.None(
@@ -695,7 +695,7 @@ final class NestedContainersAddingUp {
                             mine.add(values.removeFirst());
                         }
                         return ContainersAddingUp.filled(mine, level.holding(), level.view(),
-                                filling, level.apart(), elements, reading);
+                                filling, level.apart(), elements, List.of(), reading);
                     }, way, reading);
         }
 
@@ -747,7 +747,7 @@ final class NestedContainersAddingUp {
             beside.putAll(filling.beside());
             Proposals one = PlanComposer.compose(filling.plan().root(),
                     new ValuesCarryingANumber(filling.fixed(), inner.values().getFirst(),
-                            beside, filling.narrowed(), reading),
+                            Map.of(), beside, filling.narrowed(), reading),
                     reading);
             met = met.and(one.met());
             if (one.isEmpty()) {

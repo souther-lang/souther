@@ -768,6 +768,9 @@ public final class Generator {
                              // word says that, where the word for a set walked to its end says the
                              // set has no value in it.
                              NUMBERS_OF_A_SET_TRIED,
+                             // Likewise the choices of a number for each of several totals past
+                             // this one: the search came to is about the choices it tried.
+                             COMBINATIONS_OF_TOTALS_TRIED,
                              // The counts a string is written for past this one, and the lengths
                              // past the ones looked at, were never asked for either.
                              CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,

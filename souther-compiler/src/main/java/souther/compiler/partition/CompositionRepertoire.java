@@ -62,8 +62,10 @@ public enum CompositionRepertoire {
      * and one read off a value the group already asks for is read off the values that demand
      * admits, and one it is composed out of is composed for. Which groups those are is the
      * realizer's to say and is not spelled out here; what this names is the values left over, whose
-     * numbers are reached none of those ways — two totals of one container are two spreadings of
-     * one list of elements at once, and nothing here writes that.
+     * numbers are reached none of those ways. Totals of the fields of their own of one container's
+     * elements are composed together, one share of each for each element; what is left over is
+     * totals that read one field, a total computed of several fields beside another, and a choice
+     * among forms of a field solved for beside another total.
      *
      * <p>So a group nothing built a value for is not a group no value answers. Raising anything
      * reaches none of them; what would is somebody writing the solving.

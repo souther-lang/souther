@@ -38,7 +38,7 @@ class AHelpersConditionIsToldApartByItsCallOnEveryLineTest {
                 constructs No
 
             let ok (zs: List<Line>): Bool =
-                List.sum(List.map(x -> x.a, zs)) + List.sum(List.map(x -> x.b, zs)) > 0
+                List.sum(List.map(x -> x.a, zs)) + List.sum(List.map(x -> x.a + x.b, zs)) > 0
 
             let f (xs, ys, n) = {
                 guard ok(xs) else No { why = 0 }
