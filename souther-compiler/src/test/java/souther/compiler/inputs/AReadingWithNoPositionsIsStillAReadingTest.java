@@ -42,7 +42,6 @@ class AReadingWithNoPositionsIsStillAReadingTest {
 
     private static RuleReadingSource rules() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

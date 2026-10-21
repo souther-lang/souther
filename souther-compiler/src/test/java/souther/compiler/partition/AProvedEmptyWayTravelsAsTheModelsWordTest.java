@@ -189,9 +189,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     private static final Compilation COMPILATION = compiled();
 
     private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(BOUNDED, "Main");
-        made.answerEverything();
-        return made;
+        return Compilation.ofSource(BOUNDED, "Main");
     }
 
     private static String module() {

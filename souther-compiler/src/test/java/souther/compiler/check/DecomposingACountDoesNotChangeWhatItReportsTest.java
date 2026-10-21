@@ -52,7 +52,6 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
                                      Map<String, String> documents) {
         Compilation c = Compilation.ofDocuments(
                 new LinkedHashMap<>(documents), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
 
         List<TypeSymbol.AtModule> declared = c.db().ask(new Front.DeclaredTypes(MODULE)).value();
         RuleReadingSource source = Shapes.ruleReading(c.db(), MODULE).value();

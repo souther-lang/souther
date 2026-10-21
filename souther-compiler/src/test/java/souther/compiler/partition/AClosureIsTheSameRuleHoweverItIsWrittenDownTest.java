@@ -100,7 +100,6 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
                 data Low
                 data High
                 """ + "\n" + declaration + "\n", "Main");
-        compilation.answerEverything();
         assertEquals(1, compilation.modules().size(), "the model under test compiles");
         return compilation;
     }

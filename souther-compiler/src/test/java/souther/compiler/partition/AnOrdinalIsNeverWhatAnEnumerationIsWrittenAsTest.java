@@ -114,7 +114,6 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
                         let f (s) = { guard s < Won else Ok
                             No }
                         """, "Main");
-        compilation.answerEverything();
 
         assertNull(Carrier.ofValue(
                 Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Qualified"))),

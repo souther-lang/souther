@@ -320,7 +320,6 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
     private static Read readingOf(String behavior) {
         return READINGS.computeIfAbsent(behavior, name -> {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
-            compilation.answerEverything();
             String module = compilation.modules().getFirst();
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");

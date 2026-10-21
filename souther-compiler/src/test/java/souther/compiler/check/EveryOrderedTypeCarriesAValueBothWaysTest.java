@@ -53,7 +53,6 @@ class EveryOrderedTypeCarriesAValueBothWaysTest {
 
     private static Symbols symbols() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
     }
 

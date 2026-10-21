@@ -171,7 +171,6 @@ class AChoiceTheNumbersContradictIsNoOpenWayTest {
                 behavior f : (r: R) -> Yes
                 let f (r) = Yes
                 """, "Main");
-        compilation.answerEverything();
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         InputReading reading = inputs.reading(RuleReadings.of(compilation, "m"));

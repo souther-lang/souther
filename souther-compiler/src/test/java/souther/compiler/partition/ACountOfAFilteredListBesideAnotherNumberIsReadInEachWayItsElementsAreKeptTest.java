@@ -40,10 +40,20 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     private static final String ONES =
             "List.sum(List.map(x -> 1, List.filter(x -> x > 0, [a, b])))";
 
-    /** Eighteen elements, each kept by a truth of its own: more ways than one condition is read
-     *  in. */
-    private static final String MANY = "List.filter(x -> x > 0, [a, b, a + 1, b + 1, a + 2, b + 2,"
-            + " a + 3, b + 3, a + 4, b + 4, a + 5, b + 5, a + 6, b + 6, a + 7, b + 7, a + 8, b + 8])";
+    /** As few elements, each kept by a truth of its own, as make more ways than one condition is
+     *  read in. */
+    private static final String MANY = many(32 - Integer.numberOfLeadingZeros(
+            CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()));
+
+    /** {@code elements} elements, {@code a} and {@code b} in turn, each one more than the last of
+     *  its own. */
+    private static String many(int elements) {
+        List<String> each = new ArrayList<>();
+        for (int i = 0; i < elements; i++) {
+            each.add((i % 2 == 0 ? "a" : "b") + (i < 2 ? "" : " + " + i / 2));
+        }
+        return "List.filter(x -> x > 0, [" + String.join(", ", each) + "])";
+    }
 
     /** A helper whose body counts what a filter keeps of the two values it was handed. */
     private static final String HELPER = """

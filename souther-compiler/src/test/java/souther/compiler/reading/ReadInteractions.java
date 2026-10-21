@@ -27,7 +27,6 @@ final class ReadInteractions {
      *  could not join among it. */
     static CoverageRead.Read readAll(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

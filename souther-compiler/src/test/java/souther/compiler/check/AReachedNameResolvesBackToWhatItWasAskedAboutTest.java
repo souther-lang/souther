@@ -71,7 +71,6 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
 
     private static Symbols scopeOf(String module, String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
-        compilation.answerEverything();
         return Scopes.derived(compilation.db(), module).value();
     }
 

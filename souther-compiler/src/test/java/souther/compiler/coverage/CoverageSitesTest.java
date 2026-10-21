@@ -53,7 +53,6 @@ class CoverageSitesTest {
 
     private static Checked bodiesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(module)).value();

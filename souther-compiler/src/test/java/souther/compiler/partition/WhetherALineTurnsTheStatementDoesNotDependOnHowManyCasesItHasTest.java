@@ -83,21 +83,19 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
     }
 
     /**
-     * And a line that turns the statement in some of its cases is kept, said one by one or as
-     * one: {@code x} compared with nought where an even number of truths hold, and nought
-     * compared with it where they do not, is one statement whose line on {@code x} decides wherever
-     * an even number of them hold — sixteen cases of five truths and thirty-two of six.
+     * And a line that turns the statement in some of its cases is kept: {@code x} compared with
+     * nought where an even number of truths hold, and nought compared with it where they do not,
+     * is one statement whose line on {@code x} decides wherever an even number of them hold —
+     * sixteen cases of five truths, as many as are said one by one. One truth more is past them,
+     * and the line kept there is {@link ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest}'s.
      */
     @Test
-    void aLineSomeCaseOfItTurnsIsKeptWhereverItsCasesAreSaidAsOne() {
-        for (int truths = 5; truths <= 6; truths++) {
-            JsonNode report = reportOf(even(truths));
-            int of = truths;
-            assertFalse(bordersOn(report, "e/x").isEmpty(),
-                    () -> "the line on x is a border, of " + of + " truths: " + report);
-            assertFalse(reasonsAt(report, "x").contains("rule_never_turns_on_this_line"),
-                    () -> "and not one the statement never turns on: " + reasonsAt(report, "x"));
-        }
+    void aLineSomeCaseOfItTurnsIsKeptAtAsManyCasesAsAreSaidOneByOne() {
+        JsonNode report = reportOf(even(5));
+        assertFalse(bordersOn(report, "e/x").isEmpty(),
+                () -> "the line on x is a border: " + report);
+        assertFalse(reasonsAt(report, "x").contains("rule_never_turns_on_this_line"),
+                () -> "and not one the statement never turns on: " + reasonsAt(report, "x"));
     }
 
     /**

@@ -76,7 +76,6 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
 
     private static List<Generator.GeneratedRow> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

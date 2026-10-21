@@ -114,7 +114,6 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
 
     private static SearchRegion region() {
         Compilation compilation = Compilation.ofSource(TWO_RELATED_AND_A_THIRD, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

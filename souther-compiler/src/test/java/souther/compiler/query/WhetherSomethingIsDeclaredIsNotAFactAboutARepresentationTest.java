@@ -122,7 +122,6 @@ class WhetherSomethingIsDeclaredIsNotAFactAboutARepresentationTest {
                 data Bag = { held: Missing }
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
 
         TypeKey bag = new TypeKey("shop.prices", "Bag");
         Registry<Derived.Def> derived = Names.derivedRegistry(c.db());

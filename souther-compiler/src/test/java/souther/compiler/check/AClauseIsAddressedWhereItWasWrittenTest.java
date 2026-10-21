@@ -62,9 +62,7 @@ class AClauseIsAddressedWhereItWasWrittenTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return Compilation.ofSource(SOURCE, "Main");
     }
 
     private static TypeSymbol even(Compilation compilation) {

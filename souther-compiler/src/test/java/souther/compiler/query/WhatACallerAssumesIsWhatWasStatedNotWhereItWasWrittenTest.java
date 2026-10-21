@@ -69,9 +69,7 @@ class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
         for (int i = 0; i < sources.size(); i++) {
             byId.put(files.get(i), before + sources.get(i));
         }
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 
     @Test
