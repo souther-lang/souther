@@ -16,6 +16,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -173,6 +174,22 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
         assertEquals(Set.of("d", "r"),
                 undivided(aWindow(NumericDomain.Bounds.OPEN), ExactRatio.ZERO, Rel.GE));
         assertEquals(Set.of(), undivided(aWindow(run(1, 0)), ExactRatio.ZERO, Rel.GE));
+    }
+
+    /**
+     * The same relation, asked of {@code w}: every value up to the farthest two dates are apart is
+     * reached by choosing both dates, and past it the type's lines alone settle it, so {@code w}
+     * is left undivided. A date whose order is read as running on takes the days there are.
+     */
+    @Test
+    void twoDatesTogetherReachTheValuesOfACountOfDays() {
+        var leaves = WhatARelationLeavesUndivided.leavesOf(aWindow(NumericDomain.Bounds.OPEN), 2,
+                ExactRatio.ZERO, Rel.GE, String::equals, (one, other) -> true,
+                Granularity.DISCRETE, GREATEST_INT);
+
+        var settled = assertInstanceOf(WhatARelationLeavesUndivided.Leaves.Settled.class, leaves);
+        assertFalse(settled.ofTheTypeAlone().isEmpty());
+        assertTrue(settled.linesOfTheModel().isEmpty());
     }
 
     /** The same, with {@code w} tied to {@code d}: holding it still may hold {@code d} too. */
