@@ -2,12 +2,14 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.RuleKey;
 
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.RandomAccess;
 
 /**
  * A parameter-rooted location: a parameter, and the steps taken from it.
@@ -141,7 +143,57 @@ public record TermPath(String head, List<Step> steps) {
         // A path is rooted somewhere. Rooted at nothing it is a place with no parameter to be a
         // place of, and every answer that carries one says a position was reached.
         Objects.requireNonNull(head, "a path is rooted at a parameter");
-        steps = List.copyOf(steps);
+        steps = steps instanceof Steps ? steps : new Steps(List.copyOf(steps));
+    }
+
+    /**
+     * The steps of a path, which know their own hash.
+     *
+     * <p>A path is a key of the tables a search keeps, so it is hashed far more often than it is
+     * made, and its hash is its steps' — which are records, hashed through a method handle one step
+     * at a time. A record cannot hold a field of its own, so the steps hold it: an immutable list
+     * that works its hash out once and says it ever after, and that tells two lists apart by it
+     * before it walks them.
+     */
+    private static final class Steps extends AbstractList<Step> implements RandomAccess {
+
+        private final List<Step> of;
+        private int hash;
+
+        private Steps(List<Step> of) {
+            this.of = of;
+        }
+
+        @Override
+        public Step get(int at) {
+            return of.get(at);
+        }
+
+        @Override
+        public int size() {
+            return of.size();
+        }
+
+        @Override
+        public int hashCode() {
+            int had = hash;
+            if (had == 0) {
+                had = of.hashCode();
+                hash = had;
+            }
+            return had;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (other == this) {
+                return true;
+            }
+            if (other instanceof Steps steps && steps.hashCode() != hashCode()) {
+                return false;
+            }
+            return super.equals(other);
+        }
     }
 
     public static TermPath of(String head) {
