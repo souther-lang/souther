@@ -600,6 +600,79 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
         assertEquals(direct, pair, "a pair");
     }
 
+    /**
+     * An entry of a map's list handed to a helper that takes it apart, or to a helper that hands
+     * it to another, is measured as the same rule written over the entry directly: the value of
+     * the entry is the input's map element and its key is the map's key.
+     */
+    @Test
+    void anEntryOfAMapsListHandedToAHelperIsTakenApartAsWhereItWritesIt() {
+        String direct = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(e -> {
+                            let (_, n) = e
+                            n >= u.atLeast
+                        }, Map.toList(u.counts)))
+                """);
+        String viaHelper = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                let valueOf (entry: (String, Int)): Int = {
+                    let (_, n) = entry
+                    n
+                }
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(e -> valueOf(e) >= u.atLeast, Map.toList(u.counts)))
+                """);
+        String keyDirect = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(e -> {
+                            let (k, _) = e
+                            String.length(k) >= u.atLeast
+                        }, Map.toList(u.counts)))
+                """);
+        String keyViaNestedHelpers = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                let keyOf (entry: (String, Int)): String = {
+                    let (k, _) = entry
+                    k
+                }
+
+                let lengthOf (entry: (String, Int)): Int = String.length(keyOf(entry))
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(e -> lengthOf(e) >= u.atLeast, Map.toList(u.counts)))
+                """);
+        String valueViaFunctionValue = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                let valueOf (entry: (String, Int)): Int = {
+                    let (_, n) = entry
+                    n
+                }
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(n -> n >= u.atLeast,
+                        List.map(valueOf, Map.toList(u.counts))))
+                """);
+        assertTrue(direct.startsWith("[u.counts[*] = u.atLeast]"), direct);
+        assertEquals(direct, viaHelper, "the value of an entry, taken apart in a helper");
+        assertEquals(direct, valueViaFunctionValue, "the value of an entry, a helper as a value");
+        assertTrue(keyDirect.contains("String.length(u.counts[key]) = u.atLeast"), keyDirect);
+        assertEquals(keyDirect, keyViaNestedHelpers, "the key of an entry, in nested helpers");
+    }
+
     /** The same where the arm opens what a lookup in a map found under its key. */
     @Test
     void aNameAnArmOpensOutOfALookupIsFollowedOutOfTheArmItWasBoundIn() {
