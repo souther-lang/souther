@@ -167,6 +167,7 @@
         "cases_a_line_is_asked_in",
         "depth_a_construction_plan_descends",
         "numbers_of_a_set_tried",
+        "combinations_of_totals_tried",
         "code_points_a_string_is_searched_in_full",
         "code_points_beyond_a_count_a_string_is_looked_for",
         "runs_repairing_a_row",

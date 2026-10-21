@@ -48,7 +48,6 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -2098,15 +2097,20 @@ final class TermRealizations {
      */
     static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
                                        Function<Place, Realization> of) {
-        return firstThatBuilds(walkedTheWholeQuestion, tried.numbers(), tried.rest(), of);
+        return firstThatBuilds(walkedTheWholeQuestion, tried.numbers(), tried.rest().shortfall(),
+                of);
     }
 
     /**
      * The same, over whatever a value is built for: one number, or the numbers of several totals
      * together ({@link Together}).
+     *
+     * @param handedOver what whatever handed the numbers over left, every reason of every walk
+     *                   that did: none where it handed over all there were
      */
     static <T> Realization firstThatBuilds(boolean walkedTheWholeQuestion, List<T> numbers,
-                                           Remainder rest, Function<T, Realization> of) {
+                                           CompositionShortfall handedOver,
+                                           Function<T, Realization> of) {
         // Everything every number that built nothing came to without, taken as one shortfall so
         // that no vocabulary of it is left behind here. The rules leaving no number at one of the
         // numbers handed over says nothing about the next: this walk is over the numbers, and that
@@ -2124,13 +2128,7 @@ final class TermRealizations {
         // Why there were no more to try, said by whatever handed them over. Worked out here, this
         // would be the one place that knows what every account's numbers are and how it walks them,
         // which is what handing the reason over is for.
-        met = met.and(switch (rest) {
-            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
-            case Remainder.StoppedAt(CompositionBudget figure) ->
-                    CompositionShortfall.of(Set.of(figure));
-            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
-                    CompositionShortfall.writing(written);
-        });
+        met = met.and(handedOver);
         if (!met.figures().isEmpty()) {
             return new Realization.Stopped(met);
         }
@@ -2147,8 +2145,7 @@ final class TermRealizations {
         // same way and has seen one number of it, so the same emptiness said of the class would be
         // a sentence about every value the class holds. And nothing here says anything about what
         // could be built at a number this walked past: this is about the numbers, not the values.
-        if (numbers.isEmpty() && rest instanceof Remainder.Exhausted
-                && walkedTheWholeQuestion) {
+        if (numbers.isEmpty() && handedOver.nothing() && walkedTheWholeQuestion) {
             return new Realization.NoNumberTheDeclarationsAdmit();
         }
         return last instanceof Realization.None none ? none
@@ -2501,57 +2498,48 @@ final class TermRealizations {
      * The numbers of several totals tried together: a number for each, and why there are no more
      * choices of them.
      *
+     * <p>Why there are no more is every reason of every walk that handed numbers over, and the
+     * reason the choices of them were cut where they were: a shortfall, which adds, and not a
+     * {@link Remainder}, which is one walk's single reason.
+     *
      * @param each each choice of one number for every total, in the order the totals are asked
      * @param rest why there are no more choices
      */
-    record Together(List<List<Place>> each, Remainder rest) {
+    record Together(List<List<Place>> each, CompositionShortfall rest) {
 
         /**
          * Every choice of one number for each of {@code candidates}, the first total's the slowest
-         * to move, up to the figure that bounds the numbers of a set. What a choice leaves, or what
-         * any total's candidates left, is why there are no more.
+         * to move, up to the figure that bounds the choices.
          */
         static Together of(List<Tried> candidates) {
-            int most = CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum();
-            List<List<Place>> out = new ArrayList<>();
-            boolean cut = false;
-            if (candidates.stream().noneMatch(each -> each.numbers().isEmpty())) {
-                int[] at = new int[candidates.size()];
-                boolean done = false;
-                while (!done) {
-                    if (out.size() == most) {
-                        cut = true;
-                        break;
-                    }
-                    List<Place> choice = new ArrayList<>();
-                    for (int i = 0; i < at.length; i++) {
-                        choice.add(candidates.get(i).numbers().get(at[i]));
-                    }
-                    out.add(List.copyOf(choice));
-                    int i = at.length - 1;
-                    while (i >= 0 && ++at[i] == candidates.get(i).numbers().size()) {
-                        at[i] = 0;
-                        i--;
-                    }
-                    done = i < 0;
-                }
-            }
-            if (cut) {
-                return new Together(out, new Remainder.StoppedAt(
-                        CompositionBudget.NUMBERS_OF_A_SET_TRIED));
-            }
-            Set<CompositionRepertoire> written = EnumSet.noneOf(CompositionRepertoire.class);
+            int most = CompositionBudget.COMBINATIONS_OF_TOTALS_TRIED.maximum();
+            CompositionShortfall left = CompositionShortfall.NONE;
             for (Tried each : candidates) {
-                switch (each.rest()) {
-                    case Remainder.Exhausted _ -> { }
-                    case Remainder.StoppedAt stopped -> {
-                        return new Together(out, stopped);
-                    }
-                    case Remainder.SomeOf some -> written.addAll(some.written());
-                }
+                left = left.and(each.rest().shortfall());
             }
-            return new Together(out, written.isEmpty() ? new Remainder.Exhausted()
-                    : new Remainder.SomeOf(written));
+            List<List<Place>> out = new ArrayList<>();
+            if (candidates.stream().anyMatch(each -> each.numbers().isEmpty())) {
+                return new Together(out, left);
+            }
+            int[] at = new int[candidates.size()];
+            for (boolean more = true; more; ) {
+                if (out.size() == most) {
+                    return new Together(out, left.and(CompositionShortfall.of(
+                            Set.of(CompositionBudget.COMBINATIONS_OF_TOTALS_TRIED))));
+                }
+                List<Place> choice = new ArrayList<>();
+                for (int i = 0; i < at.length; i++) {
+                    choice.add(candidates.get(i).numbers().get(at[i]));
+                }
+                out.add(List.copyOf(choice));
+                int i = at.length - 1;
+                while (i >= 0 && ++at[i] == candidates.get(i).numbers().size()) {
+                    at[i] = 0;
+                    i--;
+                }
+                more = i >= 0;
+            }
+            return new Together(out, left);
         }
     }
 
@@ -2594,6 +2582,23 @@ final class TermRealizations {
      * standing on a guess.
      */
     sealed interface Remainder {
+
+        /**
+         * What this says to a reader as a shortfall: the one a walk met, or none where it went to
+         * the end.
+         *
+         * <p>The one place a remainder becomes a shortfall. A remainder is one walk's reason, and
+         * walks that hand over together add their shortfalls ({@link CompositionShortfall#and})
+         * rather than choose among their remainders.
+         */
+        default CompositionShortfall shortfall() {
+            return switch (this) {
+                case Exhausted _ -> CompositionShortfall.NONE;
+                case StoppedAt(CompositionBudget figure) -> CompositionShortfall.of(Set.of(figure));
+                case SomeOf(Set<CompositionRepertoire> written) ->
+                        CompositionShortfall.writing(written);
+            };
+        }
 
         /** There are no more: the numbers handed over are every one the set has in the window its
          *  account can be asked for. */
@@ -3705,7 +3710,7 @@ final class TermRealizations {
         // search was allowed.
         CompositionShortfall met = CompositionShortfall.NONE;
         for (OfAString each : wanted) {
-            met = met.and(shortfallOf(each.tried().rest()));
+            met = met.and(each.tried().rest().shortfall());
         }
         if (pastWhatIsSearchedInFull || sumPastWhatIsWritten) {
             met = met.and(CompositionShortfall.of(
@@ -3720,17 +3725,6 @@ final class TermRealizations {
         }
         return new Realization.Unexhausted(met.nothing() ? CompositionShortfall.writing(Set.of(
                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)) : met, null);
-    }
-
-    /** What a walk over numbers that ended short of the set says it was stopped by. */
-    private static CompositionShortfall shortfallOf(Remainder rest) {
-        return switch (rest) {
-            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
-            case Remainder.StoppedAt(CompositionBudget figure) ->
-                    CompositionShortfall.of(Set.of(figure));
-            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
-                    CompositionShortfall.writing(written);
-        };
     }
 
     /**

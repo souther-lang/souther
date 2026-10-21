@@ -1021,6 +1021,9 @@ final class ContainersAddingUp {
             if (many > figure().maximum()) {
                 return Taken.NOT_TAKEN;
             }
+            // Asked of every total before any of them is decided on, so that the reason a total
+            // could not be worked out is said whichever of the others turns the count away.
+            List<BigDecimal> alsoTotals = otherTotalsOver(many);
             BigDecimal total = makings.total();
             FieldSolved solved = makings.solved();
             int carrying = solved == null ? many : solved.carrying(many);
@@ -1049,28 +1052,8 @@ final class ContainersAddingUp {
                     }
                 }
             }
-            // What each of the other totals is to be spread over the same elements, solved for the
-            // field it adds up where it is computed of it.
-            List<BigDecimal> alsoTotals = new ArrayList<>();
-            for (Also each : makings.also()) {
-                if (each.solved() == null) {
-                    alsoTotals.add(each.total());
-                    continue;
-                }
-                switch (each.solved().fieldsAddingUpTo(each.total(), many)) {
-                    case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
-                        left.unheld(new CompositionCapacity(
-                                CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER,
-                                unheld.why()));
-                        return Taken.AND_MORE;
-                    }
-                    case ExactAnswer.Held<Optional<BigDecimal>> held -> {
-                        if (held.value().isEmpty()) {
-                            return Taken.AND_MORE;
-                        }
-                        alsoTotals.add(held.value().get());
-                    }
-                }
+            if (alsoTotals == null) {
+                return Taken.AND_MORE;
             }
             // Said of the shapes this count is spread in, before any of them is walked, because it
             // is about which arrangements there are rather than about what came of trying two of
@@ -1116,28 +1099,64 @@ final class ContainersAddingUp {
         }
 
         /**
+         * What each of the other totals is to be spread over {@code many} elements, solved for the
+         * field it adds up where it is computed of it — or null where some total of them cannot
+         * be, which is a count this writes no container for.
+         *
+         * <p>Every total is asked and each that cannot be held is said: stopping at the first
+         * would leave a reader the reason of one total when two could not be worked out.
+         */
+        private List<BigDecimal> otherTotalsOver(int many) {
+            List<BigDecimal> totals = new ArrayList<>();
+            boolean every = true;
+            for (Also each : makings.also()) {
+                if (each.solved() == null) {
+                    totals.add(each.total());
+                    continue;
+                }
+                switch (each.solved().fieldsAddingUpTo(each.total(), many)) {
+                    case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
+                        left.unheld(new CompositionCapacity(
+                                CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER,
+                                unheld.why()));
+                        every = false;
+                    }
+                    case ExactAnswer.Held<Optional<BigDecimal>> held -> {
+                        if (held.value().isEmpty()) {
+                            every = false;
+                        } else {
+                            totals.add(held.value().get());
+                        }
+                    }
+                }
+            }
+            return every ? totals : null;
+        }
+
+        /**
          * Each of the other totals spread over {@code many} elements the way the first is, into
          * {@code shares}; false where one of them reaches no decomposition by this shape, which
          * leaves the shape with no container that comes to all of them.
          */
         private boolean spreadTheRest(List<BigDecimal> totals, int many, Spread how,
                                       List<AlsoSpread> shares) {
+            boolean every = true;
             for (int i = 0; i < totals.size(); i++) {
                 Also each = makings.also().get(i);
+                // Every total is spread, and each that could not be worked out is said, whichever
+                // of the totals before it reached no decomposition.
                 switch (splitting(totals.get(i), many, each.ends(), how, each.carrier(), false)) {
-                    case Split.None _ -> {
-                        return false;
-                    }
+                    case Split.None _ -> every = false;
                     case Split.NotWorkedOut(UnheldNumber why) -> {
                         left.unheld(new CompositionCapacity(
                                 CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER, why));
-                        return false;
+                        every = false;
                     }
                     case Split.Some(List<BigDecimal> values) -> shares.add(new AlsoSpread(
                             each.carrier(), values.stream().<Place>map(Count::of).toList()));
                 }
             }
-            return true;
+            return every;
         }
 
         /**
