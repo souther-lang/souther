@@ -355,6 +355,26 @@ final class NestedContainersAddingUp {
     }
 
     /**
+     * The type of what the innermost container {@code leaf} is an element of holds, {@code container}
+     * being the type of the outermost — or null where a container on the way is no list or set, or
+     * the way from one to the next is not fields all the way.
+     */
+    static Type ofTheLeaves(Type container, TermPath leaf, RuleReadingContext reading) {
+        List<TermPath> chain = leaf.containersHoldingIt();
+        Type type = container;
+        for (int at = 0; at < chain.size() && type != null; at++) {
+            if (!(TypeView.shapeOf(type, reading.source().inners(), reading.source().symbols(),
+                    reading.source().kinds(), reading.source().sums())
+                    instanceof Shape.Sequence holding)) {
+                return null;
+            }
+            type = at == chain.size() - 1 ? holding.element()
+                    : typeAlong(holding.element(), chain.get(at), chain.get(at + 1), reading);
+        }
+        return type;
+    }
+
+    /**
      * The type of the container at {@code to}, a position inside the element {@code element} of the
      * container at {@code from}, or null where the way there is not fields all the way.
      */

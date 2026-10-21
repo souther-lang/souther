@@ -11,6 +11,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -57,7 +58,8 @@ class AMapOfHowOftenEachKeyOccursIsFilteredAndMeasuredWholeTest {
     void theModelDrawsItsLineAndIsOwedARowOnEachSideOfIt() {
         Compilation before = measured(MODEL);
         List<String> offered = offeredInputs(before);
-        assertTrue(offered.contains("[\"\"], 0") && offered.contains("[\"\"], 3"),
+        assertTrue(offered.stream().anyMatch(each -> each.matches("\\[\"[^\"]*\"], 0"))
+                        && offered.stream().anyMatch(each -> each.matches("\\[\"[^\"]*\"], 3")),
                 () -> "a row is offered past the line and one short of it: " + offered);
         assertTrue(report(before).contains("multiplicity(xs[*])"),
                 () -> "the line is on how often a key occurs: " + report(before));
@@ -69,6 +71,55 @@ class AMapOfHowOftenEachKeyOccursIsFilteredAndMeasuredWholeTest {
         assertEquals(List.of(), AdequacyReport.of(after).adequacyGaps().stream()
                         .map(each -> each.kind() + " " + each.about()).toList(),
                 () -> "nothing is owed once the rows stand on the line: " + report(after));
+    }
+
+    /**
+     * Keys a rule keeps from the empty string, as a label is kept to one letter at least: the key
+     * written as often as a count asks is one its type admits, as the keys of a set of them are,
+     * and not the first string along the order, which every row holding it is refused for. So
+     * a row is offered on each side of the line, of a list of them or of the labels of a list of
+     * issues alike.
+     */
+    @Test
+    void aKeyWrittenAsOftenAsACountAsksIsOneItsTypeAdmits() {
+        String labels = """
+                module example.popular
+
+                data Label = String
+                    invariant String.length(value) >= 1
+
+                """;
+        String flat = labels + """
+                let countsOf (xs: List<Label>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x.value, 1, n -> n + 1, acc),
+                        Map.empty, xs)
+
+                behavior popular : (xs: List<Label>, atLeast: Int) -> Map<String, Int>
+
+                let popular (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast, countsOf(xs))
+                """;
+        String nested = labels + """
+                data Issue = { id: String, labels: Set<Label> }
+
+                let countsOf (issues: List<Issue>): Map<String, Int> =
+                    List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty,
+                        List.flatMap(i -> List.map(l -> l.value, Set.toList(i.labels)), issues))
+
+                behavior popular : (issues: List<Issue>, atLeast: Int) -> Map<String, Int>
+
+                let popular (issues, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast, countsOf(issues))
+                """;
+        for (String model : List.of(flat, nested)) {
+            Compilation compilation = measured(model);
+            List<String> offered = offeredInputs(compilation);
+            assertFalse(offered.isEmpty(), () -> "rows are offered: " + report(compilation));
+            assertTrue(offered.stream().noneMatch(each -> each.contains("Label(\"\")")),
+                    () -> "no row holds a label the type refuses: " + offered);
+            assertFalse(report(compilation).contains("nothing could show a row can be written"),
+                    () -> "every point has a row composed for it: " + report(compilation));
+        }
     }
 
     private static List<String> offeredInputs(Compilation compilation) {

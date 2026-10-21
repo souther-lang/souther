@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -16,9 +17,11 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Text;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.Type;
 
 import java.math.RoundingMode;
@@ -725,17 +728,17 @@ final class CardinalityComposer {
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        List<Place> candidates = valuesToCount(kept, own, container, place, carrier, run, unheld,
-                unnamed);
+        TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
+                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
+        List<Place> candidates = valuesToCount(kept, own, container, place, carrier, run,
+                holding.element(), reading, unheld, unnamed);
         if (candidates == null) {
             return notChosen("where `" + kept.key() + "` turns over an element of `"
                     + container + "` could not be worked out");
         }
         List<Place> beside = candidates.isEmpty() ? List.of()
-                : valuesBeside(candidates.getFirst(), candidates, kept, carrier, run, unheld,
-                        unnamed);
-        TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
-                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
+                : valuesBeside(candidates.getFirst(), candidates, kept, carrier, run,
+                        holding.element(), reading, unheld, unnamed);
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
@@ -840,8 +843,9 @@ final class CardinalityComposer {
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         KeptOccurrences kept = term.selection();
+        Type leaves = NestedContainersAddingUp.ofTheLeaves(sourceType, place, reading);
         List<Place> candidates = valuesToCount(kept, own, chain.getLast(), place, carrier, run,
-                unheld, unnamed);
+                leaves, reading, unheld, unnamed);
         if (candidates == null) {
             return notChosen("where `" + kept.key() + "` turns over an element of `"
                     + chain.getLast() + "` could not be worked out");
@@ -851,7 +855,7 @@ final class CardinalityComposer {
                     : "no value at `" + place + "` to repeat that `" + kept.key() + "` keeps");
         }
         List<Place> beside = valuesBeside(candidates.getFirst(), candidates, kept, carrier, run,
-                unheld, unnamed);
+                leaves, reading, unheld, unnamed);
         NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
         List<FixtureTemplate> built = new ArrayList<>();
         CompositionShortfall rest = CompositionShortfall.NONE;
@@ -956,7 +960,8 @@ final class CardinalityComposer {
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         List<Place> beside = new ArrayList<>();
-        for (Place each : valuesTheRulesLeave(carrier, run, unheld, unnamed)) {
+        Type leaves = NestedContainersAddingUp.ofTheLeaves(sourceType, place, reading);
+        for (Place each : valuesTheRulesLeave(carrier, run, leaves, reading, unheld, unnamed)) {
             if (values.stream().noneMatch(each::sameAs)) {
                 beside.add(each);
             }
@@ -1088,12 +1093,13 @@ final class CardinalityComposer {
     private static List<Place> valuesToCount(KeptOccurrences kept, NumericTerm own,
                                              TermPath container, TermPath place,
                                              Carrier carrier, NumericDomain.Bounds run,
+                                             Type element, RuleReadingContext reading,
                                              Set<CompositionCapacity> unheld,
                                              Set<CompositionRepertoire> unnamed) {
         if (kept != null) {
             return keptValues(kept, own, container, place, carrier, run, unheld, unnamed);
         }
-        return valuesTheRulesLeave(carrier, run, unheld, unnamed);
+        return valuesTheRulesLeave(carrier, run, element, reading, unheld, unnamed);
     }
 
     /**
@@ -1102,19 +1108,56 @@ final class CardinalityComposer {
      */
     private static List<Place> valuesBeside(Place counted, List<Place> toCount, KeptOccurrences kept,
                                             Carrier carrier, NumericDomain.Bounds run,
+                                            Type element, RuleReadingContext reading,
                                             Set<CompositionCapacity> unheld,
                                             Set<CompositionRepertoire> unnamed) {
         List<Place> pool = kept == null ? toCount
-                : valuesTheRulesLeave(carrier, run, unheld, unnamed);
+                : valuesTheRulesLeave(carrier, run, element, reading, unheld, unnamed);
         return pool.stream().filter(each -> !each.sameAs(counted)).toList();
     }
 
+    /**
+     * Values of an element of type {@code element} inside {@code run}. A string is one the rules on
+     * the element admit: walked to along the order, the first string of a run that starts nowhere
+     * is the empty one, which a rule giving each label a letter refuses once a row holding it is
+     * written. Where those rules offer none, the order is walked as for a number.
+     *
+     * @param element the type of the element, or null where it is not known
+     */
     private static List<Place> valuesTheRulesLeave(Carrier carrier, NumericDomain.Bounds run,
+                                                   Type element, RuleReadingContext reading,
                                                    Set<CompositionCapacity> unheld,
                                                    Set<CompositionRepertoire> unnamed) {
-        return carrier.counts()
-                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
+        if (carrier.counts()) {
+            return valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed);
+        }
+        List<Place> admitted = element == null ? List.of()
+                : stringsAdmittedWithin(element, run, reading);
+        return !admitted.isEmpty() ? admitted
                 : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
+    }
+
+    /** The strings the rules on {@code element} admit that {@code run} holds, as many as a count
+     *  is composed with and no two alike ({@link Witnesses#distinctValuesOf}). */
+    private static List<Place> stringsAdmittedWithin(Type element, NumericDomain.Bounds run,
+                                                     RuleReadingContext reading) {
+        List<Place> out = new ArrayList<>();
+        for (FixtureTemplate each : Witnesses.distinctValuesOf(element, MOST_ELEMENTS + 1,
+                reading, Set.of()).values()) {
+            // The names the fixture was written under, taken off to the string they wrap.
+            Hir.Expr at = each.value();
+            while (at instanceof Hir.Apply applied && applied.args().size() == 1
+                    && applied.application() instanceof ApplicationOrigin.ComposedFixture) {
+                at = applied.args().getFirst();
+            }
+            if (at instanceof Hir.StringLit written) {
+                Place place = Text.of(written.value());
+                if (holds(run, place) && out.stream().noneMatch(place::sameAs)) {
+                    out.add(place);
+                }
+            }
+        }
+        return out;
     }
 
     /**
