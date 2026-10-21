@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,6 +42,37 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     private static final String OVER_A_RUN = "over a run";
 
+    /** Each model measured once for the class: a test asks the words and the classes of one
+     *  model, and only reads it. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
+    /**
+     * The behavior {@code m} taking {@code inputs} and answering {@code body}, read for the lines
+     * its rules draw and no row composed at them: what is asked here is the word a place is left
+     * with and the classes it is parted into, which no composed row moves.
+     */
+    private static Compilation measured(String inputs, String declarations, String body) {
+        return MEASURED.computeIfAbsent("""
+                module w1
+                %s
+                behavior m : (%s) -> Bool
+                let m (%s) = %s
+                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
+                source -> {
+                    Compilation compilation = Compilation.ofSource(source, "Main");
+                    compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+                    compilation.answerEverything();
+                    return compilation;
+                });
+    }
+
     /**
      * The classes the axis at {@code path} is divided into, where a place the relation does not
      * leave undivided is parted at the values that settle it whatever the rest hold — or none
@@ -47,15 +80,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     private static List<String> classesAt(String inputs, String declarations, String body,
                                           String path) {
-        Compilation compilation = Compilation.ofSource("""
-                module w1
-                %s
-                behavior m : (%s) -> Bool
-                let m (%s) = %s
-                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured(inputs, declarations, body);
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("w1")).value().get("m");
         return evidence.axes().stream().filter(axis -> axis.path().equals(path))
@@ -68,15 +93,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     private static Map<String, String> left(String inputs, String declarations, String body,
                                             String at) {
-        Compilation compilation = Compilation.ofSource("""
-                module w1
-                %s
-                behavior m : (%s) -> Bool
-                let m (%s) = %s
-                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured(inputs, declarations, body);
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, String> out = new LinkedHashMap<>();
@@ -873,7 +890,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 behavior m : (v: %s) -> Bool
                 let m (v) = true
                 """.formatted(declaration, name), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));

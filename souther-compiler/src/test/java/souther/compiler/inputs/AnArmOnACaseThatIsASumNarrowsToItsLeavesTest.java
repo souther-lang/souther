@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -19,6 +20,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -245,12 +247,6 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
      */
     @Test
     void aValueLeftSeveralCasesStandsAtItsPosition() {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
-        c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
-        assertEquals(List.of(), c.errors().stream()
-                .map(e -> e.diagnostic().code().toString()).toList(), "the model is measured");
-
         Set<String> rated = underTheField(named("rate"), "r");
         assertTrue(rated.contains("r.level") && rated.stream().noneMatch(each -> each.contains("{")),
                 () -> "the value compared is the position's: " + rated);
@@ -273,8 +269,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
      */
     @Test
     void aNameTheCasesOfACaseShareStandsUnderThoseCases() {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
-        c.answerEverything();
+        Compilation c = measured(MODEL);
         InputDomain inputs = c.db().ask(new Adequacy.Inputs(c.modules().get(0))).value()
                 .get("busy");
         assertEquals(List.of("f.unit@Desk.count", "f.unit@Ward.count"),
@@ -290,9 +285,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
      */
     @Test
     void aComparisonOfThatNameDrawsItsLineUnderEachCase() {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
-        c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
+        Compilation c = measured(MODEL);
         String human = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
         assertTrue(human.contains("read as busy/f.unit@Desk.count: = 4")
                         && human.contains("read as busy/f.unit@Ward.count: = 4"),
@@ -387,13 +380,34 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
         return found;
     }
 
+    /** Each model asked about here, measured whole, once for the class. */
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
+    /**
+     * {@code model} measured as a report measures it, and every question about it answered.
+     *
+     * <p>Once for the class: every question here reads the same answers of the same model, and none
+     * of them changes one.
+     */
+    private static Compilation measured(String model) {
+        return MEASURED.computeIfAbsent(model, written -> {
+            Compilation c = Compilation.ofSource(written, "Main");
+            c.measure(Adequacy.Asked.fullReport());
+            c.answerEverything();
+            assertEquals(List.of(), c.errors().stream()
+                    .map(e -> e.diagnostic().code() + " " + e.diagnostic().said() + " "
+                            + e.diagnostic().literalMessage()).toList(), "the model is measured");
+            return c;
+        });
+    }
+
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
     private static DecisionReading readingOf(String model, String behavior) {
-        Compilation c = Compilation.ofSource(model, "Main");
-        c.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        c.answerEverything();
-        assertEquals(List.of(), c.errors().stream()
-                .map(e -> e.diagnostic().code() + " " + e.diagnostic().said() + " "
-                        + e.diagnostic().literalMessage()).toList(), "the model is measured");
+        Compilation c = measured(model);
         DecisionEvidence decided = c.db().ask(new Adequacy.Decides(c.modules().get(0))).value()
                 .get(behavior);
         assertNotNull(decided, () -> "the rules of " + behavior + " are read");
@@ -409,8 +423,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
 
     /** Every location {@code behavior}'s body names, read the way its measurement reads it. */
     private static List<TermPath> named(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = measured(MODEL);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

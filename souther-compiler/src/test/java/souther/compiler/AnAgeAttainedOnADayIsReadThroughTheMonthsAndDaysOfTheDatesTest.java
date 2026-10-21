@@ -50,7 +50,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
             """;
 
     /** Each source measured once for the class: the tests here only read what a measurement says,
-     *  and three ask the age at sixty. */
+     *  and four ask the age between forty and sixty-five. */
     private static final Map<String, Compilation> MEASURED = new HashMap<>();
 
     private static Compilation compiled(String source) {
@@ -80,7 +80,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
 
     @Test
     void theAgeAttainedOnADayIsReadInTheMonthsAndDaysAndInTheYears() {
-        String report = report(AGE + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n");
+        String report = report(BETWEEN_FORTY_AND_SIXTY_FIVE);
 
         assertFalse(report.contains(NOT_REACHED), report);
         assertTrue(report.contains("rather than dividing the values here, about"
@@ -102,22 +102,20 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     }
 
     /**
-     * The rows offered stand at both sides of the line of the age, and at both sides of the
-     * correction by the month and day where the years are sixty apart: the same difference of
-     * years, an age of fifty-nine before the day and of sixty on or after it.
+     * The rows offered stand at both sides of each line of the age, and at both sides of the
+     * correction by the month and day where the years are as far apart as the line: the same
+     * difference of years, an age one short of the line before the day and at the line on or
+     * after it.
      */
     @Test
     void theRowsOfferedStandAtBothSidesOfTheAgeAndOfTheMonthAndDayCorrection() {
-        Compilation compilation = compiled(AGE
-                + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n");
+        Compilation compilation = compiled(BETWEEN_FORTY_AND_SIXTY_FIVE);
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
                 .text();
 
-        Set<Integer> ages = new HashSet<>();
-        boolean sixtyYearsApartBefore = false;
-        boolean sixtyYearsApartOnOrAfter = false;
+        Set<String> atTheLines = new HashSet<>();
         for (String row : offered.lines().filter(each -> each.contains("Date(\"")).toList()) {
             List<LocalDate> dates = new ArrayList<>();
             int at = 0;
@@ -126,20 +124,18 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 dates.add(LocalDate.parse(row.substring(at + 6, end)));
                 at = end;
             }
-            int age = ageAttained(dates.get(0), dates.get(1));
-            ages.add(age);
-            if (dates.get(1).getYear() - dates.get(0).minusDays(1).getYear() == 60) {
-                sixtyYearsApartBefore |= age == 59;
-                sixtyYearsApartOnOrAfter |= age == 60;
-            }
+            int apart = dates.get(1).getYear() - dates.get(0).minusDays(1).getYear();
+            atTheLines.add(apart + " apart, " + ageAttained(dates.get(0), dates.get(1)));
         }
 
-        assertTrue(ages.contains(59) && ages.contains(60), ages + "\n" + offered);
-        assertTrue(sixtyYearsApartBefore && sixtyYearsApartOnOrAfter, offered);
+        assertTrue(atTheLines.containsAll(List.of(
+                "40 apart, 39", "40 apart, 40", "65 apart, 64", "65 apart, 65")),
+                atTheLines + "\n" + offered);
     }
 
     /**
-     * What each row offered is answered, worked out apart from the reading and put to the program.
+     * What each row offered for a way that states the age at two lines is answered, worked out
+     * apart from the reading and put to the program, with a row at each side of each line.
      *
      * <p>The rows come with the answer the calendar gives for the age, and are written as the
      * examples of the behavior: the program is run on each and an answer that is not the one
@@ -147,14 +143,6 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
      * what the line was drawn at, shows as an answer that differs, and what is offered is
      * covered by what was written, with no point left without a row.
      */
-    @Test
-    void theRowsOfferedAreAnsweredAsTheCalendarWorksTheAgeOut() {
-        assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(
-                AGE + "let f (birthday, on) = attainedAgeOn(birthday, on) >= 60\n",
-                age -> age >= 60, 59, 60);
-    }
-
-    /** The same of a way that states the age at two lines, with a row at each side of each. */
     @Test
     void theRowsOfferedForTwoComparisonsOfOneAgeAreAnsweredAsTheCalendarWorksTheAgeOut() {
         assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(BETWEEN_FORTY_AND_SIXTY_FIVE,
@@ -265,22 +253,6 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 + " is not worked out, about `Date.year((birthday -1 days))`"), report);
     }
 
-    private static final String YEARS_UNREAD = NOT_REACHED
-            + ", so which values here settle it on their own is not worked out, about `Date.year(";
-
-    /** The age bound by a {@code let} and compared at the two lines of a band. */
-    @Test
-    void anAgeBoundByALetAndComparedAtTwoLinesIsReadInTheYears() {
-        String report = report(AGE + """
-                let f (birthday, on) = {
-                    let age = attainedAgeOn(birthday, on)
-                    if age >= 40 && age < 65 then true else false
-                }
-                """);
-
-        assertFalse(report.contains(YEARS_UNREAD), report);
-    }
-
     /** The chain measured once, for the tests that read it. A measure of it is most of what they
      *  cost, and what each asks is of this one. */
     private static final class Measured {
@@ -291,7 +263,8 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     /**
      * Arms of an {@code if} chain beside a flag add ways to the third comparison, most of which
      * ask the age to be at least seventy and below nineteen at once. Those are no way and do not
-     * count against the figure, so each of the ways left is looked along.
+     * count against the figure, so each of the ways left is looked along, and the age the
+     * {@code let} binds is read in the years of the dates at each line it is compared at.
      */
     @Test
     void aChainOfAgeComparisonsBesideAFlagIsReadInTheYearsMonthsAndDays() {
@@ -331,8 +304,15 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
 
     /**
      * The rows offered stand at both sides of each line of the age, and the class each is
-     * answered is the one the calendar's age and the flag give: the rows are written back as
-     * examples whose answers are worked out here, apart from the compiler.
+     * answered is the one the calendar's age and the flag give.
+     *
+     * <p>The answers are worked out here, apart from the compiler, and the rows are written back
+     * as examples the program is run on: an answer that is not the program's is an error. That
+     * holds the working out of the age, the chain of comparisons and the rows put at its lines to
+     * one account of the calendar together, which no test of one of them alone does. The rows run
+     * are the ones at the lines — the rows offered, and past seventy the day each age is attained
+     * and the day before at both values of the flag, which the rows offered stand at only where a
+     * comparison asks it.
      */
     @Test
     void theRowsOfferedForAChainOfAgeComparisonsAreAnsweredAsTheCalendarWorksTheClassOut() {
@@ -348,24 +328,18 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
         Set<Integer> ages = new HashSet<>();
         for (String line : offered.lines().toList()) {
             Matcher found = row.matcher(line);
-            if (!found.find()) {
-                continue;
+            if (found.find()) {
+                LocalDate birthday = LocalDate.parse(found.group(1));
+                LocalDate on = LocalDate.parse(found.group(2));
+                ages.add(ageAttained(birthday, on));
+                example(examples, birthday, on, Boolean.parseBoolean(found.group(3)));
             }
-            LocalDate birthday = LocalDate.parse(found.group(1));
-            LocalDate on = LocalDate.parse(found.group(2));
-            boolean ascendant = Boolean.parseBoolean(found.group(3));
-            int age = ageAttained(birthday, on);
-            ages.add(age);
-            example(examples, birthday, on, ascendant);
         }
         assertTrue(ages.containsAll(List.of(18, 19, 69, 70)),
                 () -> "a row at each side of each line: " + ages + "\n" + offered);
 
-        // The rows offered stand at the points of each comparison and not at every way the flag
-        // combines with them, so the rows past seventy are written here at both values of it,
-        // at the day each age is attained and the day before.
         LocalDate born = LocalDate.of(1950, 6, 15);
-        for (int age : List.of(18, 19, 69, 70, 71)) {
+        for (int age : List.of(69, 70)) {
             LocalDate attained = born.minusDays(1).plusYears(age);
             for (LocalDate on : List.of(attained, attained.minusDays(1))) {
                 example(examples, born, on, true);
@@ -373,35 +347,23 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
             }
         }
 
-        // Answered and not measured: the examples are run against the program, and one whose
-        // answer is not the program's is an error, which is all this asks.
+        // Run and not measured: an example whose answer is not the program's is an error, which
+        // is all this asks of the rows.
         Compilation answered = Compilation.ofSource(CHAIN + "\nexample f\n" + examples, "Main");
         answered.answerEverything();
-
         assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
     }
-
-    private static final String ONE_LINE_BESIDE_A_FLAG = AGE.replace(
-            "behavior f : (birthday: Date, on: Date) -> Bool\n", "") + """
-            behavior f : (birthday: Date, on: Date, ascendant: Bool) -> Int
-            let f (birthday, on, ascendant) = {
-                let age = attainedAgeOn(birthday, on)
-                if age >= 70 && ascendant then 3
-                else if age >= 70 then 2
-                else 0
-            }
-            """;
 
     /**
      * The years of the two dates are tied by the age, so the year of the day is not left the whole
      * of a year's range by the year of the birthday still to be chosen: every point of the month
-     * and day correction is offered a row, and the rows are answered as the calendar works the
-     * class out.
+     * and day correction at seventy, where the flag is asked beside the age, is offered a row,
+     * each where the calendar puts it.
      */
     @Test
     void everyPointOfTheCorrectionOfAnAgeBesideAFlagIsOfferedARow() {
-        Compilation compilation = compiled(ONE_LINE_BESIDE_A_FLAG);
-        String report = report(compilation);
+        Compilation compilation = Measured.CHAIN_OF_AGES;
+        String report = Measured.REPORT;
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
@@ -411,7 +373,6 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
 
         Pattern row = Pattern.compile(
                 "Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\), (true|false)");
-        StringBuilder examples = new StringBuilder();
         Set<String> points = new HashSet<>();
         for (String line : offered.lines().toList()) {
             Matcher found = row.matcher(line);
@@ -422,12 +383,9 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 int age = ageAttained(birthday, on);
                 points.add(age + " " + (beforeTheDay(birthday, on) ? "before" : "on or after")
                         + " " + ascendant);
-                examples.append("    | (Date(\"").append(birthday).append("\"), Date(\"")
-                        .append(on).append("\"), ").append(ascendant).append(") -> ")
-                        .append(age >= 70 ? (ascendant ? 3 : 2) : 0).append('\n');
             }
         }
-        assertFalse(examples.isEmpty(), offered);
+        assertFalse(points.isEmpty(), offered);
         // A row at each side of the correction by the month and day where the age is seventy, and
         // one at each value of the flag from there on: the points the report would name if one of
         // them had no row, asked of the rows themselves. The rows stand at the points of each
@@ -437,11 +395,6 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 points.toString());
         assertTrue(points.contains("70 on or after true") && points.contains("70 on or after false"),
                 points.toString());
-
-        Compilation answered = Compilation.ofSource(
-                ONE_LINE_BESIDE_A_FLAG + "\nexample f\n" + examples, "Main");
-        answered.answerEverything();
-        assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
     }
 
     /**

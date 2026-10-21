@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -12,8 +13,10 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -390,7 +393,22 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
                 .json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** Each model measured once for the class: the tests here ask three models for their page
+     *  and their document, and only read them. */
     private static Compilation measured(String model) {
+        return MEASURED.computeIfAbsent(model, WhatTheOfferWasShortOfReachesTheAccountTest::measuring);
+    }
+
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
+    private static Compilation measuring(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

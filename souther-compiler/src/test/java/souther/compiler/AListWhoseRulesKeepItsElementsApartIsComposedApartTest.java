@@ -354,6 +354,15 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
         });
     }
 
+    /** Compiled and run and not measured, for a question about what a row answers: a row the
+     *  model does not answer as written is refused by running it, and nothing the measurement
+     *  finds is read. */
+    private static Compilation unmeasured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return compilation;
+    }
+
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
@@ -500,7 +509,7 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
                                                     + holder + "` " + run);
                                         }
                                     })));
-                    Compilation answered = measured(model + "    | \"composed\" : (" + input
+                    Compilation answered = unmeasured(model + "    | \"composed\" : (" + input
                             + ") -> " + (totalOf(value) >= 10 ? 1 : 0) + "\n");
                     assertEquals(List.of(), errors(answered), input);
                 }

@@ -64,19 +64,23 @@ class ReadingsHoldTheirContractTest {
         return out;
     }
 
-    /** Every pair of {@code from}, and every triple of its first {@code triplesOf}. */
+    /**
+     * Every pair of {@code from}, and every triple of its first {@code triplesOf}, each once
+     * whatever its order: which order the readings come in is what {@link #orders} gives every
+     * test that asks it.
+     */
     private static List<List<Type>> groups(List<Type> from, int triplesOf) {
         List<List<Type>> out = new ArrayList<>();
-        for (Type l : from) {
-            for (Type r : from) {
-                out.add(List.of(l, r));
+        for (int l = 0; l < from.size(); l++) {
+            for (int r = l; r < from.size(); r++) {
+                out.add(List.of(from.get(l), from.get(r)));
             }
         }
         List<Type> few = from.subList(0, Math.min(triplesOf, from.size()));
-        for (Type a : few) {
-            for (Type b : few) {
-                for (Type c : few) {
-                    out.add(List.of(a, b, c));
+        for (int a = 0; a < few.size(); a++) {
+            for (int b = a; b < few.size(); b++) {
+                for (int c = b; c < few.size(); c++) {
+                    out.add(List.of(few.get(a), few.get(b), few.get(c)));
                 }
             }
         }
@@ -123,7 +127,7 @@ class ReadingsHoldTheirContractTest {
             Type expected = Readings.of(readings);
             for (List<Type> order : orders(readings)) {
                 assertEquals(expected, Readings.of(order),
-                        show(readings) + " read as " + show(order));
+                        () -> show(readings) + " read as " + show(order));
             }
         }
     }
@@ -134,7 +138,8 @@ class ReadingsHoldTheirContractTest {
         for (List<Type> readings : everything()) {
             List<Type> twice = new ArrayList<>(readings);
             twice.addAll(readings);
-            assertEquals(Readings.of(readings), Readings.of(twice), show(readings) + " given twice");
+            assertEquals(Readings.of(readings), Readings.of(twice),
+                    () -> show(readings) + " given twice");
         }
     }
 
@@ -145,16 +150,19 @@ class ReadingsHoldTheirContractTest {
      */
     @Test
     void theAnswerHasNothingLeftToSettle() {
-        for (List<Type> readings : everything()) {
-            Readings all = new Readings();
-            for (Type reading : readings) {
-                all.add(reading);
-            }
-            Type answer = all.answer();
-            assertEquals(answer, all.answer(), show(readings) + " asked twice");
-            if (answer != null) {
-                all.add(answer);
-                assertEquals(answer, all.answer(), show(readings) + " read back into itself");
+        for (List<Type> group : everything()) {
+            for (List<Type> readings : orders(group)) {
+                Readings all = new Readings();
+                for (Type reading : readings) {
+                    all.add(reading);
+                }
+                Type answer = all.answer();
+                assertEquals(answer, all.answer(), () -> show(readings) + " asked twice");
+                if (answer != null) {
+                    all.add(answer);
+                    assertEquals(answer, all.answer(),
+                            () -> show(readings) + " read back into itself");
+                }
             }
         }
     }

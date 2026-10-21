@@ -88,26 +88,26 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
         assertTrue(answer.err().contains("構文エラー"), answer.err());
     }
 
+    /**
+     * A value that is not a tag is refused, naming where it was written. A reader sent to
+     * {@code --lang} over a variable their shell exports is sent to fix something they did not
+     * write.
+     *
+     * <p>A tag whose first subtag is a language and whose second says nothing, because that is the
+     * one a tolerant reading would take for English. Whether a tag is one is
+     * {@code ALanguageIsNamedByATagAndNotByACatalogTest}'s; what is asked here is what the command
+     * line does with the answer when the shell gave the value.
+     */
     @Test
-    void aValueThatIsNotATagIsRefused() throws Exception {
+    void aValueThatIsNotATagIsRefusedNamingTheVariableAndNotTheOption() throws Exception {
         Answer answer = souther(Map.of("SOUTHER_LANG", "en-!!"),
                 "compile", source(MODEL, "ok.sou").toString(), "-d", dir.resolve("out").toString());
 
         assertEquals(2, answer.code(), answer.err());
         assertTrue(answer.err().contains("SOUTHER_LANG"), answer.err());
         assertTrue(answer.err().contains("en-!!"), answer.err());
-        assertEquals("", answer.out(), answer.out());
-    }
-
-    /** Naming where it was written. A reader sent to `--lang` over a variable their shell exports is
-     *  sent to fix something they did not write. */
-    @Test
-    void theRefusalNamesTheVariableAndNotTheOption() throws Exception {
-        Answer answer = souther(Map.of("SOUTHER_LANG", "!!"),
-                "compile", source(MODEL, "ok.sou").toString(), "-d", dir.resolve("out").toString());
-
-        assertEquals(2, answer.code(), answer.err());
         assertFalse(answer.err().contains("`--lang`"), answer.err());
+        assertEquals("", answer.out(), answer.out());
     }
 
     /** A language with no catalog is named, here as on the line. */

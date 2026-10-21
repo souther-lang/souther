@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.RowsOfABlock;
 import souther.compiler.diag.SourceRendering;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -449,9 +450,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      */
     @Test
     void aClassOpenAtBothEndsOffersAValueOfItsOwnOrNone() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = model();
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "openOnBothSidesDense",
@@ -513,9 +512,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      */
     @Test
     void theClassOfEverythingElseIsOfferedAValueThatIsNoneOfThem() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = model();
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledDense", SourceRendering.namedByIdentity(compilation.texts())).text();
@@ -529,11 +526,29 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                         + " a class: " + moment);
     }
 
+    /** The model measured once for the class: every test here reads it, and only reads it. */
+    private static Compilation measuredModel;
+
+    private static synchronized Compilation model() {
+        if (measuredModel == null) {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            measuredModel = compilation;
+        }
+        return measuredModel;
+    }
+
+    /** And given back when the class is done with it: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static synchronized void released() {
+        measuredModel = null;
+    }
+
     /** What the measures answered for each named behavior. */
     private static Map<String, Measured> measured(Iterable<String> behaviors) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = model();
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("example.matrix")).value();
         assertNotNull(coverage, "the model under test compiles");
@@ -575,9 +590,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     @Test
     void howTheValuesStepIsAskedOfTheCarrier() {
         for (String behavior : List.of("twoLinesDense", "twoLinesMoment")) {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = model();
             String block = souther.compiler.report.GeneratedRows.of(
                     compilation, "example.matrix", behavior, SourceRendering.namedByIdentity(compilation.texts())).text();
 

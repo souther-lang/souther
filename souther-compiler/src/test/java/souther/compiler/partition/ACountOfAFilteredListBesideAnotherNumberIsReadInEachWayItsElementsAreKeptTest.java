@@ -131,10 +131,11 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
             new Related("k == %s", "%s == k", (k, n) -> k.equals(n)));
 
     /**
-     * Every row of {@code a} and {@code b} from minus one to one and {@code k} from minus three to
+     * Every row of {@code a} and {@code b} at nought and one and {@code k} from minus three to
      * four, which the model answers as the rows say, written either way round: the borders on
      * {@code k} are where the relation turns for a count of nought, one and two, and a row stands
-     * at every point of each that one is owed at.
+     * at every point of each that one is owed at. The filter keeps a value above nought, so each
+     * of the two kept or not is every count there is.
      */
     @Test
     void theBordersAreWhereTheRelationTurnsForEachCountAndARowIsAtEveryPoint() {
@@ -142,8 +143,8 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
             Set<String> turns = new TreeSet<>();
             StringBuilder rows = new StringBuilder("example f\n");
             for (int k = -3; k <= 4; k++) {
-                for (int a = -1; a <= 1; a++) {
-                    for (int b = -1; b <= 1; b++) {
+                for (int a = 0; a <= 1; a++) {
+                    for (int b = 0; b <= 1; b++) {
                         int kept = (a > 0 ? 1 : 0) + (b > 0 ? 1 : 0);
                         boolean holds = related.holds().test(k, kept);
                         rows.append("    | \"k%d a%d b%d\" : (%d, %d, %d) -> %s\n".formatted(

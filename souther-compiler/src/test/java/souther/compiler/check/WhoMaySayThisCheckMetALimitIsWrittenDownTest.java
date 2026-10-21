@@ -5,6 +5,8 @@ import souther.compiler.WhatWasCompiled;
 
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
+import java.lang.classfile.constantpool.PoolEntry;
+import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -185,7 +187,7 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
 
     @Test
     void onlyAReaderThatMetOneSaysThisCheckMetALimit() {
-        assertEquals(declared(MAY_SAY), callers(assembling()),
+        assertEquals(declared(MAY_SAY), callersOfTheWaysIn(),
                 "a limit is made where one was met and nowhere else. What each of these met: "
                         + why(MAY_SAY));
     }
@@ -193,7 +195,7 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
     /** And that something does make one, so the rule above is not read over no classes at all. */
     @Test
     void andSomethingDoesSaySo() {
-        assertFalse(callers(assembling()).isEmpty(),
+        assertFalse(callersOfTheWaysIn().isEmpty(),
                 "nothing makes a limit, so the rule above saw nothing");
     }
 
@@ -245,10 +247,27 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
     }
 
     /** Which methods call any of {@code watched}. */
+    private static Map<String, String> callersOfTheWaysIn;
+
+    /** Who calls a way in, read once for the class: two questions here ask it. */
+    private static Map<String, String> callersOfTheWaysIn() {
+        if (callersOfTheWaysIn == null) {
+            callersOfTheWaysIn = callers(assembling());
+        }
+        return callersOfTheWaysIn;
+    }
+
     private static Map<String, String> callers(Set<Producer> watched) {
         assertFalse(watched.isEmpty(), "no producer was watched, so this says nothing");
+        Set<String> owners = new TreeSet<>();
+        watched.forEach(each -> owners.add(each.owner()));
         Map<String, String> calls = new TreeMap<>();
         for (ClassModel model : WhatWasCompiled.compiled().all()) {
+            // A call names its owner in the caller's constant pool, so a class whose pool names
+            // none of the owners watched calls none of them and its code is not read.
+            if (!namesAnyOf(model, owners)) {
+                continue;
+            }
             String from = model.thisClass().asInternalName().replace('/', '.').replace('$', '.');
             for (MethodModel method : model.methods()) {
                 method.code().ifPresent(code -> code.forEach(element -> {
@@ -263,6 +282,15 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
             }
         }
         return calls;
+    }
+
+    private static boolean namesAnyOf(ClassModel model, Set<String> owners) {
+        for (PoolEntry entry : model.constantPool()) {
+            if (entry instanceof Utf8Entry text && owners.contains(text.stringValue())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** What a method takes, written the way a reader of a licence above writes it. */

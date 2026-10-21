@@ -27,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * container it answered holds, whether it holds anything, and what number it answers in each of
  * the cases the library defines it in.
  *
- * <p>One program per row, asked of both, and each side held to its own expectation rather than to
+ * <p>Each row its own helper and its own two behaviors, asked of both, and each side held to its
+ * own expectation rather than to
  * the other's: two readings agreeing on a wrong answer is not what is asked. The measure is read
  * where a guard {@code helper(x) >= 5} draws its lines; the discharge where
  * {@code Digit(helper(c))} under {@code c >= from} is owed nothing. Each law is asked once where it
@@ -104,7 +105,27 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             new Row("if 10 - 2 * Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 9"
                     + " then c else 0 - 1", 0, Set.of(), false));
 
-    private static String program(Row row) {
+    /** {@code rows}, each a {@code helper} with the two behaviors that read it beside it. */
+    private static String program(List<Row> rows) {
+        StringBuilder each = new StringBuilder();
+        for (int at = 0; at < rows.size(); at++) {
+            each.append("""
+
+                    let helper%1$d (c: Int): Int =
+                        %2$s
+
+                    behavior check%1$d : (x: Int) -> Int | Bad
+                    let check%1$d (x) = {
+                        guard helper%1$d(x) >= 5 else Bad
+                        0
+                    }
+
+                    behavior f%1$d : (c: Int) -> Digit
+                        constructs Digit
+                    let f%1$d (c) =
+                        if c >= %3$d then Digit(helper%1$d(c)) else Digit(0)
+                    """.formatted(at, rows.get(at).body(), rows.get(at).from()));
+        }
         return """
                 module demo
 
@@ -113,38 +134,54 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
                     invariant atLeastNought = value >= 0
 
                 let grown (xs: List<Int>): Int = List.length(List.append(xs, [7]))
-
-                let helper (c: Int): Int =
-                    %s
-
-                behavior check : (x: Int) -> Int | Bad
-                let check (x) = {
-                    guard helper(x) >= 5 else Bad
-                    0
-                }
-
-                behavior f : (c: Int) -> Digit
-                    constructs Digit
-                let f (c) =
-                    if c >= %d then Digit(helper(c)) else Digit(0)
-                """.formatted(row.body(), row.from());
+                %s""".formatted(each);
     }
 
+    /**
+     * The rows the discharge owes nothing are one module, each with its own two behaviors: each
+     * {@code check} is measured on its own lines, and the discharge owes nothing anywhere. A row it
+     * owes something is a module of its own, so the warning it is owed is its own.
+     */
     @Test
     void eachProgramIsReadAsItsLawSaysByBoth() {
         List<String> disagreeing = new ArrayList<>();
+        List<Row> dischargedRows = ROWS.stream().filter(Row::discharged).toList();
+        Compilation together = measured(program(dischargedRows));
+        JsonNode report = reportOf(together);
+        for (int at = 0; at < dischargedRows.size(); at++) {
+            Row row = dischargedRows.get(at);
+            Set<String> points = pointsOn(report, "check" + at + "/x");
+            if (!points.equals(row.measured())) {
+                disagreeing.add(row.body() + ": measured " + points + ", expected "
+                        + new TreeSet<>(row.measured()));
+            }
+        }
+        List<Located> owed = owed(together);
+        if (!owed.isEmpty()) {
+            disagreeing.add("discharged none of " + owed.stream()
+                    .map(each -> each.diagnostic().said()).toList() + ", expected all");
+        }
         for (Row row : ROWS) {
-            Compilation compilation = measured(program(row));
-            Set<String> points = pointsOn(reportOf(compilation), "check/x");
-            boolean discharged = compilation.warnings().stream().map(Located::diagnostic)
-                    .noneMatch(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code()));
-            if (!points.equals(row.measured()) || discharged != row.discharged()) {
+            if (row.discharged()) {
+                continue;
+            }
+            Compilation compilation = measured(program(List.of(row)));
+            Set<String> points = pointsOn(reportOf(compilation), "check0/x");
+            boolean discharged = owed(compilation).isEmpty();
+            if (!points.equals(row.measured()) || discharged) {
                 disagreeing.add(row.body() + ": measured " + points + ", discharged " + discharged
-                        + ", expected " + new TreeSet<>(row.measured()) + " and "
-                        + row.discharged());
+                        + ", expected " + new TreeSet<>(row.measured()) + " and false");
             }
         }
         assertEquals(List.of(), disagreeing, "each row is read as its law says by both");
+    }
+
+    /** What the discharge left owed: its warnings. */
+    private static List<Located> owed(Compilation compilation) {
+        return compilation.warnings().stream()
+                .filter(each -> each.diagnostic().severity() == Severity.WARNING
+                        && "E2011".equals(each.diagnostic().code()))
+                .toList();
     }
 
     /** Every value at or beside a line of the statement a row is owed at, on {@code axis}. */

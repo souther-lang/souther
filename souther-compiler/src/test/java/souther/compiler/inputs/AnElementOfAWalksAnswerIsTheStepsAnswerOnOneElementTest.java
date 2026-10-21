@@ -10,6 +10,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -262,14 +263,10 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     /**
      * A fold starting from a map the input holds is made of that map as well as of the list it
      * walked — over an empty list it answers the map itself — so a value of it is not said to have
-     * come from the list.
-     *
-     * <p>And where a value came from is said as one place, so a value made of two has no place:
-     * the rule about it is filed nowhere and goes unreported. What this pins is that state as it
-     * is, the rule absent from what is not read rather than said of the list.
+     * come from the list alone: a rule about it is about a value made of both.
      */
     @Test
-    void aValueAFoldFromAnInputMapWorkedOutIsNotSaidToComeFromTheListAlone() {
+    void aValueAFoldFromAnInputMapWorkedOutIsSaidToBeMadeOfBothTheMapAndTheList() {
         List<String> notRead = notReadIn(compiled("""
                 let countsOf (start: Map<String, Int>, xs: List<String>): Map<String, Int> =
                     List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), start, xs)
@@ -281,7 +278,508 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 example busy
                     | "nothing walked, the start kept" : ([("a", 5), ("b", 1)], []) -> [("a", 5)]
                 """));
-        assertEquals(List.of(), notRead);
+        assertEquals(List.of("start[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE,
+                        "xs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                notRead, () -> notRead.toString());
+    }
+
+    private static final String SEEDED_FOLD = """
+            let countsOf (start: Map<String, Int>, xs: List<String>): Map<String, Int> =
+                List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), start, xs)
+
+            """;
+
+    /** Everything the measurement does not read, whatever the reason. */
+    private List<String> notReadWith(String behavior) {
+        return notReadIn(compiled(SEEDED_FOLD + behavior)).stream().sorted().toList();
+    }
+
+    private static List<String> derivedAt(String... positions) {
+        return Arrays.stream(positions)
+                .map(each -> each + " " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
+                .sorted().toList();
+    }
+
+    /** A choice between two values each made of two places keeps all four. */
+    @Test
+    void aChoiceBetweenTwoValuesEachMadeOfTwoInputsIsMadeOfAllFour() {
+        assertEquals(derivedAt("other[*]", "start[*]", "xs[*]", "ys[*]"), notReadWith("""
+                behavior busy : (flag: Bool, start: Map<String, Int>, other: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
+                let busy (flag, start, other, xs, ys) =
+                    Map.filterEntries((_, count) -> count >= 3,
+                        if flag then countsOf(start, xs) else countsOf(other, ys))
+                """));
+    }
+
+    /** A fold over a list chosen between two is made of the seed and of either list. */
+    @Test
+    void aFoldFromAnInputMapOverAListChosenBetweenTwoIsMadeOfTheMapAndEitherList() {
+        assertEquals(derivedAt("start[*]", "xs[*]", "ys[*]"), notReadWith("""
+                behavior busy : (flag: Bool, start: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
+                let busy (flag, start, xs, ys) =
+                    Map.filterEntries((_, count) -> count >= 3,
+                        countsOf(start, if flag then xs else ys))
+                """));
+    }
+
+    /**
+     * A seed worked out of an input number stands at no position, and what it was worked out of is
+     * not followed through arithmetic: the rule is said at the list the fold walked, which it is
+     * made of, and not at the number, which it is too — over an empty list the answer is the seed.
+     * Pinned so that the limit is a fact somebody wrote down, and the answer is not taken for the
+     * whole of where the value came from.
+     */
+    @Test
+    void aFoldFromASeedWorkedOutOfAnInputNumberIsSaidAtTheListAndNotFollowedToTheNumber() {
+        assertEquals(derivedAt("xs[*]"), notReadIn(compiled("""
+                let countsOf (n: Int, xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 0, c -> 127 - c, acc),
+                              Map.fromList([("k", n + 1)]), xs)
+
+                behavior busy : (n: Int, xs: List<String>) -> Map<String, Int>
+                let busy (n, xs) =
+                    Map.filterEntries((_, count) -> count >= 3, countsOf(n, xs))
+                """)).stream().sorted().toList());
+    }
+
+    /** A fold seeded with what another fold made is made of all that fold was made of. */
+    @Test
+    void aFoldSeededWithAValueAFoldMadeIsMadeOfEverythingBothWereMadeOf() {
+        assertEquals(derivedAt("start[*]", "xs[*]", "ys[*]"), notReadWith("""
+                behavior busy : (start: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
+                let busy (start, xs, ys) =
+                    Map.filterEntries((_, count) -> count >= 3,
+                        countsOf(countsOf(start, xs), ys))
+                """));
+    }
+
+    /**
+     * A field of a value made of an input map's entries and of the list a fold walked is made of
+     * those, and not of a field of the list's elements, which have none.
+     */
+    @Test
+    void aFieldOfAValueMadeOfTwoInputsIsMadeOfThemAndNamesNoFieldOfEither() {
+        assertEquals(derivedAt("start[*]", "xs[*]"), notReadIn(compiled("""
+                data Counter = { count: Int }
+
+                let tally (start: Map<String, Counter>, xs: List<String>): Map<String, Counter> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, Counter { count = 0 },
+                                                             c -> Counter { count = 127 - c.count }, acc),
+                              start, xs)
+
+                behavior busy : (start: Map<String, Counter>, xs: List<String>) -> Map<String, Counter> constructs Counter
+                let busy (start, xs) =
+                    Map.filterEntries((_, c) -> c.count >= 3, tally(start, xs))
+                """)));
+    }
+
+    private static final String COUNTS_OF = """
+            let countsOf (xs: List<String>): Map<String, Int> =
+                List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> 127 - n, acc), Map.empty, xs)
+
+            """;
+
+    /** A pair taken out of a pair is read to the end, however many pairs deep the value is. */
+    @Test
+    void aValueTakenOutOfAPairTakenOutOfAPairComesFromWhereTheHelperGotIt() {
+        assertEquals(derivedAt("xs[*]"), notReadIn(compiled(COUNTS_OF + """
+                let boxed (m: Map<String, Int>): ((Int, Map<String, Int>), Int) = ((0, m), 1)
+
+                behavior busy : (xs: List<String>) -> Map<String, Int>
+                let busy (xs) = {
+                    let (inner, _) = boxed(countsOf(xs))
+                    let (_, selected) = inner
+                    Map.filterEntries((_, count) -> count >= 3, selected)
+                }
+                """)).stream().sorted().toList());
+    }
+
+    /** What a record was given for a field is what a field read back out of it holds. */
+    @Test
+    void aFieldOfARecordHoldsWhatTheRecordWasGivenForIt() {
+        assertEquals(derivedAt("xs[*]"), notReadIn(compiled(COUNTS_OF + """
+                data Box = { m: Map<String, Int> }
+
+                behavior busy : (xs: List<String>) -> Map<String, Int> constructs Box
+                let busy (xs) = {
+                    let box = Box { m = countsOf(xs) }
+                    Map.filterEntries((_, count) -> count >= 3, box.m)
+                }
+                """)).stream().sorted().toList());
+    }
+
+    /** A field of a record a helper chose between is the field of whichever it chose. */
+    @Test
+    void aFieldOfARecordAHelperChoseBetweenComesFromEitherPlace() {
+        List<String> notRead = notReadIn(compiled(COUNTS_OF + """
+                data Box = { m: Map<String, Int> }
+
+                let pickBox (flag: Bool, a: Map<String, Int>, b: Map<String, Int>): Box =
+                    if flag then Box { m = a } else Box { m = b }
+
+                behavior busy : (flag: Bool, xs: List<String>, ys: List<String>) -> Map<String, Int>
+                    constructs Box
+                let busy (flag, xs, ys) = {
+                    let box = pickBox(flag, countsOf(xs), countsOf(ys))
+                    Map.filterEntries((_, count) -> count >= 3, box.m)
+                }
+                """));
+        assertEquals(2, notRead.stream().filter(each -> each.startsWith("xs[*] ")
+                || each.startsWith("ys[*] ")).count(), () -> notRead.toString());
+    }
+
+    private static final String WHICH = """
+            data Left = { items: Map<String, Int> }
+            data Right = { count: Int }
+            data Which = Left | Right
+
+            """;
+
+    /** What a measurement draws and leaves unread, to be compared between two spellings. */
+    private static String measured(String source) {
+        Compilation compilation = compiled(source);
+        return linesOf(compilation) + " / " + notReadIn(compilation).stream().sorted().toList();
+    }
+
+    /** What a rule is left as when its value may be at one place or at none: no line, and the
+     *  place it may be at is told, beside the number the rule was written over. */
+    private static String mayBeAt(String place) {
+        return "[] / [atLeast " + UndividedPosition.Reason.UNSUPPORTED_SYNTAX + ", " + place + " "
+                + UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS + "]";
+    }
+
+    /**
+     * A name an arm of a match binds means, out of the arm, what it means inside it. A pair or a
+     * record a helper answers out of such an arm is a value that is at the place the name stands
+     * for on one run and elsewhere on the other, and a rule about it is told at that place — where
+     * the same rule written inside the arm draws its line there.
+     */
+    @Test
+    void aNameAMatchArmBindsIsFollowedOutOfTheArmItWasBoundIn() {
+        String inTheArm = measured(WHICH + """
+                behavior busy : (w: Which, atLeast: Int) -> Map<String, Int>
+                let busy (w, atLeast) =
+                    match w with
+                    | Left as l -> Map.filterEntries((_, count) -> count >= atLeast, l.items)
+                    | Right -> Map.empty
+                """);
+        assertTrue(inTheArm.startsWith("[w@Left.items[*] = atLeast]"), inTheArm);
+
+        assertEquals(mayBeAt("w@Left.items[*]"), measured(WHICH + """
+                let select (w: Which): (Int, Map<String, Int>) =
+                    match w with
+                    | Left as l -> (1, l.items)
+                    | Right -> (0, Map.empty)
+
+                behavior busy : (w: Which, atLeast: Int) -> Map<String, Int>
+                let busy (w, atLeast) = {
+                    let (_, selected) = select(w)
+                    Map.filterEntries((_, count) -> count >= atLeast, selected)
+                }
+                """), "a pair out of the arm");
+
+        assertEquals(mayBeAt("w@Left.items[*]"), measured(WHICH + """
+                data Box = { m: Map<String, Int> }
+
+                let select (w: Which): Box =
+                    match w with
+                    | Left as l -> Box { m = l.items }
+                    | Right -> Box { m = Map.empty }
+
+                behavior busy : (w: Which, atLeast: Int) -> Map<String, Int> constructs Box
+                let busy (w, atLeast) = {
+                    let box = select(w)
+                    Map.filterEntries((_, count) -> count >= atLeast, box.m)
+                }
+                """), "a record out of the arm");
+    }
+
+    /**
+     * A name an arm binds to a value worked out, not to a place of the input, stands for that value
+     * and is followed to where it came from. The rule written in the arm is measured as the same
+     * rule written over the value itself is — the line it draws at the place of the input — and
+     * the pair a helper answers out of the arm is told at that place.
+     */
+    @Test
+    void aNameAnArmBindsToAValueWorkedOutIsFollowedToThePlaceOfTheInputItCameFrom() {
+        String direct = measured("""
+                behavior busy : (xs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (xs, atLeast) = List.filter(n -> n >= atLeast, List.reverse(xs))
+                """);
+        assertTrue(direct.startsWith("[xs[*] = atLeast]"), direct);
+        String inTheArm = measured("""
+                behavior busy : (xs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (xs, atLeast) =
+                    match List.get(0, [List.reverse(xs)]) with
+                    | Some v -> List.filter(n -> n >= atLeast, v)
+                    | None -> []
+                """);
+        String viaPair = measured("""
+                let pick (xs: List<Int>): (Int, List<Int>) =
+                    match List.get(0, [List.reverse(xs)]) with
+                    | Some v -> (1, v)
+                    | None -> (0, [])
+
+                behavior busy : (xs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (xs, atLeast) = {
+                    let (_, s) = pick(xs)
+                    List.filter(n -> n >= atLeast, s)
+                }
+                """);
+        assertEquals(direct, inTheArm, "in the arm");
+        assertEquals(mayBeAt("xs[*]"), viaPair, "out of the arm");
+
+        String directOption = measured("""
+                behavior busy : (outer: Map<String, List<Int>>, atLeast: Int) -> List<Int>
+                let busy (outer, atLeast) =
+                    match Map.get("k", outer) with
+                    | Some xs -> List.filter(n -> n >= atLeast, List.reverse(xs))
+                    | None -> []
+                """);
+        assertTrue(directOption.startsWith("[outer[*][*] = atLeast]"), directOption);
+        String optionInTheArm = measured("""
+                behavior busy : (outer: Map<String, List<Int>>, atLeast: Int) -> List<Int>
+                let busy (outer, atLeast) =
+                    match Option.map(xs -> List.reverse(xs), Map.get("k", outer)) with
+                    | Some ys -> List.filter(n -> n >= atLeast, ys)
+                    | None -> []
+                """);
+        String optionViaPair = measured("""
+                let select (outer: Map<String, List<Int>>): (Int, List<Int>) =
+                    match Option.map(xs -> List.reverse(xs), Map.get("k", outer)) with
+                    | Some ys -> (1, ys)
+                    | None -> (0, [])
+
+                behavior busy : (outer: Map<String, List<Int>>, atLeast: Int) -> List<Int>
+                let busy (outer, atLeast) = {
+                    let (_, selected) = select(outer)
+                    List.filter(n -> n >= atLeast, selected)
+                }
+                """);
+        assertEquals(directOption, optionInTheArm, "in the arm");
+        assertEquals(mayBeAt("outer[*][*]"), optionViaPair, "out of the arm");
+    }
+
+    /**
+     * A record or a pair handed to a helper and taken apart in it is measured as the value it was
+     * built of is, written directly: the rule is told at the place of the input the value came
+     * from.
+     */
+    @Test
+    void aRecordOrAPairHandedToAHelperAndTakenApartInItKeepsWhereItsValuesCameFrom() {
+        String direct = measured(COUNTS_OF + """
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast, countsOf(xs))
+                """);
+        assertTrue(direct.contains("xs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                direct);
+        String record = measured(COUNTS_OF + """
+                data Box = { m: Map<String, Int> }
+
+                let extract (box: Box): Map<String, Int> = box.m
+
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int> constructs Box
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast,
+                        extract(Box { m = countsOf(xs) }))
+                """);
+        assertEquals(direct, record, "a record");
+
+        String pair = measured(COUNTS_OF + """
+                let second (pair: (Int, Map<String, Int>)): Map<String, Int> = {
+                    let (_, m) = pair
+                    m
+                }
+
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast,
+                        second((0, countsOf(xs))))
+                """);
+        assertEquals(direct, pair, "a pair");
+    }
+
+    /**
+     * An entry of a map's list handed to a helper that takes it apart, or to a helper that hands
+     * it to another, is measured as the same rule written over the entry directly: the value of
+     * the entry is the input's map element and its key is the map's key.
+     */
+    @Test
+    void anEntryOfAMapsListHandedToAHelperIsTakenApartAsWhereItWritesIt() {
+        String direct = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(e -> {
+                            let (_, n) = e
+                            n >= u.atLeast
+                        }, Map.toList(u.counts)))
+                """);
+        String viaHelper = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                let valueOf (entry: (String, Int)): Int = {
+                    let (_, n) = entry
+                    n
+                }
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(e -> valueOf(e) >= u.atLeast, Map.toList(u.counts)))
+                """);
+        String keyDirect = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(e -> {
+                            let (k, _) = e
+                            String.length(k) >= u.atLeast
+                        }, Map.toList(u.counts)))
+                """);
+        String keyViaNestedHelpers = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                let keyOf (entry: (String, Int)): String = {
+                    let (k, _) = entry
+                    k
+                }
+
+                let lengthOf (entry: (String, Int)): Int = String.length(keyOf(entry))
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(e -> lengthOf(e) >= u.atLeast, Map.toList(u.counts)))
+                """);
+        String valueViaFunctionValue = measured("""
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                let valueOf (entry: (String, Int)): Int = {
+                    let (_, n) = entry
+                    n
+                }
+
+                behavior busy : (u: Usage) -> Int
+                let busy (u) =
+                    List.length(List.filter(n -> n >= u.atLeast,
+                        List.map(valueOf, Map.toList(u.counts))))
+                """);
+        assertTrue(direct.startsWith("[u.counts[*] = u.atLeast]"), direct);
+        assertEquals(direct, viaHelper, "the value of an entry, taken apart in a helper");
+        assertEquals(direct, valueViaFunctionValue, "the value of an entry, a helper as a value");
+        assertTrue(keyDirect.contains("String.length(u.counts[key]) = u.atLeast"), keyDirect);
+        assertEquals(keyDirect, keyViaNestedHelpers, "the key of an entry, in nested helpers");
+    }
+
+    /** The same where the arm opens what a lookup in a map found under its key. */
+    @Test
+    void aNameAnArmOpensOutOfALookupIsFollowedOutOfTheArmItWasBoundIn() {
+        String inTheArm = measured("""
+                behavior busy : (outer: Map<String, Map<String, Int>>, atLeast: Int) -> Map<String, Int>
+                let busy (outer, atLeast) =
+                    match Map.get("k", outer) with
+                    | Some m -> Map.filterEntries((_, count) -> count >= atLeast, m)
+                    | None -> Map.empty
+                """);
+        assertTrue(inTheArm.startsWith("[outer[*][*] = atLeast]"), inTheArm);
+
+        assertEquals(mayBeAt("outer[*][*]"), measured("""
+                let select (outer: Map<String, Map<String, Int>>): (Int, Map<String, Int>) =
+                    match Map.get("k", outer) with
+                    | Some m -> (1, m)
+                    | None -> (0, Map.empty)
+
+                behavior busy : (outer: Map<String, Map<String, Int>>, atLeast: Int) -> Map<String, Int>
+                let busy (outer, atLeast) = {
+                    let (_, selected) = select(outer)
+                    Map.filterEntries((_, count) -> count >= atLeast, selected)
+                }
+                """));
+    }
+
+    /** Which pair a match chose is read in every arm, one of which binds a name of its own. */
+    @Test
+    void aValueTakenOutOfAPairAMatchChoseBetweenComesFromEitherArm() {
+        List<String> notRead = notReadIn(compiled(COUNTS_OF + """
+                let pick (o: Option<Int>, a: Map<String, Int>, b: Map<String, Int>)
+                        : (Int, Map<String, Int>) =
+                    match o with
+                    | Some v -> (v, a)
+                    | None -> (0, b)
+
+                behavior busy : (xs: List<String>, ys: List<String>) -> Map<String, Int>
+                let busy (xs, ys) = {
+                    let (_, m) = pick(Map.get("k", countsOf(xs)), countsOf(xs), countsOf(ys))
+                    Map.filterEntries((_, count) -> count >= 3, m)
+                }
+                """));
+        assertEquals(2, notRead.stream().filter(each -> each.startsWith("xs[*] ")
+                || each.startsWith("ys[*] ")).count(), () -> notRead.toString());
+    }
+
+    /** A value taken out of a pair a helper chose between is the component of whichever it chose. */
+    @Test
+    void aValueTakenOutOfAPairAHelperChoseBetweenComesFromEitherPlace() {
+        List<String> notRead = notReadIn(compiled("""
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> 127 - n, acc), Map.empty, xs)
+
+                let pick (flag: Bool, a: Map<String, Int>, b: Map<String, Int>)
+                        : (Int, Map<String, Int>) =
+                    if flag then (1, a) else (2, b)
+
+                behavior busy : (flag: Bool, xs: List<String>, ys: List<String>) -> List<String>
+                let busy (flag, xs, ys) = {
+                    let (_, m) = pick(flag, countsOf(xs), countsOf(ys))
+                    List.filter(a -> match Map.get(a, m) with
+                                        | Some n -> n > 1
+                                        | None -> false, Map.keys(m))
+                }
+                """));
+        assertEquals(2, notRead.stream().filter(each -> each.startsWith("xs[*] ")
+                || each.startsWith("ys[*] ")).count(), () -> notRead.toString());
+    }
+
+    /**
+     * A fold whose answer holds lists, flattened, is made of the lists it was seeded with and of the
+     * strings it walked, and a rule about it is said at those two.
+     */
+    @Test
+    void aFlattenedFoldMadeOfListsAndStringsIsSaidAtBoth() {
+        List<String> notRead = notReadIn(compiled("""
+                let listsOf (start: Map<String, List<Int>>, xs: List<String>): Map<String, List<Int>> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, [], l -> List.reverse(l), acc),
+                              start, xs)
+
+                behavior busy : (start: Map<String, List<Int>>, xs: List<String>) -> List<Int>
+                let busy (start, xs) =
+                    List.filter(n -> n >= 3, List.flatMap(l -> l, Map.values(listsOf(start, xs))))
+                """));
+        assertEquals(derivedAt("start[*]", "xs[*]"), notRead.stream().sorted().toList());
+    }
+
+    /** A value taken out of a pair a helper built is the component the helper put there. */
+    @Test
+    void aValueTakenOutOfAPairAHelperBuiltComesFromWhereTheHelperGotIt() {
+        List<String> notRead = notReadIn(compiled("""
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> 127 - n, acc), Map.empty, xs)
+
+                let split (m: Map<String, Int>): (List<String>, Map<String, Int>) = (Map.keys(m), m)
+
+                behavior busy : (xs: List<String>, ys: List<String>) -> List<String>
+                let busy (xs, ys) = {
+                    let (ka, _) = split(countsOf(xs))
+                    let (_, mb) = split(countsOf(ys))
+                    List.filter(a -> match Map.get(a, mb) with
+                                        | Some n -> n > 1
+                                        | None -> false, ka)
+                }
+                """));
+        assertEquals(List.of("ys[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                notRead, () -> notRead.toString());
     }
 
     /** A rule about the strings such a fold worked out is a rule all the same, and is said to be

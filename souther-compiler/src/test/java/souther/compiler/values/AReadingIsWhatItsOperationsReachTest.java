@@ -1,5 +1,6 @@
 package souther.compiler.values;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
@@ -23,8 +24,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -198,21 +201,39 @@ class AReadingIsWhatItsOperationsReachTest {
      * one as surely as one written out, so the bootstrap arguments of an {@code invokedynamic} are
      * read too.
      */
-    private static Set<String> waysInto(Class<?> state) {
-        String internal = state.getName().replace('.', '/');
-        Set<String> ways = new LinkedHashSet<>();
+    private static synchronized Set<String> waysInto(Class<?> state) {
+        if (waysIn == null) {
+            waysIn = everyWayIn();
+        }
+        return waysIn.getOrDefault(state.getName().replace('.', '/'), Set.of());
+    }
+
+    /** Every way in to every class, by its internal name, read off the compiler once for the
+     *  class: each question below asks about one of them, and the reading is of the same code. */
+    private static Map<String, Set<String>> waysIn;
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static synchronized void released() {
+        waysIn = null;
+    }
+
+    /** A constructor is a way into its own class, and any other method a way into each class whose
+     *  constructor its code invokes or hands on. */
+    private static Map<String, Set<String>> everyWayIn() {
+        Map<String, Set<String>> out = new HashMap<>();
         for (Path each : classFiles()) {
             ClassModel owner = parse(each);
-            boolean itself = owner.thisClass().asInternalName().equals(internal);
             for (MethodModel method : owner.methods()) {
-                boolean made = "<init>".equals(method.methodName().stringValue())
-                        ? itself : makes(method, internal);
-                if (made) {
-                    ways.add(named(owner, method));
+                Set<String> into = "<init>".equals(method.methodName().stringValue())
+                        ? Set.of(owner.thisClass().asInternalName()) : made(method);
+                for (String internal : into) {
+                    out.computeIfAbsent(internal, _ -> new LinkedHashSet<>())
+                            .add(named(owner, method));
                 }
             }
         }
-        return ways;
+        return out;
     }
 
     /** One way in, as the method it is: what it is called, and what it was handed. */
@@ -239,19 +260,30 @@ class AReadingIsWhatItsOperationsReachTest {
         return named.substring(named.lastIndexOf('$') + 1);
     }
 
-    /** Whether the method's own code makes one: written out, or handed to something that will. */
-    private static boolean makes(MethodModel method, String internal) {
-        return method.code().map(code -> code.elementStream().anyMatch(element -> switch (element) {
-            case InvokeInstruction it -> internal.equals(it.owner().asInternalName())
-                    && "<init>".equals(it.name().stringValue());
-            case InvokeDynamicInstruction it -> it.invokedynamic().bootstrap().arguments().stream()
-                    .anyMatch(argument -> argument instanceof MethodHandleEntry handle
-                            && handle.asSymbol() instanceof DirectMethodHandleDesc said
-                            && internal.equals(said.owner().descriptorString()
-                                    .substring(1, said.owner().descriptorString().length() - 1))
-                            && "<init>".equals(said.methodName()));
-            default -> false;
-        })).orElse(false);
+    /** The classes the method's own code makes one of: written out, or handed to something that
+     *  will. */
+    private static Set<String> made(MethodModel method) {
+        Set<String> out = new LinkedHashSet<>();
+        method.code().ifPresent(code -> code.elementStream().forEach(element -> {
+            switch (element) {
+                case InvokeInstruction it -> {
+                    if ("<init>".equals(it.name().stringValue())) {
+                        out.add(it.owner().asInternalName());
+                    }
+                }
+                case InvokeDynamicInstruction it -> it.invokedynamic().bootstrap().arguments()
+                        .forEach(argument -> {
+                            if (argument instanceof MethodHandleEntry handle
+                                    && handle.asSymbol() instanceof DirectMethodHandleDesc said
+                                    && "<init>".equals(said.methodName())) {
+                                String owner = said.owner().descriptorString();
+                                out.add(owner.substring(1, owner.length() - 1));
+                            }
+                        });
+                default -> { }
+            }
+        }));
+        return out;
     }
 
     private static ClassModel parse(Path compiled) {

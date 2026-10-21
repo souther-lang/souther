@@ -7,10 +7,15 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -48,16 +53,71 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
                 """.formatted(closure, threshold);
     }
 
-    /** The number is the computation, whichever way an author wrote it. */
+    /**
+     * The number is the computation, whichever way an author wrote it; and two computations over
+     * one list are two numbers, read beside the spellings of the one so that a reading that took
+     * every total of the field for one number is told apart.
+     */
     @Test
     void aFormOfOneFieldIsTheSameNumberHoweverItIsWritten() {
-        for (String spelled : List.of("a.q * 2", "2 * a.q", "a.q + a.q")) {
-            String report = report(model(spelled, 4));
+        Map<String, String> read = readEach(List.of("a.q * 2", "2 * a.q", "a.q + a.q", "a.q * 3"));
+        String thrice = read.remove("a.q * 3");
+        read.forEach((spelled, report) -> {
             assertTrue(report.contains("List.sum({2·q + 0 | xs[*]})"),
                     () -> spelled + " is twice the field: " + report);
             assertFalse(report.contains("not read"), () -> spelled + " is read: " + report);
-        }
+        });
+        assertTrue(thrice.contains("List.sum({3·q + 0 | xs[*]})"), thrice);
+        assertFalse(thrice.contains("{2·q"), thrice);
     }
+
+    /**
+     * What the report says of each of {@code closures}, each summed over the list and compared
+     * against four in a behavior of its own: the behaviors are one module, measured once, and each
+     * closure is read off its own behavior's part of the report.
+     */
+    private static Map<String, String> readEach(List<String> closures) {
+        StringBuilder module = new StringBuilder("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, p: Int, debit: Bool }
+                """);
+        for (int at = 0; at < closures.size(); at++) {
+            module.append("""
+
+                    behavior decide%d : (xs: List<A>) -> Many | Few
+
+                    let decide%d (xs) =
+                        if List.sum(List.map(a -> %s, xs)) >= 4
+                        then Many else Few
+                    """.formatted(at, at, closures.get(at)));
+        }
+        String report = report(module.toString());
+        Map<String, StringBuilder> parts = new LinkedHashMap<>();
+        StringBuilder part = null;
+        for (String line : report.lines().toList()) {
+            Matcher behavior = BEHAVIOR.matcher(line);
+            if (behavior.find()) {
+                part = parts.computeIfAbsent(closures.get(Integer.parseInt(behavior.group(1))),
+                        _ -> new StringBuilder());
+            } else if (line.isBlank()) {
+                part = null;
+            }
+            if (part != null) {
+                part.append(line).append('\n');
+            }
+        }
+        assertEquals(new LinkedHashSet<>(closures), parts.keySet(), report);
+        Map<String, String> out = new LinkedHashMap<>();
+        parts.forEach((closure, said) -> out.put(closure, said.toString()));
+        return out;
+    }
+
+    /** The line a behavior's part of the report opens with. */
+    private static final Pattern BEHAVIOR = Pattern.compile("^  decide(\\d+) ");
 
     /** A name given the computation, and a helper that computes it, are the same number. */
     @Test
@@ -80,14 +140,6 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
                 """;
         String report = report(named);
         assertTrue(report.contains("List.sum({2·q + 0 | xs[*]})"), report);
-    }
-
-    /** Two computations over one list are two numbers. */
-    @Test
-    void twoComputationsOverOneListAreTwoNumbers() {
-        String report = report(model("a.q * 3", 4));
-        assertTrue(report.contains("List.sum({3·q + 0 | xs[*]})"), report);
-        assertFalse(report.contains("{2·q"), report);
     }
 
     /** More than one field, and a choice by a flag the element holds, are read. */
@@ -259,11 +311,11 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
      */
     @Test
     void aClosureThatIsTheFieldIsTheFieldWhateverItIsSpelledAs() {
-        for (String spelled : List.of("a.q", "a.q * 1", "a.q + 0", "if a.debit then a.q else a.q")) {
-            String report = report(model(spelled, 4));
-            assertTrue(report.contains("List.sum(xs[*].q)"), () -> spelled + ": " + report);
-            assertFalse(report.contains("List.sum({"), () -> spelled + ": " + report);
-        }
+        readEach(List.of("a.q", "a.q * 1", "a.q + 0", "if a.debit then a.q else a.q"))
+                .forEach((spelled, report) -> {
+                    assertTrue(report.contains("List.sum(xs[*].q)"), () -> spelled + ": " + report);
+                    assertFalse(report.contains("List.sum({"), () -> spelled + ": " + report);
+                });
     }
 
     /**
@@ -460,14 +512,28 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
 
     private static String report(String model) {
         Compilation compilation = compiled(model);
+        compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** Each model measured once for the class: some are asked for their report and for their
+     *  rows. The rows ask what they read of the measurement; the rest is asked where a report is
+     *  made. */
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(model, each -> {
+            Compilation compilation = Compilation.ofSource(each, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            return compilation;
+        });
+    }
+
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 }

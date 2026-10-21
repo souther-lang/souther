@@ -1,9 +1,13 @@
 package souther.compiler.check;
 
-import souther.compiler.Compiler;
+import souther.compiler.ImplicitModuleName;
 import souther.compiler.check.InvariantChecker.Said;
 import souther.compiler.check.InvariantChecker.Verdict;
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
@@ -67,7 +71,7 @@ class ANamedComputedValueIsReadAsWhatItWasGivenTest {
         List<Said> said = Collections.synchronizedList(new ArrayList<>());
         InvariantChecker.WATCHING = said;
         try {
-            Compiler.compileWithWarnings(source);
+            checked(source);
         } finally {
             InvariantChecker.WATCHING = null;
         }
@@ -88,8 +92,31 @@ class ANamedComputedValueIsReadAsWhatItWasGivenTest {
     }
 
     private static boolean warns(String body) {
-        return Compiler.compileWithWarnings(MODEL + body).warnings().stream()
+        return checked(MODEL + body).stream().map(Located::diagnostic)
                 .anyMatch(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code()));
+    }
+
+    /**
+     * The warnings the invariant check leaves on {@code source}, or the error it or anything it
+     * reads refuses the source with.
+     *
+     * <p>The check is what is asked, over the bodies it reads, and not the classes or the other
+     * warnings of the module: what every test here reads is what the check said.
+     */
+    private static List<Located> checked(String source) {
+        Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
+        CompileException structural = compilation.structuralFailure();
+        if (structural != null) {
+            throw structural;
+        }
+        for (String module : compilation.modules()) {
+            compilation.db().ask(new Bodies.InvariantWarnings(module));
+        }
+        CompileException failure = compilation.failure();
+        if (failure != null) {
+            throw failure;
+        }
+        return compilation.warnings();
     }
 
     /**

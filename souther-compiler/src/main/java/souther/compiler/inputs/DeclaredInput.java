@@ -5,6 +5,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.ReadableFields;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.types.Type;
@@ -52,6 +53,14 @@ public final class DeclaredInput {
     private DeclaredInput(Map<String, Type> parameters, RuleReadingSource source) {
         this.parameters = Map.copyOf(parameters);
         this.source = source;
+    }
+
+    /**
+     * The symbols the declarations of this input were read under, or null for an input that
+     * declares none ({@link #NONE}).
+     */
+    Symbols symbols() {
+        return source == null ? null : source.symbols();
     }
 
     /** The parameters {@code declared} takes, read under {@code source}. */

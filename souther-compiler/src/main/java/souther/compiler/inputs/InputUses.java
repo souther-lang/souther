@@ -171,6 +171,7 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
                 }
                 // Each of them on some run, so each is read.
                 case PathResolution.MayStandAt(var among) -> whole.addAll(among);
+                case PathResolution.MadeOf made -> whole.addAll(made.places());
                 case PathResolution.NotAPosition _ -> {
                     if (Core.withoutStanding(e) instanceof Core.Read read
                             && watched.contains(read.binding())) {
@@ -258,6 +259,7 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
                 case PathResolution.NotAPosition _ -> { }
                 // A name that may stand at a place stands there on some run, so each is named.
                 case PathResolution.MayStandAt(var among) -> demanded.addAll(among);
+                case PathResolution.MadeOf made -> demanded.addAll(made.places());
             }
         }
 

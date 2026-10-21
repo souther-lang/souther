@@ -74,9 +74,13 @@ public final class DocumentShape {
      */
     public record Read(int objects, int conditions, List<String> wrong) {}
 
+    /** The schema read once for every document walked against it: the walk only reads it, and a
+     *  caller handed {@link #schema()} gets one of its own. */
+    private static final JsonNode SHIPPED = schema();
+
     /** {@code document} read against the schema this compiler ships. */
     public static Read of(JsonNode document) {
-        Walk walk = new Walk(schema());
+        Walk walk = new Walk(SHIPPED);
         walk.of(document, "");
         return new Read(walk.objects, walk.conditions, walk.wrong);
     }

@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -321,7 +322,24 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
                 modules);
     }
 
-    private static Compilation compiled() {
+    /** The one model every question here is about, measured once for the class: each question
+     *  reads what the compilation answered and none of them changes it. */
+    private static Compilation measured;
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static synchronized void released() {
+        measured = null;
+    }
+
+    private static synchronized Compilation compiled() {
+        if (measured == null) {
+            measured = measuredAfresh();
+        }
+        return measured;
+    }
+
+    private static Compilation measuredAfresh() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

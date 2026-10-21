@@ -552,7 +552,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         return switch (reads.forkedOn(match.scrutinee(), ruleSource.newtypes())) {
             case PathResolution.At(var stands) -> stands;
             case PathResolution.NotAPosition _ -> null;
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
     }
 

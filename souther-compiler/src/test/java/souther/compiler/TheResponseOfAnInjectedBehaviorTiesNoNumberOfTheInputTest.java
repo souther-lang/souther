@@ -236,10 +236,11 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
                 .replace(SUM_OF_THE_ROWS, number);
     }
 
+    /** The rows offered for {@code source}, which ask what they read of its measurement; its
+     *  classes, examples and warnings are not read. */
     private static String rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         return GeneratedRows.of(compilation, null, null,
                 SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
     }

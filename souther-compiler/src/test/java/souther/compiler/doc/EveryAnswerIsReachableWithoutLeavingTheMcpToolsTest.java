@@ -55,7 +55,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
      */
     @Test
     void aClientThatKnowsNoNameIsGivenEveryNameThereIs() {
-        Set<String> listed = names(whole("doc_read", "{}"));
+        Set<String> listed = names(listing());
 
         Set<String> thereIs = new TreeSet<>();
         SpecDocument.bundled(Caller.MCP).sections()
@@ -79,7 +79,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
      */
     @Test
     void aClientAndAReaderAtAPromptAreGivenTheSameNames() {
-        assertEquals(names(printed(new String[]{})), names(whole("doc_read", "{}")));
+        assertEquals(names(printed(new String[]{})), names(listing()));
     }
 
     /**
@@ -89,7 +89,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
      */
     @Test
     void everyNameADocumentSendsThisClientToIsOnTheListingItStartedFrom() {
-        Set<String> listed = names(whole("doc_read", "{}"));
+        Set<String> listed = names(listing());
 
         Set<String> sentTo = new TreeSet<>();
         LibraryDocs docs = LibraryDocs.on(getClass().getClassLoader(), Caller.MCP);
@@ -129,7 +129,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
 
     @Test
     void everyNameTheListingGivesCanBeReadBack() {
-        List<String> names = whole("doc_read", "{}").lines()
+        List<String> names = listing().lines()
                 .map(line -> line.substring(0, line.indexOf('\t'))).toList();
 
         for (int at : List.of(0, names.size() / 2, names.size() - 1)) {
@@ -213,6 +213,19 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
             said.append(part, 0, carriesOn.start());
             cursor = carriesOn.group(1);
         }
+    }
+
+    private static String listed;
+
+    /**
+     * The listing a client that knows no name is given, followed to its end once for the class:
+     * four questions here read it and none of them changes it.
+     */
+    private String listing() {
+        if (listed == null) {
+            listed = whole("doc_read", "{}");
+        }
+        return listed;
     }
 
     /** What an answer says to ask for the rest of it, and where the answer itself ends. */
