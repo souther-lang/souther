@@ -493,11 +493,14 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core,
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputPath", "introducing", "(" + core + "L" + c
-                + "inputs/BindingEnvironment;L" + c + "inputs/InputPath$OfAConstruction;)"
-                + "Ljava/lang/Object;", Reading.NAMES, READS_THE_NAMES);
+                + "inputs/BindingEnvironment;L" + c + "inputs/InputPath$OfAConstruction;)L" + c
+                + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputPath", "named", "(" + core + "L" + c
                 + "inputs/BindingEnvironment;)L" + c + "inputs/PathResolution;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "inputs/InputPath", "through", "(" + core + "L" + c
+                + "inputs/InputPath$Wanted;L" + c + "inputs/BindingEnvironment;)L" + c
+                + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/AffineReading$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/ComparisonAssessment", "readsAnswer", "(" + core + "L" + c

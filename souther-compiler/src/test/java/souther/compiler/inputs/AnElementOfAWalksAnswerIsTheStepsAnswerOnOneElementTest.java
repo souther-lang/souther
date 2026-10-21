@@ -373,6 +373,81 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 """)));
     }
 
+    private static final String COUNTS_OF = """
+            let countsOf (xs: List<String>): Map<String, Int> =
+                List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> 127 - n, acc), Map.empty, xs)
+
+            """;
+
+    /** A pair taken out of a pair is read to the end, however many pairs deep the value is. */
+    @Test
+    void aValueTakenOutOfAPairTakenOutOfAPairComesFromWhereTheHelperGotIt() {
+        assertEquals(derivedAt("xs[*]"), notReadIn(compiled(COUNTS_OF + """
+                let boxed (m: Map<String, Int>): ((Int, Map<String, Int>), Int) = ((0, m), 1)
+
+                behavior busy : (xs: List<String>) -> Map<String, Int>
+                let busy (xs) = {
+                    let (inner, _) = boxed(countsOf(xs))
+                    let (_, selected) = inner
+                    Map.filterEntries((_, count) -> count >= 3, selected)
+                }
+                """)).stream().sorted().toList());
+    }
+
+    /** What a record was given for a field is what a field read back out of it holds. */
+    @Test
+    void aFieldOfARecordHoldsWhatTheRecordWasGivenForIt() {
+        assertEquals(derivedAt("xs[*]"), notReadIn(compiled(COUNTS_OF + """
+                data Box = { m: Map<String, Int> }
+
+                behavior busy : (xs: List<String>) -> Map<String, Int> constructs Box
+                let busy (xs) = {
+                    let box = Box { m = countsOf(xs) }
+                    Map.filterEntries((_, count) -> count >= 3, box.m)
+                }
+                """)).stream().sorted().toList());
+    }
+
+    /** A field of a record a helper chose between is the field of whichever it chose. */
+    @Test
+    void aFieldOfARecordAHelperChoseBetweenComesFromEitherPlace() {
+        List<String> notRead = notReadIn(compiled(COUNTS_OF + """
+                data Box = { m: Map<String, Int> }
+
+                let pickBox (flag: Bool, a: Map<String, Int>, b: Map<String, Int>): Box =
+                    if flag then Box { m = a } else Box { m = b }
+
+                behavior busy : (flag: Bool, xs: List<String>, ys: List<String>) -> Map<String, Int>
+                    constructs Box
+                let busy (flag, xs, ys) = {
+                    let box = pickBox(flag, countsOf(xs), countsOf(ys))
+                    Map.filterEntries((_, count) -> count >= 3, box.m)
+                }
+                """));
+        assertEquals(2, notRead.stream().filter(each -> each.startsWith("xs[*] ")
+                || each.startsWith("ys[*] ")).count(), () -> notRead.toString());
+    }
+
+    /** Which pair a match chose is read in every arm, one of which binds a name of its own. */
+    @Test
+    void aValueTakenOutOfAPairAMatchChoseBetweenComesFromEitherArm() {
+        List<String> notRead = notReadIn(compiled(COUNTS_OF + """
+                let pick (o: Option<Int>, a: Map<String, Int>, b: Map<String, Int>)
+                        : (Int, Map<String, Int>) =
+                    match o with
+                    | Some v -> (v, a)
+                    | None -> (0, b)
+
+                behavior busy : (xs: List<String>, ys: List<String>) -> Map<String, Int>
+                let busy (xs, ys) = {
+                    let (_, m) = pick(Map.get("k", countsOf(xs)), countsOf(xs), countsOf(ys))
+                    Map.filterEntries((_, count) -> count >= 3, m)
+                }
+                """));
+        assertEquals(2, notRead.stream().filter(each -> each.startsWith("xs[*] ")
+                || each.startsWith("ys[*] ")).count(), () -> notRead.toString());
+    }
+
     /** A value taken out of a pair a helper chose between is the component of whichever it chose. */
     @Test
     void aValueTakenOutOfAPairAHelperChoseBetweenComesFromEitherPlace() {

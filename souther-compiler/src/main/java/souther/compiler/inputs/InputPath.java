@@ -356,11 +356,9 @@ final class InputPath {
      * the expression above it is not: the value a field of it was given is read where the
      * construction is, and read where the projection stands, a name the {@code let} opened would
      * stand for nothing.
-     *
-     * @param <T> what that reader answers
      */
-    private interface OfAConstruction<T> {
-        T of(Core.Construct construct, BindingEnvironment names);
+    private interface OfAConstruction {
+        PathResolution of(Core.Construct construct, BindingEnvironment names);
     }
 
     /**
@@ -385,13 +383,20 @@ final class InputPath {
      * <p>Descending from a construction to the value it gave a field needs nothing of its own: that
      * stays inside one expression, which is the kind of step nothing has to bound.
      */
-    private <T> T introducing(Core e, BindingEnvironment names, OfAConstruction<T> found) {
+    private PathResolution introducing(Core e, BindingEnvironment names, OfAConstruction found) {
         return switch (Core.withoutStanding(e)) {
             case Core.Construct construct -> found.of(construct, names);
             case Core.Read r when names.roleOf(r.binding()) instanceof BindingRole.Alias(var held) ->
                     trail.through(r.binding(), () -> introducing(held, names, found));
             case Core.LetIn let ->
                     introducing(let.body(), names.inside(let.binder(), let.value()), found);
+            // A value chosen between constructions is read in each case, and the answers come
+            // together the way those of any choice do.
+            case Core.If iff when asksAcrossCases() -> acrossCases(List.of(iff.then(), iff.els()),
+                    arm -> introducing(arm, names, found));
+            case Core.Match match when asksAcrossCases() -> acrossCases(
+                    match.cases().stream().map(Core.Case::body).toList(),
+                    arm -> introducing(arm, names, found));
             // A projection of a construction whose field was given another construction, which is
             // what a value built out of values written where they stand looks like.
             case Core.FieldAccess fa -> introducing(fa.target(), names,
@@ -453,10 +458,25 @@ final class InputPath {
         return at;
     }
 
+    /**
+     * Where {@code wanted} of the value {@code steps} from {@code next} on read off {@code from}
+     * holds stands, each name cancelling against a construction in turn, or null where {@code from}
+     * is not one written in this tree.
+     */
+    private PathResolution heldAlong(Core from, List<Core.FieldProjection.Step> steps, int next,
+                                     Wanted wanted, BindingEnvironment names) {
+        return introducing(from, names, (construct, at) -> {
+            Core written = given(construct, steps.get(next).field());
+            return next + 1 == steps.size() ? heldAt(written, wanted, at)
+                    : heldAlong(written, steps, next + 1, wanted, at);
+        });
+    }
+
     /** What {@code found} makes of the construction the value {@code steps} from {@code next} on
      *  read off {@code from} stands for, each name cancelling against a construction in turn. */
-    private <T> T introducingAlong(Core from, List<Core.FieldProjection.Step> steps, int next,
-                                   BindingEnvironment names, OfAConstruction<T> found) {
+    private PathResolution introducingAlong(Core from, List<Core.FieldProjection.Step> steps,
+                                            int next, BindingEnvironment names,
+                                            OfAConstruction found) {
         if (next == steps.size()) {
             return introducing(from, names, found);
         }
@@ -512,10 +532,8 @@ final class InputPath {
      * filed under it. Any other pair says nothing about where its places stand.
      */
     private PathResolution placeOf(Core.TupleGet get, BindingEnvironment names) {
-        List<Held> written = componentsOf(get.tuple(), get.index(), names);
-        return written != null
-                ? alongEachCase(written.stream().map(one -> named(one.value(), one.names())).toList())
-                : placeOfAnElementsPair(get, names);
+        PathResolution written = inComponent(get.tuple(), get.index(), names, this::named);
+        return written != null ? written : placeOfAnElementsPair(get, names);
     }
 
     /**
@@ -544,7 +562,7 @@ final class InputPath {
 
     /**
      * Where a place of the pair an element is stands, following the names the pair is read under.
-     * Asked only once no pair written in this tree stands behind them, which {@link #componentsOf}
+     * Asked only once no pair written in this tree stands behind them, which {@link #inComponent}
      * has followed to the end, so it is not asked again at each name.
      */
     private PathResolution placeOfAnElementsPair(Core.TupleGet get, BindingEnvironment names) {
@@ -683,11 +701,22 @@ final class InputPath {
         }
         // A place of a pair written in this tree holds what the value written there holds.
         if (e instanceof Core.TupleGet get) {
-            List<Held> written = componentsOf(get.tuple(), get.index(), names);
+            PathResolution written = inComponent(get.tuple(), get.index(), names,
+                    (value, at) -> heldAt(value, wanted, at));
             if (written != null) {
-                return alongEachCase(written.stream()
-                        .map(one -> heldAt(one.value(), wanted, one.names())).toList());
+                return written;
             }
+        }
+        // A field of a record written in this tree holds what the record was given for it.
+        PathResolution given = switch (e) {
+            case Core.FieldAccess fa -> introducing(fa.target(), names,
+                    (construct, at) -> heldAt(given(construct, fa), wanted, at));
+            case Core.FieldProjection p -> heldAlong(p.base(), p.steps().inOrder(), 0, wanted,
+                    names);
+            default -> null;
+        };
+        if (given != null) {
+            return given;
         }
         // What a binding's body answers is read with the binding in scope, as a body a call was
         // expanded into binds its parameters around what it answers.
@@ -886,45 +915,64 @@ final class InputPath {
     }
 
     /**
-     * The values at {@code index} of the pair {@code tuple} stands for, one for each pair it may be
-     * and the names each is read under, or null where {@code tuple} is not a pair written in this
-     * tree on every case it is chosen between.
+     * What a reader makes of a value and the names it is read under.
+     *
+     * <p>Two things because a value reached through a {@code let} is written under bindings the
+     * expression above it is not.
+     */
+    private interface OfAValue {
+        PathResolution of(Core value, BindingEnvironment names);
+    }
+
+    /**
+     * What {@code read} makes of the value at {@code index} of the pair {@code tuple} stands for,
+     * or null where {@code tuple} is not a pair written in this tree on every case it is chosen
+     * between.
      *
      * <p>A pair and the projection of one of its places cancel, the way a construction and the
      * projection of a field do ({@link #introducing}): a helper that answers {@code (a, b)} and a
      * destructuring that reads the second place read {@code b}, wherever the helper's answer is
-     * bound on the way. A helper that answers one pair or another has the place of either.
+     * bound on the way. A helper that answers one pair or another has the place of either, and a
+     * pair taken out of a pair is read for the place asked of it.
+     *
+     * <p>The reader runs inside the walk, under every binding on the way to the value, for the
+     * reason {@link #introducing} gives.
      */
-    private List<Held> componentsOf(Core tuple, int index, BindingEnvironment names) {
+    private PathResolution inComponent(Core tuple, int index, BindingEnvironment names,
+                                       OfAValue read) {
         return switch (Core.withoutStanding(tuple)) {
             case Core.Tuple pair -> index < pair.elements().size()
-                    ? List.of(new Held(pair.elements().get(index), names)) : null;
+                    ? read.of(pair.elements().get(index), names) : null;
             case Core.Read r when names.roleOf(r.binding()) instanceof BindingRole.Alias(var held) ->
-                    trail.through(r.binding(), () -> componentsOf(held, index, names));
-            case Core.LetIn let ->
-                    componentsOf(let.body(), index, names.inside(let.binder(), let.value()));
-            case Core.If iff when asksAcrossCases() ->
-                    componentsInEach(List.of(iff.then(), iff.els()), index, names);
-            case Core.Match match when asksAcrossCases() -> componentsInEach(
-                    match.cases().stream().map(Core.Case::body).toList(), index, names);
+                    trail.through(r.binding(), () -> inComponent(held, index, names, read));
+            case Core.LetIn let -> inComponent(let.body(), index,
+                    names.inside(let.binder(), let.value()), read);
+            case Core.If iff when asksAcrossCases() -> acrossCases(List.of(iff.then(), iff.els()),
+                    arm -> inComponent(arm, index, names, read));
+            case Core.Match match when asksAcrossCases() -> acrossCases(
+                    match.cases().stream().map(Core.Case::body).toList(),
+                    arm -> inComponent(arm, index, names, read));
+            case Core.TupleGet inner -> inComponent(inner.tuple(), inner.index(), names,
+                    (value, at) -> inComponent(value, index, at, read));
             case null, default -> null;
         };
     }
 
-    private List<Held> componentsInEach(List<Core> cases, int index, BindingEnvironment names) {
-        List<Held> out = new ArrayList<>();
+    /**
+     * The answers on each of {@code cases} a value is chosen between, put together
+     * ({@link #alongEachCase}), or null where one case is not one this walk reduces.
+     */
+    private PathResolution acrossCases(List<Core> cases, Function<Core, PathResolution> each) {
+        List<PathResolution> answers = new ArrayList<>();
         for (Core one : cases) {
-            List<Held> in = componentsOf(one, index, names);
-            if (in == null) {
+            PathResolution answer = each.apply(one);
+            if (answer == null) {
                 return null;
             }
-            out.addAll(in);
+            answers.add(answer);
         }
-        return out;
+        return alongEachCase(answers);
     }
-
-    /** A value and the names it is read under. */
-    private record Held(Core value, BindingEnvironment names) {}
 
     private static Core.Block blockStanding(Core closure) {
         return Core.withoutStanding(closure) instanceof Core.Block block ? block : null;
