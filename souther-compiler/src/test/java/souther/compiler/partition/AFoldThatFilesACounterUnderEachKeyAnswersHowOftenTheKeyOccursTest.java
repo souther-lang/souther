@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
@@ -19,6 +20,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -198,7 +200,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
 
     @Test
     void aConditionHeldTwiceDrawsAnotherLineOnTheSameCount() {
-        Compilation compilation = measured(
+        Compilation compilation = read(
                 modelOf(COUNTING, "count >= atLeast && count < 5", ""));
         assertEquals(2, bordersOf(compilation).size(),
                 () -> "a line for each comparison: " + report(compilation));
@@ -221,8 +223,8 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
 
                 let popular (xs, atLeast) = selected(xs, atLeast)
                 """;
-        Compilation another = measured(direct);
-        assertEquals(axisOf(measured(modelOf(COUNTING, "count >= atLeast", ""))),
+        Compilation another = read(direct);
+        assertEquals(axisOf(read(modelOf(COUNTING, "count >= atLeast", ""))),
                 axisOf(another));
         assertTrue(json(another).contains("multiplicity(xs[*])"), () -> report(another));
     }
@@ -239,12 +241,12 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
      */
     @Test
     void keysAMapAnsweredAsTheyAreAreCountedAsTheListIs() {
-        Compilation plain = measured(modelOf(COUNTING, "count >= atLeast", ""));
+        Compilation plain = read(modelOf(COUNTING, "count >= atLeast", ""));
         List<String> plainAxes = axisOf(plain);
         List<String> plainUnread = unreadOf(plain);
         for (String keys : List.of("List.map(k -> k, xs)", "List.map(k -> k, List.map(j -> j, xs))",
                 "List.reverse(List.map(k -> k, xs))", "List.map(k -> k, List.sort(xs))")) {
-            Compilation compilation = measured(modelOver(keys));
+            Compilation compilation = read(modelOver(keys));
             assertEquals(plainAxes, axisOf(compilation),
                     () -> keys + ": " + report(compilation));
             assertTrue(json(compilation).contains("multiplicity(xs[*])"),
@@ -276,10 +278,10 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
      */
     @Test
     void whetherAMapHoldsAnythingIsReadWhateverOrderTheFoldWalksTheKeysIn() {
-        Compilation plain = measured(modelOfWhetherItHoldsAnything("xs"));
+        Compilation plain = read(modelOfWhetherItHoldsAnything("xs"));
         assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
         assertSidesAreRead(plain);
-        Compilation reversed = measured(modelOfWhetherItHoldsAnything("List.reverse(xs)"));
+        Compilation reversed = read(modelOfWhetherItHoldsAnything("List.reverse(xs)"));
         assertEquals(axisOf(plain), axisOf(reversed), () -> report(reversed));
         assertEquals(decisionsOf(plain), decisionsOf(reversed), () -> report(reversed));
         assertFalse(report(reversed).contains("not read"), () -> report(reversed));
@@ -302,7 +304,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
      */
     @Test
     void whetherAMapHoldsAnythingIsNotReadAsHowManyKeysThereAreWhereSomeWereKept() {
-        Compilation kept = measured(modelOfWhetherItHoldsAnything(
+        Compilation kept = read(modelOfWhetherItHoldsAnything(
                 "List.filter(k -> String.length(k) > 1, xs)"));
         assertTrue(axisOf(kept).stream().noneMatch(each -> each.contains("List.length(xs)")),
                 () -> axisOf(kept) + report(kept));
@@ -332,7 +334,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 "List.map(k -> String.append(k, \"!\"), xs)",
                 "List.filter(k -> String.length(k) > 1, xs)",
                 "List.map(k -> k, List.filter(k -> String.length(k) > 1, xs))")) {
-            Compilation compilation = measured(modelOver(keys));
+            Compilation compilation = read(modelOver(keys));
             assertFalse(json(compilation).contains("multiplicity(xs[*])"),
                     () -> keys + ": " + report(compilation));
         }
@@ -392,10 +394,10 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                         "detail.label"))) {
             Read direct = directly.computeIfAbsent(taken.counted(), counted -> {
                 Compilation compiled =
-                        measured(modelOfIssues(countedUnder("k." + counted), "issues"));
+                        read(modelOfIssues(countedUnder("k." + counted), "issues"));
                 return new Read(axisOf(compiled), unreadOf(compiled));
             });
-            Compilation compilation = measured(modelOfIssues(taken.step(), taken.keys()));
+            Compilation compilation = read(modelOfIssues(taken.step(), taken.keys()));
             assertEquals(direct.axes(), axisOf(compilation),
                     () -> taken + ": " + report(compilation));
             assertTrue(json(compilation).contains(
@@ -455,7 +457,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 "List.map(i -> \"same\", issues)",
                 "List.map(i -> i.label, List.filter(i -> i.detail.weight > 1, issues))",
                 "List.flatMap(i -> i.tags, issues)")) {
-            Compilation compilation = measured(modelOfIssues(countedUnder("k"), keys));
+            Compilation compilation = read(modelOfIssues(countedUnder("k"), keys));
             assertFalse(json(compilation).contains("multiplicity("),
                     () -> keys + ": " + report(compilation));
         }
@@ -467,7 +469,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
      */
     @Test
     void aKeyReadOffAnotherWalksElementIsNotCountedAsTheElementsKey() {
-        Compilation compilation = measured("""
+        Compilation compilation = read("""
                 module example.popular
 
                 data Issue = { label: String }
@@ -488,7 +490,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     /** A key wrapped in a newtype is the value it wraps under a name, and occurs as often. */
     @Test
     void aKeyWrappedInANewtypeIsCountedAsTheValueItWraps() {
-        Compilation compilation = measured("""
+        Compilation compilation = read("""
                 module example.popular
 
                 data Label = String
@@ -520,7 +522,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 "{ let made = Outer { key = Key { label = i.label } }\n made.key.label }",
                 "{ let made = Shell { outer = Outer { key = Key { label = i.label } } }\n"
                         + " let inner = made.outer.key\n inner.label }")) {
-            Compilation compilation = measured("""
+            Compilation compilation = read("""
                     module example.popular
 
                     data Issue = { label: String }
@@ -561,7 +563,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                         + " issues)"),
                 new Wrapped("Label(k.label)", "issues"),
                 new Wrapped("{ let key = Label(k.label)\n key }", "issues"))) {
-            Compilation compilation = measured("""
+            Compilation compilation = read("""
                     module example.popular
 
                     data Label = String
@@ -691,7 +693,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     /** A lookup that files under another key than the one it looked up is no counter of it. */
     @Test
     void aLookupThatFilesUnderAnotherKeyIsNotACounter() {
-        Compilation compilation = measured(modelOf("""
+        Compilation compilation = read(modelOf("""
                 match Map.get(x, acc) with
                     | None -> Map.insert(x, 1, acc)
                     | Some n -> Map.insert("other", n + 1, acc)""", "count >= atLeast", ""));
@@ -718,7 +720,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 "Map.updateOrInsert(\"all\", 1, n -> n + 1, Map.updateOrInsert(x, 1, n -> n + 1,"
                         + " acc))");
         for (String step : steps) {
-            Compilation compilation = measured(modelOf(step, "count >= atLeast", ""));
+            Compilation compilation = read(modelOf(step, "count >= atLeast", ""));
             assertTrue(bordersOf(compilation).isEmpty(),
                     () -> "no line on how often a key occurs for " + step + ": "
                             + report(compilation));
@@ -730,7 +732,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     /** A map that starts with something in it has entries no element filed. */
     @Test
     void aFoldFromAMapWithEntriesIsNotReadAsACounter() {
-        Compilation compilation = measured("""
+        Compilation compilation = read("""
                 module example.popular
 
                 let countsOf (xs: List<String>): Map<String, Int> =
@@ -771,7 +773,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     /** A key read at a field of the element is a line still, though no row is chosen for it. */
     @Test
     void aKeyAtAFieldOfTheElementDrawsItsLine() {
-        Compilation compilation = measured("""
+        Compilation compilation = read("""
                 module example.popular
 
                 data Item = { label: String, weight: Int }
@@ -903,7 +905,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 new Walked("ts: List<Touch>",
                         "List.flatMap(t -> List.map(l -> (l, t.weight), t.labels), ts)",
                         "occurrences(ts[*].labels[*])"))) {
-            Compilation compilation = measured("""
+            Compilation compilation = read("""
                     module example.popular
 
                     data Item = { label: String, weight: Int }
@@ -944,7 +946,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 new Walked("xs: List<Item>", "List.map("
                         + "x -> Pair { name = String.append(x.label, \"!\"), size = x.weight },"
                         + " xs)", null))) {
-            Compilation compilation = measured("""
+            Compilation compilation = read("""
                     module example.popular
 
                     data Item = { label: String, weight: Int }
@@ -1116,7 +1118,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 """;
         List<String> kept = new ArrayList<>();
         for (String longerThan : List.of("0", "1")) {
-            Compilation compilation = measured(modelOfTouches("List<String>",
+            Compilation compilation = read(modelOfTouches("List<String>",
                     "List.filter(k -> String.length(k) > " + longerThan
                             + ", List.flatMap(t -> t.labels, ts))") + example);
             Matcher named = Pattern.compile("\"kept_by\"\\s*:\\s*\"([^\"]*)\"")
@@ -1379,11 +1381,39 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 .toList();
     }
 
+    /** Each source measured once for the class at each level: several tests read the same model,
+     *  and only read it. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    private static final Map<String, Compilation> READ = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+        READ.clear();
+    }
+
     /** The source measured, which is a source that compiles: a model that did not would have no
      *  line to draw whatever its folds are. */
     private static Compilation measured(String source) {
+        return MEASURED.computeIfAbsent(source,
+                text -> compiled(text, Adequacy.Asked.fullReport()));
+    }
+
+    /**
+     * The source read for the lines its rules draw, and no row composed at them: what a test asks
+     * that is about what a count is read as, and nothing about a row put on either side of it.
+     */
+    private static Compilation read(String source) {
+        return READ.computeIfAbsent(source,
+                text -> compiled(text, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS)));
+    }
+
+    private static Compilation compiled(String source, Adequacy.Asked asked) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(asked);
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code().toString()).toList(),

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
@@ -12,8 +13,10 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -54,9 +57,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
      * way with: the rows an obligation at it is owed at are rows past them.
      */
     private static String whereTheLineDecides(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured(model);
         List<String> found = Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
                 .filter(line -> line.border().cut().toString().contains("Apart"))
                 .map(line -> ((LineOrigin.ComparisonOrigin) line.origin()).part()
@@ -68,9 +69,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
 
     /** The line a comparison of two values draws is the line between them. */
     private static List<String> lineBetweenAAndK(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured(model);
         return Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
                 .filter(line -> line.border().cut().toString().contains("Apart"))
                 .map(line -> (line.border().cut() + " " + new TreeSet<>(line.items().keySet()
@@ -197,9 +196,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
      */
     @Test
     void aRuleSomeRunsStopInIsNamedByItsRuleIdInTheDocument() {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted("", QUOTIENT), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured(MODEL.formatted("", QUOTIENT));
         JsonNode findings = JsonMapper.builder().build()
                 .readTree(AdequacyReport.of(compilation)
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
@@ -315,10 +312,28 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     }
 
     private static String human(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /** Each model measured once for the class: several tests read the same model, its lines and
+     *  its report, and only read them. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
+    private static Compilation measured(String model) {
+        return MEASURED.computeIfAbsent(model, source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
     }
 }

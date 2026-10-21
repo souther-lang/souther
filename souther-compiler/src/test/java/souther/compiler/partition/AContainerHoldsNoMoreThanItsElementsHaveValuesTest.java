@@ -346,7 +346,6 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     private static BorderAssessment countLineOf(String model, int value, String said) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "p");
         assertNotNull(read, () -> said + ": the model under test compiles");
         return read.get("f").stream()
@@ -422,7 +421,6 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     private static List<FillResult.Offer> offersOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "p");
         assertNotNull(all, "the model under test compiles");
         return all.get("f").composed().offers();
@@ -528,7 +526,6 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
 
     private static RuleReadingContext pastTheFigures() {
         Compilation compilation = Compilation.ofSource(PAST_THE_FIGURES, "Main");
-        compilation.answerEverything();
         return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
                 ReadAs.THE_COMPILATION_DOES);
     }
@@ -596,7 +593,6 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     private static Map<String, List<BorderAssessment>> readingsOf(Compilation compilation,
                                                                   String module) {
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), module);
         assertNotNull(read, "the model under test compiles");
         return read;
