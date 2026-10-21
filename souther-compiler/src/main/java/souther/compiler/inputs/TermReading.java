@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
@@ -614,7 +615,7 @@ final class TermReading {
             }
             terms.add(exact.value());
         }
-        return sumOf(terms);
+        return sumOf(terms, on.answered());
     }
 
     /**
@@ -657,10 +658,7 @@ final class TermReading {
             }
             OneElement fields = new OneElement(on, element, position++);
             ExactAnswer<ExactRatio> made = term.value().at(fields);
-            Reading stop = made == null
-                    ? (fields.stopped != null ? fields.stopped : new Reading.NotNumber())
-                    : made instanceof ExactAnswer.Unheld<ExactRatio>(UnheldNumber why)
-                            ? new Reading.NotWorkedOut(why) : null;
+            Reading stop = numberOf(made, fields, on.observed());
             if (stop != null) {
                 stopped.put(itsKey, stop);
             } else {
@@ -671,17 +669,41 @@ final class TermReading {
         Map<Place, Reading> ofEachKey = new HashMap<>();
         if (everyKeyStopped == null) {
             numbers.forEach((key, gathered) -> ofEachKey.put(key,
-                    gatheredBy(term.gathering(), gathered)));
+                    gatheredBy(term.gathering(), gathered, on.answered())));
             ofEachKey.putAll(stopped);
         }
-        return new UnderItsKey(keyedOn, keys, ofEachKey, everyKeyStopped);
+        return new UnderItsKey(keyedOn, each.size(), keys, ofEachKey, everyKeyStopped);
     }
 
-    /** What the numbers of one key come to by {@code gathering}, which are some. */
+    /**
+     * Why the number one element was made into is none the reading can use, or null where it is
+     * one: a field it needs that the element does not hold, a number the exact arithmetic could
+     * not hold, or one {@code on}, what the program computes it as, does not — where the program
+     * stops making it.
+     */
+    private static Reading numberOf(ExactAnswer<ExactRatio> made, OneElement fields, Carrier on) {
+        if (made == null) {
+            return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
+        }
+        if (!(made instanceof ExactAnswer.Held<ExactRatio>(ExactRatio number))) {
+            return new Reading.NotWorkedOut(((ExactAnswer.Unheld<ExactRatio>) made).why());
+        }
+        return switch (number.writtenDecimal()) {
+            case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
+                    new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value().isEmpty()
+                    ? new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS)
+                    : on == null || on.onTheGrid(new Count(written.value().get())) == null
+                            ? new Reading.NotNumber() : null;
+        };
+    }
+
+    /** What the numbers of one key come to by {@code gathering}, which are some, each added on
+     *  {@code on} as the program adds them. */
     private static Reading gatheredBy(NumericTerm.GatheredUnderItsKey.Gathering gathering,
-                                      List<ExactRatio> numbers) {
+                                      List<ExactRatio> numbers, Carrier on) {
         return switch (gathering) {
-            case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> sumOf(numbers);
+            case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> sumOf(numbers, on);
             case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) -> {
                 ExactRatio end = numbers.getFirst();
                 for (ExactRatio other : numbers) {
@@ -699,18 +721,23 @@ final class TermReading {
      * What every key of a run's elements came to, read once for every element asked about.
      *
      * @param keyedOn   what a key is decoded on
+     * @param elements  how many elements there are, read or not
      * @param keys      each element's key, in the order the row holds them, as far as they were
-     *                  read
+     *                  read: every one of them where {@code stopped} is null
      * @param ofEachKey what each key read came to
      * @param stopped   why no key's number is read, where an element's key was not; else null
      */
-    record UnderItsKey(Carrier keyedOn, List<Place> keys, Map<Place, Reading> ofEachKey,
-                       Reading stopped) {
+    record UnderItsKey(Carrier keyedOn, int elements, List<Place> keys,
+                       Map<Place, Reading> ofEachKey, Reading stopped) {
 
-        /** What each element's key comes to, one reading per element. */
+        /**
+         * What each element's key comes to, one reading per element whether or not its key was
+         * read: an element whose number nothing read is one a reader is told stopped, and never
+         * one left out of what it counts.
+         */
         List<Reading> ofEachElement() {
             if (stopped != null) {
-                return keys.stream().map(_ -> stopped).toList();
+                return Collections.nCopies(elements, stopped);
             }
             return keys.stream().map(ofEachKey::get).toList();
         }
@@ -983,7 +1010,7 @@ final class TermReading {
             }
             terms.add(count.exactly());
         }
-        return sumOf(terms);
+        return sumOf(terms, elements);
     }
 
     /**
@@ -994,6 +1021,32 @@ final class TermReading {
      * it. The two are one account of one operation, so what a sum too wide for the exact arithmetic
      * comes to is one answer.
      */
+    private static Reading sumOf(List<ExactRatio> terms, Carrier on) {
+        Reading whole = sumOf(terms);
+        if (!(whole instanceof Reading.Number) || on == null) {
+            return whole;
+        }
+        // Added one at a time in the order the walk hands them, which is what the program does,
+        // and a step past what the carrier holds is where its run stops: whole numbers that pass
+        // the last one on the way come to no total, though those after would bring it back. Asked
+        // of each step and not of the total alone for that reason. A step this arithmetic cannot
+        // hold says nothing of the carrier, and the sum of them all is the answer then.
+        ExactRatio sofar = ExactRatio.ZERO;
+        for (ExactRatio each : terms) {
+            if (!(sofar.plus(each) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio next))
+                    || !(next.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>>(
+                            Optional<BigDecimal> written))
+                    || written.isEmpty()) {
+                return whole;
+            }
+            if (on.onTheGrid(new Count(written.get())) == null) {
+                return new Reading.NotNumber();
+            }
+            sofar = next;
+        }
+        return whole;
+    }
+
     private static Reading sumOf(List<ExactRatio> terms) {
         // A container may hold a model's own decimals, spaced as widely apart in scale as any two
         // of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards against

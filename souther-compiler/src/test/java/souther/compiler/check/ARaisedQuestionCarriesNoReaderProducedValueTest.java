@@ -124,9 +124,6 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * what make it one number of the place, and both are what the author's fold wrote — the end
      * its closure keeps, and the field it files under, carried as the field names read from the
      * element.
-     *
-     * <p>{@code OfTheTotalOfItsKey} is the same for the total of a key's numbers, and carries the
-     * field names of the key for the same reason.
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",
@@ -142,7 +139,6 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOccurrencesInEveryContainer",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfTheOccurrencesOfAKey",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfTheExtremeOfItsKey",
-            "souther/compiler/check/NumberAt$OfWhatNumber$OfTheTotalOfItsKey",
             "souther/compiler/check/Extreme",
             "souther/compiler/check/Extreme$Least",
             "souther/compiler/check/Extreme$Greatest",

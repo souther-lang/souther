@@ -2378,8 +2378,7 @@ public final class FieldDomains {
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,
-                 NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _,
-                 NumberAt.OfWhatNumber.OfTheTotalOfItsKey _ -> null;
+                 NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
         };
     }
 
@@ -2465,8 +2464,7 @@ public final class FieldDomains {
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,
-                 NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _,
-                 NumberAt.OfWhatNumber.OfTheTotalOfItsKey _ -> null;
+                 NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
         };
     }
 

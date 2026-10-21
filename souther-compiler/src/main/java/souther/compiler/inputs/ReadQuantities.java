@@ -1383,16 +1383,15 @@ final class ReadQuantities implements Quantities {
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
     private InputAtom called(NumericTerm term, StructuralContext under) {
-        // A number computed of each element is no number at a place, so what names it is the term,
-        // under the value whose rules the elements stand under.
-        if (term instanceof NumericTerm.TakenOver over
-                && over.source() instanceof RunSource.ComputedOccurrences) {
+        // A number no place names is named by the term, under the value whose rules what it is
+        // read from stands under ({@link NumericTerm#atItsPlace}).
+        NumberAt.OfWhatNumber which = term.atItsPlace();
+        if (which == null) {
             return new InputAtom.Computed(
-                    rootOf(standingUnder(term.subjectPath(), under)).root().toString(), over);
+                    rootOf(standingUnder(term.subjectPath(), under)).root().toString(), term);
         }
         UnderARoot at = rootOf(term.subjectPath());
-        NumberAt<RuleKey> where = coordinateOf(at, term);
-        return atomAt(standingUnder(pathOf(at.root(), where.position()), under), where.of());
+        return atomAt(standingUnder(pathOf(at.root(), at.named()), under), which);
     }
 
     /** Where a value's own rules put a coordinate, as a place of this input. */
@@ -2095,46 +2094,6 @@ final class ReadQuantities implements Quantities {
                             + " about " + term);
         }
         return term;
-    }
-
-    /**
-     * The coordinate of one term, in the words the rules of the value it is a position of are read
-     * in.
-     *
-     * <p>Total, because the name arrives with the root that answers by it ({@link #rootOf}). Which
-     * steps of a place are names a rule writes is settled once, where the root is chosen, so
-     * nothing here decides it again and there is no place a term could arrive at that this cannot
-     * name.
-     *
-     * <p>Named by the operation and not by "something was taken here". A count of a string and the
-     * magnitude of a number at the same place are two quantities, and a flag brought them to one
-     * name — so a guard bounding one would have been read against the clauses written about the
-     * other (#1027).
-     */
-    private NumberAt<RuleKey> coordinateOf(UnderARoot at, NumericTerm term) {
-        return switch (term) {
-            case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
-            case NumericTerm.TakenOf taken ->
-                    NumberAt.takenOf(at.named(), taken.operation(), taken.arguments(),
-                            taken.transformation());
-            case NumericTerm.CodePointClassCount count ->
-                    NumberAt.countOf(at.named(), count.counted(), count.through());
-            case NumericTerm.CodePointValueSum _ -> NumberAt.codePointSumOf(at.named());
-            case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
-            case NumericTerm.OccurrencesOfItsValue occurrences ->
-                    NumberAt.occurrencesOf(at.named(), occurrences.selection() == null ? null
-                            : occurrences.selection().key());
-            // The key by the whole place it stands at: what a rule calls a place is relative to the
-            // value it is a position of, and two parameters are both called the value.
-            case NumericTerm.OccurrencesOfAKey asked ->
-                    NumberAt.occurrencesOfAKey(at.named(), asked.key().discriminated());
-            case NumericTerm.ExtremeOfItsKey extreme ->
-                    NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().fields());
-            case NumericTerm.GatheredUnderItsKey gathered ->
-                    new NumberAt<>(at.named(), gathered.ofWhatNumber());
-            case NumericTerm.TakenOver over ->
-                    NumberAt.takenAsItStands(at.named(), over.operation());
-        };
     }
 
     /** The term a form is, where it is one term taken as itself, or null where it is arithmetic. */

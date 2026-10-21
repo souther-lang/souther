@@ -4,8 +4,6 @@ import souther.compiler.check.NumberAt;
 import souther.compiler.check.Owed;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
-import souther.compiler.numeric.ValueTransformation;
-import souther.compiler.semantics.TakenArguments;
 
 /**
  * What a rule placed, taken apart into where it was written and what it says there.
@@ -80,41 +78,18 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
      * where the value is chosen ({@link InputDomain#rootNaming}) — worked out again here, this
      * would answer that a rule names nothing at a value picked for naming it.
      *
-     * <p>Exhaustive over {@link NumericTerm}, with no {@code default}: a term of a third kind is a
-     * name this would have to read, and stopping the compile is what says so.
+     * <p>Which number of the place it is, is the term's own answer ({@link
+     * NumericTerm#atItsPlace}), asked of a term a place names. A term no place names has no name
+     * a rule of the value could have written, and is no seed.
      */
     public static PlacementSeed of(RuleAddress address, NumericTerm term,
                                    RuleCitation cited) {
-        return new PlacementSeed(address, new Placed.ANumberOfIt(switch (term) {
-            case NumericTerm.ValueOf _ -> new NumberAt.OfWhatNumber.OfItsOwnValue();
-            case NumericTerm.TakenOf taken ->
-                    new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken.operation(),
-                            taken.arguments(), taken.transformation());
-            case NumericTerm.CodePointClassCount count ->
-                    new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted(),
-                            count.through());
-            case NumericTerm.CodePointValueSum _ ->
-                    new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
-            case NumericTerm.Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
-            case NumericTerm.OccurrencesOfItsValue occurrences ->
-                    new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
-                            occurrences.selection() == null ? null
-                                    : occurrences.selection().key());
-            case NumericTerm.OccurrencesOfAKey asked ->
-                    new NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey(
-                            asked.key().discriminated());
-            case NumericTerm.ExtremeOfItsKey extreme ->
-                    new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme.extreme(),
-                            extreme.keyField().fields());
-            case NumericTerm.GatheredUnderItsKey gathered -> gathered.ofWhatNumber();
-            // The operation likewise, since what a rule about this number is about is what the
-            // operation answered. That it answered it over a run rather than of one value is not a
-            // difference a rule of the value the run is under can name: no clause of a record is
-            // written about what its elements come to.
-            case NumericTerm.TakenOver over ->
-                    new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(over.operation(),
-                            TakenArguments.NONE, ValueTransformation.NONE);
-        }), cited);
+        NumberAt.OfWhatNumber which = term.atItsPlace();
+        if (which == null) {
+            throw new IllegalArgumentException(term + " is named by no place, and no rule of a"
+                    + " value is written at one for it");
+        }
+        return new PlacementSeed(address, new Placed.ANumberOfIt(which), cited);
     }
 
     /**

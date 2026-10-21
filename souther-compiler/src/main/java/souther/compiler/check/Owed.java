@@ -93,7 +93,6 @@ public sealed interface Owed {
                         "occurrences(" + where + " equal to " + asked.key() + ")";
                 case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                         extreme.spelledAt(where);
-                case NumberAt.OfWhatNumber.OfTheTotalOfItsKey total -> total.spelledAt(where);
             };
         }
     }

@@ -1858,9 +1858,6 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                     throw new IllegalStateException("a clause of a declaration was read as a rule"
                             + " about " + extreme.spelledAt(path.toString()));
-            case NumberAt.OfWhatNumber.OfTheTotalOfItsKey total ->
-                    throw new IllegalStateException("a clause of a declaration was read as a rule"
-                            + " about " + total.spelledAt(path.toString()));
         };
         if (term == null) {
             throw new IllegalStateException(
@@ -1933,10 +1930,8 @@ public final class InputDomain {
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _ -> Carrier.WHOLE;
-            // One of the values standing there, so on their order; and a total of them is spaced
-            // as they are.
-            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _,
-                 NumberAt.OfWhatNumber.OfTheTotalOfItsKey _ -> carried;
+            // One of the values standing there, so on their order.
+            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> carried;
         };
     }
 
@@ -2068,10 +2063,6 @@ public final class InputDomain {
                 }
                 yield extreme;
             }
-            // Gathered over a run a walk was shown to be over, which a name does not show.
-            case NumberAt.OfWhatNumber.OfTheTotalOfItsKey total ->
-                    throw new IllegalStateException(total.spelledAt(path.toString())
-                            + " was asked for by name, and no declaration names it");
         };
     }
 

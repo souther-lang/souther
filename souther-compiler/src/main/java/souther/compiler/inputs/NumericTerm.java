@@ -1000,7 +1000,8 @@ public sealed interface NumericTerm
         /**
          * What the elements standing at {@code elements} that hold at {@code key} what the element
          * under consideration holds there come to, each as {@code value}, by {@code gathering} —
-         * or null where the key is not reached from an element by fields alone, the value reads
+         * or null where the key is not reached from an element by fields alone — the element itself
+         * among them, reached by none — the value reads
          * where each element stands, or the number is {@link ExtremeOfItsKey}'s.
          *
          * <p>Asked of elements a walk was shown to be over every occurrence of, and of no others:
@@ -1014,10 +1015,10 @@ public sealed interface NumericTerm
          */
         public static GatheredUnderItsKey of(TermPath elements, ElementProjection key,
                                              ElementValue value, Type each, Gathering gathering) {
-            // The key a way of fields alone, so one value of every element.
+            // The key a way of fields alone, so one value of every element: none of them where the
+            // element is its own key.
             if (elements == null || key == null || value == null || each == null
                     || gathering == null || !elements.insideAContainer() || key.fields() == null
-                    || key.fields().isEmpty()
                     || value.readsThePosition()) {
                 return null;
             }
@@ -1103,29 +1104,15 @@ public sealed interface NumericTerm
             return hash;
         }
 
-        /**
-         * Which number of what stands at {@link #subjectPath} this is, as a rule names one: the
-         * total or the end, and the key. What each element contributes is not in it, as it is not
-         * in the name of a total computed of each element: no clause of a value is written about
-         * what its elements come to.
-         */
-        public NumberAt.OfWhatNumber ofWhatNumber() {
-            return switch (gathering) {
-                case Gathering.Total _ -> new NumberAt.OfWhatNumber.OfTheTotalOfItsKey(
-                        key.fields());
-                case Gathering.End(Extreme extreme) ->
-                        new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, key.fields());
-            };
-        }
-
         @Override
         public String toString() {
             ElementProjection place = value.asAPlace();
             String of = place == null ? "{" + value + " | " + elements + "}"
                     : place.from(elements).toString();
             return switch (gathering) {
-                case Gathering.Total _ -> new NumberAt.OfWhatNumber.OfTheTotalOfItsKey(
-                        key.fields()).spelledAt(of);
+                case Gathering.Total _ -> "total(" + of + " by "
+                        + NumberAt.OfWhatNumber.OfTheExtremeOfItsKey.keySpelled(key.fields())
+                        + ")";
                 case Gathering.End(Extreme extreme) ->
                         new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, key.fields())
                                 .spelledAt(of);
@@ -1352,6 +1339,61 @@ public sealed interface NumericTerm
             case OccurrencesOfItsValue _ -> null;
             case OccurrencesOfAKey _ -> null;
             // Gathered from every element of one key, so from no one place.
+            case GatheredUnderItsKey _ -> null;
+        };
+    }
+
+    /**
+     * Which number of what stands at {@link #subjectPath} this is, as a place and a kind of number
+     * name it — or null where they do not say which number it is.
+     *
+     * <p>The one answer to it. A number is named by a place where the place and the kind of
+     * number say it apart from every other, which is how a clause of a declaration and a statement
+     * of a body come to be about one number. Where they do not, a name made of them would be one
+     * name for several numbers: the totals of {@code q + 1} and of {@code q + 2} over one list are
+     * both a total at the list's elements, and the sums of two containers in every node of a tree
+     * are both a sum at its root. Such a number is named by the term itself, which is equal by
+     * everything that makes it the number it is.
+     *
+     * <p>By the operation, and not by something having been taken at the place: a count of a
+     * string and the magnitude of a number at one place are two numbers, and one name for both
+     * would read a guard on one against the clauses written about the other.
+     *
+     * <p>Exhaustive over the terms there are, with no {@code default}: a kind added says which of
+     * the two it is here, and every reader that names a number asks this.
+     */
+    default NumberAt.OfWhatNumber atItsPlace() {
+        return switch (this) {
+            case ValueOf _ -> new NumberAt.OfWhatNumber.OfItsOwnValue();
+            case TakenOf taken -> new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
+                    taken.operation(), taken.arguments(), taken.transformation());
+            case CodePointClassCount count ->
+                    new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted(),
+                            count.through());
+            case CodePointValueSum _ -> new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
+            case Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
+            case OccurrencesOfItsValue occurrences ->
+                    new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
+                            occurrences.selection() == null ? null
+                                    : occurrences.selection().key());
+            // The key by the whole place it stands at: what a rule calls a place is relative to the
+            // value it is a position of, and two parameters are both called the value.
+            case OccurrencesOfAKey asked ->
+                    new NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey(asked.key().discriminated());
+            case ExtremeOfItsKey extreme -> new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(
+                    extreme.extreme(), extreme.keyField().fields());
+            // The operation and the values at the place, where the values are what stands there.
+            // What a walk computed of each element, and which nodes of a tree a container is read
+            // in, are not said by the place the run is read from.
+            case TakenOver over -> switch (over.source()) {
+                case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _ ->
+                        new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(over.operation(),
+                                TakenArguments.NONE, ValueTransformation.NONE);
+                case RunSource.ComputedOccurrences _, RunSource.ReachableNodes _ -> null;
+            };
+            // What each element contributes is a number made of it, which the place does not say
+            // even where it reads one field: the field read as another kind of number is another
+            // number at the same place.
             case GatheredUnderItsKey _ -> null;
         };
     }

@@ -258,6 +258,86 @@ class AFoldThatAddsWhatEachKeyFilesAnswersTheTotalOfItsValuesTest {
     }
 
     /**
+     * An element that is its own key is a key as much as a field of it is: the total of the
+     * elements equal to each is the line, spelled by the element itself, and the rows offered for
+     * it meet it.
+     */
+    @Test
+    void anElementThatIsItsOwnKeyIsTotalledUnderItself() {
+        String model = """
+                module example.ledger
+
+                let totals (xs: List<Int>): Map<Int, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, x, n -> n + x, acc),
+                              Map.empty, xs)
+
+                behavior over : (xs: List<Int>, limit: Int) -> List<Int>
+
+                let over (xs, limit) =
+                    List.sort(Map.keys(Map.filterEntries((_, t) -> t >= limit, totals(xs))))
+                %s""";
+        Compilation before = measured(model.formatted(""));
+        assertTrue(json(before).contains("total(xs[*] by itself)"), () -> report(before));
+        Pattern row = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
+        StringBuilder written = new StringBuilder("\nexample over\n");
+        int named = 0;
+        for (String each : Adequacy.offeredFor(before.db(),
+                        OfferingRequest.overTheModule("example.ledger"))
+                .rowsByBehavior().getOrDefault("over", List.of()).stream()
+                .map(offered -> String.join(", ",
+                        offered.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList()) {
+            Matcher matched = row.matcher(each);
+            if (!matched.matches()) {
+                fail("an offered row is one this reads back: " + each);
+            }
+            int limit = Integer.parseInt(matched.group(2));
+            Map<Integer, Integer> totals = new LinkedHashMap<>();
+            for (String x : matched.group(1).isEmpty() ? new String[0]
+                    : matched.group(1).split(", ")) {
+                totals.merge(Integer.parseInt(x), Integer.parseInt(x), Integer::sum);
+            }
+            List<Integer> kept = totals.entrySet().stream()
+                    .filter(entry -> entry.getValue() >= limit).map(Map.Entry::getKey)
+                    .sorted().toList();
+            written.append("    | \"offered ").append(named++).append("\" : (").append(each)
+                    .append(") -> ").append(kept).append("\n");
+        }
+        assertTrue(named > 0, () -> "rows are offered: " + report(before));
+        Compilation after = measured(model.formatted(written));
+        assertEquals(List.of(), unmetOf(after),
+                () -> "the rows that were offered meet the line: " + report(after));
+    }
+
+    /**
+     * A total looked up under a key asked for, rather than under one of the map's own keys, is
+     * whether some element has that key and what the elements that have it come to — a number
+     * this does not read yet. It is said to be unread, and no total of a key is drawn for it.
+     */
+    @Test
+    void aTotalLookedUpUnderAKeyAskedForIsLeftUnread() {
+        Compilation compilation = measured("""
+                module example.ledger
+
+                data Posting = { account: String, amount: Int }
+
+                let totals (ps: List<Posting>): Map<String, Int> =
+                    List.fold((acc, p) -> Map.updateOrInsert(p.account, p.amount,
+                                              n -> n + p.amount, acc), Map.empty, ps)
+
+                behavior large : (ps: List<Posting>, account: String) -> Bool
+
+                let large (ps, account) =
+                    match Map.get(account, totals(ps)) with
+                        | Some amount -> amount >= 100
+                        | None -> false
+                """);
+        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+        assertFalse(json(compilation).contains("gathered_under_its_key"),
+                () -> report(compilation));
+    }
+
+    /**
      * A total of nought is written as elements of the key coming to nought, and not as no element:
      * none files no key, so the comparison of what a key comes to is never made.
      */
