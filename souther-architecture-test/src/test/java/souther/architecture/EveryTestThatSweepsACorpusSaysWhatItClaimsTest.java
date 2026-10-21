@@ -2,6 +2,7 @@ package souther.architecture;
 
 import souther.test.CheckedInObservation;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 import souther.test.RepositoryLayout;
 
 import org.junit.jupiter.api.Test;
@@ -142,6 +143,60 @@ class EveryTestThatSweepsACorpusSaysWhatItClaimsTest {
                         + " for a reason other than the one it states");
     }
 
+    /** The corpus a test that reads it pays for in every JVM it is first in. */
+    private static final String REPOSITORY_MODELS = "souther/compiler/conformance/RepositoryModels";
+
+    private static final String READS_THE_REPOSITORYS_MODELS =
+            "L" + ReadsTheRepositorysModels.class.getName().replace('.', '/') + ";";
+
+    /**
+     * Every test that reaches the repository's models carries the tag that asks it with the others,
+     * and no other test does.
+     *
+     * <p>Not declared, as the claim above is, but read off what the test reaches: where it is asked
+     * is a matter of what it costs, and what it costs is compiling the models, which a test that
+     * reaches them pays wherever it is the first of them in its JVM. Held both ways. A test missing
+     * the tag is handed to the forks that each compile the models again; one carrying it that no
+     * longer reaches them is asked in a runner kept for them, for nothing.
+     *
+     * <p>Of the file and not of the class, as the tag is: a nested test is covered by the class it
+     * is written in.
+     */
+    @Test
+    void everyTestReachingTheRepositorysModelsIsAskedWithTheOthers() {
+        Set<String> reaching = new TreeSet<>();
+        for (String each : reaching(referencesByClass(), Set.of(REPOSITORY_MODELS))) {
+            if (each.endsWith("Test")) {
+                reaching.add(outermost(each).replace('/', '.'));
+            }
+        }
+        assertFalse(reaching.isEmpty(),
+                "no test reaches " + REPOSITORY_MODELS + ", so the name is stale and this holds for a"
+                        + " reason other than the one it states");
+
+        Set<String> tagged = new TreeSet<>();
+        compiledTests().forEach((name, every) -> {
+            for (ClassModel each : every) {
+                each.findAttribute(Attributes.runtimeVisibleAnnotations()).ifPresent(annotations ->
+                        annotations.annotations().forEach(annotation -> {
+                            if (annotation.className().stringValue()
+                                    .equals(READS_THE_REPOSITORYS_MODELS)) {
+                                tagged.add(name.replace('/', '.'));
+                            }
+                        }));
+            }
+        });
+        assertEquals(List.copyOf(reaching), List.copyOf(tagged),
+                "the tests that reach the repository's models are the ones tagged "
+                        + ReadsTheRepositorysModels.class.getSimpleName());
+    }
+
+    /** The class one is written inside at the top of its file. */
+    private static String outermost(String internalName) {
+        int nested = internalName.indexOf('$');
+        return nested < 0 ? internalName : internalName.substring(0, nested);
+    }
+
     /**
      * The compiled tests this walk is over, by binary name.
      *
@@ -206,8 +261,16 @@ class EveryTestThatSweepsACorpusSaysWhatItClaimsTest {
 
     /** The classes that name a corpus, and the classes that reach one through them. */
     private static Set<String> reachingACorpus(Map<String, Set<String>> references) {
+        Set<String> reaching = reaching(references, CORPORA);
+        // A corpus that is itself a test class reaches itself and is one of these.
+        CORPORA.stream().filter(references::containsKey).forEach(reaching::add);
+        return reaching;
+    }
+
+    /** The classes that name one of {@code targets}, and the classes that reach one through them. */
+    private static Set<String> reaching(Map<String, Set<String>> references, Set<String> targets) {
         Set<String> reaching = new LinkedHashSet<>();
-        Deque<String> pending = new ArrayDeque<>(CORPORA);
+        Deque<String> pending = new ArrayDeque<>(targets);
         while (!pending.isEmpty()) {
             String target = pending.removeFirst();
             for (Map.Entry<String, Set<String>> each : references.entrySet()) {
@@ -216,8 +279,6 @@ class EveryTestThatSweepsACorpusSaysWhatItClaimsTest {
                 }
             }
         }
-        // A corpus that is itself a test class reaches itself and is one of these.
-        CORPORA.stream().filter(references::containsKey).forEach(reaching::add);
         return reaching;
     }
 

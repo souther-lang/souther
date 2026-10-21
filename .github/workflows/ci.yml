@@ -11,6 +11,14 @@ on:
 permissions:
   contents: read
 
+env:
+  # What Maven is told about the repositories a dependency's pom names. Asked first what each of
+  # them holds, it fetches a list of prefixes from every one of them on the first artifact it
+  # resolves there, and two of those named by poms this build reads answer that fetch with an
+  # error after a wait — every runner, on the path a change waits on, for artifacts the cache
+  # already holds. Told not to ask, it resolves what it resolved before.
+  REPOSITORIES: -Daether.remoteRepositoryFilter.prefixes=false
+
 jobs:
   # What a pull request and a push wait on: everything except the tests written `@Nightly`. A test
   # is left out only where its class says both that no cheaper way to ask the same question was
@@ -36,6 +44,12 @@ jobs:
   # compiler runners finish together: the compiler's own package is the largest share and cannot
   # be split by package, so it is in `compiler-b` with the small ones, and the rest are here.
   #
+  # The tests that read the repository's models are a fourth runner of their own, and the other
+  # two compiler runners leave them out by their tag. Reading the models costs compiling them, once
+  # for a JVM; spread over the forks of the runners above, every fork one of them reached first
+  # compiled them again. Here they are one fork, and the models are compiled once. Which tests
+  # carry the tag is read off what they reach, so a test added among them lands here.
+  #
   # Error Prone is not run here. The `lint` profile is on wherever `CI` is set, which every runner
   # is, and it reads the whole reactor at every compile — the same findings three times over, in
   # the time each runner spends before its first test. The `lint` job below asks it once, beside
@@ -51,12 +65,23 @@ jobs:
           - name: rest
             modules: ''
             tests: '!souther/compiler/**,!**/*IT'
+            tags: '-Dtest.excluded.groups=nightly'
+            forks: '$(nproc)'
           - name: compiler-a
             modules: '-pl souther-compiler -am'
             tests: 'souther/compiler/partition/**,souther/compiler/check/**,souther/compiler/doc/**,souther/compiler/inputs/**,souther/compiler/report/**,souther/compiler/meta/**'
+            tags: '-Dtest.excluded.groups=nightly,repository-models'
+            forks: '$(nproc)'
           - name: compiler-b
             modules: '-pl souther-compiler -am'
             tests: 'souther/compiler/**,!souther/compiler/partition/**,!souther/compiler/check/**,!souther/compiler/doc/**,!souther/compiler/inputs/**,!souther/compiler/report/**,!souther/compiler/meta/**'
+            tags: '-Dtest.excluded.groups=nightly,repository-models'
+            forks: '$(nproc)'
+          - name: compiler-models
+            modules: '-pl souther-compiler -am'
+            tests: 'souther/compiler/**'
+            tags: '-Dgroups=repository-models -Dtest.excluded.groups=nightly'
+            forks: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up JDK 25
@@ -68,14 +93,16 @@ jobs:
       - name: Build and test
         # As many as the runner has, and printed so that a run says how many it was given. The
         # number in the pom is a ceiling for a machine somebody is also working on, and a runner
-        # is nobody's. A module a filter matches nothing in runs no tests rather than failing.
-        # Naming tests in the pom empties the tag left out, so the tag is named here again.
+        # is nobody's, except where a runner is kept to one fork. A module a filter matches nothing
+        # in runs no tests rather than failing. Naming tests in the pom empties the tag left out, so
+        # the tags are named here again.
         run: |
-          echo "forks: $(nproc)"
-          mvn -B --no-transfer-progress verify ${{ matrix.shard.modules }} \
+          echo "forks: ${{ matrix.shard.forks }}"
+          mvn --version | head -1
+          mvn -B --no-transfer-progress verify ${{ matrix.shard.modules }} $REPOSITORIES \
             -P '!lint' \
-            -DforkCount=$(nproc) \
-            -Dtest.excluded.groups=nightly \
+            -DforkCount=${{ matrix.shard.forks }} \
+            ${{ matrix.shard.tags }} \
             -Dsurefire.failIfNoSpecifiedTests=false \
             '-Dtest=${{ matrix.shard.tests }}'
 
@@ -93,7 +120,7 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Compile with Error Prone
-        run: mvn -B --no-transfer-progress test-compile
+        run: mvn -B --no-transfer-progress test-compile $REPOSITORIES
 
   # And the slow ones, asked where waiting for them costs nobody an edit: once a night, and nowhere
   # a change is on its way in. Emptying the property is what asks them; everything the job above
@@ -123,4 +150,5 @@ jobs:
       - name: Build and test ${{ matrix.branch }}, the slow tests included
         run: |
           echo "forks: $(nproc)"
-          mvn -B --no-transfer-progress verify -DforkCount=$(nproc) -Dtest.excluded.groups=
+          mvn -B --no-transfer-progress verify $REPOSITORIES -DforkCount=$(nproc) \
+            -Dtest.excluded.groups=

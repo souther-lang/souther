@@ -14,6 +14,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * longer one.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class NoRuleIsPlacedWhereNothingAccountsForItTest {
 
     /**

@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -40,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * any one model.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class ARuleWhoseReadingStoppedLeavesAQuestionTest {
 
     /** A comparison in a body that no reading takes apart. */

@@ -11,6 +11,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.types.TypeSymbols;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
 
@@ -48,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * case.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
 
     private static final List<String> REACHING_EVERY_WAY = List.of("""

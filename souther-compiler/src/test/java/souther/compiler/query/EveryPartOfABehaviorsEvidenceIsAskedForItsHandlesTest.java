@@ -7,6 +7,7 @@ import souther.compiler.check.RuleCitations;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.report.AdequacyReport;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
@@ -40,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * a rule it read.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryPartOfABehaviorsEvidenceIsAskedForItsHandlesTest {
 
     @Test

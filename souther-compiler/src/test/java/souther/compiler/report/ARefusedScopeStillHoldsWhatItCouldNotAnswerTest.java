@@ -5,6 +5,7 @@ import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * by hand, this would say a record can be constructed, which javac already says.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
 
     /**
