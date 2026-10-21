@@ -2,6 +2,7 @@ package souther.bench;
 
 import souther.bench.SaltedOrder.Finding;
 import souther.bench.SaltedOrder.Kind;
+import souther.bench.SaltedOrder.Measures;
 import souther.bench.SaltedOrder.Reading;
 import souther.bench.SaltedOrder.Tag;
 import souther.bench.SaltedOrder.Val;
@@ -172,6 +173,9 @@ final class SaltedOrderFlow {
     private final Map<MethodKey, List<MethodKey>> runs = new HashMap<>();
     private final Map<String, Integer> captured = new HashMap<>();
     private final Deque<Unit> queue = new ArrayDeque<>();
+
+    /** How many times a method was read, which is more than once where what it reads changed. */
+    private int reads;
     private final Set<Unit> queued = new HashSet<>();
     private final Set<Unit> started = new HashSet<>();
     private final Map<MethodKey, Val> handsOutAnAnswer = new LinkedHashMap<>();
@@ -181,7 +185,7 @@ final class SaltedOrderFlow {
     private final Map<String, Set<String>> reached = new LinkedHashMap<>();
 
     /** One thing that was found, of one reader. */
-    private record Reported(String reader, String what) {}
+    private record Reported(String reader, String what, boolean followed) {}
 
     private SaltedOrderFlow(List<ClassModel> universe, Predicate<String> beginsAt) {
         this.beginsAt = beginsAt;
@@ -315,6 +319,11 @@ final class SaltedOrderFlow {
                     functionsMadeIn.computeIfAbsent(new MethodKey(
                             bodyOwner.substring(1, bodyOwner.length() - 1), body.methodName(),
                             body.lookupDescriptor()), k -> new LinkedHashSet<>()).add(in);
+                    // A reference to the method that makes a copy is the call, made where the
+                    // library runs it, so the reading begins here as it does at a written call.
+                    if (makesACopyWhenRun(in.owner(), body)) {
+                        makesACopy.add(in);
+                    }
                 }
             }
         } else if (owner.equals("StringConcatFactory") || owner.equals("ObjectMethods")) {
@@ -379,7 +388,6 @@ final class SaltedOrderFlow {
         for (MethodKey each : makesACopy) {
             enqueueOnce(new Unit(each, ""));
         }
-        int reads = 0;
         int most = methods.size() * 60;
         while (!queue.isEmpty()) {
             Unit next = queue.poll();
@@ -390,6 +398,17 @@ final class SaltedOrderFlow {
                         + methods.size() + " methods, and " + queue.size() + " still waiting");
             }
         }
+    }
+
+    /** What the reading came to in size, for a test to hold it to what it is meant to be. */
+    private Measures measured() {
+        int longest = 0;
+        long tags = 0;
+        for (Set<Tag> each : facts.values()) {
+            tags += each.size();
+            longest = Math.max(longest, HeldCopies.longestPath(each));
+        }
+        return new Measures(reads, methods.size(), facts.size(), tags, longest);
     }
 
     private void enqueue(Unit unit) {
@@ -405,7 +424,40 @@ final class SaltedOrderFlow {
         }
     }
 
+    /** A function a call of the library was given that the table of held copies has no row for. */
+    private record HandedFunction(String where, String call, String function) {}
+
+    private final List<HandedFunction> handedToUnread = new ArrayList<>();
+
+    /**
+     * The copies a function returns, which are where it is called and not where it was made, so
+     * that a function handed to a call nothing here reads is said so when it returns one.
+     */
+    private Set<String> copiesReturnedBy(String function) {
+        Unit body = bodyOf(function);
+        if (body == null) {
+            return Set.of();
+        }
+        Set<String> out = new TreeSet<>();
+        for (String key : List.of("R:" + body, "R:" + new Unit(body.method(), ""))) {
+            for (Tag each : facts.getOrDefault(key, Set.of())) {
+                if (each.kind() == Kind.COLLECTION || each.isHeld()) {
+                    out.add(each.origin());
+                }
+            }
+        }
+        return out;
+    }
+
     private Reading finish() {
+        for (HandedFunction each : handedToUnread) {
+            Set<String> origins = copiesReturnedBy(each.function());
+            if (!origins.isEmpty()) {
+                noteNotFollowed(each.where(), "hands a function that returns a copy to "
+                        + each.call()
+                        + ", which nothing says where it goes", origins);
+            }
+        }
         for (var each : handsOutAnAnswer.entrySet()) {
             MethodKey method = each.getKey();
             String signature = method.name() + method.descriptor();
@@ -421,9 +473,10 @@ final class SaltedOrderFlow {
         }
         List<Finding> out = new ArrayList<>();
         for (var each : findings.entrySet()) {
-            out.add(new Finding(each.getKey().reader(), each.getKey().what(), each.getValue()));
+            out.add(new Finding(each.getKey().reader(), each.getKey().what(), each.getValue(),
+                    each.getKey().followed()));
         }
-        return new Reading(roots, out, reached);
+        return new Reading(roots, out, reached, measured());
     }
 
     private static Set<String> originsOf(Set<Tag> tags) {
@@ -437,7 +490,13 @@ final class SaltedOrderFlow {
     }
 
     private void note(String reader, String what, Set<String> origins) {
-        findings.computeIfAbsent(new Reported(reader, what), k -> new TreeSet<>())
+        findings.computeIfAbsent(new Reported(reader, what, true), k -> new TreeSet<>())
+                .addAll(origins);
+    }
+
+    /** A copy handed to what nothing says what it does with: reported, and not followed on. */
+    private void noteNotFollowed(String reader, String what, Set<String> origins) {
+        findings.computeIfAbsent(new Reported(reader, what, false), k -> new TreeSet<>())
                 .addAll(origins);
     }
 
@@ -483,7 +542,7 @@ final class SaltedOrderFlow {
     private boolean joinFact(String key, Set<Tag> given) {
         Set<Tag> tags = new LinkedHashSet<>();
         for (Tag each : given) {
-            if (each.cameOutOfACopy()) {
+            if (each.travels()) {
                 tags.add(each);
             }
         }
@@ -695,7 +754,16 @@ final class SaltedOrderFlow {
         in[0] = new State(seed, new ArrayList<>());
         BitSet pending = new BitSet();
         pending.set(0);
+        // What a place holds only grows, among a finite set of tags, so a method is read to the
+        // end; a method that is not is one where something grows without bound, and is said so
+        // rather than read for ever.
+        int steps = 0;
+        int mostSteps = 1000 * (size + 10);
         while (!pending.isEmpty()) {
+            if (++steps > mostSteps) {
+                throw new AssertionError("the reading of " + unit + " does not settle: " + steps
+                        + " steps over " + size + " instructions");
+            }
             int here = pending.nextSetBit(0);
             pending.clear(here);
             State state = in[here].copy();
@@ -862,8 +930,9 @@ final class SaltedOrderFlow {
             case ArrayLoadInstruction load -> {
                 state.pop();
                 Val array = state.pop();
-                state.push(new Val(array.as(Kind.PICKED), isWide(load.typeKind()), -1, null, null,
-                        Set.of()));
+                Set<Tag> loaded = new LinkedHashSet<>(array.as(Kind.PICKED));
+                loaded.addAll(HeldCopies.loadedFromAnArray(array));
+                state.push(new Val(loaded, isWide(load.typeKind()), -1, null, null, Set.of()));
             }
             case ArrayStoreInstruction _ -> {
                 Val value = state.pop();
@@ -876,6 +945,7 @@ final class SaltedOrderFlow {
                                 .madeAt(unit + ":" + index + " stores in an array"));
                     }
                 }
+                into.addAll(HeldCopies.storedInAnArray(value));
                 place(state, array, into);
             }
             case OperatorInstruction operator -> {
@@ -1192,7 +1262,7 @@ final class SaltedOrderFlow {
                 Set<Tag> kept = new LinkedHashSet<>();
                 for (Tag each : value.tags()) {
                     if (each.kind() == Kind.COLLECTION || each.kind() == Kind.TRAVERSAL
-                            || (carriesIt && each.isAnAnswer())) {
+                            || each.isHeld() || (carriesIt && each.isAnAnswer())) {
                         kept.add(each);
                     }
                 }
@@ -1244,21 +1314,44 @@ final class SaltedOrderFlow {
      * a method builds a text out of the parts of the one element it was given.
      */
     private static boolean carriesACopy(Val receiver, List<Val> args) {
-        if (!withoutElements(receiver.tags()).isEmpty()) {
+        if (receiver.cameOutOfACopy() && !walkables(receiver.tags()).isEmpty()) {
             return true;
         }
         for (Val each : args) {
-            if (!withoutElements(each.tags()).isEmpty()) {
+            if (!walkables(each.tags()).isEmpty()) {
                 return true;
             }
         }
         return false;
     }
 
-    private static Set<Tag> withoutElements(Set<Tag> tags) {
+    /** Whether a call is handed a container that holds a copy whole, and nothing else of one. */
+    private static boolean holdsACopy(Val receiver, List<Val> args) {
+        if (receiver.has(Kind.HELD)) {
+            return true;
+        }
+        for (Val each : args) {
+            if (each.has(Kind.HELD)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<Tag> walkables(Set<Tag> tags) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag each : tags) {
             if (each.cameOutOfACopy() && each.kind() != Kind.PICKED) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    private static Set<Tag> withoutElements(Set<Tag> tags) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Tag each : tags) {
+            if (each.travels() && each.kind() != Kind.PICKED) {
                 out.add(each);
             }
         }
@@ -1393,7 +1486,7 @@ final class SaltedOrderFlow {
             }
             // Read with nothing handed, the callee is read once something it reads holds what came
             // out of a copy, and this call is read again when what it hands back changes.
-            if (tainted) {
+            if (tainted || holdsACopy(receiver, args)) {
                 enqueueOnce(callee);
             }
             if (returnsAValue) {
@@ -1417,6 +1510,13 @@ final class SaltedOrderFlow {
             Outcome outcome = effectsOf(state, jdk, where, here);
             result.addAll(madeAt(outcome.result().tags(), here));
             made = outcome.result();
+            // A function handed to the call may run in it, whatever the call is made on, and what
+            // it puts in what it captured is then in it.
+            for (Val each : args) {
+                for (Tag function : each.functions()) {
+                    handBackWhatItFilled(unit, state, function.origin());
+                }
+            }
             for (Feed feed : outcome.feeds()) {
                 for (Tag function : feed.functions()) {
                     Set<Tag> back = function.origin().startsWith("ref|")
@@ -1424,6 +1524,11 @@ final class SaltedOrderFlow {
                             : feedFunction(unit, function.origin(), feed.elements());
                     if (feed.returns()) {
                         result.addAll(back);
+                    }
+                    result.addAll(HeldCopies.handedBackBy(feed.into(), back));
+                    Set<Tag> keptInTheContainer = HeldCopies.keptBy(feed.into(), back);
+                    if (feed.keptBy() != null && !keptInTheContainer.isEmpty()) {
+                        place(state, feed.keptBy(), keptInTheContainer);
                     }
                     if (feed.keptBy() != null) {
                         place(state, feed.keptBy(), madeAt(SaltedOrderVocabulary.survivors(back,
@@ -1457,6 +1562,14 @@ final class SaltedOrderFlow {
         String owner = call.owner();
         String name = call.name();
         Set<String> origins = originsOf(call.tainted());
+        Set<String> unresolved = HeldCopies.unresolvedBy(call);
+        if (!unresolved.isEmpty()) {
+            noteNotFollowed(where, HeldCopies.unresolvedSaid(call), unresolved);
+        }
+        for (Tag function : HeldCopies.functionsNotRun(call)) {
+            handedToUnread.add(new HandedFunction(where,
+                    owner.replace('/', '.') + "." + name, function.origin()));
+        }
         if (SaltedOrderVocabulary.writesOut(owner, name)) {
             // A write is a sink whatever else is known of the call: what is written is written
             // in the order it has, and only the one there is has none.
@@ -1466,6 +1579,7 @@ final class SaltedOrderFlow {
                     written.add(each);
                 }
             }
+            written.addAll(HeldCopies.textOfHeld(call));
             if (!written.isEmpty()) {
                 Set<String> sites = sitesOf(Val.of(written));
                 note(where, "writes what came out of a copy to " + owner.replace('/', '.')
@@ -1475,7 +1589,7 @@ final class SaltedOrderFlow {
             }
         } else if (outcome.unmodeled()) {
             Set<String> sites = sitesOf(Val.of(call.tainted()));
-            note(where, (isJava(owner) ? "calls " : "hands what came out of a copy to ")
+            noteNotFollowed(where, (isJava(owner) ? "calls " : "hands what came out of a copy to ")
                     + owner.replace('/', '.') + "." + name
                     + (isJava(owner) ? " on what came out of a copy, and nothing says what that"
                             + " does with its order" : ", which is not read here")
@@ -1500,7 +1614,7 @@ final class SaltedOrderFlow {
 
     /** What is a reference to a method of the library, and the values it was made over. */
     private record LibraryRef(Signature method, boolean isStatic, boolean isConstructor,
-                              List<Val> captured) {}
+                              List<Val> captured, String copyOrigin) {}
 
     private final Map<String, LibraryRef> libraryRefs = new HashMap<>();
 
@@ -1553,7 +1667,13 @@ final class SaltedOrderFlow {
         Call call = new Call(ref.method().owner(), ref.method().name(), ref.method().descriptor(),
                 receiver, args, ref.isStatic(), !returns.equals("V"),
                 returns.startsWith("L") || returns.startsWith("["), false);
-        return effectsOf(state, call, where, here).result().tags();
+        Set<Tag> made = new LinkedHashSet<>(effectsOf(state, call, where, here).result().tags());
+        if (ref.copyOrigin() != null) {
+            roots.add(ref.copyOrigin());
+            reached.computeIfAbsent(ref.copyOrigin(), k -> new LinkedHashSet<>());
+            made.add(new Tag(Kind.COLLECTION, ref.copyOrigin()));
+        }
+        return made;
     }
 
     private static boolean keepsPositionInAnInt(String name) {
@@ -1567,6 +1687,16 @@ final class SaltedOrderFlow {
                  "hashCode", "toString" -> true;
             default -> false;
         };
+    }
+
+    /** Whether a reference to this method, made in a class the reading begins at, is a copy. */
+    private boolean makesACopyWhenRun(String madeIn, DirectMethodHandleDesc handle) {
+        String owner = handle.owner().descriptorString();
+        boolean isStatic = handle.kind() == DirectMethodHandleDesc.Kind.STATIC
+                || handle.kind() == DirectMethodHandleDesc.Kind.INTERFACE_STATIC;
+        return isStatic && beginsAt.test(madeIn)
+                && isACopy(owner.substring(1, owner.length() - 1), handle.methodName(),
+                        MethodTypeDesc.ofDescriptor(handle.lookupDescriptor()).parameterCount());
     }
 
     private static boolean isACopy(String owner, String name, int count) {
@@ -1627,7 +1757,13 @@ final class SaltedOrderFlow {
             return;
         }
         for (int at = 0; at < made.values().size(); at++) {
-            place(state, made.values().get(at), readFact("O:" + body + "#" + at, here));
+            Set<Tag> filled = new LinkedHashSet<>(readFact("O:" + body + "#" + at, here));
+            if (!body.context().isEmpty()) {
+                // The body is also read on its own, where it makes a copy it puts in what it
+                // captured.
+                filled.addAll(readFact("O:" + new Unit(body.method(), "") + "#" + at, here));
+            }
+            place(state, made.values().get(at), filled);
         }
     }
 
@@ -1754,10 +1890,20 @@ final class SaltedOrderFlow {
                     DirectMethodHandleDesc.Kind kind = body.kind();
                     String refKey = "ref|" + bodyOwner + "#" + body.methodName()
                             + body.lookupDescriptor() + "|" + unit.method() + ":" + index;
+                    // What the reference makes, where it is the method that makes a copy, is a
+                    // copy made where it is run, and is named as a call at this place would name
+                    // it. Making the reference makes none: it is only where the reading may begin.
+                    String copyOrigin = null;
+                    if (makesACopyWhenRun(unit.method().owner(), body)) {
+                        copyOrigin = unit.method().owner().replace('/', '.') + "#"
+                                + unit.method().name() + ":"
+                                + bodyOwner.substring(bodyOwner.lastIndexOf('/') + 1) + "."
+                                + body.methodName() + "@" + index;
+                    }
                     libraryRefs.put(refKey, new LibraryRef(handle,
                             kind == DirectMethodHandleDesc.Kind.STATIC
                                     || kind == DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
-                            kind == DirectMethodHandleDesc.Kind.CONSTRUCTOR, args));
+                            kind == DirectMethodHandleDesc.Kind.CONSTRUCTOR, args, copyOrigin));
                     result.add(new Tag(Kind.FUNCTION, refKey));
                 }
             }
@@ -1765,9 +1911,17 @@ final class SaltedOrderFlow {
             String here = unit + ":" + index + " joins into a text";
             for (int each = 0; each < args.size(); each++) {
                 for (Tag tag : args.get(each).tags()) {
+                    if (tag.kind() == Kind.TRAVERSAL) {
+                        // A stream or a cursor says what it is and not what it walks.
+                        continue;
+                    }
                     if (tag.cameOutOfACopy()) {
                         result.add(tag.kind() == Kind.PICKED || tag.kind() == Kind.CHOSEN ? tag
                                 : new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
+                    } else if (tag.isHeld() && HeldCopies.textReaches(tag.site(), false)) {
+                        // The text of a container says the copies it holds, in their order,
+                        // down to an array or a stream, which say what they are.
+                        result.add(new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
                     }
                 }
                 // A text of an object says what its class's toString says, which for a record is

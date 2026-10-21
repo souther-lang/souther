@@ -2,6 +2,7 @@ package souther.bench;
 
 import org.junit.jupiter.api.Test;
 
+import souther.bench.SaltedOrder.Measures;
 import souther.bench.SaltedOrder.Reading;
 
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Nothing in this compiler takes the iteration of a copy the partition makes into an answer before
@@ -103,6 +105,32 @@ class AnOrderlessPartitionCarrierIsNotWalkedBeforeItsOrderIsNamedTest {
         assertEquals(List.of(), lost,
                 "a copy the partition makes ended nowhere this could say, so what is done with it"
                         + " was not read");
+    }
+
+    /**
+     * And the reading stays small: a copy held in a container is followed by one tag and a short
+     * path, so the methods read are a fraction of the compiler's.
+     *
+     * <p>Not a figure the reading is promised to stay at. What it asks is that following what is
+     * held does not become following everything that a copy could reach, which a reading that
+     * tagged each element chosen by an order did: it read each method several times over, and the
+     * facts it held ran to millions. A path that grew with the code, or a tag made per element,
+     * shows here before it fails anywhere.
+     */
+    @Test
+    void whatIsHeldIsFollowedByAPathThatIsShortAndByAFractionOfTheMethods() {
+        Measures measured = thePartition().measured();
+
+        assertTrue(measured.longestHeldPath() <= HeldCopies.MAX_DEPTH + 1,
+                () -> "a held copy was followed along a path of " + measured.longestHeldPath()
+                        + " characters, more than the reading widens at");
+        assertTrue(measured.reads() * 10L <= measured.methods(),
+                () -> "the reading read methods " + measured.reads() + " times over "
+                        + measured.methods() + " methods, so what a copy reaches is being followed"
+                        + " past where it is held");
+        assertTrue(measured.tags() <= 50L * measured.facts(),
+                () -> "the places that held anything held " + measured.tags() + " tags between "
+                        + measured.facts() + " of them, which is more than a few apiece");
     }
 
     @Test
