@@ -505,22 +505,34 @@ final class ContainersAddingUp {
      *
      * @param wanted  the numbers the rules leave how many it holds
      * @param counted the order those numbers are places of
+     * @param least   the fewest it may hold whatever {@code wanted} says: a container whose
+     *                elements stand for a key filed in a map holds at least one, and a set that
+     *                has nought in it is asked for the counts in it from one
      */
-    record HowManyIsAskedFor(NumericSet wanted, Carrier counted) {
+    record HowManyIsAskedFor(NumericSet wanted, Carrier counted, int least) {
 
         HowManyIsAskedFor {
             Objects.requireNonNull(wanted, "how many it is asked to hold is a set of counts");
             Objects.requireNonNull(counted, "a count is a place on the order it is counted by");
+            if (least < 0) {
+                throw new IllegalArgumentException("a container holds no fewer than none: "
+                        + least);
+            }
+        }
+
+        HowManyIsAskedFor(NumericSet wanted, Carrier counted) {
+            this(wanted, counted, 0);
         }
 
         /** Whether holding that many is one of the numbers asked for. */
         boolean holds(int many) {
-            return wanted.holds(new Count(BigDecimal.valueOf(many)), counted);
+            return many >= least && wanted.holds(new Count(BigDecimal.valueOf(many)), counted);
         }
 
         /** As ends, for the walk that steps the counts. */
         NumericDomain.Bounds extent() {
-            return wanted.extent();
+            return wanted.extent().meet(new NumericDomain.Bounds(
+                    Endpoint.inclusive(Count.of(least)), null));
         }
     }
 
@@ -611,8 +623,12 @@ final class ContainersAddingUp {
                 case NumericTerm.GatheredUnderItsKey gathered
                         when gathered.value().asAPlace() == null ->
                         of(gathered.elements(), gathered.value(), null, orders);
+                case NumericTerm.GatheredUnderAKey asked
+                        when asked.gathered().value().asAPlace() == null ->
+                        of(asked.gathered().elements(), asked.gathered().value(), null, orders);
                 case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
-                     NumericTerm.GatheredUnderItsKey _, NumericTerm.OfAnElementsNeighbours _,
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
+                     NumericTerm.OfAnElementsNeighbours _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> null;
             };
         }
@@ -1046,15 +1062,18 @@ final class ContainersAddingUp {
                     extreme + " is written as one value, and nothing here adds it up");
             // The place of each element the number is, where it is one; a number made of the
             // element is solved for through a field of it ({@link FieldSolved}).
-            case NumericTerm.GatheredUnderItsKey gathered -> {
-                ElementProjection place = gathered.value().asAPlace();
-                if (place == null) {
-                    throw new IllegalStateException(gathered + " is made of each element, and is"
-                            + " solved for through a field of it");
-                }
-                yield place.from(gathered.elements());
-            }
+            case NumericTerm.GatheredUnderItsKey gathered -> placeOfEach(gathered);
+            case NumericTerm.GatheredUnderAKey asked -> placeOfEach(asked.gathered());
         };
+    }
+
+    private static TermPath placeOfEach(NumericTerm.GatheredUnderItsKey gathered) {
+        ElementProjection place = gathered.value().asAPlace();
+        if (place == null) {
+            throw new IllegalStateException(gathered + " is made of each element, and is"
+                    + " solved for through a field of it");
+        }
+        return place.from(gathered.elements());
     }
 
     /**

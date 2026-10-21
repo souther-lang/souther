@@ -61,7 +61,7 @@ final class TermOrdering {
             // The end of a key's values is one of the values, so it is measured where they are;
             // and what a key's numbers come to is measured on what each of them stands as.
             case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
-                 NumericTerm.GatheredUnderItsKey _ -> observed;
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> observed;
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                  NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
@@ -112,7 +112,8 @@ final class TermOrdering {
         NewtypeInners inners = declarations.inners();
         return switch (term) {
             case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
-                 NumericTerm.GatheredUnderItsKey _ -> positionType == null ? null
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->
+                    positionType == null ? null
                     : Carrier.ofValue(positionType, declarations);
             case NumericTerm.TakenOf taken -> {
                 Type answers =

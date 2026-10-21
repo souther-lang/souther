@@ -154,6 +154,18 @@ public final class TermOrders {
     }
 
     /**
+     * The elements of the run a term gathers under a key an input holds ({@link
+     * NumericTerm.GatheredUnderAKey}), every occurrence's, put together once for the number of
+     * any key asked.
+     *
+     * @param each every element of the run, in the order they are held
+     */
+    public <G> ElementsUnderAKey<G> togetherUnderAKey(
+            List<Function<ElementProjection, Holding<G>>> each) {
+        return TermReading.togetherUnderAKey(this, each);
+    }
+
+    /**
      * What an element holds at a way into it: a value, or nothing, for a reason in the words of
      * whoever handed the element over.
      *
@@ -190,6 +202,20 @@ public final class TermOrders {
          * and failing that, what the number's own reading of the values says.
          */
         Neighbouring<G> numberOf(Function<ElementProjection, Holding<G>> own);
+    }
+
+    /** The elements of a run put together ({@link #togetherUnderAKey}). */
+    public interface ElementsUnderAKey<G> {
+
+        /**
+         * What the elements of the key {@code asked}, a value an input holds, come to.
+         *
+         * <p>What stops it is the first element in order whose key holds nothing or is read as no
+         * number, as it stops every key; then the first of the key's own elements, in order, that
+         * stops its number. A key no element has comes to no number, which is a reading and not a
+         * stop.
+         */
+        Neighbouring<G> numberUnder(ObservedValue asked);
     }
 
     /** A number read among an element's neighbours, or the nothing its reading came to first. */

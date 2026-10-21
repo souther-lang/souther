@@ -520,6 +520,9 @@ final class NumericWitness {
                     looking.toNarrowBy(extreme.valuesTakenFrom(), within);
             case NumericTerm.GatheredUnderItsKey gathered -> gathered.valuesTakenFrom() == null
                     ? ValueSet.ANY : looking.toNarrowBy(gathered.valuesTakenFrom(), within);
+            // The same for the elements of the one key an input holds, which are some of them.
+            case NumericTerm.GatheredUnderAKey asked ->
+                    admittedAt(asked.gathered(), looking, within);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
                     ValueSet.ANY;
@@ -533,8 +536,8 @@ final class NumericWitness {
             case NumericTerm.FromOnePosition one -> within.apartAt(one);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                 NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _ ->
-                    PlacesApart.NONE;
+                 NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
+                 NumericTerm.GatheredUnderAKey _ -> PlacesApart.NONE;
         };
     }
 

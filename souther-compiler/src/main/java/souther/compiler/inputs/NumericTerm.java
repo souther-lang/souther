@@ -62,7 +62,8 @@ import java.util.function.UnaryOperator;
 public sealed interface NumericTerm
         permits NumericTerm.FromOnePosition, NumericTerm.TakenOver,
                 NumericTerm.OfAnElementsNeighbours, NumericTerm.OccurrencesOfItsValue,
-                NumericTerm.OccurrencesOfAKey, NumericTerm.GatheredUnderItsKey {
+                NumericTerm.OccurrencesOfAKey, NumericTerm.GatheredUnderItsKey,
+                NumericTerm.GatheredUnderAKey {
 
     /**
      * A number of an element read off the elements beside it in its container: how often its value
@@ -1015,6 +1016,20 @@ public sealed interface NumericTerm
          */
         public static GatheredUnderItsKey of(TermPath elements, ElementProjection key,
                                              ElementValue value, Type each, Gathering gathering) {
+            GatheredUnderItsKey made = underAnyKey(elements, key, value, each, gathering);
+            boolean ownPlaceInOneContainer = made != null && value.asAPlace() != null
+                    && elements.containersHoldingIt().size() == 1;
+            return gathering instanceof Gathering.End && ownPlaceInOneContainer ? null : made;
+        }
+
+        /**
+         * The same, including the end of the values of a place inside one container, which {@link
+         * #of} leaves to {@link ExtremeOfItsKey}: for the key an input holds ({@link
+         * GatheredUnderAKey}) there is no other spelling of it.
+         */
+        static GatheredUnderItsKey underAnyKey(TermPath elements, ElementProjection key,
+                                               ElementValue value, Type each,
+                                               Gathering gathering) {
             // The key a way of fields alone, so one value of every element: none of them where the
             // element is its own key.
             if (elements == null || key == null || value == null || each == null
@@ -1022,10 +1037,7 @@ public sealed interface NumericTerm
                     || value.readsThePosition()) {
                 return null;
             }
-            boolean ownPlaceInOneContainer = value.asAPlace() != null
-                    && elements.containersHoldingIt().size() == 1;
-            return gathering instanceof Gathering.End && ownPlaceInOneContainer ? null
-                    : new GatheredUnderItsKey(elements, key, value, each, gathering);
+            return new GatheredUnderItsKey(elements, key, value, each, gathering);
         }
 
         /** Where each element of the run stands. */
@@ -1088,7 +1100,7 @@ public sealed interface NumericTerm
             TermPath at = moved.apply(elements);
             return at != null && at.containersHoldingIt().size()
                     == elements.containersHoldingIt().size()
-                    ? of(at, key, value, each, gathering) : null;
+                    ? underAnyKey(at, key, value, each, gathering) : null;
         }
 
         @Override
@@ -1117,6 +1129,120 @@ public sealed interface NumericTerm
                         new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, key.fields())
                                 .spelledAt(of);
             };
+        }
+    }
+
+    /**
+     * What the elements of a run come to together among those whose key is the value an input
+     * holds at {@link #asked()}: the number {@link GatheredUnderItsKey} is for the key of the
+     * element under consideration, read for a key outside the run.
+     *
+     * <p>As {@link OccurrencesOfAKey} is beside {@link OccurrencesOfItsValue}: the key is chosen
+     * with the rest of the row, so the number stands at neither it nor the elements, and it is
+     * nothing where no element has the key. {@link #subjectPath} is where a reader is sent.
+     */
+    final class GatheredUnderAKey implements NumericTerm {
+
+        private final GatheredUnderItsKey gathered;
+        private final TermPath asked;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
+        private GatheredUnderAKey(GatheredUnderItsKey gathered, TermPath asked) {
+            this.gathered = Objects.requireNonNull(gathered, "gathered under a key");
+            this.asked = Objects.requireNonNull(asked, "gathered under the key an input holds");
+            this.hash = Objects.hash(GatheredUnderAKey.class, gathered, asked);
+        }
+
+        /**
+         * What the elements standing at {@code elements} come to, each as {@code value}, by
+         * {@code gathering}, among those holding at {@code key} what the input holds at
+         * {@code asked}, which stands outside every container — or null where
+         * {@link GatheredUnderItsKey} reads none of them. The end of the values of a place inside
+         * one container is read: nothing else spells it for a key asked for.
+         */
+        public static GatheredUnderAKey of(TermPath elements, ElementProjection key,
+                                           ElementValue value, Type each,
+                                           GatheredUnderItsKey.Gathering gathering,
+                                           TermPath asked) {
+            return over(GatheredUnderItsKey.underAnyKey(elements, key, value, each, gathering),
+                    asked);
+        }
+
+        private static GatheredUnderAKey over(GatheredUnderItsKey gathered, TermPath asked) {
+            return gathered == null || asked == null || asked.insideAContainer() ? null
+                    : new GatheredUnderAKey(gathered, asked);
+        }
+
+        /** What is gathered, for the key of whichever element is under consideration. */
+        public GatheredUnderItsKey gathered() {
+            return gathered;
+        }
+
+        /** Where the key gathered for stands. */
+        public TermPath asked() {
+            return asked;
+        }
+
+        /**
+         * Whether the key is a field the number is made of, or one around or inside it: every
+         * element of the key holds the key there, so each contributes it and the number is the
+         * elements' share of that one value.
+         */
+        public boolean keyIsWhatIsAdded() {
+            TermPath keyAt = gathered.key().from(gathered.elements());
+            for (ElementProjection read : gathered.value().reads()) {
+                TermPath readAt = read.from(gathered.elements());
+                if (readAt.isAtOrUnder(keyAt) || keyAt.isAtOrUnder(readAt)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Whether each element contributes its key and nothing else, so that the number is the
+         * key itself where the elements of a key are one, and is the key as often as the key
+         * occurs where they are several. The number a row is at then fixes the key: the key is
+         * chosen with it and not before.
+         */
+        public boolean keyIsEachElementsNumber() {
+            ElementProjection place = gathered.value().asAPlace();
+            return place != null && place.from(gathered.elements())
+                    .equals(gathered.key().from(gathered.elements()));
+        }
+
+        /** Where the elements stand, which is where a reader is sent and no place the number
+         *  stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return gathered.elements();
+        }
+
+        /** The same number of the elements and the key standing where {@code moved} puts them —
+         *  or null where the elements are not in as many containers there, or the key stands
+         *  inside one. */
+        @Override
+        public GatheredUnderAKey movedTo(UnaryOperator<TermPath> moved) {
+            GatheredUnderItsKey at = gathered.movedTo(moved);
+            return at == null ? null : over(at, moved.apply(asked));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof GatheredUnderAKey that && hash == that.hash
+                    && gathered.equals(that.gathered) && asked.equals(that.asked);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return gathered + " equal to " + asked;
         }
     }
 
@@ -1339,7 +1465,7 @@ public sealed interface NumericTerm
             case OccurrencesOfItsValue _ -> null;
             case OccurrencesOfAKey _ -> null;
             // Gathered from every element of one key, so from no one place.
-            case GatheredUnderItsKey _ -> null;
+            case GatheredUnderItsKey _, GatheredUnderAKey _ -> null;
         };
     }
 
@@ -1394,7 +1520,7 @@ public sealed interface NumericTerm
             // What each element contributes is a number made of it, which the place does not say
             // even where it reads one field: the field read as another kind of number is another
             // number at the same place.
-            case GatheredUnderItsKey _ -> null;
+            case GatheredUnderItsKey _, GatheredUnderAKey _ -> null;
         };
     }
 
@@ -1438,7 +1564,7 @@ public sealed interface NumericTerm
             // The same, and the key it counts for is another place a moved place leaves behind.
             case OccurrencesOfAKey _ -> null;
             // Gathered over a run, which a place moved alone is another one of.
-            case GatheredUnderItsKey _ -> null;
+            case GatheredUnderItsKey _, GatheredUnderAKey _ -> null;
         };
     }
 
@@ -1493,7 +1619,7 @@ public sealed interface NumericTerm
             // An end is one of the numbers of its key and a total any number they add up to; what
             // they are bounded by is what the elements' rules guarantee, which is a reading of
             // the run and not of the term.
-            case GatheredUnderItsKey _ -> NumericDomain.Bounds.OPEN;
+            case GatheredUnderItsKey _, GatheredUnderAKey _ -> NumericDomain.Bounds.OPEN;
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it

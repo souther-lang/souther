@@ -1233,6 +1233,41 @@
           }
         },
         {
+          "description": "What the elements standing at `elements` come to, among those holding at `key` what the input holds at `asked`: the total of what `computation` makes of each, or the least or the greatest of it. The elements are every occurrence of the place, as for `gathered_under_its_key`. It is no number where no element holds the key, and no one position holds it.",
+          "required": [
+            "gathering",
+            "elements",
+            "key",
+            "asked",
+            "computation"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "gathered_under_a_key"
+            },
+            "gathering": {
+              "enum": [
+                "total",
+                "least",
+                "greatest"
+              ]
+            },
+            "elements": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "asked": {
+              "type": "string"
+            },
+            "computation": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
           "description": "What the code points of the string a position holds come to, each added as the number it is.",
           "required": [
             "position"
@@ -6038,6 +6073,9 @@
                           "values_that_answer_several_of_their_numbers",
                           "places_in_a_run_that_are_named",
                           "elements_chosen_for_a_count",
+                          "keys_placed_at_the_number_their_elements_come_to",
+                          "keys_of_one_fold_asked_together",
+                          "ends_of_a_key_written_as_one_element",
                           "elements_a_computed_total_is_solved_for",
                           "mixes_of_cases_a_total_is_spread_over",
                           "trees_written_for_a_count",
