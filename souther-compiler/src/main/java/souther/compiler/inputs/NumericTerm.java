@@ -1145,10 +1145,14 @@ public sealed interface NumericTerm
 
         private final GatheredUnderItsKey gathered;
         private final TermPath asked;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         private GatheredUnderAKey(GatheredUnderItsKey gathered, TermPath asked) {
             this.gathered = Objects.requireNonNull(gathered, "gathered under a key");
             this.asked = Objects.requireNonNull(asked, "gathered under the key an input holds");
+            this.hash = Objects.hash(GatheredUnderAKey.class, gathered, asked);
         }
 
         /**
@@ -1199,13 +1203,13 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof GatheredUnderAKey that && gathered.equals(that.gathered)
-                    && asked.equals(that.asked);
+            return other instanceof GatheredUnderAKey that && hash == that.hash
+                    && gathered.equals(that.gathered) && asked.equals(that.asked);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(GatheredUnderAKey.class, gathered, asked);
+            return hash;
         }
 
         @Override
