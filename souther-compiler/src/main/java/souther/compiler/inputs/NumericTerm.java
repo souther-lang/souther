@@ -1185,6 +1185,34 @@ public sealed interface NumericTerm
             return asked;
         }
 
+        /**
+         * Whether the key is a field the number is made of, or one around or inside it: every
+         * element of the key holds the key there, so each contributes it and the number is the
+         * elements' share of that one value.
+         */
+        public boolean keyIsWhatIsAdded() {
+            TermPath keyAt = gathered.key().from(gathered.elements());
+            for (ElementProjection read : gathered.value().reads()) {
+                TermPath readAt = read.from(gathered.elements());
+                if (readAt.isAtOrUnder(keyAt) || keyAt.isAtOrUnder(readAt)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Whether each element contributes its key and nothing else, so that the number is the
+         * key itself where the elements of a key are one, and is the key as often as the key
+         * occurs where they are several. The number a row is at then fixes the key: the key is
+         * chosen with it and not before.
+         */
+        public boolean keyIsEachElementsNumber() {
+            ElementProjection place = gathered.value().asAPlace();
+            return place != null && place.from(gathered.elements())
+                    .equals(gathered.key().from(gathered.elements()));
+        }
+
         /** Where the elements stand, which is where a reader is sent and no place the number
          *  stands at. */
         @Override

@@ -6177,6 +6177,11 @@ public final class Generator {
                 TermOrders orders = subject.quantities().ordersOf(term);
                 return orders == null ? null : orders.observed();
             };
+            // The key that is what each element adds is the number, so it is chosen where the
+            // number is: the elements of the key then come to it with one of them.
+            if (each.getKey().keyIsTheNumber()) {
+                here = here.given(key, each.getValue());
+            }
             switch (NumericWitness.of(here, List.of(key), on, looking)) {
                 case NumericWitness.Standing.Found beside -> {
                     for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {

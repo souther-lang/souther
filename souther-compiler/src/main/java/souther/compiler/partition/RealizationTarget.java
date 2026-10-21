@@ -64,6 +64,14 @@ public sealed interface RealizationTarget {
     }
 
     /**
+     * Whether the value at {@link #keyAskedFor} is the number this target is asked for, so that
+     * the two are chosen together and the key is not placed before the number it is.
+     */
+    default boolean keyIsTheNumber() {
+        return false;
+    }
+
+    /**
      * The target of a number, which every number has.
      *
      * <p>Exhaustive over the terms there are, with no {@code default} and no null. Read off a
@@ -328,6 +336,11 @@ public sealed interface RealizationTarget {
         @Override
         public TermPath keyAskedFor() {
             return term.asked();
+        }
+
+        @Override
+        public boolean keyIsTheNumber() {
+            return term.keyIsEachElementsNumber();
         }
 
         @Override

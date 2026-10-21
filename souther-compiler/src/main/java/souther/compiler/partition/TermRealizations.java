@@ -1940,6 +1940,11 @@ final class TermRealizations {
      * <p>The key is the row's other parameter, fixed with the rest of the row before the container
      * is composed, so the elements are written holding the one value the region leaves it at. A
      * key the region leaves at more than one is not chosen here.
+     *
+     * <p>Where the key is a field the number is made of, the value is not written beside the
+     * share, which would be that position asked two things: the region the elements are chosen in
+     * is narrowed to the key instead. What is composed is then one key of the several the number
+     * is reached at, and is said to be some of them ({@link #someOfTheKeys}).
      */
     private static Realization underAKey(Type sourceType, List<List<String>> keptApart,
                                          TermOrders orders, AskedAt asked, SearchRegion within,
@@ -1960,6 +1965,15 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         TermPath keyAt = gathered.key().from(gathered.elements());
+        // The key at a field the number is made of is the number there: every element holds the
+        // key at it, so each contributes the same value and the elements come to that many of it.
+        // Asked of the region, that is the run the elements are chosen in narrowed to the key; asked
+        // as a value written beside the share, it would be that position asked two things.
+        if (term.keyIsWhatIsAdded()) {
+            Realization made = underItsKey(sourceType, keptApart, orders, asked,
+                    within.given(new NumericTerm.ValueOf(keyAt), key), reading, inside);
+            return someOfTheKeys(made);
+        }
         List<FixtureTemplate> held = List.of(FixtureTemplate.on(keyedOn, key,
                 reading.source().symbols().scope()::reach));
         Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
@@ -1971,6 +1985,25 @@ final class TermRealizations {
         }
         return underItsKey(sourceType, keptApart, orders, asked, within, reading,
                 new DemandsInside(among, inside.required()));
+    }
+
+    /**
+     * What came of composing for a key placed at the number, said as an offer of some of the keys
+     * there are: the key was one value of the several the number is reached at, so a row not
+     * written is not a row there is none of.
+     */
+    private static Realization someOfTheKeys(Realization made) {
+        CompositionShortfall some = CompositionShortfall.writing(
+                Set.of(CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO));
+        return switch (made) {
+            case Realization.Built built -> new Realization.Built(built.values(),
+                    built.rest().and(some));
+            case Realization.Stopped stopped -> new Realization.Stopped(stopped.met().and(some));
+            case Realization.Unexhausted unexhausted -> new Realization.Unexhausted(
+                    unexhausted.met().and(some), unexhausted.detail());
+            case Realization.None none -> new Realization.Unexhausted(some, none.detail());
+            case Realization.NoNumberTheDeclarationsAdmit nothing -> nothing;
+        };
     }
 
     /** A container whose elements come to one of those numbers, which is what a row has to hold for

@@ -5293,22 +5293,7 @@ final class Pullback {
 
     /**
      * What the elements a fold files under each key come to by {@code gathering}, each as what
-     * {@code value} computes of it — or null where something in {@code alike} is another number of
-     * the element, the list is not every occurrence of elements standing at a place of the input,
-     * or the key is no way of fields from where they stand.
-     *
-     * <p>Where the elements stand is the walk's answer about the element itself ({@link
-     * OnePerElement.ReadOff#ITSELF}, read down {@link InputReads#occurrencesOf} with the key), and
-     * every number of the element is read from there: an element that is the value standing at a
-     * place holds at each field what that place holds there. A walk that made something new of
-     * each element — a record of a field doubled, a newtype round it — leaves the element standing
-     * at no place, and is read as nothing rather than as what it was made from.
-     *
-     * <p>The elements are some of the occurrences only where every one of them is filed; a list
-     * some of whose elements a statement keeps is not read here.
-     *
-     * @param alike what the step files or compares as the same number of each element as
-     *              {@code value}: a total adds it, an end is chosen against it
+     * {@code value} computes of it — or null where {@link #elementsGathered} reads none.
      */
     private NumericTerm.GatheredUnderItsKey gatheredUnderItsKey(
             Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
@@ -5320,8 +5305,8 @@ final class Pullback {
 
     /**
      * The same elements gathered for the key an input holds at {@code asked}, which is the number
-     * the lookup of that key finds ({@link #valueLookedUpUnderAKey}) — or null where something
-     * in {@code alike} is another number of the element, or the elements are not read.
+     * the lookup of that key finds ({@link #valueLookedUpUnderAKey}) — or null where
+     * {@link #elementsGathered} reads none.
      */
     private NumericTerm.GatheredUnderAKey gatheredUnderAKey(
             Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
@@ -5341,6 +5326,25 @@ final class Pullback {
     private record ElementsGathered(TermPath elements, ElementProjection key,
                                     ElementValue number, Type each) {}
 
+    /**
+     * Where the elements a fold files stand, and the key and the number of each — or null where
+     * something in {@code alike} is another number of the element, the list is not every
+     * occurrence of elements standing at a place of the input, or the key is no way of fields
+     * from where they stand.
+     *
+     * <p>Where the elements stand is the walk's answer about the element itself ({@link
+     * OnePerElement.ReadOff#ITSELF}, read down {@link InputReads#occurrencesOf} with the key), and
+     * every number of the element is read from there: an element that is the value standing at a
+     * place holds at each field what that place holds there. A walk that made something new of
+     * each element — a record of a field doubled, a newtype round it — leaves the element standing
+     * at no place, and is read as nothing rather than as what it was made from.
+     *
+     * <p>The elements are some of the occurrences only where every one of them is filed; a list
+     * some of whose elements a statement keeps is not read here.
+     *
+     * @param alike what the step files or compares as the same number of each element as
+     *              {@code value}: a total adds it, an end is chosen against it
+     */
     private ElementsGathered elementsGathered(Denotation whole, KeyedAccumulation filed,
                                               Core value, List<Core> alike) {
         OnePerElement.ReadOff key = readOff(whole, filed, filed.key());

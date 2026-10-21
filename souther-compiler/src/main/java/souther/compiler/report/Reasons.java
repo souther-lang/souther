@@ -165,6 +165,10 @@ final class Reasons {
                         "the places inside one run a value is named at";
                 case ELEMENTS_CHOSEN_FOR_A_COUNT ->
                         "the elements chosen for how many of them meet a statement";
+                case KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO ->
+                        "the keys a number their elements come to turns on, other than the one"
+                                + " placed at it, and the containers that ask for more elements"
+                                + " of a key than one";
                 case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
                         "the elements whose computed number is made of several fields, chosen"
                                 + " by a flag, chosen by their case or chosen by where they"

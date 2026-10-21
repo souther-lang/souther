@@ -97,6 +97,21 @@ public enum CompositionRepertoire {
     ELEMENTS_CHOSEN_FOR_A_COUNT,
 
     /**
+     * The keys placed beside the number their own elements come to, where the key is a field that
+     * number is made of.
+     *
+     * <p>The key is another parameter's and is fixed before the elements are composed, while the
+     * elements of a key come to a number that turns on the key. Where each element adds the key
+     * itself, the key is placed at the number asked for and a row holds one element of it; a key
+     * that divides the number, with that many elements, is one of the others, and so is a size
+     * of the container that asks for more elements than one. Where the number is made of the
+     * key and something more, the key is a value the rules leave and nothing relates it to the
+     * number. All of them are written by none of these. Raising no figure reaches them; what
+     * would is a way of choosing the key and the elements of it together.
+     */
+    KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
+
+    /**
      * The elements whose computed number is made of the fields of one element in ways this
      * compiler solves for.
      *
@@ -166,7 +181,8 @@ public enum CompositionRepertoire {
             case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR -> true;
             case WAYS_A_TOTAL_IS_SPREAD, PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
                  VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
-                 ELEMENTS_CHOSEN_FOR_A_COUNT, MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                 ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
+                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
                  TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
         };
     }
