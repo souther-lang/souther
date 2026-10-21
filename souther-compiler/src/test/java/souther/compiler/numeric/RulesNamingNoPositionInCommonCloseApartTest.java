@@ -2,6 +2,8 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.RulesAsWritten.Written;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -9,11 +11,12 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.compiler.numeric.RulesAsWritten.positionsOf;
+import static souther.compiler.numeric.RulesAsWritten.rules;
 
 /**
  * Rules that name no position in common leave together the product of what each of them leaves.
@@ -26,13 +29,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * premise from another part tightens nothing while that part leaves its rule a value. A change to
  * how a premise or a round is read that breaks one of those breaks this.
  *
- * <p>The rules are drawn at random over three positions and then said again over three others, so
- * the two halves are independent by construction rather than by the luck of the draw, and the two
- * halves are dealt into one list in an order that is drawn too. The second half is the first under
- * other names as well as a second draw of its own: renamed, both halves ask the same thing and must
- * come to the same thing, and drawn apart, one half can hold nothing while the other holds plenty.
- * Now and then it is one of two systems written out instead, for the two cases a draw does not
- * reach: rules the rounds run out on, and a hop the exact arithmetic cannot compose.
+ * <p>The rules are written over three positions ({@link #HALVES}) and then said again over three
+ * others, so the two halves are independent by construction, and the two halves are dealt into one
+ * list both interleaved and one after the other. The second half is the first under other names as
+ * well as another half of its own: renamed, both halves ask the same thing and must come to the
+ * same thing, and written apart, one half can hold nothing while the other holds plenty. Each half
+ * is written for a case the product has to carry: a rule over three positions that joins the third
+ * through no difference, a weighted sum beside a difference, a half holding nothing, and a half that
+ * falls into parts of its own. Two systems are written out besides, for the two cases no half of
+ * whole numbers reaches: rules the rounds run out on, and a hop the exact arithmetic cannot compose.
  *
  * <p>Compared on everything a state answers and everything read off it afterwards. A domain is asked
  * about forms over positions of both halves once the closure is done, which no part asked about on
@@ -52,12 +57,11 @@ class RulesNamingNoPositionInCommonCloseApartTest {
     private static final List<String> A_HAIR_APART = List.of("u", "v");
 
     /**
-     * Whole numbers for the drawn halves, and values that fill for the two systems written out.
+     * Whole numbers for the written halves, and values that fill for the two systems written out.
      *
-     * <p>A drawn half is often boxed, and over whole numbers in a box the rounds stop on their own,
-     * each taking some end a whole step in. Over values that fill, a box and a sum weighted
-     * unevenly descend through fractions until the rounds run out, which is the halving pair's case
-     * said once rather than drawn over and over at the price of every round.
+     * <p>A half is often boxed, and over whole numbers in a box the rounds stop on their own, each
+     * taking some end a whole step in. Over values that fill, a box and a sum weighted unevenly
+     * descend through fractions until the rounds run out, which is the halving pair's case.
      */
     private static Granularity spacing(String position) {
         return HALVING.contains(position) || A_HAIR_APART.contains(position)
@@ -75,52 +79,83 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             CanonicalOrder.asTheyAreSpelled(),
             (one, other) -> other.compareTo(one));
 
-    private static final int CASES = 140;
+    /**
+     * Halves over {@link #ONE_HALF}, each with what it is for.
+     *
+     * <p>Where a and b are boxed it is because a rule over three positions carries a bound from two
+     * of them onto the third only where the two have ends, so without them a parting that left the
+     * third out of the rule's part would answer the same and be checked for nothing.
+     */
+    private static final List<List<Written>> HALVES = List.of(
+            // A rule over all three positions, which joins cc to a and b through no difference, and
+            // a later bound on a tighter than its box.
+            boxed(rules("a + b - 2cc <= 1", "a - b <= 2", "a <= 2"), List.of("a", "b")),
+            // A weighted sum beside a difference.
+            rules("2a - b >= 1", "b - cc <= 0", "cc <= 3"),
+            // A half holding nothing.
+            boxed(rules("a + b >= 9"), List.of("a", "b")),
+            // A half that falls into parts of its own: a hole sided by a bound, and a sum on its own.
+            rules("a /= 0", "a >= 0", "-cc - b < 2", "cc <= 3"));
 
-    /** Fewer for the domain, which asks every form at every place under every relation. */
-    private static final int DOMAINS = 20;
+    /** Which half goes beside which: renamed, written apart, and the two systems written out. */
+    private static List<List<List<Written>>> pairs() {
+        List<Written> carrying = HALVES.get(0);
+        List<Written> weighted = HALVES.get(1);
+        List<Written> empty = HALVES.get(2);
+        List<Written> inParts = HALVES.get(3);
+        return List.of(
+                List.of(carrying, renamed(carrying)),
+                List.of(weighted, renamed(weighted)),
+                List.of(inParts, renamed(inParts)),
+                List.of(carrying, renamed(empty)),
+                List.of(empty, renamed(weighted)),
+                List.of(inParts, renamed(carrying)),
+                List.of(weighted, halving()),
+                List.of(carrying, aHairApart()));
+    }
+
+    /** The pairs whose second half is over {@link #OTHER_HALF}, which a domain over the two halves
+     *  is asked about. */
+    private static List<List<List<Written>>> twoHalves() {
+        List<List<List<Written>>> out = new ArrayList<>();
+        for (List<List<Written>> pair : pairs()) {
+            if (OTHER_HALF.containsAll(positionsOf(pair.get(1)))) {
+                out.add(pair);
+            }
+        }
+        return out;
+    }
 
     @Test
     void theClosureOfBothHalvesIsTheProductOfTheClosureOfEach() {
-        Random dice = new Random(2169);
         Seen seen = new Seen();
-        for (int round = 0; round < CASES; round++) {
-            CanonicalOrder<String> order = ORDERS.get(round % ORDERS.size());
-            // Boxed every other time: a rule over three positions carries a bound from two of them
-            // onto the third only where the two have ends, so without them a parting that left the
-            // third out of the rule's part would answer the same and be checked for nothing.
-            List<Written> drawn = someRules(dice, ONE_HALF);
-            // Two of the three are enough to carry a bound onto the third.
-            List<Written> one = dice.nextBoolean() ? boxed(drawn, List.of("a", "b")) : drawn;
-            // The rounds run out on the halving pair only after every round they have, so it is
-            // drawn now and then rather than as often as the others; and the hop nothing can
-            // compose is said outright, since a draw reaches it only by luck.
-            List<Written> other = round % 40 == 39 ? halving()
-                    : round % 10 == 4 ? aHairApart()
-                    : round % 2 == 0 ? renamed(one) : someRules(dice, OTHER_HALF);
-            List<AffineConstraint<String>> left = read(one);
-            List<AffineConstraint<String>> right = read(other);
-            List<AffineConstraint<String>> both = dealt(dice, left, right);
+        for (List<List<Written>> pair : pairs()) {
+            List<AffineConstraint<String>> left = read(pair.get(0));
+            List<AffineConstraint<String>> right = read(pair.get(1));
+            for (List<AffineConstraint<String>> both : deals(left, right)) {
+                for (CanonicalOrder<String> order : ORDERS) {
+                    ClosedState<String> leftClosed = ClosedState.closedTogether(left,
+                            RulesNamingNoPositionInCommonCloseApartTest::spacing, order);
+                    ClosedState<String> rightClosed = ClosedState.closedTogether(right,
+                            RulesNamingNoPositionInCommonCloseApartTest::spacing, order);
+                    Outcome inOneRun = outcome(ClosedState.closedTogether(both,
+                            RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
+                    Outcome product = outcome(ClosedState.product(List.of(leftClosed, rightClosed)));
+                    Outcome parted = outcome(ClosedState.of(both,
+                            RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
+                    Outcome kept = outcome(ClosedStates.kept().of(both,
+                            RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
 
-            ClosedState<String> leftClosed = ClosedState.closedTogether(left,
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order);
-            ClosedState<String> rightClosed = ClosedState.closedTogether(right,
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order);
-            Outcome inOneRun = outcome(ClosedState.closedTogether(both,
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
-            Outcome product = outcome(ClosedState.product(List.of(leftClosed, rightClosed)));
-            Outcome parted = outcome(ClosedState.of(both,
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
-            Outcome kept = outcome(ClosedStates.kept().of(both,
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
-
-            assertEquals(inOneRun, product, () -> "the product of " + left + " and " + right
-                    + " is not their closure in one run");
-            assertEquals(inOneRun, parted, () -> both + " parted is not " + both + " in one run");
-            assertEquals(inOneRun, kept, () -> both + " kept a part at a time is not " + both
-                    + " in one run");
-            seen.saw(inOneRun, leftClosed.holdsNothing(), rightClosed.holdsNothing(),
-                    ClosureQuestion.independentRules(both).size());
+                    assertEquals(inOneRun, product, () -> "the product of " + left + " and "
+                            + right + " is not their closure in one run");
+                    assertEquals(inOneRun, parted,
+                            () -> both + " parted is not " + both + " in one run");
+                    assertEquals(inOneRun, kept, () -> both + " kept a part at a time is not "
+                            + both + " in one run");
+                    seen.saw(inOneRun, leftClosed.holdsNothing(), rightClosed.holdsNothing(),
+                            ClosureQuestion.independentRules(both).size());
+                }
+            }
         }
         seen.coveredEveryCase();
     }
@@ -129,25 +164,25 @@ class RulesNamingNoPositionInCommonCloseApartTest {
      * And a domain over both halves answers forms over both alike, closed either way.
      *
      * <p>Asked through the domain because that is where a form over two halves is asked: after the
-     * closure, out of what it handed back, and about positions no part asked about together.
+     * closure, out of what it handed back, and about positions no part asked about together. Every
+     * position is boxed, so a form over both halves has ends to be read and not only no end on
+     * either side.
      */
     @Test
     void aFormOverBothHalvesIsAnsweredAlikeEitherWay() {
-        Random dice = new Random(1016);
         int bounded = 0;
-        for (int round = 0; round < DOMAINS; round++) {
-            CanonicalOrder<String> order = ORDERS.get(round % ORDERS.size());
-            List<Written> one = boxed(someRules(dice, ONE_HALF), ONE_HALF);
-            List<Written> other = round % 2 == 0 ? renamed(one)
-                    : boxed(someRules(dice, OTHER_HALF), OTHER_HALF);
-            List<Written> both = dealt(dice, one, other);
-
+        int each = 0;
+        for (List<List<Written>> pair : twoHalves()) {
+            List<Written> one = boxed(pair.get(0), ONE_HALF);
+            List<Written> other = boxed(pair.get(1), OTHER_HALF);
+            List<Written> both = deals(one, other).getFirst();
+            CanonicalOrder<String> order = ORDERS.get(each++ % ORDERS.size());
             // Parted through a kept table, which is the road a domain over many contexts takes; the
             // road that keeps nothing parts the rules the same way, and is held to the closure in
             // one run above.
             NumericDomain<String> inOneRun = said(both, order, ClosedStates.IN_ONE_RUN);
             NumericDomain<String> parted = said(both, order, ClosedStates.kept());
-            assertEquals(inOneRun.isBottom(), parted.isBottom(), () -> both.toString());
+            assertEquals(inOneRun.isBottom(), parted.isBottom(), both::toString);
             for (Map<String, ExactRatio> form : formsOverBothHalves()) {
                 LinearForm<String> asked = new LinearForm<>(ExactRatio.ZERO, form);
                 assertEquals(inOneRun.projectionOf(asked), parted.projectionOf(asked),
@@ -156,24 +191,22 @@ class RulesNamingNoPositionInCommonCloseApartTest {
                     LinearForm<String> shifted = new LinearForm<>(ExactRatio.of(at), form);
                     for (Rel rel : List.of(Rel.LE, Rel.LT, Rel.GE, Rel.EQ)) {
                         assertEquals(inOneRun.entails(shifted, rel), parted.entails(shifted, rel),
-                                () -> "whether " + shifted + " " + rel + " 0 follows from " + both);
+                                () -> "whether " + shifted + " " + rel + " 0 follows from "
+                                        + both);
                         assertEquals(inOneRun.refutes(shifted, rel), parted.refutes(shifted, rel),
                                 () -> "whether " + shifted + " " + rel + " 0 is refused by "
                                         + both);
                     }
                 }
-            }
-            for (String position : positionsOf(both)) {
-                assertEquals(inOneRun.projectionOf(position), parted.projectionOf(position),
-                        () -> "where " + position + " is under " + both);
-            }
-            for (Map<String, ExactRatio> form : formsOverBothHalves()) {
-                if (!inOneRun.isBottom()
-                        && inOneRun.projectionOf(new LinearForm<>(ExactRatio.ZERO, form))
+                if (inOneRun.projectionOf(asked)
                         instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
                         && bounds.min() != null && bounds.max() != null) {
                     bounded++;
                 }
+            }
+            for (String position : positionsOf(both)) {
+                assertEquals(inOneRun.projectionOf(position), parted.projectionOf(position),
+                        () -> "where " + position + " is under " + both);
             }
         }
         assertTrue(bounded > 0, "no form over both halves was bounded both ways, so the forms were"
@@ -187,97 +220,97 @@ class RulesNamingNoPositionInCommonCloseApartTest {
      * <p>What lending does is decide where each rule said later goes among the parts the closure
      * before it had: at the end of the one part whose positions it weighs, into a part of its own
      * after all of them, or — where it weighs positions of two — nowhere, with the parts worked out
-     * from the rules. The rules are cut at a drawn place, so each of the three is drawn, and each is
+     * from the rules. The rules are cut at every place, so each of the three is reached, and each is
      * counted. Asked of the table and of a domain the rules are said into one at a time, with what
-     * they leave asked now and then on the way, since a domain is lent whatever the one it was made
-     * from had worked out by then.
+     * they leave asked after every rule on the way, since a domain is lent whatever the one it was
+     * made from had worked out by then.
      */
     @Test
     void rulesSaidAfterAClosureComeToTheSameStateWithItsPartsLent() {
-        Random dice = new Random(2481);
         int joinedOne = 0;
         int stoodApart = 0;
         int joinedTwo = 0;
-        for (int round = 0; round < CASES; round++) {
-            CanonicalOrder<String> order = ORDERS.get(round % ORDERS.size());
-            List<Written> one = dice.nextBoolean()
-                    ? boxed(someRules(dice, ONE_HALF), List.of("a", "b")) : someRules(dice, ONE_HALF);
-            List<Written> other = round % 2 == 0 ? renamed(one) : someRules(dice, OTHER_HALF);
-            List<Written> written = dealt(dice, one, other);
-            List<AffineConstraint<String>> both = read(written);
-            int cut = dice.nextInt(both.size() + 1);
-            List<AffineConstraint<String>> first = both.subList(0, cut);
+        int each = 0;
+        for (List<List<Written>> pair : twoHalves()) {
+            for (List<Written> written : deals(pair.get(0), pair.get(1))) {
+                CanonicalOrder<String> order = ORDERS.get(each++ % ORDERS.size());
+                List<AffineConstraint<String>> both = read(written);
+                NumericDomain<String> alone = said(written, order, ClosedStates.IN_ONE_RUN);
+                NumericDomain<String> lent = saidAskingOnTheWay(written, order);
+                assertEquals(alone.isBottom(), lent.isBottom(), written::toString);
+                for (String position : positionsOf(written)) {
+                    assertEquals(alone.projectionOf(position), lent.projectionOf(position),
+                            () -> "where " + position + " is under " + written);
+                }
+                Outcome inOneRun = outcome(ClosedState.closedTogether(both,
+                        RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
+                for (int cut = 0; cut <= both.size(); cut++) {
+                    List<AffineConstraint<String>> first = both.subList(0, cut);
+                    ClosedStates kept = ClosedStates.kept();
+                    ClosedStates.Parted<String> before = kept.of(first,
+                            RulesNamingNoPositionInCommonCloseApartTest::spacing, order, null);
+                    long askedBefore = kept.questionsAsked();
+                    ClosedStates.Parted<String> after = kept.of(both,
+                            RulesNamingNoPositionInCommonCloseApartTest::spacing, order, before);
+                    long asked = kept.questionsAsked() - askedBefore;
 
-            ClosedStates kept = ClosedStates.kept();
-            ClosedStates.Parted<String> before = kept.of(first,
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order, null);
-            long askedBefore = kept.questionsAsked();
-            ClosedStates.Parted<String> after = kept.of(both,
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order, before);
-            long asked = kept.questionsAsked() - askedBefore;
-            Outcome inOneRun = outcome(ClosedState.closedTogether(both,
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
+                    assertEquals(inOneRun, outcome(after.state()), () -> both + " lent the parts of "
+                            + first + " is not " + both + " in one run");
 
-            assertEquals(inOneRun, outcome(after.state()), () -> both + " lent the parts of "
-                    + first + " is not " + both + " in one run");
-            NumericDomain<String> alone = said(written, order, ClosedStates.IN_ONE_RUN);
-            NumericDomain<String> lent = saidAskingOnTheWay(written, order, dice);
-            assertEquals(alone.isBottom(), lent.isBottom(), written::toString);
-            for (String position : positionsOf(written)) {
-                assertEquals(alone.projectionOf(position), lent.projectionOf(position),
-                        () -> "where " + position + " is under " + written);
-            }
-
-            // Where each later rule goes, taken in the order they were said, so that a later rule
-            // meets the parts the ones before it made. Only the parts they reach are asked about,
-            // unless one of them joins two, and then every part of all the rules is.
-            Map<String, Integer> partOf = new LinkedHashMap<>();
-            List<List<AffineConstraint<String>>> parts = ClosureQuestion.independentRules(first);
-            for (int at = 0; at < parts.size(); at++) {
-                for (AffineConstraint<String> rule : parts.get(at)) {
-                    for (String position : rule.form().coefs().keySet()) {
-                        partOf.put(position, at);
+                    // Where each later rule goes, taken in the order they were said, so that a later
+                    // rule meets the parts the ones before it made. Only the parts they reach are
+                    // asked about, unless one of them joins two, and then every part of all the
+                    // rules is.
+                    Map<String, Integer> partOf = new LinkedHashMap<>();
+                    List<List<AffineConstraint<String>>> parts =
+                            ClosureQuestion.independentRules(first);
+                    for (int at = 0; at < parts.size(); at++) {
+                        for (AffineConstraint<String> rule : parts.get(at)) {
+                            for (String position : rule.form().coefs().keySet()) {
+                                partOf.put(position, at);
+                            }
+                        }
                     }
-                }
-            }
-            int made = parts.size();
-            Set<Integer> reachedAtAll = new LinkedHashSet<>();
-            boolean joined = false;
-            for (AffineConstraint<String> later : both.subList(cut, both.size())) {
-                Set<Integer> reached = new LinkedHashSet<>();
-                later.form().coefs().keySet().forEach(position -> {
-                    if (partOf.containsKey(position)) {
-                        reached.add(partOf.get(position));
+                    int made = parts.size();
+                    Set<Integer> reachedAtAll = new LinkedHashSet<>();
+                    boolean joined = false;
+                    for (AffineConstraint<String> later : both.subList(cut, both.size())) {
+                        Set<Integer> reached = new LinkedHashSet<>();
+                        later.form().coefs().keySet().forEach(position -> {
+                            if (partOf.containsKey(position)) {
+                                reached.add(partOf.get(position));
+                            }
+                        });
+                        if (reached.size() > 1) {
+                            joinedTwo++;
+                            joined = true;
+                            break;
+                        }
+                        int part;
+                        if (reached.isEmpty()) {
+                            stoodApart++;
+                            part = made++;
+                        } else {
+                            joinedOne++;
+                            part = reached.iterator().next();
+                        }
+                        reachedAtAll.add(part);
+                        for (String position : later.form().coefs().keySet()) {
+                            partOf.put(position, part);
+                        }
                     }
-                });
-                if (reached.size() > 1) {
-                    joinedTwo++;
-                    joined = true;
-                    break;
-                }
-                int part;
-                if (reached.isEmpty()) {
-                    stoodApart++;
-                    part = made++;
-                } else {
-                    joinedOne++;
-                    part = reached.iterator().next();
-                }
-                reachedAtAll.add(part);
-                for (String position : later.form().coefs().keySet()) {
-                    partOf.put(position, part);
+                    long expected = joined ? ClosureQuestion.independentRules(both).size()
+                            : reachedAtAll.size();
+                    assertEquals(expected, asked, () -> "the questions put once " + first
+                            + " was lent to " + both);
                 }
             }
-            long expected = joined ? ClosureQuestion.independentRules(both).size()
-                    : reachedAtAll.size();
-            assertEquals(expected, asked, () -> "the questions put once " + first
-                    + " was lent to " + both);
         }
         int ones = joinedOne;
         int aparts = stoodApart;
         int twos = joinedTwo;
         assertTrue(joinedOne > 0 && stoodApart > 0 && joinedTwo > 0, () -> "a place a later rule"
-                + " can go was never drawn: " + ones + " joined one part, " + aparts
+                + " can go was never reached: " + ones + " joined one part, " + aparts
                 + " stood apart and " + twos + " joined two");
     }
 
@@ -318,7 +351,7 @@ class RulesNamingNoPositionInCommonCloseApartTest {
                 false, apart, new LinkedHashSet<>(differences.relations()));
     }
 
-    /** Which of the cases the theorem is about the draws reached, so that a draw reaching none of
+    /** Which of the cases the theorem is about the halves reached, so that a list reaching none of
      *  them is not read as the theorem holding there. */
     private static final class Seen {
         int bothHoldSomething;
@@ -355,70 +388,15 @@ class RulesNamingNoPositionInCommonCloseApartTest {
                     + " where a half fell apart on its own";
             assertTrue(bothHoldSomething > 0 && oneHoldsNothing > 0 && ranOut > 0
                     && notComposed > 0 && aHalfInParts > 0,
-                    "a case the theorem covers was never drawn: " + counts);
+                    "a case the theorem covers was never reached: " + counts);
         }
     }
 
     // --- the rules --------------------------------------------------------------------------------
 
-    private record Written(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {}
-
-    /**
-     * A handful of rules over {@code positions}: bounds, differences and sums weighted unevenly,
-     * with now and then a bound a hop cannot compose onto a whole number.
-     *
-     * <p>Every other time, one of them weighs all three positions. A rule over three positions is
-     * what joins a position to a part through no difference and no pair, so it is the case a
-     * parting that took a rule for edges between two positions gets wrong, and it is drawn rather
-     * than left to turn up. Not every time: rules over three positions that always hold one rule
-     * over all of them are always one part, and a half whose rules fall apart is the product
-     * taken inside the half.
-     */
-    private static List<Written> someRules(Random dice, List<String> positions) {
-        List<Written> out = new ArrayList<>();
-        if (dice.nextBoolean()) {
-            Map<String, ExactRatio> overAll = new LinkedHashMap<>();
-            for (String position : positions) {
-                overAll.put(position, ExactRatio.of(dice.nextBoolean() ? 1 + dice.nextInt(2)
-                        : -1 - dice.nextInt(2)));
-            }
-            out.add(new Written(overAll, ExactRatio.of(dice.nextInt(15) - 7),
-                    dice.nextBoolean() ? Rel.LE : Rel.GE));
-        }
-        int howMany = 1 + dice.nextInt(3);
-        for (int i = 0; i < howMany; i++) {
-            Map<String, ExactRatio> coefs = new LinkedHashMap<>();
-            for (String position : positions) {
-                int weight = dice.nextInt(5) - 2;
-                if (weight != 0) {
-                    coefs.put(position, ExactRatio.of(weight));
-                }
-            }
-            if (coefs.isEmpty()) {
-                continue;
-            }
-            ExactRatio constant = dice.nextInt(8) == 0 ? A_HAIR : ExactRatio.of(dice.nextInt(15) - 7);
-            Rel[] all = Rel.values();
-            out.add(new Written(coefs, constant, all[dice.nextInt(all.length)]));
-        }
-        return out;
-    }
-
-    /**
-     * {@code rules} with each of {@code positions} held between minus four and four, so that a form
-     * over both halves has ends to be read and not only no end on either side.
-     *
-     * <p>Narrow, because the rounds narrow a whole-number box a step at a time and each round reads
-     * every rule: a wider box is more rounds over the same rules and decides nothing more.
-     */
+    /** {@code rules} with each of {@code positions} held between minus four and four. */
     private static List<Written> boxed(List<Written> rules, List<String> positions) {
-        List<Written> out = new ArrayList<>();
-        for (String position : positions) {
-            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(4), Rel.GE));
-            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(-4), Rel.LE));
-        }
-        out.addAll(rules);
-        return out;
+        return RulesAsWritten.boxed(rules, positions, -4, 4);
     }
 
     /** The same rules over the other half's positions. */
@@ -476,35 +454,32 @@ class RulesNamingNoPositionInCommonCloseApartTest {
     }
 
     private static List<AffineConstraint<String>> read(List<Written> written) {
-        List<AffineConstraint<String>> out = new ArrayList<>();
-        for (Written each : written) {
-            if (AffineConstraint.of(each.coefs(), each.constant(), each.rel(),
-                    RulesNamingNoPositionInCommonCloseApartTest::spacing)
-                    instanceof AffineConstraint.Read.Stated<String> stated) {
-                out.add(stated.constraint());
-            }
-        }
-        return out;
+        return RulesAsWritten.read(written, RulesNamingNoPositionInCommonCloseApartTest::spacing);
     }
 
-    /** Both lists in one, each kept in its own order, with which comes next drawn at every step. */
-    private static <T> List<T> dealt(Random dice, List<T> one, List<T> other) {
-        List<T> out = new ArrayList<>();
-        int i = 0;
-        int j = 0;
-        while (i < one.size() || j < other.size()) {
-            boolean fromOne = j >= other.size() || (i < one.size() && dice.nextBoolean());
-            out.add(fromOne ? one.get(i++) : other.get(j++));
+    /**
+     * Both lists in one, each kept in its own order: taken from each in turn, and the second before
+     * the first. Parting puts a part's rules in the order they came, so the two deals hand it the
+     * halves' rules in two orders against each other.
+     */
+    private static <T> List<List<T>> deals(List<T> one, List<T> other) {
+        List<T> inTurn = new ArrayList<>();
+        for (int at = 0; at < Math.max(one.size(), other.size()); at++) {
+            if (at < one.size()) {
+                inTurn.add(one.get(at));
+            }
+            if (at < other.size()) {
+                inTurn.add(other.get(at));
+            }
         }
-        return out;
+        List<T> otherFirst = new ArrayList<>(other);
+        otherFirst.addAll(one);
+        return List.of(inTurn, otherFirst);
     }
 
     private static NumericDomain<String> said(List<Written> rules, CanonicalOrder<String> order,
                                               ClosedStates closing) {
-        Map<String, Granularity> kinds = new LinkedHashMap<>();
-        List<String> everywhere = new ArrayList<>(ONE_HALF);
-        everywhere.addAll(OTHER_HALF);
-        everywhere.forEach(position -> kinds.put(position, spacing(position)));
+        Map<String, Granularity> kinds = kinds(rules);
         NumericDomain<String> out = NumericDomain.top(order, closing);
         for (Written each : rules) {
             out = out.assume(new LinearForm<>(each.constant(), each.coefs()), each.rel(), kinds);
@@ -512,34 +487,31 @@ class RulesNamingNoPositionInCommonCloseApartTest {
         return out;
     }
 
-    /**
-     * {@link #said} through a kept table, asking whether anything is left after a drawn half of
-     * the rules, so that each domain is lent what the one before it had worked out by then — and
-     * each answer on the way held to the same rules closed in one run.
-     */
-    private static NumericDomain<String> saidAskingOnTheWay(List<Written> rules,
-                                                            CanonicalOrder<String> order,
-                                                            Random dice) {
+    private static Map<String, Granularity> kinds(List<Written> rules) {
         Map<String, Granularity> kinds = new LinkedHashMap<>();
         List<String> everywhere = new ArrayList<>(ONE_HALF);
         everywhere.addAll(OTHER_HALF);
+        everywhere.addAll(positionsOf(rules));
         everywhere.forEach(position -> kinds.put(position, spacing(position)));
+        return kinds;
+    }
+
+    /**
+     * {@link #said} through a kept table, asking whether anything is left after every rule, so that
+     * each domain is lent what the one before it had worked out by then — and each answer on the way
+     * held to the same rules closed in one run.
+     */
+    private static NumericDomain<String> saidAskingOnTheWay(List<Written> rules,
+                                                            CanonicalOrder<String> order) {
+        Map<String, Granularity> kinds = kinds(rules);
         NumericDomain<String> out = NumericDomain.top(order, ClosedStates.kept());
         NumericDomain<String> alone = NumericDomain.top(order, ClosedStates.IN_ONE_RUN);
         for (Written each : rules) {
             LinearForm<String> said = new LinearForm<>(each.constant(), each.coefs());
             out = out.assume(said, each.rel(), kinds);
             alone = alone.assume(said, each.rel(), kinds);
-            if (dice.nextBoolean()) {
-                assertEquals(alone.isBottom(), out.isBottom(), rules::toString);
-            }
+            assertEquals(alone.isBottom(), out.isBottom(), rules::toString);
         }
-        return out;
-    }
-
-    private static Set<String> positionsOf(List<Written> rules) {
-        Set<String> out = new LinkedHashSet<>();
-        rules.forEach(each -> out.addAll(each.coefs().keySet()));
         return out;
     }
 }

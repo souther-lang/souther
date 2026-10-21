@@ -6,15 +6,16 @@ import souther.compiler.numeric.NumericDomain.Bounds;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.compiler.numeric.RulesAsWritten.OVER_THREE;
+import static souther.compiler.numeric.RulesAsWritten.reversed;
+import static souther.compiler.numeric.RulesAsWritten.twice;
 
 /**
  * What a domain says is a function of the rules it was given, and of nothing else.
@@ -285,23 +286,26 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
                 "the same position, asked as a position and as a form");
     }
 
-    // --- and over rules drawn at random ---------------------------------------------------------------
+    // --- and over rules chosen for what they tell apart -------------------------------------------------
 
+    /**
+     * Over the systems of {@link RulesAsWritten#OVER_THREE}. Those whose answer could move with the
+     * order hold two rules bounding one thing — one sum held below two bounds, one position bounded
+     * above by two sums, the rest of one rule bounded below by two others — with the tighter said
+     * first, so a reader that lets the later one win answers the other way round differently; and a
+     * part holding nothing beside one that holds something is where the answer is put together from
+     * parts.
+     */
     @Test
     void theOrderAndTheRepetitionAreNotPartOfAnyAnswer() {
         Map<String, Granularity> kinds = whole("a", "b", "c");
-        Random dice = new Random(891);
-        for (int round = 0; round < 300; round++) {
-            List<Written> rules = someRules(dice);
+        for (List<RulesAsWritten.Written> written : OVER_THREE) {
+            List<Written> rules = new ArrayList<>();
+            written.forEach(each -> rules.add(new Written(
+                    new LinearForm<>(each.constant(), each.coefs()), each.rel())));
             NumericDomain<String> asWritten = given(rules, kinds);
-
-            List<Written> shuffled = new ArrayList<>(rules);
-            Collections.shuffle(shuffled, dice);
-            NumericDomain<String> reordered = given(shuffled, kinds);
-
-            List<Written> doubled = new ArrayList<>(rules);
-            doubled.addAll(rules);
-            NumericDomain<String> twice = given(doubled, kinds);
+            NumericDomain<String> reordered = given(reversed(rules), kinds);
+            NumericDomain<String> twice = given(twice(rules), kinds);
 
             // The same questions, scaled up, are the same questions.
             for (Written each : rules) {
@@ -334,33 +338,5 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
                 }
             }
         }
-    }
-
-    private static List<Written> someRules(Random dice) {
-        List<String> positions = List.of("a", "b", "c");
-        List<Written> out = new ArrayList<>();
-        int howMany = 2 + dice.nextInt(4);
-        for (int i = 0; i < howMany; i++) {
-            LinearForm<String> form = num(dice.nextInt(15) - 7);
-            for (String position : positions) {
-                int weight = dice.nextInt(5) - 2;
-                if (weight != 0) {
-                    form = SmallForm.small(form).plus(scaled(position, weight)).form();
-                }
-            }
-            if (form.coefs().isEmpty()) {
-                continue;
-            }
-            Rel rel = switch (dice.nextInt(6)) {
-                case 0 -> Rel.LT;
-                case 1 -> Rel.GE;
-                case 2 -> Rel.GT;
-                case 3 -> Rel.EQ;
-                case 4 -> Rel.NE;
-                default -> Rel.LE;
-            };
-            out.add(new Written(form, rel));
-        }
-        return out;
     }
 }
