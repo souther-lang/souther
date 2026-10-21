@@ -11,6 +11,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -47,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * by a walk that never met the absence it is about.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class WhatAReadingReadsCanBeKeyedByWhatTheModelStatesTest {
 
     /** One helper called twice: one written comparison, two copies of it in the tree that runs. */

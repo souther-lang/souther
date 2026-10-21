@@ -14,6 +14,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * is read off the finding rather than looked for in one place.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
 
     /**

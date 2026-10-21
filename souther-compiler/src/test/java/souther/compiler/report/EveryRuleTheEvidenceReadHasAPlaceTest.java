@@ -5,6 +5,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * answer about the readings that model happens to raise.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryRuleTheEvidenceReadHasAPlaceTest {
 
     @Test

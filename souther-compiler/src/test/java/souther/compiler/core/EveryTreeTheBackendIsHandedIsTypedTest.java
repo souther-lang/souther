@@ -6,6 +6,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * nothing at run time asks this.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryTreeTheBackendIsHandedIsTypedTest {
 
     @Test
