@@ -60,6 +60,41 @@ class AContainerOfStringsIsComposedWithSoManyElementsMeetingAStatementTest {
                 .and(values -> !values.isEmpty())), () -> "one with none below: " + offered);
     }
 
+    /**
+     * Strings of a type kept to one letter at least are chosen out of what the type admits: the
+     * least string along the order is the empty one, which every row holding it is refused for,
+     * so the ones chosen below the string the statement holds them against are strings of the
+     * type there. Alike where the string is a field of the element.
+     */
+    @Test
+    void aCountOfWhatIsBelowAStringIsComposedOfStringsTheirTypeAdmits() {
+        String labels = """
+                module probe
+                data Low
+                data High
+                data Label = String
+                    invariant String.length(value) >= 1
+                """;
+        String alone = labels + """
+                behavior pick : (xs: List<Label>) -> Low | High
+                let pick (xs) =
+                    if List.length(List.filter(y -> y.value < "m", xs)) >= 2 then High else Low
+                """;
+        String inARecord = labels + """
+                data Item = { label: Label, size: Int }
+                behavior pick : (xs: List<Item>) -> Low | High
+                let pick (xs) =
+                    if List.length(List.filter(y -> y.label.value < "m" && y.size > 0, xs)) >= 2
+                        then High else Low
+                """;
+        for (String model : List.of(alone, inARecord)) {
+            List<List<String>> offered = containersOffered(model);
+            assertTrue(offered.stream().anyMatch(below("m", 2)), () -> "two below: " + offered);
+            assertTrue(offered.stream().noneMatch(values -> values.contains("")),
+                    () -> "no label the type refuses: " + offered);
+        }
+    }
+
     /** Two counts over one list are one list: a twice and b three times. */
     @Test
     void twoCountsOfOneListAreComposedInOneList() {

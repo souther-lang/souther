@@ -170,10 +170,14 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * so each is a piece of work of its own that mints this allowance for itself
      * ({@code RevisionWork}): minted at the call instead, the work would be done again at every
      * visit of a search. What it pays for is what those questions make, and not the machines of the
-     * patterns they borrow ({@link #OF_A_PATTERN_FOR_A_WITNESS}).
+     * patterns they borrow ({@link #OF_A_PATTERN_FOR_A_WITNESS}). The strings a row's value is
+     * chosen among along an order are the same offer, asked of a run: what the rules leave, met
+     * with the count, and what of that lies inside the run.
      */
     private static final List<String> OF_A_WITNESS = List.of(
             "souther/compiler/partition/Partitions",
+            "souther/compiler/partition/Partitions$StringsInsideARun",
+            "souther/compiler/partition/Partitions$StringsLeft",
             "souther/compiler/partition/Partitions$StringsTheRulesAdmit",
             "souther/compiler/partition/Partitions$WhatTheOfferIsShortOf");
 

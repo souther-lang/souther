@@ -78,7 +78,8 @@ class AMapOfHowOftenEachKeyOccursIsFilteredAndMeasuredWholeTest {
      * written as often as a count asks is one its type admits, as the keys of a set of them are,
      * and not the first string along the order, which every row holding it is refused for. So
      * a row is offered on each side of the line, of a list of them or of the labels of a list of
-     * issues alike.
+     * issues alike. Of the strings the type admits, the one written is the one written for a
+     * label wherever it stands, and not the shortest string its rules leave, which is a tab.
      */
     @Test
     void aKeyWrittenAsOftenAsACountAsksIsOneItsTypeAdmits() {
@@ -117,6 +118,9 @@ class AMapOfHowOftenEachKeyOccursIsFilteredAndMeasuredWholeTest {
             assertFalse(offered.isEmpty(), () -> "rows are offered: " + report(compilation));
             assertTrue(offered.stream().noneMatch(each -> each.contains("Label(\"\")")),
                     () -> "no row holds a label the type refuses: " + offered);
+            assertTrue(offered.stream().anyMatch(each -> each.contains("Label(\"x\")"))
+                            && offered.stream().noneMatch(each -> each.contains("\\t")),
+                    () -> "the label written is the one written for a label: " + offered);
             assertFalse(report(compilation).contains("nothing could show a row can be written"),
                     () -> "every point has a row composed for it: " + report(compilation));
         }

@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which places a relation of terms is shown to leave undivided, asked of the terms themselves.
@@ -355,5 +357,40 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 held(1, 0, Rel.GE), held(1, -1, Rel.LE)));
         assertEquals(Set.of(), apart(pair(2, -2, A_DATE), -1, Rel.LT,
                 held(1, 0, Rel.GT), held(1, -1, Rel.LT)));
+    }
+
+    /**
+     * {@code 2^62 x - y < 0}, {@code x} from nought to a hundred and {@code y} an {@code Int} read
+     * as though its order ran on: at two, the true side needs a {@code y} past the greatest
+     * {@code Int}. The run {@code y} has to stand in is a finite one, and still runs past where
+     * {@code y}'s order stops, so {@code y} is no witness there. Held to a run inside its order —
+     * a weight of one — it is.
+     */
+    @Test
+    void aFiniteRunPastWhereTheReachingOrderStopsIsNoWitness() {
+        var y = term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true);
+        var weighedPast = term("x", 1L << 62, run(0, 100), run(0, 100), null, true);
+        var inside = term("x", 2, run(0, 100), run(0, 100), null, true);
+        assertFalse(undivided(List.of(weighedPast, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+        assertTrue(undivided(List.of(inside, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+    }
+
+    /**
+     * {@code x - y + z - 1000 > 0}, {@code z} read as though its order ran on but counted on an
+     * order stopping at a hundred: brought to nought by a {@code z} of a thousand, the rest would
+     * leave {@code x} to {@code y}, and no {@code z} is there. Counted on an order reaching a
+     * thousand, it is.
+     */
+    @Test
+    void aTermIsHeldOnlyAtAValueItsOrderHolds() {
+        var x = term("x", 1, run(0, 10), run(0, 10), null, true);
+        var y = term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true);
+        var shortOrder = runningTo(run(0, 100), "z", 1, NumericDomain.Bounds.OPEN,
+                NumericDomain.Bounds.OPEN, null, true);
+        var longOrder = runningTo(run(0, 1000), "z", 1, NumericDomain.Bounds.OPEN,
+                NumericDomain.Bounds.OPEN, null, true);
+        ExactRatio constant = ExactRatio.of(-1000);
+        assertFalse(undivided(List.of(x, y, shortOrder), constant, Rel.GT).contains("x"));
+        assertTrue(undivided(List.of(x, y, longOrder), constant, Rel.GT).contains("x"));
     }
 }

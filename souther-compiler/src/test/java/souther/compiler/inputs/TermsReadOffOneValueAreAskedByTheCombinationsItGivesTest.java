@@ -62,9 +62,14 @@ class TermsReadOffOneValueAreAskedByTheCombinationsItGivesTest {
 
     private static Leaves leavesOf(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
                                    long constant, Rel relation, List<JointSupport> supports) {
+        return leavesOf(terms, at, constant, relation, supports, GREATEST_INT);
+    }
+
+    private static Leaves leavesOf(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
+                                   long constant, Rel relation, List<JointSupport> supports,
+                                   BigInteger greatest) {
         return WhatARelationLeavesUndivided.leavesOf(terms, at, ExactRatio.of(constant), relation,
-                String::equals, (one, other) -> true, Granularity.DISCRETE, GREATEST_INT,
-                supports);
+                String::equals, (one, other) -> true, Granularity.DISCRETE, greatest, supports);
     }
 
     /**
@@ -83,6 +88,27 @@ class TermsReadOffOneValueAreAskedByTheCombinationsItGivesTest {
                     "term " + at);
             assertFalse(leavesOf(terms, at, 0, Rel.LT, List.of()) instanceof Leaves.Undivided,
                     "term " + at + " without the dates' combinations");
+        }
+    }
+
+    /**
+     * A witness is a row that is computed. Each date's part of a row is at most a hundred times
+     * twelve and thirty-one, so the rows the combinations give are computed where the type holds
+     * both dates' parts added, and are no witnesses one short of that.
+     */
+    @Test
+    void theCombinationsAreNoWitnessesWhereTheirRowsPassWhereTheTypeStops() {
+        var terms = List.of(term("on", 100, 1, 12), term("on", 1, 1, 31),
+                term("birthday", -100, 1, 12), term("birthday", -1, 1, 31));
+        var supports = List.of(new JointSupport(List.of(0, 1), monthsAndDays(false)),
+                new JointSupport(List.of(2, 3), monthsAndDays(false)));
+        BigInteger bothDates = BigInteger.valueOf(2 * (100 * 12 + 31));
+        for (int at = 0; at < terms.size(); at++) {
+            assertInstanceOf(Leaves.Undivided.class,
+                    leavesOf(terms, at, 0, Rel.LT, supports, bothDates), "term " + at);
+            assertFalse(leavesOf(terms, at, 0, Rel.LT, supports,
+                    bothDates.subtract(BigInteger.ONE)) instanceof Leaves.Undivided,
+                    "term " + at + " where the type stops one short of both dates");
         }
     }
 

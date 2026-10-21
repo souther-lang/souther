@@ -2541,6 +2541,116 @@ public final class Partitions {
     }
 
     /**
+     * What the rules on {@code view} leave its strings, so far as this compiler read them: what
+     * they say of the strings, and how many characters one holds. Null where they leave every
+     * string, where the type is no string, and where what they leave could not be worked out — a
+     * rule not read refuses nothing here and is the decoder's to refuse by.
+     *
+     * <p>For a caller naming values along the strings' own order, which knows nothing of the type:
+     * the least string there is comes first along it, and a rule on the characters is written to
+     * refuse it.
+     */
+    static StringsTheRulesLeave stringsTheRulesLeave(TypeView view, RuleReadingContext reading) {
+        if (!(view.shape() instanceof Shape.Scalar scalar) || scalar.prim() != Type.Prim.STRING) {
+            return null;
+        }
+        // Each vocabulary read whether or not the other says anything: a run along the order is
+        // a question about where a string lies, which stepping a character onto the last does not
+        // answer, so the count is read here even where no pattern is stated.
+        RulesRead rules = new RulesRead(patternsStatedOn(view, reading.source()),
+                DeclaredBounds.countsHeld(view, reading, null));
+        if (rules.stated().read().isEmpty() && !countsTheCharacters(rules.characters())) {
+            return null;
+        }
+        Language leaves = reading.revision().settled(new StringsLeft(rules)).orElse(null);
+        return leaves == null ? null : new StringsTheRulesLeave(rules, leaves, reading.revision());
+    }
+
+    /**
+     * The strings the rules on a type leave, read once and asked of a string or of a run.
+     *
+     * @param rules    what the rules say of the strings and of how many characters they hold
+     * @param leaves   the strings those leave
+     * @param revision where what a run leaves is settled
+     */
+    record StringsTheRulesLeave(RulesRead rules, Language leaves, RevisionKnowledge revision) {
+
+        /** Whether {@code text} is one of them. */
+        boolean admits(String text) {
+            return leaves.has(text);
+        }
+
+        /**
+         * Up to {@code many} of them inside the run of the strings' own order from {@code low} to
+         * {@code high}, each one somebody can write, shortest first; none where no such string
+         * lies there or this compiler could not work out which do. A missing end is none.
+         */
+        List<String> inside(Endpoint low, Endpoint high, int many) {
+            return many <= 0 ? List.of() : revision.settled(new StringsInsideARun(rules,
+                    low == null ? null : low.at().key(), low != null && low.inclusive(),
+                    high == null ? null : high.at().key(), high != null && high.inclusive(),
+                    many));
+        }
+    }
+
+    /**
+     * The strings the rules read at a position leave, the count met with what the patterns say,
+     * as work settled by those rules; empty where building them ran past the allowance.
+     */
+    record StringsLeft(RulesRead rules) implements RevisionWork<Optional<Language>> {
+
+        @Override
+        public Optional<Language> workedOut(RevisionKnowledge revision) {
+            Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
+            CandidateStrings left = rules.stated().read().isEmpty()
+                    ? withinTheCount(Language.EVERY_STRING, rules.characters(), meter,
+                            rules.stated().unread())
+                    : admittedBy(rules.stated(), rules.characters(), meter, revision);
+            return Optional.ofNullable(left.language());
+        }
+    }
+
+    /**
+     * Up to {@code many} of the strings the rules read at a position leave inside one run of the
+     * strings' own order, each somebody can write, as work settled by those rules and the run.
+     *
+     * @param low  the lower end of the run, or null where it has none
+     * @param high the upper end of the run, or null where it has none
+     */
+    record StringsInsideARun(RulesRead rules, String low, boolean lowIn, String high,
+                             boolean highIn, int many) implements RevisionWork<List<String>> {
+
+        @Override
+        public List<String> workedOut(RevisionKnowledge revision) {
+            Language left = revision.settled(new StringsLeft(rules)).orElse(null);
+            Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
+            if (left != null && high != null) {
+                Language below = Language.before(high, meter);
+                below = below == null || !highIn ? below : below.with(List.of(high), meter);
+                left = below == null ? null : left.and(below, meter);
+            }
+            if (left != null && low != null) {
+                Language below = Language.before(low, meter);
+                Language from = below == null ? null : below.not(meter);
+                from = from == null || lowIn ? from : from.without(List.of(low), meter);
+                left = from == null ? null : left.and(from, meter);
+            }
+            List<String> out = new ArrayList<>();
+            while (left != null && out.size() < many) {
+                String some = left.someWritten();
+                if (some == null) {
+                    break;
+                }
+                out.add(some);
+                if (out.size() < many) {
+                    left = left.without(List.of(some), meter);
+                }
+            }
+            return List.copyOf(out);
+        }
+    }
+
+    /**
      * What the rules read at a position left out of what {@link StringsTheRulesAdmit} offers
      * there, as work settled by those rules.
      *

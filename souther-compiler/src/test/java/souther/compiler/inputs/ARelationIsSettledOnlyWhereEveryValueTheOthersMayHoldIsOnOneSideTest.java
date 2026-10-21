@@ -23,6 +23,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Which values of a term settle a relation, asked of where the other terms may lie, and whether
@@ -803,6 +804,55 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 denseTerm("y", -1, unit, unit), Rel.LT);
         assertEquals(List.of(new Line(Rel.GE, ExactRatio.of(BigInteger.ONE,
                 BigInteger.valueOf(3)))), ((Leaves.Settled) leaves).lines());
+    }
+
+    /**
+     * {@code xy < 1000}, {@code x} from one to five and {@code y} read as though its order ran on:
+     * over every {@code x}, {@code y} has to stand from two hundred to a thousand. Counted on an
+     * order stopping at a hundred, no {@code y} is there and nothing is shown; on one reaching a
+     * thousand, {@code y} leaves every {@code x} either way.
+     */
+    @Test
+    void aFactorPastWhereItsOrderStopsIsNoWitness() {
+        NumericDomain.Bounds fromOne = run(1L, 5L);
+        for (long stops : new long[] {100, 1000}) {
+            var y = new WhatARelationLeavesUndivided.Term<>(List.of("y"), ExactRatio.of(1),
+                    NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true,
+                    Granularity.DISCRETE, run(-stops, stops));
+            Leaves leaves = WhatARelationLeavesUndivided.leavesOfAProduct(
+                    term("x", 1, fromOne, fromOne), y, ExactRatio.of(1000), Rel.LT, true,
+                    GREATEST_INT);
+            assertEquals(stops == 1000 ? new Leaves.Undivided() : null, leaves,
+                    "y counted up to " + stops);
+        }
+    }
+
+    /**
+     * {@code xy = 0}, {@code x} from one to five: only a {@code y} of nought makes it hold, and a
+     * {@code y} counted on an order starting at one never is, however its run is read.
+     */
+    @Test
+    void aFactorWhoseOrderHoldsNoNoughtIsNoWitnessOfIt() {
+        NumericDomain.Bounds fromOne = run(1L, 5L);
+        for (long least : new long[] {1, 0}) {
+            var y = new WhatARelationLeavesUndivided.Term<>(List.of("y"), ExactRatio.of(1),
+                    NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true,
+                    Granularity.DISCRETE, run(least, 100L));
+            Leaves leaves = WhatARelationLeavesUndivided.leavesOfAProduct(
+                    term("x", 1, fromOne, fromOne), y, ExactRatio.ZERO, Rel.EQ, true,
+                    GREATEST_INT);
+            assertEquals(least == 0 ? new Leaves.Undivided() : null, leaves,
+                    "y counted from " + least);
+        }
+    }
+
+    /** A value is taken only on the order it is counted on: a run taken past where the order
+     *  stops is no term. */
+    @Test
+    void aTermTakesNoValuePastItsOrder() {
+        assertThrows(IllegalArgumentException.class, () -> new WhatARelationLeavesUndivided.Term<>(
+                List.of("y"), ExactRatio.of(1), run(0L, 200L), run(0L, 200L), null, true,
+                Granularity.DISCRETE, run(0L, 100L)));
     }
 
     /** Runs a point apart are lines apart: a point both leave out is not covered. */

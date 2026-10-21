@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -21,7 +20,6 @@ import souther.compiler.numeric.Text;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.Type;
 
 import java.math.RoundingMode;
@@ -208,6 +206,8 @@ final class CardinalityComposer {
         int perPart = distinct ? MOST_ELEMENTS : 1;
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
+                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<Place> candidates = List.of();
         if (element.carrier().counts()) {
             List<ExactRatio> turns = new ArrayList<>();
@@ -234,13 +234,12 @@ final class CardinalityComposer {
                 turns.addAll(where);
             }
             if (run != null) {
-                candidates = valuesAlongAnOrder(element.carrier(), run, turns, perPart, unnamed);
+                candidates = valuesAlongAnOrder(element.carrier(), run, turns, perPart,
+                        OfTheType.of(ofTheElement, reading), unnamed);
             }
         }
         Groups<Place> groups =
                 Groups.of(asked, container, element, written, candidates).keptBy(asked);
-        TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
-                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         Sharing sharing = new Sharing(groups, asked, List.of(), size, distinct, MOST_SHARES);
@@ -490,8 +489,8 @@ final class CardinalityComposer {
         Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
         Map<NumericTerm, Place> beside = settledOutside(asked, measuring, within, written);
         ElementValues ofTheElement = ElementValues.of(container, holding.element(), reading,
-                at -> numbersAt(at, asked, measuring, within, beside, distinct ? MOST_ELEMENTS : 1,
-                        unheld, unnamed));
+                (at, part) -> numbersAt(at, OfTheType.of(part, reading), asked, measuring, within,
+                        beside, distinct ? MOST_ELEMENTS : 1, unheld, unnamed));
         if (ofTheElement == null) {
             return notChosen("an element of `" + container + "` has a part whose values are"
                     + " neither one of so many nor numbers the statements part");
@@ -596,10 +595,10 @@ final class CardinalityComposer {
     /**
      * The values of the number at {@code at} inside an element that are read for {@code asked}:
      * each place a statement turns over at, and {@code each} values of every run between them,
-     * inside what the rules leave it — or null where the number is on no order, or where a
-     * statement turns over at it could not be worked out.
+     * inside what the rules leave it and values of {@code part} — or null where the number is on
+     * no order, or where a statement turns over at it could not be worked out.
      */
-    private static List<ObservedValue> numbersAt(TermPath at, List<Asked> asked,
+    private static List<ObservedValue> numbersAt(TermPath at, OfTheType part, List<Asked> asked,
                                                  Quantities measuring, SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
                                                  Set<CompositionRepertoire> unnamed) {
@@ -638,7 +637,7 @@ final class CardinalityComposer {
                 }
                 turns.addAll(where);
             }
-            places = valuesAlongAnOrder(carrier, run, turns, each, unnamed);
+            places = valuesAlongAnOrder(carrier, run, turns, each, part, unnamed);
         }
         List<ObservedValue> out = new ArrayList<>();
         for (Place place : places) {
@@ -730,15 +729,16 @@ final class CardinalityComposer {
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
+        OfTheType repeated = OfTheType.of(ofTheElement, reading);
         List<Place> candidates = valuesToCount(kept, own, container, place, carrier, run,
-                holding.element(), reading, unheld, unnamed);
+                repeated, unheld, unnamed);
         if (candidates == null) {
             return notChosen("where `" + kept.key() + "` turns over an element of `"
                     + container + "` could not be worked out");
         }
         List<Place> beside = candidates.isEmpty() ? List.of()
-                : valuesBeside(candidates.getFirst(), candidates, kept, carrier, run,
-                        holding.element(), reading, unheld, unnamed);
+                : valuesBeside(candidates.getFirst(), candidates, kept, carrier, run, repeated,
+                        unheld, unnamed);
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
@@ -843,9 +843,10 @@ final class CardinalityComposer {
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         KeptOccurrences kept = term.selection();
-        Type leaves = NestedContainersAddingUp.ofTheLeaves(sourceType, place, reading);
+        OfTheType leaves = OfTheType.of(
+                NestedContainersAddingUp.ofTheLeaves(sourceType, place, reading), reading);
         List<Place> candidates = valuesToCount(kept, own, chain.getLast(), place, carrier, run,
-                leaves, reading, unheld, unnamed);
+                leaves, unheld, unnamed);
         if (candidates == null) {
             return notChosen("where `" + kept.key() + "` turns over an element of `"
                     + chain.getLast() + "` could not be worked out");
@@ -855,7 +856,7 @@ final class CardinalityComposer {
                     : "no value at `" + place + "` to repeat that `" + kept.key() + "` keeps");
         }
         List<Place> beside = valuesBeside(candidates.getFirst(), candidates, kept, carrier, run,
-                leaves, reading, unheld, unnamed);
+                leaves, unheld, unnamed);
         NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
         List<FixtureTemplate> built = new ArrayList<>();
         CompositionShortfall rest = CompositionShortfall.NONE;
@@ -960,8 +961,9 @@ final class CardinalityComposer {
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         List<Place> beside = new ArrayList<>();
-        Type leaves = NestedContainersAddingUp.ofTheLeaves(sourceType, place, reading);
-        for (Place each : valuesTheRulesLeave(carrier, run, leaves, reading, unheld, unnamed)) {
+        OfTheType leaves = OfTheType.of(
+                NestedContainersAddingUp.ofTheLeaves(sourceType, place, reading), reading);
+        for (Place each : valuesTheRulesLeave(carrier, run, leaves, unheld, unnamed)) {
             if (values.stream().noneMatch(each::sameAs)) {
                 beside.add(each);
             }
@@ -1093,13 +1095,14 @@ final class CardinalityComposer {
     private static List<Place> valuesToCount(KeptOccurrences kept, NumericTerm own,
                                              TermPath container, TermPath place,
                                              Carrier carrier, NumericDomain.Bounds run,
-                                             Type element, RuleReadingContext reading,
+                                             OfTheType element,
                                              Set<CompositionCapacity> unheld,
                                              Set<CompositionRepertoire> unnamed) {
         if (kept != null) {
-            return keptValues(kept, own, container, place, carrier, run, unheld, unnamed);
+            return keptValues(kept, own, container, place, carrier, run, element, unheld,
+                    unnamed);
         }
-        return valuesTheRulesLeave(carrier, run, element, reading, unheld, unnamed);
+        return valuesTheRulesLeave(carrier, run, element, unheld, unnamed);
     }
 
     /**
@@ -1108,56 +1111,94 @@ final class CardinalityComposer {
      */
     private static List<Place> valuesBeside(Place counted, List<Place> toCount, KeptOccurrences kept,
                                             Carrier carrier, NumericDomain.Bounds run,
-                                            Type element, RuleReadingContext reading,
+                                            OfTheType element,
                                             Set<CompositionCapacity> unheld,
                                             Set<CompositionRepertoire> unnamed) {
         List<Place> pool = kept == null ? toCount
-                : valuesTheRulesLeave(carrier, run, element, reading, unheld, unnamed);
+                : valuesTheRulesLeave(carrier, run, element, unheld, unnamed);
         return pool.stream().filter(each -> !each.sameAs(counted)).toList();
     }
 
-    /**
-     * Values of an element of type {@code element} inside {@code run}. A string is one the rules on
-     * the element admit: walked to along the order, the first string of a run that starts nowhere
-     * is the empty one, which a rule giving each label a letter refuses once a row holding it is
-     * written. Where those rules offer none, the order is walked as for a number.
-     *
-     * @param element the type of the element, or null where it is not known
-     */
+    /** Values of an element of {@code element} inside {@code run}. */
     private static List<Place> valuesTheRulesLeave(Carrier carrier, NumericDomain.Bounds run,
-                                                   Type element, RuleReadingContext reading,
+                                                   OfTheType element,
                                                    Set<CompositionCapacity> unheld,
                                                    Set<CompositionRepertoire> unnamed) {
-        if (carrier.counts()) {
-            return valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed);
-        }
-        List<Place> admitted = element == null ? List.of()
-                : stringsAdmittedWithin(element, run, reading);
-        return !admitted.isEmpty() ? admitted
-                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
+        return carrier.counts()
+                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
+                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, element,
+                        unnamed);
     }
 
-    /** The strings the rules on {@code element} admit that {@code run} holds, as many as a count
-     *  is composed with and no two alike ({@link Witnesses#distinctValuesOf}). */
-    private static List<Place> stringsAdmittedWithin(Type element, NumericDomain.Bounds run,
-                                                     RuleReadingContext reading) {
-        List<Place> out = new ArrayList<>();
-        for (FixtureTemplate each : Witnesses.distinctValuesOf(element, MOST_ELEMENTS + 1,
-                reading, Set.of()).values()) {
-            // The names the fixture was written under, taken off to the string they wrap.
-            Hir.Expr at = each.value();
-            while (at instanceof Hir.Apply applied && applied.args().size() == 1
-                    && applied.application() instanceof ApplicationOrigin.ComposedFixture) {
-                at = applied.args().getFirst();
+    /**
+     * The type a value named along an order that is not counted is a value of, so that what is
+     * named is one a row can hold.
+     *
+     * <p>The order knows nothing of the type. Walked from where a run starts nowhere, the first
+     * string is the empty one, and a rule giving each label a letter refuses every row holding
+     * it; a string the type's rules refuse is no value of the place however it lies along the
+     * order. So a value the order names is offered where the type admits it, and inside a run
+     * where it admits none of those, strings the type admits there are: first those written for
+     * a value of the type wherever it stands, so a row holds the one the other rows hold, then
+     * those its rules leave inside the run ({@link Partitions#stringsTheRulesLeave}).
+     *
+     * @param strings what the type's rules leave its strings, or null where they leave every one
+     *                or nothing is known of the type, and every value the order names is offered
+     * @param written the strings written for values of the type ({@link Witnesses#stringsOf}),
+     *                which its rules admit
+     */
+    record OfTheType(Partitions.StringsTheRulesLeave strings, List<String> written) {
+
+        OfTheType {
+            written = List.copyOf(written);
+        }
+
+        /** Nothing known of the type, so every value the order names. */
+        static final OfTheType ANY = new OfTheType(null, List.of());
+
+        /** {@code type} read whole, its rules read by {@code reading}; any where it is null. */
+        static OfTheType of(Type type, RuleReadingContext reading) {
+            if (type == null) {
+                return ANY;
             }
-            if (at instanceof Hir.StringLit written) {
-                Place place = Text.of(written.value());
-                if (holds(run, place) && out.stream().noneMatch(place::sameAs)) {
-                    out.add(place);
+            RuleReadingSource source = reading.source();
+            return of(TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                    source.sums()), reading);
+        }
+
+        /** The type {@code view} reads, its rules read by {@code reading}. */
+        static OfTheType of(TypeView view, RuleReadingContext reading) {
+            Partitions.StringsTheRulesLeave strings = Partitions.stringsTheRulesLeave(view, reading);
+            return strings == null ? ANY : new OfTheType(strings,
+                    Witnesses.stringsOf(view.declared(), MOST_ELEMENTS + 1, reading).stream()
+                            .filter(strings::admits).toList());
+        }
+
+        /** Whether {@code place} is a value of the type: a string its rules admit, or any place
+         *  of an order that holds no strings. */
+        boolean admits(Place place) {
+            return strings == null || !(place instanceof Text text) || strings.admits(text.at());
+        }
+
+        /** Up to {@code many} strings the type admits between {@code low} and {@code high}. */
+        List<Place> inside(Endpoint low, Endpoint high, int many) {
+            if (strings == null) {
+                return List.of();
+            }
+            NumericDomain.Bounds run = new NumericDomain.Bounds(low, high);
+            List<Place> out = new ArrayList<>();
+            for (String each : written) {
+                if (out.size() < many && run.admits(Text.of(each))) {
+                    out.add(Text.of(each));
                 }
             }
+            for (String each : strings.inside(low, high, many - out.size())) {
+                if (out.stream().noneMatch(Text.of(each)::sameAs)) {
+                    out.add(Text.of(each));
+                }
+            }
+            return out;
         }
-        return out;
     }
 
     /**
@@ -1167,7 +1208,7 @@ final class CardinalityComposer {
      */
     private static List<Place> keptValues(KeptOccurrences kept, NumericTerm own,
                                           TermPath container, TermPath place, Carrier carrier,
-                                          NumericDomain.Bounds run,
+                                          NumericDomain.Bounds run, OfTheType element,
                                           Set<CompositionCapacity> unheld,
                                           Set<CompositionRepertoire> unnamed) {
         List<Place> near;
@@ -1182,7 +1223,7 @@ final class CardinalityComposer {
             if (turns == null) {
                 return null;
             }
-            near = valuesAlongAnOrder(carrier, run, turns, MOST_ELEMENTS + 1, unnamed);
+            near = valuesAlongAnOrder(carrier, run, turns, MOST_ELEMENTS + 1, element, unnamed);
         }
         List<Place> out = new ArrayList<>();
         for (Place each : near) {
@@ -1601,7 +1642,7 @@ final class CardinalityComposer {
      * the carrier, which names a value inside it where there is one.
      */
     static List<Place> valuesAlongAnOrder(Carrier carrier, NumericDomain.Bounds run,
-                                          List<Place> turns, int each,
+                                          List<Place> turns, int each, OfTheType element,
                                           Set<CompositionRepertoire> unnamed) {
         List<Place> inside = new ArrayList<>();
         for (Place turn : turns) {
@@ -1613,11 +1654,38 @@ final class CardinalityComposer {
         List<Place> out = new ArrayList<>();
         Endpoint from = run.min();
         for (Place turn : inside) {
-            out.addAll(walked(carrier, from, Endpoint.exclusive(turn), each, unnamed));
-            out.add(turn);
+            out.addAll(admitted(carrier, from, Endpoint.exclusive(turn), each, element, unnamed));
+            // A place the type refuses still parts the run, and is no value to offer.
+            if (element.admits(turn)) {
+                out.add(turn);
+            }
             from = Endpoint.exclusive(turn);
         }
-        out.addAll(walked(carrier, from, run.max(), each, unnamed));
+        out.addAll(admitted(carrier, from, run.max(), each, element, unnamed));
+        return out;
+    }
+
+    /**
+     * Up to {@code each} values of {@code element} from {@code low} to {@code high} along an order
+     * that is not counted: those the order names there that the type admits, then, short of that
+     * many, ones the type admits there. A part the order names nothing in is said only where
+     * nothing is offered in it.
+     */
+    private static List<Place> admitted(Carrier carrier, Endpoint low, Endpoint high, int each,
+                                        OfTheType element, Set<CompositionRepertoire> unnamed) {
+        Set<CompositionRepertoire> named = EnumSet.noneOf(CompositionRepertoire.class);
+        List<Place> out = new ArrayList<>(walked(carrier, low, high, each, named).stream()
+                .filter(element::admits).toList());
+        if (out.size() < each) {
+            for (Place more : element.inside(low, high, each)) {
+                if (out.size() < each && out.stream().noneMatch(more::sameAs)) {
+                    out.add(more);
+                }
+            }
+        }
+        if (out.isEmpty()) {
+            unnamed.addAll(named);
+        }
         return out;
     }
 

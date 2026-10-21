@@ -159,6 +159,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
                             + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "CardinalityComposer$OfTheType", "of",
+                    "(" + TYPE + CONTEXT + ")L" + PARTITION + "CardinalityComposer$OfTheType;",
+                    THE_POSITION),
             row(PARTITION + "ConstructionPlan", "applying",
                     "(L" + PARTITION + "ConstructionPlan$Settled;L" + INPUTS + "Refinement;" + INNERS
                             + SYMBOLS + KINDS + SUMS + ")L" + PARTITION
@@ -250,7 +253,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "ValuesOfAnElement", "valuesOf",
                     "(" + TYPE + "L" + INPUTS + "TermPath;" + ADMITTED + CONTEXT
-                            + "ILjava/util/function/Function;Ljava/util/Set;)Ljava/util/List;",
+                            + "ILjava/util/function/BiFunction;Ljava/util/Set;)Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "differing",
                     "(" + TYPE + "I" + HELD + CONTEXT + "Ljava/util/Set;)" + PROPOSALS,

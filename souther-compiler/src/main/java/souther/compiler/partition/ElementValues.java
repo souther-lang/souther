@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
@@ -8,7 +9,7 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * The values an element of a container is listed at, and the two ways each is read: as part of a
@@ -53,11 +54,11 @@ final class ElementValues {
      * {@link ValuesOfAnElement#of} lists them — or null where some part of the element is one
      * nothing here lists values of.
      *
-     * @param numbersAt the values a number standing at a position is read at, or null where none
-     *                  are chosen there
+     * @param numbersAt the values a number standing at a position, of the type read there, is
+     *                  read at, or null where none are chosen there
      */
     static ElementValues of(TermPath container, Type element, RuleReadingContext reading,
-                            Function<TermPath, List<ObservedValue>> numbersAt) {
+                            BiFunction<TermPath, TypeView, List<ObservedValue>> numbersAt) {
         ValuesOfAnElement.Listed listed = ValuesOfAnElement.of(element, container.element(),
                 reading, MOST_VALUES, numbersAt);
         return listed == null ? null : new ElementValues(container, element, reading, listed);

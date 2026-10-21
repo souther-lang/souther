@@ -240,8 +240,16 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
         // statement's, drawn where the part of it that is x turns.
         List<JsonNode> onX = new ArrayList<>();
         borders(report, "e/x", onX);
-        onX.removeIf(each -> !each.path("lineId").path("line").path("which").path("kind")
-                .asString().equals("part_of_comparison"));
+        List<String> besideIt = new ArrayList<>();
+        onX.removeIf(each -> {
+            String kind = each.path("lineId").path("line").path("which").path("kind").asString();
+            if (!kind.equals("part_of_comparison")) {
+                besideIt.add(kind);
+            }
+            return !kind.equals("part_of_comparison");
+        });
+        assertEquals(List.of("comparison"), besideIt,
+                () -> "beside it, the comparison's own line at one: " + besideIt);
         assertEquals(1, onX.size(), () -> "one line on x, read in every case it turns in: " + onX);
         List<JsonNode> atTheLine = new ArrayList<>();
         onX.getFirst().path("items").forEach(item -> {

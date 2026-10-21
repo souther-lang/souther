@@ -121,6 +121,22 @@ class WhatOnlyAComposedValueShowsIsUnknownWhereNothingComposedOneTest {
                 "and composing a value tells the account nothing it did not have");
     }
 
+    /**
+     * And a name nothing ties to the count leaves the point to the rules: the pattern's language
+     * is read whole and holds a value, so the projection offers one beside a count at the line.
+     */
+    @Test
+    void aNameNothingTiesToTheCountLeavesThePointProven() {
+        String untied = INSIDE_A_RECORD.replace(
+                "    invariant String.matches(\"[A-Z]{1,4}\", name.value) || count.value >= 100\n",
+                "");
+        ObligationAssessment unread = theMissedPoint(untied, HowALineIsRead.THE_RULES_ALONE);
+        assertEquals(ItemAssessment.WritabilityProjection.PROVEN, unread.projection(),
+                "the rules reach the point through the record");
+        assertTrue(unread.writabilityEvidence().known(),
+                "so it is known writable with nothing composed");
+    }
+
     private static boolean dispositionSays(ObligationAssessment owed,
                                            Class<? extends ObligationDisposition.Uncertainty> why) {
         return owed.disposition() instanceof ObligationDisposition.Undecided(var because)
