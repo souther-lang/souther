@@ -115,7 +115,7 @@ public final class HeldWholeAndNotTakenOut {
     }
 
     /** A stream and a cursor name themselves too, which is the point of asking for their text. */
-    @SuppressWarnings("StreamToString")
+    @SuppressWarnings({"StreamToString", "UnnecessaryStringBuilder"})
     public static String theTextOfAStreamThatHoldsACopy(Set<CompositionBudget> values) {
         Stream<Set<CompositionBudget>> stream = Stream.of(Set.copyOf(values));
         return new StringBuilder().append(stream).toString();
