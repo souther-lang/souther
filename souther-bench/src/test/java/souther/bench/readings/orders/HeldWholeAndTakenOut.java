@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.Formatter;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.List;
@@ -241,6 +242,64 @@ public final class HeldWholeAndTakenOut {
         List<Set<CompositionBudget>> holder = new ArrayList<>();
         holder.add(Set.copyOf(values));
         return holder.toString();
+    }
+
+    /** The array a container is copied into is written, and what is read back is the copy. */
+    @SuppressWarnings("unchecked")
+    public static List<CompositionBudget> copiedIntoTheArrayItIsGiven(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = List.of(Set.copyOf(values));
+        Set<CompositionBudget>[] target = (Set<CompositionBudget>[]) new Set<?>[1];
+        if (holder.toArray(target) != target) {
+            return List.of();
+        }
+        return new ArrayList<>(target[0]);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static List<CompositionBudget> copiedIntoAnArrayItMakes(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = List.of(Set.copyOf(values));
+        return new ArrayList<>((Set<CompositionBudget>) Arrays.asList(holder.toArray())
+                .getFirst());
+    }
+
+    /** A formatter keeps what it is made to say, and says it when it is asked, not when told. */
+    public static String saidByAFormatterAskedLater(Set<CompositionBudget> values) {
+        Formatter formatter = new Formatter();
+        formatter.format("%s", List.of(Set.copyOf(values)));
+        return formatter.toString();
+    }
+
+    public static String saidByAFormatterAskedByTheCall(Set<CompositionBudget> values) {
+        return new Formatter().format("%s", Set.copyOf(values)).toString();
+    }
+
+    public static String saidByObjectsToStringOfTheContainer(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        return Objects.toString(holder);
+    }
+
+    public static String saidByTheTextOfAnOptional(Set<CompositionBudget> values) {
+        return Optional.of(Set.copyOf(values)).toString();
+    }
+
+    public static String saidByTheTextOfAMapThatHoldsTheCopyAsAKey(Set<CompositionBudget> values) {
+        Map<Set<CompositionBudget>, String> holder = new HashMap<>();
+        holder.put(Set.copyOf(values), "k");
+        return holder.toString();
+    }
+
+    /** What is written is written in the order its text says, whether by a format or by a line. */
+    public static void writtenByAPrintf(Set<CompositionBudget> values) {
+        System.out.printf("%s", Set.copyOf(values));
+    }
+
+    public static void writtenByAPrintlnOfTheContainer(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        System.out.println(holder);
     }
 
     /** The arguments of a format are handed over as one array, and each is made text. */

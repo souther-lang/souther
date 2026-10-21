@@ -11,6 +11,7 @@ import souther.bench.SaltedOrderVocabulary.Push;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Formatter;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -204,7 +205,7 @@ final class HeldCopies {
             "capacity", "setSize", "comparator", "isNull", "nonNull", "identityHashCode", "hash",
             "frequency", "disjoint", "binarySearch", "checkIndex", "swap", "rotate", "reverse",
             "shuffle", "sort", "elementCount", "remainingCapacity", "empty", "mappingCount",
-            "deepEquals");
+            "deepEquals", "toIdentityString", "contentEquals", "compare", "compareTo");
 
     /** What makes text of what it is handed, so that a container says the copies it holds. */
     private static final Set<String> MAKES_TEXT_OF_ITS_ARGUMENTS = Set.of(
@@ -495,12 +496,19 @@ final class HeldCopies {
             return order;
         }
         Outcome out = order;
-        boolean intoABuilder = !call.isStatic()
-                && (call.name().equals("append") || call.name().equals("insert"));
-        if (intoABuilder) {
+        // What is said into something that keeps what it is told is kept by it: the text is asked
+        // of it later, by a call that has no copy in sight.
+        boolean intoSomethingThatKeepsIt = !call.isStatic() && accumulatesText(call.owner());
+        if (intoSomethingThatKeepsIt) {
             out = SaltedOrderVocabulary.alsoPushing(out, List.of(new Push(call.receiver(), said)));
         }
         return call.returnsAReference() ? out.holding(said) : out;
+    }
+
+    /** Whether what is of this type keeps the text it is told, to say it when it is asked. */
+    private static boolean accumulatesText(String internalName) {
+        return isA(internalName, StringBuilder.class) || isA(internalName, StringBuffer.class)
+                || isA(internalName, Formatter.class);
     }
 
     /**
@@ -577,13 +585,17 @@ final class HeldCopies {
         List<Val> args = call.args();
         String owner = call.owner();
         if (!call.isStatic()) {
-            if (!STORES_WHAT_IT_HOLDS_IN_ITS_ARGUMENT.contains(name) || args.isEmpty()) {
+            if (!writesIntoItsArgument(name, args.size()) || args.isEmpty()) {
                 return List.of();
             }
-            // A container drains into one, and a vector is copied into an array.
+            // A container drains into one, and is copied into an array: a vector, or a collection
+            // asked for its elements in an array it is given, which it fills where it has room.
             Set<Tag> held = held(call.receiver());
-            return pushed(args.get(0), name.equals("copyInto")
-                    ? retargeted(held, "ew", ARRAY_ELEMENT) : held);
+            return pushed(args.get(0), name.equals("drainTo") ? held
+                    : retargeted(held, "ew", ARRAY_ELEMENT));
+        }
+        if (!writesIntoItsArgument(owner, name, args.size())) {
+            return List.of();
         }
         if (owner.equals("java/lang/System") && name.equals("arraycopy") && args.size() == 5) {
             return pushed(args.get(2), held(args.get(0)));
@@ -1130,6 +1142,32 @@ final class HeldCopies {
             }
         }
         return longest;
+    }
+
+    /**
+     * Whether the call of this name with this many arguments writes what it holds into the
+     * container or array it is given, which is not the one it answers: where it has room it fills
+     * the array it is given, and whether it has is not asked.
+     */
+    static boolean writesIntoItsArgument(String name, int arity) {
+        return STORES_WHAT_IT_HOLDS_IN_ITS_ARGUMENT.contains(name)
+                || (name.equals("toArray") && arity == 1);
+    }
+
+    /**
+     * Whether a static call of the library writes into one of the containers or arrays it is
+     * given: the copies of one into another, a fill, an array copy.
+     */
+    static boolean writesIntoItsArgument(String owner, String name, int arity) {
+        return switch (owner) {
+            case "java/lang/System" -> name.equals("arraycopy") && arity == 5;
+            case "java/util/Collections" -> (name.equals("addAll") && arity == 2)
+                    || (name.equals("copy") && arity == 2) || (name.equals("fill") && arity == 2)
+                    || (name.equals("replaceAll") && arity == 3);
+            case "java/util/Arrays" -> (name.equals("fill") && arity >= 2)
+                    || (name.equals("setAll") && arity == 2);
+            default -> false;
+        };
     }
 
     /** The descriptor's argument count, for a table that is read by arity. */

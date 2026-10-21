@@ -323,8 +323,7 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
                 boolean handedAnObject = Arrays.stream(each.getParameterTypes()).anyMatch(
                         type -> type == Object.class || type == Object[].class);
                 if (handedAnObject && !HeldCopies.understands(each.getName(),
-                        each.getParameterCount())
-                        && !NOT_TEXT_AND_NOT_ASKING.containsKey(each.getName())) {
+                        each.getParameterCount())) {
                     unread.add(host.getSimpleName() + "." + each.getName() + "/"
                             + each.getParameterCount());
                 }
@@ -338,18 +337,98 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
     }
 
     /**
-     * What a method of these classes does with an object it is handed that is not text and not a
-     * question about it: it stores it, which is read where the class is a collection.
+     * Every method that is given an array or a container reads it or writes into it, and the ones
+     * that write are the ones the reading puts what the receiver holds into.
+     *
+     * <p>A call has three places an effect lands: what it answers, the object it is made on, and the
+     * arrays and containers it is given. The first two are in every row of the tables; the third
+     * is the one a row of a table that is read by name is likely to leave out, for a method that
+     * answers an array and fills the one it was given looks like a method that only answers one.
+     * So each method with such a parameter says which it is, here.
      */
-    private static final Map<String, String> NOT_TEXT_AND_NOT_ASKING = Map.of(
-            "contentEquals", "asks whether the characters are the same, which is a question",
-            "indexOf", "asks where, which is a question",
-            "lastIndexOf", "asks where, which is a question",
-            "compare", "orders two, and answers a number",
-            "compareTo", "orders two, and answers a number",
-            "requireNonNullElse", "hands back one of the two",
-            "toIdentityString", "says the class and the identity of the object, and nothing of"
-                    + " what it holds");
+    @Test
+    void everyMethodGivenAnArrayOrAContainerReadsItOrWritesIntoIt() {
+        List<String> unsaid = new ArrayList<>();
+        for (Method each : methodsGivenAnArrayOrAContainer()) {
+            String owner = each.getDeclaringClass().getName().replace('.', '/');
+            boolean writes = each.getParameterCount() > 0 && (Modifier.isStatic(each.getModifiers())
+                    ? HeldCopies.writesIntoItsArgument(owner, each.getName(),
+                            each.getParameterCount())
+                    : HeldCopies.writesIntoItsArgument(each.getName(), each.getParameterCount()));
+            // The wrappers are a family by name, which another test holds to wrapping a container.
+            boolean wraps = each.getName().startsWith("unmodifiable")
+                    || each.getName().startsWith("synchronized")
+                    || each.getName().startsWith("checked");
+            if (!writes && !wraps && !READS_WHAT_IT_IS_GIVEN.containsKey(each.getName())) {
+                unsaid.add(describe(each));
+            }
+        }
+
+        assertEquals(List.of(), unsaid.stream().distinct().sorted().toList(),
+                "a method is given an array or a container and it is not said whether it reads it or"
+                        + " writes into it, so a copy it writes there is not followed");
+    }
+
+    /** What a method does with an array or a container it is given that only reads it. */
+    private static final Map<String, String> READS_WHAT_IT_IS_GIVEN = readsWhatItIsGiven();
+
+    private static Map<String, String> readsWhatItIsGiven() {
+        Map<String, String> out = new TreeMap<>();
+        say(out, "reads the container it is given and puts what it holds in the one it is made on",
+                "addAll", "addAllAbsent", "putAll");
+        say(out, "asks something of what it is given and answers a number or a truth",
+                "containsAll", "removeAll", "retainAll", "disjoint", "frequency", "binarySearch",
+                "compare", "equals", "mismatch", "deepEquals", "hashCode", "deepHashCode", "hash",
+                "indexOfSubList", "lastIndexOfSubList");
+        say(out, "makes another container, an array or a walk of what it is given, which holds"
+                        + " what that did",
+                "asList", "copyOf", "copyOfRange", "of", "ofEntries", "ofLazy", "stream",
+                "spliterator", "enumeration", "asLifoQueue", "newSetFromMap",
+                "newSequencedSetFromMap");
+        say(out, "puts what it is given in another order, in the place it is, so that every path"
+                        + " of a copy it holds is the one it was",
+                "sort", "parallelSort", "reverse", "shuffle", "rotate", "swap");
+        say(out, "takes the greatest or the least of what it is given, which is one element out",
+                "max", "min");
+        say(out, "makes text of what it is given", "toString", "deepToString", "format",
+                "formatted", "join");
+        say(out, "folds the elements of an array by a function and writes the results in it, which"
+                        + " is not followed and is said where a function that returns a copy is"
+                        + " given to it",
+                "parallelPrefix", "parallelSetAll");
+        say(out, "keeps the container it is given as something the program holds elsewhere, which"
+                        + " is not followed",
+                "setProperties");
+        return out;
+    }
+
+    private static void say(Map<String, String> into, String reason, String... names) {
+        for (String name : names) {
+            into.put(name, reason);
+        }
+    }
+
+    private static List<Method> methodsGivenAnArrayOrAContainer() {
+        List<Class<?>> hosts = new ArrayList<>(COLLECTIONS);
+        hosts.addAll(List.of(Stream.class, Collections.class, Arrays.class, Objects.class,
+                System.class, String.class, StringBuilder.class, StringBuffer.class));
+        List<Method> out = new ArrayList<>();
+        for (Class<?> host : hosts) {
+            for (Method method : host.getMethods()) {
+                for (Class<?> parameter : method.getParameterTypes()) {
+                    boolean anArray = parameter.isArray() && !parameter.getComponentType()
+                            .isPrimitive();
+                    boolean aContainer = Collection.class.isAssignableFrom(parameter)
+                            || Map.class.isAssignableFrom(parameter);
+                    if (anArray || aContainer) {
+                        out.add(method);
+                        break;
+                    }
+                }
+            }
+        }
+        return out;
+    }
 
     /**
      * The families the wrappers of {@code Collections} are named in take the container they wrap

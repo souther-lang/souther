@@ -128,6 +128,13 @@ public final class HeldWholeAndNotTakenOut {
         return "cursor: " + cursor + String.valueOf(cursor);
     }
 
+    /** The identity of an object is its class and a number, and says nothing of what it holds. */
+    public static String theIdentityOfAContainerThatHoldsACopy(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        return Objects.toIdentityString(holder);
+    }
+
     /** The text of an array in an array is the inner array's name, and the shallow text stops. */
     public static String theShallowTextOfAnArrayInAnArray(Set<CompositionBudget> values) {
         Object[] inner = new Object[1];
