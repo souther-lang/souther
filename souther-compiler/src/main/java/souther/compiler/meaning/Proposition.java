@@ -11,6 +11,7 @@ import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,6 +19,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 /**
@@ -888,15 +890,15 @@ public sealed interface Proposition {
     /**
      * How many of {@code statements} hold, each weighed as many times as it was written, being one
      * of the counts {@code admitted}. Made through {@link #compared(Relation, boolean)}, and
-     * only where the choices of which of them hold are more than a reading writes out, or come to
-     * more parts than a step is concluded with.
+     * only where the choices of which of them hold are more than the statements are.
      *
      * <p>The statements and the count, and not the choices. Written out, a choice names every
      * statement — each one chosen holding and, for a count that admits no more, each other one
-     * failing — so exactly one of {@code n} is {@code n} choices of {@code n} statements each. Held
-     * here, each statement is held once, and a reader that needs the choices is handed them
-     * through {@link CountsWrittenOut}, held to how many they are and how many parts every count
-     * it is handed comes to together.
+     * failing — so exactly one of {@code n} is {@code n} choices of {@code n} statements each, and
+     * exactly four of eight is seventy. Held here, each statement is held once; a reader that
+     * reads a count reads this, and one that needs the choices is handed them through {@link
+     * CountsWrittenOut}, held to how many they are and how many parts every count it is handed
+     * comes to together.
      *
      * <p>Denied, it is the count being one of the others. No statement is denied by that, and no
      * choice is made.
@@ -978,6 +980,67 @@ public sealed interface Proposition {
         /** How many the statements come to where every one of them holds. */
         public int weight() {
             return weights.stream().mapToInt(Integer::intValue).sum();
+        }
+
+        /**
+         * A count of {@code statements}, each weighed as many times as {@code weights} says, being
+         * one of {@code admitted} — with what the statements say of themselves taken out.
+         *
+         * <p>A statement that holds on every row adds its weight to every count, and one that fails
+         * on every row adds none, so neither is counted: the counts admitted are the ones left once
+         * the first are taken from them. Two statements written alike are one statement weighed
+         * twice. What is left is the count again where it is a count, and otherwise what it comes
+         * to for every row — a count admitted at none of the counts there are, or at every one,
+         * which {@code SoManyHold} is not made for.
+         *
+         * @param admitted the counts admitted, rising; may reach past what the statements come to
+         */
+        public static Proposition counting(List<Proposition> statements, List<Integer> weights,
+                                           List<Integer> admitted) {
+            SortedMap<String, Proposition> kept = new TreeMap<>();
+            Map<String, Integer> weighed = new HashMap<>();
+            int always = 0;
+            for (int at = 0; at < statements.size(); at++) {
+                Proposition statement = statements.get(at);
+                if (statement instanceof Always(boolean holds)) {
+                    always += holds ? weights.get(at) : 0;
+                    continue;
+                }
+                kept.putIfAbsent(statement.key(), statement);
+                weighed.merge(statement.key(), weights.get(at), Integer::sum);
+            }
+            int all = weighed.values().stream().mapToInt(Integer::intValue).sum();
+            List<Integer> counts = new ArrayList<>();
+            for (int count : admitted) {
+                int left = count - always;
+                if (left >= 0 && left <= all) {
+                    counts.add(left);
+                }
+            }
+            if (counts.isEmpty()) {
+                return new Always(false);
+            }
+            if (counts.size() == all + 1) {
+                return new Always(true);
+            }
+            return SharedPropositions.shared(new SoManyHold(List.copyOf(kept.values()),
+                    kept.keySet().stream().map(weighed::get).toList(), counts));
+        }
+
+        /**
+         * This count over {@code each} of its statements instead — itself where none changed. What
+         * a statement is replaced by is the count's to count, so a statement that comes out the
+         * same as another is weighed with it ({@link #counting}).
+         */
+        public Proposition mapped(UnaryOperator<Proposition> each) {
+            List<Proposition> out = new ArrayList<>(statements.size());
+            boolean changed = false;
+            for (Proposition statement : statements) {
+                Proposition replaced = each.apply(statement);
+                changed |= replaced != statement;
+                out.add(replaced);
+            }
+            return changed ? counting(out, weights, admitted) : this;
         }
 
         @Override

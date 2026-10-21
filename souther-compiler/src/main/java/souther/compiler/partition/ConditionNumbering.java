@@ -235,6 +235,12 @@ final class ConditionNumbering {
             if (each instanceof OnTheWay.OneOf several) {
                 several.alternatives().forEach(one -> file(one, by));
             }
+            if (each instanceof OnTheWay.Counted counted) {
+                counted.statements().forEach(one -> {
+                    file(one.holding(), by);
+                    file(one.failing(), by);
+                });
+            }
         }
     }
 
@@ -260,6 +266,12 @@ final class ConditionNumbering {
             }
             if (each instanceof OnTheWay.OneOf several) {
                 several.alternatives().forEach(one -> told(one, into));
+            }
+            if (each instanceof OnTheWay.Counted counted) {
+                counted.statements().forEach(one -> {
+                    told(one.holding(), into);
+                    told(one.failing(), into);
+                });
             }
         }
     }

@@ -124,6 +124,19 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
                     }
                 }
             }
+            if (mine instanceof OnTheWay.Counted one && theirs instanceof OnTheWay.Counted two) {
+                if (one.statements().size() != two.statements().size()) {
+                    return false;
+                }
+                for (int each = 0; each < one.statements().size(); each++) {
+                    OnTheWay.Counted.Statement those = one.statements().get(each);
+                    OnTheWay.Counted.Statement these = two.statements().get(each);
+                    if (!retoldInto(those.holding(), these.holding(), other, into)
+                            || !retoldInto(those.failing(), these.failing(), other, into)) {
+                        return false;
+                    }
+                }
+            }
         }
         return true;
     }
@@ -162,6 +175,12 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
             filedAlone(each, by, into);
             if (each instanceof OnTheWay.OneOf several) {
                 several.alternatives().forEach(one -> filed(one, by, into));
+            }
+            if (each instanceof OnTheWay.Counted counted) {
+                counted.statements().forEach(one -> {
+                    filed(one.holding(), by, into);
+                    filed(one.failing(), by, into);
+                });
             }
         }
     }

@@ -91,16 +91,24 @@ final class WhichOfThemHold {
 
 
     /**
-     * What the relation states: its choices written out, where they are no more than how many
-     * readings one condition makes ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}) and
-     * written out come to no more parts than a step is concluded with — and otherwise the
+     * What the relation states: its choices written out, where they are no more than the
+     * statements are (and within what a reading takes in, {@link
+     * CompositionBudget#READINGS_OF_ONE_CONDITION}, and a step concludes with) — and otherwise the
      * statements and the counts it admits, held as they are ({@link Proposition.SoManyHold}).
+     *
+     * <p>The count is what is stated and the choices are one way of writing it. Exactly one of
+     * {@code n} is {@code n} choices and is written out; exactly four of eight is seventy, which is
+     * a different number of things to read, to take apart and to deny from the eight statements
+     * there are. Held, a reader that reads a count does not take it apart, and one that reads only
+     * conjunctions and disjunctions is handed the choices ({@link CountsWrittenOut}).
      *
      * <p>One relation is stated one way, whichever reader made it: which way turns on the
      * statements and the counts alone, and on no figure a reader has in hand.
      */
     Proposition stated() {
-        Written within = written(CompositionBudget.READINGS_OF_ONE_CONDITION,
+        Written within = written(statements.size(),
+                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.maximum(),
+                CompositionBudget.READINGS_OF_ONE_CONDITION,
                 CompositionBudget.PARTS_A_DERIVATION_CONCLUDES);
         if (within.choices() != null) {
             return within.choices();
@@ -146,8 +154,13 @@ final class WhichOfThemHold {
      * its denial are in many choices, and are counted the first time and known after.
      */
     Written written(CompositionBudget choicesFigure, CompositionBudget partsFigure) {
-        long mostChoices = choicesFigure.maximum();
-        long mostParts = partsFigure.maximum();
+        return written(choicesFigure.maximum(), partsFigure.maximum(), choicesFigure, partsFigure);
+    }
+
+    /** The same, held to {@code mostChoices} and {@code mostParts}, which {@code choicesFigure}
+     *  and {@code partsFigure} are named for where the choices are past one of them. */
+    private Written written(long mostChoices, long mostParts, CompositionBudget choicesFigure,
+                            CompositionBudget partsFigure) {
         // One counting for every choice: the statements are the same in each, and each, and each
         // denial of one, is counted once and then known.
         Conclusion counting = Conclusion.countingTo(partsFigure);

@@ -1394,10 +1394,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * {@code stated}, read to the end, as the several lines it draws, each with where it decides —
-     * every count of statements in it written out as the choices of which hold, all of them held
-     * to one figure ({@link CountsWrittenOut}). Past that figure where its lines decide was not
-     * worked out, and where none are drawn it is several lines not drawn, at each place the
-     * comparison is filed at.
+     * every count of statements in it read as a count, where it stands outside the element of a
+     * container, and written out as the choices of which hold inside one, all of them held to one
+     * figure ({@link CountsWrittenOut}). Past that figure where its lines decide was not worked
+     * out, and where none are drawn it is several lines not drawn, at each place the comparison is
+     * filed at.
      *
      * <p>Unless a reading under a relation that drew no line stopped. The statement is then no line
      * for what stopped there, said as a statement holding a part nothing read is ({@link #noLine}).
@@ -1409,7 +1410,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 Supplier<AffineReading.OfAComparison> arithmetic,
                                 InputReading read, InputReads reads, Arrivals answering,
                                 Optional<AuthorsLines> authors) {
-        return switch (CountsWrittenOut.of(stated)) {
+        return switch (CountsWrittenOut.outsideElementsOf(stated)) {
             case CountsWrittenOut.PastAFigure(CompositionBudget figure) ->
                     new Read.Stopped(ComparisonAssessment.atEachOf(
                             GuardThresholds.filedAt(comparison, read, reads, answering),
@@ -1498,7 +1499,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // A statement holding counts whose choices are past their figure is no rule of the
         // application's own, as one holding a part nothing read is not: what it reads is read
         // where its comparisons are written, each on its own.
-        if (CountsWrittenOut.of(stated) instanceof CountsWrittenOut.Written(Proposition written)
+        if (CountsWrittenOut.outsideElementsOf(stated)
+                instanceof CountsWrittenOut.Written(Proposition written)
                 && several(behavior, application, written, read, reads, Optional.of(authors))
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;

@@ -55,25 +55,50 @@ public final class CountsWrittenOut {
      */
     private static final Map<Proposition, Optional<Handed>> HANDED = new WeakHashMap<>();
 
+    /** The same, for a reader that reads a count itself wherever it stands outside an element of a
+     *  container ({@link #outsideElementsOf}). */
+    private static final Map<Proposition, Optional<Handed>> HANDED_OUTSIDE_ELEMENTS =
+            new WeakHashMap<>();
+
     private long partsLeft = PARTS.maximum();
     private CompositionBudget stoppedAt;
+    /** Whether a count outside every element of a container is left as it is. */
+    private boolean leavingCounts;
 
-    private CountsWrittenOut() {
+    private CountsWrittenOut(boolean leavingCounts) {
+        this.leavingCounts = leavingCounts;
     }
 
     /** What {@code stated} is handed to such a reader as. */
     public static Handed of(Proposition stated) {
-        synchronized (HANDED) {
-            Optional<Handed> kept = HANDED.get(stated);
+        return of(stated, false, HANDED);
+    }
+
+    /**
+     * What {@code stated} is handed to a reader that reads a count of statements itself, as far as
+     * it can: a count is left as it is wherever it stands outside the element of a container, and
+     * written out inside one, where the statements are met by each element apart.
+     *
+     * <p>A count whose statements are themselves counts inside an element is written out whole.
+     */
+    public static Handed outsideElementsOf(Proposition stated) {
+        return of(stated, true, HANDED_OUTSIDE_ELEMENTS);
+    }
+
+    private static Handed of(Proposition stated, boolean leavingCounts,
+                             Map<Proposition, Optional<Handed>> handedBefore) {
+        synchronized (handedBefore) {
+            Optional<Handed> kept = handedBefore.get(stated);
             if (kept != null) {
                 return kept.orElseGet(() -> new Written(stated));
             }
         }
-        CountsWrittenOut writing = new CountsWrittenOut();
+        CountsWrittenOut writing = new CountsWrittenOut(leavingCounts);
         Proposition written = writing.writtenOut(stated);
         Handed handed = written == null ? new PastAFigure(writing.stoppedAt) : new Written(written);
-        synchronized (HANDED) {
-            HANDED.putIfAbsent(stated, written == stated ? Optional.empty() : Optional.of(handed));
+        synchronized (handedBefore) {
+            handedBefore.putIfAbsent(stated,
+                    written == stated ? Optional.empty() : Optional.of(handed));
         }
         return handed;
     }
@@ -81,6 +106,7 @@ public final class CountsWrittenOut {
     /** {@code stated} written out, or null where the writing stopped. */
     private Proposition writtenOut(Proposition stated) {
         return switch (stated) {
+            case Proposition.SoManyHold counted when leavingCounts && leaves(counted) -> counted;
             case Proposition.SoManyHold counted -> {
                 WhichOfThemHold.Written written = counted.writtenForAReader();
                 if (written.choices() == null) {
@@ -113,17 +139,17 @@ public final class CountsWrittenOut {
                         : Proposition.onAnApplication(each);
             }
             case Proposition.Some some -> {
-                Proposition element = writtenOut(some.ofTheElement());
+                Proposition element = writtenOutInAnElement(some.ofTheElement());
                 yield element == null ? null : element == some.ofTheElement() ? some
                         : new Proposition.Some(some.container(), element, some.holds());
             }
             case Proposition.SomeReachable reached -> {
-                Proposition atANode = writtenOut(reached.atANode());
+                Proposition atANode = writtenOutInAnElement(reached.atANode());
                 if (atANode == null) {
                     yield null;
                 }
                 Proposition noneBelow = reached.noneBelow().isEmpty() ? null
-                        : writtenOut(reached.noneBelow().get());
+                        : writtenOutInAnElement(reached.noneBelow().get());
                 if (reached.noneBelow().isPresent() && noneBelow == null) {
                     yield null;
                 }
@@ -137,6 +163,24 @@ public final class CountsWrittenOut {
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.Carried _, Proposition.Unread _ -> stated;
         };
+    }
+
+    /** Whether no count stands inside an element of a container in the statements of
+     *  {@code counted}, outside which a count is left as it is. */
+    private static boolean leaves(Proposition.SoManyHold counted) {
+        return new CountsWrittenOut(true).writtenOut(counted.statements()) == counted.statements();
+    }
+
+    /** {@code stated}, which an element of a container meets, written out: every count in it is
+     *  met by each element apart. */
+    private Proposition writtenOutInAnElement(Proposition stated) {
+        boolean leaving = leavingCounts;
+        leavingCounts = false;
+        try {
+            return writtenOut(stated);
+        } finally {
+            leavingCounts = leaving;
+        }
     }
 
     /** Each of {@code parts} written out, the list itself where none changed, or null where one

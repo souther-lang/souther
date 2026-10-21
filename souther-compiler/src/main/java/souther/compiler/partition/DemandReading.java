@@ -169,6 +169,87 @@ final class DemandReading {
         }
 
         /**
+         * A count of statements, each asked whole whether it holds and whether it fails: a row is
+         * past the condition where it meets what each statement asks on the side it comes out, and
+         * the number that hold is one of {@code admitted}.
+         *
+         * <p>The statements and the count, as {@link Proposition.SoManyHold} holds them, and not
+         * the choices of which of them hold. Taken apart as choices, a count of {@code n}
+         * statements is as many alternatives as there are sets of them that come to a count it
+         * admits, and the denial of it is the same again.
+         *
+         * <p>A value, compared by what it holds, and hashed once, as {@link OneOf} is.
+         */
+        static final class Counted implements Taken {
+
+            /**
+             * One statement counted: how many times it was written, and what a row meets where it
+             * holds and where it fails.
+             */
+            record Statement(int weight, List<Read> holding, List<Read> failing) {
+
+                Statement {
+                    holding = List.copyOf(holding);
+                    failing = List.copyOf(failing);
+                }
+            }
+
+            private final List<Statement> statements;
+            private final List<Integer> admitted;
+            private final Proposition stated;
+            private final int hash;
+
+            Counted(List<Statement> statements, List<Integer> admitted, Proposition stated) {
+                this.statements = List.copyOf(statements);
+                this.admitted = List.copyOf(admitted);
+                this.stated = Objects.requireNonNull(stated, "the statement counted");
+                if (this.statements.isEmpty()) {
+                    throw new IllegalArgumentException("a count is of some statements");
+                }
+                this.hash = Objects.hash(this.statements, this.admitted, stated);
+            }
+
+            List<Statement> statements() {
+                return statements;
+            }
+
+            List<Integer> admitted() {
+                return admitted;
+            }
+
+            Proposition stated() {
+                return stated;
+            }
+
+            /** Every read of every statement, on either side. */
+            List<Read> parts() {
+                List<Read> out = new ArrayList<>();
+                for (Statement each : statements) {
+                    out.addAll(each.holding());
+                    out.addAll(each.failing());
+                }
+                return out;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return this == other || (other instanceof Counted that && hash == that.hash
+                        && statements.equals(that.statements) && admitted.equals(that.admitted)
+                        && stated.equals(that.stated));
+            }
+
+            @Override
+            public int hashCode() {
+                return hash;
+            }
+
+            @Override
+            public String toString() {
+                return "Counted[admitted=" + admitted + ", statements=" + statements + "]";
+            }
+        }
+
+        /**
          * None, and everything that stopped it, each once.
          *
          * @param ofAnAnswerAlone whether the condition names nothing but what a dependency
@@ -260,6 +341,11 @@ final class DemandReading {
                         out.add(of(one))));
                 return out.isEmpty() ? own : out.gathered();
             }
+            if (read instanceof Read.Counted counted) {
+                ModelOccurrences.Gathering out = new ModelOccurrences.Gathering();
+                counted.parts().forEach(one -> out.add(of(one)));
+                return out.isEmpty() ? own : out.gathered();
+            }
             return own;
         }
 
@@ -323,6 +409,24 @@ final class DemandReading {
                     }
                 }
             }
+            if (kept instanceof Read.Counted one && dropped instanceof Read.Counted other
+                    && one.statements().size() == other.statements().size()) {
+                for (int each = 0; each < one.statements().size(); each++) {
+                    Read.Counted.Statement those = one.statements().get(each);
+                    Read.Counted.Statement these = other.statements().get(each);
+                    if (those.holding().size() == these.holding().size()
+                            && those.failing().size() == these.failing().size()) {
+                        for (int at = 0; at < those.holding().size(); at++) {
+                            joinedInto(those.holding().get(at), mine, these.holding().get(at),
+                                    theirs, into);
+                        }
+                        for (int at = 0; at < those.failing().size(); at++) {
+                            joinedInto(those.failing().get(at), mine, these.failing().get(at),
+                                    theirs, into);
+                        }
+                    }
+                }
+            }
         }
 
         /** What {@code off} says {@code read} and every read inside an alternative of it were
@@ -333,6 +437,9 @@ final class DemandReading {
             if (read instanceof Read.OneOf oneOf) {
                 oneOf.alternatives().forEach(alternative ->
                         alternative.forEach(one -> resolved(one, off, into)));
+            }
+            if (read instanceof Read.Counted counted) {
+                counted.parts().forEach(one -> resolved(one, off, into));
             }
         }
     }
@@ -610,7 +717,7 @@ final class DemandReading {
     static Projected projectedOff(Pullback.Pulled pulled, Proposition stated, InputReading read,
                                   ModelOccurrences own) {
         Projection projection = Projection.over(pulled, own);
-        List<Read> reads = switch (CountsWrittenOut.of(stated)) {
+        List<Read> reads = switch (CountsWrittenOut.outsideElementsOf(stated)) {
             case CountsWrittenOut.Written(Proposition written) ->
                     projected(written, read, projection);
             case CountsWrittenOut.PastAFigure(var figure) -> pastTheChoices(figure);
@@ -719,8 +826,9 @@ final class DemandReading {
      * What a statement holding a count of statements whose choices are not written out asks of a
      * row: nothing a row is written toward, past {@code figure}.
      *
-     * <p>A count of statements is asked as the choices of which of them hold, every count in the
-     * statement written out together and held to one figure ({@link CountsWrittenOut}).
+     * <p>A count of statements inside the element of a container is asked as the choices of which
+     * of them hold, every count in the statement written out together and held to one figure
+     * ({@link CountsWrittenOut}); one outside it is asked as a count ({@link Read.Counted}).
      */
     private static List<Read> pastTheChoices(CompositionBudget figure) {
         return List.of(new Read.Unread(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure)));
@@ -804,13 +912,32 @@ final class DemandReading {
     }
 
     /**
+     * What a count of statements asks of a row: what each of its statements asks where it holds
+     * and where it fails, and the counts admitted. No choice of which of them hold is made here;
+     * the way a row takes through the count is found where the statements are judged together
+     * ({@link WayToTheBorder#along}).
+     */
+    private static Read counted(Proposition.SoManyHold counted, InputReading read,
+                                Projection projection) {
+        List<Read.Counted.Statement> each = new ArrayList<>(counted.statements().size());
+        for (int at = 0; at < counted.statements().size(); at++) {
+            Proposition statement = counted.statements().get(at);
+            each.add(new Read.Counted.Statement(counted.weights().get(at),
+                    projected(statement, read, projection),
+                    projected(statement.denied(), read, projection)));
+        }
+        return new Read.Counted(each, counted.admitted(), counted);
+    }
+
+    /**
      * The same, with what some element meeting each statement already asked kept in
      * {@code projection} by the statement's key, and each read told there which copies it was
      * read off.
      *
-     * <p>A count of statements about values written out is read as which of them hold, and every
-     * choice names each statement, holding or failing — so one element statement is met once in
-     * every choice, and the walk of the ways an element meets it is the dear part.
+     * <p>A count of statements outside the element of a container is read as it is
+     * ({@link Read.Counted}); inside one, it is written out as the choices of which of them hold
+     * ({@link CountsWrittenOut}), and every choice names each statement, holding or failing — so
+     * one element statement is met once in every choice.
      *
      * <p>A read is told the parts of the statement it was made of, the parts first: what an
      * alternative or a conjunct asks was read off that part, and not off the whole the part is
@@ -891,8 +1018,7 @@ final class DemandReading {
                 yield projection.joinedAlike(oneOf(parts, each -> each, (each, _) -> each,
                         Optional.of(any)), parts);
             }
-            case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
-                    "a count reaches what a row is asked written out as its choices: " + stated);
+            case Proposition.SoManyHold counted -> List.of(counted(counted, read, projection));
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A
             // statement of an application no run makes is an alternative too many and never one
@@ -1310,6 +1436,11 @@ final class DemandReading {
                 }
                 yield AnElementsWay.oneOfEach(ofEach);
             }
+            // A count of statements met by an element is written out as its choices before it is
+            // read there, so this one is never reached by a reading of an element; were it, no
+            // composer writes a row toward it.
+            case Read.Counted _ -> List.of(AnElementsWay.ofTheRow(forTheRun(whole,
+                    RowDemand.NoComposer.A_COUNT_WITHIN_AN_ELEMENT)));
         };
     }
 
