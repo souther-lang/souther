@@ -198,13 +198,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * of.
      *
      * @param undivided  the places shown undivided
-     * @param settled    each term shown to be settled by some of its values, and those values
+     * @param settled    each term shown to be settled by some of its values, and those values —
+     *                   kept whether or not the term is the number at one position, and whether
+     *                   or not the lines parting them are the model's. A term whose every line
+     *                   the orders' ends alone draw is also among the places shown undivided, as
+     *                   the model draws no line on it
      * @param rowsArrive whether any row comes along the way this is of; where none does it says
      *                   nothing of any row, and a way put beside it is what the two come to
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
-                        Map<NumericTerm.FromOnePosition,
-                                WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                        Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                         boolean rowsArrive) {
 
         WhatItLeaves {
@@ -213,8 +216,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,
-                     Map<NumericTerm.FromOnePosition,
-                             WhatARelationLeavesUndivided.Leaves.Settled> settled) {
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled) {
             this(undivided, settled, true);
         }
 
@@ -236,7 +238,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
             both.retainAll(other.undivided);
-            Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> alike =
+            Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> alike =
                     new LinkedHashMap<>();
             settled.forEach((term, runs) -> {
                 if (runs.equals(other.settled.get(term))) {
@@ -697,7 +699,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(read, sources, carriers, along, conditions, stating, heldWhole);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
-        Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled =
+        Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
         WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
                 conditions.stream().map(OnAWay::affine).toList(), askedAsAStatement());
@@ -977,18 +979,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return out;
     }
 
-    /** What {@code leaves} says of the side at {@code at}, put where it goes. */
+    /**
+     * What {@code leaves} says of the side at {@code at}, put where it goes. Values settling it
+     * are kept against the side's number, whatever number it is; where only the orders' ends
+     * draw the lines between them, the model draws none on the side and it is undivided too.
+     */
     private void putDown(int at, WhatARelationLeavesUndivided.Leaves leaves,
                         Set<FilingCoordinate> undivided,
-                        Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled>
-                                settled) {
+                        Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled) {
         switch (leaves) {
             case null -> { }
             case WhatARelationLeavesUndivided.Leaves.Undivided _ ->
                     undivided.addAll(sides.get(at).madeOf());
             case WhatARelationLeavesUndivided.Leaves.Settled runs -> {
-                if (sides.get(at).atOnePosition() != null) {
-                    settled.put(sides.get(at).atOnePosition(), runs);
+                if (sides.get(at).number() != null) {
+                    settled.put(sides.get(at).number(), runs);
+                }
+                if (!runs.ofTheTypeAlone().isEmpty() && runs.linesOfTheModel().isEmpty()) {
+                    undivided.addAll(sides.get(at).madeOf());
                 }
             }
         }

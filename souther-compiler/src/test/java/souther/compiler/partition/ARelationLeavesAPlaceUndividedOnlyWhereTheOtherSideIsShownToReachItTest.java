@@ -387,6 +387,40 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "atLeast"));
     }
 
+    /**
+     * The count itself: at the greatest count no bar is greater, so the comparison holds there
+     * whatever the bar is, and below it there are bars either side of every count. That line is
+     * where the bar's type stops and no class of the model's, so the count is read and no line is
+     * drawn on it; the bar is parted by its line at one. A rule putting the bar at the greatest
+     * {@code Int} at most draws the same line as the model's, and a count has no position to draw
+     * it at.
+     */
+    @Test
+    void aCountSettledOnlyWhereTheOtherTypeStopsIsRead() {
+        String inputs = "issues: List<Issue>, atLeast: Int";
+        assertEquals(Map.of("occurrences(issues[*].labels[*])", RELATES),
+                left(inputs, LABELLED, BUSY, atThe(">=", LABELLED, inputs, BUSY)));
+
+        String barred = "issues: List<Issue>, atLeast: Bar";
+        String ruled = LABELLED + "\ndata Bar = Int invariant value <= 9223372036854775807";
+        String body = BUSY.replace("atLeast", "atLeast.value");
+        assertEquals(Map.of("occurrences(issues[*].labels[*])", NOT_SHOWN),
+                left(barred, ruled, body, atThe(">=", ruled, barred, body)));
+    }
+
+    /**
+     * {@code x <= Int.min(s, t)}: at the least {@code x} it holds whatever the two are, only because
+     * the least of two {@code Int}s is no less than the least {@code Int}; and the least of them
+     * holds it whatever {@code x} is only at the greatest {@code Int}, where both stop. Both are
+     * where the type stops, and every place is read with no line drawn on it.
+     */
+    @Test
+    void aValueSettledOnlyWhereTheAnswerStopsWithItsTypeIsRead() {
+        assertEquals(Map.of("x", RELATES, "s", RELATES, "t", RELATES),
+                left("x: Int, s: Int, t: Int", "data Unused = Int", "x <= Int.min(s, t)",
+                        "4:21"));
+    }
+
     /** Beside a total, two positions are each a term of the relation and not of the run. The
      *  adjustment held at nought, the gross stands at every value the total takes. */
     @Test
@@ -463,14 +497,16 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * A day apart, the last date has no date after it and the first none before; that is where the
      * dates stop and no line the model draws. Moved together, two dates are a day apart wherever
      * they stand, and only how far apart they are settles it. A date and a count of days are not
-     * moved together.
+     * moved together: a count past the days from the first date to the last or short of those to
+     * the first settles the comparison, which is where the dates stop and no line the model
+     * draws, so the count is read; the days to a date past which no count runs are not shown.
      */
     @Test
     void twoValuesADayApartRelateEachOther() {
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int", "Date.daysBetween(a, b) == 1",
                         "4:39"));
-        assertEquals(Map.of("a", NOT_SHOWN, "n", NOT_SHOWN),
+        assertEquals(Map.of("a", NOT_SHOWN, "n", RELATES),
                 left("a: Date, n: Int", "data Unused = Int",
                         "Date.daysBetween(Date(\"2026-01-01\"), a) <= n", "4:56"));
     }

@@ -261,12 +261,71 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 term("n", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
                 term("len", -1, run(0L, null), run(0L, null))), 0, 0, Rel.LE);
         assertEquals(settledIn(null, null, settled(null, 0L, true)), fromNought);
-        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) fromNought).lines());
+        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) fromNought).linesOfTheModel());
 
         assertEquals(new Leaves.Undivided(), leavesOf(List.of(
                 term("n", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
                 term("len", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 0, 0,
                 Rel.LE));
+    }
+
+    /**
+     * {@code k - count <= 0}, the count what an operation answers, from one on, and {@code k} any
+     * {@code Int}. At the greatest count no {@code k} is greater, so the relation holds there
+     * whatever {@code k} is; below it {@code k} is either side of every count. The line at the
+     * greatest count is there only because {@code k} stops where its type does: free to run on,
+     * {@code k} would be above that count too. So it is kept, and kept apart as the type's.
+     */
+    @Test
+    void aValueSettledOnlyBecauseTheOtherStopsWhereItsTypeDoesIsTheTypesLine() {
+        long most = Long.MAX_VALUE;
+        Leaves.Settled count = (Leaves.Settled) leavesOf(List.of(
+                term("k", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                answer("count", -1, run(1L, null), run(1L, null))), 1, 0, Rel.LE);
+        assertEquals(List.of(settled(most, most, true)), count.runs());
+        assertEquals(List.of(line(Rel.GE, most)), count.ofTheTypeAlone());
+        assertEquals(List.of(), count.linesOfTheModel());
+
+        // A rule that puts k at the greatest Int at most draws the same line, and it is the
+        // model's: the rule stops k there, wherever its type stops.
+        Leaves.Settled ruled = (Leaves.Settled) leavesOf(List.of(
+                term("k", 1, run(null, most), NumericDomain.Bounds.OPEN),
+                answer("count", -1, run(1L, null), run(1L, null))), 1, 0, Rel.LE);
+        assertEquals(List.of(line(Rel.GE, most)), ruled.linesOfTheModel());
+        assertEquals(List.of(), ruled.ofTheTypeAlone());
+    }
+
+    /**
+     * The same count, with {@code k} not shown to take any value: that the greatest count is
+     * settled by the type alone says nothing of the counts below it, which no {@code k} is shown
+     * to reach either side of, and nothing is shown.
+     */
+    @Test
+    void aLineOfTheTypeShowsNothingOfTheValuesNoOtherTermIsShownToReach() {
+        assertNull(leavesOf(List.of(
+                term("k", 1, NumericDomain.Bounds.OPEN, null),
+                answer("count", -1, run(1L, null), run(1L, null))), 1, 0, Rel.LE));
+    }
+
+    /**
+     * {@code x - y - 2 < 0}, both any {@code Int}: at the two greatest {@code y} the relation holds
+     * whatever {@code x} is, but only as {@code y + 2}, which passes where the type stops. Cut where
+     * the type stops, the run is still one no row computes, and nothing is shown.
+     */
+    @Test
+    void aRunCutWhereTheTypeStopsIsStillNoRowWhereItsSumPassesTheEnd() {
+        assertNull(leavesOf(List.of(
+                answer("x", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                answer("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 1, -2,
+                Rel.LT));
+    }
+
+    /** A term that is what an operation answers, counted on the {@code Int}s. */
+    private static WhatARelationLeavesUndivided.Term<String> answer(String place, long weight,
+                                                                   NumericDomain.Bounds holds,
+                                                                   NumericDomain.Bounds realizes) {
+        return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
+                realizes, null, false, Granularity.DISCRETE, INTS);
     }
 
     /**
@@ -704,11 +763,13 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         ExactRatio five = ExactRatio.of(5);
         Leaves.Settled apart = new Leaves.Settled(List.of(
                 new SettledRun(null, ExactCut.exclusive(five), true),
-                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false);
+                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false,
+                List.of());
         assertEquals(List.of(new Line(Rel.LT, five), new Line(Rel.GT, five)), apart.lines());
         Leaves.Settled touching = new Leaves.Settled(List.of(
                 new SettledRun(null, ExactCut.inclusive(five), true),
-                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false);
+                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false,
+                List.of());
         assertEquals(List.of(new Line(Rel.LE, five)), touching.lines());
     }
 }

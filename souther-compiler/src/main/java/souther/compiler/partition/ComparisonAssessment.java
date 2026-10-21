@@ -228,13 +228,18 @@ sealed interface ComparisonAssessment {
      */
     private static List<AtAPosition> settlingLines(
             DrawnBeside beside,
-            Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled,
+            Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
             InputReading reading) {
         List<AtAPosition> out = new ArrayList<>();
         List<NumericTerm> terms = new ArrayList<>(settled.keySet());
         for (NumericTerm term : NumericTerms.inOrder(terms)) {
+            // A line is drawn on a number a row can be written to stand at, and only where the
+            // model draws it: one the orders' ends alone draw parts no class of the model's.
+            if (term.atOnePosition() == null) {
+                continue;
+            }
             List<WhatARelationLeavesUndivided.Line> lines =
-                    settled.get(term.atOnePosition()).lines();
+                    settled.get(term).linesOfTheModel();
             List<AtAPosition> here = new ArrayList<>();
             for (WhatARelationLeavesUndivided.Line each : lines) {
                 Cutting drawn = Cutting.onOneTerm(beside.behavior(), term,
@@ -335,11 +340,10 @@ sealed interface ComparisonAssessment {
          * another application that shows its place nothing, or something else, leaves no class
          * of its own there.
          */
-        private static Map<NumericTerm.FromOnePosition,
-                WhatARelationLeavesUndivided.Leaves.Settled> settledByEvery(
+        private static Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settledByEvery(
                 List<Set<FilingCoordinate>> about,
                 List<UndividedByARelation.WhatItLeaves> leaves) {
-            Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> out =
+            Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> out =
                     new LinkedHashMap<>();
             for (UndividedByARelation.WhatItLeaves each : leaves) {
                 each.settled().forEach((term, runs) -> {

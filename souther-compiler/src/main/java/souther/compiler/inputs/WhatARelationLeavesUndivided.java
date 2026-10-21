@@ -170,23 +170,42 @@ public final class WhatARelationLeavesUndivided {
          * @param greatest the upper end, or null where it holds no greatest
          * @param whole    whether the term's values are whole numbers, so that a run ending at one
          *                 and a run starting at the next leave nothing between them
+         * @param ofTheTypeAlone those of {@link #lines()} drawn only because the orders the terms
+         *                 are counted on stop: worked out with every term free to run past where
+         *                 its type stops, the relation draws none of them. {@code count >= k}
+         *                 holds whatever {@code k} is at the greatest count only because no
+         *                 {@code k} is greater. Such a line is no class of the model's
          */
-        record Settled(List<SettledRun> runs, ExactCut least, ExactCut greatest, boolean whole)
+        record Settled(List<SettledRun> runs, ExactCut least, ExactCut greatest, boolean whole,
+                       List<Line> ofTheTypeAlone)
                 implements Leaves {
 
             /** Runs of a term whose values are whole, its ends being the whole numbers it holds. */
             public static Settled ofWhole(List<SettledRun> runs, BigInteger least,
                                           BigInteger greatest) {
                 return new Settled(runs, least == null ? null : wholeEnd(least),
-                        greatest == null ? null : wholeEnd(greatest), true);
+                        greatest == null ? null : wholeEnd(greatest), true, List.of());
             }
 
             public Settled {
                 runs = List.copyOf(runs);
+                ofTheTypeAlone = List.copyOf(ofTheTypeAlone);
                 if (runs.isEmpty()) {
                     throw new IllegalArgumentException("a term some values of which settle a"
                             + " relation has some");
                 }
+            }
+
+            /** The same runs, those of their lines {@code model} does not draw drawn by the
+             *  orders' ends alone. */
+            Settled besideWhatTheModelDraws(List<Line> model) {
+                return new Settled(runs, least, greatest, whole,
+                        lines().stream().filter(each -> !model.contains(each)).toList());
+            }
+
+            /** The lines the model draws: {@link #lines()} but those the orders' ends alone do. */
+            public List<Line> linesOfTheModel() {
+                return lines().stream().filter(each -> !ofTheTypeAlone.contains(each)).toList();
             }
 
             /**
@@ -437,6 +456,55 @@ public final class WhatARelationLeavesUndivided {
                                 independent, supports, jointly))) {
             return new Leaves.Undivided();
         }
+        Leaves free = settledAmong(terms, at, constant, asking, overlap, independent,
+                granularity, greatest, jointly);
+        if (granularity != Granularity.DISCRETE) {
+            return free;
+        }
+        // Asked again of the values each term's order holds, a value of the term may settle the
+        // relation that the free terms left either way: no greater value of the other is there to
+        // fail it. That is a line of the orders' ends and none of the model's.
+        List<Term<P>> withinTheirOrders = terms.stream()
+                .map(WhatARelationLeavesUndivided::withinItsOrder).toList();
+        if (withinTheirOrders.equals(terms)
+                || !(settledAmong(withinTheirOrders, at, constant, asking, overlap, independent,
+                        granularity, greatest, jointly) instanceof Leaves.Settled bounded)) {
+            return free;
+        }
+        Leaves.Settled marked = bounded.besideWhatTheModelDraws(
+                free instanceof Leaves.Settled drawn ? drawn.lines() : List.of());
+        return free != null && marked.ofTheTypeAlone().isEmpty() ? free : marked;
+    }
+
+    /**
+     * {@code term}, holding only the whole values the order it is counted on holds: the values it
+     * holds, cut where that order stops. A term whose order or values are no whole numbers is
+     * left as it is.
+     */
+    private static <P> Term<P> withinItsOrder(Term<P> term) {
+        if (term.spacing() != Granularity.DISCRETE || term.runsTo() == null
+                || term.holds() == null) {
+            return term;
+        }
+        WholeRun order = WholeRun.ofTheValues(term.runsTo());
+        WholeRun held = WholeRun.ofTheValues(term.holds());
+        if (order == null || held == null) {
+            return term;
+        }
+        WholeRun both = held.meet(order);
+        if (both.equals(held) || !both.holdsAWholeNumber()) {
+            return term;
+        }
+        return new Term<>(term.madeOf(), term.weight(), both.asBounds(), term.realizes(),
+                term.takes(), term.itsPlace(), term.spacing(), term.runsTo());
+    }
+
+    /** Which values of the term at {@code at} settle the relation, and that every other value
+     *  leaves it either way — or null where that is not shown. */
+    private static <P> Leaves settledAmong(List<Term<P>> terms, int at, ExactRatio constant,
+                                           Asking asking, BiPredicate<P, P> overlap,
+                                           Independence independent, Granularity granularity,
+                                           BigInteger greatest, Jointly jointly) {
         Term<P> it = terms.get(at);
         if (granularity == null || constant == null) {
             return null;
@@ -1015,7 +1083,8 @@ public final class WhatARelationLeavesUndivided {
                 return null;
             }
         }
-        return new Leaves.Settled(inOrder(runs, false), held.lower(), held.upper(), false);
+        return new Leaves.Settled(inOrder(runs, false), held.lower(), held.upper(), false,
+                List.of());
     }
 
     /** How far from nought the value of {@code run} nearest it is, or null where the run is no
