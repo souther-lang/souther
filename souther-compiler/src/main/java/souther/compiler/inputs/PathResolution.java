@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
@@ -17,7 +18,7 @@ import java.util.function.UnaryOperator;
  * rule an author wrote about their input leaves the measurement without a word; held as one of them,
  * it is filed where the model may say nothing.
  *
- * <p>None of the three stands for a shape the reading declined. That was an answer here once,
+ * <p>None of these stands for a shape the reading declined. That was an answer here once,
  * because a walk refused shapes for being shapes and a reader could not tell "this expression names
  * no position" from "this walk did not follow that". The walk now refuses a step for what a binding
  * is, and a binding that is nothing this can place is a fact about the model as much as arithmetic
@@ -93,6 +94,151 @@ public sealed interface PathResolution {
     }
 
     /**
+     * The expression is made of what stands at every place of one of {@code alternatives}, the one
+     * the run is on.
+     *
+     * <p>A reading of where a value came from, and never of where it stands ({@link
+     * InputReads#cameFrom}). A fold from a map the input holds answers that map's entries on an
+     * empty list and entries made of the list's elements otherwise, so what it answers came from
+     * both places, and a rule about it is about a value made of them. Held apart from {@link
+     * MayStandAt}, which says the value is at one of its places on the run it is on: this says it
+     * is made of every place of an alternative. A fold over a list chosen between two is made of
+     * its seed and the first list, or of its seed and the second, and that is two alternatives of
+     * two places each.
+     *
+     * <p><b>One form for making and choosing, so that each takes what the other gave.</b> Every
+     * place a value may be made of is in some alternative, an alternative made of one place being a
+     * place it may stand at. {@link #madeOf} takes every alternative of each part with every
+     * alternative of the others, {@link #anyOf} puts the alternatives of its cases side by side, and
+     * all of them end in {@link #of}, so no combination is a case of its own to be handled or
+     * forgotten. Some alternative has more than one place: an answer without one is a position or
+     * several that it may stand at, and is that, however many.
+     *
+     * <p>Where making multiplies choices past {@link #MOST_WAYS_TOLD_APART}, the alternatives of
+     * that value are one, made of every place of all of them. It is the places the value may be
+     * made of and no fewer, so a rule about it is filed everywhere it is owed, and a reader that
+     * asks only where the value came from cannot tell it from the exact answer.
+     *
+     * <p>Not a position, so a reader that needs one place reads it as none, as it does a value
+     * that may stand at several.
+     */
+    record MadeOf(List<List<TermPath>> alternatives) implements PathResolution {
+
+        public MadeOf {
+            alternatives = alternatives.stream().map(List::copyOf).toList();
+            if (alternatives.stream().anyMatch(List::isEmpty)
+                    || alternatives.stream().noneMatch(each -> each.size() > 1)) {
+                throw new IllegalArgumentException(
+                        "a value made of several is made of more than one place on some run");
+            }
+        }
+
+        /** Every place the value is made of on some run, once each. */
+        public List<TermPath> places() {
+            return alternatives.stream().flatMap(List::stream).distinct().toList();
+        }
+    }
+
+    /**
+     * The most alternatives that making a value out of several choices tells apart. Past that, the
+     * alternatives are merged into one made of every place of every one of them: more places than
+     * the value is made of on any run, and none fewer, which is what a rule about it is filed at.
+     *
+     * <p>A bound on the one operation that multiplies, {@link #madeOf}, where each choice made
+     * between values doubles the alternatives of the value made of them. Choosing between values
+     * only adds, so {@link #anyOf} has none, and a choice among any number of places stays the
+     * places it may stand at. A bound and not a measurement: the choices a body writes by hand come
+     * to a handful.
+     */
+    int MOST_WAYS_TOLD_APART = 64;
+
+    /**
+     * Where a value made of every one of {@code these} came from: the places of each together with
+     * the places of the others, in every way the cases of each can come together.
+     *
+     * <p>A part that stands at no position adds no place, as a constant written into the body does
+     * not: the value came from the places of the others, and a rule about it is owed the sentence
+     * there. It is no position only where every part is.
+     *
+     * <p><b>That is not a claim that the part came from no input.</b> A part worked out of a name
+     * by arithmetic, or built out of one, stands at no position either, and what it was worked out
+     * of is not followed: a reading of provenance leaves arithmetic rather than file a rule at a
+     * position the rule says nothing about ({@code BehaviorSetStatements#positionsItCameFrom}). So
+     * the places here are the ones that are followed and the answer is not that they are all of
+     * them.
+     */
+    static PathResolution madeOf(List<PathResolution> these) {
+        List<List<TermPath>> ways = List.of(List.of());
+        boolean any = false;
+        boolean settled = true;
+        for (PathResolution each : these) {
+            List<List<TermPath>> cases = alternativesOf(each);
+            if (cases != null) {
+                ways = together(ways, cases);
+                any = true;
+                // A part that only may stand at a place keeps the value from being settled there.
+                settled &= each instanceof At;
+            }
+        }
+        return any ? of(ways, settled) : new NotAPosition();
+    }
+
+    /** Every alternative of {@code ways} with every one of {@code cases}, or all their places in
+     *  one alternative where two choices multiply past what an answer tells apart. One side that
+     *  is not a choice multiplies nothing, however many alternatives the other has. */
+    private static List<List<TermPath>> together(List<List<TermPath>> ways,
+                                                 List<List<TermPath>> cases) {
+        if (ways.size() > 1 && cases.size() > 1
+                && (long) ways.size() * cases.size() > MOST_WAYS_TOLD_APART) {
+            List<TermPath> every = new ArrayList<>();
+            ways.forEach(every::addAll);
+            cases.forEach(every::addAll);
+            return List.of(every);
+        }
+        List<List<TermPath>> out = new ArrayList<>();
+        for (List<TermPath> way : ways) {
+            for (List<TermPath> one : cases) {
+                List<TermPath> both = new ArrayList<>(way);
+                both.addAll(one);
+                out.add(both);
+            }
+        }
+        return out;
+    }
+
+    /** The alternatives a value stands at or is made of, or null where it came from none. */
+    private static List<List<TermPath>> alternativesOf(PathResolution resolution) {
+        return switch (resolution) {
+            case At(var at) -> List.of(List.of(at));
+            case MayStandAt(var among) -> among.stream().map(List::of).toList();
+            case MadeOf(var alternatives) -> alternatives;
+            case NotAPosition _ -> null;
+        };
+    }
+
+    /**
+     * The answer for a value made of every place of one of {@code alternatives}, the one place of
+     * all of them where {@code settled} and they come to one, and no position where there is none.
+     *
+     * <p>The one place every answer of this kind ends, so that a place dropped or repeated is
+     * dropped or repeated once. Places of an alternative that are one place are one, alternatives
+     * that are one are one, and an answer in which no alternative has more than one place is a
+     * position or the positions it may stand at.
+     */
+    private static PathResolution of(List<List<TermPath>> alternatives, boolean settled) {
+        List<List<TermPath>> ways = alternatives.stream()
+                .map(each -> each.stream().distinct().toList()).distinct().toList();
+        if (ways.isEmpty()) {
+            return new NotAPosition();
+        }
+        if (ways.stream().anyMatch(each -> each.size() > 1)) {
+            return new MadeOf(ways);
+        }
+        List<TermPath> places = ways.stream().map(List::getFirst).distinct().toList();
+        return settled && places.size() == 1 ? new At(places.getFirst()) : new MayStandAt(places);
+    }
+
+    /**
      * Where a value that is any one of {@code these} stands.
      *
      * <p>One place where every one of them is that place, and the places among them otherwise. What
@@ -107,29 +253,18 @@ public sealed interface PathResolution {
      * would leave the measurement — which is what "all of them or none" came to.
      */
     static PathResolution anyOf(List<PathResolution> these) {
-        List<TermPath> among = new java.util.ArrayList<>();
+        List<List<TermPath>> ways = new ArrayList<>();
         boolean everyOne = true;
         for (PathResolution each : these) {
-            switch (each) {
-                case At(var at) -> {
-                    if (!among.contains(at)) {
-                        among.add(at);
-                    }
-                }
-                case MayStandAt(var some) -> {
-                    everyOne = false;
-                    some.forEach(at -> {
-                        if (!among.contains(at)) {
-                            among.add(at);
-                        }
-                    });
-                }
-                case NotAPosition _ -> everyOne = false;
+            List<List<TermPath>> cases = alternativesOf(each);
+            if (cases == null) {
+                everyOne = false;
+            } else {
+                ways.addAll(cases);
+                everyOne &= each instanceof At;
             }
         }
-        return among.isEmpty() ? new NotAPosition()
-                : everyOne && among.size() == 1 ? new At(among.get(0))
-                : new MayStandAt(among);
+        return of(ways, everyOne);
     }
 
     /**
@@ -167,11 +302,15 @@ public sealed interface PathResolution {
         return switch (this) {
             case At(var at) -> new At(at.position());
             case NotAPosition _ -> this;
+            // Each place it is made of, as a place; places that come to one are one place.
+            case MadeOf(var alternatives) -> of(alternatives.stream()
+                    .map(each -> each.stream().map(TermPath::position).toList()).toList(),
+                    alternatives.size() == 1);
             // Each place it may stand at, as a place: the same answer about the run, whatever the
             // narrowings on the way to any one of them. Kept as the places it may be even where
             // they come to one, since what this says is that no read of it is settled as one.
-            case MayStandAt(var among) ->
-                    new MayStandAt(among.stream().map(TermPath::position).distinct().toList());
+            case MayStandAt(var among) -> of(among.stream().map(TermPath::position)
+                    .map(List::of).toList(), false);
         };
     }
 
@@ -181,7 +320,9 @@ public sealed interface PathResolution {
      * <p>For a reader whose question is about where a value stands rather than about which place it
      * is: a field of what stands here stands at the field of it, and an element of what stands here
      * at an element of it. Such a reader has nothing to decide between the answers — the step is
-     * the same step wherever the value came from — so it says the step and this says where.
+     * the same step wherever the value stands — so it says the step and this says where. Where the
+     * value is made of several places together it does not stand at them, and the step is no step
+     * of theirs: they stay the places it is made of.
      *
      * <p><b>Written here because a reader that decides for itself stops deciding.</b> A walk over
      * the arms is exhaustive only while there is an arm for each, and a reader that took a step at
@@ -194,11 +335,18 @@ public sealed interface PathResolution {
         return switch (this) {
             case At(var at) -> new At(step.apply(at));
             case NotAPosition _ -> this;
+            // A place the value is takes the step, and places it is made of together keep their
+            // names: they are not alike, so a field or an element of the value is not known to be
+            // a field or an element of each, and a step taken at one that has none names a path
+            // nothing holds.
+            case MadeOf(var alternatives) -> of(alternatives.stream()
+                    .map(each -> each.size() == 1 ? List.of(step.apply(each.getFirst())) : each)
+                    .toList(), false);
             // Still may, and still at each of them: a step taken at a place a value may stand is a
             // place a step of it may stand. Two of them the step takes to one place are one place
             // among the ones it may be, and it may still be none of them.
-            case MayStandAt(var among) ->
-                    new MayStandAt(among.stream().map(step).distinct().toList());
+            case MayStandAt(var among) -> of(among.stream().map(step).map(List::of).toList(),
+                    false);
         };
     }
 }
