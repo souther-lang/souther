@@ -3,11 +3,13 @@ package souther.bench.readings.orders;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.publish.PublicationOrders;
 
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -80,6 +82,26 @@ public final class HeldWholeAndNotTakenOut {
         List<Set<CompositionBudget>> holder = new ArrayList<>();
         holder.add(Set.copyOf(values));
         return holder.stream().map(Set::size).toList();
+    }
+
+    public static int onlyTheContainerIsAsked(Set<CompositionBudget> values,
+                                              Set<CompositionBudget> other) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        int asked = holder.size() + holder.indexOf(other) + holder.hashCode();
+        if (holder.isEmpty() || holder.contains(other) || Objects.isNull(holder)
+                || holder.equals(List.of(other))) {
+            asked++;
+        }
+        return asked;
+    }
+
+    public static List<CompositionBudget> theOldValueOfAnEntryWasNotTheCopy(
+            Set<CompositionBudget> values) {
+        Map.Entry<String, Set<CompositionBudget>> holder =
+                new AbstractMap.SimpleEntry<>("k", new LinkedHashSet<>());
+        Set<CompositionBudget> old = holder.setValue(Set.copyOf(values));
+        return new ArrayList<>(old);
     }
 
     public static List<CompositionBudget> aReplaceWhoseExpectedValueIsTheCopy(

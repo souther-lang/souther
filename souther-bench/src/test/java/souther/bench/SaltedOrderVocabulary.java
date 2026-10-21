@@ -486,6 +486,20 @@ final class SaltedOrderVocabulary {
 
     private static final Set<String> PUTS_MANY_IN = Set.of("addAll", "putAll");
 
+    /**
+     * Whether a call puts one element in what it is made on: a name of the list above, or an
+     * operation the table of held copies says stores what it is given, which is the one place that
+     * says where an operation stores and so what it is.
+     */
+    static Set<String> namesThatPutOneIn() {
+        return PUTS_ONE_IN;
+    }
+
+    private static boolean putsOneIn(Call call) {
+        return PUTS_ONE_IN.contains(call.name())
+                || HeldCopies.placementOf(call.name(), call.args().size()).isPresent();
+    }
+
     private static final Set<String> MAKES_TEXT = Set.of(
             "toString", "join", "valueOf", "format", "formatted", "concat", "repeat", "strip",
             "trim", "substring", "toUpperCase", "toLowerCase", "replace", "replaceAll",
@@ -957,7 +971,8 @@ final class SaltedOrderVocabulary {
                 || name.equals("toSet") || name.equals("toUnmodifiableSet"))) {
             return Outcome.returning(Val.of(unorderedFrom(call.everything())));
         }
-        if (library && (PUTS_ONE_IN.contains(name) || PUTS_MANY_IN.contains(name))) {
+        if (library && (putsOneIn(call) || PUTS_MANY_IN.contains(name)
+                || HeldCopies.putsAllIn(name))) {
             return filled(call, feeds);
         }
         if ((call.owner().startsWith("java/lang/") && MAKES_TEXT.contains(name))
@@ -1136,7 +1151,7 @@ final class SaltedOrderVocabulary {
         String made = target.isHeldInAMap() ? null : target.made();
         // Text put into a builder is the whole of what it says of what it is given, which for a
         // plurality is every element in the order it iterates.
-        boolean many = PUTS_MANY_IN.contains(call.name())
+        boolean many = PUTS_MANY_IN.contains(call.name()) || HeldCopies.putsAllIn(call.name())
                 || call.name().equals("append") || call.name().equals("insert");
         boolean ownOrder = putsInItsOwnOrder(made) && !target.has(Kind.TIES_LEFT_TO_THE_WALK);
         boolean keepsOrder = made != null

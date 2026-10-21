@@ -10,12 +10,15 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -183,6 +186,108 @@ public final class HeldWholeAndTakenOut {
                 new AbstractMap.SimpleEntry<>("k", Set.of());
         holder.setValue(Set.copyOf(values));
         return new ArrayList<>(holder.getValue());
+    }
+
+    public static List<CompositionBudget> theOldValueOfAnEntryThatIsSet(
+            Set<CompositionBudget> values) {
+        Map.Entry<String, Set<CompositionBudget>> holder =
+                new AbstractMap.SimpleEntry<>("k", Set.copyOf(values));
+        Set<CompositionBudget> old = holder.setValue(Set.of());
+        return new ArrayList<>(old);
+    }
+
+    public static List<CompositionBudget> addedThroughAListIterator(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        ListIterator<Set<CompositionBudget>> cursor = holder.listIterator();
+        cursor.add(Set.copyOf(values));
+        return new ArrayList<>(holder.getFirst());
+    }
+
+    public static List<CompositionBudget> setThroughAnEntryOfAMap(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new HashMap<>();
+        holder.put("k", Set.of());
+        Map.Entry<String, Set<CompositionBudget>> entry = holder.entrySet().iterator().next();
+        entry.setValue(Set.copyOf(values));
+        return new ArrayList<>(holder.get("k"));
+    }
+
+    public static List<CompositionBudget> concatenatedWithAnEmptyStream(
+            Set<CompositionBudget> values) {
+        Stream<Set<CompositionBudget>> left = Stream.of(Set.copyOf(values));
+        return new ArrayList<>(Stream.concat(left, Stream.empty()).findFirst().orElseThrow());
+    }
+
+    @SuppressWarnings("unchecked")
+    public static List<CompositionBudget> wrappedByACheckedList(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        List<Set<CompositionBudget>> checked = Collections.checkedList(holder,
+                (Class<Set<CompositionBudget>>) (Class<?>) Set.class);
+        return new ArrayList<>(checked.getFirst());
+    }
+
+    public static List<CompositionBudget> handedBackByRequireNonNull(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        return new ArrayList<>(Objects.requireNonNull(holder).getFirst());
+    }
+
+    public static String saidAsTheTextOfTheContainer(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        return holder.toString();
+    }
+
+    public static String saidInAConcatenationWithTheContainer(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        return "held: " + holder;
+    }
+
+    public static String saidByAnAppendOfTheContainer(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        StringBuilder out = new StringBuilder();
+        out.append(holder);
+        return out.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    public static List<CompositionBudget> addedAllFromAnArrayByTheLibrary(
+            Set<CompositionBudget> values) {
+        Set<CompositionBudget>[] array = (Set<CompositionBudget>[]) new Set<?>[1];
+        array[0] = Set.copyOf(values);
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        Collections.addAll(holder, array);
+        return new ArrayList<>(holder.getFirst());
+    }
+
+    @SuppressWarnings("unchecked")
+    public static List<CompositionBudget> copiedBetweenArraysByTheLibrary(
+            Set<CompositionBudget> values) {
+        Set<CompositionBudget>[] from = (Set<CompositionBudget>[]) new Set<?>[1];
+        Set<CompositionBudget>[] to = (Set<CompositionBudget>[]) new Set<?>[1];
+        from[0] = Set.copyOf(values);
+        System.arraycopy(from, 0, to, 0, 1);
+        return new ArrayList<>(to[0]);
+    }
+
+    public static List<CompositionBudget> filledIntoAListByTheLibrary(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>(List.of(Set.of()));
+        Collections.fill(holder, Set.copyOf(values));
+        return new ArrayList<>(holder.getFirst());
+    }
+
+    /** Handed to what nothing says what it does with: said so, and not taken for followed. */
+    public static List<CompositionBudget> handedToACollectorNothingFollows(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        return new ArrayList<>(holder.stream().collect(Collectors.toList()).getFirst());
     }
 
     public static List<CompositionBudget> heldByASingletonMap(Set<CompositionBudget> values) {

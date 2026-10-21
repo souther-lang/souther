@@ -45,6 +45,13 @@ import java.util.Set;
  * value it expects and a value stores its third. {@link #placementOf} is that table, and a test
  * puts every method of the collections of the library that is named like one that stores to it.
  *
+ * <p><b>A container that holds a copy is never handed to something unread in silence.</b> What a
+ * call does with one is a word of this table (it stores, takes out, makes a view or a copy, clears,
+ * asks only what is held, runs a function over it, makes text) or it is said so as a finding that
+ * names the copy. The text of a container says the copies it holds in the order they iterate. A
+ * view, a cursor or an entry of another container writes through to it, which is not followed: what
+ * is stored in one is said so as well, since it is stored in the container it is of.
+ *
  * <p><b>What this does not follow.</b> A container is a set of paths and not of keys, so a put to
  * a key a copy was put to before does not take the copy out: that is read as holding both, which
  * says more than the code does. {@code clear} is the only operation that takes something out. A
@@ -92,11 +99,53 @@ final class HeldCopies {
             "get", "getOrDefault", "remove", "orElse", "orElseGet", "orElseThrow", "getValue",
             "firstElement", "lastElement", "take", "takeFirst", "takeLast", "put", "putIfAbsent",
             "replace", "set", "merge", "compute", "computeIfAbsent", "computeIfPresent",
-            "putFirst", "putLast", "push");
+            "putFirst", "putLast", "push", "setValue");
 
-    private static final Set<String> KEY_VIEWS = Set.of("keySet", "sequencedKeySet");
+    /**
+     * What asks a container something that cannot reveal a copy it holds or keep one: how many it
+     * holds, whether it holds one, where one stands, a hash of them all. A hash is the same
+     * whichever order the elements are met in, which is the contract of the sets that are copies.
+     */
+    private static final Set<String> ASKS_ONLY = Set.of(
+            "size", "isEmpty", "contains", "containsAll", "containsKey", "containsValue", "equals",
+            "hashCode", "indexOf", "lastIndexOf", "isPresent", "hasNext", "hasPrevious",
+            "hasMoreElements", "nextIndex", "previousIndex", "removeAll", "retainAll",
+            "removeFirstOccurrence", "removeLastOccurrence", "removeElement",
+            "removeAllElements", "removeElementAt", "removeRange", "trimToSize", "ensureCapacity",
+            "capacity", "setSize", "comparator", "isNull", "nonNull", "identityHashCode", "hash",
+            "frequency", "disjoint", "binarySearch", "checkIndex", "swap", "rotate", "reverse",
+            "shuffle", "sort", "elementCount", "remainingCapacity", "empty", "mappingCount");
 
-    private static final Set<String> VALUE_VIEWS = Set.of("values", "sequencedValues");
+    /** What makes text of what it is handed, so that a container says the copies it holds. */
+    private static final Set<String> MAKES_TEXT_OF_ITS_ARGUMENTS = Set.of(
+            "valueOf", "format", "formatted", "append", "insert", "print", "println", "toString");
+
+    /** What hands back the container it is given, or one that holds what it did. */
+    private static final Set<String> HANDS_BACK_THE_CONTAINER = Set.of(
+            "requireNonNull", "requireNonNullElse", "requireNonNullElseGet", "concat");
+
+    /**
+     * What runs the functions it is given over the elements, keys or values it holds. The copies
+     * go to the functions as their arguments, and what the functions do with them is read where the
+     * functions are.
+     */
+    private static final Set<String> RUNS_FUNCTIONS = Set.of(
+            "forEach", "forEachEntry", "forEachKey", "forEachValue", "forEachRemaining",
+            "removeIf", "ifPresent", "ifPresentOrElse", "map", "flatMap", "or", "reduceEntries",
+            "reduceKeys", "reduceValues", "reduceEntriesToInt", "reduceEntriesToLong",
+            "reduceEntriesToDouble", "reduceKeysToInt", "reduceKeysToLong", "reduceKeysToDouble",
+            "reduceValuesToInt", "reduceValuesToLong", "reduceValuesToDouble", "reduceToInt",
+            "reduceToLong", "reduceToDouble", "searchEntries", "searchKeys", "searchValues");
+
+    /** What stores what it holds in a container it is given. */
+    private static final Set<String> STORES_WHAT_IT_HOLDS_IN_ITS_ARGUMENT = Set.of(
+            "drainTo", "copyInto");
+
+    private static final Set<String> KEY_VIEWS = Set.of(
+            "keySet", "sequencedKeySet", "navigableKeySet", "descendingKeySet", "keys");
+
+    private static final Set<String> VALUE_VIEWS = Set.of(
+            "values", "sequencedValues", "elements");
 
     private static final Set<String> ENTRY_VIEWS = Set.of("entrySet", "sequencedEntrySet");
 
@@ -107,7 +156,7 @@ final class HeldCopies {
             "copyOf", "copyOfRange", "stream");
 
     private static final Set<String> SAME_ELEMENTS_IN_ANOTHER_FORM = Set.of(
-            "toList", "toArray", "sorted", "clone");
+            "toList", "toArray", "sorted", "clone", "asIterator");
 
     private HeldCopies() {}
 
@@ -162,10 +211,14 @@ final class HeldCopies {
 
     /** What the call does to held copies, joined to what the order reading made of it. */
     static Outcome through(Call call, Outcome order) {
-        if (!SaltedOrderVocabulary.inTheCollectionsLibrary(call.owner())) {
-            return order;
+        Outcome out = withText(call, order);
+        List<Push> intoArguments = putIntoArguments(call);
+        if (!intoArguments.isEmpty()) {
+            out = SaltedOrderVocabulary.alsoPushing(out, intoArguments);
         }
-        Outcome out = order;
+        if (!SaltedOrderVocabulary.inTheCollectionsLibrary(call.owner())) {
+            return out;
+        }
         Set<Tag> handedBack = handedBack(call);
         if (!handedBack.isEmpty()) {
             out = out.holding(handedBack);
@@ -181,7 +234,214 @@ final class HeldCopies {
         if (handedToTheFunctions != null) {
             out = out.feeding(List.of(handedToTheFunctions), false);
         }
+        return markedAsAView(call, out);
+    }
+
+    /**
+     * What a call answers that writes through to the container it was made on is marked, so that a
+     * put to it is known not to reach any object that is tracked. The entries of a map are views of
+     * it, and so is the cursor of a list, a key set, a sublist; what is taken out of the entries of
+     * a map is an entry.
+     */
+    private static Outcome markedAsAView(Call call, Outcome out) {
+        if (call.isStatic() || !call.returnsAReference()) {
+            return out;
+        }
+        String name = call.name();
+        int mark;
+        if (call.receiver().isEntries()) {
+            if (takesOut(name) && !name.endsWith("Key")) {
+                mark = Val.A_VIEW;
+            } else if (SaltedOrderVocabulary.keepsTheElementsOfAWalk(name)
+                    || SaltedOrderVocabulary.isAView(name)) {
+                mark = Val.ENTRIES;
+            } else {
+                return out;
+            }
+        } else if (ENTRY_VIEWS.contains(name)) {
+            mark = Val.ENTRIES;
+        } else if (KEY_VIEWS.contains(name) || VALUE_VIEWS.contains(name)
+                || SaltedOrderVocabulary.isAView(name) || name.equals("listIterator")) {
+            mark = Val.A_VIEW;
+        } else {
+            return out;
+        }
+        return new Outcome(out.result().withAlloc(mark), out.pushes(), out.clears(), out.feeds(),
+                out.crossedBy(), out.unmodeled(), out.endsAs());
+    }
+
+    /** The text a call makes of the containers it is handed says the copies they hold, in order. */
+    private static Outcome withText(Call call, Outcome order) {
+        Set<Tag> said = textOfHeld(call);
+        if (said.isEmpty()) {
+            return order;
+        }
+        Outcome out = order;
+        boolean intoABuilder = !call.isStatic()
+                && (call.name().equals("append") || call.name().equals("insert"));
+        if (intoABuilder) {
+            out = SaltedOrderVocabulary.alsoPushing(out, List.of(new Push(call.receiver(), said)));
+        }
+        return call.returnsAReference() ? out.holding(said) : out;
+    }
+
+    /**
+     * The order each copy held in what the call is handed is said in, where the call makes text of
+     * it. The text of a container is the text of what it holds, and a set that is a copy says its
+     * elements in the order it iterates.
+     */
+    static Set<Tag> textOfHeld(Call call) {
+        String name = call.name();
+        boolean ofTheReceiver = name.equals("toString") && !call.isStatic()
+                && call.args().isEmpty();
+        if (!ofTheReceiver && !MAKES_TEXT_OF_ITS_ARGUMENTS.contains(name)) {
+            return Set.of();
+        }
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Val each : call.args()) {
+            addTextOf(each, out);
+        }
+        if (ofTheReceiver) {
+            addTextOf(call.receiver(), out);
+        }
         return out;
+    }
+
+    private static void addTextOf(Val value, Set<Tag> into) {
+        for (Tag each : value.tags()) {
+            if (each.isHeld()) {
+                into.add(new Tag(Kind.SEQUENCE, each.origin()));
+            }
+        }
+    }
+
+    /** What the call puts in the containers it is given, which are not the one it is made on. */
+    private static List<Push> putIntoArguments(Call call) {
+        String name = call.name();
+        List<Val> args = call.args();
+        String owner = call.owner();
+        if (!call.isStatic()) {
+            // What a container holds is put in the one it is given.
+            return STORES_WHAT_IT_HOLDS_IN_ITS_ARGUMENT.contains(name) && !args.isEmpty()
+                    ? pushed(args.get(0), held(call.receiver())) : List.of();
+        }
+        if (owner.equals("java/lang/System") && name.equals("arraycopy") && args.size() == 5) {
+            return pushed(args.get(2), held(args.get(0)));
+        }
+        if (owner.equals("java/util/Collections")) {
+            if (name.equals("addAll") && args.size() == 2) {
+                return pushed(args.get(0), held(args.get(1)));
+            }
+            if (name.equals("copy") && args.size() == 2) {
+                return pushed(args.get(0), held(args.get(1)));
+            }
+            if (name.equals("fill") && args.size() == 2) {
+                return pushed(args.get(0), putIn(ELEMENT, args.get(1)));
+            }
+            if (name.equals("replaceAll") && args.size() == 3) {
+                return pushed(args.get(0), putIn(ELEMENT, args.get(2)));
+            }
+        }
+        if (owner.equals("java/util/Arrays") && name.equals("fill") && !args.isEmpty()) {
+            return pushed(args.get(0), putIn(ELEMENT, args.get(args.size() - 1)));
+        }
+        return List.of();
+    }
+
+    private static List<Push> pushed(Val into, Set<Tag> tags) {
+        return tags.isEmpty() ? List.of() : List.of(new Push(into, tags));
+    }
+
+    /**
+     * Whether the operation of this name is one this reads, for a container that holds a copy: it
+     * stores, takes out, makes a view or a copy, clears, asks only what is held, or makes text.
+     * What is none of those is not followed, and is said so when a container that holds a copy is
+     * handed to it.
+     */
+    static boolean understands(String name, int arity) {
+        return placementOf(name, arity).isPresent() || PUTS_ALL.contains(name)
+                || takesOut(name) || KEY_VIEWS.contains(name) || VALUE_VIEWS.contains(name)
+                || ENTRY_VIEWS.contains(name) || SaltedOrderVocabulary.isAView(name)
+                || SaltedOrderVocabulary.keepsTheElementsOfAWalk(name)
+                || SAME_ELEMENTS_IN_ANOTHER_FORM.contains(name) || name.equals("clear")
+                || name.equals("<init>") || ASKS_ONLY.contains(name)
+                || RUNS_FUNCTIONS.contains(name) || STORES_WHAT_IT_HOLDS_IN_ITS_ARGUMENT.contains(name)
+                || (name.equals("search") && arity <= 2)
+                || MAKES_TEXT_OF_ITS_ARGUMENTS.contains(name)
+                || HOLDS_ITS_ARGUMENTS.contains(name) || HANDS_BACK_ITS_ARGUMENT.contains(name)
+                || HANDS_BACK_THE_CONTAINER.contains(name)
+                || STORES_WHAT_A_FUNCTION_MAKES.contains(name)
+                || name.startsWith("unmodifiable") || name.startsWith("synchronized")
+                || name.startsWith("checked") || name.equals("entry")
+                || name.equals("singletonMap") || name.equals("nCopies")
+                || name.equals("ofEntries") || name.equals("arraycopy")
+                || name.equals("fill") || name.equals("copy") || name.equals("replaceAll");
+    }
+
+    /**
+     * The copies a call is handed, held whole, that it is not known what it does with, and the
+     * copies it stores in something that is a view of another container or came from one, which
+     * the storing does not reach.
+     */
+    static Set<String> unresolvedBy(Call call) {
+        Set<String> out = new LinkedHashSet<>();
+        boolean functionsRunOverIt = false;
+        for (Val each : call.args()) {
+            functionsRunOverIt |= !each.functions().isEmpty();
+        }
+        boolean handed = false;
+        for (Val each : call.everything()) {
+            for (Tag tag : each.tags()) {
+                if (tag.isHeld()) {
+                    handed = true;
+                }
+            }
+        }
+        if (handed && !functionsRunOverIt && !understands(call.name(), call.args().size())) {
+            for (Val each : call.everything()) {
+                for (Tag tag : each.tags()) {
+                    if (tag.isHeld()) {
+                        out.add(tag.origin());
+                    }
+                }
+            }
+        }
+        if (storesIntoSomethingUntracked(call)) {
+            for (Val each : call.args()) {
+                for (Tag tag : each.tags()) {
+                    if (tag.kind() == Kind.COLLECTION || tag.isHeld()) {
+                        out.add(tag.origin());
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether the call stores in an object that nothing here made or holds in a place: the cursor of
+     * a list, an entry of a map, a view, what a call of something that is not read answered. What
+     * is stored in it is stored in the container it is of as well, and that is not followed.
+     */
+    private static boolean storesIntoSomethingUntracked(Call call) {
+        if (call.isStatic() || call.name().equals("<init>")) {
+            return false;
+        }
+        if (placementOf(call.name(), call.args().size()).isEmpty()
+                && !PUTS_ALL.contains(call.name())) {
+            return false;
+        }
+        return call.receiver().isAView();
+    }
+
+    /** What the reading says of a call that holds a copy whole and is not followed. */
+    static String unresolvedSaid(Call call) {
+        String what = call.owner().replace('/', '.') + "." + call.name();
+        return storesIntoSomethingUntracked(call)
+                ? "stores a copy whole in " + what + "'s receiver, which is a view of or came from"
+                        + " another container, and what is stored there is not followed back"
+                : "hands a container that holds a copy whole to " + what + ", and nothing says"
+                        + " what that does with the copy";
     }
 
     /**
@@ -326,8 +586,14 @@ final class HeldCopies {
                 out.addAll(putIn(ELEMENT, each));
             }
         } else if (!args.isEmpty() && (HANDS_BACK_ITS_ARGUMENT.contains(name)
-                || name.startsWith("unmodifiable") || name.startsWith("synchronized"))) {
+                || name.startsWith("unmodifiable") || name.startsWith("synchronized")
+                || name.startsWith("checked"))) {
             out.addAll(held(args.get(0)));
+        } else if (HANDS_BACK_THE_CONTAINER.contains(name)) {
+            // The container it is given, or the elements of both containers it is given.
+            for (Val each : args) {
+                out.addAll(held(each));
+            }
         } else if (!args.isEmpty() && (name.equals("min") || name.equals("max"))
                 && call.owner().equals("java/util/Collections")) {
             out.addAll(takenOut(held(args.get(0)), ELEMENT));

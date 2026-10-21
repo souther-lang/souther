@@ -1495,7 +1495,8 @@ final class SaltedOrderFlow {
                 kept = Val.of(kept).madeOfTheElement().tags();
             }
             boolean heldInAMap = made != null && made.isHeldInAMap();
-            int object = heldInAMap ? made.alloc()
+            boolean aView = made != null && made.alloc() < -1;
+            int object = (heldInAMap || aView) ? made.alloc()
                     : SaltedOrderVocabulary.makesAFreshNode(owner, name) ? index + 1 : -1;
             state.push(new Val(narrowed(kept, returns), isWide(type.returnType()), object,
                     made == null ? null : made.made(), heldInAMap ? made.home() : null, Set.of())
@@ -1513,6 +1514,10 @@ final class SaltedOrderFlow {
         String owner = call.owner();
         String name = call.name();
         Set<String> origins = originsOf(call.tainted());
+        Set<String> unresolved = HeldCopies.unresolvedBy(call);
+        if (!unresolved.isEmpty()) {
+            note(where, HeldCopies.unresolvedSaid(call), unresolved);
+        }
         if (SaltedOrderVocabulary.writesOut(owner, name)) {
             // A write is a sink whatever else is known of the call: what is written is written
             // in the order it has, and only the one there is has none.
@@ -1522,6 +1527,7 @@ final class SaltedOrderFlow {
                     written.add(each);
                 }
             }
+            written.addAll(HeldCopies.textOfHeld(call));
             if (!written.isEmpty()) {
                 Set<String> sites = sitesOf(Val.of(written));
                 note(where, "writes what came out of a copy to " + owner.replace('/', '.')
@@ -1830,6 +1836,9 @@ final class SaltedOrderFlow {
                     if (tag.cameOutOfACopy()) {
                         result.add(tag.kind() == Kind.PICKED || tag.kind() == Kind.CHOSEN ? tag
                                 : new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
+                    } else if (tag.isHeld()) {
+                        // The text of a container says the copies it holds, in their order.
+                        result.add(new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
                     }
                 }
                 // A text of an object says what its class's toString says, which for a record is

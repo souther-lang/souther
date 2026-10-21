@@ -71,8 +71,6 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
 
     /** What answers a type variable and is not one of the collection's own. */
     private static final Map<String, String> ANSWERS_NO_ELEMENT = Map.of(
-            "setValue", "answered the value the entry held, which is a taking out and is in the"
-                    + " table by name",
             "search", "answers what a function it is given returns, which is not followed",
             "searchKeys", "answers what a function it is given returns, which is not followed",
             "searchValues", "answers what a function it is given returns, which is not followed",
@@ -80,6 +78,9 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
             "reduceKeys", "answers what a function it is given returns, which is not followed",
             "reduceValues", "answers what a function it is given returns, which is not followed",
             "reduceEntries", "answers what a function it is given returns, which is not followed");
+
+    /** What a method does that neither reveals nor keeps a copy a container holds, said by name. */
+    private static final Map<String, String> NOT_AN_OPERATION_ON_WHAT_IS_HELD = Map.of();
 
     private static final List<Class<?>> COLLECTIONS = List.of(
             Collection.class, List.class, Deque.class, Queue.class, BlockingQueue.class,
@@ -129,6 +130,73 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
         assertEquals(List.of(), unread.stream().distinct().sorted().toList(),
                 "a method answers what a collection held and is not in the table of held copies,"
                         + " so a copy taken out in that way is not seen to be the copy");
+    }
+
+    /**
+     * An operation that stores and answers what it replaced is both: the entry's {@code setValue}
+     * puts the new value in and hands the old one back, and a table that read only the first
+     * would lose the copy that was there.
+     */
+    @Test
+    void anOperationThatStoresAndAnswersTheValueItReplacedIsAWayOfTakingOneOutToo() {
+        List<String> only = new ArrayList<>();
+        for (Method each : methods()) {
+            boolean stores = HeldCopies.placementOf(each.getName(), each.getParameterCount())
+                    .isPresent();
+            boolean answersWhatWasThere = each.getGenericReturnType() instanceof TypeVariable<?>;
+            if (stores && answersWhatWasThere && !HeldCopies.takesOut(each.getName())) {
+                only.add(describe(each));
+            }
+        }
+
+        assertEquals(List.of(), only.stream().distinct().sorted().toList(),
+                "an operation stores a value and answers the one it replaced, and is read as"
+                        + " storing only");
+    }
+
+    /**
+     * Every method of these collections is one the reading of held copies has a word for: it
+     * stores, takes out, makes a view or a copy, clears, asks only what is held, or makes text; or
+     * it is listed here with what it does that nothing of the above says.
+     */
+    @Test
+    void everyMethodOfTheCollectionsIsOneTheReadingOfHeldCopiesHasAWordFor() {
+        List<String> unread = new ArrayList<>();
+        for (Method each : methods()) {
+            if (!HeldCopies.understands(each.getName(), each.getParameterCount())
+                    && !NOT_AN_OPERATION_ON_WHAT_IS_HELD.containsKey(each.getName())) {
+                unread.add(describe(each));
+            }
+        }
+
+        assertEquals(List.of(), unread.stream().distinct().sorted().toList(),
+                "a method of the collections is not one the reading of held copies knows: a"
+                        + " container that holds a copy and is handed to it is said not to be"
+                        + " followed, so say here what it does, or read it");
+    }
+
+    /**
+     * The order reading and the table of held copies agree on what puts something in: a name the
+     * first calls a put is a row of the second, or is text. Two lists of the same thing are two
+     * answers, and an operation in one only is read as a put by one of them and as nothing by
+     * the other.
+     */
+    @Test
+    void theOrderReadingCallsNothingAPutThatTheTableOfHeldCopiesDoesNotStore() {
+        Set<String> text = Set.of("append", "insert");
+        List<String> only = new ArrayList<>();
+        for (String name : SaltedOrderVocabulary.namesThatPutOneIn()) {
+            boolean row = false;
+            for (int arity = 0; arity <= 4; arity++) {
+                row |= HeldCopies.placementOf(name, arity).isPresent();
+            }
+            if (!row && !text.contains(name)) {
+                only.add(name);
+            }
+        }
+
+        assertEquals(List.of(), only.stream().sorted().toList(),
+                "the order reading calls a name a put and the table of held copies has no row");
     }
 
     /** The control: the tables hold the cases that are known to be easy to get wrong. */

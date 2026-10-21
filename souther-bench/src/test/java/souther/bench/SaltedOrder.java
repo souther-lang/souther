@@ -241,6 +241,16 @@ final class SaltedOrder {
          */
         static final String HELD_IN_A_MAP = "held in a map";
 
+        /**
+         * The {@code alloc} of a view, an iterator or an entry of another container: an object that
+         * writes through to what it is of, which is not followed. A put to it is a put to that, and
+         * so is not a put to any object this tracks.
+         */
+        static final int A_VIEW = -2;
+
+        /** The {@code alloc} of the entries of a map, or a walk over them: each is a view. */
+        static final int ENTRIES = -3;
+
         static final Val CLEAN = new Val(Set.of(), false, -1, null, null, Set.of());
 
         static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null, Set.of());
@@ -269,6 +279,16 @@ final class SaltedOrder {
 
         boolean isHeldInAMap() {
             return HELD_IN_A_MAP.equals(made);
+        }
+
+        /** Whether this is a view, an iterator or an entry of another container. */
+        boolean isAView() {
+            return alloc == A_VIEW;
+        }
+
+        /** Whether this is the entries of a map, or a walk over them. */
+        boolean isEntries() {
+            return alloc == ENTRIES;
         }
 
         /** The same, as an object of no place in particular. */
@@ -345,7 +365,10 @@ final class SaltedOrder {
             all.addAll(other.tags);
             Set<String> eitherType = types.containsAll(other.types) ? types
                     : union(types, other.types);
-            return new Val(all, wide || other.wide, alloc == other.alloc ? alloc : -1,
+            // Where one way of reaching a place is a view, the place may be one.
+            int object = alloc == other.alloc ? alloc
+                    : (isAView() || other.isAView()) ? A_VIEW : -1;
+            return new Val(all, wide || other.wide, object,
                     made != null && made.equals(other.made) ? made : null,
                     home != null && home.equals(other.home) ? home : null, eitherType);
         }
