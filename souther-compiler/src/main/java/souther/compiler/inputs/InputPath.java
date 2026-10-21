@@ -284,7 +284,7 @@ final class InputPath {
             // A field of what the target stands at, at every place the target stands. Where the
             // field is not a step of a path — a newtype's own value is the value under it — the
             // place is the target's, which is the step this takes there.
-            case Core.FieldAccess fa -> named(fa.target(), names).deeper(
+            case Core.FieldAccess fa -> named(fa.target(), names).throughAField(
                     // Asked of {@link Location}, which owns the rule, from the answer this walk was
                     // handed. Whether a name wears one value was settled when the module was
                     // indexed, so a path through a field does not turn on what the declaration
@@ -446,7 +446,7 @@ final class InputPath {
         Type read = from.type();
         for (int i = next; i < steps.size(); i++) {
             Core.FieldProjection.Step step = steps.get(i);
-            at = at.deeper(Location.isStep(read, step.field(), newtypes)
+            at = at.throughAField(Location.isStep(read, step.field(), newtypes)
                     ? base -> base.then(step.field()) : base -> base);
             read = step.type();
         }

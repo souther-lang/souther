@@ -488,7 +488,7 @@ public final class GuardThresholds {
                         out.putIfAbsent(FilingCoordinate.at(each),
                                 new BlockReason.RuleAboutAnElementOfSeveralContainers()));
                 // A value made of every one of them is a value somebody computed at each place.
-                case PathResolution.MadeOf(var together) -> together.forEach(each ->
+                case PathResolution.MadeOf made -> made.places().forEach(each ->
                         out.putIfAbsent(FilingCoordinate.at(each),
                                 new BlockReason.RuleAboutADerivedValue()));
             }

@@ -282,6 +282,77 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 notRead, () -> notRead.toString());
     }
 
+    private static final String SEEDED_FOLD = """
+            let countsOf (start: Map<String, Int>, xs: List<String>): Map<String, Int> =
+                List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), start, xs)
+
+            """;
+
+    private List<String> derivedValueRulesIn(String behavior) {
+        return notReadIn(compiled(SEEDED_FOLD + behavior)).stream()
+                .filter(each -> each.endsWith(" " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE))
+                .sorted().toList();
+    }
+
+    private static List<String> derivedAt(String... positions) {
+        return java.util.Arrays.stream(positions)
+                .map(each -> each + " " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
+                .sorted().toList();
+    }
+
+    /** A choice between two values each made of two places keeps all four. */
+    @Test
+    void aChoiceBetweenTwoValuesEachMadeOfTwoInputsIsMadeOfAllFour() {
+        assertEquals(derivedAt("other[*]", "start[*]", "xs[*]", "ys[*]"), derivedValueRulesIn("""
+                behavior busy : (flag: Bool, start: Map<String, Int>, other: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
+                let busy (flag, start, other, xs, ys) =
+                    Map.filterEntries((_, count) -> count >= 3,
+                        if flag then countsOf(start, xs) else countsOf(other, ys))
+                """));
+    }
+
+    /** A fold over a list chosen between two is made of the seed and of either list. */
+    @Test
+    void aFoldFromAnInputMapOverAListChosenBetweenTwoIsMadeOfTheMapAndEitherList() {
+        assertEquals(derivedAt("start[*]", "xs[*]", "ys[*]"), derivedValueRulesIn("""
+                behavior busy : (flag: Bool, start: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
+                let busy (flag, start, xs, ys) =
+                    Map.filterEntries((_, count) -> count >= 3,
+                        countsOf(start, if flag then xs else ys))
+                """));
+    }
+
+    /** A fold seeded with what another fold made is made of all that fold was made of. */
+    @Test
+    void aFoldSeededWithAValueAFoldMadeIsMadeOfEverythingBothWereMadeOf() {
+        assertEquals(derivedAt("start[*]", "xs[*]", "ys[*]"), derivedValueRulesIn("""
+                behavior busy : (start: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
+                let busy (start, xs, ys) =
+                    Map.filterEntries((_, count) -> count >= 3,
+                        countsOf(countsOf(start, xs), ys))
+                """));
+    }
+
+    /**
+     * A field of a value made of an input map's entries and of the list a fold walked is made of
+     * those, and not of a field of the list's elements, which have none.
+     */
+    @Test
+    void aFieldOfAValueMadeOfTwoInputsIsMadeOfThemAndNamesNoFieldOfEither() {
+        assertEquals(derivedAt("start[*]", "xs[*]"), notReadIn(compiled("""
+                data Counter = { count: Int }
+
+                let tally (start: Map<String, Counter>, xs: List<String>): Map<String, Counter> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, Counter { count = 0 },
+                                                             c -> Counter { count = 127 - c.count }, acc),
+                              start, xs)
+
+                behavior busy : (start: Map<String, Counter>, xs: List<String>) -> Map<String, Counter> constructs Counter
+                let busy (start, xs) =
+                    Map.filterEntries((_, c) -> c.count >= 3, tally(start, xs))
+                """)));
+    }
+
     /** A value taken out of a pair a helper built is the component the helper put there. */
     @Test
     void aValueTakenOutOfAPairAHelperBuiltComesFromWhereTheHelperGotIt() {
