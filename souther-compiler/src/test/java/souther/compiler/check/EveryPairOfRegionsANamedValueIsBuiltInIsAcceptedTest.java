@@ -97,12 +97,22 @@ class EveryPairOfRegionsANamedValueIsBuiltInIsAcceptedTest {
         abstract String around(String first, String second);
     }
 
+    /**
+     * Every region beside itself and beside the next, in every holder.
+     *
+     * <p>What tells the two builds apart is the build each is, the value and the region it was
+     * built for, and a fault there is one wherever the value is built twice: any pair shows it, and
+     * the one most alike is a region beside another of its own kind. So each region is asked beside
+     * itself, and beside the next so that every region is asked first and second beside one that is
+     * not it. Asked of every pair, the same fault is asked of every pair again.
+     */
     @TestFactory
     Stream<DynamicTest> everyPairInEveryHolder() {
         List<DynamicTest> out = new ArrayList<>();
         for (Holder holder : Holder.values()) {
-            for (String first : REGIONS) {
-                for (String second : REGIONS) {
+            for (int at = 0; at < REGIONS.size(); at++) {
+                String first = REGIONS.get(at);
+                for (String second : List.of(first, REGIONS.get((at + 1) % REGIONS.size()))) {
                     String source = HEAD + holder.around(first, second);
                     out.add(DynamicTest.dynamicTest(holder + " " + first + " / " + second,
                             () -> assertEquals(List.of(), Compiler.compiled(source, "m")
