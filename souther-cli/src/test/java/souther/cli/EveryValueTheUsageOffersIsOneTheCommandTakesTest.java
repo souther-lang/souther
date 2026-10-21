@@ -2,9 +2,6 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -74,15 +71,6 @@ class EveryValueTheUsageOffersIsOneTheCommandTakesTest {
     }
 
     private static int code(List<String> args) {
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        System.setOut(new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8));
-        try {
-            return Main.dispatch(args.toArray(String[]::new));
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
+        return CliInProcess.run(args.toArray(String[]::new)).code();
     }
 }

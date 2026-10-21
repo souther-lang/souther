@@ -33,18 +33,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class ARowOfferedAtAPointIsOneTheRulesHaveNotRefusedTest {
 
     /**
-     * Two fields the record holds equal, each running to ten thousand.
+     * The sum the guard holds the two halves to: twice a hundredth more than the times the walk
+     * asks the rules again, so the one pair that stands at it lies past where the asking stops,
+     * with room for the few asks the walk makes before it reaches this point.
+     */
+    private static final int ASKED = CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN.maximum();
+
+    private static final int SUM = 2 * (ASKED + ASKED / 100);
+
+    /**
+     * Two fields the record holds equal, each running to {@link #SUM}.
      *
-     * <p>The only pair whose sum is ten thousand is five thousand each. Every other pair of that sum
-     * is inside the box the two ranges describe and outside what the record leaves, and the walk
-     * meets thousands of them on the way.
+     * <p>The only pair whose sum is that is half of it each. Every other pair of that sum is inside
+     * the box the two ranges describe and outside what the record leaves, and the walk meets more of
+     * them on the way than it reads the rules again for.
      */
     private static final String EQUAL_HALVES = """
             module example.halves
 
             data N = Int
                 invariant atLeastNone = value >= 0
-                invariant atMostTenThousand = value <= 10000
+                invariant atMostTheSum = value <= %1$d
 
             data P = { x: N, y: N }
                 invariant sameAsEachOther = x.value == y.value
@@ -56,16 +65,16 @@ class ARowOfferedAtAPointIsOneTheRulesHaveNotRefusedTest {
             behavior f : (p: P) -> Result
                 constructs Yes, No
             let f (p) = {
-                guard Int.add(p.x.value, p.y.value) <= 10000 else No { why = 0 }
+                guard Int.add(p.x.value, p.y.value) <= %1$d else No { why = 0 }
                 Yes { v = 1 }
             }
 
             example f
                 | "under" : (P { x = N(1), y = N(1) }) -> Yes { v = 1 }
-            """;
+            """.formatted(SUM);
 
     /**
-     * The ON point of the guard's line is at a sum of ten thousand, which one pair stands at.
+     * The ON point of the guard's line is at {@link #SUM}, which one pair stands at.
      *
      * <p>What may not be said of it is that every value tried there was refused. Either a row is
      * offered — and then it is a pair the rules leave — or the search says it did not settle the
@@ -75,7 +84,8 @@ class ARowOfferedAtAPointIsOneTheRulesHaveNotRefusedTest {
     void aPointIsNotReportedAsRefusedOnTheStrengthOfPairsTheRulesRefuse() {
         String report = report(EQUAL_HALVES);
 
-        assertFalse(report.contains("every value tried at p.x + p.y = 10000 was refused"), report);
+        assertFalse(report.contains("every value tried at p.x + p.y = " + SUM + " was refused"),
+                report);
     }
 
     /**

@@ -1,13 +1,17 @@
 package souther.compiler;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.generated.JsonBoundary;
+import souther.compiler.query.Compilation;
 import souther.temporal.TemporalForms;
 import souther.temporal.TemporalForms.Kind;
 import souther.temporal.TemporalForms.Refusal;
@@ -166,8 +170,7 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
     /** A boundary reads what the language reads, at a field and under a key, whatever the path. */
     @Test
     void everyPathAtABoundaryReadsWhatTheLanguageReads() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODEL),
-                ATemporalTextIsTheLanguagesAndNotTheParsersTest.class.getClassLoader());
+        BytesClassLoader loader = loader();
         for (Row r : ROWS) {
             String field = FIELD.get(r.kind());
             Map<String, Object> fields = new HashMap<>(USUAL);
@@ -200,8 +203,7 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
      */
     @Test
     void whatTheEncoderWritesForAValueABoundaryReadIsReadBackAndWrittenInSource() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODEL),
-                ATemporalTextIsTheLanguagesAndNotTheParsersTest.class.getClassLoader());
+        BytesClassLoader loader = loader();
         for (Row r : ROWS) {
             if (!r.readAtBoundary()) {
                 continue;
@@ -224,8 +226,7 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
     /** The one worked example the specification gives: an offset names a moment, written in UTC. */
     @Test
     void anOffsetIsWrittenBackAsTheSameMomentInUtc() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODEL),
-                ATemporalTextIsTheLanguagesAndNotTheParsersTest.class.getClassLoader());
+        BytesClassLoader loader = loader();
         Map<String, Object> raw = new HashMap<>(USUAL);
         raw.put("at", "2026-07-25T09:00:00+09:00");
         Map<?, ?> written = (Map<?, ?>) Codecs.encode(loader, "demo.In",
@@ -233,15 +234,44 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
         assertEquals("2026-07-25T00:00:00Z", String.valueOf(written.get("at")));
     }
 
-    /** The runner reads a top-level argument by the same language. */
+    /**
+     * The runner reads a top-level argument by the same language: the model compiled once, as the
+     * runner compiles it, and every row read as the argument of the behavior taking its kind.
+     */
     @Test
     void theRunnerReadsWhatTheLanguageReads() throws Exception {
+        Compilation compilation = compiled();
+        Map<String, Sig> signatures = compilation.signatures(
+                compilation.module(compilation.modules().get(0)).name());
         for (Row r : ROWS) {
-            JsonBoundary.Read read = Crossing.reading(MODEL, "demo", BEHAVIOR.get(r.kind()),
-                    MAPPER.writeValueAsString(r.text()));
+            JsonBoundary.Read read = JsonBoundary.read(compilation.loader(),
+                    signatures.get(BEHAVIOR.get(r.kind())).ins().get(0),
+                    MAPPER.readTree(MAPPER.writeValueAsString(r.text())));
             assertEquals(r.readAtBoundary(), read instanceof JsonBoundary.Read.Value,
                     r.kind() + " " + r.text() + " as an argument");
         }
+    }
+
+    private static Compilation compiled;
+
+    /** The model compiled once for the class: every test here runs what it compiled to. */
+    private static Compilation compiled() {
+        if (compiled == null) {
+            compiled = Compiler.compiled(MODEL, "demo", new ArrayList<>());
+        }
+        return compiled;
+    }
+
+    /** And given back when the class is done with it: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        compiled = null;
+    }
+
+    private static BytesClassLoader loader() {
+        return new BytesClassLoader(compiled().classes(),
+                ATemporalTextIsTheLanguagesAndNotTheParsersTest.class.getClassLoader());
     }
 
     /** Source writes what the language writes, and says why where it does not. */

@@ -165,6 +165,16 @@ final class Reasons {
                         "the places inside one run a value is named at";
                 case ELEMENTS_CHOSEN_FOR_A_COUNT ->
                         "the elements chosen for how many of them meet a statement";
+                case KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO ->
+                        "the keys a number their elements come to turns on, other than the one"
+                                + " placed at it, and the containers that ask for more elements"
+                                + " of a key than one";
+                case KEYS_OF_ONE_FOLD_ASKED_TOGETHER ->
+                        "the keys of one fold asked for together at values other than the ones"
+                                + " tried, and a key only counted at a number other than the"
+                                + " first total's";
+                case ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT ->
+                        "the ends of a key's values among more than one element of the key";
                 case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
                         "the elements whose computed number is made of several fields, chosen"
                                 + " by a flag, chosen by their case or chosen by where they"

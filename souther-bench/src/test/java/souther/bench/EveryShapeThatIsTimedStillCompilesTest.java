@@ -27,9 +27,10 @@ import java.util.List;
  */
 class EveryShapeThatIsTimedStillCompilesTest {
 
-    /** Enough of each shape to be that shape: a chain has a middle, and the widest module imports
-     *  its full width rather than however many happen to be written before it. */
-    private static final int MODULES = 2 * Scale.WIDTHS[Scale.WIDTHS.length - 1];
+    /** Enough of each shape to be that shape, and no more: the last module imports the widest
+     *  width in full rather than however many happen to be written before it, which is one module
+     *  past that width, and a chain that long has a middle. */
+    private static final int MODULES = Scale.WIDTHS[Scale.WIDTHS.length - 1] + 1;
 
     /** Enough values that a fan-out fans and a chain has links that are not its ends. */
     private static final int VALUES = 8;

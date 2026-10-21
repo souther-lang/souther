@@ -315,11 +315,20 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
         throw new AssertionError("small whole numbers are held: " + answer);
     }
 
-    /** Longer than a chain nothing is left out of is read before the figure stops it
+    /**
+     * The fewest calls whose last condition, every way of them read, is read more times in all than
+     * are made: the last condition of {@code n} calls is read {@code 2^n - 2} times
+     * ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}).
+     */
+    private static final int PAST_THE_FIGURE = 32 - Integer.numberOfLeadingZeros(
+            CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum() + 2);
+
+    /** As long as a chain nothing is left out of is when the figure stops it, and read to the end
      *  ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}). */
     @Test
     void aLongChainOfAmountsNoughtOrMoreReadsEveryConditionToTheEnd() {
-        for (String source : List.of(chain(12, true), lets(12, true))) {
+        for (String source : List.of(chain(PAST_THE_FIGURE, true),
+                lets(PAST_THE_FIGURE, true))) {
             List<Proposition> stated = stated(source);
 
             assertFalse(stated.isEmpty());

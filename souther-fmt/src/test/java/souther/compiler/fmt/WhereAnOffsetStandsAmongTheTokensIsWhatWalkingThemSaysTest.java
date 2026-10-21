@@ -19,9 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * first token. The walk is what the rules were written against, so the table that replaced it is
  * held against the walk rather than against a second statement of what the answers ought to be.
  *
- * <p>Asked at every offset of every source in the corpus, and not at the offsets the families
- * happen to ask about. Which of them a family asks is that family's to change, and a table that
- * agreed only where it is asked today would be one the next question can find a hole in.
+ * <p>Asked at every offset of every source written for the corpus, and not at the offsets the
+ * families happen to ask about. Which of them a family asks is that family's to change, and a table
+ * that agreed only where it is asked today would be one the next question can find a hole in.
  */
 @ClosedWorldContract
 class WhereAnOffsetStandsAmongTheTokensIsWhatWalkingThemSaysTest {
@@ -58,14 +58,23 @@ class WhereAnOffsetStandsAmongTheTokensIsWhatWalkingThemSaysTest {
         }
     }
 
+    /**
+     * Over the sources written for the corpus, as they are written and in canonical form.
+     *
+     * <p>Not the library's sources beside them. What the table answers from is where tokens start
+     * and end, and the written sources already hold every way two tokens stand: touching, apart on
+     * a line, and apart across lines. A file of the library is more of the same runs, and asking
+     * at its every offset asks the walk the square of its length for nothing these do not already
+     * ask.
+     */
     @Test
-    void theTableSaysWhatTheWalkSaidOverTheCorpus() {
-        for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
+    void theTableSaysWhatTheWalkSaidOverTheWrittenSources() {
+        for (String source : WhatGoesBetweenTwoTokensOnALineTest.written()) {
             String canonical = Formatter.format(CstParser.parse(source).root());
             heldAtEveryOffset(source, Witnesses.code(CstParser.parse(source).root()),
-                    "a source of the corpus");
+                    "a written source");
             heldAtEveryOffset(canonical, Witnesses.code(CstParser.parse(canonical).root()),
-                    "the canonical form of a source of the corpus");
+                    "the canonical form of a written source");
         }
     }
 
@@ -125,7 +134,7 @@ class WhereAnOffsetStandsAmongTheTokensIsWhatWalkingThemSaysTest {
         int past = 0;
         int touching = 0;
         int spanning = 0;
-        for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
+        for (String source : WhatGoesBetweenTwoTokensOnALineTest.written()) {
             List<SyntaxToken> tokens = Witnesses.code(CstParser.parse(source).root());
             Witnesses.Run run = new Witnesses.Run(tokens);
             for (int i = 0; i + 1 < tokens.size(); i++) {

@@ -5,9 +5,8 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -127,28 +126,15 @@ class ACompilationThatFailedStillReportsWhatItsRowsCoverTest {
             args.add(file.toString());
         }
 
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        int code;
-        try {
-            // `dispatch` rather than `main`, which turns a non-zero answer into a dead JVM.
-            code = Main.dispatch(args.toArray(String[]::new));
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
-        return new Streams(code, out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+        Ran answered = CliInProcess.run(args.toArray(String[]::new));
+        return new Streams(answered.code(), answered.out(), answered.err());
     }
 
     @Test
     void theReportIsWrittenForAModuleOneOfWhoseBehaviorsDidNotCheck() throws Exception {
         Streams ran = run(ONE_BEHAVIOR_DOES_NOT_CHECK, "--format", "json");
 
+        assertEquals(1, ran.code(), ran.err());
         assertFalse(ran.out().isBlank(),
                 "the report is what this command answers with; stderr said: " + ran.err());
         JsonNode report = JSON.readTree(ran.out());

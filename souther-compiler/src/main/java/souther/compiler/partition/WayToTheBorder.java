@@ -155,6 +155,9 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
             @Override
             public Step<Numbered, NoInputTakesIt> with(Numbered so, OnTheWay entry) {
+                if (entry instanceof OnTheWay.Counted counted) {
+                    return CountedWays.admits(this, so, counted);
+                }
                 return switch (takenIn(so.held(), entry)) {
                     case Step.Closed<HeldTogether, Reachability>(var why) ->
                             new Step.Closed<>(new NoInputTakesIt.TheConditionsClash(switch (why) {
@@ -339,6 +342,10 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             switch (each) {
                 case OnTheWay.OneOf several ->
                         several.alternatives().forEach(one -> stated(one, into));
+                case OnTheWay.Counted counted -> counted.statements().forEach(one -> {
+                    stated(one.holding(), into);
+                    stated(one.failing(), into);
+                });
                 // A narrowing's alternatives are the cases it leaves, each made afresh as a
                 // narrowing to that case; they state nothing the narrowing did not.
                 case OnTheWay.Narrowed _, OnTheWay.Declined _, OnTheWay.TakenIn _,
@@ -393,7 +400,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     /** The conditions on this way a row is past one of several ways of
      *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
     public List<OnTheWay> severalWays() {
-        return onTheWay.stream().filter(OnTheWay::ofSeveralWays).toList();
+        return onTheWay.stream().filter(OnTheWay::splitsTheWay).toList();
     }
 
     /**
@@ -411,7 +418,18 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * it is judged by the same walk, as the one way it is.
      */
     OneOfEach.Walked<OnTheWay, Reachability> along() {
-        return OneOfEach.walk(onTheWay, ASKED_OF_A_ROW, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+        // A way with no count on it is walked as it always was, with the walk's own figures.
+        if (stated().stream().noneMatch(OnTheWay.Counted.class::isInstance)) {
+            return walked(onTheWay, ASKED_OF_A_ROW);
+        }
+        return CountedWays.walkedWithCounts(onTheWay, ASKED_OF_A_ROW, WayToTheBorder::walked);
+    }
+
+    private static OneOfEach.Walked<OnTheWay, Reachability> walked(
+            List<OnTheWay> entries,
+            OneOfEach.Vocabulary<OnTheWay, HeldTogether, Reachability> vocabulary) {
+        return OneOfEach.walk(entries, vocabulary,
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                 CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
     }
 
@@ -511,6 +529,11 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                             }
                             yield out;
                         }
+                        case OnTheWay.Counted counted -> {
+                            Set<TermPath> out = new LinkedHashSet<>();
+                            counted.parts().forEach(one -> out.addAll(positions(one)));
+                            yield out;
+                        }
                         case OnTheWay.Settled _, OnTheWay.Declined _, OnTheWay.OneOf _ ->
                                 Set.of();
                     };
@@ -524,6 +547,9 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 /** {@code so} with {@code entry} taken in, or why no row takes them together. */
                 @Override
                 public Step<HeldTogether, Reachability> with(HeldTogether so, OnTheWay entry) {
+                    if (entry instanceof OnTheWay.Counted counted) {
+                        return CountedWays.admits(this, so, counted);
+                    }
                     return switch (takenIn(so, entry)) {
                         case Step.Held<HeldTogether, Reachability>(var held) ->
                                 held.relating(entry);
@@ -577,7 +603,10 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 }
                 yield new Step.Held<>(so.withRequirements(required));
             }
-            case OnTheWay.TakenIn _, OnTheWay.Declined _, OnTheWay.OneOf _ -> new Step.Held<>(so);
+            // A count is judged where its statements are taken in, beside the rest of the way
+            // ({@link CountedWays}), and asks nothing of cases or truths on its own.
+            case OnTheWay.TakenIn _, OnTheWay.Declined _, OnTheWay.OneOf _,
+                 OnTheWay.Counted _ -> new Step.Held<>(so);
         };
     }
 }

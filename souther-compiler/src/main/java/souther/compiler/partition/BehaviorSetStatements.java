@@ -367,8 +367,9 @@ public final class BehaviorSetStatements {
                                                    DeclarationNewtypes newtypes,
                                                    souther.compiler.coverage.Arrivals answering) {
         return switch (stands) {
-            case PathResolution.MayStandAt(var among) -> mayStandAt(among);
-            case PathResolution.NotAPosition _ ->
+            case PathResolution.MayStandAt several ->
+                    saying(OwedWhereItCameFrom.ofSeveral(several));
+            case PathResolution.NotAPosition _, PathResolution.MadeOf _ ->
                     whereItsValueCameFrom(each, symbols, newtypes, answering);
             // The caller asks this only where the subject stands at no one place.
             case PathResolution.At at -> throw new IllegalArgumentException(
@@ -398,9 +399,9 @@ public final class BehaviorSetStatements {
     private static Outcome whereItsValueCameFrom(PredicateReadings.Reading each, Symbols symbols,
                                                  DeclarationNewtypes newtypes,
                                                  souther.compiler.coverage.Arrivals answering) {
-        if (each.reads().cameFrom(each.subject(), newtypes)
-                instanceof PathResolution.MayStandAt(var among)) {
-            return mayStandAt(among);
+        if (OwedWhereItCameFrom.ofSeveral(each.reads().cameFrom(each.subject(), newtypes))
+                instanceof OwedWhereItCameFrom owed) {
+            return saying(owed);
         }
         Set<TermPath> from = positionsItCameFrom(GuardThresholds.originOf(
                 each.subject(), each.reads(), symbols, newtypes, answering));
@@ -461,10 +462,10 @@ public final class BehaviorSetStatements {
         };
     }
 
-    /** A rule about a value that is what stands at one of {@code among}, said at each of them. */
-    private static Outcome mayStandAt(List<TermPath> among) {
-        return new Outcome.SayingNothing(among.stream().map(FilingCoordinate::at).toList(),
-                new BlockReason.RuleAboutAnElementOfSeveralContainers());
+    /** A rule about a value that came from several places, said at each of them. */
+    private static Outcome saying(OwedWhereItCameFrom owed) {
+        return new Outcome.SayingNothing(
+                owed.places().stream().map(FilingCoordinate::at).toList(), owed.why());
     }
 
     /**

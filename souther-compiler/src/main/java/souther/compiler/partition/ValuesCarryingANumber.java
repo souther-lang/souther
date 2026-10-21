@@ -38,13 +38,17 @@ import java.util.Set;
  *                 too, spelled as the plan names them — under the case each is narrowed to. What
  *                 stands there is the plan's to build, and a field filled from its declaration
  *                 alone would be whichever case that walk came to first
+ * @param alsoFixed the numbers of the other totals the element is built for, each at its own
+ *                 position the plan was made against and written the way {@code value} is
  */
 record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
+                             Map<TermPath, FixtureTemplate> alsoFixed,
                              Map<TermPath, FixtureTemplate> beside, Set<TermPath> narrowed,
                              RuleReadingContext reading)
         implements PlanComposer.Values {
 
     ValuesCarryingANumber {
+        alsoFixed = Map.copyOf(alsoFixed);
         beside = Map.copyOf(beside);
         narrowed = Set.copyOf(narrowed);
     }
@@ -60,13 +64,14 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
         // number and not a value of the position, so the names its own type wears go on here — the
         // plan's `worn` is what a value already wearing those is still missing, which is what a
         // value chosen at a slot by a search is.
-        if (slot.at().equals(fixed)) {
+        FixtureTemplate number = slot.at().equals(fixed) ? value : alsoFixed.get(slot.at());
+        if (number != null) {
             FixtureTemplate written = WornNames.under(TypeView.of(slot.type(),
                             reading.source().inners(),
                             reading.source().symbols(),
                             reading.source().kinds(),
                             reading.source().sums()).wrappers(),
-                    value, reading.source());
+                    number, reading.source());
             return Proposals.ofNullable(written);
         }
         // A position narrowed to a case nothing is composed under. Which case it is is the value:
@@ -129,6 +134,11 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
     private boolean holdsSomethingAsked(ConstructionPlan.Node node) {
         if (fixed.isAtOrUnder(node.at())) {
             return true;
+        }
+        for (TermPath each : alsoFixed.keySet()) {
+            if (each.isAtOrUnder(node.at())) {
+                return true;
+            }
         }
         for (TermPath each : beside.keySet()) {
             if (each.isAtOrUnder(node.at())) {

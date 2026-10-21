@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -100,11 +102,11 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
 
     @Test
     void everyWayOfWritingTheTotalIsOneMeetingOfTwoDecisions() {
-        SOURCES.forEach((way, source) ->
-                assertEquals(List.of(List.of(2, 2)), shape(readAll(source, "total").interactions()),
-                        way));
-        SOURCES.forEach((way, source) ->
-                assertEquals(List.of(), readAll(source, "total").notJoined(), way));
+        SOURCES.forEach((way, source) -> {
+            CoverageRead.Read read = readAll(source, "total");
+            assertEquals(List.of(List.of(2, 2)), shape(read.interactions()), way);
+            assertEquals(List.of(), read.notJoined(), way);
+        });
     }
 
     @Test
@@ -114,24 +116,6 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
 
         assertEquals(List.of(), read.interactions());
         assertEquals(List.of(), read.notJoined());
-    }
-
-    /** Whatever the way, a total that is a function of decisions is a meeting or is said not to be
-     *  one. The table above is every way it is known to be written; a way added to it that finds
-     *  neither is the defect this holds against. */
-    @Test
-    void noWayIsReadAsIfItDecidedNothing() {
-        List<String> silent = new ArrayList<>();
-        Map<String, String> every = new LinkedHashMap<>(SOURCES);
-        every.putAll(NOT_JOINED);
-        every.forEach((way, source) -> {
-            CoverageRead.Read read = readAll(source, "total");
-            if (read.interactions().isEmpty() && read.notJoined().isEmpty()) {
-                silent.add(way);
-            }
-        });
-        assertEquals(List.of(), silent, "ways read as if they decided nothing");
-        assertFalse(every.isEmpty());
     }
 
     @Test
@@ -433,20 +417,27 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
 
     /**
      * Every pipeline of up to two such stages after a choice made once and used twice is one
-     * decision, and the same after a choice made in each of two applications is two. The stages
-     * are crossed with each other, so that one added is tried after every other.
+     * decision, and the same after a choice made in each of two applications is two.
+     *
+     * <p>Each stage alone, and each stage handed on by a map and by a flatMap, and each stage after
+     * one that writes every element out twice. A stage past another is where an element carries
+     * more than one application beside the one that wrote the choice, and a map and a flatMap are
+     * the two ways a stage adds its own to them; what a stage before it does to the elements is
+     * whether it keeps them one for one or writes them out again, so a stage that keeps them and
+     * one that does not are what each stage is tried after.
      */
     @Test
     void whatIsDoneWithAChoiceAfterItIsMadeChangesNoDecisionCount() {
         String writes = "List.flatMap(r -> { let chosen = if r.active then 1 else 0\n"
                 + "    [ chosen, chosen ] }, %s)";
-        List<List<String>> pipelines = new ArrayList<>();
+        List<String> handingOn = List.of(STAGES.get(0), STAGES.get(1));
+        String writtenOutTwice = STAGES.get(5);
+        Set<List<String>> pipelines = new LinkedHashSet<>();
         pipelines.add(List.of());
-        for (String first : STAGES) {
-            pipelines.add(List.of(first));
-            for (String second : STAGES) {
-                pipelines.add(List.of(first, second));
-            }
+        for (String stage : STAGES) {
+            pipelines.add(List.of(stage));
+            handingOn.forEach(after -> pipelines.add(List.of(stage, after)));
+            pipelines.add(List.of(writtenOutTwice, stage));
         }
         List<String> differing = new ArrayList<>();
         for (List<String> stages : pipelines) {

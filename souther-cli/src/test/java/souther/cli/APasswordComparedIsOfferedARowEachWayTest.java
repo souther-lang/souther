@@ -2,9 +2,6 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -67,14 +64,6 @@ class APasswordComparedIsOfferedARowEachWayTest {
     private static String examples(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-login").resolve("login.sou");
         Files.writeString(file, model);
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.dispatch(new String[] {"examples", file.toString(), "--generate"});
-        } finally {
-            System.setOut(originalOut);
-        }
-        return out.toString(StandardCharsets.UTF_8);
+        return CliInProcess.printed("examples", file.toString(), "--generate");
     }
 }

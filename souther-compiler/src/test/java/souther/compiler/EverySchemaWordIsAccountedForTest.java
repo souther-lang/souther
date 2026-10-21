@@ -1570,6 +1570,7 @@ class EverySchemaWordIsAccountedForTest {
         held.add("/$defs/termId/oneOf/3/properties/class");
         held.add("/$defs/termId/oneOf/5/properties/extreme");
         held.add("/$defs/termId/oneOf/6/properties/gathering");
+        held.add("/$defs/termId/oneOf/7/properties/gathering");
         // How a choice by position compares it, held to the relations by
         // `theWordsAPositionIsComparedByAreTheRelationsThereAre`.
         held.add("/" + String.join("/", A_POSITION_RELATION));

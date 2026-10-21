@@ -1,5 +1,6 @@
 package souther.cli;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,9 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AUnitDecoderDoesNotReadItsInputTest {
 
-    @TempDir
-    Path dir;
-
     private static final String MODEL = """
             module demo
 
@@ -30,10 +28,18 @@ class AUnitDecoderDoesNotReadItsInputTest {
             let alone (c) = c
             """;
 
-    private String run(String input) throws Exception {
+    /** {@link #MODEL}, compiled once and handed each input in turn. */
+    private static Runner.Program demo;
+
+    @BeforeAll
+    static void compile(@TempDir Path dir) throws Exception {
         Path file = dir.resolve("demo.sou");
         Files.writeString(file, MODEL);
-        return Runner.run(file, "alone", input).trim();
+        demo = Runner.compile(file);
+    }
+
+    private static String run(String input) {
+        return demo.run("alone", input).trim();
     }
 
     @Test

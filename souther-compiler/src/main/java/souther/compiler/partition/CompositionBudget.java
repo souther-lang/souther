@@ -524,6 +524,21 @@ public enum CompositionBudget {
     NUMBERS_OF_A_SET_TRIED(8),
 
     /**
+     * How many choices of one number for each of several totals are tried before one of them is
+     * built for.
+     *
+     * <p>Several totals of one container are answered by one container, so what is tried is a
+     * number for each of them at once, and the choices are the products of what each total's
+     * numbers are: two totals with four numbers each are sixteen choices. That is another amount
+     * of work than the numbers of one set, which {@link #NUMBERS_OF_A_SET_TRIED} bounds, and each
+     * is bounded by its own figure so that raising one changes only the work it counts.
+     *
+     * <p>Spent only where a choice was left out. Choices that fit are every choice there is, and a
+     * figure named there is a number an author raises to be told the same thing.
+     */
+    COMBINATIONS_OF_TOTALS_TRIED(8),
+
+    /**
      * The most code points of a class a string is asked to hold up to which every way of writing a
      * string holding that many is tried.
      *
@@ -685,6 +700,9 @@ public enum CompositionBudget {
                     "how many steps the cases where a line of a statement decides are taken"
                             + " through, asking whether a row stands on each side of it";
             case NUMBERS_OF_A_SET_TRIED -> "how many of the numbers a class admits are tried";
+            case COMBINATIONS_OF_TOTALS_TRIED ->
+                    "how many choices of a number for each of several totals of one container are"
+                            + " tried";
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
                     "how many code points of a class a string is searched for in full";
             case CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
@@ -752,6 +770,7 @@ public enum CompositionBudget {
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
                  WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
+                 COMBINATIONS_OF_TOTALS_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                  RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW -> null;

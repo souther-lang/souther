@@ -32,6 +32,7 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.nio.file.Files;
@@ -141,13 +142,18 @@ public final class Runner {
 
         /** The file, read — what the compile is handed and what a report about it quotes. */
         CompilationSources sources() {
-            return CompilationSources.files(
-                    List.of(new SourceFile(file.toString(), read(file))));
+            return sourcesOf(file);
         }
     }
 
-    /** Parses the {@code run} subcommand's arguments (everything after {@code run}). */
-    static Invocation parse(String[] args) {
+    /** {@code file}, read as the one source a compile is handed. */
+    private static CompilationSources sourcesOf(Path file) {
+        return CompilationSources.files(List.of(new SourceFile(file.toString(), read(file))));
+    }
+
+    /** Parses the {@code run} subcommand's arguments (everything after {@code run}), reading a
+     *  relative path from the directory {@code environment} is run in. */
+    static Invocation parse(String[] args, Environment environment) {
         Path file = null;
         String behaviorName = null;
         String inputJson = null;
@@ -158,13 +164,13 @@ public final class Runner {
                 case "--input" -> inputJson = value(args, ++i, "--input");
                 case "-cp", "--class-path" -> {
                     String option = args[i];
-                    classPath.addAll(entriesOf(value(args, ++i, option)));
+                    classPath.addAll(entriesOf(value(args, ++i, option), environment));
                 }
                 default -> {
                     if (file != null) {
                         throw usage("run.usage.singlefile", "run takes a single .sou file");
                     }
-                    file = Path.of(args[i]);
+                    file = environment.path(args[i]);
                 }
             }
         }
@@ -174,12 +180,13 @@ public final class Runner {
         return new Invocation(file, behaviorName, inputJson, pathOf(classPath));
     }
 
-    /** A class path as its entries, in the order they are searched. */
-    static List<Path> entriesOf(String written) {
+    /** A class path as its entries, in the order they are searched, each read as
+     *  {@code environment} reads a path it is given. */
+    static List<Path> entriesOf(String written, Environment environment) {
         List<Path> entries = new ArrayList<>();
-        for (String entry : written.split(java.io.File.pathSeparator)) {
+        for (String entry : written.split(File.pathSeparator)) {
             if (!entry.isBlank()) {
-                entries.add(Path.of(entry));
+                entries.add(environment.path(entry));
             }
         }
         return entries;
@@ -229,30 +236,67 @@ public final class Runner {
      */
     static String run(Invocation invocation, CompilationSources sources,
                       List<Located> warningsOut) {
-        String behaviorName = invocation.behaviorName();
-        String inputJson = invocation.inputJson();
+        return compile(sources, invocation.path(), warningsOut)
+                .run(invocation.behaviorName(), invocation.inputJson());
+    }
 
+    /** Compiles {@code file} once, for a caller that drives more than one behavior of it or one
+     * behavior with more than one input. */
+    public static Program compile(Path file) {
+        return compile(sourcesOf(file), ModulePath.EMPTY, new ArrayList<>());
+    }
+
+    /** Compiles {@code sources} against {@code path}, collecting the compile's warnings into
+     * {@code warningsOut}. */
+    static Program compile(CompilationSources sources, ModulePath path, List<Located> warningsOut) {
         // One compilation answers all of it. Re-reading the source here to find the behavior and
         // its signature would resolve every name a second time, against a tree this compile has
         // already produced.
-        Compilation compilation = Compiler.compiled(sources, invocation.path(), warningsOut);
+        Compilation compilation = Compiler.compiled(sources, path, warningsOut);
         // The module this file declares, and not one it reached: what the path holds is read for its
         // declarations and is no part of what this compilation declares.
         Prepared module = compilation.module(compilation.modules().get(0));
-        Map<String, Sig> sigs = compilation.signatures(module.name());
+        return new Program(compilation, module, compilation.signatures(module.name()));
+    }
 
-        Hir.BehaviorDef spec = resolveBehavior(compilation, module, behaviorName);
-        Sig sig = sigs.get(spec.name());
+    /**
+     * One {@code .sou} file, compiled, whose behaviors are driven from it.
+     *
+     * <p>Every run reads the same compilation: which behavior a name picks, the signature it is
+     * decoded and encoded by, and the classes it runs. A run builds a fresh instance of the behavior's
+     * class, so one run leaves nothing behind that the next one reads.
+     *
+     * <p><b>One run at a time.</b> A run asks the compilation it holds, and a compilation's store is
+     * not safe to ask from two threads at once; runs of one program are made one after another. A
+     * caller that would run behaviors on several threads compiles a program for each.
+     */
+    public static final class Program {
+        private final Compilation compilation;
+        private final Prepared module;
+        private final Map<String, Sig> sigs;
 
-        // The compilation's own — its classes over the ones the path already built. Composing a
-        // loader here instead would be a second statement of that order, which is the one thing
-        // about loading this compiler settles in a single place.
-        ClassLoader loader = compilation.loader();
-        Object[] args = decodeInputs(loader, spec.name(), sig.ins(), inputJson);
+        private Program(Compilation compilation, Prepared module, Map<String, Sig> sigs) {
+            this.compilation = compilation;
+            this.module = module;
+            this.sigs = sigs;
+        }
 
-        Object result = invoke(loader, module.name(), spec.name(), args);
-        Object encoded = encodeOutput(loader, module.name(), spec.name(), sig.out(), result);
-        return writeJson(encoded);
+        /** Drives {@code behaviorName} with {@code inputJson} and returns the encoded output as
+         * JSON text, read as {@link Runner#run(Path, String, String)} reads them. */
+        public String run(String behaviorName, String inputJson) {
+            Hir.BehaviorDef spec = resolveBehavior(compilation, module, behaviorName);
+            Sig sig = sigs.get(spec.name());
+
+            // The compilation's own — its classes over the ones the path already built. Composing a
+            // loader here instead would be a second statement of that order, which is the one thing
+            // about loading this compiler settles in a single place.
+            ClassLoader loader = compilation.loader();
+            Object[] args = decodeInputs(loader, spec.name(), sig.ins(), inputJson);
+
+            Object result = invoke(loader, module.name(), spec.name(), args);
+            Object encoded = encodeOutput(loader, module.name(), spec.name(), sig.out(), result);
+            return writeJson(encoded);
+        }
     }
 
     // --- behavior selection ---------------------------------------------------------------------

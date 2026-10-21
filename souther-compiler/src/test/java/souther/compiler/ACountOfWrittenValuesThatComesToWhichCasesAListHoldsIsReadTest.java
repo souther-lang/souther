@@ -395,14 +395,15 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
     /**
      * Exactly nine of eighteen values written out, each a number of its own, is more choices than a
      * reader of them is handed — more than one condition is read in: the count is read and held
-     * whole, and where its lines decide is said not to have been worked out at that figure, and
-     * not that a part of it was not read.
+     * whole, and where each of its lines decides is worked out from the count and not from its
+     * choices. Each statement is a line, and it decides where the other seventeen come to eight
+     * or to nine; neither a stop at the figure the choices are past nor a part not read is said.
      *
      * <p>Numbers of their own, since statements about one number cannot hold in most of the ways
      * a choice asks, and written out those ways are none.
      */
     @Test
-    void aCountWhoseChoicesArePastWhatAReaderIsHandedSaysThatFigure() {
+    void aCountWhoseChoicesArePastWhatAReaderIsHandedIsReadWholeAndItsLinesAreDrawn() {
         String fields = IntStream.range(0, 18).mapToObj(at -> "f" + at + ": Int")
                 .collect(Collectors.joining(", "));
         String values = IntStream.range(0, 18).mapToObj(at -> "w.f" + at)
@@ -425,9 +426,10 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
 
         CompositionBudget figure = CompositionBudget.READINGS_OF_ONE_CONDITION;
-        assertTrue(human.contains("stopped at " + figure.counts() + " (" + figure.name() + ", "
+        assertFalse(human.contains("stopped at " + figure.counts() + " (" + figure.name() + ", "
                 + figure.maximum() + ")"), human);
         assertFalse(human.contains("a part of what it states was not read"), human);
+        assertTrue(human.contains("axes 18"), human);
     }
 
     /** Each finding's kind and what it is about. */

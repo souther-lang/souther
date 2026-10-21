@@ -176,7 +176,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Deque;Ljava/util/Map;Ljava/lang/Object;)Z",
                     "stops a group's walk at the choices looked at or at the ways handed on, and"
                             + " records which, which the walk says in what it comes back with"),
-            Map.entry("souther.compiler.partition.WayToTheBorder#along()"
+            Map.entry("souther.compiler.partition.WayToTheBorder#walked("
+                            + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;)"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",
                     "hands both figures to the walk, whose answer says which it stopped at"),
             Map.entry("souther.compiler.partition.WayToTheBorder#takenByNoInput("
@@ -393,6 +394,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "says in what it hands back that a run held more members than it offered, by"
                             + " the figure it was cut at"),
+            Map.entry("souther.compiler.partition.TermRealizations$Together#of("
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Together;",
+                    "says in what it hands back that the numbers of several totals were cut at"
+                            + " the figure that bounds the numbers of a set"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofARemainder("
                             + "Lsouther/compiler/partition/Standing$OfARemainder;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
@@ -683,9 +689,55 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // which.
             Map.entry("souther.compiler.meaning.CountsWrittenOut#<clinit>()V",
                     "how many parts every count one reader is handed comes to together"),
-            Map.entry("souther.compiler.meaning.CountsWrittenOut#<init>()V",
+            Map.entry("souther.compiler.meaning.CountsWrittenOut#<init>(Z)V",
                     "starts a reader's writing out at the figure, which every count it is handed"
                             + " is charged to, and past which it is handed none and told the figure"),
+            // The assignments of a count's statements that hold together with the rest of a way:
+            // as many are looked for as a way is looked along, and past a figure the walk says
+            // which it was and proves nothing.
+            Map.entry("souther.compiler.partition.CountedWays$Search#run("
+                            + "Ljava/lang/Object;I)Lsouther/compiler/partition/CountedWays$Found;",
+                    "hands on the figure the search ran past, or the one that left assignments"
+                            + " unhanded, so that no way is said to be every way past it"),
+            Map.entry("souther.compiler.partition.CountedWays$Steps#<init>(I)V",
+                    "starts the walks an assignment may be walked again in at as many as ways are"
+                            + " looked along, and says when there are none left"),
+            Map.entry("souther.compiler.partition.CountedWays#walkedWithCounts("
+                            + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;"
+                            + "Ljava/util/function/BiFunction;)"
+                            + "Lsouther/compiler/partition/OneOfEach$Walked;",
+                    "says the figure the steps ran out at on the ways the first walk handed on,"
+                            + " so that they are not said to be every way"),
+            Map.entry("souther.compiler.partition.CountedWays$Steps#ofAWay()"
+                            + "Lsouther/compiler/partition/CountedWays$Steps;",
+                    "the steps a whole way's counts take together, which the searches and the walks"
+                            + " of their assignments all take from"),
+            Map.entry("souther.compiler.partition.CountedWays$Steps#ofAProbe()"
+                            + "Lsouther/compiler/partition/CountedWays$Steps;",
+                    "the steps one probe of whether a count can hold takes: its share of a way's,"
+                            + " past which the probe proves nothing"),
+            Map.entry("souther.compiler.partition.CountedWays$Expansion#add("
+                            + "Lsouther/compiler/partition/OneOfEach$Way;)V",
+                    "says the figure a way left as it stands was left at, and keeps its count"),
+            Map.entry("souther.compiler.partition.CountedWays$Expansion#walkInto("
+                            + "Ljava/util/List;Ljava/util/List;)V",
+                    "says that the steps ran out where an assignment was walked past them"),
+            Map.entry("souther.compiler.partition.CountedWays$Expansion#addUnder("
+                            + "Lsouther/compiler/partition/OneOfEach$Way;Ljava/util/List;)V",
+                    "says the figure a count was left at where no step was left to expand it"),
+            Map.entry("souther.compiler.partition.CountedWays$Expansion#result("
+                            + "Ljava/util/List;)Lsouther/compiler/partition/OneOfEach$Walked;",
+                    "hands on the figure the ways were stopped at, and proves no way closed"
+                            + " without a reason"),
+            Map.entry("souther.compiler.partition.CountedWays$Expansion#keep("
+                            + "Lsouther/compiler/partition/OneOfEach$Way;)V",
+                    "keeps a way until as many are kept as are looked along, and says that figure"
+                            + " of the ones left out"),
+            Map.entry("souther.compiler.partition.CountedWays$Expansion#expand("
+                            + "Lsouther/compiler/partition/OneOfEach$Way;Ljava/util/List;"
+                            + "Ljava/util/List;)V",
+                    "looks for no more assignments than there is room for among the ways looked"
+                            + " along, and says that figure when it leaves some"),
             Map.entry("souther.compiler.partition.Cutting#asLines("
                             + "Ljava/lang/String;"
                             + "Lsouther/compiler/check/StatedComparison;"

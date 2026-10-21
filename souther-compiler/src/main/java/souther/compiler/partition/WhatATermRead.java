@@ -414,6 +414,62 @@ sealed interface WhatATermRead {
     }
 
     /**
+     * What {@code on} reads of the key this reading chose at {@code key}, among every element of
+     * the run it gathers under keys: what the elements holding that key come to, which is no number
+     * where none does ({@link NumericTerm.GatheredUnderAKey}).
+     *
+     * <p>The key is outside the run, so the number is read for it and a row that wrote nothing at
+     * the key has no value for the number. The elements are every occurrence's, whichever a reading
+     * chose.
+     */
+    static WhatATermRead underAKey(TermOrders on, BorderQuantity.Observation row, TermPath key) {
+        return switch (row.at(key)) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue asked) -> switch (
+                        row.keptOf(new EveryElementUnderAKey(on))) {
+                    case WalkResult.CouldNotWalk<TermOrders.ElementsUnderAKey<WhatATermRead>> _ ->
+                            new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                    case WalkResult.Reached(
+                            TermOrders.ElementsUnderAKey<WhatATermRead> together) ->
+                            switch (together.numberUnder(asked)) {
+                                case TermOrders.Neighbouring.Read<WhatATermRead>(
+                                        NumericTerm.Reading read) -> of(read);
+                                case TermOrders.Neighbouring.HeldNothing<WhatATermRead>(
+                                        WhatATermRead why) -> why;
+                            };
+                };
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
+            };
+        };
+    }
+
+    /** The elements of the run {@code on}'s term gathers under a key an input holds, put together
+     *  once ({@link TermOrders#togetherUnderAKey}), which no reading's choice turns. */
+    record EveryElementUnderAKey(TermOrders on) implements
+            BorderQuantity.ReadAlike<WalkResult<TermOrders.ElementsUnderAKey<WhatATermRead>>> {
+
+        @Override
+        public WalkResult<TermOrders.ElementsUnderAKey<WhatATermRead>> readAt(
+                BorderQuantity.Observation row) {
+            TermPath elements = ((NumericTerm.GatheredUnderAKey) on.term()).subjectPath();
+            if (!(everyElementAbove(row, elements) instanceof WalkResult.Reached<
+                    List<BorderQuantity.Observation>>(
+                            List<BorderQuantity.Observation> reached))) {
+                return WalkResult.couldNotWalk();
+            }
+            List<Function<ElementProjection, TermOrders.Holding<WhatATermRead>>> each =
+                    new ArrayList<>(reached.size());
+            for (BorderQuantity.Observation element : reached) {
+                each.add(heldBy(element, elements));
+            }
+            return WalkResult.reached(on.togetherUnderAKey(each));
+        }
+    }
+
+    /**
      * Every element of the run {@code on}'s term gathers under keys, put together once, which no
      * reading's choice turns: every element of every container the elements stand in, the outer
      * one first, each read as the row with it chosen.

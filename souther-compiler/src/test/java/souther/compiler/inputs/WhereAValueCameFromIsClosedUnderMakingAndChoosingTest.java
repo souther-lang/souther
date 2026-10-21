@@ -1,0 +1,241 @@
+package souther.compiler.inputs;
+
+import org.junit.jupiter.api.Test;
+import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ResolvedCase;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * Where a value came from is an answer that can be made of several places together and chosen
+ * between, and each of those operations takes what the other gave.
+ *
+ * <p>A value a fold made from a seed and a list is made of both; a value an {@code if} chose
+ * between two of those is one or the other of them, each made of two; a fold seeded with such a
+ * value is made of that and of its own list. None of those may drop a place on the way, since a
+ * rule about the value is filed at the places it came from and a place dropped is a rule nobody is
+ * told is unread.
+ */
+class WhereAValueCameFromIsClosedUnderMakingAndChoosingTest {
+
+    private static final TermPath A = TermPath.of("a").then("items").element();
+    private static final TermPath B = TermPath.of("b").then("items").element();
+    private static final TermPath C = TermPath.of("c").then("items").element();
+    private static final TermPath D = TermPath.of("d").then("items").element();
+
+    private static PathResolution at(TermPath path) {
+        return new PathResolution.At(path);
+    }
+
+    /** Made of every one of {@code places} together. */
+    private static PathResolution together(TermPath... places) {
+        return new PathResolution.MadeOf(List.of(List.of(places)));
+    }
+
+    /** Made of the one pair together or of the other. */
+    private static PathResolution eitherPair(TermPath first, TermPath second, TermPath third,
+                                             TermPath fourth) {
+        return new PathResolution.MadeOf(List.of(List.of(first, second), List.of(third, fourth)));
+    }
+
+    @Test
+    void aChoiceBetweenTwoValuesMadeOfSeveralKeepsEveryPlaceOfBoth() {
+        PathResolution chosen = PathResolution.anyOf(List.of(
+                PathResolution.madeOf(List.of(at(A), at(B))),
+                PathResolution.madeOf(List.of(at(C), at(D)))));
+        assertEquals(eitherPair(A, B, C, D), chosen);
+    }
+
+    @Test
+    void aValueMadeOfOneOfTwoPlacesAndAnotherIsMadeOfEachPairInTurn() {
+        PathResolution chosen = new PathResolution.MayStandAt(List.of(B, C));
+        assertEquals(eitherPair(A, B, A, C),
+                PathResolution.madeOf(List.of(at(A), chosen)));
+    }
+
+    @Test
+    void aValueMadeOfAValueMadeOfSeveralIsMadeOfAllOfThem() {
+        assertEquals(together(A, B, C), PathResolution.madeOf(List.of(
+                PathResolution.madeOf(List.of(at(A), at(B))), at(C))));
+    }
+
+    @Test
+    void aPartThatCameFromNowhereTheInputHoldsAddsNoPlace() {
+        assertEquals(at(A), PathResolution.madeOf(List.of(
+                at(A), new PathResolution.NotAPosition())));
+        assertEquals(together(A, B), PathResolution.madeOf(List.of(
+                new PathResolution.NotAPosition(), at(A), at(B))));
+    }
+
+    @Test
+    void aValueEveryPartOfWhichCameFromNowhereHasNoPlaceToName() {
+        assertEquals(new PathResolution.NotAPosition(), PathResolution.madeOf(List.of(
+                new PathResolution.NotAPosition(), new PathResolution.NotAPosition())));
+        assertEquals(new PathResolution.NotAPosition(), PathResolution.madeOf(List.of()));
+    }
+
+    @Test
+    void aChoiceWhereOneCaseCameFromNowhereKeepsTheOnesThatDidNot() {
+        assertEquals(together(A, B), PathResolution.anyOf(List.of(
+                PathResolution.madeOf(List.of(at(A), at(B))), new PathResolution.NotAPosition())));
+    }
+
+    @Test
+    void placesThatComeToOneWhereTheNarrowingsAreTakenOutAreThatOnePlace() {
+        CasesLeft either = CasesLeft.of(ResolvedCase.of(
+                CaseSelector.direct(leaf("OnceKind")), List.of(leaf("Station"), leaf("Hospital"))));
+        TermPath narrowed = A.refine(either);
+        assertEquals(at(A), together(narrowed, A).heldAt());
+        assertEquals(together(A, B), together(narrowed, B).heldAt());
+    }
+
+    @Test
+    void aStepIntoAValueMadeOfSeveralPlacesIsMadeOfThosePlacesAndNotOfAStepOfEach() {
+        PathResolution made = together(A, B);
+        assertEquals(made, made.deeper(path -> path.then("count")));
+        assertEquals(at(A.then("count")), at(A).deeper(path -> path.then("count")));
+    }
+
+    @Test
+    void aPlaceTheValueIsTakesTheStepWhereOthersItIsMadeOfDoNot() {
+        PathResolution either = PathResolution.anyOf(List.of(at(A), together(B, C)));
+        PathResolution.MadeOf stepped = (PathResolution.MadeOf) either.deeper(
+                path -> path.then("count"));
+        assertEquals(List.of(List.of(A.then("count")), List.of(B, C)), stepped.alternatives());
+    }
+
+    /** One part of {@code ways} places it may stand at, named {@code name} and a number. */
+    private static PathResolution mayStandAtOneOf(String name, int ways) {
+        List<TermPath> among = new ArrayList<>();
+        for (int i = 0; i < ways; i++) {
+            among.add(TermPath.of(name + i).then("items").element());
+        }
+        return new PathResolution.MayStandAt(among);
+    }
+
+    @Test
+    void aChoiceAmongMorePlacesThanAnAnswerTellsApartIsStillTheOnesItMayStandAt() {
+        List<PathResolution> cases = new ArrayList<>();
+        for (int i = 0; i <= PathResolution.MOST_WAYS_TOLD_APART; i++) {
+            cases.add(at(TermPath.of("p" + i).then("items").element()));
+        }
+        PathResolution chosen = PathResolution.anyOf(cases);
+        assertEquals(PathResolution.MOST_WAYS_TOLD_APART + 1,
+                ((PathResolution.MayStandAt) chosen).among().size());
+    }
+
+    @Test
+    void aValueMadeOfOneChoiceIsThatChoiceHoweverManyPlacesItHas() {
+        PathResolution many = mayStandAtOneOf("p", PathResolution.MOST_WAYS_TOLD_APART + 1);
+        assertEquals(many, PathResolution.madeOf(List.of(many)));
+    }
+
+    @Test
+    void aChoiceAmongMoreValuesMadeOfSeveralThanAnAnswerTellsApartKeepsEveryOne() {
+        List<PathResolution> cases = new ArrayList<>();
+        for (int i = 0; i <= PathResolution.MOST_WAYS_TOLD_APART; i++) {
+            cases.add(PathResolution.madeOf(List.of(
+                    at(TermPath.of("p" + i).then("items").element()), at(A))));
+        }
+        PathResolution.MadeOf chosen = (PathResolution.MadeOf) PathResolution.anyOf(cases);
+        assertEquals(PathResolution.MOST_WAYS_TOLD_APART + 1, chosen.alternatives().size());
+    }
+
+    @Test
+    void aValueMadeInAsManyWaysAsAnAnswerTellsApartKeepsEveryWay() {
+        PathResolution.MadeOf made = (PathResolution.MadeOf) PathResolution.madeOf(List.of(
+                mayStandAtOneOf("p", 4), mayStandAtOneOf("q", 4), mayStandAtOneOf("r", 4)));
+        assertEquals(PathResolution.MOST_WAYS_TOLD_APART, made.alternatives().size());
+        assertEquals(true, made.alternatives().stream().allMatch(each -> each.size() == 3));
+    }
+
+    @Test
+    void aValueMadeInMoreWaysThanThatIsMadeOfAllTheirPlacesTogether() {
+        PathResolution first = mayStandAtOneOf("p", 8);
+        PathResolution second = mayStandAtOneOf("q", 9);
+        PathResolution.MadeOf made = (PathResolution.MadeOf) PathResolution.madeOf(
+                List.of(first, second));
+        assertEquals(1, made.alternatives().size());
+        List<TermPath> every = new ArrayList<>(((PathResolution.MayStandAt) first).among());
+        every.addAll(((PathResolution.MayStandAt) second).among());
+        assertEquals(Set.copyOf(every), Set.copyOf(made.alternatives().getFirst()));
+    }
+
+    /** One answer of every kind, and of each kind the shapes that tell it apart. */
+    private static List<PathResolution> everyKindOfAnswer() {
+        return List.of(
+                at(A),
+                at(B),
+                new PathResolution.NotAPosition(),
+                new PathResolution.MayStandAt(List.of(A)),
+                new PathResolution.MayStandAt(List.of(A, B)),
+                together(A, B),
+                new PathResolution.MadeOf(List.of(List.of(A, B), List.of(C))));
+    }
+
+    /** Every place an answer names, however it names them. */
+    private static Set<TermPath> placesOf(PathResolution answer) {
+        return switch (answer) {
+            case PathResolution.At(var at) -> Set.of(at);
+            case PathResolution.MayStandAt(var among) -> Set.copyOf(among);
+            case PathResolution.MadeOf made -> Set.copyOf(made.places());
+            case PathResolution.NotAPosition _ -> Set.of();
+        };
+    }
+
+    @Test
+    void makingOutOfOneAnswerOrChoosingAmongOneIsThatAnswer() {
+        for (PathResolution each : everyKindOfAnswer()) {
+            assertEquals(each, PathResolution.madeOf(List.of(each)), "made of " + each);
+            assertEquals(each, PathResolution.anyOf(List.of(each)), "chosen from " + each);
+        }
+    }
+
+    @Test
+    void takingNoStepOrTakingTheNarrowingsOutTwiceChangesNothingMore() {
+        for (PathResolution each : everyKindOfAnswer()) {
+            assertEquals(each, each.deeper(path -> path), "no step on " + each);
+            assertEquals(each.heldAt(), each.heldAt().heldAt(), "held twice " + each);
+        }
+    }
+
+    @Test
+    void makingAndChoosingNameTheSamePlacesInWhateverOrderTheyAreGiven() {
+        for (PathResolution first : everyKindOfAnswer()) {
+            for (PathResolution second : everyKindOfAnswer()) {
+                assertEquals(placesOf(PathResolution.madeOf(List.of(first, second))),
+                        placesOf(PathResolution.madeOf(List.of(second, first))),
+                        "made of " + first + " and " + second);
+                assertEquals(placesOf(PathResolution.anyOf(List.of(first, second))),
+                        placesOf(PathResolution.anyOf(List.of(second, first))),
+                        "chosen from " + first + " and " + second);
+            }
+        }
+    }
+
+    @Test
+    void makingAndChoosingNameEveryPlaceTheirPartsNameAndNoOther() {
+        for (PathResolution first : everyKindOfAnswer()) {
+            for (PathResolution second : everyKindOfAnswer()) {
+                Set<TermPath> every = new HashSet<>(placesOf(first));
+                every.addAll(placesOf(second));
+                assertEquals(every, placesOf(PathResolution.madeOf(List.of(first, second))),
+                        "made of " + first + " and " + second);
+                assertEquals(every, placesOf(PathResolution.anyOf(List.of(first, second))),
+                        "chosen from " + first + " and " + second);
+            }
+        }
+    }
+
+    private static TypeSymbol leaf(String name) {
+        return TypeSymbols.declared(new TypeKey("m", name));
+    }
+}

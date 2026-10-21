@@ -144,7 +144,7 @@ public final class UnreachableClaims {
             // A claim is about one position, and a scrutinee that only may stand at one is about
             // whichever of them the run is in. Claimed of each, a case unreachable in one sequence
             // would be claimed unreachable in the other.
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
         if (path == null) {
             return;

@@ -34,6 +34,7 @@ import java.util.function.Predicate;
 
 import souther.compiler.inputs.NumericTerm.Reading;
 import souther.compiler.inputs.TermOrders.ElementsTogether;
+import souther.compiler.inputs.TermOrders.ElementsUnderAKey;
 import souther.compiler.inputs.TermOrders.Holding;
 import souther.compiler.inputs.TermOrders.Neighbouring;
 import net.unit8.notation199x.ScalarValues;
@@ -112,6 +113,17 @@ final class TermReading {
                     each);
             case NumericTerm.ExtremeOfItsKey _ -> new KeyedEnds<>(on, each);
         };
+    }
+
+    /** The elements of a run put together for what they come to under a key an input holds
+     *  ({@link TermOrders#togetherUnderAKey}). */
+    static <G> ElementsUnderAKey<G> togetherUnderAKey(TermOrders on,
+            List<Function<ElementProjection, Holding<G>>> each) {
+        Objects.requireNonNull(each, "a term is read among the elements a walk came to");
+        if (!(on.term() instanceof NumericTerm.GatheredUnderAKey)) {
+            throw new IllegalArgumentException(on.term() + " is gathered under no key asked for");
+        }
+        return new Gathered<>(on, each);
     }
 
     /**
@@ -614,8 +626,11 @@ final class TermReading {
      * key, or a key that is no number, may be of any key, so the first of those stops every key;
      * one holding nothing at a field its number reads, or whose number is none, stops its own key
      * and no other. A key's numbers are read the first time an element of it is asked about.
+     *
+     * <p>Asked of a key an input holds ({@link NumericTerm.GatheredUnderAKey}) it is read the same
+     * way, and is no number where no element has the key.
      */
-    private static final class Gathered<G> implements ElementsTogether<G> {
+    private static final class Gathered<G> implements ElementsTogether<G>, ElementsUnderAKey<G> {
 
         private final TermOrders on;
         private final NumericTerm.GatheredUnderItsKey term;
@@ -630,7 +645,8 @@ final class TermReading {
 
         Gathered(TermOrders on, List<Function<ElementProjection, Holding<G>>> each) {
             this.on = on;
-            this.term = (NumericTerm.GatheredUnderItsKey) on.term();
+            this.term = on.term() instanceof NumericTerm.GatheredUnderAKey asked ? asked.gathered()
+                    : (NumericTerm.GatheredUnderItsKey) on.term();
             this.keyedOn = on.fieldCarrier(term.key());
             this.each = List.copyOf(each);
             Neighbouring<G> stop = keyedOn == null
@@ -660,10 +676,15 @@ final class TermReading {
                 }
                 case Holding.Value<G>(ObservedValue value) -> ownKey = value;
             }
+            return numberUnder(ownKey);
+        }
+
+        @Override
+        public Neighbouring<G> numberUnder(ObservedValue key) {
             if (everyKey != null) {
                 return everyKey;
             }
-            return switch (whereTheOrderPuts(keyedOn, ownKey)) {
+            return switch (whereTheOrderPuts(keyedOn, key)) {
                 case Where.Nowhere nowhere -> new Neighbouring.Read<>(nowhere.why());
                 case Where.At(Place place) -> asked.computeIfAbsent(place.canonical(), this::read);
             };

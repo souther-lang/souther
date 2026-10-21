@@ -319,6 +319,18 @@ final class TermRealizations {
                 case RealizationTarget.OfANumber number -> numbers.add(number);
             }
         }
+        // What the elements of keys an input holds come to, with how many elements each key has
+        // where that is counted beside it: the counts are the keys' own, which is a statement the
+        // elements of a key meet by being its elements.
+        List<RealizationTarget.OfANumber> totals = numbers.stream()
+                .filter(each -> each.term() instanceof NumericTerm.GatheredUnderAKey).toList();
+        if (together.isEmpty() && !totals.isEmpty()
+                && (totals.size() > 1 || numbers.size() > 1 || !counts.isEmpty())
+                && numbers.stream().allMatch(each -> totals.contains(each)
+                        || standsAtTheKeyOfTheTotals(each, totals))
+                && counts.stream().allMatch(count -> countsTheElementsOfAKeyOf(count, totals))) {
+            return underSeveralKeys(targets, counts, totals, numbers);
+        }
         if (!counts.isEmpty() || !together.isEmpty()) {
             return countsOf(targets, counts, together, numbers);
         }
@@ -349,10 +361,11 @@ final class TermRealizations {
         // place, so a second value asked for is a second place and is another group's.
         RealizationTarget.OfANumber itself = null;
         List<RealizationTarget.OfANumber> takenOfIt = new ArrayList<>();
-        // How many the container holds and what it comes to, which are the two numbers a container
-        // is composed out of rather than read for.
+        // How many the container holds and what it comes to, which are the numbers a container
+        // is composed out of rather than read for. It comes to as many totals as the group asks,
+        // each of a field of its elements.
         RealizationTarget.OfANumber manyItHolds = null;
-        RealizationTarget.OfANumber whatItComesTo = null;
+        List<RealizationTarget.OfANumber> whatItComesTo = new ArrayList<>();
         // How many of a string's code points are in a class and what they come to, which are
         // numbers of one string to be written together with how long it is.
         List<RealizationTarget.OfANumber> ofItsCodePoints = new ArrayList<>();
@@ -369,7 +382,8 @@ final class TermRealizations {
                 // Written as the value it is the end of, alone: beside another number of the same
                 // place it would be two numbers asked of one value that need not be one. The same
                 // for what the elements of a key come to.
-                case NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _ -> {
+                case NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
+                     NumericTerm.GatheredUnderAKey _ -> {
                     return nothingSolvesAGroup();
                 }
                 case NumericTerm.ValueOf _ -> itself = target;
@@ -387,7 +401,7 @@ final class TermRealizations {
                     if (!(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
                         return nothingSolvesAGroup();
                     }
-                    whatItComesTo = target;
+                    whatItComesTo.add(target);
                 }
                 case NumericTerm.TakenOf taken -> {
                     takenOfIt.add(target);
@@ -424,7 +438,7 @@ final class TermRealizations {
                         // total together is a container built to have both, and the arm below is
                         // where the two meet.
                         case TakenAs.HowManyItHolds _ -> manyItHolds = target;
-                        case TakenAs.TheSumOfWhatItHolds _ -> whatItComesTo = target;
+                        case TakenAs.TheSumOfWhatItHolds _ -> whatItComesTo.add(target);
                     }
                 }
             }
@@ -453,19 +467,27 @@ final class TermRealizations {
         }
         // How many a container holds beside what it comes to, which is one container to compose:
         // the sizes it may be are the ones the first number leaves, and filling one of those to
-        // the second is what a total is composed by anyway.
-        if (manyItHolds != null && whatItComesTo != null) {
+        // the second is what a total is composed by anyway. So is a container asked for more than
+        // one total, which is one container whose elements hold a figure at each field a total
+        // reads: a total of each is a share of every element, chosen together.
+        if (!whatItComesTo.isEmpty() && (manyItHolds != null || whatItComesTo.size() > 1)) {
+            if (whatItComesTo.size() > 1 && !ContainersAddingUp.addUpTogether(whatItComesTo)) {
+                return nothingSolvesAGroup();
+            }
             RealizationTarget.OfANumber many = manyItHolds;
-            RealizationTarget.OfANumber total = whatItComesTo;
-            return wholly(targets, List.of(many, total),
-                    () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
+            List<RealizationTarget.OfANumber> owned = new ArrayList<>(whatItComesTo);
+            if (many != null) {
+                owned.add(many);
+            }
+            return wholly(targets, owned,
+                    () -> new JointBuilder.TotalsOfOneContainer(whatItComesTo, many));
         }
         // The remainders of one place by their divisors, with nothing else asked of it. A value
         // that is none of them is nothing these write, so a quotient or a part beside them is a
         // group nothing here solves.
         if (!remainders.isEmpty()) {
             if (!quotients.isEmpty() || !times.isEmpty() || !dates.isEmpty()
-                    || manyItHolds != null || whatItComesTo != null) {
+                    || manyItHolds != null || !whatItComesTo.isEmpty()) {
                 return nothingSolvesAGroup();
             }
             return wholly(targets, remainders.keySet(),
@@ -588,6 +610,70 @@ final class TermRealizations {
         }
         return wholly(group, numbers,
                 () -> new JointBuilder.ValuesEqualToAKeyAcrossContainers(numbers));
+    }
+
+    /**
+     * What the elements of several keys an input holds come to, of the elements of one fold.
+     *
+     * <p>One fold, as {@link JointBuilder.UnderSeveralKeys} writes the elements of each key apart
+     * from the others and puts them in one container: the keys are told apart by the same way
+     * from an element to its key, and the numbers are gathered of the same elements. Numbers of
+     * another way to the key, or of other elements, share elements this does not choose between.
+     */
+    private static JointRealization underSeveralKeys(Collection<RealizationTarget> group,
+                                                     List<RealizationTarget.ACount> counts,
+                                                     List<RealizationTarget.OfANumber> totals,
+                                                     List<RealizationTarget.OfANumber> numbers) {
+        NumericTerm.GatheredUnderItsKey first =
+                ((NumericTerm.GatheredUnderAKey) totals.getFirst().term()).gathered();
+        for (RealizationTarget.OfANumber each : totals) {
+            NumericTerm.GatheredUnderItsKey gathered =
+                    ((NumericTerm.GatheredUnderAKey) each.term()).gathered();
+            if (!gathered.elements().equals(first.elements())
+                    || !gathered.key().equals(first.key())) {
+                return nothingSolvesAGroup();
+            }
+        }
+        List<RealizationTarget> owned = new ArrayList<>(numbers);
+        owned.addAll(counts);
+        return wholly(group, owned, () -> new JointBuilder.UnderSeveralKeys(counts, totals));
+    }
+
+    /**
+     * Whether {@code number} is the value of the key field of the elements the totals are
+     * gathered of: what a statement counting the elements of a key reads of each, which the
+     * elements are written holding and the row is read back for.
+     */
+    private static boolean standsAtTheKeyOfTheTotals(RealizationTarget.OfANumber number,
+                                                     List<RealizationTarget.OfANumber> totals) {
+        NumericTerm.GatheredUnderItsKey gathered =
+                ((NumericTerm.GatheredUnderAKey) totals.getFirst().term()).gathered();
+        return number.term() instanceof NumericTerm.ValueOf value
+                && value.position().equals(gathered.key().from(gathered.elements()));
+    }
+
+    /**
+     * Whether {@code count} is how many elements have the key a total in {@code numbers} is
+     * gathered for: the elements of its container whose key is the value an input holds, which
+     * is the statement the elements of that key meet by being its elements.
+     */
+    private static boolean countsTheElementsOfAKeyOf(
+            RealizationTarget.ACount count, List<RealizationTarget.OfANumber> numbers) {
+        return keyAskedOfTheCount(count, ((NumericTerm.GatheredUnderAKey)
+                numbers.getFirst().term()).gathered()) != null;
+    }
+
+    /**
+     * The input whose value the elements {@code count} counts have for their key — or null where
+     * it counts something else: the elements of the container {@code gathered} gathers whose key
+     * is the value of one input standing outside every container.
+     */
+    private static TermPath keyAskedOfTheCount(RealizationTarget.ACount count,
+                                               NumericTerm.GatheredUnderItsKey gathered) {
+        RealizationTarget.AskedKey key = count.askedKey();
+        return key != null && key.elements().equals(gathered.elements())
+                && key.keyAt().equals(gathered.key().from(gathered.elements())) ? key.asked()
+                : null;
     }
 
     /**
@@ -1105,40 +1191,72 @@ final class TermRealizations {
          * demand refuses is no candidate, and a walk that filled one would spend a figure of this
          * compiler's on a container nobody asked for.
          */
-        record HoldingThatManyAndAddingUpToThat(RealizationTarget.OfANumber manyItHolds,
-                                                RealizationTarget.OfANumber whatItComesTo)
+        record TotalsOfOneContainer(List<RealizationTarget.OfANumber> whatItComesTo,
+                                    RealizationTarget.OfANumber manyItHolds)
                 implements JointBuilder {
+
+            public TotalsOfOneContainer {
+                if (whatItComesTo.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a container composed for its totals is asked for at least one");
+                }
+                whatItComesTo = List.copyOf(whatItComesTo);
+            }
 
             @Override
             public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
-                TermOrders counted = measuring.ordersOf(manyItHolds.term());
-                TermOrders adds = measuring.ordersOf(whatItComesTo.term());
-                AskedAt holdsAt = demands.get(manyItHolds);
-                AskedAt comesToAt = demands.get(whatItComesTo);
-                NumericSet many = holdsAt == null ? null : holdsAt.walking();
-                NumericSet total = comesToAt == null ? null : comesToAt.walking();
-                if (counted == null || counted.answered() == null || adds == null
-                        || many == null || total == null) {
-                    return new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                ContainersAddingUp.HowManyIsAskedFor holding = null;
+                if (manyItHolds != null) {
+                    TermOrders counted = measuring.ordersOf(manyItHolds.term());
+                    AskedAt holdsAt = demands.get(manyItHolds);
+                    NumericSet many = holdsAt == null ? null : holdsAt.walking();
+                    if (counted == null || counted.answered() == null || many == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    // Where the rules leave the size on the way, which the container's own walk
+                    // asks of the region already. What is handed over here is the group's demand
+                    // and not the way, so neither reading stands in for the other.
+                    if (within != null && within.projectionOf(manyItHolds.term())
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    holding = new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
                 }
-                // Where the rules leave the size on the way, which the container's own walk asks
-                // of the region already. What is handed over here is the group's demand and not
-                // the way, so neither reading stands in for the other.
-                if (within != null && within.projectionOf(manyItHolds.term())
-                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
-                    return new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                List<TermOrders> adding = new ArrayList<>();
+                List<Tried> candidates = new ArrayList<>();
+                for (RealizationTarget.OfANumber each : whatItComesTo) {
+                    TermOrders adds = measuring.ordersOf(each.term());
+                    AskedAt comesToAt = demands.get(each);
+                    NumericSet total = comesToAt == null ? null : comesToAt.walking();
+                    if (adds == null || total == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    adding.add(adds);
+                    candidates.add(onTheOrder(total, adds, comesToAt.named(), within));
                 }
-                ContainersAddingUp.HowManyIsAskedFor holding =
-                        new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
+                ContainersAddingUp.HowManyIsAskedFor sizes = holding;
+                Together together = Together.of(candidates);
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
-                        onTheOrder(total, adds, comesToAt.named(), within),
-                        at -> ContainersAddingUp.to(at, sourceType, keptApart, adds, within,
-                                reading, holding, inside));
+                        together.each(), together.rest(),
+                        at -> ContainersAddingUp.to(at.getFirst(), sourceType, keptApart,
+                                adding.getFirst(), within, reading, sizes,
+                                alsoAddingUp(adding, at), inside));
+            }
+
+            /** The totals after the first, each with the number tried for it. */
+            private static List<ContainersAddingUp.AlsoAddingUp> alsoAddingUp(
+                    List<TermOrders> adding, List<Place> at) {
+                List<ContainersAddingUp.AlsoAddingUp> also = new ArrayList<>();
+                for (int each = 1; each < adding.size(); each++) {
+                    also.add(new ContainersAddingUp.AlsoAddingUp(adding.get(each), at.get(each)));
+                }
+                return also;
             }
         }
 
@@ -1250,6 +1368,211 @@ final class TermRealizations {
                 nothingInside(inside);
                 return CardinalityComposer.composeAcrossContainersEqualToAKey(sourceType,
                         keptApart, asked, demands, measuring, within, reading);
+            }
+        }
+
+        /**
+         * A container holding the elements of each of several keys an input holds, the elements
+         * of a key coming to the number asked of it and being as many as the count asked of them.
+         *
+         * <p>Composed one key at a time and put together. The elements of a key are written
+         * holding it ({@link TermRealizations#underAKey}), so the elements of another are none of
+         * its own, and the container is the elements of each in turn. Keys the row holds at one
+         * value are one key, whose elements come to the one number asked of them all; two numbers
+         * asked of it are elements chosen for both, which nothing here does.
+         *
+         * <p>A key asked only how many elements have it is written as a key whose number is the
+         * one a total of the group asks, since nothing else says what its elements come to; one
+         * asked to have none is written with none.
+         *
+         * <p>Offered row by row, the ways one key is composed taken beside the ways of the others
+         * in turn, and not every combination of them: what is left is said as a way a total is
+         * spread that was not tried.
+         *
+         * @param counts how many elements have each key, where that is asked beside the numbers
+         */
+        record UnderSeveralKeys(List<RealizationTarget.ACount> counts,
+                                List<RealizationTarget.OfANumber> numbers)
+                implements JointBuilder {
+
+            public UnderSeveralKeys {
+                counts = List.copyOf(counts);
+                numbers = List.copyOf(numbers);
+            }
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                List<Place> keys = new ArrayList<>();
+                List<RealizationTarget.OfANumber> ofEachKey = new ArrayList<>();
+                List<AskedAt> askedOfEachKey = new ArrayList<>();
+                List<NumericSet> howManyOfEachKey = new ArrayList<>();
+                // The keys only counted: no number is asked of their elements.
+                List<Boolean> onlyCounted = new ArrayList<>();
+                List<List<RealizationTarget.ACount>> countsOfEachKey = new ArrayList<>();
+                for (RealizationTarget.OfANumber number : numbers) {
+                    NumericTerm.GatheredUnderAKey term =
+                            (NumericTerm.GatheredUnderAKey) number.term();
+                    Place key = within == null ? null : CardinalityComposer.settled(within,
+                            new NumericTerm.ValueOf(term.asked()));
+                    if (key == null) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(
+                                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                                "`" + term.asked() + "` stands at no one value, so what is"
+                                        + " gathered for it is not known");
+                    }
+                    int at = 0;
+                    while (at < keys.size() && !keys.get(at).sameAs(key)) {
+                        at++;
+                    }
+                    if (at == keys.size()) {
+                        keys.add(key);
+                        ofEachKey.add(number);
+                        askedOfEachKey.add(demands.get(number));
+                        howManyOfEachKey.add(null);
+                        onlyCounted.add(false);
+                        countsOfEachKey.add(new ArrayList<>());
+                        continue;
+                    }
+                    // Two parameters holding one value are one key, whose elements come to what
+                    // both ask: one number where the two asked are, or the point of the one that
+                    // the other holds.
+                    NumericTerm.GatheredUnderItsKey held =
+                            ((NumericTerm.GatheredUnderAKey) ofEachKey.get(at).term()).gathered();
+                    TermOrders orders = measuring.ordersOf(number.term());
+                    AskedAt agreed = !held.equals(term.gathered()) ? null
+                            : agreed(askedOfEachKey.get(at), demands.get(number),
+                                    orders == null ? null : orders.answered());
+                    if (agreed == null) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                                "two numbers are asked of the elements of one key");
+                    }
+                    askedOfEachKey.set(at, agreed);
+                }
+                // How many elements a key has, asked of the key whose elements the count is of; two
+                // counts of one key's elements are one question, asked alike or not at all.
+                NumericTerm.GatheredUnderItsKey gathered =
+                        ((NumericTerm.GatheredUnderAKey) numbers.getFirst().term()).gathered();
+                for (RealizationTarget.ACount count : counts) {
+                    TermPath askedOfTheKey = keyAskedOfTheCount(count, gathered);
+                    Place key = within == null ? null : CardinalityComposer.settled(within,
+                            new NumericTerm.ValueOf(askedOfTheKey));
+                    if (key == null) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(
+                                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                                "`" + askedOfTheKey + "` stands at no one value, so how many"
+                                        + " elements have it is not known");
+                    }
+                    int at = 0;
+                    while (at < keys.size() && !keys.get(at).sameAs(key)) {
+                        at++;
+                    }
+                    if (at == keys.size()) {
+                        // Nothing says what its elements come to, so they are written to come to
+                        // what the first total of the group asks of its own: one of the numbers
+                        // they may come to, and the way this composes them at all.
+                        keys.add(key);
+                        ofEachKey.add(numbers.getFirst());
+                        askedOfEachKey.add(demands.get(numbers.getFirst()));
+                        howManyOfEachKey.add(null);
+                        onlyCounted.add(true);
+                        countsOfEachKey.add(new ArrayList<>());
+                    }
+                    countsOfEachKey.get(at).add(count);
+                    AskedAt asked = demands.get(count);
+                    NumericSet wanted = asked == null ? null : asked.walking();
+                    NumericSet had = howManyOfEachKey.get(at);
+                    if (!onlyCounted.get(at) && had != null && !had.equals(wanted)) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                                "two counts are asked of the elements of one key");
+                    }
+                    howManyOfEachKey.set(at, wanted);
+                }
+                List<List<FixtureTemplate>> ways = new ArrayList<>();
+                CompositionShortfall rest = CompositionShortfall.NONE;
+                for (int each = 0; each < keys.size(); each++) {
+                    NumericSet howMany = howManyOfEachKey.get(each);
+                    // A key asked to have no element is written with none.
+                    if (onlyCounted.get(each) && countsOfEachKey.get(each).stream()
+                            .allMatch(count -> {
+                                AskedAt wanted = demands.get(count);
+                                return wanted != null
+                                        && wanted.walking().holds(Count.of(0), Carrier.WHOLE)
+                                        && !wanted.walking().holds(Count.of(1), Carrier.WHOLE);
+                            })) {
+                        continue;
+                    }
+                    Realization one = underAKey(sourceType, keptApart,
+                            measuring.ordersOf(ofEachKey.get(each).term()),
+                            askedOfEachKey.get(each), within, reading, inside, howMany,
+                            keys.get(each));
+                    if (!(one instanceof Realization.Built built)) {
+                        return asked(one, keys, onlyCounted);
+                    }
+                    ways.add(built.values());
+                    rest = rest.and(built.rest());
+                }
+                int rows = ways.stream().mapToInt(List::size).max().orElse(0);
+                List<FixtureTemplate> together = new ArrayList<>();
+                for (int row = 0; row < rows; row++) {
+                    List<FixtureTemplate> parts = new ArrayList<>();
+                    for (List<FixtureTemplate> each : ways) {
+                        parts.add(each.get(row % each.size()));
+                    }
+                    FixtureTemplate joined = FixtureTemplate.concatenated(parts);
+                    if (joined == null) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                                "a container that is not a list written bare is not put together"
+                                        + " out of the elements of several keys");
+                    }
+                    together.add(joined);
+                }
+                return asked(new Realization.Built(together, rest.and(
+                        CompositionShortfall.writing(
+                                Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)))),
+                        keys, onlyCounted);
+            }
+
+            /**
+             * What came of the keys, said to be some of the ways they may be asked together
+             * where there is more than one key or one is only counted: the values they were
+             * placed at and the number a key only counted came to are a way to try, and a row not
+             * written is not a row there is none of.
+             */
+            private static Realization asked(Realization made, List<Place> keys,
+                                              List<Boolean> onlyCounted) {
+                return keys.size() > 1 || onlyCounted.contains(true)
+                        ? someOf(made, CompositionRepertoire.KEYS_OF_ONE_FOLD_ASKED_TOGETHER)
+                        : made;
+            }
+
+            /**
+             * What two parameters holding one key ask of its elements, as one asking: the one asked
+             * where they ask alike, or the point of the one that the other's set holds — and null
+             * where they ask what no one set of elements is chosen for.
+             */
+            private static AskedAt agreed(AskedAt one, AskedAt other, Carrier on) {
+                if (one == null || other == null) {
+                    return one == null ? other : one;
+                }
+                NumericSet asked = one.walking();
+                NumericSet alsoAsked = other.walking();
+                if (asked.equals(alsoAsked)) {
+                    return one;
+                }
+                if (on == null) {
+                    return null;
+                }
+                if (asked instanceof NumericSet.At point && alsoAsked.holds(point.value(), on)) {
+                    return one;
+                }
+                return alsoAsked instanceof NumericSet.At point && asked.holds(point.value(), on)
+                        ? other : null;
             }
         }
 
@@ -1387,7 +1710,7 @@ final class TermRealizations {
             return false;
         }
         return switch (builder) {
-            case JointBuilder.HoldingThatManyAndAddingUpToThat _ -> true;
+            case JointBuilder.TotalsOfOneContainer _ -> true;
             case JointBuilder.OneNumberOnItsOwn only -> switch (only.number().term()) {
                 case NumericTerm.TakenOver over ->
                         over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
@@ -1398,13 +1721,15 @@ final class TermRealizations {
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                     NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _ -> false;
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
+                     NumericTerm.GatheredUnderAKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
             case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _,
                  JointBuilder.ValuesAlikeAcrossContainers _,
-                 JointBuilder.ValuesEqualToAKeyAcrossContainers _ -> false;
+                 JointBuilder.ValuesEqualToAKeyAcrossContainers _,
+                 JointBuilder.UnderSeveralKeys _ -> false;
             case JointBuilder.StringsHoldingTheirNumbers _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
@@ -1604,7 +1929,9 @@ final class TermRealizations {
             // Written as the container of the elements, holding elements of one key that come to
             // the number ({@link RealizationTarget.UnderItsKey}).
             case NumericTerm.GatheredUnderItsKey _ -> underItsKey(sourceType, keptApart, orders,
-                    asked, within, reading, inside);
+                    asked, within, reading, inside, null);
+            case NumericTerm.GatheredUnderAKey _ -> underAKey(sourceType, keptApart, orders,
+                    asked, within, reading, inside, null, null);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(),
                     taken.transformation(), sourceType, keptApart, orders, asked, within,
                     reading, inside);
@@ -1770,13 +2097,27 @@ final class TermRealizations {
      */
     static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
                                        Function<Place, Realization> of) {
+        return firstThatBuilds(walkedTheWholeQuestion, tried.numbers(), tried.rest().shortfall(),
+                of);
+    }
+
+    /**
+     * The same, over whatever a value is built for: one number, or the numbers of several totals
+     * together ({@link Together}).
+     *
+     * @param handedOver what whatever handed the numbers over left, every reason of every walk
+     *                   that did: none where it handed over all there were
+     */
+    static <T> Realization firstThatBuilds(boolean walkedTheWholeQuestion, List<T> numbers,
+                                           CompositionShortfall handedOver,
+                                           Function<T, Realization> of) {
         // Everything every number that built nothing came to without, taken as one shortfall so
         // that no vocabulary of it is left behind here. The rules leaving no number at one of the
         // numbers handed over says nothing about the next: this walk is over the numbers, and that
         // one was a value's answer, whose shortfall is none.
         CompositionShortfall met = CompositionShortfall.NONE;
         Realization last = null;
-        for (Place number : tried.numbers()) {
+        for (T number : numbers) {
             Realization made = of.apply(number);
             if (made instanceof Realization.Built built) {
                 return built;
@@ -1787,13 +2128,7 @@ final class TermRealizations {
         // Why there were no more to try, said by whatever handed them over. Worked out here, this
         // would be the one place that knows what every account's numbers are and how it walks them,
         // which is what handing the reason over is for.
-        met = met.and(switch (tried.rest()) {
-            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
-            case Remainder.StoppedAt(CompositionBudget figure) ->
-                    CompositionShortfall.of(Set.of(figure));
-            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
-                    CompositionShortfall.writing(written);
-        });
+        met = met.and(handedOver);
         if (!met.figures().isEmpty()) {
             return new Realization.Stopped(met);
         }
@@ -1810,8 +2145,7 @@ final class TermRealizations {
         // same way and has seen one number of it, so the same emptiness said of the class would be
         // a sentence about every value the class holds. And nothing here says anything about what
         // could be built at a number this walked past: this is about the numbers, not the values.
-        if (tried.numbers().isEmpty() && tried.rest() instanceof Remainder.Exhausted
-                && walkedTheWholeQuestion) {
+        if (numbers.isEmpty() && handedOver.nothing() && walkedTheWholeQuestion) {
             return new Realization.NoNumberTheDeclarationsAdmit();
         }
         return last instanceof Realization.None none ? none
@@ -1907,23 +2241,124 @@ final class TermRealizations {
     private static Realization underItsKey(Type sourceType, List<List<String>> keptApart,
                                            TermOrders orders, AskedAt asked,
                                            SearchRegion within, RuleReadingContext reading,
-                                           DemandsInside inside) {
-        NumericTerm.GatheredUnderItsKey gathered = (NumericTerm.GatheredUnderItsKey) orders.term();
+                                           DemandsInside inside, NumericSet howMany) {
+        NumericTerm.GatheredUnderItsKey gathered =
+                orders.term() instanceof NumericTerm.GatheredUnderAKey ofAKey ? ofAKey.gathered()
+                        : (NumericTerm.GatheredUnderItsKey) orders.term();
         if (orders.answered() == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         // Some element, since a key is filed where one has it: a container of none comes to
-        // nought added up and files no key at all.
+        // nought added up and files no key at all. An end is one element, which is its own end
+        // by either; and how many elements the key has is asked of them as well where a count of
+        // them is asked beside the number.
+        boolean anEnd = gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End;
+        NumericSet some = anEnd ? new NumericSet.At(Count.of(1))
+                : new NumericSet.AwayFrom(List.of(Count.of(0)));
+        // An end is written as one element, which is a way of writing it and not what an end is: a
+        // count of its key's elements that has no one in it asks for an end this does not write,
+        // and is not a count no key has.
+        if (anEnd && howMany != null && !howMany.holds(Count.of(1), Carrier.WHOLE)) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                    CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT)),
+                    "an end of the elements of a key is written as one element, and the key is"
+                            + " asked to have more");
+        }
+        // A key filed in a map has some element, so whatever count of them is asked, one or more
+        // of the counts in it is the size.
         ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
-                gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End
-                        ? new NumericSet.At(Count.of(1))
-                        : new NumericSet.AwayFrom(List.of(Count.of(0))),
-                Carrier.WHOLE);
-        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                howMany == null || anEnd ? some : howMany, Carrier.WHOLE, 1);
+        Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
                         reading, elements, inside));
+        // And an end that is not written is not an end no row has: the container may be one its
+        // type makes hold more of the key's elements than one, which the end is among.
+        return anEnd ? someOf(made, CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT)
+                : made;
+    }
+
+    /**
+     * Containers of the elements whose key an input holds, each element written holding that key
+     * and the elements coming to one number of the set asked for, as {@link #underItsKey} writes
+     * them.
+     *
+     * <p>The key is the row's other parameter, fixed with the rest of the row before the container
+     * is composed, so the elements are written holding the one value the region leaves it at. A
+     * key the region leaves at more than one is not chosen here.
+     *
+     * <p>Where the key is a field the number is made of, the value is not written beside the
+     * share, which would be that position asked two things: the region the elements are chosen in
+     * is narrowed to the key instead. What is composed is then one key of the several the number
+     * is reached at, and is said to be some of them ({@link #someOfTheKeys}).
+     */
+    private static Realization underAKey(Type sourceType, List<List<String>> keptApart,
+                                         TermOrders orders, AskedAt asked, SearchRegion within,
+                                         RuleReadingContext reading, DemandsInside inside,
+                                         NumericSet howMany, Place keyHeld) {
+        NumericTerm.GatheredUnderAKey term = (NumericTerm.GatheredUnderAKey) orders.term();
+        NumericTerm.GatheredUnderItsKey gathered = term.gathered();
+        Place key = keyHeld != null ? keyHeld : within == null ? null
+                : CardinalityComposer.settled(within, new NumericTerm.ValueOf(term.asked()));
+        if (key == null) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(
+                    Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                    "`" + term.asked() + "` stands at no one value, so what is gathered for it is"
+                            + " not known");
+        }
+        Carrier keyedOn = orders.fieldCarrier(gathered.key());
+        if (keyedOn == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        TermPath keyAt = gathered.key().from(gathered.elements());
+        // The key at a field the number is made of is the number there: every element holds the
+        // key at it, so each contributes the same value and the elements come to that many of it.
+        // Asked of the region, that is the run the elements are chosen in narrowed to the key; asked
+        // as a value written beside the share, it would be that position asked two things.
+        if (term.keyIsWhatIsAdded()) {
+            Realization made = underItsKey(sourceType, keptApart, orders, asked,
+                    within.given(new NumericTerm.ValueOf(keyAt), key), reading, inside, howMany);
+            return someOfTheKeys(made);
+        }
+        List<FixtureTemplate> held = List.of(FixtureTemplate.on(keyedOn, key,
+                reading.source().symbols().scope()::reach));
+        Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
+        List<FixtureTemplate> had = among.put(keyAt, held);
+        if (had != null && !had.equals(held)) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(
+                    Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                    "`" + keyAt + "` is asked to hold another value than the key");
+        }
+        return underItsKey(sourceType, keptApart, orders, asked, within, reading,
+                new DemandsInside(among, inside.required()), howMany);
+    }
+
+    /**
+     * What came of composing for a key placed at the number, said as an offer of some of the keys
+     * there are: the key was one value of the several the number is reached at, so a row not
+     * written is not a row there is none of.
+     */
+    private static Realization someOfTheKeys(Realization made) {
+        return someOf(made, CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO);
+    }
+
+    /**
+     * {@code made} said to be an offer of some of a population {@code population} names and not
+     * all of it: the nothing it came to is a nothing this tried, and never that none exists.
+     */
+    private static Realization someOf(Realization made, CompositionRepertoire population) {
+        CompositionShortfall some = CompositionShortfall.writing(Set.of(population));
+        return switch (made) {
+            case Realization.Built built -> new Realization.Built(built.values(),
+                    built.rest().and(some));
+            case Realization.Stopped stopped -> new Realization.Stopped(stopped.met().and(some));
+            case Realization.Unexhausted unexhausted -> new Realization.Unexhausted(
+                    unexhausted.met().and(some), unexhausted.detail());
+            case Realization.None none -> new Realization.Unexhausted(some, none.detail());
+            case Realization.NoNumberTheDeclarationsAdmit nothing -> nothing;
+        };
     }
 
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
@@ -2060,6 +2495,55 @@ final class TermRealizations {
     }
 
     /**
+     * The numbers of several totals tried together: a number for each, and why there are no more
+     * choices of them.
+     *
+     * <p>Why there are no more is every reason of every walk that handed numbers over, and the
+     * reason the choices of them were cut where they were: a shortfall, which adds, and not a
+     * {@link Remainder}, which is one walk's single reason.
+     *
+     * @param each each choice of one number for every total, in the order the totals are asked
+     * @param rest why there are no more choices
+     */
+    record Together(List<List<Place>> each, CompositionShortfall rest) {
+
+        /**
+         * Every choice of one number for each of {@code candidates}, the first total's the slowest
+         * to move, up to the figure that bounds the choices.
+         */
+        static Together of(List<Tried> candidates) {
+            int most = CompositionBudget.COMBINATIONS_OF_TOTALS_TRIED.maximum();
+            CompositionShortfall left = CompositionShortfall.NONE;
+            for (Tried each : candidates) {
+                left = left.and(each.rest().shortfall());
+            }
+            List<List<Place>> out = new ArrayList<>();
+            if (candidates.stream().anyMatch(each -> each.numbers().isEmpty())) {
+                return new Together(out, left);
+            }
+            int[] at = new int[candidates.size()];
+            for (boolean more = true; more; ) {
+                if (out.size() == most) {
+                    return new Together(out, left.and(CompositionShortfall.of(
+                            Set.of(CompositionBudget.COMBINATIONS_OF_TOTALS_TRIED))));
+                }
+                List<Place> choice = new ArrayList<>();
+                for (int i = 0; i < at.length; i++) {
+                    choice.add(candidates.get(i).numbers().get(at[i]));
+                }
+                out.add(List.copyOf(choice));
+                int i = at.length - 1;
+                while (i >= 0 && ++at[i] == candidates.get(i).numbers().size()) {
+                    at[i] = 0;
+                    i--;
+                }
+                more = i >= 0;
+            }
+            return new Together(out, left);
+        }
+    }
+
+    /**
      * The numbers a search was handed, and why there are no others.
      *
      * <p>Both from whoever handed them over. A walk that filled what it was allowed and a walk that
@@ -2098,6 +2582,23 @@ final class TermRealizations {
      * standing on a guess.
      */
     sealed interface Remainder {
+
+        /**
+         * What this says to a reader as a shortfall: the one a walk met, or none where it went to
+         * the end.
+         *
+         * <p>The one place a remainder becomes a shortfall. A remainder is one walk's reason, and
+         * walks that hand over together add their shortfalls ({@link CompositionShortfall#and})
+         * rather than choose among their remainders.
+         */
+        default CompositionShortfall shortfall() {
+            return switch (this) {
+                case Exhausted _ -> CompositionShortfall.NONE;
+                case StoppedAt(CompositionBudget figure) -> CompositionShortfall.of(Set.of(figure));
+                case SomeOf(Set<CompositionRepertoire> written) ->
+                        CompositionShortfall.writing(written);
+            };
+        }
 
         /** There are no more: the numbers handed over are every one the set has in the window its
          *  account can be asked for. */
@@ -3020,7 +3521,7 @@ final class TermRealizations {
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _,
-                     NumericTerm.GatheredUnderItsKey _ ->
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->
                         throw new IllegalStateException(
                         term + " is no number a string is written for");
             };
@@ -3209,7 +3710,7 @@ final class TermRealizations {
         // search was allowed.
         CompositionShortfall met = CompositionShortfall.NONE;
         for (OfAString each : wanted) {
-            met = met.and(shortfallOf(each.tried().rest()));
+            met = met.and(each.tried().rest().shortfall());
         }
         if (pastWhatIsSearchedInFull || sumPastWhatIsWritten) {
             met = met.and(CompositionShortfall.of(
@@ -3224,17 +3725,6 @@ final class TermRealizations {
         }
         return new Realization.Unexhausted(met.nothing() ? CompositionShortfall.writing(Set.of(
                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)) : met, null);
-    }
-
-    /** What a walk over numbers that ended short of the set says it was stopped by. */
-    private static CompositionShortfall shortfallOf(Remainder rest) {
-        return switch (rest) {
-            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
-            case Remainder.StoppedAt(CompositionBudget figure) ->
-                    CompositionShortfall.of(Set.of(figure));
-            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
-                    CompositionShortfall.writing(written);
-        };
     }
 
     /**

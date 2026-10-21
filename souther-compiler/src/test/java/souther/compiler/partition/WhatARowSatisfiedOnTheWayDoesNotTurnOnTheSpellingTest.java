@@ -112,6 +112,10 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
                     + several.alternatives().stream()
                             .map(WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest::said)
                             .toList();
+            case OnTheWay.Counted counted -> "count " + counted.admitted() + " of "
+                    + counted.statements().stream()
+                            .map(one -> said(one.holding()) + "/" + said(one.failing()))
+                            .toList();
         }).toList().toString();
     }
 

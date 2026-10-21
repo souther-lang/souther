@@ -52,9 +52,11 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
      * element of {@code xs}. Where it fixes {@code cap} at nought the two cannot both hold: the
      * rules cap the list at none, and what is asked for is a list holding one.
      *
-     * <p>The fields beside them are what make the search wide enough to meet its bound. They relate
-     * to nothing here and are refused for nothing of their own, which is the point — the figure a
-     * reader would be sent to raise has nothing to do with why no row exists.
+     * <p>The fields beside them are what make the search wide enough to meet its bound, and six are
+     * the fewest that do: with five, a search left to it rejects every candidate before it meets
+     * any figure. They relate to nothing here and are refused for nothing of their own, which is
+     * the point — the figure a reader would be sent to raise has nothing to do with why no row
+     * exists.
      */
     private static final String CAPPED = """
             module example.placing
@@ -75,12 +77,6 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
                 , d: Awkward
                 , e: Awkward
                 , f: Awkward
-                , g: Awkward
-                , h: Awkward
-                , i: Awkward
-                , j: Awkward
-                , k: Awkward
-                , l: Awkward
                 }
                 invariant floor = cap >= 0
                 invariant capped = List.length(xs) <= cap

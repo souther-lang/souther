@@ -6,8 +6,10 @@ import souther.compiler.publish.DocumentPart;
 import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -153,18 +155,8 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
      * it moved from the call into a constant the call reads, and the set of them is closed by the
      * enum, so an array started this way cannot leave the population in silence either.
      */
-    private static Set<String> namesStartedThrough(String method) throws Exception {
-        Set<String> out = new LinkedHashSet<>();
-        if (!STARTING_BY_NAMING_A_PART.contains(method)) {
-            return out;
-        }
-        for (Compiled.Site each : compiled()) {
-            if (each.at().equals(method) && each.how() == Compiled.How.READS
-                    && each.owner().equals(NAMES_A_PART)) {
-                out.add(DocumentPart.valueOf(each.member()).key());
-            }
-        }
-        return out;
+    private static Set<String> namesStartedThrough(String method) {
+        return STARTED_THROUGH_A_PART.getOrDefault(method, Set.of());
     }
 
     /** The methods that start an array under {@code field}, read off the name written at the call
@@ -195,13 +187,8 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
      * is handed over as the arrangement: a writer that wants it in order says so where it writes.
      */
     private static boolean crossesIn(String method) {
-        for (Compiled.Site site : compiled()) {
-            // Called and not merely named. What is asked is that this method takes the sequence
-            // from a crossing; a method that hands `written` on as a reference has not taken one,
-            // and counting that would let a writer answer for a sequence it never asked for.
-            if (site.how() == Compiled.How.CALLS
-                    && CROSSINGS.contains(site.owner()) && site.member().equals("written")
-                    && (site.at().equals(method) || site.at().startsWith(method + "("))) {
+        for (String at : CROSSING_IN) {
+            if (at.equals(method) || at.startsWith(method + "(")) {
                 return true;
             }
         }
@@ -228,6 +215,35 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
                     && each.site().owner().equals(NAMES_A_PART))
             .map(each -> each.site().at())
             .collect(Collectors.toSet());
+
+    /** What each of those methods starts by naming a part, taken in the same way: one pass over
+     *  the sites, rather than one for every call that is asked about. */
+    private static final Map<String, Set<String>> STARTED_THROUGH_A_PART = startedThroughAPart();
+
+    private static Map<String, Set<String>> startedThroughAPart() {
+        Map<String, Set<String>> out = new HashMap<>();
+        for (Compiled.Site each : compiled()) {
+            if (each.how() == Compiled.How.READS && each.owner().equals(NAMES_A_PART)
+                    && STARTING_BY_NAMING_A_PART.contains(each.at())) {
+                out.computeIfAbsent(each.at(), _ -> new LinkedHashSet<>())
+                        .add(DocumentPart.valueOf(each.member()).key());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The methods that take a sequence from a crossing, as the sites name them.
+     *
+     * <p>Called and not merely named. What is asked is that a method takes the sequence from a
+     * crossing; a method that hands {@code written} on as a reference has not taken one, and
+     * counting that would let a writer answer for a sequence it never asked for.
+     */
+    private static final List<String> CROSSING_IN = compiled().stream()
+            .filter(site -> site.how() == Compiled.How.CALLS
+                    && CROSSINGS.contains(site.owner()) && site.member().equals("written"))
+            .map(Compiled.Site::at)
+            .toList();
 
     private interface Reading<T> {
         List<T> read() throws Exception;

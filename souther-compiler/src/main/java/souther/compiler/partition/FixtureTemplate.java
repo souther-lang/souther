@@ -253,6 +253,33 @@ public record FixtureTemplate(String text, Hir.Expr value) {
                         NO_SOURCE));
     }
 
+    /**
+     * The elements of several collections written one after another as one collection — or null
+     * where one of them is not a collection written bare, which a newtype around one is not.
+     *
+     * <p>The text of each is read as {@link #collection} wrote it, the elements between the
+     * brackets, so that what is joined is spelled as it was and the tree is the elements of each in
+     * order.
+     */
+    public static FixtureTemplate concatenated(List<FixtureTemplate> collections) {
+        List<Hir.Expr> values = new ArrayList<>();
+        List<String> written = new ArrayList<>();
+        for (FixtureTemplate each : collections) {
+            if (!(each.value() instanceof Hir.ListLit list) || !each.text().startsWith("[")
+                    || !each.text().endsWith("]")) {
+                return null;
+            }
+            values.addAll(list.elements());
+            String elements = each.text().substring(1, each.text().length() - 1);
+            if (!elements.isEmpty()) {
+                written.add(elements);
+            }
+        }
+        return new FixtureTemplate("[" + String.join(", ", written) + "]",
+                new Hir.ListLit(List.copyOf(values), SourceConstructOrigin.unwritten(), NOWHERE,
+                        NO_SOURCE));
+    }
+
     /** One entry of a map: the pair a fixture writes a key and its value as. */
     public static FixtureTemplate entry(FixtureTemplate key, FixtureTemplate value) {
         return new FixtureTemplate("(" + key.text() + ", " + value.text() + ")",

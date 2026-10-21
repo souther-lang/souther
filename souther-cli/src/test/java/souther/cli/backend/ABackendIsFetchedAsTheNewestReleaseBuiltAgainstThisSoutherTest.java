@@ -187,7 +187,8 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         }
         repository.metadata(WASM, versions.toArray(String[]::new));
         repository.jar(WASM, "0.3.0", "cli", jar("third", "wasm", HERE));
-        repository.slowPoms(300);
+        long pomWait = 100;
+        repository.slowPoms(pomWait);
 
         long started = System.nanoTime();
         BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
@@ -196,7 +197,7 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
 
         assertEquals("0.3.0", fetched.release().version());
         // Thirteen poms one at a time would be thirteen waits; two windows of them are two.
-        assertTrue(took.compareTo(Duration.ofMillis(300L * 13 / 2)) < 0, took.toString());
+        assertTrue(took.compareTo(Duration.ofMillis(pomWait * 13 / 2)) < 0, took.toString());
     }
 
     @Test
@@ -556,16 +557,17 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
                 "socks5://proxy:1080", Central.Failure.Misread.Scheme.class,
                 "http://alice:se/cret@proxy:8080", Central.Failure.Misread.NotAnAddress.class,
                 "http://", Central.Failure.Misread.NotAnAddress.class).entrySet()) {
-            Configured configured = Repository.configured(Map.of("HTTPS_PROXY", named.getKey()));
+            Configured configured = Repository.configured(Map.of("HTTPS_PROXY", named.getKey()),
+                    Map.of());
 
             assertInstanceOf(named.getValue(), assertInstanceOf(Configured.Unusable.class,
                     configured).why().why(), named.getKey());
         }
         assertInstanceOf(Repository.class,
-                Repository.configured(Map.of("HTTPS_PROXY", "proxy:3128")));
+                Repository.configured(Map.of("HTTPS_PROXY", "proxy:3128"), Map.of()));
         assertInstanceOf(Repository.class,
                 Repository.configured(Map.of("HTTPS_PROXY", "http://alice:secret@proxy:8080",
-                        "NO_PROXY", "repo.maven.apache.org")));
+                        "NO_PROXY", "repo.maven.apache.org"), Map.of()));
     }
 
     @Test

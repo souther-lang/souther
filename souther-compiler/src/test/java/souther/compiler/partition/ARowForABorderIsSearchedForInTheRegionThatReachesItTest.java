@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -9,6 +10,7 @@ import souther.compiler.query.ItemAssessment;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -463,14 +465,25 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
                 "a row is owed at " + point.label());
     }
 
-    /** The lines the behavior's positions met, whosever the row at each point is. */
+    /** The lines the behavior's positions met, whosever the row at each point is: what the
+     *  measure reads, which asks for what it reads. Each source measured once for the class. */
     private static List<BorderAssessment> lines(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        Map<String, List<BorderAssessment>> all =
-                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
-        assertNotNull(all, "the model under test compiles");
-        return all.get("checkout");
+        return LINES.computeIfAbsent(source, text -> {
+            Compilation compilation = Compilation.ofSource(text, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            Map<String, List<BorderAssessment>> all =
+                    Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+            assertNotNull(all, "the model under test compiles");
+            return all.get("checkout");
+        });
+    }
+
+    private static final Map<String, List<BorderAssessment>> LINES = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        LINES.clear();
     }
 }

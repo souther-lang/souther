@@ -582,9 +582,10 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                     %s
                 """).formatted(body.indent(4).strip());
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+        // The errors of what was asked, which is the body checked: a model that does not check
+        // has no body to read, whatever it says.
+        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");

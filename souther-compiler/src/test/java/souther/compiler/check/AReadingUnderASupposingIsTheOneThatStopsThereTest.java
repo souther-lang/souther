@@ -127,9 +127,12 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
         NAMES.forEach(each -> supposings.add(Set.of(declared(each))));
         Set<Cardinality> seen = new HashSet<>();
         for (Set<TypeSymbol> supposed : supposings) {
+            // What a declaration counts to where nothing is lent is the same in either order, so
+            // it is counted once and held against what each order lends.
+            Map<String, Cardinality> ownCounts = new LinkedHashMap<>();
+            Supposing notSharing = Supposing.of(supposed, new Supposing.Across(itsOwn));
             for (List<String> order : List.of(NAMES, backwards)) {
                 Supposing sharing = Supposing.of(supposed, new Supposing.Across(source));
-                Supposing notSharing = Supposing.of(supposed, new Supposing.Across(itsOwn));
                 for (String asked : order) {
                     TypeSymbol.AtModule named = declared(asked);
                     if (supposed.contains(named)) {
@@ -137,8 +140,9 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
                     }
                     Cardinality lent = CardinalityTransfer.upperOf(named, defs.get(asked),
                             shared, Answers.settled(unknown), sharing);
-                    Cardinality own = CardinalityTransfer.upperOf(named, defs.get(asked),
-                            alone, Answers.settled(unknown), notSharing);
+                    Cardinality own = ownCounts.computeIfAbsent(asked, _ ->
+                            CardinalityTransfer.upperOf(named, defs.get(asked), alone,
+                                    Answers.settled(unknown), notSharing));
                     assertEquals(String.valueOf(own), String.valueOf(lent),
                             () -> asked + " under " + supposed + " counts otherwise when its"
                                     + " reading is shared");
@@ -169,9 +173,13 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
         Collections.reverse(backwards);
         Set<String> told = new HashSet<>();
         int lentItsOwn = 0;
+        // A declaration's own reading, read through everything, is one whatever is supposed.
+        Map<String, DeclarationReading> itsOwn = new LinkedHashMap<>();
         for (String supposed : NAMES) {
             InvariantChecker.Reach stopsThere =
                     InvariantChecker.Reach.stoppingAt(Set.of(declared(supposed)));
+            // And one stopping at the supposed name says the same in either order.
+            Map<String, List<String>> stopping = new LinkedHashMap<>();
             for (List<String> order : List.of(NAMES, backwards)) {
                 Supposing supposing = Supposing.of(Set.of(declared(supposed)), across);
                 for (String asked : order) {
@@ -180,9 +188,9 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
                     }
                     TypeSymbol.AtModule named = declared(asked);
                     DeclarationReading lent = supposing.readingOf(named, reading);
-                    List<String> own = saidBy(InvariantChecker.readFields(
-                            named, reading, Map.of(), stopsThere), named, reading, stopsThere,
-                            source);
+                    List<String> own = stopping.computeIfAbsent(asked, _ -> saidBy(
+                            InvariantChecker.readFields(named, reading, Map.of(), stopsThere),
+                            named, reading, stopsThere, source));
                     List<String> handed = saidBy(lent, named, reading, supposing.reach(), source);
                     assertEquals(own.size(), handed.size(), "the same questions were asked");
                     for (int each = 0; each < own.size(); each++) {
@@ -192,8 +200,8 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
                                 + " else");
                     }
                     told.addAll(own);
-                    if (lent == InvariantChecker.readFields(named, reading, Map.of(),
-                            InvariantChecker.Reach.EVERYTHING)) {
+                    if (lent == itsOwn.computeIfAbsent(asked, _ -> InvariantChecker.readFields(
+                            named, reading, Map.of(), InvariantChecker.Reach.EVERYTHING))) {
                         lentItsOwn++;
                     }
                 }

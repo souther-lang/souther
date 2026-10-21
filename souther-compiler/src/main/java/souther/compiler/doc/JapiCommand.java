@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
@@ -68,6 +69,17 @@ public final class JapiCommand {
     }
 
     /**
+     * The same run, for a caller that is not this process: {@code defaultClassPath} is the class
+     * path to fall back on where the line names none, and {@code located} is the file each entry of
+     * either names, so a relative entry is read from wherever the caller was run.
+     */
+    public static int run(String[] args, PrintStream out, PrintStream err, String defaultClassPath,
+                          Function<String, Path> located) {
+        return run(args, out, err, defaultClassPath, located, Disk.OPEN,
+                WorkBudget.of(BoundedRead.MOST_ENTRIES_PER_REQUEST), SourceDocs.NONE);
+    }
+
+    /**
      * The same run, reading only what is under {@code root}: an entry outside it, or a link met on
      * the way to a file, is refused rather than followed. For a caller whose class path is not its
      * own to choose.
@@ -78,7 +90,7 @@ public final class JapiCommand {
 
     /** The same confined run, answering what a source says from {@code sources} where it can. */
     static int runConfined(String[] args, PrintStream out, PrintStream err, Path root, SourceDocs sources) {
-        return run(args, out, err, System.getProperty("java.class.path", ""),
+        return run(args, out, err, System.getProperty("java.class.path", ""), Path::of,
                 new Disk(ConfinedTree.at(root)), WorkBudget.of(BoundedRead.MOST_ENTRIES_PER_REQUEST), sources);
     }
 
@@ -135,23 +147,24 @@ public final class JapiCommand {
 
     /** The same run, over the class path to fall back on when the caller names none. */
     static int run(String[] args, PrintStream out, PrintStream err, String defaultClassPath) {
-        return run(args, out, err, defaultClassPath, Disk.OPEN, WorkBudget.of(BoundedRead.MOST_ENTRIES_PER_REQUEST),
-                SourceDocs.NONE);
+        return run(args, out, err, defaultClassPath, Path::of);
     }
 
     /** The same confined run, with {@code mostEntries} as everything one request may look at. */
     static int runConfined(String[] args, PrintStream out, PrintStream err, Path root, long mostEntries) {
-        return run(args, out, err, System.getProperty("java.class.path", ""),
+        return run(args, out, err, System.getProperty("java.class.path", ""), Path::of,
                 new Disk(ConfinedTree.at(root)), WorkBudget.of(mostEntries), SourceDocs.NONE);
     }
 
     /**
      * The same run, reading what the caller names through {@code disk}, and looking at no more than
      * {@code work} allows in all. The class path to fall back on is this command's own and is read
-     * from wherever it is. What a source says is asked of {@code sources}.
+     * from wherever it is. Each class path entry is the file {@code located} makes of it. What a
+     * source says is asked of {@code sources}.
      */
     private static int run(String[] args, PrintStream out, PrintStream err, String defaultClassPath,
-                           Disk disk, WorkBudget work, SourceDocs sources) {
+                           Function<String, Path> located, Disk disk, WorkBudget work,
+                           SourceDocs sources) {
         String name = null;
         List<Entry> entries = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
@@ -162,7 +175,7 @@ public final class JapiCommand {
                         return 2;
                     }
                     for (String p : args[++i].split(java.io.File.pathSeparator)) {
-                        entries.add(new Entry(Path.of(p), true, disk, work));
+                        entries.add(new Entry(located.apply(p), true, disk, work));
                     }
                 }
                 default -> name = args[i];
@@ -175,7 +188,7 @@ public final class JapiCommand {
         if (entries.isEmpty()) {
             for (String p : defaultClassPath.split(java.io.File.pathSeparator)) {
                 if (!p.isEmpty()) {
-                    entries.add(new Entry(Path.of(p), false, Disk.OPEN, work));
+                    entries.add(new Entry(located.apply(p), false, Disk.OPEN, work));
                 }
             }
         }

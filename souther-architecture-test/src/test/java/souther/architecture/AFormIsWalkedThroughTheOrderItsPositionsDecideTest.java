@@ -2,16 +2,12 @@ package souther.architecture;
 
 import org.junit.jupiter.api.Test;
 
-import java.lang.classfile.ClassModel;
-import java.lang.classfile.MethodModel;
-import java.lang.classfile.instruction.InvokeInstruction;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -49,16 +45,6 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
 
     private static final String THE_FORM = "souther/compiler/numeric/CanonicalForm";
 
-    /** What a mapping is asked, which says nothing about what order it holds. */
-    private static final Set<String> ASKED_NOT_WALKED =
-            Set.of("get", "getOrDefault", "containsKey", "containsValue", "size", "isEmpty",
-                    "equals", "hashCode", "toString", "copyOf", "of");
-
-    /** What takes the positions out in the order the mapping happens to hold them. */
-    private static final Set<String> WALKS_IT =
-            Set.of("keySet", "entrySet", "values", "forEach", "iterator", "stream",
-                    "sequencedKeySet", "sequencedEntrySet", "sequencedValues");
-
     /**
      * Every reader that walks a form's coefficients into something whose answer sees the order, and
      * what was found when it was read.
@@ -80,6 +66,13 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
     private static final CompiledOutputs AND_WHAT_IS_COMPILED_BESIDE_IT =
             CompiledOutputs.ofEverythingCompiledHere();
 
+    /**
+     * Every reader the rule finds is one still to move, and every one still to move is found.
+     *
+     * <p>Equal and not contained, which is also what says the rule was asked of classes that read a
+     * form: the list above is not empty, so a walk that read no reader of a form would find none
+     * and fail here rather than pass while answering about nothing.
+     */
     @Test
     void everyReaderThatWalksAFormsPositionsIsOneOfTheOnesStillToMove() {
         assertEquals(READ_AND_SETTLED.keySet().stream().sorted().toList(), whoWalksAForm(COMPILED),
@@ -87,28 +80,6 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
                         + " order in its answer that the form cannot see — it asks the atom domain"
                         + " for one (CanonicalForm#entriesIn), or it is named above with why the"
                         + " order cannot reach what it answers");
-    }
-
-    /**
-     * And the rule was asked of classes that were read.
-     *
-     * <p>A walk finding no class that mentions a form would find no reader walking one, and would
-     * pass while answering about nothing.
-     */
-    @Test
-    void andTheClassesThatReadAFormWereRead() {
-        List<String> mentioning = new ArrayList<>();
-        for (ClassModel read : COMPILED.all()) {
-            if (read.methods().stream().anyMatch(each -> asks(each, ASKED_NOT_WALKED)
-                    || asks(each, WALKS_IT))) {
-                mentioning.add(read.thisClass().name().stringValue());
-            }
-        }
-
-        assertFalse(mentioning.isEmpty(),
-                "nothing here reads a form's coefficients at all, which is not what this"
-                        + " repository holds");
-        assertTrue(COMPILED.all().size() > 1, "the classes this rule is about were not built here");
     }
 
     /**
@@ -200,14 +171,5 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
             }
         }
         return walking.stream().sorted().distinct().toList();
-    }
-
-    /** Whether this method calls one of {@code names} on something that is a mapping or a set. */
-    private static boolean asks(MethodModel method, Set<String> names) {
-        return method.code().stream().flatMap(code -> code.elementStream())
-                .anyMatch(element -> element instanceof InvokeInstruction call
-                        && (call.owner().asInternalName().equals("java/util/Map")
-                                || call.owner().asInternalName().equals("java/util/Set"))
-                        && names.contains(call.name().stringValue()));
     }
 }

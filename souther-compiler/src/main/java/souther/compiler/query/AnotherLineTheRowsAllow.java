@@ -1048,6 +1048,11 @@ public sealed interface AnotherLineTheRowsAllow {
                     case OnTheWay.OneOf _ -> {
                         return false;
                     }
+                    // How many of some statements hold, which statements the row met being as
+                    // little followed through a step as which way it took.
+                    case OnTheWay.Counted _ -> {
+                        return false;
+                    }
                     // Settled for every row: past it whatever a step moves, or past it for none.
                     case OnTheWay.Settled settled -> {
                         if (!settled.thisWay()) {

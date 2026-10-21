@@ -2,8 +2,12 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Severity;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -94,7 +98,31 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
             """;
 
     private static Compiler.Compiled compiled(String body) {
-        return Compiler.compileWithWarnings(TYPES + "\n" + body);
+        return checked(TYPES + "\n" + body);
+    }
+
+    /**
+     * What the invariant check says of {@code source}: its warnings, or the error it or anything it
+     * reads refuses the source with.
+     *
+     * <p>The check is what is asked, over the bodies it reads, and not the classes or the other
+     * warnings of the module: what every test here reads is whether the check owed a rule or
+     * refused a value.
+     */
+    private static Compiler.Compiled checked(String source) {
+        Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
+        CompileException structural = compilation.structuralFailure();
+        if (structural != null) {
+            throw structural;
+        }
+        for (String module : compilation.modules()) {
+            compilation.db().ask(new Bodies.InvariantWarnings(module));
+        }
+        CompileException failure = compilation.failure();
+        if (failure != null) {
+            throw failure;
+        }
+        return new Compiler.Compiled(Map.of(), compilation.warnings());
     }
 
     private static boolean owed(Compiler.Compiled c) {
@@ -332,7 +360,7 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
      */
     @Test
     void aRecordsOwnInvariantBoundsTheFieldAWalkReads() {
-        assertFalse(owed(Compiler.compileWithWarnings("""
+        assertFalse(owed(checked("""
                 module demo
 
                 data Money = Int
@@ -361,7 +389,7 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
      */
     @Test
     void aProductInsideTheStepIsReadUnderTheInductionHypothesis() {
-        assertFalse(owed(Compiler.compileWithWarnings("""
+        assertFalse(owed(checked("""
                 module demo
 
                 data Positive = Int
@@ -389,7 +417,7 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
     @Test
     void aProductInsideTheStepSeededBelowTheClauseIsRefused() {
         CompileException refused = assertThrows(CompileException.class, () ->
-                Compiler.compileWithWarnings("""
+                checked("""
                         module demo
 
                         data Positive = Int

@@ -122,12 +122,21 @@ final class AnswerShape {
 
     /** Whether {@code type} says what it is, rather than which object it is. */
     static boolean declaresEquals(Class<?> type) {
-        try {
-            return type.getMethod("equals", Object.class).getDeclaringClass() != Object.class;
-        } catch (NoSuchMethodException none) {
-            return false;
-        }
+        return DECLARES_EQUALS.get(type);
     }
+
+    /** What {@link #declaresEquals} says of each class, asked once a class: a walk of one store
+     *  meets the same few classes at every one of the objects it opens. */
+    private static final ClassValue<Boolean> DECLARES_EQUALS = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            try {
+                return type.getMethod("equals", Object.class).getDeclaringClass() != Object.class;
+            } catch (NoSuchMethodException none) {
+                return false;
+            }
+        }
+    };
 
     /**
      * What a thing of this type holds, by the fields it and everything it extends declare.
@@ -140,6 +149,18 @@ final class AnswerShape {
      * without what is primitive, which the language already says the meaning of.
      */
     static List<Field> fieldsOf(Class<?> type) {
+        return FIELDS.get(type);
+    }
+
+    /** What {@link #fieldsOf} says of each class, read once a class for the same reason. */
+    private static final ClassValue<List<Field>> FIELDS = new ClassValue<>() {
+        @Override
+        protected List<Field> computeValue(Class<?> type) {
+            return fieldsDeclaredUnder(type);
+        }
+    };
+
+    private static List<Field> fieldsDeclaredUnder(Class<?> type) {
         List<Field> out = new ArrayList<>();
         for (Class<?> at = type; at != null && at != Object.class; at = at.getSuperclass()) {
             for (Field field : at.getDeclaredFields()) {

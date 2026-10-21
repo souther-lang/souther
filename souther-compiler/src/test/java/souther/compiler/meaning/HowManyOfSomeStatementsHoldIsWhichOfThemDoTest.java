@@ -10,6 +10,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * How many of some statements hold, held against a number, is which of them hold: a choice for each
- * that puts the number where the comparison does — written out where the choices are few enough to
- * be a part of what a step states, and otherwise held as the statements and the counts admitted.
+ * that puts the number where the comparison does — written out where the choices are no more than
+ * the statements, and otherwise held as the statements and the counts admitted.
  *
  * <p>What a closure states of each value a container was written with is one statement per value,
  * and {@code List.filter(x -> x > 0, [a, a])} holds two of one statement. So two of them is that
@@ -45,19 +46,21 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         assertEquals(new Proposition.Always(false), howMany(List.of(P, P), Rel.EQ, 1));
     }
 
+    /** One of two is held as the count, and its choices are either of them and not both. */
     @Test
     void oneOfTwoIsEitherOfThemAndNotBoth() {
-        assertEquals(Proposition.any(List.of(
+        assertEquals(new CountsWrittenOut.Written(Proposition.any(List.of(
                         Proposition.all(List.of(P, Q.denied())),
-                        Proposition.all(List.of(P.denied(), Q)))),
-                howMany(List.of(P, Q), Rel.EQ, 1));
+                        Proposition.all(List.of(P.denied(), Q))))),
+                CountsWrittenOut.of(howMany(List.of(P, Q), Rel.EQ, 1)));
     }
 
     /** At least one holding is one of them holding, whatever the other does: a fewest set that
      *  comes to the number, and nothing said of the rest. */
     @Test
     void atLeastOneOfTwoIsEitherOfThem() {
-        assertEquals(Proposition.any(List.of(P, Q)), howMany(List.of(P, Q), Rel.GE, 1));
+        assertEquals(new CountsWrittenOut.Written(Proposition.any(List.of(P, Q))),
+                CountsWrittenOut.of(howMany(List.of(P, Q), Rel.GE, 1)));
     }
 
     /** At most one holding is the denial of both holding: one of them failing, whatever the other
@@ -82,14 +85,14 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
     }
 
     /**
-     * Exactly one of many is one choice for each of them, and not one for each way they could all
-     * come out: written out, as long as the choices come to no more parts than a step is concluded
-     * with.
+     * Exactly one of many is held as the count, and its choices are one for each of them and not
+     * one for each way they could all come out, for a reader that is handed them.
      */
     @Test
     void exactlyOneOfManyIsOneChoiceForEach() {
         List<Proposition> each = distinct(18);
-        assertEquals(exactlyOneOf(each), howMany(each, Rel.EQ, 1));
+        assertEquals(new CountsWrittenOut.Written(exactlyOneOf(each)),
+                CountsWrittenOut.of(howMany(each, Rel.EQ, 1)));
     }
 
     /**
@@ -256,6 +259,123 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         }
 
         assertEquals(new Proposition.Always(false), howMany(twice, Rel.EQ, 39));
+    }
+
+    /**
+     * A count is held as the count whenever it is one, and not by how many choices it would be
+     * written out as: neither how many a reading takes in nor how many parts a step concludes with
+     * is part of what it states. Only a relation that comes to one choice or none is not a count,
+     * and is the statement itself or no row.
+     */
+    @Test
+    void aCountIsHeldAsTheCountWhateverHowManyChoicesItWouldBeWrittenOutAs() {
+        int[][] counts = {{2, 1}, {3, 1}, {4, 2}, {5, 4}, {8, 4}, {10, 5}, {11, 5}, {13, 6}};
+
+        for (int[] nk : counts) {
+            assertInstanceOf(Proposition.SoManyHold.class,
+                    howMany(distinct(nk[0]), Rel.EQ, nk[1]), () -> nk[1] + " of " + nk[0]);
+        }
+        for (int[] nk : new int[][] {{3, 3}, {3, 0}}) {
+            assertTrue(!(howMany(distinct(nk[0]), Rel.EQ, nk[1]) instanceof Proposition.SoManyHold),
+                    () -> nk[1] + " of " + nk[0] + " is one choice");
+        }
+    }
+
+    /**
+     * Held as the count or written out, it states the same for every way its statements come out,
+     * and its denial states the opposite: the number that hold, weighed by how often each was
+     * written, stands to the number as the comparison says.
+     */
+    @Test
+    void heldOrWrittenOutItStatesTheSameCountAndItsDenialTheOpposite() {
+        for (int statements = 1; statements <= 6; statements++) {
+            List<Proposition> each = new ArrayList<>(distinct(statements));
+            // The first statement written twice, so a statement weighs more than one.
+            each.add(each.getFirst());
+            for (Rel rel : List.of(Rel.EQ, Rel.GE)) {
+                for (int against = 0; against <= each.size(); against++) {
+                    Proposition stated = howMany(each, rel, against);
+                    Proposition denied = Proposition.compared(relation(each, rel, against), false);
+                    for (int ways = 0; ways < (1 << each.size()); ways++) {
+                        Set<String> holding = holdingIn(each, ways);
+                        int count = (int) each.stream()
+                                .filter(one -> holds(one, holding)).count();
+                        boolean expected = rel.holds(Integer.compare(count, against));
+                        int of = statements;
+                        int at = against;
+                        assertEquals(expected, holds(stated, holding),
+                                () -> rel + " " + at + " of " + of + " statements, ways " + holding);
+                        assertEquals(!expected, holds(denied, holding),
+                                () -> "not " + rel + " " + at + " of " + of + " statements, ways "
+                                        + holding);
+                    }
+                }
+            }
+        }
+    }
+
+    /** The positions of {@code each} that are true when {@code ways} says so, bit by bit. */
+    private static Set<String> holdingIn(List<Proposition> each, int ways) {
+        Set<String> out = new HashSet<>();
+        List<Proposition> once = each.stream().distinct().toList();
+        for (int at = 0; at < once.size(); at++) {
+            if (((ways >> at) & 1) == 1) {
+                out.add(((Proposition.Truth) once.get(at)).of().toString());
+            }
+        }
+        return out;
+    }
+
+    /** Whether {@code stated} holds where the truths named in {@code holding} are true. */
+    private static boolean holds(Proposition stated, Set<String> holding) {
+        return switch (stated) {
+            case Proposition.Always always -> always.holds();
+            case Proposition.Truth truth -> holding.contains(truth.of().toString()) == truth.holds();
+            case Proposition.All all -> all.parts().stream().allMatch(part -> holds(part, holding));
+            case Proposition.Any any -> any.parts().stream().anyMatch(part -> holds(part, holding));
+            case Proposition.SoManyHold counted -> {
+                int count = 0;
+                for (int at = 0; at < counted.statements().size(); at++) {
+                    if (holds(counted.statements().get(at), holding)) {
+                        count += counted.weights().get(at);
+                    }
+                }
+                yield counted.admitted().contains(count);
+            }
+            default -> throw new AssertionError("a statement of truths: " + stated);
+        };
+    }
+
+    /**
+     * A count made over other statements takes out what they say of themselves: one that always
+     * holds adds its weight to every count, one that never does adds none, and two written alike
+     * are one weighed twice. What is left is the count again, or what it comes to for every row.
+     */
+    @Test
+    void aCountOverSettledAndRepeatedStatementsIsTheCountOfWhatIsLeft() {
+        List<Proposition> each = distinct(4);
+
+        assertEquals(Proposition.SoManyHold.counting(each, List.of(1, 1, 1, 1), List.of(1)),
+                Proposition.SoManyHold.counting(
+                        List.of(each.get(0), each.get(1), each.get(2), each.get(3),
+                                new Proposition.Always(true)),
+                        List.of(1, 1, 1, 1, 2), List.of(3)));
+        assertEquals(Proposition.SoManyHold.counting(each, List.of(1, 1, 1, 1), List.of(2)),
+                Proposition.SoManyHold.counting(
+                        List.of(each.get(0), each.get(1), each.get(2), each.get(3),
+                                new Proposition.Always(false)),
+                        List.of(1, 1, 1, 1, 2), List.of(2)));
+        assertEquals(Proposition.SoManyHold.counting(List.of(each.get(0), each.get(1)),
+                        List.of(2, 1), List.of(1, 2)),
+                Proposition.SoManyHold.counting(
+                        List.of(each.get(0), each.get(0), each.get(1)), List.of(1, 1, 1),
+                        List.of(1, 2)));
+        assertEquals(new Proposition.Always(true),
+                Proposition.SoManyHold.counting(each, List.of(1, 1, 1, 1), List.of(0, 1, 2, 3, 4)));
+        assertEquals(new Proposition.Always(false),
+                Proposition.SoManyHold.counting(each, List.of(1, 1, 1, 1), List.of(5)));
+        assertEquals(new Proposition.Always(true), Proposition.SoManyHold.counting(
+                List.of(new Proposition.Always(true)), List.of(1), List.of(1)));
     }
 
     /** {@code count} statements, each about a position of its own. */

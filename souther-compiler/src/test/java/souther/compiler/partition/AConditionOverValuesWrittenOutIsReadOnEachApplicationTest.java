@@ -270,9 +270,10 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 let f (w) = if %s then 1 else 0
                 """.formatted(condition);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+        // The errors of what was asked, which is the body checked: a model that does not check
+        // has no fork to read, whatever its condition says.
+        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");

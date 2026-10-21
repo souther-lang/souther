@@ -454,7 +454,10 @@ final class ReadQuantities implements Quantities {
                     onTheWay(computed.computation().reads(), computed.elements()),
                     ruleReading.source().symbols(), ruleReading.source().declarations());
         }
-        if (term instanceof NumericTerm.GatheredUnderItsKey gathered) {
+        NumericTerm.GatheredUnderItsKey gathered = term instanceof NumericTerm.GatheredUnderAKey asked
+                ? asked.gathered()
+                : term instanceof NumericTerm.GatheredUnderItsKey own ? own : null;
+        if (gathered != null) {
             // As a computed run is: what a key's numbers come to stands as what each of them
             // does, and the key and the fields each number reads are read on their own types.
             Map<ElementProjection, Type> fieldTypes = new LinkedHashMap<>();
@@ -2446,6 +2449,9 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.GatheredUnderItsKey gathered ->
                     gathered.valuesTakenFrom() instanceof NumericTerm.ValueOf each
                             ? ownOf(each) : null;
+            // Of the elements of one key, which are some of the run's: where they are bounded.
+            case NumericTerm.GatheredUnderAKey asked ->
+                    whereItsValuesAre(asked.gathered());
         };
     }
 

@@ -240,6 +240,14 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
         return compilation;
     }
 
+    /** Compiled and run and not measured, for a question about what its rows answer: a row that
+     *  does not hold is refused by running it, and nothing the measurement finds is read. */
+    private static Compilation unmeasured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return compilation;
+    }
+
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
@@ -324,6 +332,6 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
     @Test
     void theSameRowsAnsweredAsAnotherRuleAreRefused() {
         COMPOSED.forEach((model, composed) -> assertFalse(
-                errors(measured(withRows(model, composed, false))).isEmpty(), model));
+                errors(unmeasured(withRows(model, composed, false))).isEmpty(), model));
     }
 }

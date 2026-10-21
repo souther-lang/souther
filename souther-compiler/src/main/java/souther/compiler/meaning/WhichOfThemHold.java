@@ -36,6 +36,9 @@ import java.util.function.Predicate;
  */
 final class WhichOfThemHold {
 
+    /** How many choices a relation comes to before it is a count: a count of one is no count. */
+    private static final long ONE_CHOICE = 1;
+
     /** Each statement once, in the order first written. */
     private final List<Proposition> statements;
 
@@ -91,16 +94,24 @@ final class WhichOfThemHold {
 
 
     /**
-     * What the relation states: its choices written out, where they are no more than how many
-     * readings one condition makes ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}) and
-     * written out come to no more parts than a step is concluded with — and otherwise the
-     * statements and the counts it admits, held as they are ({@link Proposition.SoManyHold}).
+     * What the relation states: the one choice it comes to, where it comes to no more than one
+     * (or to none, which no row is) — and otherwise the statements and the counts it admits, held
+     * as they are ({@link Proposition.SoManyHold}).
+     *
+     * <p>The count is what is stated and the choices are one way of writing it, so a count is held
+     * whenever it is a count. With one choice nothing is chosen, and the choice is the same
+     * statement said again. Exactly one of {@code n} is {@code n} choices of {@code n} statements
+     * and exactly four of eight is seventy: how many of them there are is no part of what is
+     * stated, and a reader that reads a count does not take it apart. One that reads only
+     * conjunctions and disjunctions is handed the choices ({@link CountsWrittenOut}).
      *
      * <p>One relation is stated one way, whichever reader made it: which way turns on the
      * statements and the counts alone, and on no figure a reader has in hand.
      */
     Proposition stated() {
-        Written within = written(CompositionBudget.READINGS_OF_ONE_CONDITION,
+        Written within = written(ONE_CHOICE,
+                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.maximum(),
+                CompositionBudget.READINGS_OF_ONE_CONDITION,
                 CompositionBudget.PARTS_A_DERIVATION_CONCLUDES);
         if (within.choices() != null) {
             return within.choices();
@@ -146,8 +157,13 @@ final class WhichOfThemHold {
      * its denial are in many choices, and are counted the first time and known after.
      */
     Written written(CompositionBudget choicesFigure, CompositionBudget partsFigure) {
-        long mostChoices = choicesFigure.maximum();
-        long mostParts = partsFigure.maximum();
+        return written(choicesFigure.maximum(), partsFigure.maximum(), choicesFigure, partsFigure);
+    }
+
+    /** The same, held to {@code mostChoices} and {@code mostParts}, which {@code choicesFigure}
+     *  and {@code partsFigure} are named for where the choices are past one of them. */
+    private Written written(long mostChoices, long mostParts, CompositionBudget choicesFigure,
+                            CompositionBudget partsFigure) {
         // One counting for every choice: the statements are the same in each, and each, and each
         // denial of one, is counted once and then known.
         Conclusion counting = Conclusion.countingTo(partsFigure);

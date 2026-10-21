@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
@@ -19,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BinaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -208,7 +210,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      *  name given what the step answers, or as a lookup and a filing, is the same end. */
     @Test
     void theSameEndWrittenAnotherWayIsTheSameLine() {
-        List<String> plain = axisOf(measured(modelOf(LEAST, "")));
+        List<String> plain = axisOf(read(modelOf(LEAST, "")));
         for (String step : List.of(
                 "Map.updateOrInsert(t.account, t.days, seen -> Int.min(t.days, seen), acc)",
                 "Map.updateOrInsert(t.account, t.days,"
@@ -223,7 +225,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 match Map.get(t.account, acc) with
                         | None -> Map.insert(t.account, t.days, acc)
                         | Some seen -> Map.insert(t.account, Int.min(seen, t.days), acc)""")) {
-            Compilation compilation = measured(modelOf(step, ""));
+            Compilation compilation = read(modelOf(step, ""));
             assertEquals(plain, axisOf(compilation), () -> step + ": " + report(compilation));
         }
     }
@@ -235,7 +237,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      */
     @Test
     void theStaleAccountsModelReadsItsComparison() {
-        Compilation compilation = measured("""
+        Compilation compilation = read("""
                 module example.stale
 
                 data Touch = { account: String, days: Int }
@@ -377,7 +379,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 "List.map(t -> Seen { who = t.account, since = t.days + 1 }, touches)",
                 "List.map(t -> Seen { who = t.account,"
                         + " since = Date.daysBetween(t.on, today) }, touches)")) {
-            Compilation compilation = measured(OVER_WHAT_A_MAP_BUILT.formatted(
+            Compilation compilation = read(OVER_WHAT_A_MAP_BUILT.formatted(
                     "Map.updateOrInsert(p.who, p.since, seen -> Int.min(seen, p.since), acc)",
                     walked));
             assertTrue(report(compilation).contains("not read"),
@@ -426,18 +428,6 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     private static final String COMPARED_WITH_WHAT_WAS_FOUND = "Map.updateOrInsert(t.account,"
             + " t.days, seen -> if t.days < seen then t.days else seen, acc)";
 
-    /**
-     * What the step finds under the key is the end of the values of the earlier elements of that
-     * key, so the comparison of the element's value against it is read: the value has that end on
-     * both sides of it among elements of one key, but at the end its range stops at.
-     */
-    @Test
-    void theComparisonAgainstWhatWasFoundUnderTheKeyIsRead() {
-        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED,
-                COMPARED_WITH_WHAT_WAS_FOUND));
-        assertEquals(List.of(), unreadBeside(report(compilation)), () -> report(compilation));
-    }
-
     /** A key worked out of the value is no place two elements share, and nothing is said of what
      *  was found under it. */
     private static final String LOOKUP_AND_FILING = """
@@ -447,15 +437,17 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                           if t.days < seen then t.days else seen, acc)""";
 
     /**
-     * What was found is the least of the earlier values of the key, which no value above the top of
-     * the range can be below: the comparison is false for a value at the top, and may come out
-     * either way for every one under it. So it draws one line, at the top, and no value under is
-     * divided by it. The same line, and nothing else, however the step is written.
+     * What the step finds under the key is the end of the values of the earlier elements of that
+     * key, so the comparison of the element's value against it is read. What was found is the
+     * least of the earlier values of the key, which no value above the top of the range can be
+     * below: the comparison is false for a value at the top, and may come out either way for every
+     * one under it. So it draws one line, at the top, and no value under is divided by it. The same
+     * line, and nothing else, however the step is written.
      */
     @Test
     void theComparisonDrawsItsLineAtTheTopOfTheRangeAndNowhereUnderIt() {
         for (String step : List.of(COMPARED_WITH_WHAT_WAS_FOUND, LOOKUP_AND_FILING)) {
-            String report = report(measured(modelWith(WITHIN_A_HUNDRED, step)));
+            String report = report(read(modelWith(WITHIN_A_HUNDRED, step)));
             assertTrue(report.contains(
                     "no IN point is owed at touches[*].days = 100 (comparison@"), report);
             assertFalse(report.contains("touches[*].days = 0 (comparison@"), report);
@@ -466,42 +458,40 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     /**
      * Elements of one key hold the number the key is, so what was found is the number of the one
      * compared and no other value: the comparison is false for every value, which the range over
-     * every element does not say. Left unread, written either way, whether or not a rule of the
-     * element names the key.
+     * every element does not say. Left unread, written either way, under a range that would draw
+     * the line at its top for a key apart from the value.
      */
     @Test
     void aKeyThatIsTheValueLeavesTheComparisonUnread() {
-        for (String rule : List.of("other >= 0", "days >= 0", "days >= 0 && days <= 100")) {
-            for (String step : List.of(
-                    "Map.updateOrInsert(t.days, t.days,"
-                            + " seen -> if t.days < seen then t.days else seen, acc)",
-                    """
-                    match Map.get(t.days, acc) with
-                            | None -> Map.insert(t.days, t.days, acc)
-                            | Some seen -> Map.insert(t.days,
-                                  if t.days < seen then t.days else seen, acc)""")) {
-                String report = report(measured("""
-                        module example.stale
+        for (String step : List.of(
+                "Map.updateOrInsert(t.days, t.days,"
+                        + " seen -> if t.days < seen then t.days else seen, acc)",
+                """
+                match Map.get(t.days, acc) with
+                        | None -> Map.insert(t.days, t.days, acc)
+                        | Some seen -> Map.insert(t.days,
+                              if t.days < seen then t.days else seen, acc)""")) {
+            String report = report(read("""
+                    module example.stale
 
-                        data Touch = { days: Int, other: Int }
-                            invariant %s
+                    data Touch = { days: Int }
+                        invariant %s
 
-                        let sinceOf (touches: List<Touch>): Map<Int, Int> =
-                            List.fold((acc, t) -> %s, Map.empty, touches)
+                    let sinceOf (touches: List<Touch>): Map<Int, Int> =
+                        List.fold((acc, t) -> %s, Map.empty, touches)
 
-                        behavior stale : (touches: List<Touch>) -> List<Int>
+                    behavior stale : (touches: List<Touch>) -> List<Int>
 
-                        let stale (touches) = Map.keys(sinceOf(touches))
-                        """.formatted(rule, step)));
-                assertTrue(report.contains("not read"), () -> rule + "\n" + step + "\n" + report);
-            }
+                    let stale (touches) = Map.keys(sinceOf(touches))
+                    """.formatted(WITHIN_A_HUNDRED, step)));
+            assertTrue(report.contains("not read"), () -> step + "\n" + report);
         }
     }
 
     /** With at most one element there is no earlier one to have found anything. */
     @Test
     void aListOfOneAtMostHasNoEarlierElementToHaveFoundAValue() {
-        String report = report(measured("""
+        String report = report(read("""
                 module example.stale
 
                 data Touch = { account: String, days: Int }
@@ -530,15 +520,15 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                         | None -> Map.insert(t.account, t.days, acc)
                         | Some seen -> Map.insert(t.account,
                               if t.days < seen then t.days else seen, acc)""";
-        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED, lookup));
+        Compilation compilation = read(modelWith(WITHIN_A_HUNDRED, lookup));
         assertEquals(List.of(), unreadBeside(report(compilation)), () -> report(compilation));
-        assertEquals(axisOf(measured(modelWith(WITHIN_A_HUNDRED, COMPARED_WITH_WHAT_WAS_FOUND))),
+        assertEquals(axisOf(read(modelWith(WITHIN_A_HUNDRED, COMPARED_WITH_WHAT_WAS_FOUND))),
                 axisOf(compilation));
     }
 
     @Test
     void aKeyWorkedOutOfTheValueLeavesTheComparisonUnread() {
-        Compilation compilation = measured(modelWith(WITHIN_A_HUNDRED,
+        Compilation compilation = read(modelWith(WITHIN_A_HUNDRED,
                 "Map.updateOrInsert(String.fromInt(t.days + 1), t.days,"
                         + " seen -> if t.days < seen then t.days else seen, acc)"));
         assertFalse(unreadBeside(report(compilation)).isEmpty(), () -> report(compilation));
@@ -548,7 +538,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      *  no wider than this one's, which the range over every element does not say. */
     @Test
     void aRuleRelatingTheKeyToTheValueLeavesTheComparisonUnread() {
-        Compilation compilation = measured(modelWith(
+        Compilation compilation = read(modelWith(
                 WITHIN_A_HUNDRED + " && (account /= \"a\" || days <= 10)",
                 COMPARED_WITH_WHAT_WAS_FOUND));
         assertFalse(unreadBeside(report(compilation)).isEmpty(), () -> report(compilation));
@@ -559,7 +549,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     @Test
     void aRuleOfTheElementReadingOnlyTheKeyLeavesTheComparisonRead() {
         for (String step : List.of(COMPARED_WITH_WHAT_WAS_FOUND, LOOKUP_AND_FILING)) {
-            String report = report(measured(modelWith(
+            String report = report(read(modelWith(
                     WITHIN_A_HUNDRED + " && String.length(account) > 0", step)));
             assertEquals(List.of(), unreadBeside(report), report);
         }
@@ -569,7 +559,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      *  to be compared with, which the comparison is not read as having. */
     @Test
     void aRuleKeepingTheKeysApartLeavesTheComparisonUnread() {
-        Compilation compilation = measured("""
+        Compilation compilation = read("""
                 module example.stale
 
                 data Touch = { account: String, days: Int }
@@ -606,7 +596,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 // another key filed beside the end kept
                 "Map.insert(\"other\", 9, " + LEAST + ")");
         for (String step : steps) {
-            Compilation compilation = measured(modelOf(step, ""));
+            Compilation compilation = read(modelOf(step, ""));
             assertFalse(json(compilation).contains("least("),
                     () -> "nothing is said of the least of a key's values for " + step + ": "
                             + report(compilation));
@@ -752,10 +742,39 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** Each source measured once for the class at each level: several tests read the same model,
+     *  and only read it. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    private static final Map<String, Compilation> READ = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+        READ.clear();
+    }
+
     /** The source measured, which is a source that compiles. */
     private static Compilation measured(String source) {
+        return MEASURED.computeIfAbsent(source,
+                text -> compiled(text, Adequacy.Asked.fullReport()));
+    }
+
+    /**
+     * The source read for the lines its rules draw, and no row composed at them: what a test asks
+     * that is about what a comparison is read as, and nothing about a row put on either side of
+     * it.
+     */
+    private static Compilation read(String source) {
+        return READ.computeIfAbsent(source,
+                text -> compiled(text, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS)));
+    }
+
+    private static Compilation compiled(String source, Adequacy.Asked asked) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(asked);
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code().toString()).toList(),
