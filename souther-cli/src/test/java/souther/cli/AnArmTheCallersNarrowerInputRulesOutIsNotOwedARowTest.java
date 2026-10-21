@@ -171,17 +171,19 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
                 | "live" : (Live { n = 1 }) -> 1
             """;
 
-    /** An optional over the narrower sum, whose present value is handed to the helper over the
-     *  wider one. */
+    /** An optional over the narrower sum, handed whole to a helper that takes an optional of the
+     *  wider one and hands its present value on. */
     private static final String AN_OPTIONAL = TYPES + """
 
             data Box = { stage: OpenStage? }
 
-            behavior weigh : (b: Box) -> Int
-            let weigh (b) =
-                match b.stage with
+            let present (s: Option<Stage>): Int =
+                match s with
                     | Some stage -> weightOf(stage)
                     | None -> 0
+
+            behavior weigh : (b: Box) -> Int
+            let weigh (b) = present(b.stage)
 
             example weigh
                 | "none" : (Box { stage = None }) -> 0
@@ -315,8 +317,10 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
 
         assertEquals(0, output.exit(), () -> output.report() + output.warnings());
         assertTrue(output.warnings().contains("E1327")
-                        && output.warnings().contains("`b.stage@Some` is declared as Draft, Live"),
-                () -> "the value an optional holds is an `OpenStage`, and no `Done` arrives:\n"
+                        && output.warnings().contains("`b.stage@Some` is declared as Draft, Live")
+                        && output.warnings().contains("the arm is for Done"),
+                () -> "the value an optional holds is an `OpenStage` through the helper over the"
+                        + " wider optional, and the arm no value arrives at is the one for `Done`:\n"
                         + output.warnings());
     }
 
