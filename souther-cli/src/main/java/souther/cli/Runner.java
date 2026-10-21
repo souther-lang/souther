@@ -32,6 +32,7 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.nio.file.Files;
@@ -146,8 +147,9 @@ public final class Runner {
         }
     }
 
-    /** Parses the {@code run} subcommand's arguments (everything after {@code run}). */
-    static Invocation parse(String[] args) {
+    /** Parses the {@code run} subcommand's arguments (everything after {@code run}), reading a
+     *  relative path from the directory {@code environment} is run in. */
+    static Invocation parse(String[] args, Environment environment) {
         Path file = null;
         String behaviorName = null;
         String inputJson = null;
@@ -158,13 +160,13 @@ public final class Runner {
                 case "--input" -> inputJson = value(args, ++i, "--input");
                 case "-cp", "--class-path" -> {
                     String option = args[i];
-                    classPath.addAll(entriesOf(value(args, ++i, option)));
+                    classPath.addAll(entriesOf(value(args, ++i, option), environment));
                 }
                 default -> {
                     if (file != null) {
                         throw usage("run.usage.singlefile", "run takes a single .sou file");
                     }
-                    file = Path.of(args[i]);
+                    file = environment.path(args[i]);
                 }
             }
         }
@@ -174,12 +176,13 @@ public final class Runner {
         return new Invocation(file, behaviorName, inputJson, pathOf(classPath));
     }
 
-    /** A class path as its entries, in the order they are searched. */
-    static List<Path> entriesOf(String written) {
+    /** A class path as its entries, in the order they are searched, each read as
+     *  {@code environment} reads a path it is given. */
+    static List<Path> entriesOf(String written, Environment environment) {
         List<Path> entries = new ArrayList<>();
-        for (String entry : written.split(java.io.File.pathSeparator)) {
+        for (String entry : written.split(File.pathSeparator)) {
             if (!entry.isBlank()) {
-                entries.add(Path.of(entry));
+                entries.add(environment.path(entry));
             }
         }
         return entries;

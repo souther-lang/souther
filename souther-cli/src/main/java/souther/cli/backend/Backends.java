@@ -1,5 +1,6 @@
 package souther.cli.backend;
 
+import souther.cli.Environment;
 import souther.compiler.io.Listing;
 
 import java.io.IOException;
@@ -11,7 +12,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.TreeSet;
@@ -138,18 +138,19 @@ public final class Backends {
      * one so that a build under development, or a backend fetched for this Souther, stands in for
      * what was installed with it. No install prefix is worked out from where this runs.
      *
-     * <p>Read from the {@code variables} and {@code properties} a run is given, and never from the
-     * process: the run is what was told where its backends are.
+     * <p>Read from the {@code environment} a run is given, and never from the process: the run is
+     * what was told where its backends are, and a directory named relatively is under the one it
+     * is run in.
      */
-    public static Backends installed(Map<String, String> variables,
-                                     Map<String, String> properties) {
+    public static Backends installed(Environment environment) {
         List<Path> directories = new ArrayList<>();
-        String home = variables.get("SOUTHER_HOME");
-        directories.add(home != null && !home.isBlank() ? Path.of(home, "backends")
-                : Path.of(properties.get("user.home"), ".souther", "backends"));
-        String packaged = properties.get("souther.backends");
+        String home = environment.variable("SOUTHER_HOME");
+        directories.add(home != null && !home.isBlank()
+                ? environment.path(home).resolve("backends")
+                : environment.userHome().resolve(".souther").resolve("backends"));
+        String packaged = environment.property("souther.backends");
         if (packaged != null && !packaged.isBlank()) {
-            directories.add(Path.of(packaged));
+            directories.add(environment.path(packaged));
         }
         return new Backends(directories);
     }

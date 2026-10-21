@@ -46,7 +46,7 @@ public final class BackendProcess {
     /** Runs the backend in {@code environment} and waits for it, answering with its exit status. */
     public static int run(Backends.Backend backend, List<String> arguments, Environment environment)
             throws IOException, InterruptedException {
-        List<String> command = command(Path.of(environment.property("java.home")),
+        List<String> command = command(environment.javaHome(),
                 ToolingMetadata.requiredJvmArgs(), backend, arguments);
         ProcessBuilder builder = new ProcessBuilder(command)
                 .directory(environment.workingDirectory().toAbsolutePath().toFile());

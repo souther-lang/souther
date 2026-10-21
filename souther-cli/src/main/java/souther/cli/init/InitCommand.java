@@ -51,6 +51,10 @@ public final class InitCommand {
      * command the way a shell does: in a directory of its own, and as a release that has a version.
      * A compiler running from class files has no manifest and no version to write into a build file,
      * which is a refusal here and not a placeholder somebody has to find later.
+     *
+     * <p>A relative path, the directory on the line or an entry of {@code searchPath}, is read from
+     * {@code here} as {@link Environment#path} reads one, so a run in a directory other than the
+     * JVM's writes where it was told.
      */
     static int run(String[] args, Locale locale, PrintStream out, PrintStream err, Path here,
                    String souther, String searchPath) {
@@ -61,7 +65,7 @@ public final class InitCommand {
         String moduleAsWritten = null;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
-                case "-d", "--dir" -> directory = Path.of(args[++i]);
+                case "-d", "--dir" -> directory = here.resolve(args[++i]);
                 case "--build" -> buildAsWritten = args[++i];
                 case "--model" -> modelAsWritten = args[++i];
                 case "--module" -> moduleAsWritten = args[++i];
@@ -407,19 +411,20 @@ public final class InitCommand {
         String task = creating ? "classes" : "test";
         out.println("    " + cd
                 + (wrapper ? "./gradlew " + task : "gradle wrapper && ./gradlew " + task));
-        if (!wrapper && !onThePath("gradle", searchPath)) {
+        if (!wrapper && !onThePath("gradle", searchPath, here)) {
             out.println();
             out.println("    " + Messages.get("cli.init.gradle", locale));
         }
     }
 
-    /** Whether a command of this name is on {@code searchPath}, the {@code PATH} the run was given. */
-    private static boolean onThePath(String command, String searchPath) {
+    /** Whether a command of this name is on {@code searchPath}, the {@code PATH} the run was given,
+     *  a relative entry of which is read from {@code here}. */
+    private static boolean onThePath(String command, String searchPath, Path here) {
         if (searchPath == null) {
             return false;
         }
         for (String entry : searchPath.split(File.pathSeparator)) {
-            if (!entry.isBlank() && Files.isExecutable(Path.of(entry).resolve(command))) {
+            if (!entry.isBlank() && Files.isExecutable(here.resolve(entry).resolve(command))) {
                 return true;
             }
         }

@@ -169,7 +169,8 @@ class WarningReportingTest {
         Path file = write("probe.sou", UNPROVEN);
         List<Located> warnings = new ArrayList<>();
 
-        Runner.Invocation invocation = Runner.parse(new String[]{file.toString(), "--input", "-1"});
+        Runner.Invocation invocation = Runner.parse(new String[]{file.toString(), "--input", "-1"},
+                Environment.ofThisProcess());
         assertThrows(Runner.RunException.class,
                 () -> Runner.run(invocation, invocation.sources(), warnings));
 

@@ -19,7 +19,10 @@ import java.util.Set;
  * <p>Every one of those is read from the settings here, once, and nowhere else. What the run is
  * told by {@code souther.repository}, {@code https.proxyHost}, {@code HTTPS_PROXY} and
  * {@code NO_PROXY} decides them together, so a message naming the repository and the client asking
- * it cannot be reading two versions of one setting.
+ * it cannot be reading two versions of one setting. The client is always handed the proxy those
+ * settings name and never left to the JVM's own selector, which reads the JVM's properties and not
+ * the run's. Only the system's own proxies are asked of the JVM, by {@link ProxyProperties}, where
+ * the run's properties ask for them.
  *
  * <p>A repository is reached over HTTPS, or over plain HTTP on this machine's own loopback address,
  * and so is every address a redirect from it sends a request to: {@link #admits} is the one place
@@ -36,14 +39,15 @@ public final class Repository implements Configured {
 
     private static final Set<String> LOOPBACK = Set.of("localhost", "127.0.0.1", "[::1]");
 
-    /** How the repository is reached: directly, through a proxy, or as Java's settings say. */
+    /** How the repository is reached: directly, through a proxy, or as Java's properties say. */
     sealed interface Route {
         record Direct() implements Route {}
 
         record Through(InetSocketAddress proxy) implements Route {}
 
-        /** Java's own {@code https.proxyHost} and {@code http.nonProxyHosts}. */
-        record AsJavaSays() implements Route {}
+        /** Java's {@code https.proxyHost} and {@code http.nonProxyHosts}, as the properties the
+         *  run is given name them. */
+        record AsPropertiesSay(ProxyProperties proxies) implements Route {}
     }
 
     private final URI root;
@@ -83,7 +87,8 @@ public final class Repository implements Configured {
         }
         Optional<String> proxy = either(variables, "HTTPS_PROXY", "https_proxy");
         if (properties.get("https.proxyHost") != null || proxy.isEmpty()) {
-            return new Repository(at, name, new Route.AsJavaSays());
+            return new Repository(at, name, new Route.AsPropertiesSay(
+                    new ProxyProperties(properties)));
         }
         return switch (proxyNamed(proxy.get())) {
             case Named.At<InetSocketAddress>(InetSocketAddress through) ->
@@ -147,7 +152,7 @@ public final class Repository implements Configured {
             switch (route) {
                 case Route.Direct _ -> builder.proxy(HttpClient.Builder.NO_PROXY);
                 case Route.Through through -> builder.proxy(ProxySelector.of(through.proxy()));
-                case Route.AsJavaSays _ -> { }
+                case Route.AsPropertiesSay(ProxyProperties proxies) -> builder.proxy(proxies);
             }
             client = builder.build();
         }

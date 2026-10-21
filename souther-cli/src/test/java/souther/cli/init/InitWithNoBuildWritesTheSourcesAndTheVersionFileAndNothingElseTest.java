@@ -61,6 +61,19 @@ class InitWithNoBuildWritesTheSourcesAndTheVersionFileAndNothingElseTest {
                 .contains("module my_app"));
     }
 
+    /** A directory named by a relative path is under the one the command is run in, which is not
+     *  this JVM's. */
+    @Test
+    void aRelativeDirectoryIsUnderTheOneItIsRunIn(@TempDir Path parent) throws IOException {
+        Path here = project(parent, "here");
+
+        Run run = run(here, "9.9.9", "--build", "none", "-d", "made");
+
+        assertEquals(0, run.code(), run.err());
+        assertTrue(Files.isRegularFile(here.resolve("made").resolve(".souther-version")),
+                run.out());
+    }
+
     @Test
     void whatItSaysToRunNextNamesNoTarget(@TempDir Path parent) throws IOException {
         Path project = project(parent, "shop");

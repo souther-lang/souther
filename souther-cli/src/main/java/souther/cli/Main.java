@@ -43,7 +43,6 @@ import souther.cli.backend.Shown;
 import souther.cli.backend.Unavailable;
 import souther.cli.init.InitCommand;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -235,7 +234,7 @@ public final class Main {
             return 2;
         }
         Locale locale = render.locale();
-        Backends backends = Backends.installed(environment.variables(), environment.properties());
+        Backends backends = Backends.installed(environment);
         try {
             Optional<Backends.Backend> backend = switch (backends.find(target.name(),
                     ModuleMetadata.compilerVersion())) {
@@ -335,7 +334,7 @@ public final class Main {
         String version = ModuleMetadata.compilerVersion();
         BackendFetch.Source source = Central.configured(environment.variables(),
                 environment.properties());
-        Backends backends = Backends.installed(environment.variables(), environment.properties());
+        Backends backends = Backends.installed(environment);
         try {
             return switch (BackendFetch.again(backends, source, target, version,
                     release -> fetching(out, locale, release))) {
@@ -417,7 +416,7 @@ public final class Main {
             case EXAMPLES -> () -> examplesSubcommand(rest);
             case DOC -> () -> DocCommand.run(rest, out, err);
             case API -> () -> ApiCommand.run(rest, out, err);
-            case JAPI -> () -> JapiCommand.run(rest, out, err);
+            case JAPI -> () -> japiSubcommand(rest);
             case MCP -> () -> mcpSubcommand(rest);
             case LSP -> () -> lspSubcommand(rest);
             case TOOLING -> () -> toolingSubcommand(rest);
@@ -444,6 +443,16 @@ public final class Main {
                 + (said == null ? "" : ": " + said.replaceAll("\\R", " "));
     }
 
+    /**
+     * {@code souther japi <name> [-cp <path>]}: falls back on the class path the run's
+     * {@code java.class.path} names, and reads every entry from the directory the run is in.
+     */
+    private int japiSubcommand(String[] args) {
+        String classPath = environment.property("java.class.path");
+        return JapiCommand.run(args, out, err, classPath == null ? "" : classPath,
+                environment::path);
+    }
+
     /** {@code souther compile <file.sou>... -d <outdir>}: writes the generated {@code .class} files. */
     private int compileSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
@@ -453,7 +462,7 @@ public final class Main {
         }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
-        Path outDir = Path.of(".");
+        Path outDir = environment.path(".");
         Adequacy.Asked measure = Adequacy.Asked.NOTHING;
         boolean refuseWarnings = false;
         for (int i = 0; i < args.length; i++) {
@@ -474,15 +483,10 @@ public final class Main {
                     }
                     refuseWarnings = args[i].equals("error");
                 }
-                case "-d", "--dir" -> outDir = Path.of(args[++i]);
-                case "-cp", "--class-path" -> {
-                    for (String entry : args[++i].split(File.pathSeparator)) {
-                        if (!entry.isBlank()) {
-                            classPath.add(Path.of(entry));
-                        }
-                    }
-                }
-                default -> sources.add(Path.of(args[i]));
+                case "-d", "--dir" -> outDir = environment.path(args[++i]);
+                case "-cp", "--class-path" -> classPath.addAll(Runner.entriesOf(args[++i],
+                        environment));
+                default -> sources.add(environment.path(args[i]));
             }
         }
         if (sources.isEmpty()) {
@@ -579,18 +583,13 @@ public final class Main {
         Adequacy.Asked measure = Adequacy.Asked.fullReport();
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
-                case "-cp", "--class-path" -> {
-                    for (String entry : args[++i].split(File.pathSeparator)) {
-                        if (!entry.isBlank()) {
-                            classPath.add(Path.of(entry));
-                        }
-                    }
-                }
+                case "-cp", "--class-path" -> classPath.addAll(Runner.entriesOf(args[++i],
+                        environment));
                 case "--module" -> module = CanonicalNames.name(args[++i]);   // a name from outside
                 case "--behavior" -> behavior = CanonicalNames.name(args[++i]);   // a name from outside
                 case "--generate" -> generate = true;
                 case "--strict" -> strict = true;
-                default -> sources.add(Path.of(args[i]));
+                default -> sources.add(environment.path(args[i]));
             }
         }
         if (sources.isEmpty()) {
@@ -860,7 +859,7 @@ public final class Main {
             switch (a) {
                 case "-w", "--write" -> write = true;
                 case "--check" -> check = true;
-                default -> files.add(Path.of(a));
+                default -> files.add(environment.path(a));
             }
         }
         if (files.isEmpty()) {
@@ -973,7 +972,7 @@ public final class Main {
         Runner.Invocation invocation;
         CompilationSources read;
         try {
-            invocation = Runner.parse(args);
+            invocation = Runner.parse(args, environment);
             read = invocation.sources();
         } catch (Runner.RunException e) {
             // Raised before anything is compiled, so there is nothing to report beside it.

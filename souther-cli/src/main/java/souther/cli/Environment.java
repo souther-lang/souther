@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -23,18 +24,32 @@ import java.util.Properties;
  * inherits the streams where they are the process's, and is given pipes copied to and from them
  * where they are not; and only the process's own output can be a terminal.
  *
+ * <p>Two properties a run reads without asking whether they are there, so an environment names
+ * them or is not one: {@code user.home}, under which a fetched backend goes where
+ * {@code SOUTHER_HOME} does not say, and {@code java.home}, the JVM a backend is started on. A
+ * JVM sets both, so this process's environment always names them.
+ *
  * @param variables the environment variables, by name
  * @param properties the system properties, by name
- * @param workingDirectory where a project's version file is looked for from, and where a process
- *        the run starts is started
+ * @param workingDirectory where a project's version file is looked for from, what a relative path
+ *        the run is given is read against, and where a process the run starts is started
  */
 public record Environment(Map<String, String> variables, Map<String, String> properties,
                           Path workingDirectory, InputStream in, PrintStream out, PrintStream err,
                           boolean processStreams) {
 
+    private static final List<String> NAMED = List.of("user.home", "java.home");
+
     public Environment {
         variables = Map.copyOf(variables);
         properties = Map.copyOf(properties);
+        for (String property : NAMED) {
+            String value = properties.get(property);
+            if (value == null || value.isBlank()) {
+                throw new IllegalArgumentException("an environment names no " + property
+                        + ", which a run reads without asking whether it is there");
+            }
+        }
     }
 
     /**
@@ -59,6 +74,29 @@ public record Environment(Map<String, String> variables, Map<String, String> pro
     /** The property {@code name}, or null where it is not set. */
     public String property(String name) {
         return properties.get(name);
+    }
+
+    /**
+     * The file a path the run was given names: a relative one is read from
+     * {@link #workingDirectory}, and an absolute one stands as written.
+     *
+     * <p>The one place a path written on the line, in a variable or in a property becomes a file,
+     * so a run in a directory other than the JVM's reads and writes where it was told. This
+     * process's working directory is the empty path, against which a relative path stays as it was
+     * written and is read by the process from the directory it runs in.
+     */
+    public Path path(String written) {
+        return workingDirectory.resolve(written);
+    }
+
+    /** The user's home, from {@code user.home}. */
+    public Path userHome() {
+        return path(properties.get("user.home"));
+    }
+
+    /** The JVM a backend the run starts is run on, from {@code java.home}. */
+    public Path javaHome() {
+        return path(properties.get("java.home"));
     }
 
     /**
