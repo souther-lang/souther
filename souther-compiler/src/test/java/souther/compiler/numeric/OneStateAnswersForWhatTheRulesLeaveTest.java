@@ -21,7 +21,8 @@ import static souther.compiler.numeric.RulesAsWritten.admits;
 import static souther.compiler.numeric.RulesAsWritten.boxed;
 import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
 import static souther.compiler.numeric.RulesAsWritten.relationsIn;
-import static souther.compiler.numeric.RulesAsWritten.reversed;
+import static souther.compiler.numeric.RulesAsWritten.rules;
+import static souther.compiler.numeric.RulesAsWritten.everyOrder;
 import static souther.compiler.numeric.RulesAsWritten.twice;
 
 /**
@@ -39,7 +40,8 @@ import static souther.compiler.numeric.RulesAsWritten.twice;
  * takes or hands to the reduction: a weighted difference that must not be read as a difference, a
  * cycle summing to nought, ends meeting at one value, a hole sided one way and not the other, a part
  * holding nothing beside one that holds something, and two premises bounding one sum, which a
- * reading letting the later one win answers differently the other way round.
+ * reading letting the later one win answers differently in some order. Each is given in every order
+ * its rules have.
  */
 class OneStateAnswersForWhatTheRulesLeaveTest {
 
@@ -177,6 +179,18 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
         assertInstanceOf(Read.HoldsNever.class, read);
     }
 
+    /**
+     * And a chosen system holding such a rule is refused where it is read, rather than handed on
+     * without it. Left out, the points would hold nothing while the state held something, and a
+     * check that asks only of the points that are left would pass over the two disagreeing.
+     */
+    @Test
+    void aRuleNoWholeValueSatisfiesIsRefusedWhereTheSystemIsRead() {
+        assertThrows(IllegalArgumentException.class, () -> read(rules("2a = 1")));
+        assertEquals(List.of(), read(rules("2a /= 1")),
+                "a rule every value satisfies states nothing, and is left out");
+    }
+
     // --- the same rules, the same answer ------------------------------------------------------------
 
     @Test
@@ -184,14 +198,15 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
         for (List<Written> written : OVER_THREE) {
             List<AffineConstraint<String>> stated = read(written);
             ClosedState<String> asWritten = closing(stated);
-            ClosedState<String> reordered = closing(reversed(stated));
-            assertEquals(asWritten.holdsNothing(), reordered.holdsNothing(),
-                    () -> "emptiness moved when the rules were reordered: " + stated);
-            if (asWritten.holdsNothing()) {
-                continue;
+            for (List<AffineConstraint<String>> order : everyOrder(stated)) {
+                ClosedState<String> reordered = closing(order);
+                assertEquals(asWritten.holdsNothing(), reordered.holdsNothing(),
+                        () -> "emptiness moved when the rules were reordered: " + order);
+                if (!asWritten.holdsNothing()) {
+                    assertEquals(asWritten.box(), reordered.box(),
+                            () -> "the box moved when the rules were reordered: " + order);
+                }
             }
-            assertEquals(asWritten.box(), reordered.box(),
-                    () -> "the box moved when the rules were reordered: " + stated);
         }
     }
 

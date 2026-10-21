@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.RulesAsWritten.Written;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -11,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static souther.compiler.numeric.RulesAsWritten.admits;
 import static souther.compiler.numeric.RulesAsWritten.boxed;
+import static souther.compiler.numeric.RulesAsWritten.everyOrder;
 import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
-import static souther.compiler.numeric.RulesAsWritten.reversed;
 import static souther.compiler.numeric.RulesAsWritten.rules;
 import static souther.compiler.numeric.RulesAsWritten.twice;
 
@@ -44,7 +45,9 @@ import static souther.compiler.numeric.RulesAsWritten.twice;
  * <p>The systems are the ones the closure has a step for ({@link #SYSTEMS}): a bound carried onto a
  * position along differences above and below, through more than one position between; a difference
  * read through nought; ends that meet at one value beside ends that cross; a cycle summing to nought
- * beside one summing below it; two rules on one edge with the looser said last; and the weights and
+ * beside one summing below it; two rules on one edge with the looser said last; a difference said
+ * outright looser than the path to it through a third position, which a closure keeping the first
+ * bound it found for an edge leaves loose; and the weights and
  * strict comparisons a rule is read down to the same edges from.
  */
 class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
@@ -72,6 +75,8 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
             rules("a - b <= -3", "b <= -2", "c - a <= 0"),
             // Two bounds on one difference, the looser said last.
             rules("a - b <= 1", "a - b <= 3"),
+            // A difference said outright looser than the path to it through a third position.
+            rules("a - c <= 3", "a - b <= 0", "b - c <= 0"),
             // Weights of two and strict comparisons, which are read down to edges of one.
             rules("2a - 2b <= 3", "2c >= 3", "a < 0", "b - c < 2"),
             // A bound carried onto a through three positions between.
@@ -115,12 +120,27 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
                         + " of " + SYSTEMS.size() + " were empty");
     }
 
-    /** The same rules in any order are the same answers. */
+    /**
+     * The same rules in any order are the same answers.
+     *
+     * <p>Every order of a system's own rules, said after the range and before it. The range holds a
+     * position each and nothing between two, so where it stands against the rules is the one thing
+     * about its order a reader could answer differently for.
+     */
     @Test
     void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
         for (List<Written> system : SYSTEMS) {
             List<Written> written = bounded(system);
-            assertSameAnswers(written, closed(written), closed(reversed(written)));
+            DifferenceBounds<String> asWritten = closed(written);
+            List<Written> range = written.subList(0, written.size() - system.size());
+            for (List<Written> order : everyOrder(system)) {
+                List<Written> rangeFirst = new ArrayList<>(range);
+                rangeFirst.addAll(order);
+                List<Written> rangeLast = new ArrayList<>(order);
+                rangeLast.addAll(range);
+                assertSameAnswers(rangeFirst, asWritten, closed(rangeFirst));
+                assertSameAnswers(rangeLast, asWritten, closed(rangeLast));
+            }
         }
     }
 

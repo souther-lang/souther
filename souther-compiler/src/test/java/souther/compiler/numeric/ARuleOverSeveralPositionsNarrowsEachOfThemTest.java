@@ -20,7 +20,7 @@ import static souther.compiler.numeric.RulesAsWritten.OVER_THREE;
 import static souther.compiler.numeric.RulesAsWritten.admits;
 import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
 import static souther.compiler.numeric.RulesAsWritten.relationsIn;
-import static souther.compiler.numeric.RulesAsWritten.reversed;
+import static souther.compiler.numeric.RulesAsWritten.everyOrder;
 
 /**
  * A rule over several positions narrows each of them, and never past what the rules admit.
@@ -44,7 +44,7 @@ import static souther.compiler.numeric.RulesAsWritten.reversed;
  * takes: the rest of a rule read without the position being bounded, ends that meet at one value,
  * a cycle of differences summing to nought, a hole sided by what is known and one that is not, and
  * two rules or two premises bounding one thing, which a reader letting the later one win answers
- * differently the other way round.
+ * differently in some order. Each is given in every order its rules have.
  */
 class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
 
@@ -334,27 +334,28 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 + " of " + OVER_THREE.size() + ", so one of the two was never checked");
     }
 
-    /** And the same answers whatever order the rules arrived in. */
+    /** And the same answers whatever order the rules arrived in, which is every order they have. */
     @Test
     void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
         for (List<Written> written : OVER_THREE) {
             List<AffineConstraint<String>> stated = read(written);
             Box<String> from = between("a", LOW, HIGH, "b", LOW, HIGH, "c", LOW, HIGH);
-            List<AffineConstraint<String>> shuffled = reversed(stated);
-
             FormReach<String> asRead = reading(stated, from);
-            FormReach<String> reread = reading(shuffled, from);
-            if (asRead == null || reread == null) {
+            if (asRead == null) {
                 continue;   // the differences hold nothing, which the closure answers before a round
             }
-            Reduction<String> asWritten =
-                    AffineReduction.over(asRead, atom -> Granularity.DISCRETE,
-                            CanonicalOrder.asTheyAreSpelled());
-            Reduction<String> reordered =
-                    AffineReduction.over(reread, atom -> Granularity.DISCRETE,
-                            CanonicalOrder.asTheyAreSpelled());
-            assertEquals(asWritten, reordered,
-                    () -> "the reduction moved when the rules were reordered: " + stated);
+            Reduction<String> asWritten = AffineReduction.over(asRead,
+                    atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
+            for (List<AffineConstraint<String>> shuffled : everyOrder(stated)) {
+                FormReach<String> reread = reading(shuffled, from);
+                assertTrue(reread != null,
+                        () -> "the differences hold nothing only in another order: " + shuffled);
+                Reduction<String> reordered =
+                        AffineReduction.over(reread, atom -> Granularity.DISCRETE,
+                                CanonicalOrder.asTheyAreSpelled());
+                assertEquals(asWritten, reordered,
+                        () -> "the reduction moved when the rules were reordered: " + shuffled);
+            }
         }
     }
 

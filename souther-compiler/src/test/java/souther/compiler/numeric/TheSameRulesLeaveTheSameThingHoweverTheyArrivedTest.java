@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static souther.compiler.numeric.RulesAsWritten.OVER_THREE;
-import static souther.compiler.numeric.RulesAsWritten.reversed;
+import static souther.compiler.numeric.RulesAsWritten.everyOrder;
 import static souther.compiler.numeric.RulesAsWritten.twice;
 
 /**
@@ -289,12 +289,12 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     // --- and over rules chosen for what they tell apart -------------------------------------------------
 
     /**
-     * Over the systems of {@link RulesAsWritten#OVER_THREE}. Those whose answer could move with the
-     * order hold two rules bounding one thing — one sum held below two bounds, one position bounded
-     * above by two sums, the rest of one rule bounded below by two others — with the tighter said
-     * first, so a reader that lets the later one win answers the other way round differently; and a
-     * part holding nothing beside one that holds something is where the answer is put together from
-     * parts.
+     * Over the systems of {@link RulesAsWritten#OVER_THREE}, each given in every order its rules
+     * have. Those whose answer could move with the order hold two rules bounding one thing — one
+     * sum held below two bounds, one position bounded above by two sums, the rest of one rule
+     * bounded below by two others — so a reader that lets the later one win, or the one said
+     * between, answers in some order differently; and a part holding nothing beside one that holds
+     * something is where the answer is put together from parts.
      */
     @Test
     void theOrderAndTheRepetitionAreNotPartOfAnyAnswer() {
@@ -304,8 +304,11 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
             written.forEach(each -> rules.add(new Written(
                     new LinearForm<>(each.constant(), each.coefs()), each.rel())));
             NumericDomain<String> asWritten = given(rules, kinds);
-            NumericDomain<String> reordered = given(reversed(rules), kinds);
-            NumericDomain<String> twice = given(twice(rules), kinds);
+            List<NumericDomain<String>> others = new ArrayList<>();
+            for (List<Written> order : everyOrder(rules)) {
+                others.add(given(order, kinds));
+            }
+            others.add(given(twice(rules), kinds));
 
             // The same questions, scaled up, are the same questions.
             for (Written each : rules) {
@@ -321,7 +324,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
                         asWritten.provenByTheBoxAndItsDifferences(doubledForm, each.rel()),
                         () -> "scaling the question moved what the ranges state: " + rules);
             }
-            for (NumericDomain<String> other : List.of(reordered, twice)) {
+            for (NumericDomain<String> other : others) {
                 assertEquals(asWritten.isBottom(), other.isBottom(),
                         () -> "whether anything is left moved: " + rules);
                 for (String position : List.of("a", "b", "c")) {

@@ -4,7 +4,6 @@ import souther.compiler.numeric.AffineConstraint.Read;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,6 +20,31 @@ import java.util.regex.Pattern;
  * <p>For the tests that hold what the closure and the reduction say to the points themselves. A rule
  * is written the way it reads — {@code 2a - b <= -3} — so a chosen case says on its face what it is,
  * and it is checked at a point by its own arithmetic rather than by anything under test.
+ *
+ * <p>What the chosen systems were held to: each change below was made to the code they read, one at
+ * a time, and the tests named are the ones that refused it. A change of the systems is checked
+ * against this list again.
+ *
+ * <pre>
+ *   DifferenceBounds  a cycle summing to nought read as empty     WhatTheDifference…, ARuleOver…, OneState… (the points)
+ *   DifferenceBounds  ends meeting at one value read as crossed   the same three
+ *   DifferenceBounds  an edge keeps the first bound found for it  WhatTheDifference… (the path through a third)
+ *   DifferenceBounds  a carried bound above: the last one wins    WhatTheDifference… (the points)
+ *   DifferenceBounds  a difference not read through nought        WhatTheDifference… (the points)
+ *   ClosedState       one round only                              OneState…aRoundReadsWhatTheRoundBeforeItLeft
+ *   ClosedState       a product forgets that the rounds ran out   RulesNaming…theClosureOfBothHalves…
+ *   ClosureQuestion   a rule joining two parts loses the first    the build itself (prove-the-library)
+ *   AffineReduction   a hole at the floor not sided               ARuleOver…, TheSameRules… (written cases)
+ *   AffineReduction   a bound above: the last one wins            the order tests of ARuleOver…, OneState…, TheSameRules…
+ *   AffineReduction   the middle one of three rules passed over   ARuleOver…theOrder… (every order; a reversal misses it)
+ *   AffineReduction   a rest never reached not made strict        ARuleOver…aBoundReachedByNothingMakesWhatFollowsStrict
+ *   AffineReduction   ends meeting at one value read as empty     ARuleOver…, OneState… (the points)
+ *   AffineReduction   a hole at the only value left kept          ARuleOver…, TheSameRules… (written cases)
+ * </pre>
+ *
+ * <p>Two changes none of these refuse, since what they make wrong is how tight a state is and these
+ * claim soundness of it: a box carried along a difference letting the last bound win, and a form two
+ * rules leave nothing not being asked for.
  */
 final class RulesAsWritten {
 
@@ -98,9 +122,44 @@ final class RulesAsWritten {
         return out;
     }
 
-    /** The constraints {@code written} states, leaving out what holds always or never. */
+    /**
+     * The constraints {@code written} states.
+     *
+     * <p>A rule every value satisfies states nothing, and leaving it out leaves the points it is
+     * checked against where they were. A rule no value satisfies, or one the arithmetic cannot write,
+     * is refused: left out, the points would hold nothing and what is handed on would hold
+     * something, and a test that asks only of the points that are left would pass over the
+     * disagreement without asking anything. A test that draws such rules says what it owes for them,
+     * through {@link #someRuleHoldsNever} or by reading through {@link #statedOnly}.
+     */
     static List<AffineConstraint<String>> read(List<Written> written,
                                                Function<String, Granularity> spacing) {
+        List<AffineConstraint<String>> out = new ArrayList<>();
+        for (Written each : written) {
+            switch (AffineConstraint.of(each.coefs(), each.constant(), each.rel(), spacing)) {
+                case Read.Stated<String> stated -> out.add(stated.constraint());
+                case Read.HoldsAlways<String> _ -> { }
+                case Read.HoldsNever<String> _ -> throw new IllegalArgumentException(
+                        "`" + each + "` holds at no value, so no constraint can stand for it");
+                case Read.NotWorkedOut<String> unheld -> throw new IllegalArgumentException(
+                        "`" + each + "` states a constraint the arithmetic cannot write: "
+                                + unheld.why());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The constraints {@code written} states, leaving out every rule that states none: one every
+     * value satisfies, one no value satisfies, and one the arithmetic cannot write.
+     *
+     * <p>For drawn rules handed to two readers that are held to each other and to nothing else, such
+     * as a closure in one run and the same rules parted: both are handed the same list, so a rule left
+     * out is left out of both, and no point is asked about that could disagree with what they hold.
+     * A test that asks the points as well reads through {@link #read}.
+     */
+    static List<AffineConstraint<String>> statedOnly(List<Written> written,
+                                                     Function<String, Granularity> spacing) {
         List<AffineConstraint<String>> out = new ArrayList<>();
         for (Written each : written) {
             if (AffineConstraint.of(each.coefs(), each.constant(), each.rel(), spacing)
@@ -111,10 +170,111 @@ final class RulesAsWritten {
         return out;
     }
 
-    /** {@code items} the other way round. */
-    static <T> List<T> reversed(List<T> items) {
-        List<T> out = new ArrayList<>(items);
-        Collections.reverse(out);
+    /**
+     * Whether a rule of {@code written} is one no value satisfies, as reading it decides.
+     *
+     * <p>For rules drawn rather than chosen, which come to such a rule now and then: there is
+     * nothing to hand on for them, and what is owed instead is that the points hold nothing either.
+     */
+    static boolean someRuleHoldsNever(List<Written> written, Function<String, Granularity> spacing) {
+        return written.stream().anyMatch(each -> AffineConstraint.of(each.coefs(), each.constant(),
+                each.rel(), spacing) instanceof Read.HoldsNever<String>);
+    }
+
+    /**
+     * {@code items} in every order there is.
+     *
+     * <p>A reversal leaves a middle rule in the middle, so a reader that answers differently only
+     * where a later rule stands between two earlier ones is seen in some other order and not in
+     * that one. The systems here hold four rules or fewer, which is twenty-four orders at most.
+     */
+    static <T> List<List<T>> everyOrder(List<T> items) {
+        if (items.size() <= 1) {
+            return List.of(List.copyOf(items));
+        }
+        List<List<T>> out = new ArrayList<>();
+        for (int first = 0; first < items.size(); first++) {
+            List<T> rest = new ArrayList<>(items);
+            T taken = rest.remove(first);
+            for (List<T> after : everyOrder(rest)) {
+                List<T> order = new ArrayList<>();
+                order.add(taken);
+                order.addAll(after);
+                out.add(order);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Every way of dealing {@code one} and {@code other} into one list with each kept in its own
+     * order.
+     */
+    static <T> List<List<T>> everyInterleaving(List<T> one, List<T> other) {
+        if (one.isEmpty() || other.isEmpty()) {
+            List<T> out = new ArrayList<>(one);
+            out.addAll(other);
+            return List.of(out);
+        }
+        List<List<T>> out = new ArrayList<>();
+        for (List<T> rest : everyInterleaving(one.subList(1, one.size()), other)) {
+            List<T> dealt = new ArrayList<>();
+            dealt.add(one.getFirst());
+            dealt.addAll(rest);
+            out.add(dealt);
+        }
+        for (List<T> rest : everyInterleaving(one, other.subList(1, other.size()))) {
+            List<T> dealt = new ArrayList<>();
+            dealt.add(other.getFirst());
+            dealt.addAll(rest);
+            out.add(dealt);
+        }
+        return out;
+    }
+
+    /**
+     * Ways of dealing {@code one} and {@code other} into one list with each kept in its own order:
+     * either list said whole at every place among the other's, and the two taken in turn.
+     *
+     * <p>A reader that answers differently where rules of one list stand between two of the other
+     * is seen at every place that can happen, and one that answers differently where the two
+     * alternate is seen in the turns. The count grows with the two lengths added rather than with
+     * the number of every interleaving, which for two lists of seven is thousands. Where every
+     * interleaving is no more than these, every interleaving is what comes back.
+     */
+    static <T> List<List<T>> eachWholeAtEveryPlace(List<T> one, List<T> other) {
+        Set<List<T>> out = new LinkedHashSet<>();
+        wholeAtEveryPlace(one, other, out);
+        wholeAtEveryPlace(other, one, out);
+        out.add(inTurn(one, other));
+        out.add(inTurn(other, one));
+        long every = 1;
+        for (int taken = 1; taken <= other.size(); taken++) {
+            every = every * (one.size() + taken) / taken;
+        }
+        return every <= out.size() ? everyInterleaving(one, other) : List.copyOf(out);
+    }
+
+    private static <T> void wholeAtEveryPlace(List<T> placed, List<T> among, Set<List<T>> out) {
+        for (int at = 0; at <= among.size(); at++) {
+            List<T> dealt = new ArrayList<>(among.subList(0, at));
+            dealt.addAll(placed);
+            dealt.addAll(among.subList(at, among.size()));
+            out.add(dealt);
+        }
+    }
+
+    /** Both lists in one, taken from each in turn. */
+    static <T> List<T> inTurn(List<T> one, List<T> other) {
+        List<T> out = new ArrayList<>();
+        for (int at = 0; at < Math.max(one.size(), other.size()); at++) {
+            if (at < one.size()) {
+                out.add(one.get(at));
+            }
+            if (at < other.size()) {
+                out.add(other.get(at));
+            }
+        }
         return out;
     }
 
@@ -195,8 +355,9 @@ final class RulesAsWritten {
      * closure can be wrong, and each said beside what it tells apart.
      *
      * <p>The reduction and the closure are held to the points over these, and the readers above them
-     * to the same answers whatever order the rules arrive in. A system that asks about order has its
-     * two competing rules in the order whose reversal exposes a reader that lets the last one win.
+     * to the same answers in every order the rules have ({@link #everyOrder}). A system that asks
+     * about order holds two rules bounding one thing, so a reader that lets the last one win, or the
+     * one said between, answers in some order differently.
      */
     static final List<List<Written>> OVER_THREE = List.of(
             // A sum read the other way, where the rest is b and not a again.
