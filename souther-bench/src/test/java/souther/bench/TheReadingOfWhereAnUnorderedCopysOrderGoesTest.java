@@ -211,6 +211,22 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
                 ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
     }
 
+    @Test
+    void aReaderHandedAnObjectByNothingIsReadWhenTheTextOfItsClassSaysACopy() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "saidOfOneItIsHanded",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
+    void aReaderHandedNothingIsReadWhenTheTextItAsksAnObjectForSaysACopy() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "saidByItsOwnText",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
     private static Reading readingOfOnly(Class<?> readers) {
         return SaltedOrderFlow.read(fixtures(readers),
                 TheReadingOfWhereAnUnorderedCopysOrderGoesTest::madeInTheFixtures);

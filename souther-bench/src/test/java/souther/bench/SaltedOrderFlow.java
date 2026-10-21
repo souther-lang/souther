@@ -220,7 +220,50 @@ final class SaltedOrderFlow {
                     if (comparesASizeWithOne(elements)) {
                         asksForExactlyOne.add(in);
                     }
+                    textOfAnyObjectMadeIn(in, elements);
                 });
+            }
+        }
+    }
+
+    /**
+     * Where a method makes text of an object of whatever class, what the fields of each class it
+     * may hold a value as are asked by it.
+     *
+     * <p>Which value the text is made of is settled only by reading the method, so every class a
+     * value in it is held as stands in for it: its own, its parameters', and what it makes, casts
+     * to, reads from a field or is handed back by a call.
+     */
+    private void textOfAnyObjectMadeIn(MethodKey in, List<CodeElement> elements) {
+        boolean makesText = false;
+        Set<String> heldAs = new LinkedHashSet<>();
+        heldAs.add("L" + in.owner() + ";");
+        for (ClassDesc each : MethodTypeDesc.ofDescriptor(in.descriptor()).parameterList()) {
+            heldAs.add(each.descriptorString());
+        }
+        for (CodeElement each : elements) {
+            switch (each) {
+                case InvokeInstruction call -> {
+                    makesText |= makesTextOfAnyObject(call.owner().asInternalName(),
+                            call.name().stringValue());
+                    heldAs.add(call.typeSymbol().returnType().descriptorString());
+                }
+                case InvokeDynamicInstruction dynamic ->
+                        heldAs.add(dynamic.typeSymbol().returnType().descriptorString());
+                case FieldInstruction field -> heldAs.add(field.typeSymbol().descriptorString());
+                case NewObjectInstruction made ->
+                        heldAs.add(made.className().asSymbol().descriptorString());
+                case TypeCheckInstruction check when check.opcode() == Opcode.CHECKCAST ->
+                        heldAs.add(check.type().asSymbol().descriptorString());
+                default -> { }
+            }
+        }
+        if (!makesText) {
+            return;
+        }
+        for (String each : heldAs) {
+            if (each.startsWith("L") && !isJava(each.substring(1))) {
+                asks(in, "C:" + each.substring(1, each.length() - 1));
             }
         }
     }
@@ -704,7 +747,7 @@ final class SaltedOrderFlow {
             // What a walk hands a method is the one element that call is made for.
             tags.add(each.handedToACall());
         }
-        return new Val(tags, wide, -1, null, home);
+        return new Val(tags, wide, -1, null, home, null).heldAs(descriptor);
     }
 
     private static void merge(State[] in, BitSet pending, int to, State state) {
@@ -755,7 +798,8 @@ final class SaltedOrderFlow {
             case ArrayLoadInstruction load -> {
                 state.pop();
                 Val array = state.pop();
-                state.push(new Val(array.as(Kind.PICKED), isWide(load.typeKind()), -1, null, null));
+                state.push(new Val(array.as(Kind.PICKED), isWide(load.typeKind()), -1, null, null,
+                        null));
             }
             case ArrayStoreInstruction _ -> {
                 Val value = state.pop();
@@ -818,7 +862,8 @@ final class SaltedOrderFlow {
             case ThrowInstruction _ -> state.pop();
             case NewObjectInstruction made ->
                     state.push(Val.CLEAN.withAlloc(index + 1)
-                            .withMade(made.className().asInternalName()));
+                            .withMade(made.className().asInternalName())
+                            .heldAs(made.className().asSymbol().descriptorString()));
             case NewPrimitiveArrayInstruction _ -> {
                 state.pop();
                 state.push(Val.CLEAN.withAlloc(index + 1).withMade("array"));
@@ -845,7 +890,8 @@ final class SaltedOrderFlow {
                     if (value.isHeldInAMap() && !SaltedOrderVocabulary.inTheCollectionsLibrary(cast)) {
                         value = value.apartFromAnyPlace();
                     }
-                    state.push(narrowed(value, cast.startsWith("[") ? cast : "L" + cast + ";"));
+                    String castTo = cast.startsWith("[") ? cast : "L" + cast + ";";
+                    state.push(narrowed(value, castTo).heldAs(castTo));
                 }
             }
             case MonitorInstruction _ -> state.pop();
@@ -1068,7 +1114,8 @@ final class SaltedOrderFlow {
                         tags.add(each);
                     }
                 }
-                state.push(new Val(narrowed(tags, type.descriptorString()), wide, -1, null, fact));
+                state.push(new Val(narrowed(tags, type.descriptorString()), wide, -1, null, fact,
+                        null).heldAs(type.descriptorString()));
             }
             default -> {
                 Val value = narrowed(state.pop(), type.descriptorString())
@@ -1111,6 +1158,17 @@ final class SaltedOrderFlow {
 
     private static boolean isJava(String owner) {
         return owner.startsWith("java/") || owner.startsWith("javax/") || owner.startsWith("jdk/");
+    }
+
+    /** Whether a call of the library makes text of an object it is handed, of whatever class. */
+    private static boolean makesTextOfAnyObject(String owner, String name) {
+        return switch (owner) {
+            case "java/lang/String" -> name.equals("valueOf");
+            case "java/lang/StringBuilder", "java/lang/StringBuffer",
+                 "java/lang/AbstractStringBuilder" -> name.equals("append") || name.equals("insert");
+            case "java/util/Objects" -> name.equals("toString");
+            default -> false;
+        };
     }
 
     /**
@@ -1182,6 +1240,20 @@ final class SaltedOrderFlow {
         Set<Tag> result = new LinkedHashSet<>();
         Val made = null;
 
+        // An object handed where any object is taken, to be made text, is the text its class's
+        // toString makes of it. This is how a concatenation hands over every operand that is not a
+        // text or a primitive, so the operand's class is known only from where the value came.
+        if (makesTextOfAnyObject(owner, name)) {
+            List<ClassDesc> parameters = type.parameterList();
+            for (int each = 0; each < args.size(); each++) {
+                String heldAs = args.get(each).type();
+                if (parameters.get(each).descriptorString().equals("Ljava/lang/Object;")
+                        && heldAs != null && !isJava(heldAs)) {
+                    args.set(each, args.get(each).plus(textOfTheFieldsOf(unit, heldAs)));
+                }
+            }
+        }
+
         Signature signature = new Signature(owner, name, descriptor);
         if (isStatic && SaltedOrderVocabulary.declaredTotalOrders().contains(signature)) {
             state.push(Val.of(new Tag(Kind.TOTAL_ORDER, "")));
@@ -1205,7 +1277,7 @@ final class SaltedOrderFlow {
                     }
                 }
                 state.push(new Val(narrowed(left, returns), isWide(type.returnType()), -1, null,
-                        null));
+                        null, null).heldAs(returns));
             }
             return;
         }
@@ -1301,7 +1373,8 @@ final class SaltedOrderFlow {
             int object = heldInAMap ? made.alloc()
                     : SaltedOrderVocabulary.makesAFreshNode(owner, name) ? index + 1 : -1;
             state.push(new Val(narrowed(kept, returns), isWide(type.returnType()), object,
-                    made == null ? null : made.made(), heldInAMap ? made.home() : null));
+                    made == null ? null : made.made(), heldInAMap ? made.home() : null, null)
+                    .heldAs(returns));
         }
     }
 
@@ -1646,7 +1719,7 @@ final class SaltedOrderFlow {
         if (!returns.equals("V")) {
             boolean reference = returns.startsWith("L") || returns.startsWith("[");
             state.push(new Val(reference ? narrowed(result, returns) : Set.of(), wide, -1, null,
-                    null));
+                    null, null).heldAs(returns));
         }
     }
 

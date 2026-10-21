@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -168,8 +169,7 @@ final class SaltedOrder {
         /** Whether this is one of the kinds of thing that came out of a copy. */
         boolean cameOutOfACopy() {
             return kind == Kind.COLLECTION || kind == Kind.TRAVERSAL || isPositional();
-        }
-    }
+        }    }
 
     /**
      * A value the analysis holds on the stack or in a local.
@@ -178,9 +178,12 @@ final class SaltedOrder {
      * is seen by every place the same object is held. {@code home} says where it was last read
      * from, a local or a field, which is how a call on a value taken out of a field is written back
      * to it. {@code made} is the class it was made from, since a call that only names an interface
-     * cannot say whether {@code add} on it keeps an order.
+     * cannot say whether {@code add} on it keeps an order. {@code type} is the class the code holds
+     * it as, where the instruction that put it there names one: what it was made as, cast to, or
+     * read through a field, a parameter or a return. A call that makes text of any object it is
+     * handed says what that class's fields hold, and the call itself names only {@code Object}.
      */
-    record Val(Set<Tag> tags, boolean wide, int alloc, String made, String home) {
+    record Val(Set<Tag> tags, boolean wide, int alloc, String made, String home, String type) {
 
         /**
          * What {@code made} says of a value taken out of a map: the object it was held in, so that
@@ -188,9 +191,9 @@ final class SaltedOrder {
          */
         static final String HELD_IN_A_MAP = "held in a map";
 
-        static final Val CLEAN = new Val(Set.of(), false, -1, null, null);
+        static final Val CLEAN = new Val(Set.of(), false, -1, null, null, null);
 
-        static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null);
+        static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null, null);
 
         Val {
             // Held in the order they were put in, so that walking them says the same twice: a copy
@@ -199,7 +202,7 @@ final class SaltedOrder {
         }
 
         static Val of(Set<Tag> tags) {
-            return new Val(tags, false, -1, null, null);
+            return new Val(tags, false, -1, null, null, null);
         }
 
         static Val of(Tag... tags) {
@@ -220,27 +223,35 @@ final class SaltedOrder {
 
         /** The same, as an object of no place in particular. */
         Val apartFromAnyPlace() {
-            return new Val(tags, wide, -1, null, null);
+            return new Val(tags, wide, -1, null, null, type);
         }
 
         Val withTags(Set<Tag> other) {
-            return new Val(other, wide, alloc, made, home);
+            return new Val(other, wide, alloc, made, home, type);
         }
 
         Val withHome(String at) {
-            return new Val(tags, wide, alloc, made, at);
+            return new Val(tags, wide, alloc, made, at, type);
         }
 
-        Val withMade(String type) {
-            return new Val(tags, wide, alloc, type, home);
+        Val withMade(String madeAs) {
+            return new Val(tags, wide, alloc, madeAs, home, type);
         }
 
         Val withAlloc(int id) {
-            return new Val(tags, wide, id, made, home);
+            return new Val(tags, wide, id, made, home, type);
         }
 
         Val asWide(boolean isWide) {
-            return new Val(tags, isWide, alloc, made, home);
+            return new Val(tags, isWide, alloc, made, home, type);
+        }
+
+        /** The same, held as the class a descriptor names, or as nothing known where it names none. */
+        Val heldAs(String descriptor) {
+            String named = descriptor.startsWith("L")
+                    ? descriptor.substring(1, descriptor.length() - 1) : null;
+            return Objects.equals(named, type) ? this
+                    : new Val(tags, wide, alloc, made, home, named);
         }
 
         Val plus(Collection<Tag> more) {
@@ -261,7 +272,8 @@ final class SaltedOrder {
             all.addAll(other.tags);
             return new Val(all, wide || other.wide, alloc == other.alloc ? alloc : -1,
                     made != null && made.equals(other.made) ? made : null,
-                    home != null && home.equals(other.home) ? home : null);
+                    home != null && home.equals(other.home) ? home : null,
+                    type != null && type.equals(other.type) ? type : null);
         }
 
         /** The copies any of what is here came out of. */
