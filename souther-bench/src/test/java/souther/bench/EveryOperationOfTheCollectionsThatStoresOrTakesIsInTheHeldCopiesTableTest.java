@@ -16,9 +16,13 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
 import java.text.MessageFormat;
 import java.util.AbstractMap;
 import java.util.ArrayDeque;
@@ -30,6 +34,8 @@ import java.util.Objects;
 import java.util.Deque;
 import java.util.Enumeration;
 import java.util.Formatter;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -61,7 +67,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Pattern;
+import java.util.stream.BaseStream;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import java.util.zip.GZIPOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -489,6 +497,121 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
                 HeldCopies.placementOf("offer", 3).orElseThrow());
         assertTrue(HeldCopies.placementOf("replace", 4).isEmpty(),
                 "an operation that no method of the library has was given a place");
+    }
+
+    /**
+     * What walks the elements of a walk, a container or an array, and answers a walk of the same
+     * element type, walks the same elements: a stream made a cursor, a cursor made a split cursor,
+     * a filtered stream. The type says so — it answers a walk of the type variable that the walk
+     * it is made on or given is of — and so what the walk held whole it still holds, as a walk's
+     * element, whichever of these it passes through.
+     */
+    @Test
+    void whatAnswersAWalkOfTheElementsOfAWalkItIsMadeOnHoldsTheCopiesTheWalkHeld() {
+        List<Class<?>> hosts = List.of(Stream.class, BaseStream.class, Iterator.class,
+                Spliterator.class, Enumeration.class, Collections.class, Spliterators.class,
+                StreamSupport.class, Arrays.class, Collection.class, Iterable.class, List.class);
+        List<String> lost = new ArrayList<>();
+        int read = 0;
+        for (Class<?> host : hosts) {
+            for (Method method : host.getMethods()) {
+                if (!keepsTheElementsOfAWalkByItsType(method)) {
+                    continue;
+                }
+                read++;
+                if (!holdsTheWalkItWasGiven(method)) {
+                    lost.add(describe(method));
+                }
+            }
+        }
+        assertEquals(List.of(), lost.stream().distinct().sorted().toList(),
+                "a method answers a walk of the elements of a walk it is made on or given, and what"
+                        + " that held whole is not held by the answer");
+        assertTrue(read > 15, "too few methods were read: " + read);
+    }
+
+    /**
+     * Whether the answer of a call of the method holds, as a walk's element, the copy that what the
+     * call was made on and given held whole in a walk, a container and an array.
+     */
+    private static boolean holdsTheWalkItWasGiven(Method method) {
+        String origin = "probe";
+        boolean isStatic = Modifier.isStatic(method.getModifiers());
+        List<SaltedOrder.Val> args = new ArrayList<>();
+        for (Class<?> each : method.getParameterTypes()) {
+            String path = isAWalk(each) ? "w" : each.isArray() ? "a"
+                    : Iterable.class.isAssignableFrom(each) ? "e" : null;
+            args.add(path == null ? SaltedOrder.Val.CLEAN
+                    : SaltedOrder.Val.of(SaltedOrder.Tag.held(origin, path)));
+        }
+        SaltedOrder.Val receiver = isStatic ? SaltedOrder.Val.CLEAN
+                : SaltedOrder.Val.of(SaltedOrder.Tag.held(origin,
+                        isAWalk(method.getDeclaringClass()) ? "w" : "e"));
+        SaltedOrderVocabulary.Call call = new SaltedOrderVocabulary.Call(
+                method.getDeclaringClass().getName().replace('.', '/'), method.getName(),
+                MethodType.methodType(method.getReturnType(), method.getParameterTypes())
+                        .descriptorString(),
+                receiver, args, isStatic, true, true, false);
+        for (SaltedOrder.Tag each : SaltedOrderVocabulary.of(call).result().tags()) {
+            if (each.isHeld() && each.origin().equals(origin) && each.site().startsWith("w")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether the method answers a walk of the type variable that the walk, container or array it
+     * is made on or given is of.
+     */
+    private static boolean keepsTheElementsOfAWalkByItsType(Method method) {
+        Type returned = method.getGenericReturnType();
+        if (!(returned instanceof ParameterizedType answer)
+                || !isAWalk((Class<?>) answer.getRawType())
+                || answer.getActualTypeArguments().length == 0) {
+            return false;
+        }
+        TypeVariable<?> variable = variableOf(answer.getActualTypeArguments()[0]);
+        if (variable == null) {
+            return false;
+        }
+        if (!Modifier.isStatic(method.getModifiers())) {
+            Class<?> on = method.getDeclaringClass();
+            return (isAWalk(on) || Iterable.class.isAssignableFrom(on))
+                    && Arrays.asList(on.getTypeParameters()).contains(variable)
+                    && on.getTypeParameters()[0].equals(variable);
+        }
+        for (Type each : method.getGenericParameterTypes()) {
+            if (each instanceof ParameterizedType given
+                    && (isAWalk((Class<?>) given.getRawType())
+                            || Iterable.class.isAssignableFrom((Class<?>) given.getRawType()))
+                    && variableOf(given.getActualTypeArguments()[0]) != null
+                    && variableOf(given.getActualTypeArguments()[0]).equals(variable)) {
+                return true;
+            }
+            if (each instanceof GenericArrayType array
+                    && variable.equals(variableOf(array.getGenericComponentType()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isAWalk(Class<?> type) {
+        return BaseStream.class.isAssignableFrom(type) || Iterator.class.isAssignableFrom(type)
+                || Spliterator.class.isAssignableFrom(type)
+                || Enumeration.class.isAssignableFrom(type);
+    }
+
+    private static TypeVariable<?> variableOf(Type type) {
+        if (type instanceof TypeVariable<?> variable) {
+            return variable;
+        }
+        if (type instanceof WildcardType wildcard && wildcard.getUpperBounds().length == 1
+                && wildcard.getUpperBounds()[0] instanceof TypeVariable<?> variable) {
+            return variable;
+        }
+        return null;
     }
 
     /**

@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.BaseStream;
 
 /**
  * What a call does to the copies a container holds whole.
@@ -244,7 +245,7 @@ final class HeldCopies {
             "unmodifiable", "synchronized", "checked");
 
     private static final Set<String> SAME_ELEMENTS_IN_ANOTHER_FORM = Set.of(
-            "toList", "toArray", "sorted", "clone", "asIterator");
+            "toList", "toArray", "sorted", "clone", "asIterator", "trySplit");
 
     /** What the library's own types are, by name, to be read off their hierarchy. */
     private static final Map<String, Optional<Class<?>>> TYPES = new ConcurrentHashMap<>();
@@ -954,6 +955,11 @@ final class HeldCopies {
         if (ENTRY_VIEWS.contains(name)) {
             return prefixed(held, ELEMENT);
         }
+        if (name.equals("peek") && isA(call.owner(), BaseStream.class)) {
+            // Looking at each element of a stream as it passes answers the same stream; a queue's
+            // peek is the one that answers an element.
+            return held;
+        }
         if (takesOut(name)) {
             if (call.descriptor().endsWith(")Ljava/util/Optional;")) {
                 // An optional of one element holds it as a container does.
@@ -966,7 +972,9 @@ final class HeldCopies {
             return takenOut(held, TAKES_A_KEY_OUT.contains(name) ? KEY : ELEMENTS);
         }
         if (SaltedOrderVocabulary.startsATraversal(name)) {
-            return retargeted(held, "ea", WALK_ELEMENT);
+            // A container and an array walk over what they hold, and a stream is made a cursor over
+            // what it was at.
+            return retargeted(held, "eaw", WALK_ELEMENT);
         }
         if (name.equals("toList")) {
             return retargeted(held, "aw", ELEMENT);
@@ -1021,9 +1029,12 @@ final class HeldCopies {
             for (Val each : args) {
                 out.addAll(putIn(slot, each));
             }
-        } else if (!args.isEmpty() && name.equals("stream")) {
-            // A stream over an array, or over a spliterator, walks the same elements.
-            out.addAll(retargeted(held(args.get(0)), "ae", WALK_ELEMENT));
+        } else if (!args.isEmpty() && (name.equals("stream") || name.equals("spliterator")
+                || name.equals("enumeration") || call.owner().equals("java/util/Spliterators"))) {
+            // A stream over an array, a container or a spliterator walks the same elements, and so
+            // does a cursor made of a spliterator, a spliterator made of a cursor or an array, and
+            // an enumeration of a container.
+            out.addAll(retargeted(held(args.get(0)), "aew", WALK_ELEMENT));
         } else if (!args.isEmpty() && (HANDS_BACK_ITS_ARGUMENT.contains(name)
                 || wrapsItsArgument(name))) {
             out.addAll(held(args.get(0)));

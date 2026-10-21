@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.Spliterators;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -343,6 +344,76 @@ public final class HeldWholeAndTakenOut {
         printer.print(Set.copyOf(values));
         printer.flush();
         return out.toString(StandardCharsets.UTF_8);
+    }
+
+    /** A walk that is made a cursor is a cursor over what the walk was at. */
+    public static List<CompositionBudget> aStreamMadeACursor(Set<CompositionBudget> values) {
+        return new ArrayList<>(Stream.of(Set.copyOf(values)).iterator().next());
+    }
+
+    public static List<CompositionBudget> aStreamLookedAtOnTheWayAndMadeACursor(
+            Set<CompositionBudget> values) {
+        return new ArrayList<>(Stream.of(Set.copyOf(values)).peek(_ -> { }).iterator().next());
+    }
+
+    public static List<CompositionBudget> aSplitCursorSplitOff(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> got = new ArrayList<>();
+        Objects.requireNonNull(Stream.of(Set.copyOf(values)).spliterator().trySplit())
+                .tryAdvance(got::add);
+        return new ArrayList<>(got.getFirst());
+    }
+
+    public static List<CompositionBudget> aStreamMadeASplitCursorAndStepped(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> got = new ArrayList<>();
+        Stream.of(Set.copyOf(values)).spliterator().tryAdvance(got::add);
+        return new ArrayList<>(got.getFirst());
+    }
+
+    public static List<CompositionBudget> aLambdaGivenToTheSplitCursorOfAStream(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> got = new ArrayList<>();
+        Stream.of(Set.copyOf(values)).spliterator().tryAdvance(each -> got.add(each));
+        return new ArrayList<>(got.getFirst());
+    }
+
+    public static List<CompositionBudget> aSplitCursorMadeACursorAgain(
+            Set<CompositionBudget> values) {
+        return new ArrayList<>(Spliterators.iterator(Stream.of(Set.copyOf(values)).spliterator())
+                .next());
+    }
+
+    public static List<CompositionBudget> aCursorOverAStreamOverAList(
+            Set<CompositionBudget> values) {
+        return new ArrayList<>(List.of(Set.copyOf(values)).stream().sequential().iterator()
+                .next());
+    }
+
+    public static List<CompositionBudget> aStreamOfAnArrayMadeACursor(
+            Set<CompositionBudget> values) {
+        Set<?>[] held = new Set<?>[1];
+        held[0] = Set.copyOf(values);
+        @SuppressWarnings("unchecked")
+        Set<CompositionBudget> first = (Set<CompositionBudget>) Arrays.stream(held).iterator()
+                .next();
+        return new ArrayList<>(first);
+    }
+
+    public static List<CompositionBudget> aCursorRunToItsEnd(Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> got = new ArrayList<>();
+        Stream.of(Set.copyOf(values)).iterator().forEachRemaining(got::add);
+        return new ArrayList<>(got.getFirst());
+    }
+
+    public static List<CompositionBudget> anEnumerationOverAListOfTheCopy(
+            Set<CompositionBudget> values) {
+        return new ArrayList<>(Collections.enumeration(List.of(Set.copyOf(values)))
+                .nextElement());
+    }
+
+    public static List<CompositionBudget> anEnumerationMadeAList(Set<CompositionBudget> values) {
+        return new ArrayList<>(Collections.list(
+                Collections.enumeration(List.of(Set.copyOf(values)))).getFirst());
     }
 
     /** A writer nothing here made is a window onto wherever whoever made it wrote to. */

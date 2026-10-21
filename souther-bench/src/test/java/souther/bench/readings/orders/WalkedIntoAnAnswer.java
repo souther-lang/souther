@@ -47,6 +47,11 @@ public final class WalkedIntoAnAnswer {
         return List.copyOf(held.figures());
     }
 
+    /** Looking at each of a walk's elements as it passes is not choosing among them. */
+    public static List<CompositionBudget> listedAfterBeingLookedAtOnTheWay(Held held) {
+        return held.figures().stream().peek(_ -> { }).toList();
+    }
+
     public static List<CompositionBudget> gatheredOneAtATime(Held held) {
         List<CompositionBudget> out = new ArrayList<>();
         for (CompositionBudget each : held.figures()) {
