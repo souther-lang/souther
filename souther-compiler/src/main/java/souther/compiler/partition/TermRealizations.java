@@ -48,6 +48,7 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -361,10 +362,11 @@ final class TermRealizations {
         // place, so a second value asked for is a second place and is another group's.
         RealizationTarget.OfANumber itself = null;
         List<RealizationTarget.OfANumber> takenOfIt = new ArrayList<>();
-        // How many the container holds and what it comes to, which are the two numbers a container
-        // is composed out of rather than read for.
+        // How many the container holds and what it comes to, which are the numbers a container
+        // is composed out of rather than read for. It comes to as many totals as the group asks,
+        // each of a field of its elements.
         RealizationTarget.OfANumber manyItHolds = null;
-        RealizationTarget.OfANumber whatItComesTo = null;
+        List<RealizationTarget.OfANumber> whatItComesTo = new ArrayList<>();
         // How many of a string's code points are in a class and what they come to, which are
         // numbers of one string to be written together with how long it is.
         List<RealizationTarget.OfANumber> ofItsCodePoints = new ArrayList<>();
@@ -400,7 +402,7 @@ final class TermRealizations {
                     if (!(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
                         return nothingSolvesAGroup();
                     }
-                    whatItComesTo = target;
+                    whatItComesTo.add(target);
                 }
                 case NumericTerm.TakenOf taken -> {
                     takenOfIt.add(target);
@@ -437,7 +439,7 @@ final class TermRealizations {
                         // total together is a container built to have both, and the arm below is
                         // where the two meet.
                         case TakenAs.HowManyItHolds _ -> manyItHolds = target;
-                        case TakenAs.TheSumOfWhatItHolds _ -> whatItComesTo = target;
+                        case TakenAs.TheSumOfWhatItHolds _ -> whatItComesTo.add(target);
                     }
                 }
             }
@@ -466,19 +468,27 @@ final class TermRealizations {
         }
         // How many a container holds beside what it comes to, which is one container to compose:
         // the sizes it may be are the ones the first number leaves, and filling one of those to
-        // the second is what a total is composed by anyway.
-        if (manyItHolds != null && whatItComesTo != null) {
+        // the second is what a total is composed by anyway. So is a container asked for more than
+        // one total, which is one container whose elements hold a figure at each field a total
+        // reads: a total of each is a share of every element, chosen together.
+        if (!whatItComesTo.isEmpty() && (manyItHolds != null || whatItComesTo.size() > 1)) {
+            if (whatItComesTo.size() > 1 && !ContainersAddingUp.addUpTogether(whatItComesTo)) {
+                return nothingSolvesAGroup();
+            }
             RealizationTarget.OfANumber many = manyItHolds;
-            RealizationTarget.OfANumber total = whatItComesTo;
-            return wholly(targets, List.of(many, total),
-                    () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
+            List<RealizationTarget.OfANumber> owned = new ArrayList<>(whatItComesTo);
+            if (many != null) {
+                owned.add(many);
+            }
+            return wholly(targets, owned,
+                    () -> new JointBuilder.TotalsOfOneContainer(whatItComesTo, many));
         }
         // The remainders of one place by their divisors, with nothing else asked of it. A value
         // that is none of them is nothing these write, so a quotient or a part beside them is a
         // group nothing here solves.
         if (!remainders.isEmpty()) {
             if (!quotients.isEmpty() || !times.isEmpty() || !dates.isEmpty()
-                    || manyItHolds != null || whatItComesTo != null) {
+                    || manyItHolds != null || !whatItComesTo.isEmpty()) {
                 return nothingSolvesAGroup();
             }
             return wholly(targets, remainders.keySet(),
@@ -1182,40 +1192,72 @@ final class TermRealizations {
          * demand refuses is no candidate, and a walk that filled one would spend a figure of this
          * compiler's on a container nobody asked for.
          */
-        record HoldingThatManyAndAddingUpToThat(RealizationTarget.OfANumber manyItHolds,
-                                                RealizationTarget.OfANumber whatItComesTo)
+        record TotalsOfOneContainer(List<RealizationTarget.OfANumber> whatItComesTo,
+                                    RealizationTarget.OfANumber manyItHolds)
                 implements JointBuilder {
+
+            public TotalsOfOneContainer {
+                if (whatItComesTo.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a container composed for its totals is asked for at least one");
+                }
+                whatItComesTo = List.copyOf(whatItComesTo);
+            }
 
             @Override
             public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
-                TermOrders counted = measuring.ordersOf(manyItHolds.term());
-                TermOrders adds = measuring.ordersOf(whatItComesTo.term());
-                AskedAt holdsAt = demands.get(manyItHolds);
-                AskedAt comesToAt = demands.get(whatItComesTo);
-                NumericSet many = holdsAt == null ? null : holdsAt.walking();
-                NumericSet total = comesToAt == null ? null : comesToAt.walking();
-                if (counted == null || counted.answered() == null || adds == null
-                        || many == null || total == null) {
-                    return new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                ContainersAddingUp.HowManyIsAskedFor holding = null;
+                if (manyItHolds != null) {
+                    TermOrders counted = measuring.ordersOf(manyItHolds.term());
+                    AskedAt holdsAt = demands.get(manyItHolds);
+                    NumericSet many = holdsAt == null ? null : holdsAt.walking();
+                    if (counted == null || counted.answered() == null || many == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    // Where the rules leave the size on the way, which the container's own walk
+                    // asks of the region already. What is handed over here is the group's demand
+                    // and not the way, so neither reading stands in for the other.
+                    if (within != null && within.projectionOf(manyItHolds.term())
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    holding = new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
                 }
-                // Where the rules leave the size on the way, which the container's own walk asks
-                // of the region already. What is handed over here is the group's demand and not
-                // the way, so neither reading stands in for the other.
-                if (within != null && within.projectionOf(manyItHolds.term())
-                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
-                    return new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                List<TermOrders> adding = new ArrayList<>();
+                List<Tried> candidates = new ArrayList<>();
+                for (RealizationTarget.OfANumber each : whatItComesTo) {
+                    TermOrders adds = measuring.ordersOf(each.term());
+                    AskedAt comesToAt = demands.get(each);
+                    NumericSet total = comesToAt == null ? null : comesToAt.walking();
+                    if (adds == null || total == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    adding.add(adds);
+                    candidates.add(onTheOrder(total, adds, comesToAt.named(), within));
                 }
-                ContainersAddingUp.HowManyIsAskedFor holding =
-                        new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
+                ContainersAddingUp.HowManyIsAskedFor sizes = holding;
+                Together together = Together.of(candidates);
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
-                        onTheOrder(total, adds, comesToAt.named(), within),
-                        at -> ContainersAddingUp.to(at, sourceType, keptApart, adds, within,
-                                reading, holding, inside));
+                        together.each(), together.rest(),
+                        at -> ContainersAddingUp.to(at.getFirst(), sourceType, keptApart,
+                                adding.getFirst(), within, reading, sizes,
+                                alsoAddingUp(adding, at), inside));
+            }
+
+            /** The totals after the first, each with the number tried for it. */
+            private static List<ContainersAddingUp.AlsoAddingUp> alsoAddingUp(
+                    List<TermOrders> adding, List<Place> at) {
+                List<ContainersAddingUp.AlsoAddingUp> also = new ArrayList<>();
+                for (int each = 1; each < adding.size(); each++) {
+                    also.add(new ContainersAddingUp.AlsoAddingUp(adding.get(each), at.get(each)));
+                }
+                return also;
             }
         }
 
@@ -1669,7 +1711,7 @@ final class TermRealizations {
             return false;
         }
         return switch (builder) {
-            case JointBuilder.HoldingThatManyAndAddingUpToThat _ -> true;
+            case JointBuilder.TotalsOfOneContainer _ -> true;
             case JointBuilder.OneNumberOnItsOwn only -> switch (only.number().term()) {
                 case NumericTerm.TakenOver over ->
                         over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
@@ -2056,13 +2098,22 @@ final class TermRealizations {
      */
     static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
                                        Function<Place, Realization> of) {
+        return firstThatBuilds(walkedTheWholeQuestion, tried.numbers(), tried.rest(), of);
+    }
+
+    /**
+     * The same, over whatever a value is built for: one number, or the numbers of several totals
+     * together ({@link Together}).
+     */
+    static <T> Realization firstThatBuilds(boolean walkedTheWholeQuestion, List<T> numbers,
+                                           Remainder rest, Function<T, Realization> of) {
         // Everything every number that built nothing came to without, taken as one shortfall so
         // that no vocabulary of it is left behind here. The rules leaving no number at one of the
         // numbers handed over says nothing about the next: this walk is over the numbers, and that
         // one was a value's answer, whose shortfall is none.
         CompositionShortfall met = CompositionShortfall.NONE;
         Realization last = null;
-        for (Place number : tried.numbers()) {
+        for (T number : numbers) {
             Realization made = of.apply(number);
             if (made instanceof Realization.Built built) {
                 return built;
@@ -2073,7 +2124,7 @@ final class TermRealizations {
         // Why there were no more to try, said by whatever handed them over. Worked out here, this
         // would be the one place that knows what every account's numbers are and how it walks them,
         // which is what handing the reason over is for.
-        met = met.and(switch (tried.rest()) {
+        met = met.and(switch (rest) {
             case Remainder.Exhausted _ -> CompositionShortfall.NONE;
             case Remainder.StoppedAt(CompositionBudget figure) ->
                     CompositionShortfall.of(Set.of(figure));
@@ -2096,7 +2147,7 @@ final class TermRealizations {
         // same way and has seen one number of it, so the same emptiness said of the class would be
         // a sentence about every value the class holds. And nothing here says anything about what
         // could be built at a number this walked past: this is about the numbers, not the values.
-        if (tried.numbers().isEmpty() && tried.rest() instanceof Remainder.Exhausted
+        if (numbers.isEmpty() && rest instanceof Remainder.Exhausted
                 && walkedTheWholeQuestion) {
             return new Realization.NoNumberTheDeclarationsAdmit();
         }
@@ -2444,6 +2495,64 @@ final class TermRealizations {
             case RemainderSolutions.Answer.Undecided(CompositionBudget figure) ->
                     new Tried(List.of(), new Remainder.StoppedAt(figure));
         };
+    }
+
+    /**
+     * The numbers of several totals tried together: a number for each, and why there are no more
+     * choices of them.
+     *
+     * @param each each choice of one number for every total, in the order the totals are asked
+     * @param rest why there are no more choices
+     */
+    record Together(List<List<Place>> each, Remainder rest) {
+
+        /**
+         * Every choice of one number for each of {@code candidates}, the first total's the slowest
+         * to move, up to the figure that bounds the numbers of a set. What a choice leaves, or what
+         * any total's candidates left, is why there are no more.
+         */
+        static Together of(List<Tried> candidates) {
+            int most = CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum();
+            List<List<Place>> out = new ArrayList<>();
+            boolean cut = false;
+            if (candidates.stream().noneMatch(each -> each.numbers().isEmpty())) {
+                int[] at = new int[candidates.size()];
+                boolean done = false;
+                while (!done) {
+                    if (out.size() == most) {
+                        cut = true;
+                        break;
+                    }
+                    List<Place> choice = new ArrayList<>();
+                    for (int i = 0; i < at.length; i++) {
+                        choice.add(candidates.get(i).numbers().get(at[i]));
+                    }
+                    out.add(List.copyOf(choice));
+                    int i = at.length - 1;
+                    while (i >= 0 && ++at[i] == candidates.get(i).numbers().size()) {
+                        at[i] = 0;
+                        i--;
+                    }
+                    done = i < 0;
+                }
+            }
+            if (cut) {
+                return new Together(out, new Remainder.StoppedAt(
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED));
+            }
+            Set<CompositionRepertoire> written = EnumSet.noneOf(CompositionRepertoire.class);
+            for (Tried each : candidates) {
+                switch (each.rest()) {
+                    case Remainder.Exhausted _ -> { }
+                    case Remainder.StoppedAt stopped -> {
+                        return new Together(out, stopped);
+                    }
+                    case Remainder.SomeOf some -> written.addAll(some.written());
+                }
+            }
+            return new Together(out, written.isEmpty() ? new Remainder.Exhausted()
+                    : new Remainder.SomeOf(written));
+        }
     }
 
     /**

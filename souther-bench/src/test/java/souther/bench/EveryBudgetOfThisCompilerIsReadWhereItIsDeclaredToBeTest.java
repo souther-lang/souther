@@ -394,6 +394,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "says in what it hands back that a run held more members than it offered, by"
                             + " the figure it was cut at"),
+            Map.entry("souther.compiler.partition.TermRealizations$Together#of("
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Together;",
+                    "says in what it hands back that the numbers of several totals were cut at"
+                            + " the figure that bounds the numbers of a set"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofARemainder("
                             + "Lsouther/compiler/partition/Standing$OfARemainder;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
