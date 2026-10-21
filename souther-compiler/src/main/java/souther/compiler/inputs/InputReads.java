@@ -179,8 +179,33 @@ public final class InputReads {
      *
      * <p>The node, and not one equal to it. A value is one value however often it is read, so two
      * reads of the node are taken alike; two written alike are two values, each taken its own way.
+     *
+     * <p>Its hash is worked out once and kept, and so is the hash of what the node is taken as. A
+     * reading is a key wherever a walk asks whether it has been somewhere, and a reading is made
+     * at every step of a walk over the same chain of takings: worked out again, each would walk
+     * the whole chain, and each value a node is taken as is a tree.
      */
-    private record Taken(Core node, TakenAs as, Taken older) {
+    private static final class Taken {
+
+        private final Core node;
+        private final TakenAs as;
+        private final Taken older;
+        /** {@code as.hashCode()}, nought where it has not been worked out. A copy of this taking
+         *  over another chain holds the same {@code as} and starts from what this one knows. */
+        private int asHash;
+        /** {@link #hashCode}, nought where it has not been worked out. */
+        private int hash;
+
+        Taken(Core node, TakenAs as, Taken older) {
+            this(node, as, 0, older);
+        }
+
+        private Taken(Core node, TakenAs as, int asHash, Taken older) {
+            this.node = node;
+            this.as = as;
+            this.asHash = asHash;
+            this.older = older;
+        }
 
         /** What {@code e} is taken as, or null where it is not taken. */
         TakenAs of(Core e) {
@@ -224,24 +249,47 @@ public final class InputReads {
             if (nodes.contains(node)) {
                 return older;
             }
-            return older == this.older ? this : new Taken(node, as, older);
+            return older == this.older ? this : new Taken(node, as, asHash, older);
         }
 
         /** This, newest first, over {@code base}. */
         private Taken over(Taken base) {
             return base == null ? this
-                    : new Taken(node, as, older == null ? base : older.over(base));
+                    : new Taken(node, as, asHash, older == null ? base : older.over(base));
+        }
+
+        private int asHash() {
+            int h = asHash;
+            if (h == 0) {
+                h = as.hashCode();
+                asHash = h;
+            }
+            return h;
         }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Taken that && node == that.node
-                    && as.equals(that.as) && Objects.equals(older, that.older);
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Taken that) || node != that.node) {
+                return false;
+            }
+            // Two whose hashes are known and differ hold different values somewhere down the chain.
+            if (hash != 0 && that.hash != 0 && hash != that.hash) {
+                return false;
+            }
+            return as.equals(that.as) && Objects.equals(older, that.older);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(System.identityHashCode(node), as, older);
+            int h = hash;
+            if (h == 0) {
+                h = Objects.hash(System.identityHashCode(node), asHash(), older);
+                hash = h;
+            }
+            return h;
         }
     }
 

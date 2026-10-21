@@ -1,13 +1,16 @@
 package souther.compiler.program;
 
-import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.diag.CompileException;
+import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,8 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * are about how its parts agree, and the models are where those parts are written the way somebody
  * writes them — values in an attached file among them — rather than the way a test about one part
  * writes it.
+ *
+ * <p>Taken from the compilations {@link RepositoryModels} already answered, through the assembler's
+ * entry for a compilation in hand, which asks the same verdict and makes the same snapshot as the
+ * entry an output calls with sources.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryModelTheRepositoryCarriesIsAProgramAnOutputReadsTest {
 
     /**
@@ -34,15 +42,15 @@ class EveryModelTheRepositoryCarriesIsAProgramAnOutputReadsTest {
     void everyModelTheLanguageAcceptsIsReadAsACheckedProgram() {
         List<String> read = new ArrayList<>();
         List<String> refused = new ArrayList<>();
-        for (String corpus : ConformanceCorpus.manifest().keySet()) {
+        for (Map.Entry<String, Compilation> corpus : RepositoryModels.byCorpus().entrySet()) {
             try {
-                CheckedProgram.of(ConformanceCorpus.sourcesOf(corpus));
-                read.add(corpus);
+                CheckedProgramAssembler.of(corpus.getValue());
+                read.add(corpus.getKey());
             } catch (CompileException e) {
                 // The language refused it, so there is no program to read.
             } catch (IllegalStateException e) {
-                read.add(corpus);
-                refused.add(corpus + ": " + e.getMessage());
+                read.add(corpus.getKey());
+                refused.add(corpus.getKey() + ": " + e.getMessage());
             }
         }
         assertEquals(List.of(), refused, "models the language accepts and the program API refuses");
