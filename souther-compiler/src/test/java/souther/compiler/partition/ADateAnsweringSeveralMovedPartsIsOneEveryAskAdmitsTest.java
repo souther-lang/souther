@@ -11,7 +11,6 @@ import souther.compiler.semantics.TakenAs.DatePart;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,33 +60,40 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         };
     }
 
-    private static final List<DatePart> PARTS = List.of(DatePart.values());
+    /**
+     * Asks put together so that the date they meet at is known beforehand, which the walk confirms
+     * before the search is held against it.
+     *
+     * @param what what the case is made to tell apart
+     * @param on   the day the walk finds: the only one in a decade, or the first of a cycle; null
+     *             where it finds none
+     * @param asks what is asked of one date
+     */
+    private record Case(String what, LocalDate on, List<TermRealizations.DatePartAsk> asks) {
 
-    private static final long[] MOVES = {0, 1, -1, 30, -30, 365, -366};
-
-    /** What a chain of moves is defined at, for the chains this walks: defined everywhere, or only
-     *  between two days a step of the chain left. */
-    private static DateTranslation chain(Random random) {
-        long offset = MOVES[random.nextInt(MOVES.length)];
-        DateTranslation whole = DateTranslation.none().thenAddDays(offset);
-        if (random.nextInt(3) > 0) {
-            return whole;
+        static Case of(String what, LocalDate on, TermRealizations.DatePartAsk... asks) {
+            return new Case(what, on, List.of(asks));
         }
-        long from = LocalDate.of(1998 + random.nextInt(9), 1 + random.nextInt(12), 1)
-                .toEpochDay();
-        return new DateTranslation(offset, from, from + random.nextInt(900));
     }
 
-    private static NumericSet numbers(Random random, DatePart part, boolean lead) {
-        int range = switch (part) {
-            case YEAR -> 5;
-            case MONTH -> 12;
-            case DAY -> 31;
-        };
-        int base = part == DatePart.YEAR ? 2000 : 1;
-        Place value = Count.of(base + random.nextInt(range));
-        return lead || random.nextBoolean() ? new NumericSet.At(value)
-                : new NumericSet.AwayFrom(List.of(value, Count.of(base + random.nextInt(range))));
+    private static TermRealizations.DatePartAsk ask(DatePart part, DateTranslation moved,
+                                                    int value) {
+        return new TermRealizations.DatePartAsk(part, moved, new NumericSet.At(Count.of(value)));
+    }
+
+    private static TermRealizations.DatePartAsk awayFrom(DatePart part, DateTranslation moved,
+                                                         int one, int other) {
+        return new TermRealizations.DatePartAsk(part, moved,
+                new NumericSet.AwayFrom(List.<Place>of(Count.of(one), Count.of(other))));
+    }
+
+    private static DateTranslation by(long days) {
+        return DateTranslation.none().thenAddDays(days);
+    }
+
+    /** Moving nothing, and defined only from {@code first} to {@code last}. */
+    private static DateTranslation between(LocalDate first, LocalDate last) {
+        return new DateTranslation(0, first.toEpochDay(), last.toEpochDay());
     }
 
     private static boolean admits(TermRealizations.DatePartAsk ask, long day) {
@@ -103,32 +109,90 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
 
     /**
      * Whatever is offered answers every ask, and nothing is offered only where nothing does.
+     *
+     * <p>The search looks only at the days where some ask is answered otherwise than on the day
+     * before, so what it can get wrong is where those days are: one too late, one too early, or
+     * one left out. A date answered on many days hides that, since the day after a misplaced cut
+     * answers as well. So each case here is answered on one day only, and that day is one the walk
+     * reaches only by a cut of its own kind: the first day a narrow ask is defined at; the first
+     * of a month reached by an ask a day back turning, and a day two moved months meet at, which
+     * no unmoved ask cuts at, so the months of a moved date have to start where the calendar
+     * starts them; the first and the last day of the year walked, and the first of a year walked
+     * a month back; the last day of a year a second year ask moves into the next; a year walked
+     * that is one day long; the day an ask leaving all but two months is answered again; and the
+     * day an ask leaving all but two years stops being answered. Beside most of them stands one
+     * that misses by a day and is answered nowhere, so an offer of a date that does not answer is
+     * seen as well. That each case is answered on its day and no other is the walk's finding, and
+     * is held before the search is.
      */
     @Test
     void whatIsOfferedAnswersEveryAskAndNothingIsOfferedOnlyWhereNothingDoes() {
-        Random random = new Random(2255);
+        DateTranslation none = DateTranslation.none();
+        LocalDate midsummer = LocalDate.of(2001, 6, 15);
+        List<Case> cases = List.of(
+                Case.of("the first day a narrow ask is defined at",
+                        LocalDate.of(2001, 3, 31), year(none, 2001), ask(DatePart.MONTH,
+                                between(LocalDate.of(2001, 3, 31), LocalDate.of(2001, 4, 30)), 3)),
+                Case.of("a narrow ask defined from the day after", null, year(none, 2001),
+                        ask(DatePart.MONTH,
+                                between(LocalDate.of(2001, 4, 1), LocalDate.of(2001, 4, 30)), 3)),
+                Case.of("the first of a month a day back turns at", LocalDate.of(2001, 5, 1),
+                        year(none, 2001), ask(DatePart.MONTH, by(-1), 4),
+                        ask(DatePart.MONTH, none, 5)),
+                Case.of("a month a day back and a month after the next", null, year(none, 2001),
+                        ask(DatePart.MONTH, by(-1), 4), ask(DatePart.MONTH, none, 6)),
+                Case.of("the one day whose day before and the day before that are in two months",
+                        LocalDate.of(2001, 5, 2), year(none, 2001),
+                        ask(DatePart.MONTH, by(-1), 5), ask(DatePart.MONTH, by(-2), 4)),
+                Case.of("the last day of the year walked", LocalDate.of(2001, 12, 31),
+                        year(none, 2001), ask(DatePart.MONTH, none, 12),
+                        ask(DatePart.DAY, none, 31)),
+                Case.of("December a day on and the thirty-first", null, year(none, 2001),
+                        ask(DatePart.MONTH, by(1), 12), ask(DatePart.DAY, none, 31)),
+                Case.of("the first day of the year walked", LocalDate.of(2001, 1, 1),
+                        year(none, 2001), ask(DatePart.MONTH, none, 1), ask(DatePart.DAY, none, 1)),
+                Case.of("the first day of a year walked a month back", LocalDate.of(2001, 1, 31),
+                        year(by(-30), 2001), ask(DatePart.MONTH, none, 1),
+                        ask(DatePart.DAY, none, 31)),
+                Case.of("the last day of a year whose next day is the next year",
+                        LocalDate.of(2001, 12, 31), year(none, 2001), year(by(1), 2002)),
+                Case.of("the next day in the next year, on the thirtieth", null,
+                        year(none, 2001), year(by(1), 2002), ask(DatePart.DAY, none, 30)),
+                Case.of("a year walked over one day", midsummer,
+                        year(between(midsummer, midsummer), 2001)),
+                Case.of("a year walked over one day of another year", null,
+                        year(between(midsummer, midsummer), 2002)),
+                Case.of("the first day after two months left out", LocalDate.of(2001, 4, 1),
+                        year(none, 2001), awayFrom(DatePart.MONTH, none, 2, 3),
+                        ask(DatePart.MONTH, by(-1), 3)),
+                Case.of("the one day whose year before is neither of two left out",
+                        LocalDate.of(2003, 1, 1), year(none, 2003),
+                        awayFrom(DatePart.YEAR, by(-366), 2002, 2003)),
+                Case.of("the first of March after a leap day", LocalDate.of(2004, 3, 1),
+                        year(none, 2004), ask(DatePart.DAY, by(-1), 29),
+                        ask(DatePart.MONTH, none, 3), ask(DatePart.DAY, none, 1)),
+                Case.of("the first of March in a year with no leap day", null,
+                        year(none, 2001), ask(DatePart.DAY, by(-1), 29),
+                        ask(DatePart.MONTH, none, 3), ask(DatePart.DAY, none, 1)));
         int offered = 0;
         int refused = 0;
-        for (int round = 0; round < 600; round++) {
-            List<TermRealizations.DatePartAsk> asks = new ArrayList<>();
-            asks.add(new TermRealizations.DatePartAsk(DatePart.YEAR, chain(random),
-                    numbers(random, DatePart.YEAR, true)));
-            int more = random.nextInt(3);
-            for (int each = 0; each < more; each++) {
-                DatePart part = PARTS.get(random.nextInt(PARTS.size()));
-                asks.add(new TermRealizations.DatePartAsk(part, chain(random),
-                        numbers(random, part, false)));
+        for (Case each : cases) {
+            List<TermRealizations.DatePartAsk> asks = each.asks();
+            List<LocalDate> answering = new ArrayList<>();
+            for (long day = FIRST; day <= LAST; day++) {
+                final long on = day;
+                if (asks.stream().allMatch(ask -> admits(ask, on))) {
+                    answering.add(LocalDate.ofEpochDay(day));
+                }
             }
+            String where = each.what() + ": " + asks;
+            assertEquals(each.on() == null ? List.of() : List.of(each.on()), answering,
+                    "the days the walk finds, " + where);
+            boolean somethingAnswers = !answering.isEmpty();
 
             TermRealizations.Search found =
                     TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE);
 
-            boolean somethingAnswers = false;
-            for (long day = FIRST; day <= LAST && !somethingAnswers; day++) {
-                final long on = day;
-                somethingAnswers = asks.stream().allMatch(ask -> admits(ask, on));
-            }
-            String where = asks.toString();
             if (somethingAnswers) {
                 assertNotNull(found.on(),
                         "a date answers every ask, and none was offered: " + where);
@@ -147,8 +211,8 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         }
         // So that a walk which offered nothing, or refused nothing, cannot pass for one that was
         // right every time.
-        assertTrue(offered > 50, "only " + offered + " rounds had a date");
-        assertTrue(refused > 50, "only " + refused + " rounds had none");
+        assertTrue(offered > 0, "no case had a date");
+        assertTrue(refused > 0, "every case had a date");
     }
 
     /** The first day a walk of one cycle starts at, where the asks are defined there. */
@@ -188,37 +252,76 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
      * which covers every day the narrower moves here are defined at. The walk knows nothing of
      * where the search starts or stops, so neither the window it picks nor the cuts it makes can
      * leave a date out unseen.
+     *
+     * <p>What the search decides beyond where it cuts is which days it walks: from where every
+     * ask is defined, over a cycle, a year at a time. The cases tell those choices apart. Asks
+     * defined only before the year the cycle starts at, or only within part of a year inside it,
+     * stand beside ones that miss by a day. A leap day a year's days on is first met three years
+     * into the cycle, which a walk of fewer years does not reach. Each year walked starts its cuts
+     * afresh, so a day answered only on the second day of a year, or where two moved months meet,
+     * or where a month left out ends, is found only where each ask's runs start where the
+     * calendar's do. The rest are what a month and a day of the month a day back or a month on
+     * reach and do not, and a month a day back that January cannot have.
      */
     @Test
     void monthsAndDaysWithNoYearAreAnsweredWhereverADateAnswersThem() {
-        Random random = new Random(2443);
-        List<DatePart> noYear = List.of(DatePart.MONTH, DatePart.DAY);
+        DateTranslation none = DateTranslation.none();
+        LocalDate july = LocalDate.of(2003, 7, 20);
+        LocalDate august = LocalDate.of(2003, 8, 10);
+        List<Case> cases = List.of(
+                Case.of("a month asked only in a year before the cycle", LocalDate.of(1998, 5, 1),
+                        ask(DatePart.MONTH,
+                                between(LocalDate.of(1998, 1, 1), LocalDate.of(1998, 12, 31)), 5)),
+                Case.of("a month asked only over days before the cycle that hold no such month",
+                        null, ask(DatePart.MONTH,
+                                between(LocalDate.of(1998, 6, 1), LocalDate.of(1999, 4, 30)), 5)),
+                Case.of("the one twentieth a narrow ask inside the cycle is defined at", july,
+                        ask(DatePart.MONTH, between(july.withDayOfMonth(1), august), 7),
+                        ask(DatePart.DAY, none, 20)),
+                Case.of("a narrow ask inside the cycle that stops the day before", null,
+                        ask(DatePart.MONTH, between(july.withDayOfMonth(1), july.minusDays(1)),
+                                7),
+                        ask(DatePart.DAY, none, 20)),
+                Case.of("a day whose day before and the day before that are in two months",
+                        LocalDate.of(1997, 5, 2),
+                        ask(DatePart.MONTH, by(-1), 5), ask(DatePart.MONTH, by(-2), 4)),
+                Case.of("the day after a year walked starts", LocalDate.of(1997, 1, 2),
+                        ask(DatePart.MONTH, none, 1), ask(DatePart.DAY, none, 2)),
+                Case.of("a leap day", LocalDate.of(2000, 2, 29),
+                        ask(DatePart.MONTH, none, 2), ask(DatePart.DAY, none, 29)),
+                Case.of("a leap day a year's days on", LocalDate.of(1999, 3, 1),
+                        ask(DatePart.MONTH, by(365), 2), ask(DatePart.DAY, by(365), 29)),
+                Case.of("the first of a month after a thirty-first", LocalDate.of(1996, 11, 1),
+                        ask(DatePart.DAY, by(-1), 31), ask(DatePart.DAY, none, 1)),
+                Case.of("the first of March after a thirty-first", null,
+                        ask(DatePart.DAY, by(-1), 31), ask(DatePart.MONTH, none, 3),
+                        ask(DatePart.DAY, none, 1)),
+                Case.of("a date in March a month on that is a thirty-first",
+                        LocalDate.of(1997, 1, 31),
+                        ask(DatePart.MONTH, by(30), 3), ask(DatePart.DAY, none, 31)),
+                Case.of("the first day after two months left out", LocalDate.of(1997, 4, 1),
+                        awayFrom(DatePart.MONTH, none, 2, 3), ask(DatePart.MONTH, by(-1), 3)),
+                Case.of("January whose day before is neither December nor January", null,
+                        awayFrom(DatePart.MONTH, by(-1), 1, 12), ask(DatePart.MONTH, none, 1)));
         int offered = 0;
         int refused = 0;
-        for (int round = 0; round < 300; round++) {
-            List<TermRealizations.DatePartAsk> asks = new ArrayList<>();
-            int many = 1 + random.nextInt(3);
-            for (int each = 0; each < many; each++) {
-                DatePart part = noYear.get(random.nextInt(noYear.size()));
-                asks.add(new TermRealizations.DatePartAsk(part, chain(random),
-                        numbers(random, part, random.nextBoolean())));
-            }
-            boolean somethingAnswers = false;
+        for (Case each : cases) {
+            List<TermRealizations.DatePartAsk> asks = each.asks();
+            LocalDate first = null;
             for (long day = WIDE_FROM + REACH; day < WIDE_FROM + MONTHS.length - REACH
-                    && !somethingAnswers; day++) {
-                somethingAnswers = true;
-                for (TermRealizations.DatePartAsk ask : asks) {
-                    if (!admitsWide(ask, day)) {
-                        somethingAnswers = false;
-                        break;
-                    }
+                    && first == null; day++) {
+                final long on = day;
+                if (asks.stream().allMatch(ask -> admitsWide(ask, on))) {
+                    first = LocalDate.ofEpochDay(day);
                 }
             }
+            String where = each.what() + ": " + asks;
+            assertEquals(each.on(), first, "the first day the walk finds, " + where);
+            boolean somethingAnswers = first != null;
 
             TermRealizations.Search found =
                     TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE);
 
-            String where = asks.toString();
             assertTrue(found.everyOne(), "a cycle is every day there is to ask: " + where);
             assertEquals(somethingAnswers, found.on() != null, where);
             if (found.on() == null) {
@@ -230,8 +333,8 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
                 offered++;
             }
         }
-        assertTrue(offered > 50, "only " + offered + " rounds had a date");
-        assertTrue(refused > 20, "only " + refused + " rounds had none");
+        assertTrue(offered > 0, "no case had a date");
+        assertTrue(refused > 0, "every case had a date");
     }
 
     /**
@@ -259,6 +362,37 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
             }
         }
         assertEquals(LocalDate.of(2096, 3, 1), first);
+        assertEquals(first, found.on());
+        assertTrue(found.everyOne());
+    }
+
+    /**
+     * The cycle walked is one every ask is defined throughout, and not one that starts where the
+     * ask defined furthest back does.
+     *
+     * <p>The same combination, with the move four years on defined only from 2300: every first of
+     * March from then on has a leap day within four years until 2500, which is not a leap year, so
+     * the first date that answers is in 2496. A cycle starting in 2000 holds no day of it.
+     */
+    @Test
+    void theCycleWalkedIsOneEveryAskIsDefinedThroughout() {
+        long fourYears = 4 * 365 + 1;
+        long from = LocalDate.of(2300, 1, 1).toEpochDay();
+        DateTranslation late = new DateTranslation(fourYears, from,
+                LocalDate.MAX.toEpochDay() - fourYears);
+        TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(List.of(
+                part(DatePart.MONTH, 3), part(DatePart.DAY, 1),
+                new TermRealizations.DatePartAsk(DatePart.DAY, late,
+                        new NumericSet.At(Count.of(2)))), Carrier.DATE);
+
+        LocalDate first = null;
+        for (LocalDate on = LocalDate.ofEpochDay(from); first == null; on = on.plusDays(1)) {
+            if (on.getMonthValue() == 3 && on.getDayOfMonth() == 1
+                    && on.plusDays(fourYears).getDayOfMonth() == 2) {
+                first = on;
+            }
+        }
+        assertEquals(LocalDate.of(2496, 3, 1), first);
         assertEquals(first, found.on());
         assertTrue(found.everyOne());
     }
