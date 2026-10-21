@@ -87,19 +87,18 @@ public sealed interface RealizationTarget {
                 && mine.keyAt().equals(theirs.keyAt()) && !mine.asked().equals(theirs.asked());
     }
 
+    /** The key of the elements this target is asked about, or null where it is about no such key. */
+    default AskedKey askedKey() {
+        return null;
+    }
+
     /**
-     * The key of the elements this target is asked about, and the input whose value it is —
-     * null where the target is about no such key.
+     * The key a target asks about ({@link #askedKey}).
      *
      * @param elements where the elements stand
      * @param keyAt    the field of an element that is its key
      * @param asked    the input whose value the key is asked for
      */
-    default AskedKey askedKey() {
-        return null;
-    }
-
-    /** The key a target asks about ({@link #askedKey}). */
     record AskedKey(TermPath elements, TermPath keyAt, TermPath asked) {}
 
     /**
