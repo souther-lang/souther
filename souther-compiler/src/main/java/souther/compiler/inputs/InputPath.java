@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Which position of a behavior's input an expression names, and that it names none where it names
@@ -78,8 +79,9 @@ final class InputPath {
     private final DeclarationNewtypes newtypes;
     private final ElementQuestion asked;
     /** The reading this walk is asked on: what it takes a node as ({@link InputReads#taking}), and
-     *  the names inside an arm a choice has ({@link InputReads#namesInside}). */
-    private final InputReads reads;
+     *  the reading inside an arm a choice has ({@link InputReads#insideArm}). Put in place of
+     *  while an arm is read ({@link #inArm}). */
+    private InputReads reads;
     private final BindingTrail trail = new BindingTrail();
     /** The direction a walk after the order must come out walking ({@link TraversalDirection});
      *  the other questions say nothing of it. */
@@ -537,8 +539,30 @@ final class InputPath {
         return written != null ? written : placeOfAnElementsPair(get, names);
     }
 
-    /** An arm of a choice: what it answers, and the names in force inside it. */
-    private record Arm(Core body, BindingEnvironment names) {}
+    /** An arm of a choice: what it answers, and the reading inside it. */
+    private record Arm(Core body, InputReads reads) {
+
+        /** The names in force inside the arm. */
+        BindingEnvironment names() {
+            return reads.names();
+        }
+    }
+
+    /**
+     * What {@code read} makes of {@code arm}, read on the reading inside it.
+     *
+     * <p>The reading is the walk's to put back, so that the binding trail the walk keeps stays one
+     * across the arms, as a walk into any other expression's children does.
+     */
+    private <T> T inArm(Arm arm, Supplier<T> read) {
+        InputReads outside = reads;
+        reads = arm.reads();
+        try {
+            return read.get();
+        } finally {
+            reads = outside;
+        }
+    }
 
     /**
      * The arms of the choice {@code e} is, each with the names inside it, or null where {@code e}
@@ -551,9 +575,10 @@ final class InputPath {
      */
     private List<Arm> armsOf(Core e, BindingEnvironment names) {
         return switch (Core.withoutStanding(e)) {
-            case Core.If iff -> List.of(new Arm(iff.then(), names), new Arm(iff.els(), names));
+            case Core.If iff -> List.of(new Arm(iff.then(), reads.withNames(names)),
+                    new Arm(iff.els(), reads.withNames(names)));
             case Core.Match match -> match.cases().stream()
-                    .map(arm -> new Arm(arm.body(), reads.namesInside(names,
+                    .map(arm -> new Arm(arm.body(), reads.insideArm(names,
                             new Choice.Decides.ACase(arm, match.scrutinee()), newtypes)))
                     .toList();
             default -> null;
@@ -758,7 +783,7 @@ final class InputPath {
                 boolean holdsNone = Core.withoutStanding(arm.body()) instanceof Core.ListLit written
                         && written.elements().isEmpty();
                 if (!holdsNone || asksEveryOccurrence()) {
-                    each.add(heldAt(arm.body(), wanted, arm.names()));
+                    each.add(inArm(arm, () -> heldAt(arm.body(), wanted, arm.names())));
                 }
             }
             return alongEachCase(each);
@@ -988,7 +1013,7 @@ final class InputPath {
     private PathResolution acrossCases(List<Arm> arms, Function<Arm, PathResolution> each) {
         List<PathResolution> answers = new ArrayList<>();
         for (Arm one : arms) {
-            PathResolution answer = each.apply(one);
+            PathResolution answer = inArm(one, () -> each.apply(one));
             if (answer == null) {
                 return null;
             }

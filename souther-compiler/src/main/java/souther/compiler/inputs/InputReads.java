@@ -2232,22 +2232,29 @@ public final class InputReads {
     }
 
     /**
-     * The names in force inside the arm {@code decidedBy} took, for a walk that stands in the names
+     * This reading inside the arm {@code decidedBy} took, for a walk that stands in the names
      * {@code at} and not in the ones here.
      *
      * <p>A query for where a value came from crosses bindings on the way to a choice, and reads the
      * choice's arms in those. An arm that binds a name opens it on top of them ({@link #choosing}),
-     * which is the one place that says what such a name stands for. {@code at} itself where the
-     * declarations of this input carry no symbols to read an arm under.
+     * which is the one place that says what such a name stands for. The whole reading is handed
+     * back and not the names of it: what the arm adds is not all in the names, and a walk that took
+     * only them would lose the rest the first time a reader of it asked.
+     *
+     * <p>The reading at {@code at} itself where the declarations of this input carry no symbols to
+     * read an arm under.
      */
-    BindingEnvironment namesInside(BindingEnvironment at, Choice.Decides decidedBy,
-                                   DeclarationNewtypes newtypes) {
+    InputReads insideArm(BindingEnvironment at, Choice.Decides decidedBy,
+                         DeclarationNewtypes newtypes) {
+        InputReads there = withNames(at);
         Symbols symbols = declared.symbols();
-        if (symbols == null) {
-            return at;
-        }
-        return new InputReads(at, alternatives, declared, dependencies, applied)
-                .choosing(decidedBy, symbols, newtypes).names;
+        return symbols == null ? there : there.choosing(decidedBy, symbols, newtypes);
+    }
+
+    /** This reading, standing in the names {@code at}. */
+    InputReads withNames(BindingEnvironment at) {
+        return at == names ? this
+                : new InputReads(at, alternatives, declared, dependencies, applied);
     }
 
     /**

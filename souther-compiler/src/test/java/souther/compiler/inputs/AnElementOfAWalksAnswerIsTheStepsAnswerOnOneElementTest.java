@@ -494,6 +494,57 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 """), "a record out of the arm");
     }
 
+    /**
+     * A name an arm binds to a value worked out, not to a place of the input, is measured out of
+     * the arm as it is inside it: the pair a helper answers says what the rule written in the arm
+     * says, whatever that is. What the arm adds to the reading is held whole and not only in its
+     * names, so a reader of it that asks for the rest is answered the same.
+     */
+    @Test
+    void aNameAnArmBindsToAValueWorkedOutIsMeasuredOutOfTheArmAsInIt() {
+        String inTheArm = measured("""
+                behavior busy : (xs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (xs, atLeast) =
+                    match List.get(0, [List.reverse(xs)]) with
+                    | Some v -> List.filter(n -> n >= atLeast, v)
+                    | None -> []
+                """);
+        String viaPair = measured("""
+                let pick (xs: List<Int>): (Int, List<Int>) =
+                    match List.get(0, [List.reverse(xs)]) with
+                    | Some v -> (1, v)
+                    | None -> (0, [])
+
+                behavior busy : (xs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (xs, atLeast) = {
+                    let (_, s) = pick(xs)
+                    List.filter(n -> n >= atLeast, s)
+                }
+                """);
+        assertEquals(inTheArm, viaPair);
+
+        String optionInTheArm = measured("""
+                behavior busy : (outer: Map<String, List<Int>>, atLeast: Int) -> List<Int>
+                let busy (outer, atLeast) =
+                    match Option.map(xs -> List.reverse(xs), Map.get("k", outer)) with
+                    | Some ys -> List.filter(n -> n >= atLeast, ys)
+                    | None -> []
+                """);
+        String optionViaPair = measured("""
+                let select (outer: Map<String, List<Int>>): (Int, List<Int>) =
+                    match Option.map(xs -> List.reverse(xs), Map.get("k", outer)) with
+                    | Some ys -> (1, ys)
+                    | None -> (0, [])
+
+                behavior busy : (outer: Map<String, List<Int>>, atLeast: Int) -> List<Int>
+                let busy (outer, atLeast) = {
+                    let (_, selected) = select(outer)
+                    List.filter(n -> n >= atLeast, selected)
+                }
+                """);
+        assertEquals(optionInTheArm, optionViaPair);
+    }
+
     /** The same where the arm opens what a lookup in a map found under its key. */
     @Test
     void aNameAnArmOpensOutOfALookupIsFollowedOutOfTheArmItWasBoundIn() {
