@@ -27,7 +27,6 @@ public final class RuleReadings {
      *  compilation of its own. */
     public static RuleReadingSource ofSource(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         return of(compilation, compilation.modules().get(0));
     }
 
@@ -66,7 +65,6 @@ public final class RuleReadings {
      */
     public static String admittedByTheValueOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         Symbols symbols = souther.compiler.query.Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(symbols.module(), "N"));

@@ -156,7 +156,6 @@ class WhatStandsInForARequirementIsAskedInOnePlaceTest {
 
     private static Model modelOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         assertNotNull(prepared, "the model under test compiles");

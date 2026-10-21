@@ -314,9 +314,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     private static final Compilation COMPILATION = compiled();
 
     private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(SPREAD, "Main");
-        made.answerEverything();
-        return made;
+        return Compilation.ofSource(SPREAD, "Main");
     }
 
     private static String module() {

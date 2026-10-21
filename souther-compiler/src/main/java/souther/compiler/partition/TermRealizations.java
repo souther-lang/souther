@@ -367,8 +367,9 @@ final class TermRealizations {
                     return nothingSolvesAGroup();
                 }
                 // Written as the value it is the end of, alone: beside another number of the same
-                // place it would be two numbers asked of one value that need not be one.
-                case NumericTerm.ExtremeOfItsKey _ -> {
+                // place it would be two numbers asked of one value that need not be one. The same
+                // for what the elements of a key come to.
+                case NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _ -> {
                     return nothingSolvesAGroup();
                 }
                 case NumericTerm.ValueOf _ -> itself = target;
@@ -1397,7 +1398,7 @@ final class TermRealizations {
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                     NumericTerm.ExtremeOfItsKey _ -> false;
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
@@ -1600,6 +1601,10 @@ final class TermRealizations {
                 nothingInside(inside);
                 yield standing(sourceType, orders, asked, within, reading);
             }
+            // Written as the container of the elements, holding elements of one key that come to
+            // the number ({@link RealizationTarget.UnderItsKey}).
+            case NumericTerm.GatheredUnderItsKey _ -> underItsKey(sourceType, keptApart, orders,
+                    asked, within, reading, inside);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(),
                     taken.transformation(), sourceType, keptApart, orders, asked, within,
                     reading, inside);
@@ -1887,6 +1892,38 @@ final class TermRealizations {
     private static Realization treesNotWritten(String why) {
         return new Realization.Unexhausted(CompositionShortfall.writing(
                 Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT)), why);
+    }
+
+    /**
+     * Containers of the elements a key's number is gathered from, each holding elements that come
+     * to one number of the set asked for.
+     *
+     * <p>A total is written as a total over the container is, as many elements as add up to it and
+     * at least one. An end is written as one element: elements of one key whose least is a number
+     * are not elements adding up to it, and one element is its own least and greatest. Either way
+     * what the elements come to under their key is the number only where they share it, which the
+     * row read back whole says.
+     */
+    private static Realization underItsKey(Type sourceType, List<List<String>> keptApart,
+                                           TermOrders orders, AskedAt asked,
+                                           SearchRegion within, RuleReadingContext reading,
+                                           DemandsInside inside) {
+        NumericTerm.GatheredUnderItsKey gathered = (NumericTerm.GatheredUnderItsKey) orders.term();
+        if (orders.answered() == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // Some element, since a key is filed where one has it: a container of none comes to
+        // nought added up and files no key at all.
+        ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
+                gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End
+                        ? new NumericSet.At(Count.of(1))
+                        : new NumericSet.AwayFrom(List.of(Count.of(0))),
+                Carrier.WHOLE);
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                onTheOrder(asked.walking(), orders, asked.named(), within),
+                number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
+                        reading, elements, inside));
     }
 
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
@@ -2982,7 +3019,8 @@ final class TermRealizations {
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                     NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _ ->
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _,
+                     NumericTerm.GatheredUnderItsKey _ ->
                         throw new IllegalStateException(
                         term + " is no number a string is written for");
             };

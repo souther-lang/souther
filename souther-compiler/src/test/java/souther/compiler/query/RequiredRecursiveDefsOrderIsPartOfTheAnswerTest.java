@@ -69,7 +69,6 @@ class RequiredRecursiveDefsOrderIsPartOfTheAnswerTest {
         assertEquals(List.of("ping", "pong"), rendered(before.value()));
 
         c.update(Map.of("demo.sou", PONG_FIRST), Set.of());
-        c.answerEverything();
         Answer<List<souther.compiler.types.ReachName.Declaration>> after =
                 c.db().ask(new Bodies.RequiredRecursiveDefs("demo"));
 
@@ -100,7 +99,6 @@ class RequiredRecursiveDefsOrderIsPartOfTheAnswerTest {
                 rendered(before.value().graph().recursive()));
 
         c.update(Map.of("demo.sou", PONG_FIRST), Set.of());
-        c.answerEverything();
         Answer<Bodies.Expanding.Of> after = c.db().ask(
                 new Bodies.Expanding("demo", souther.compiler.check.InliningPolicy.FULL));
 

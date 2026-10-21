@@ -547,6 +547,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.KeyedAccumulation.AStep.stepOf",
                     "names the addition and the subtraction a step that moves a counter by a"
                             + " constant is written with, and the counter is no other step"),
+            new Held("souther.compiler.check.KeyedAccumulation.AStep.addedTo",
+                    "names the addition a step that adds a number of the element to what it found"
+                            + " is written with, and a total of the key is no other step"),
             new Held("souther.compiler.partition.DecisionSubjects.what",
                     "spells the operator a value a dependency was asked about is worked out with,"
                             + " as part of naming the question; nothing asks what it means"),

@@ -57,7 +57,6 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
     @Test
     void aReadingThatStoppedShortHasStillReadEveryRuleItWasGiven() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource whole = RuleReadings.of(compilation, module);
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
@@ -93,7 +92,6 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
     @Test
     void aCountAnsweredOutOfLentReadingsIsShortOfWhatTheyWereShortOf() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
         List<Hir.Def> declarations = declarationsOf(compilation, module);

@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * What the source wrote, read back off what javac made of it.
@@ -201,6 +202,14 @@ public final class WhatSourceWrote {
      * is and not for what that type was given, which is narrower than everywhere else here.
      */
     public static List<Carrier> handedOver(ClassModel model) {
+        return HANDED_OVER.computeIfAbsent(model, WhatSourceWrote::handedOverAnew);
+    }
+
+    /** What each class hands over, read once: the rules over the classes this compiler compiled
+     *  each sweep all of them, and the reading is nearly all of what a sweep costs. */
+    private static final Map<ClassModel, List<Carrier>> HANDED_OVER = new ConcurrentHashMap<>();
+
+    private static List<Carrier> handedOverAnew(ClassModel model) {
         List<Carrier> carriers = new ArrayList<>();
         Map<String, Set<String>> classBounds = boundsOf(model);
         Map<String, MethodModel> lowered = new LinkedHashMap<>();

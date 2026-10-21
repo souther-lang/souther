@@ -295,20 +295,10 @@ sealed interface WhatATermRead {
 
         @Override
         public TheKept readAt(BorderQuantity.Observation row) {
-            // Each container the place stands in, the outer one first, is read under each element
-            // of the one outside it: the occurrences are those of every one of them.
-            List<BorderQuantity.Observation> elements = List.of(row);
-            for (TermPath container : place.containersHoldingIt()) {
-                List<BorderQuantity.Observation> inside = new ArrayList<>();
-                for (BorderQuantity.Observation outer : elements) {
-                    if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
-                            List<BorderQuantity.Observation>>(
-                                    List<BorderQuantity.Observation> each))) {
-                        return stoppedAt(ReadingGap.COULD_NOT_WALK);
-                    }
-                    inside.addAll(each);
-                }
-                elements = inside;
+            if (!(everyElementAbove(row, place) instanceof WalkResult.Reached<
+                    List<BorderQuantity.Observation>>(
+                            List<BorderQuantity.Observation> elements))) {
+                return stoppedAt(ReadingGap.COULD_NOT_WALK);
             }
             List<ObservedValue> values = new ArrayList<>();
             for (BorderQuantity.Observation element : elements) {
@@ -394,6 +384,84 @@ sealed interface WhatATermRead {
             NumericTerm.Reading read = on.readOverElements(each);
             return left.stopped() != null ? left.stopped() : of(read);
         }
+    }
+
+    /**
+     * What {@code on} reads of the element this reading chose among the elements a run gathers
+     * under keys: what the elements holding its key come to ({@link
+     * NumericTerm.GatheredUnderItsKey}).
+     *
+     * <p>The key is the reading's own, and the elements gathered are every occurrence's, whichever
+     * a reading chose: every element of every container the elements stand in, the outer one first.
+     * Each is handed as what the row holds at each way into it, or why it holds nothing there in
+     * this layer's words, and the number says which of those it came to first and of which key
+     * ({@link TermOrders#together}): a field another key's element holds nothing at is no part of
+     * this key's number.
+     */
+    static WhatATermRead underItsKey(TermOrders on, BorderQuantity.Observation row) {
+        TermPath elements = ((NumericTerm.GatheredUnderItsKey) on.term()).elements();
+        return switch (row.keptOf(new EveryKeyOf(on))) {
+            case WalkResult.CouldNotWalk<TermOrders.ElementsTogether<WhatATermRead>> _ ->
+                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(TermOrders.ElementsTogether<WhatATermRead> together) ->
+                    switch (together.numberOf(heldBy(row, elements))) {
+                        case TermOrders.Neighbouring.Read<WhatATermRead>(
+                                NumericTerm.Reading read) -> of(read);
+                        case TermOrders.Neighbouring.HeldNothing<WhatATermRead>(
+                                WhatATermRead why) -> why;
+                    };
+        };
+    }
+
+    /**
+     * Every element of the run {@code on}'s term gathers under keys, put together once, which no
+     * reading's choice turns: every element of every container the elements stand in, the outer
+     * one first, each read as the row with it chosen.
+     */
+    record EveryKeyOf(TermOrders on) implements
+            BorderQuantity.ReadAlike<WalkResult<TermOrders.ElementsTogether<WhatATermRead>>> {
+
+        @Override
+        public WalkResult<TermOrders.ElementsTogether<WhatATermRead>> readAt(
+                BorderQuantity.Observation row) {
+            TermPath elements = ((NumericTerm.GatheredUnderItsKey) on.term()).elements();
+            if (!(everyElementAbove(row, elements) instanceof WalkResult.Reached<
+                    List<BorderQuantity.Observation>>(
+                            List<BorderQuantity.Observation> reached))) {
+                return WalkResult.couldNotWalk();
+            }
+            List<Function<ElementProjection, TermOrders.Holding<WhatATermRead>>> each =
+                    new ArrayList<>(reached.size());
+            for (BorderQuantity.Observation element : reached) {
+                each.add(heldBy(element, elements));
+            }
+            return WalkResult.reached(on.together(each));
+        }
+    }
+
+    /**
+     * Every element of the innermost container {@code place} stands in, in every occurrence of
+     * it, each read as the row with it chosen — or that one of them could not be walked to.
+     *
+     * <p>Each container the place stands in, the outer one first, is read under each element of
+     * the one outside it, so the elements are every occurrence's whichever a reading chose.
+     */
+    private static WalkResult<List<BorderQuantity.Observation>> everyElementAbove(
+            BorderQuantity.Observation row, TermPath place) {
+        List<BorderQuantity.Observation> elements = List.of(row);
+        for (TermPath container : place.containersHoldingIt()) {
+            List<BorderQuantity.Observation> inside = new ArrayList<>();
+            for (BorderQuantity.Observation outer : elements) {
+                if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
+                        List<BorderQuantity.Observation>>(
+                                List<BorderQuantity.Observation> each))) {
+                    return WalkResult.couldNotWalk();
+                }
+                inside.addAll(each);
+            }
+            elements = inside;
+        }
+        return WalkResult.reached(elements);
     }
 
     /**

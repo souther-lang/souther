@@ -292,9 +292,7 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
-        compilation.answerEverything();
-        return compilation;
+        return Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
     }
 
     private static TypeSymbol.AtModule declared(String declaration) {

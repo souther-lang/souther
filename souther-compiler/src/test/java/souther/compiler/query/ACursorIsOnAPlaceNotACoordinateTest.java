@@ -67,9 +67,7 @@ class ACursorIsOnAPlaceNotACoordinateTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(MODEL_ID.value(), MODEL);
         byId.put(ATTACHED_ID.value(), ATTACHED);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 
     /**

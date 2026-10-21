@@ -81,7 +81,6 @@ class AChoiceBetweenPatternsOffersAValueOneOfThemAcceptsTest {
 
     private static FillResult filled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

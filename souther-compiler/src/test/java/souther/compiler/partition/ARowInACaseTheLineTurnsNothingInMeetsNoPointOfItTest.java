@@ -209,7 +209,6 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
     /** What the guards of {@code e} come to in {@code source}. */
     private static GuardThresholds.Guards guardsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().getFirst();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

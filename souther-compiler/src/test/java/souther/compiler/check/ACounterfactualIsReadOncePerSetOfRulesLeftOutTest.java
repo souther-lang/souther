@@ -120,7 +120,6 @@ class ACounterfactualIsReadOncePerSetOfRulesLeftOutTest {
 
     private static FieldDomains reading(String source, String declaration) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         TypeSymbol.AtModule of = TypeSymbols.declared(new TypeKey("demo", declaration));
         return FieldDomains.of(of,
                 RuleReadingContext.unshared(

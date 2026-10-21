@@ -916,6 +916,25 @@ public final class InputNumber {
     }
 
     /**
+     * What {@code value}, written of the element a walk hands {@code element}, computes of it,
+     * where the elements stand at {@code elements} — or null where it is not read.
+     *
+     * <p>Read as what a closure over the elements answers is ({@link ElementValue#read}), so a
+     * field of the element is one way into it and a {@code match} on a place of it is read arm by
+     * arm under what the declarations put there. Nothing here says the walk's elements are the
+     * ones standing at {@code elements}: that is the caller's to have shown, of every field the
+     * value reads.
+     *
+     * @param reads where {@code value} stands
+     */
+    public static ElementValue computedOfTheElement(Core value, BindingId element,
+                                                    InputReads reads, TermPath elements,
+                                                    RuleReadingSource source) {
+        return ElementValue.read(new ElementAnswer(element, value, null), reads.heldByTheBody(),
+                source, new ElementValue.ElementsAt(elements, reads.declared()));
+    }
+
+    /**
      * The number {@code operation} takes of what {@code computed} makes of each element of the list
      * at {@code list}, handed in {@code direction} — the term a total of the same computation over a
      * list of the input is — or null where the elements are not one run.

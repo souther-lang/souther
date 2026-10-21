@@ -43,6 +43,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.ACopyOfAnApplication;
@@ -54,6 +55,7 @@ import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
@@ -5267,10 +5269,77 @@ final class Pullback {
                 NumericTerm.ExtremeOfItsKey extreme = where == null || where.value() == null ? null
                         : NumericTerm.ExtremeOfItsKey.of(where.container(), where.key(),
                                 where.value(), kept.extreme());
+                if (extreme == null) {
+                    yield gathered(whole, filed, kept.value(), kept.compared(),
+                            new NumericTerm.GatheredUnderItsKey.Gathering.End(kept.extreme()));
+                }
                 yield readOnAnOrder(extreme)
                         ? LinearForm.atom(new DecisionAtom.OfTheInput(extreme)) : null;
             }
+            case KeyedAccumulation.Filed.Summed summed -> gathered(whole, filed, summed.value(),
+                    List.of(summed.added()), NumericTerm.GatheredUnderItsKey.Gathering.TOTAL);
         };
+    }
+
+    /** What the elements of each key come to by {@code gathering}, as a number of the input
+     *  read on an order — or null where it is not read ({@link #gatheredUnderItsKey}). */
+    private LinearForm<Quantity> gathered(Denotation whole, KeyedAccumulation filed, Core value,
+                                          List<Core> alike,
+                                          NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        NumericTerm.GatheredUnderItsKey term =
+                gatheredUnderItsKey(whole, filed, value, alike, gathering);
+        return readOnAnOrder(term) ? LinearForm.atom(new DecisionAtom.OfTheInput(term)) : null;
+    }
+
+    /**
+     * What the elements a fold files under each key come to by {@code gathering}, each as what
+     * {@code value} computes of it — or null where something in {@code alike} is another number of
+     * the element, the list is not every occurrence of elements standing at a place of the input,
+     * or the key is no way of fields from where they stand.
+     *
+     * <p>Where the elements stand is the walk's answer about the element itself ({@link
+     * OnePerElement.ReadOff#ITSELF}, read down {@link InputReads#occurrencesOf} with the key), and
+     * every number of the element is read from there: an element that is the value standing at a
+     * place holds at each field what that place holds there. A walk that made something new of
+     * each element — a record of a field doubled, a newtype round it — leaves the element standing
+     * at no place, and is read as nothing rather than as what it was made from.
+     *
+     * <p>The elements are some of the occurrences only where every one of them is filed; a list
+     * some of whose elements a statement keeps is not read here.
+     *
+     * @param alike what the step files or compares as the same number of each element as
+     *              {@code value}: a total adds it, an end is chosen against it
+     */
+    private NumericTerm.GatheredUnderItsKey gatheredUnderItsKey(
+            Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
+            NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        OnePerElement.ReadOff key = readOff(whole, filed, filed.key());
+        InputReads.Occurrences placed = key == null ? null
+                : occurrencesOf(whole, filed, List.of(OnePerElement.ReadOff.ITSELF, key));
+        if (placed == null || !placed.keptBy().isEmpty()
+                || !(placed.reads().get(0) instanceof InputReads.Occurrences.Read.At(
+                        TermPath elements, boolean wrapped))
+                || wrapped
+                || !(placed.reads().get(1) instanceof InputReads.Occurrences.Read.At(
+                        TermPath keyAt, var _))
+                || !keyAt.isAtOrUnder(elements)) {
+            return null;
+        }
+        BindingId element = filed.element().binding();
+        ElementValue number = InputNumber.computedOfTheElement(value, element, whole.at(),
+                elements, read.rules());
+        if (number == null) {
+            return null;
+        }
+        for (Core each : alike) {
+            if (!number.equals(InputNumber.computedOfTheElement(each, element, whole.at(),
+                    elements, read.rules()))) {
+                return null;
+            }
+        }
+        ElementProjection keyed = ElementProjection.below(elements, keyAt);
+        return keyed == null ? null : NumericTerm.GatheredUnderItsKey.of(elements, keyed, number,
+                TypeOps.base(value.type(), read.rules().inners()), gathering);
     }
 
     /**
@@ -5412,8 +5481,12 @@ final class Pullback {
             return null;
         }
         List<OnePerElement.ReadOff> reads = new ArrayList<>(List.of(key));
+        // The value the end is kept of, where what the closure compares the value found against
+        // is taken out of the element the same way: one place, so one number of each element.
         if (filed.filed() instanceof KeyedAccumulation.Filed.Kept kept
-                && readOff(whole, filed, kept.value()) instanceof OnePerElement.ReadOff value) {
+                && readOff(whole, filed, kept.value()) instanceof OnePerElement.ReadOff value
+                && kept.compared().stream().allMatch(
+                        each -> value.equals(readOff(whole, filed, each)))) {
             reads.add(value);
         }
         // The key and the value are read down one walk, so that they stand in the same element of
@@ -5598,7 +5671,9 @@ final class Pullback {
         TermOrders orders = read.quantities().ordersOf(term);
         return orders != null && orders.observed() != null
                 && !(term instanceof NumericTerm.ExtremeOfItsKey extreme
-                && orders.fieldCarrier(extreme.keyField()) == null);
+                && orders.fieldCarrier(extreme.keyField()) == null)
+                && !(term instanceof NumericTerm.GatheredUnderItsKey gathered
+                && orders.fieldCarrier(gathered.key()) == null);
     }
 
     /**

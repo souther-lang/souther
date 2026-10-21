@@ -2,7 +2,7 @@ package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -95,9 +95,15 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
         return planned.holdsNothingAsBuilt(sets) ? Emptiness.EMPTY : Emptiness.NONEMPTY;
     }
 
-    /** The same, and everything one connective reaches from them. */
+    /**
+     * The same, and everything one connective reaches from them, each once.
+     *
+     * <p>Once, because what a step of the induction is asked of is an operand, and two connectives
+     * that come to the same reading are one operand: asked of every pair, a reading met twice
+     * asks every one of its pairs twice.
+     */
     private List<PlannedValues<String>> readings() {
-        List<PlannedValues<String>> out = new ArrayList<>(leaves());
+        Set<PlannedValues<String>> out = new LinkedHashSet<>(leaves());
         for (PlannedValues<String> one : leaves()) {
             for (PlannedValues<String> other : leaves()) {
                 out.add(one.meet(other));
@@ -105,7 +111,7 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
                 out.add(either(one, other, false));
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /** The base: a clause this reads is one alternative, and a clause it cannot read is one too —

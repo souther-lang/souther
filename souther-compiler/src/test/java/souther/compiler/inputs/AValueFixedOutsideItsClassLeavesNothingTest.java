@@ -82,7 +82,6 @@ class AValueFixedOutsideItsClassLeavesNothingTest {
 
     private static Read read() {
         Compilation compilation = Compilation.ofSources(List.of(HELD), ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

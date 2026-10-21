@@ -38,7 +38,6 @@ class AComparisonIsAccountedForWhereverItIsWrittenTest {
                 let pick (p) = BODY
                 """.replace("BODY", body);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

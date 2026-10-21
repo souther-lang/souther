@@ -54,7 +54,6 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
     @Test
     void aCountThatCouldNotReadARuleSaysSo() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource whole = RuleReadings.of(compilation, module);
         List<Hir.Def> declarations =
@@ -112,7 +111,6 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
 
                 data Row = { ...Held, m: Int }
                 """), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
         return compilation.db().ask(new Shapes.TypesWithNoValue("app.rows")).value();
     }
 }

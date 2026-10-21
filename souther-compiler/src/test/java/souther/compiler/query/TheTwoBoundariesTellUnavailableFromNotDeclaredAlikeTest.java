@@ -164,8 +164,6 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", prices);
         byId.put("cart.sou", CART);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 }

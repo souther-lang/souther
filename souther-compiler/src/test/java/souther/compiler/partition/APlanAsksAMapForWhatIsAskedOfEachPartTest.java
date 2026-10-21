@@ -92,7 +92,6 @@ class APlanAsksAMapForWhatIsAskedOfEachPartTest {
 
     private static Read readOf() {
         Compilation compilation = Compilation.ofSources(List.of(DEEP_VALUES), ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

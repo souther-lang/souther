@@ -172,8 +172,6 @@ class WhatIsPublishedTellsADeclarationNothingDeclaresFromOneItCouldNotReadTest {
         byId.put("prices.sou", prices);
         byId.put("cart.sou", cart);
         byId.put("till.sou", TILL);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 }

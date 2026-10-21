@@ -78,7 +78,6 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
 
     private static RuleReadingSource rules() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

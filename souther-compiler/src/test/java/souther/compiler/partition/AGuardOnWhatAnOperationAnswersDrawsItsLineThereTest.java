@@ -67,7 +67,6 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
      *  line is measured on. */
     private static List<String> thresholdsOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

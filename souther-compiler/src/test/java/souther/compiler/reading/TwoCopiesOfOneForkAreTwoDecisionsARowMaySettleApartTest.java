@@ -53,7 +53,6 @@ class TwoCopiesOfOneForkAreTwoDecisionsARowMaySettleApartTest {
     @Test
     void oppositeArmsOfTwoCopiesAreAPathAndOfOneCopyAreNot() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

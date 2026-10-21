@@ -87,7 +87,6 @@ class WhatARuleRaisesDoesNotMoveWithWhatAReaderCanDoTest {
     /** The rules of {@code P}, read under {@code policy}. */
     private static FieldDomains read(ReadingPolicy policy) {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);

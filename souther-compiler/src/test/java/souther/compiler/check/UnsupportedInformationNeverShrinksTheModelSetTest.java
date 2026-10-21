@@ -29,7 +29,6 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
 
     private static FieldDomains domainsOf(String source, String name) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return FieldDomains.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
@@ -38,7 +37,6 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
 
     private static OccurrenceCounts countsOf(String source, String name) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return OccurrenceCounts.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),

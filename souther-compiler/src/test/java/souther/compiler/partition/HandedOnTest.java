@@ -106,7 +106,6 @@ class HandedOnTest {
 
     private static InputReading read() {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");

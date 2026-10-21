@@ -6482,6 +6482,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("position", it.value().discriminated());
                 into.put("key", it.key().discriminated());
             }
+            // What the elements of a run come to among those alike at a place of each: their
+            // total or an end, of what each element is made to contribute.
+            case NumericTerm.GatheredUnderItsKey it -> {
+                into.put("kind", "gathered_under_its_key");
+                into.put("gathering", switch (it.gathering()) {
+                    case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> "total";
+                    case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) ->
+                            switch (extreme) {
+                                case Extreme.Least _ -> "least";
+                                case Extreme.Greatest _ -> "greatest";
+                            };
+                });
+                into.put("elements", it.elements().discriminated());
+                into.put("key", it.key().from(it.elements()).discriminated());
+                elementComputation(into.putObject("computation"), it.value());
+            }
             case NumericTerm.TakenOver it -> {
                 into.put("kind", "taken_over");
                 operationId(into.putObject("operation"), it.operation());

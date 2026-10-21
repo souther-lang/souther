@@ -112,7 +112,6 @@ class ABehaviorsInputDomainIsReadFromWhatThatBehaviorDeclaresTest {
 
     private static void edited(Compilation c, String text) {
         c.update(Map.of(ID, text), Set.of());
-        c.answerEverything();
     }
 
     @Test
