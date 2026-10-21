@@ -457,7 +457,7 @@ public final class WhatARelationLeavesUndivided {
             return new Leaves.Undivided();
         }
         Leaves free = settledAmong(terms, at, constant, asking, overlap, independent,
-                granularity, greatest, jointly);
+                granularity, greatest, jointly, null);
         if (granularity != Granularity.DISCRETE) {
             return free;
         }
@@ -466,14 +466,13 @@ public final class WhatARelationLeavesUndivided {
         // fail it. That is a line of the orders' ends and none of the model's.
         List<Term<P>> withinTheirOrders = terms.stream()
                 .map(WhatARelationLeavesUndivided::withinItsOrder).toList();
+        List<Line> drawn = free instanceof Leaves.Settled settled ? settled.lines() : List.of();
         if (withinTheirOrders.equals(terms)
                 || !(settledAmong(withinTheirOrders, at, constant, asking, overlap, independent,
-                        granularity, greatest, jointly) instanceof Leaves.Settled bounded)) {
+                        granularity, greatest, jointly, drawn) instanceof Leaves.Settled bounded)) {
             return free;
         }
-        Leaves.Settled marked = bounded.besideWhatTheModelDraws(
-                free instanceof Leaves.Settled drawn ? drawn.lines() : List.of());
-        return free != null && marked.ofTheTypeAlone().isEmpty() ? free : marked;
+        return bounded.besideWhatTheModelDraws(drawn);
     }
 
     /**
@@ -482,29 +481,39 @@ public final class WhatARelationLeavesUndivided {
      * left as it is.
      */
     private static <P> Term<P> withinItsOrder(Term<P> term) {
-        if (term.spacing() != Granularity.DISCRETE || term.runsTo() == null
-                || term.holds() == null) {
+        NumericDomain.Bounds order = term.runsTo();
+        if (term.spacing() != Granularity.DISCRETE || !endsAtNumbers(order)
+                || !endsAtNumbers(term.holds())) {
             return term;
         }
-        WholeRun order = WholeRun.ofTheValues(term.runsTo());
-        WholeRun held = WholeRun.ofTheValues(term.holds());
-        if (order == null || held == null) {
+        NumericDomain.Bounds both = term.holds().meet(order);
+        if (both.equals(term.holds()) || !both.holdsAValue()) {
             return term;
         }
-        WholeRun both = held.meet(order);
-        if (both.equals(held) || !both.holdsAWholeNumber()) {
-            return term;
-        }
-        return new Term<>(term.madeOf(), term.weight(), both.asBounds(), term.realizes(),
-                term.takes(), term.itsPlace(), term.spacing(), term.runsTo());
+        return new Term<>(term.madeOf(), term.weight(), both, term.realizes(), term.takes(),
+                term.itsPlace(), term.spacing(), order);
     }
 
-    /** Which values of the term at {@code at} settle the relation, and that every other value
-     *  leaves it either way — or null where that is not shown. */
+    /** Whether {@code bounds} is there and each end it has is a number. */
+    private static boolean endsAtNumbers(NumericDomain.Bounds bounds) {
+        return bounds != null && (bounds.min() == null || bounds.min().at() instanceof Count)
+                && (bounds.max() == null || bounds.max().at() instanceof Count);
+    }
+
+    /**
+     * Which values of the term at {@code at} settle the relation, and that every other value
+     * leaves it either way — or null where that is not shown.
+     *
+     * @param drawn the lines already drawn on the term, where only runs drawing a line besides
+     *              them are asked for; null where every run is. Runs drawing none besides them are
+     *              not worth showing the values between reached, which is the costly part, and
+     *              nothing is shown of them
+     */
     private static <P> Leaves settledAmong(List<Term<P>> terms, int at, ExactRatio constant,
                                            Asking asking, BiPredicate<P, P> overlap,
                                            Independence independent, Granularity granularity,
-                                           BigInteger greatest, Jointly jointly) {
+                                           BigInteger greatest, Jointly jointly,
+                                           List<Line> drawn) {
         Term<P> it = terms.get(at);
         if (granularity == null || constant == null) {
             return null;
@@ -577,6 +586,10 @@ public final class WhatARelationLeavesUndivided {
                 }
             }
         }
+        Leaves.Settled found = Leaves.Settled.ofWhole(inOrder(runs, true), held.low, held.high);
+        if (drawn != null && drawn.containsAll(found.lines())) {
+            return null;
+        }
         if (between.holdsAWholeNumber()) {
             List<Term<P>> narrowed = new ArrayList<>(terms);
             narrowed.set(at, new Term<>(it.madeOf(), it.weight(), between.asBounds(),
@@ -586,7 +599,7 @@ public final class WhatARelationLeavesUndivided {
                 return null;
             }
         }
-        return Leaves.Settled.ofWhole(inOrder(runs, true), held.low, held.high);
+        return found;
     }
 
     /**
