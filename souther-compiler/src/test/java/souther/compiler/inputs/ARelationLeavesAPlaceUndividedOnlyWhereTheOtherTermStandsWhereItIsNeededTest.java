@@ -9,6 +9,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
@@ -35,6 +36,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
      *  {@code Int}'s. */
     private static final NumericDomain.Bounds INTS = run(Long.MIN_VALUE, Long.MAX_VALUE);
 
+    /** The greatest {@code Int}, which the form is worked out in. */
+    private static final BigInteger GREATEST_INT = BigInteger.valueOf(Long.MAX_VALUE);
+
     /** Where a date's order stops, as days. */
     private static final NumericDomain.Bounds DAYS =
             run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay());
@@ -56,7 +60,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     private static Set<String> undivided(List<WhatARelationLeavesUndivided.Term<String>> terms,
                                          ExactRatio constant, Rel relation) {
         return WhatARelationLeavesUndivided.of(terms, constant, relation, String::equals,
-                (one, other) -> true);
+                (one, other) -> true, GREATEST_INT);
     }
 
     /**
@@ -174,7 +178,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     void aThirdTermTiedToOneOfThemIsNotHeldStill() {
         Set<String> left = WhatARelationLeavesUndivided.of(aWindow(NumericDomain.Bounds.OPEN),
                 ExactRatio.ZERO, Rel.GE, String::equals,
-                (one, other) -> !Set.of(one, other).equals(Set.of(0, 2)));
+                (one, other) -> !Set.of(one, other).equals(Set.of(0, 2)), GREATEST_INT);
         assertEquals(Set.of(), left);
     }
 

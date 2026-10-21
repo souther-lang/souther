@@ -438,6 +438,29 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "4:21"));
     }
 
+    /**
+     * A way keeping {@code b} from nought where it already keeps it above nought, as a quotient's
+     * way keeps its divisor, leaves {@code b} every value from one: the line on {@code a} it
+     * draws is the one {@code b > 0} alone draws. Kept from five instead, {@code b} runs with a
+     * gap, and every value of {@code a} between the settling ones is not shown reached.
+     */
+    @Test
+    void aValueHeldApartOutsideTheRunTakesNothingFromIt() {
+        Map<String, String> above = keptAbove("");
+        assertFalse(above.containsKey("a"), () -> "a is parted at what settles it: " + above);
+        assertEquals(above, keptAbove(" && b /= 0"));
+        assertEquals(NOT_SHOWN, keptAbove(" && b /= 5").get("a"));
+    }
+
+    /** What {@code a >= 100 * b} leaves its places along a way keeping {@code b} above nought and
+     *  saying {@code also} of it besides. */
+    private static Map<String, String> keptAbove(String also) {
+        String inputs = "a: Int, b: Int";
+        String body = "if b > 0" + also + " then a >= 100 * b else false";
+        return left(inputs, "data Unused = Int", body,
+                atThe(">=", "data Unused = Int", inputs, body));
+    }
+
     /** Beside a total, two positions are each a term of the relation and not of the run. The
      *  adjustment held at nought, the gross stands at every value the total takes. */
     @Test

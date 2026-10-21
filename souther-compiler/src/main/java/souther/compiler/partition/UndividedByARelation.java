@@ -1690,14 +1690,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * it ties the term to is asked apart ({@link TiedOnTheWay}). A form held against nought and an
      * end on one position's own order are both that. A relation over another number of a place
      * the term is read off — a string's length beside the string — is one the region holds as two
-     * numbers it does not tie, so it is not this. Nor is a relation keeping the term off a value,
-     * which leaves a hole where a run is answered by its ends.
+     * numbers it does not tie, so it is not this. A form over the term alone held off a value is:
+     * the region answers the run whole only where its rules prove the hole outside it
+     * ({@link NumericDomain#projectionCertification}), as a divisor kept above nought and off
+     * nought runs from one. Keeping it off another number is not.
      */
     private static boolean inTheRegion(NumericTerm.FromOnePosition term, OnAWay statement) {
         Set<NumericTerm> over = switch (statement.relation()) {
             case null -> Set.of();
-            case TakenConstraint.Affine affine ->
-                    affine.rel() == Rel.NE ? Set.of() : affine.form().coefs().keySet();
+            case TakenConstraint.Affine affine -> affine.rel() != Rel.NE
+                    || affine.form().coefs().size() == 1 ? affine.form().coefs().keySet()
+                    : Set.of();
             case TakenConstraint.Ordered ordered -> Set.of(ordered.term());
             case TakenConstraint.AwayFrom _ -> Set.of();
         };

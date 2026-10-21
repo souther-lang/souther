@@ -3580,7 +3580,8 @@ public final class InvariantChecker {
         // A term is shown to take anything only where nothing ties it to the others, so nothing
         // else needs saying of a pair.
         Set<RuleKey> out = new LinkedHashSet<>(WhatARelationLeavesUndivided.of(terms,
-                over.constant(), relation, overlap, (one, other) -> true));
+                over.constant(), relation, overlap, (one, other) -> true,
+                first == null ? null : first.greatestWholeNumber()));
         out.addAll(WhatARelationLeavesUndivided.ofTheirDifference(apart, over.constant(), relation,
                 List.of(), new WhatARelationLeavesUndivided.WhereTheRepresentationStops(extent),
                 overlap));

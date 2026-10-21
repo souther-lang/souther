@@ -121,12 +121,16 @@ public final class WhatARelationLeavesUndivided {
      * @param overlap     whether two places are one, or one is part of the other
      * @param independent whether nothing ties where the term at one place in {@code terms} lies to
      *                    where the term at another does
+     * @param greatest    the greatest value the type the form is worked out in holds, or null
+     *                    where it holds no greatest: a row passing it is no witness
      */
     public static <P> Set<P> of(List<Term<P>> terms, ExactRatio constant, Rel relation,
-                                BiPredicate<P, P> overlap, Independence independent) {
+                                BiPredicate<P, P> overlap, Independence independent,
+                                BigInteger greatest) {
         Set<P> out = new LinkedHashSet<>();
         for (int at = 0; at < terms.size(); at++) {
-            if (reachedBySome(terms, at, constant, relation, overlap, independent, null)) {
+            if (reachedBySome(terms, at, constant, relation, overlap, independent, null,
+                    greatest)) {
                 out.addAll(terms.get(at).madeOf());
             }
         }
@@ -451,28 +455,39 @@ public final class WhatARelationLeavesUndivided {
         Jointly jointly = granularity == Granularity.DISCRETE && greatest != null
                 ? new Jointly(greatest) : null;
         if (asking.leftBy().stream().allMatch(relation ->
-                reachedBySome(terms, at, constant, relation, overlap, independent, jointly)
+                reachedBySome(terms, at, constant, relation, overlap, independent, jointly,
+                        greatest)
                         || reachedAcrossGroups(terms, at, constant, relation, overlap,
                                 independent, supports, jointly))) {
             return new Leaves.Undivided();
         }
-        Leaves free = settledAmong(terms, at, constant, asking, overlap, independent,
-                granularity, greatest, jointly, null);
-        if (granularity != Granularity.DISCRETE) {
-            return free;
+        if (granularity == Granularity.DENSE) {
+            return leavesOfADenseTerm(terms, at, constant, asking, overlap, independent);
+        }
+        Settling free = settlingOf(terms, at, constant, asking, granularity, greatest);
+        Leaves shownFree = shown(free, terms, at, constant, asking, overlap, independent,
+                jointly, greatest);
+        if (free == null) {
+            return shownFree;
         }
         // Asked again of the values each term's order holds, a value of the term may settle the
         // relation that the free terms left either way: no greater value of the other is there to
-        // fail it. That is a line of the orders' ends and none of the model's.
+        // fail it. That is a line of the orders' ends and none of the model's. The model's lines
+        // are those the free terms' settling runs draw, whether or not the values between them
+        // were shown reached: that is a second question, and one the type's ends may be all that
+        // kept from being shown.
         List<Term<P>> withinTheirOrders = terms.stream()
                 .map(WhatARelationLeavesUndivided::withinItsOrder).toList();
-        List<Line> drawn = free instanceof Leaves.Settled settled ? settled.lines() : List.of();
-        if (withinTheirOrders.equals(terms)
-                || !(settledAmong(withinTheirOrders, at, constant, asking, overlap, independent,
-                        granularity, greatest, jointly, drawn) instanceof Leaves.Settled bounded)) {
-            return free;
+        Settling bounded = withinTheirOrders.equals(terms) ? null
+                : settlingOf(withinTheirOrders, at, constant, asking, granularity, greatest);
+        List<Line> model = free.lines();
+        // Shown already, and drawing no line the free runs do not: nothing is left to ask.
+        if (bounded == null || (shownFree != null && model.containsAll(bounded.lines()))) {
+            return shownFree;
         }
-        return bounded.besideWhatTheModelDraws(drawn);
+        return shown(bounded, withinTheirOrders, at, constant, asking, overlap, independent,
+                jointly, greatest) instanceof Leaves.Settled settled
+                ? settled.besideWhatTheModelDraws(model) : shownFree;
     }
 
     /**
@@ -501,43 +516,37 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
-     * Which values of the term at {@code at} settle the relation, and that every other value
-     * leaves it either way — or null where that is not shown.
-     *
-     * @param drawn the lines already drawn on the term, where only runs drawing a line besides
-     *              them are asked for; null where every run is. Runs drawing none besides them are
-     *              not worth showing the values between reached, which is the costly part, and
-     *              nothing is shown of them
+     * Where the values of a whole-numbered term stand to a relation, before anything is shown of
+     * the values left between: the runs that settle it whatever the others are, every one with a
+     * row that computes, the values the term holds, and those left between the runs — null where
+     * they are two runs and not one.
      */
-    private static <P> Leaves settledAmong(List<Term<P>> terms, int at, ExactRatio constant,
-                                           Asking asking, BiPredicate<P, P> overlap,
-                                           Independence independent, Granularity granularity,
-                                           BigInteger greatest, Jointly jointly,
-                                           List<Line> drawn) {
+    private record Settling(List<SettledRun> runs, WholeRun held, WholeRun between) {
+
+        /** The lines the runs part the term's values at; none where no run settles it. */
+        List<Line> lines() {
+            return runs.isEmpty() ? List.of()
+                    : Leaves.Settled.ofWhole(inOrder(runs, true), held.low, held.high).lines();
+        }
+    }
+
+    /**
+     * Which values of the whole-numbered term at {@code at} settle the relation whatever the
+     * others are — none being an answer — or null where that is not worked out: a term with no
+     * whole values, others no run of numbers, a value no row computes, or one settling it both
+     * ways where that cannot be.
+     */
+    private static <P> Settling settlingOf(List<Term<P>> terms, int at, ExactRatio constant,
+                                           Asking asking, Granularity granularity,
+                                           BigInteger greatest) {
         Term<P> it = terms.get(at);
-        if (granularity == null || constant == null) {
+        if (granularity != Granularity.DISCRETE || constant == null) {
             return null;
         }
-        WholeRun held = granularity == Granularity.DISCRETE
-                ? WholeRun.ofTheValues(it.holds()) : null;
-        if (granularity == Granularity.DISCRETE && held == null) {
+        WholeRun held = WholeRun.ofTheValues(it.holds());
+        Interval rest = restOf(terms, at, constant);
+        if (held == null || rest == null) {
             return null;
-        }
-        // What the others and the constant come to together, wherever they lie.
-        Interval rest = Interval.at(constant);
-        for (int i = 0; i < terms.size(); i++) {
-            if (i == at) {
-                continue;
-            }
-            Interval each = Interval.of(terms.get(i).holds());
-            Interval weighed = each == null ? null : each.times(terms.get(i).weight());
-            rest = weighed == null ? null : rest.plus(weighed);
-            if (rest == null) {
-                return null;
-            }
-        }
-        if (granularity == Granularity.DENSE) {
-            return leavesOfADenseTerm(terms, at, constant, asking, overlap, independent, rest);
         }
         List<SettledRun> runs = new ArrayList<>();
         List<WholeRun> settledTrue = new ArrayList<>();
@@ -563,9 +572,6 @@ public final class WhatARelationLeavesUndivided {
                 }
             }
         }
-        if (runs.isEmpty() || between == null) {
-            return null;
-        }
         if (greatest != null) {
             // The weighed size of every number but the term's, each at its value nearest nought.
             ExactRatio others = constant.abs();
@@ -586,20 +592,48 @@ public final class WhatARelationLeavesUndivided {
                 }
             }
         }
-        Leaves.Settled found = Leaves.Settled.ofWhole(inOrder(runs, true), held.low, held.high);
-        if (drawn != null && drawn.containsAll(found.lines())) {
+        return new Settling(runs, held, between);
+    }
+
+    /**
+     * {@code settling} as the term's values are left, where every value between its runs is
+     * shown left either way — or null where it is not, where no run settles it, or where the
+     * values between are two runs.
+     */
+    private static <P> Leaves shown(Settling settling, List<Term<P>> terms, int at,
+                                    ExactRatio constant, Asking asking,
+                                    BiPredicate<P, P> overlap, Independence independent,
+                                    Jointly jointly, BigInteger greatest) {
+        if (settling == null || settling.runs().isEmpty() || settling.between() == null) {
             return null;
         }
+        Term<P> it = terms.get(at);
+        WholeRun between = settling.between();
         if (between.holdsAWholeNumber()) {
             List<Term<P>> narrowed = new ArrayList<>(terms);
             narrowed.set(at, new Term<>(it.madeOf(), it.weight(), between.asBounds(),
                     it.realizes(), it.takes(), it.itsPlace(), it.spacing(), it.runsTo()));
             if (!asking.leftBy().stream().allMatch(relation -> reachedBySome(narrowed, at,
-                    constant, relation, overlap, independent, jointly))) {
+                    constant, relation, overlap, independent, jointly, greatest))) {
                 return null;
             }
         }
-        return found;
+        return Leaves.Settled.ofWhole(inOrder(settling.runs(), true), settling.held().low,
+                settling.held().high);
+    }
+
+    /** What the terms but the one at {@code at} and {@code constant} come to together, wherever
+     *  they lie; null where one of them is no run of numbers. */
+    private static <P> Interval restOf(List<Term<P>> terms, int at, ExactRatio constant) {
+        Interval rest = Interval.at(constant);
+        for (int i = 0; i < terms.size() && rest != null; i++) {
+            if (i != at) {
+                Interval each = Interval.of(terms.get(i).holds());
+                Interval weighed = each == null ? null : each.times(terms.get(i).weight());
+                rest = weighed == null ? null : rest.plus(weighed);
+            }
+        }
+        return rest;
     }
 
     /**
@@ -1037,10 +1071,11 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> Leaves leavesOfADenseTerm(List<Term<P>> terms, int at, ExactRatio constant,
                                                  Asking asking, BiPredicate<P, P> overlap,
-                                                 Independence independent, Interval rest) {
+                                                 Independence independent) {
         Term<P> it = terms.get(at);
         Span held = Span.ofTheValues(it.holds());
-        if (held == null) {
+        Interval rest = constant == null ? null : restOf(terms, at, constant);
+        if (held == null || rest == null) {
             return null;
         }
         List<SettledRun> runs = new ArrayList<>();
@@ -1092,7 +1127,7 @@ public final class WhatARelationLeavesUndivided {
         for (Span each : between) {
             Interval values = new Interval(each.lower(), each.upper());
             if (!asking.leftBy().stream().allMatch(relation -> reachedBySome(terms, at, values,
-                    constant, relation, overlap, independent, null))) {
+                    constant, relation, overlap, independent, null, null))) {
                 return null;
             }
         }
@@ -1138,27 +1173,34 @@ public final class WhatARelationLeavesUndivided {
      *  every value it would have to stand at for that one to be left undivided. */
     private static <P> boolean reachedBySome(List<Term<P>> terms, int at, ExactRatio constant,
                                              Rel relation, BiPredicate<P, P> overlap,
-                                             Independence independent, Jointly jointly) {
-        return reachedBySome(terms, at, null, constant, relation, overlap, independent, jointly);
+                                             Independence independent, Jointly jointly,
+                                             BigInteger greatest) {
+        return reachedBySome(terms, at, null, constant, relation, overlap, independent, jointly,
+                greatest);
     }
 
     /**
      * The same, asked of the values of the term at {@code at} that lie in {@code within} and not
      * of all it may hold — an exact run, so that an end no decimal writes is still the end.
+     *
+     * @param greatest the greatest value the type the form is worked out in holds, or null where
+     *                 it holds no greatest; a witness passing it is no row
      */
     private static <P> boolean reachedBySome(List<Term<P>> terms, int at, Interval within,
                                              ExactRatio constant, Rel relation,
                                              BiPredicate<P, P> overlap,
-                                             Independence independent, Jointly jointly) {
+                                             Independence independent, Jointly jointly,
+                                             BigInteger greatest) {
         boolean[] free = new boolean[terms.size()];
         for (int other = 0; other < terms.size(); other++) {
             free[other] = other != at && apart(terms, other, overlap)
                     && untied(terms, other, independent);
         }
         for (int other = 0; other < terms.size(); other++) {
-            if (free[other] && (reaches(terms, other, at, within, constant, relation)
+            if (free[other] && (reaches(terms, other, at, within, constant, relation,
+                    ExactRatio.ZERO, greatest)
                     || reachesWithTheRestHeld(terms, other, at, within, constant, relation,
-                            free))) {
+                            free, greatest))) {
                 return true;
             }
         }
@@ -1175,11 +1217,14 @@ public final class WhatARelationLeavesUndivided {
      * holds the two at nothing.
      *
      * <p>The rest are held at nought but one, which is held where it brings the constant to
-     * nought. Every one of those values is one the term is shown to take.
+     * nought. Every one of those values is one the term is shown to take. Brought to nought, the
+     * constant and the term held against it are still in every row the two are reached with, so
+     * their sizes are what a witness of the two is computed beside ({@link #reaches}).
      */
     private static <P> boolean reachesWithTheRestHeld(List<Term<P>> terms, int by, int of,
                                                       Interval within, ExactRatio constant,
-                                                      Rel relation, boolean[] free) {
+                                                      Rel relation, boolean[] free,
+                                                      BigInteger greatest) {
         if (terms.size() < 3 || constant == null) {
             return false;
         }
@@ -1197,8 +1242,11 @@ public final class WhatARelationLeavesUndivided {
             ExactRatio held = constant.negated().dividedBy(terms.get(last).weight()).orNull();
             if (held != null && takesTheValue(terms.get(last), held) && rest.stream()
                     .allMatch(i -> i == last || takesTheValue(terms.get(i), ExactRatio.ZERO))) {
-                return reaches(List.of(terms.get(of), terms.get(by)), 1, 0, within,
-                        ExactRatio.ZERO, relation);
+                ExactRatio beside = held.times(terms.get(last).weight()).orNull();
+                ExactRatio spent = beside == null ? null
+                        : constant.abs().plus(beside.abs()).orNull();
+                return spent != null && reaches(List.of(terms.get(of), terms.get(by)), 1, 0,
+                        within, ExactRatio.ZERO, relation, spent, greatest);
             }
         }
         return false;
@@ -1728,14 +1776,32 @@ public final class WhatARelationLeavesUndivided {
     /**
      * Whether the term at {@code by} stands wherever the relation needs it to for the term at
      * {@code of} to be left undivided.
+     *
+     * <p>A witness is a row that is computed, as it is for every other way a value here is
+     * shown taken ({@link #reachedTogether}, the runs {@link #settlingOf} keeps): the constant, what
+     * {@code spent} says the row holds besides, and the weighed size of each of the two at the
+     * value nearest nought it is asked at, added, are held to {@code greatest}, which no order of
+     * adding passes. {@code x - y > M}, {@code M} the greatest {@code Int}, needs a {@code y}
+     * whose distance from {@code x} passes the type, and is no row on the true side at any
+     * {@code x}. Two terms standing at each other's value with nothing besides are compared and
+     * not added, and are asked nothing of it.
+     *
+     * @param spent    the size of what the row holds besides the two and the constant — the terms
+     *                 held still beside them — or nought
+     * @param greatest the greatest value the type the form is worked out in holds, or null where
+     *                 it holds no greatest
      */
     private static <P> boolean reaches(List<Term<P>> terms, int by, int of, Interval within,
-                                       ExactRatio constant, Rel relation) {
+                                       ExactRatio constant, Rel relation, ExactRatio spent,
+                                       BigInteger greatest) {
         Term<P> reaching = terms.get(by);
         boolean exactly = relation == Rel.EQ || relation == Rel.NE;
         boolean itsValue = standsAtTheOthersValue(terms, constant);
+        // Asked last, of an answer that would otherwise be yes: most terms are refused by
+        // something cheaper first.
+        boolean computed = greatest != null && !(itsValue && spent.signum() == 0);
         if (exactly && itsValue && sameValues(terms, by, of)) {
-            return true;
+            return !computed || aWitnessComputes(terms, by, of, within, constant, spent, greatest);
         }
         if (reaching.realizes() == null) {
             return false;
@@ -1757,14 +1823,18 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         if (exactly) {
-            return needed.within(reaching.realizes(), spacings);
+            return needed.within(reaching.realizes(), spacings)
+                    && (!computed || aWitnessComputes(terms, by, of, within, constant, spent,
+                            greatest));
         }
         boolean strictlyBelow = strictlyBelow(relation, reaching.weight());
         if ((strictlyBelow ? needed.runsDown() : needed.runsUp())
                 && !othersAreTheirPlaces(terms, by)) {
             return false;
         }
-        return needed.around(reaching.realizes(), strictlyBelow, spacings);
+        return needed.around(reaching.realizes(), strictlyBelow, spacings)
+                && (!computed || aWitnessComputes(terms, by, of, within, constant, spent,
+                        greatest));
     }
 
     /**
@@ -1897,7 +1967,6 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> Run needed(List<Term<P>> terms, int by, int of, Interval within,
                                   ExactRatio constant) {
-        Term<P> reaching = terms.get(by);
         if (within != null && standsAtTheOthersValue(terms, constant)) {
             return within.asRun();
         }
@@ -1909,6 +1978,17 @@ public final class WhatARelationLeavesUndivided {
                     greatest == null ? null : greatest.at(),
                     least != null && !least.inclusive(), greatest != null && !greatest.inclusive());
         }
+        Interval at = neededAt(terms, by, of, within, constant);
+        return at == null ? null : at.asRun();
+    }
+
+    /**
+     * Where the term at {@code by} has to stand, as a run of numbers, for the term at {@code of}
+     * to be at its values — those in {@code within}, where that is given — and every other term
+     * anywhere it may be: null where one of them, or the constant, is no number.
+     */
+    private static <P> Interval neededAt(List<Term<P>> terms, int by, int of, Interval within,
+                                         ExactRatio constant) {
         if (constant == null) {
             return null;
         }
@@ -1928,9 +2008,30 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         // Where the term's weight and the rest come to nought: the rest turned and over the weight.
-        ExactRatio turned = ExactRatio.ONE.negated().dividedBy(reaching.weight()).orNull();
-        Interval at = turned == null ? null : rest.times(turned);
-        return at == null ? null : at.asRun();
+        ExactRatio turned = ExactRatio.ONE.negated().dividedBy(terms.get(by).weight()).orNull();
+        return turned == null ? null : rest.times(turned);
+    }
+
+    /**
+     * Whether a row the term at {@code by} reaches the one at {@code of} in is computed: the
+     * constant, {@code spent}, and each of the two weighed at its value nearest nought — the one
+     * at {@code of} among the values asked of it, the one at {@code by} where it has to stand —
+     * come to no more than {@code greatest}.
+     */
+    private static <P> boolean aWitnessComputes(List<Term<P>> terms, int by, int of,
+                                                Interval within, ExactRatio constant,
+                                                ExactRatio spent, BigInteger greatest) {
+        ExactRatio nearOf = nearestNought(within != null ? within
+                : Interval.of(terms.get(of).holds()));
+        ExactRatio nearBy = nearestNought(neededAt(terms, by, of, within, constant));
+        if (constant == null || nearOf == null || nearBy == null) {
+            return false;
+        }
+        ExactRatio size = nearOf.times(terms.get(of).weight().abs())
+                .flatMap(one -> nearBy.times(terms.get(by).weight().abs()).flatMap(one::plus))
+                .flatMap(both -> both.plus(constant.abs()))
+                .flatMap(spent::plus).orNull();
+        return size != null && size.compareTo(ExactRatio.of(greatest)) <= 0;
     }
 
     /** Whether no place of the term at {@code at} is one any other term is made of. */

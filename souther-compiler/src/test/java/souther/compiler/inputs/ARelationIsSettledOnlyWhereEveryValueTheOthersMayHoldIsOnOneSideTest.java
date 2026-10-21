@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -320,6 +321,53 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 Rel.LT));
     }
 
+    /**
+     * {@code x - y <= 0}, both from nought on and {@code y} shown to take every {@code Int} from
+     * nought. At nought {@code x} holds it whatever {@code y} is, because the rules hold {@code y}
+     * at nought or above: a line of the model's, whether or not the values of {@code x} past every
+     * {@code y} the type writes are shown reached.
+     */
+    @Test
+    void aLineTheRulesDrawStaysTheModelsWhereTheFreeTermsShowNothing() {
+        long most = Long.MAX_VALUE;
+        Leaves.Settled x = (Leaves.Settled) leavesOf(List.of(
+                term("x", 1, run(0L, null), run(0L, null)),
+                term("y", -1, run(0L, null), run(0L, most))), 0, 0, Rel.LE);
+        assertEquals(List.of(line(Rel.LE, 0)), x.linesOfTheModel());
+    }
+
+    /**
+     * {@code x - y + z - M > 0}, {@code M} the greatest {@code Int}: true only where
+     * {@code x - y + z} passes the greatest {@code Int}, which no row computes. Holding {@code z}
+     * at {@code M} brings the constant to nought, and {@code x - y > 0} is reached at every
+     * {@code x}; but every row it reaches the true side with is one whose sum passes the type.
+     */
+    @Test
+    void aTermHeldWhereItCancelsTheConstantIsNoWitnessWhereTheRowPassesTheType() {
+        long most = Long.MAX_VALUE;
+        Leaves x = leavesOf(List.of(
+                term("x", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                term("z", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 0, -most,
+                Rel.GT);
+        assertFalse(x instanceof Leaves.Undivided, () -> "x: " + x);
+    }
+
+    /**
+     * {@code x - y - M > 0} with {@code x} from nought to ten: a {@code y} below
+     * {@code x - M} is one every {@code y} the type writes is, but {@code x - y} then passes the
+     * greatest {@code Int}, so no row is on the true side.
+     */
+    @Test
+    void anOtherTermIsNoWitnessWhereTheRowItStandsInPassesTheType() {
+        long most = Long.MAX_VALUE;
+        Leaves x = leavesOf(List.of(
+                term("x", 1, run(0L, 10L), run(0L, 10L)),
+                term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 0, -most,
+                Rel.GT);
+        assertFalse(x instanceof Leaves.Undivided, () -> "x: " + x);
+    }
+
     /** A term that is what an operation answers, counted on the {@code Int}s. */
     private static WhatARelationLeavesUndivided.Term<String> answer(String place, long weight,
                                                                    NumericDomain.Bounds holds,
@@ -608,7 +656,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     private static Set<String> undivided(WhatARelationLeavesUndivided.Term<String> x,
                                          WhatARelationLeavesUndivided.Term<String> y, Rel relation) {
         return WhatARelationLeavesUndivided.of(List.of(x, y), ExactRatio.ZERO, relation,
-                String::equals, (one, two) -> true);
+                String::equals, (one, two) -> true, null);
     }
 
     /**

@@ -101,8 +101,10 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
     /**
      * A quotient by an input held against another value is no line, and says it is a divisor.
      * Against a number it is a line on each sign of the divisor, which stops where the comparison
-     * written out over the product stops: what is left unread of it is the relation, and not the
-     * division.
+     * written out over the product on each sign stops: what is left unread of it is the relation,
+     * and not the division. The sign is what the quotient knows of the divisor and a product
+     * written alone does not: held above nought, the divisor keeps the dividend's least values
+     * below the line.
      */
     @Test
     void aQuotientByAnInputIsADivisorAndNotAProduct() {
@@ -113,7 +115,8 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         """));
         assertEquals(reasons("""
                         behavior f : (xs: List<A>) -> Bool
-                        let f (xs) = List.any(i -> i.q >= 10 * i.p, xs)
+                        let f (xs) = List.any(i -> if i.p > 0 then i.q >= 10 * i.p
+                            else if i.p < 0 then i.q <= 10 * i.p else false, xs)
                         """),
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool

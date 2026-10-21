@@ -898,10 +898,12 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     }
 
     /** The second component is an expression like any other, and the line is drawn on what it
-     *  reads. */
+     *  reads. A length is never below nought, so a bar at one or below keeps every element
+     *  whatever it holds: a line of the model's on the bar, which the rows past every length the
+     *  type writes do not take away. */
     @Test
     void theSecondComponentIsReadAsAnyExpressionIs() {
-        assertEquals(List.of("String.length(xs[*]) = atLeast - 1"), linesOf("""
+        assertEquals(List.of("atLeast = 1", "String.length(xs[*]) = atLeast - 1"), linesOf("""
                 behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
                 let busy (xs, atLeast) =
                     Map.filterEntries((_, c) -> c >= atLeast,
