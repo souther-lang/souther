@@ -58,7 +58,6 @@ class AnArrangementOfACountAndANumberTriedBeforeIsNotOfferedAgainTest {
     void anotherSplitOfTheNumbersIsOfferedForTheSameCount() {
         Compilation compilation =
                 Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

@@ -371,7 +371,6 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
 
     private static Map<String, Core> bodiesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");

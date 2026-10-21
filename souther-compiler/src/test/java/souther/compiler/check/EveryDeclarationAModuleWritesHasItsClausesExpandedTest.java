@@ -54,7 +54,6 @@ class EveryDeclarationAModuleWritesHasItsClausesExpandedTest {
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         return new Read(RuleReadings.of(compilation, module), module);
     }

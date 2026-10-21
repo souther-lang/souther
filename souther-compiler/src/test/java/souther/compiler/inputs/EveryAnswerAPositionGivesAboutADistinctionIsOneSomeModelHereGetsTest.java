@@ -62,7 +62,6 @@ class EveryAnswerAPositionGivesAboutADistinctionIsOneSomeModelHereGetsTest {
 
     private static Admits admissionOf(String case_, ReadingPolicy policy) {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

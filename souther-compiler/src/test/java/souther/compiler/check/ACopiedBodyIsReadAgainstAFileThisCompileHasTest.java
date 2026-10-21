@@ -152,7 +152,6 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
     private static Core coreOf(Map<String, String> sources, ModulePath path, String module,
                                String behavior) {
         Compilation compilation = Compilation.ofDocuments(sources, Set.of(), path);
-        compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);

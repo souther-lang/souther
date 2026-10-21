@@ -117,7 +117,6 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(NAMES_BELOW_A_FIELD, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource source = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

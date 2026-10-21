@@ -56,7 +56,6 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
     private static GuardThresholds.Guards read(String primitive, String written) {
         String source = model(primitive, written);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

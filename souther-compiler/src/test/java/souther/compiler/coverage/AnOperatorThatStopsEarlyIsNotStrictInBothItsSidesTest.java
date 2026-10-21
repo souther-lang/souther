@@ -48,7 +48,6 @@ class AnOperatorThatStopsEarlyIsNotStrictInBothItsSidesTest {
         String source = TYPES
                 + "let pick (a, flag) = Answer(if " + condition + " then 1 else 2)\n";
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles: " + condition);

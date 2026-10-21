@@ -67,7 +67,6 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
     /** What each comparison of {@code behavior} stands under, in no order and named by no site. */
     private static List<String> standingUnder(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

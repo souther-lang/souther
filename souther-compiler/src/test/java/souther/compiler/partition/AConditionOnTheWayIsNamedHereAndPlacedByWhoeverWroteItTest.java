@@ -305,9 +305,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
     }
 
     private static Compilation compiledFrom(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return Compilation.ofSource(source, "Main");
     }
 
     /** Where a reader is sent for {@code cited}, as {@code compilation}'s sources now stand. */
@@ -352,7 +350,6 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
 
     private static Compilation compiled(String beforeTheBody) {
         Compilation compilation = Compilation.ofSource(model(beforeTheBody), "Main");
-        compilation.answerEverything();
         assertInstanceOf(String.class, compilation.modules().get(0),
                 "the model under test compiles to a module");
         return compilation;

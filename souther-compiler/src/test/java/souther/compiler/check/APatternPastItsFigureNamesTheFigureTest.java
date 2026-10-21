@@ -187,7 +187,6 @@ class APatternPastItsFigureNamesTheFigureTest {
                     invariant plain = String.matches("a{300}", value)
                     invariant marked = String.matches("a{300}b?", value)
                 """, "Main");
-        compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Long"));
         ReadingPolicy policy = new ReadingPolicy(ReadAs.THE_COMPILATION_DOES.dnfExpansionLimit(),

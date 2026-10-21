@@ -6,6 +6,7 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
@@ -207,13 +208,13 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
     }
 
     private static List<Core> bodiesOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        return bodiesIn(compilation, source);
+        return bodiesIn(Compilation.ofSource(source, "Main"), source);
     }
 
+    /** The corpus compiled and nothing measured: the bodies are what the checking hands on. */
     private static List<Core> bodiesOf(ConformanceCorpus corpus) {
-        return bodiesIn(corpus.analyse().compilation(), corpus.toString());
+        return bodiesIn(Compilation.ofSources(corpus.sources(), ModulePath.EMPTY),
+                corpus.toString());
     }
 
     private static List<Core> bodiesIn(Compilation compilation, String what) {

@@ -234,7 +234,6 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
 
     private static Bodies.CheckedBody body(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         return compilation.db().ask(new Bodies.CheckedBehavior(
                 compilation.modules().get(0), behavior)).value();
     }

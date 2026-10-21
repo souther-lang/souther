@@ -123,7 +123,6 @@ class ANumberNamedWhereNoValueIsWrittenIsStillMeasuredTest {
 
     private static Read of() {
         Compilation compilation = Compilation.ofSource(SPREAD, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);

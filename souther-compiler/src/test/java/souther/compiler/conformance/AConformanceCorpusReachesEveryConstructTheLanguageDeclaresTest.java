@@ -6,6 +6,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -190,10 +191,12 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
     /** One module of one corpus, compiled, with what the compiler answers about it. */
     private record Module(Compilation compiled, String name) {}
 
+    /** Compiled and nothing measured: what is asked of each module is what it declares and
+     *  requires, which the checking answers. */
     private static List<Module> modules() {
         List<Module> out = new ArrayList<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Compilation compiled = corpus.analyse().compilation();
+            Compilation compiled = Compilation.ofSources(corpus.sources(), ModulePath.EMPTY);
             for (String name : compiled.modules()) {
                 out.add(new Module(compiled, name));
             }

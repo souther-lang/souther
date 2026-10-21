@@ -77,7 +77,6 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
 
     private static Both both(String declaration) {
         Compilation compilation = Compilation.ofSource(PRELUDE + "\n" + declaration + "\n", "Main");
-        compilation.answerEverything();
         assertEquals(1, compilation.modules().size(), "the model under test compiles");
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -473,7 +472,6 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = if List.contains(0, xs) then High else Low
                 """, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

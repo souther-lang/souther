@@ -197,7 +197,6 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
                 byId.put(corpus.files().get(i), corpus.sources().get(i));
             }
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-            c.answerEverything();
             for (String module : c.modules()) {
                 Set<String> names = c.declaredBehaviors(module);
                 if (names == null) {

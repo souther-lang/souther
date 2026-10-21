@@ -253,7 +253,6 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
                 behavior one : (n: Int) -> Int
                 let one (n) = if n > 0 then n else 0
                 """, "Main");
-        compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().getFirst())).value();
         assertNotNull(checked);

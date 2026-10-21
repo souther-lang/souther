@@ -114,7 +114,6 @@ class WaysOfHoldingARowAreAnsweredTogetherByOneLawTest {
                 behavior f : (open: Bool) -> Int
                 let f (open) = if open then 1 else 0
                 """, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, InputDomain> inputs =

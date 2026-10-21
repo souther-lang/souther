@@ -110,7 +110,6 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
     /** Every location the body of {@code popular} names, read the way its demand is read. */
     private static List<TermPath> namedByTheBodyOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -138,7 +137,6 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(A_MAP_BESIDE_A_FIELD, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

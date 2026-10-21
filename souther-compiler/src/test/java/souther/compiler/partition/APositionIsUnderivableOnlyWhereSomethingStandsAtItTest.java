@@ -1,12 +1,12 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.conformance.ConformanceCorpus;
-import souther.compiler.diag.Located;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
@@ -18,8 +18,10 @@ import souther.compiler.query.Shapes;
 import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -111,8 +113,8 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
     @Test
     void everyCorpusPositionAgrees() {
         List<String> disagreeing = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            disagreeing.addAll(disagreeingIn(corpus.analyse().compilation()));
+        for (Compilation corpus : corpora()) {
+            disagreeing.addAll(disagreeingIn(corpus));
         }
         assertEquals(List.of(), disagreeing,
                 "a verdict and what is standing at the position say different things");
@@ -141,8 +143,8 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
     @Test
     void whereNothingStandsTheVerdictFollowsTheRulesFiledAtThePosition() {
         List<String> disagreeing = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            disagreeing.addAll(misclassifiedIn(corpus.analyse().compilation()));
+        for (Compilation corpus : corpora()) {
+            disagreeing.addAll(misclassifiedIn(corpus));
         }
         for (String model : MODELS) {
             disagreeing.addAll(misclassifiedIn(analysed(model)));
@@ -288,9 +290,29 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
         }
     }
 
+    /** Each model and each corpus analysed once for the class: the tests here read what an
+     *  analysis answered, and several ask the same one. */
+    private static final Map<String, Compilation> ANALYSED = new HashMap<>();
+
+    private static final Map<ConformanceCorpus, Compilation> CORPORA = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        ANALYSED.clear();
+        CORPORA.clear();
+    }
+
     private static Compilation analysed(String source) {
-        List<Located> warnings = new ArrayList<>();
-        return Compiler.analyzedModules(List.of(source), ModulePath.EMPTY, warnings,
-                Adequacy.Asked.fullReport());
+        return ANALYSED.computeIfAbsent(source, each -> Compiler.analyzedModules(List.of(each),
+                ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport()));
+    }
+
+    private static List<Compilation> corpora() {
+        return ConformanceCorpus.all().stream()
+                .map(corpus -> CORPORA.computeIfAbsent(corpus,
+                        each -> each.analyse().compilation()))
+                .toList();
     }
 }

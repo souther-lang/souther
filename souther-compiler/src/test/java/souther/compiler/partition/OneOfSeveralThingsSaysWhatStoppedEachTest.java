@@ -51,7 +51,6 @@ class OneOfSeveralThingsSaysWhatStoppedEachTest {
     /** What the walk declined, and why, in the order it met them. */
     private static List<WhyNotTaken> whys(String behavior, boolean holding) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().getFirst();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

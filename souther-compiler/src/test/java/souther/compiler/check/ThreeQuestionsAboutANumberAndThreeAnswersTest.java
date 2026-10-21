@@ -45,7 +45,6 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
 
     private static Answers of(String type) {
         Compilation compilation = Compilation.ofSource(TYPES, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");

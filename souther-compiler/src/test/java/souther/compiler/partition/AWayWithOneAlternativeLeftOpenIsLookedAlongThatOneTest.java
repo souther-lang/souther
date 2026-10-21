@@ -74,7 +74,6 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
                 behavior f : (k: Kind) -> Yes
                 let f (k) = Yes
                 """, "Main");
-        compilation.answerEverything();
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

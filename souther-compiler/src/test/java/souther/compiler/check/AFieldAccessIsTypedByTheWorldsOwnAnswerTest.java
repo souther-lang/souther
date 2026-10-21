@@ -53,9 +53,7 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
             compilation.db().ask(new Bodies.ModuleDefinitions(module)).value();
 
     private static Compilation compiled() {
-        Compilation c = Compilation.ofSource(MODULE, "Main");
-        c.answerEverything();
-        return c;
+        return Compilation.ofSource(MODULE, "Main");
     }
 
     /** What the check settled, which is what an accepted program's readers are handed. */
@@ -141,7 +139,6 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
                     { n: Int }
                     invariant broken = n
                 """, "Main");
-        c.answerEverything();
         Symbols scope = Scopes.derived(c.db(), "demo").value();
         TypeSymbol bad = TypeSymbols.declared(new TypeKey("demo", "Bad"));
         assertEquals(Map.of(), c.db().ask(new Shapes.ValueShapes("demo")).value(),

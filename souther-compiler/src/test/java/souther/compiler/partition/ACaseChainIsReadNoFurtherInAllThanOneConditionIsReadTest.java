@@ -147,12 +147,11 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
     }
 
     /** No arm of the chain's forks is one nothing arrives at, on conditions given up at the
-     *  figure. Asked of a compilation of its own, which reads the conditions for itself. */
+     *  figure. The question reads the conditions for itself, apart from the reading above. */
     @Test
     void whatWasGivenUpProvesNoArmUnreached() {
-        Compilation compilation = Compilation.ofSource(model(WITHIN + 1), "Main");
-        Map<String, PathReachability.Answers> byBehavior =
-                compilation.db().ask(new Adequacy.PathReached("demo")).value();
+        Map<String, PathReachability.Answers> byBehavior = read(WITHIN + 1).compilation().db()
+                .ask(new Adequacy.PathReached("demo")).value();
 
         byBehavior.get("draw").found().forEach((place, reached) ->
                 assertFalse(reached instanceof souther.compiler.reach.Reachability.Unreachable,
