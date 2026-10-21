@@ -1077,6 +1077,11 @@ final class Pullback {
                 () -> writtenOut(e, AnswerAspect.PRESENCE, reads),
                 () -> ofAnElementOfAnAnswer(e, AnswerAspect.PRESENCE, reads),
                 () -> byALaw(applied, e, AnswerAspect.PRESENCE, reads, new Denotation(e, reads)),
+                // After the law, which says which element the entry is where the map stands at a
+                // position: this says only that there is one.
+                () -> reads.mapLookedUpUnderOneOfItsOwnKeys(e, read.rules().symbols(),
+                        read.rules().newtypes()) != null
+                        ? leaf(new Derivation.UnderOneOfItsOwnKeys(), e, reads) : null,
                 () -> acrossAWalk(e, AnswerAspect.PRESENCE, reads),
                 () -> acrossARecursion(e, AnswerAspect.PRESENCE, reads),
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE), reads),
@@ -5216,12 +5221,34 @@ final class Pullback {
      */
     private LinearForm<Quantity> valueOfAnEntry(Core node, InputReads at) {
         Core container = at.containerOfTheElement(node);
-        if (container == null) {
+        return container == null ? null : valueOfAnEntryOf(at.standing(container,
+                read.rules().symbols(), read.rules().newtypes()));
+    }
+
+    /**
+     * The value filed under the key of an entry, where {@code node} is what an arm of a lookup in
+     * a map built so finds under one of that map's own keys — or null where it is anything else.
+     *
+     * <p>The key was read off the map, so the lookup finds the entry filed under it
+     * ({@link InputReads#mapLookedUpUnderOneOfItsOwnKeys}): the value is the entry's
+     * ({@link #valueOfAnEntry}), and the arm finding nothing is never taken.
+     */
+    private LinearForm<Quantity> valueUnderOneOfItsOwnKeys(Core node, InputReads at) {
+        if (!(Core.withoutStanding(node) instanceof Core.Read name)
+                || at.lookupOpenedBy(name.binding()) == null) {
             return null;
         }
+        Denotation looked = at.mapLookedUpUnderOneOfItsOwnKeys(
+                at.lookupOpenedBy(name.binding()).lookup(), read.rules().symbols(),
+                read.rules().newtypes());
+        return looked == null ? null : valueOfAnEntryOf(looked);
+    }
+
+    /** The value filed under the key of an entry of {@code whole}, where it is a map built by
+     *  filing under the key of each element of a list — or null where it is not. */
+    private LinearForm<Quantity> valueOfAnEntryOf(Denotation whole) {
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
-        Denotation whole = at.standing(container, symbols, newtypes);
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(), sides(),
                 blocksAt(whole));
         if (filed == null) {
@@ -6096,6 +6123,10 @@ final class Pullback {
                 LinearForm<Quantity> filedUnder = valueOfAnEntry(node, at);
                 if (filedUnder != null) {
                     return filedUnder;
+                }
+                LinearForm<Quantity> underItsOwnKey = valueUnderOneOfItsOwnKeys(node, at);
+                if (underItsOwnKey != null) {
+                    return underItsOwnKey;
                 }
                 LinearForm<Quantity> lookedUp = valueLookedUpUnderAKey(node, at);
                 if (lookedUp != null) {

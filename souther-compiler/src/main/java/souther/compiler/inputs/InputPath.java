@@ -1,13 +1,16 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallArguments;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Location;
+import souther.compiler.check.SeededWalk;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.MapPart;
@@ -242,6 +245,14 @@ final class InputPath {
             return where;
         }
         return switch (e) {
+            // A name an arm opened a lookup's answer under, where nothing else says what it is,
+            // holds one of the map's values, and came from wherever those did.
+            case Core.Read r when asked == ElementQuestion.VALUE_ORIGIN
+                    && names.openedBy(r.binding()) instanceof InputReads.LookupOpened opened
+                    && names.roleOf(r.binding()) instanceof BindingRole.Unknown
+                    && AnOperationApplied.of(opened.lookup()) instanceof AnOperationApplied looked
+                    && looked.args().size() == 2 ->
+                    heldAt(looked.args().get(1), new Wanted.APart(HeldIn.Part.ELEMENT), names);
             // What the name is, asked once, and the step that answers is the answer. An element is
             // answered by the container it came from even where that container is at no position:
             // the value a rewrite left under such a name is what the walk before it made of an
@@ -686,6 +697,12 @@ final class InputPath {
                 return new PathResolution.NotAPosition();
             }
         }
+        if (asked == ElementQuestion.VALUE_ORIGIN) {
+            PathResolution walked = throughAWalkFromASeed(e, names);
+            if (walked != null) {
+                return walked;
+            }
+        }
         Crossing crossing = crossing(operation, wanted);
         if (crossing == null) {
             crossing = throughAnIdentityMap(operation, args, wanted, names);
@@ -795,6 +812,30 @@ final class InputPath {
         PathResolution within = heldAt(args.get(at), wanted, names);
         return within instanceof PathResolution.NotAPosition ? null
                 : within.deeper(base -> answered.from(base).element());
+    }
+
+    /**
+     * Where what a walk from a seed answers came from, where {@code e} is one whose seed reads no
+     * name: the elements it walked, since what its answer holds is the seed's, which is written
+     * where it stands, or what its step made of them — or null where {@code e} is no such walk, or
+     * the elements stand nowhere.
+     *
+     * <p>For the walk after where a value came from and no other. What the step made is not the
+     * elements, and a rule about it is about a value made of them.
+     *
+     * <p>Not where the seed reads a name. What the answer holds is then made of the seed as well,
+     * over an empty list of the seed alone, and one position is not where it came from: said to be
+     * the elements, a rule about a value the seed handed over would be said of a list it is not
+     * made of.
+     */
+    private PathResolution throughAWalkFromASeed(Core e, BindingEnvironment names) {
+        SeededWalk walk = SeededWalk.enteredHoweverFar(e, InputPath::blockStanding);
+        if (walk == null || WhatABodyReads.anyBinding(walk.seed())) {
+            return null;
+        }
+        PathResolution from =
+                heldAt(walk.container(), new Wanted.APart(HeldIn.Part.ELEMENT), names);
+        return from instanceof PathResolution.NotAPosition ? null : from;
     }
 
     private static Core.Block blockStanding(Core closure) {

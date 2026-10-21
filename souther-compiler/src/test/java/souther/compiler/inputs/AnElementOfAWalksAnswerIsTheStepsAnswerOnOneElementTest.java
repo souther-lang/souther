@@ -207,9 +207,9 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     }
 
     /**
-     * A value a fold worked out that is no counter is no step on an element of the list folded, and
-     * where it came from is not said here: the position it is compared with keeps its own word and
-     * is told nothing about a value made from it.
+     * A value a fold worked out that is no counter is no step on an element of the list folded: the
+     * position it is compared with keeps its own word and is told nothing about a value made from
+     * it.
      */
     @Test
     void aValueAFoldWorkedOutIsNoStep() {
@@ -226,6 +226,77 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
         assertEquals(List.of("atLeast " + UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
                 notRead.stream().filter(each -> each.startsWith("atLeast ")).toList(),
                 () -> "the position the rule is about keeps its own word: " + notRead);
+    }
+
+    /**
+     * A rule about a value such a fold worked out, comparing it with nothing of the input, is
+     * still a rule: it is not read, and is said to be about a value made of the list the fold
+     * walked — whether the value is an entry handed by a walk over the map or one a lookup under
+     * the map's own keys found.
+     */
+    @Test
+    void aRuleAboutAValueAFoldWorkedOutIsNotReadAtTheListItWalked() {
+        String fold = """
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), Map.empty, xs)
+
+                """;
+        for (String busy : List.of("""
+                behavior busy : (xs: List<String>) -> Map<String, Int>
+                let busy (xs) = Map.filterEntries((_, count) -> count >= 3, countsOf(xs))
+                """, """
+                behavior busy : (xs: List<String>) -> List<String>
+                let busy (xs) = {
+                    let counts = countsOf(xs)
+                    List.filter(x -> match Map.get(x, counts) with
+                                        | Some count -> count >= 3
+                                        | None -> false, Map.keys(counts))
+                }
+                """)) {
+            List<String> notRead = notReadIn(compiled(fold + busy));
+            assertEquals(List.of("xs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                    notRead, () -> busy);
+        }
+    }
+
+    /**
+     * A fold starting from a map the input holds is made of that map as well as of the list it
+     * walked — over an empty list it answers the map itself — so a value of it is not said to have
+     * come from the list.
+     *
+     * <p>And where a value came from is said as one place, so a value made of two has no place:
+     * the rule about it is filed nowhere and goes unreported. What this pins is that state as it
+     * is, the rule absent from what is not read rather than said of the list.
+     */
+    @Test
+    void aValueAFoldFromAnInputMapWorkedOutIsNotSaidToComeFromTheListAlone() {
+        List<String> notRead = notReadIn(compiled("""
+                let countsOf (start: Map<String, Int>, xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), start, xs)
+
+                behavior busy : (start: Map<String, Int>, xs: List<String>) -> Map<String, Int>
+                let busy (start, xs) =
+                    Map.filterEntries((_, count) -> count >= 3, countsOf(start, xs))
+
+                example busy
+                    | "nothing walked, the start kept" : ([("a", 5), ("b", 1)], []) -> [("a", 5)]
+                """));
+        assertEquals(List.of(), notRead);
+    }
+
+    /** A rule about the strings such a fold worked out is a rule all the same, and is said to be
+     *  about values made of the list the fold walked. */
+    @Test
+    void aStringRuleAboutAValueAFoldWorkedOutIsNotReadAtTheListItWalked() {
+        List<String> notRead = notReadIn(compiled("""
+                let tagsOf (xs: List<String>): Map<String, String> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, x, v -> String.append(v, "!"), acc), Map.empty, xs)
+
+                behavior busy : (xs: List<String>) -> Map<String, String>
+                let busy (xs) = Map.filterEntries((_, v) -> String.startsWith("a", v), tagsOf(xs))
+                """));
+        assertEquals(List.of("xs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                notRead, () -> notRead.toString());
     }
 
     @Test

@@ -26,6 +26,7 @@ import souther.compiler.inputs.OnePerElement.ReadOff;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
@@ -1174,15 +1175,28 @@ public final class InputReads {
             if (found != null) {
                 return found;
             }
-            at = oneStepBeneath(at, symbols, newtypes, (operation, args, where) -> {
-                DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
-                return holds != null ? holds : keepingEveryElement(operation, args, where,
-                        symbols, newtypes);
-            });
+            at = oneStepBeneath(at, symbols, newtypes, (operation, args, where) ->
+                    holdingTheElementsOf(operation, args, where, symbols, newtypes));
             if (at == null) {
                 return null;
             }
         }
+    }
+
+    /**
+     * The argument whose very elements {@code operation}, applied to {@code args}, answers some of:
+     * the one its law says it holds the elements of — a filter, a reordering — or the one a closure
+     * answering each element as it is was handed. Null where it answers no argument's.
+     *
+     * <p>The one step down a list to the list its elements are the elements of, for every reader
+     * that follows an element back to where it was handed from.
+     */
+    private static DeclaredArgument holdingTheElementsOf(ValueName operation, List<Core> args,
+                                                         InputReads where, Symbols symbols,
+                                                         DeclarationNewtypes newtypes) {
+        DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
+        return holds != null ? holds
+                : keepingEveryElement(operation, args, where, symbols, newtypes);
     }
 
     /**
@@ -2856,6 +2870,91 @@ public final class InputReads {
             reads = through.denotes().at();
         }
         return new Denotation(at, reads);
+    }
+
+    /**
+     * The map {@code lookup}, read here, looks a key up in, read where it stands — where the key
+     * is one of that same map's keys; or null where {@code lookup} is no lookup in a map, or the
+     * key is not shown to be one of the map's.
+     *
+     * <p>The key is one of the map's where it is an element handed from a list of the map's keys,
+     * or from a list holding only elements of such a list: the step down to the list an element
+     * was handed from is the one every reader following an element back takes
+     * ({@link #holdingTheElementsOf}).
+     *
+     * <p>And the map whose keys were listed is the map looked in where the two are one value by
+     * name ({@link #oneNamedValue}). Two maps written alike are two maps here, whatever they hold:
+     * what is asked is that the lookup finds an entry, and only one value is known to have one.
+     */
+    public Denotation mapLookedUpUnderOneOfItsOwnKeys(Core lookup, Symbols symbols,
+                                                      DeclarationNewtypes newtypes) {
+        if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied looked)
+                || !GET.equals(looked.operation()) || looked.args().size() != 2) {
+            return null;
+        }
+        Denotation key = standing(looked.args().getFirst(), symbols, newtypes);
+        Core handedFrom = key.at().containerOfTheElement(key.value());
+        if (handedFrom == null) {
+            return null;
+        }
+        Denotation listing = key.at().standing(handedFrom, symbols, newtypes);
+        Denotation keysOf = mapWhoseKeysAreListedBy(listing, symbols, newtypes);
+        Denotation map = new Denotation(looked.args().get(1), this);
+        return keysOf != null && oneNamedValue(keysOf, map, symbols, newtypes)
+                ? standing(map.value(), symbols, newtypes) : null;
+    }
+
+    /**
+     * The map {@code list}, read where it stands, lists the keys of beneath every operation
+     * holding only elements of what it was handed — the map as it was handed to the listing,
+     * not read past its name — or null where it lists no map's keys.
+     */
+    private Denotation mapWhoseKeysAreListedBy(Denotation list, Symbols symbols,
+                                               DeclarationNewtypes newtypes) {
+        Denotation at = list;
+        while (at != null) {
+            AnOperationApplied applied = AnOperationApplied.of(at.value());
+            BoundOperationFacts.Listed listed = applied == null ? null
+                    : DefaultBoundOperationFacts.get().listsAPartOf(applied.operation());
+            if (listed != null) {
+                return listed.part() == MapPart.KEYS
+                        ? new Denotation(applied.argument(listed.map()), at.at()) : null;
+            }
+            at = oneStepBeneath(at, symbols, newtypes, (operation, args, where) ->
+                    holdingTheElementsOf(operation, args, where, symbols, newtypes));
+        }
+        return null;
+    }
+
+    /**
+     * Whether {@code one} and {@code other} are one value by name: the names each is read
+     * through, followed as {@link #denotes} follows them, come to one binding.
+     *
+     * <p>Asked only of names read in one reading of one rule, both from where a lookup stands
+     * ({@link #mapLookedUpUnderOneOfItsOwnKeys}). There a binding is one value: a helper is expanded
+     * at each call with bindings of its own, and a body a reading enters binds its parameters to
+     * the one call it entered for. A binding met on both ways is the same binding holding the same
+     * value, and two calls written alike meet at none.
+     */
+    private static boolean oneNamedValue(Denotation one, Denotation other, Symbols symbols,
+                                         DeclarationNewtypes newtypes) {
+        Set<BindingId> named = namesFollowed(one, symbols, newtypes);
+        return namesFollowed(other, symbols, newtypes).stream().anyMatch(named::contains);
+    }
+
+    /** The names {@code from} is read through on the way to what it denotes, itself first. */
+    private static Set<BindingId> namesFollowed(Denotation from, Symbols symbols,
+                                                DeclarationNewtypes newtypes) {
+        Core at = Core.withoutStanding(from.value());
+        InputReads reads = from.at();
+        Set<BindingId> met = new LinkedHashSet<>();
+        while (at instanceof Core.Read read && met.add(read.binding())
+                && reads.meaningOf(read, symbols, newtypes)
+                        instanceof ReadMeaning.Through through) {
+            at = Core.withoutStanding(through.denotes().value());
+            reads = through.denotes().at();
+        }
+        return met;
     }
 
     /**
