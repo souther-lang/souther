@@ -247,8 +247,8 @@ final class InputPath {
             // A name an arm opened a lookup's answer under, where nothing else says what it is,
             // holds one of the map's values, and came from wherever those did.
             case Core.Read r when asked == ElementQuestion.VALUE_ORIGIN
-                    && names.roleOf(r.binding()) instanceof BindingRole.Unknown
                     && names.openedBy(r.binding()) instanceof InputReads.LookupOpened opened
+                    && names.roleOf(r.binding()) instanceof BindingRole.Unknown
                     && AnOperationApplied.of(opened.lookup()) instanceof AnOperationApplied looked
                     && looked.args().size() == 2 ->
                     heldAt(looked.args().get(1), new Wanted.APart(HeldIn.Part.ELEMENT), names);
