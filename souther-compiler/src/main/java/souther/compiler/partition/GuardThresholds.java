@@ -480,17 +480,12 @@ public final class GuardThresholds {
                 continue;
             }
             // Where a side's values came from, and nothing where they came from nowhere.
-            switch (reads.cameFrom(side, newtypes)) {
-                case PathResolution.At(var at) -> out.putIfAbsent(FilingCoordinate.at(at),
-                        new BlockReason.RuleAboutADerivedValue());
-                case PathResolution.NotAPosition _ -> { }
-                case PathResolution.MayStandAt(var among) -> among.forEach(each ->
-                        out.putIfAbsent(FilingCoordinate.at(each),
-                                new BlockReason.RuleAboutAnElementOfSeveralContainers()));
-                // A value made of every one of them is a value somebody computed at each place.
-                case PathResolution.MadeOf made -> made.places().forEach(each ->
-                        out.putIfAbsent(FilingCoordinate.at(each),
-                                new BlockReason.RuleAboutADerivedValue()));
+            PathResolution came = reads.cameFrom(side, newtypes);
+            if (came instanceof PathResolution.At(var at)) {
+                out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
+            } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
+                owed.places().forEach(each ->
+                        out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
             }
         }
     }

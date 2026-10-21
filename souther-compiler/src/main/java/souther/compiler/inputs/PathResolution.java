@@ -112,7 +112,12 @@ public sealed interface PathResolution {
      * alternative of the others, {@link #anyOf} puts the alternatives of its cases side by side, and
      * all of them end in {@link #of}, so no combination is a case of its own to be handled or
      * forgotten. Some alternative has more than one place: an answer without one is a position or
-     * several that it may stand at, and is that.
+     * several that it may stand at, and is that, however many.
+     *
+     * <p>Where making multiplies choices past {@link #MOST_WAYS_TOLD_APART}, the alternatives of
+     * that value are one, made of every place of all of them. It is the places the value may be
+     * made of and no fewer, so a rule about it is filed everywhere it is owed, and a reader that
+     * asks only where the value came from cannot tell it from the exact answer.
      *
      * <p>Not a position, so a reader that needs one place reads it as none, as it does a value
      * that may stand at several.
@@ -135,12 +140,15 @@ public sealed interface PathResolution {
     }
 
     /**
-     * The most alternatives an answer tells apart. Past that, the value is said to be made of every
-     * place of every alternative together: more places than the value is made of on any run, and
-     * none fewer, which is what a rule about it is filed at.
+     * The most alternatives that making a value out of several choices tells apart. Past that, the
+     * alternatives are merged into one made of every place of every one of them: more places than
+     * the value is made of on any run, and none fewer, which is what a rule about it is filed at.
      *
-     * <p>A bound and not a measurement: the choices a body writes by hand come to a handful of
-     * alternatives, and what it limits is the product of nested choices, which doubles with each.
+     * <p>A bound on the one operation that multiplies, {@link #madeOf}, where each choice made
+     * between values doubles the alternatives of the value made of them. Choosing between values
+     * only adds, so {@link #anyOf} has none, and a choice among any number of places stays the
+     * places it may stand at. A bound and not a measurement: the choices a body writes by hand come
+     * to a handful.
      */
     int MOST_WAYS_TOLD_APART = 64;
 
@@ -166,10 +174,12 @@ public sealed interface PathResolution {
     }
 
     /** Every alternative of {@code ways} with every one of {@code cases}, or all their places in
-     *  one alternative where that is more than an answer tells apart. */
+     *  one alternative where two choices multiply past what an answer tells apart. One side that
+     *  is not a choice multiplies nothing, however many alternatives the other has. */
     private static List<List<TermPath>> together(List<List<TermPath>> ways,
                                                  List<List<TermPath>> cases) {
-        if ((long) ways.size() * cases.size() > MOST_WAYS_TOLD_APART) {
+        if (ways.size() > 1 && cases.size() > 1
+                && (long) ways.size() * cases.size() > MOST_WAYS_TOLD_APART) {
             List<TermPath> every = new ArrayList<>();
             ways.forEach(every::addAll);
             cases.forEach(every::addAll);
@@ -210,9 +220,6 @@ public sealed interface PathResolution {
                 .map(each -> each.stream().distinct().toList()).distinct().toList();
         if (ways.isEmpty()) {
             return new NotAPosition();
-        }
-        if (ways.size() > MOST_WAYS_TOLD_APART) {
-            ways = List.of(ways.stream().flatMap(List::stream).distinct().toList());
         }
         if (ways.stream().anyMatch(each -> each.size() > 1)) {
             return new MadeOf(ways);

@@ -119,6 +119,34 @@ class WhereAValueCameFromIsClosedUnderMakingAndChoosingTest {
     }
 
     @Test
+    void aChoiceAmongMorePlacesThanAnAnswerTellsApartIsStillTheOnesItMayStandAt() {
+        List<PathResolution> cases = new ArrayList<>();
+        for (int i = 0; i <= PathResolution.MOST_WAYS_TOLD_APART; i++) {
+            cases.add(at(TermPath.of("p" + i).then("items").element()));
+        }
+        PathResolution chosen = PathResolution.anyOf(cases);
+        assertEquals(PathResolution.MOST_WAYS_TOLD_APART + 1,
+                ((PathResolution.MayStandAt) chosen).among().size());
+    }
+
+    @Test
+    void aValueMadeOfOneChoiceIsThatChoiceHoweverManyPlacesItHas() {
+        PathResolution many = mayStandAtOneOf("p", PathResolution.MOST_WAYS_TOLD_APART + 1);
+        assertEquals(many, PathResolution.madeOf(List.of(many)));
+    }
+
+    @Test
+    void aChoiceAmongMoreValuesMadeOfSeveralThanAnAnswerTellsApartKeepsEveryOne() {
+        List<PathResolution> cases = new ArrayList<>();
+        for (int i = 0; i <= PathResolution.MOST_WAYS_TOLD_APART; i++) {
+            cases.add(PathResolution.madeOf(List.of(
+                    at(TermPath.of("p" + i).then("items").element()), at(A))));
+        }
+        PathResolution.MadeOf chosen = (PathResolution.MadeOf) PathResolution.anyOf(cases);
+        assertEquals(PathResolution.MOST_WAYS_TOLD_APART + 1, chosen.alternatives().size());
+    }
+
+    @Test
     void aValueMadeInAsManyWaysAsAnAnswerTellsApartKeepsEveryWay() {
         PathResolution.MadeOf made = (PathResolution.MadeOf) PathResolution.madeOf(List.of(
                 mayStandAtOneOf("p", 4), mayStandAtOneOf("q", 4), mayStandAtOneOf("r", 4)));
