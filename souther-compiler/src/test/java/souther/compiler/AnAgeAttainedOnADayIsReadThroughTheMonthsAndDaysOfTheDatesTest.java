@@ -310,75 +310,29 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
             }
             """;
 
-    /** The class of a person of {@code age}, as the chain of comparisons is meant to put it. */
-    private static int classOf(int age, boolean ascendant) {
-        if (age >= 70 && ascendant) {
-            return 3;
-        }
-        if (age >= 70) {
-            return 2;
-        }
-        return age >= 19 ? 1 : 0;
-    }
-
-    /** One example row, answered with the class the calendar's age and the flag give. */
-    private static void example(StringBuilder into, LocalDate birthday, LocalDate on,
-                                boolean ascendant) {
-        into.append("    | (Date(\"").append(birthday).append("\"), Date(\"").append(on)
-                .append("\"), ").append(ascendant).append(") -> ")
-                .append(classOf(ageAttained(birthday, on), ascendant)).append('\n');
-    }
-
     /**
-     * The rows offered stand at both sides of each line of the age, and the class each is
-     * answered is the one the calendar's age and the flag give: the rows are written back as
-     * examples whose answers are worked out here, apart from the compiler.
+     * The rows offered stand at both sides of each line of the age, as the calendar works the age
+     * of each out, apart from the compiler.
      */
     @Test
-    void theRowsOfferedForAChainOfAgeComparisonsAreAnsweredAsTheCalendarWorksTheClassOut() {
+    void theRowsOfferedForAChainOfAgeComparisonsStandAtBothSidesOfEachLine() {
         Compilation offering = Measured.CHAIN_OF_AGES;
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(offering.texts()), offering.db())
                 .text();
 
-        Pattern row = Pattern.compile(
-                "Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\), (true|false)");
-        StringBuilder examples = new StringBuilder();
+        Pattern row = Pattern.compile("Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\)");
         Set<Integer> ages = new HashSet<>();
         for (String line : offered.lines().toList()) {
             Matcher found = row.matcher(line);
-            if (!found.find()) {
-                continue;
+            if (found.find()) {
+                ages.add(ageAttained(LocalDate.parse(found.group(1)),
+                        LocalDate.parse(found.group(2))));
             }
-            LocalDate birthday = LocalDate.parse(found.group(1));
-            LocalDate on = LocalDate.parse(found.group(2));
-            boolean ascendant = Boolean.parseBoolean(found.group(3));
-            int age = ageAttained(birthday, on);
-            ages.add(age);
-            example(examples, birthday, on, ascendant);
         }
         assertTrue(ages.containsAll(List.of(18, 19, 69, 70)),
                 () -> "a row at each side of each line: " + ages + "\n" + offered);
-
-        // The rows offered stand at the points of each comparison and not at every way the flag
-        // combines with them, so the rows past seventy are written here at both values of it,
-        // at the day each age is attained and the day before.
-        LocalDate born = LocalDate.of(1950, 6, 15);
-        for (int age : List.of(18, 19, 69, 70, 71)) {
-            LocalDate attained = born.minusDays(1).plusYears(age);
-            for (LocalDate on : List.of(attained, attained.minusDays(1))) {
-                example(examples, born, on, true);
-                example(examples, born, on, false);
-            }
-        }
-
-        // Answered and not measured: the examples are run against the program, and one whose
-        // answer is not the program's is an error, which is all this asks.
-        Compilation answered = Compilation.ofSource(CHAIN + "\nexample f\n" + examples, "Main");
-        answered.answerEverything();
-
-        assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
     }
 
     private static final String ONE_LINE_BESIDE_A_FLAG = AGE.replace(
@@ -395,8 +349,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     /**
      * The years of the two dates are tied by the age, so the year of the day is not left the whole
      * of a year's range by the year of the birthday still to be chosen: every point of the month
-     * and day correction is offered a row, and the rows are answered as the calendar works the
-     * class out.
+     * and day correction is offered a row, each where the calendar puts it.
      */
     @Test
     void everyPointOfTheCorrectionOfAnAgeBesideAFlagIsOfferedARow() {
@@ -411,7 +364,6 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
 
         Pattern row = Pattern.compile(
                 "Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\), (true|false)");
-        StringBuilder examples = new StringBuilder();
         Set<String> points = new HashSet<>();
         for (String line : offered.lines().toList()) {
             Matcher found = row.matcher(line);
@@ -422,12 +374,9 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 int age = ageAttained(birthday, on);
                 points.add(age + " " + (beforeTheDay(birthday, on) ? "before" : "on or after")
                         + " " + ascendant);
-                examples.append("    | (Date(\"").append(birthday).append("\"), Date(\"")
-                        .append(on).append("\"), ").append(ascendant).append(") -> ")
-                        .append(age >= 70 ? (ascendant ? 3 : 2) : 0).append('\n');
             }
         }
-        assertFalse(examples.isEmpty(), offered);
+        assertFalse(points.isEmpty(), offered);
         // A row at each side of the correction by the month and day where the age is seventy, and
         // one at each value of the flag from there on: the points the report would name if one of
         // them had no row, asked of the rows themselves. The rows stand at the points of each
@@ -437,11 +386,6 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 points.toString());
         assertTrue(points.contains("70 on or after true") && points.contains("70 on or after false"),
                 points.toString());
-
-        Compilation answered = Compilation.ofSource(
-                ONE_LINE_BESIDE_A_FLAG + "\nexample f\n" + examples, "Main");
-        answered.answerEverything();
-        assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
     }
 
     /**

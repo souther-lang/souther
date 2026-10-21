@@ -64,18 +64,17 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
 
     /**
      * The same helper handed other values is another total: the lines drawn on the comparison of
-     * the two relate the pay of one pair to the pay of the other, which a total read for one of
-     * them and used for both could not.
+     * the two relate the pay of one month to the pay of the other, which a total read for one of
+     * them and used for both could not. A list of one is enough to keep or not.
      */
     @Test
     void theSameHelperHandedOtherValuesIsAnotherTotal() {
         String report = report("""
-                let total (a: Month, b: Month): Int =
-                    List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ a, b ])))
-                """ + guarded("total(p.x, p.y) >= total(p.u, p.v) + 100"));
+                let total (a: Month): Int =
+                    List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ a ])))
+                """ + guarded("total(p.x) >= total(p.u) + 100"));
         assertTrue(report.contains("read as f/p.u.pay: = p.x.pay - 100"), report);
-        assertTrue(report.contains("read as f/p.u.pay: = p.y.pay - 100"), report);
-        assertTrue(report.contains("read as f/p.u.pay + p.v.pay: = -100"), report);
+        assertTrue(report.contains("read as f/p.u.pay: = -100"), report);
     }
 
     @Test

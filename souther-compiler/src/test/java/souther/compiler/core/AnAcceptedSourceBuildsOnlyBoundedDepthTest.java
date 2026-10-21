@@ -325,8 +325,10 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
                 new Case("a block of guards", guards(300)),
                 new Case("every statement kind at once", everyStatementKind()));
 
+        // Compiled as far as the trees asked about and no further: that each source is accepted
+        // whole is what the tests above hold, and what is counted here is built before the backend.
         for (Case one : cases) {
-            Compilation compilation = Compiler.compiled(one.source(), "m");
+            Compilation compilation = Compilation.ofSource(one.source(), "m");
             for (String module : compilation.modules()) {
                 for (String behavior : compilation.declaredBehaviors(module)) {
                     say(tooDeep, one.what(), behavior, "the Hir it expanded",

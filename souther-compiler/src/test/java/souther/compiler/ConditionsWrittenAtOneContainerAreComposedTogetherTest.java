@@ -336,8 +336,11 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
             assertEquals(answered.composedFor(), answers,
                     () -> "a row for the rules this model has one for: " + examples + "\n" + model);
 
-            Compilation answeredBy = measured(model + "example pick\n"
-                    + String.join("\n", examples) + "\n");
+            // Run and not measured: an example whose answer is not the program's is an error,
+            // which is all this asks of the rows.
+            Compilation answeredBy = Compilation.ofSource(model + "example pick\n"
+                    + String.join("\n", examples) + "\n", "Main");
+            answeredBy.answerEverything();
             assertEquals(List.of(), answeredBy.errors().stream()
                     .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
                     .toList(), () -> "each row is answered as its inputs say: " + examples);

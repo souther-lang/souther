@@ -164,11 +164,12 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
      * reading does not divide the input by, as it does not for the same comparison written out
      * without a filter. What it stops at is that, and no longer the quotient: in each way of
      * keeping, the count is the number of months that way keeps, and the line relates the pay of
-     * one month to the pay of another.
+     * one month to the pay of another — which two months are enough to have.
      */
     @Test
     void aMeanOverTheirPayStopsAtTheLineOverSeveralValuesAndNotAtTheQuotient() {
-        String report = overAHelpersListOfThree("r.pay", "300");
+        String report = report(guarded("List.length(" + PAYABLE + ") >= 1",
+                meanOfEach("r.pay") + " >= 300"));
         assertFalse(report.contains(NO_QUOTIENT_READ), report);
         assertTrue(report.contains("relates the value here to another value"), report);
     }

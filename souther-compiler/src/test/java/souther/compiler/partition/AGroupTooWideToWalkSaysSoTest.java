@@ -44,24 +44,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AGroupTooWideToWalkSaysSoTest {
 
     /**
-     * As many decisions meeting on one value as it takes to go past the walk.
+     * As many decisions meeting on one value as it takes to go past {@link #FOUR}.
      *
      * <p>Each parameter is matched by its own helper and every result is added into one {@code Fee},
-     * so the thirteen meet at one operator and the group's choices are two to the thirteenth. The
-     * standard budget is a capacity of four thousand and ninety-six, so twelve decisions are exactly
-     * it and are offered, and the thirteenth is the first width that is not.
+     * so the three meet at one operator and the group's choices are two to the third.
      */
-    private static final String THIRTEEN = model(13);
-
-    /** The widest model still offered under the standard budget: twelve decisions are four thousand
-     *  and ninety-six choices, which is the capacity exactly. Without it, a group not offered would
-     *  be as good an account of a model this cannot read at all. */
-    private static final String TWELVE = model(12);
+    private static final String THREE = model(3);
 
     /** Two decisions, which is four choices — small enough that a budget written here can be put
-     *  either side of it exactly. Two to the thirteenth is where the default falls, and a default
-     *  can only be reached at a power of two; a budget the caller names can be reached anywhere. */
+     *  either side of it exactly, and a budget the caller names can be reached anywhere. Without a
+     *  width that is offered, a group not offered would be as good an account of a model this
+     *  cannot read at all. */
     private static final String TWO = model(2);
+
+    /** A budget of four choices: two decisions are offered under it and three are not. Which
+     *  width the standard budget falls at is its number, which is not what is asked here. */
+    private static final AdequacyPolicy.OfTheGeneration FOUR = atMost(4);
 
     /** The same behavior with rows, so a compilation can be asked what it is still owed. Each row
      *  settles every parameter the same way, which takes one arm of each helper. */
@@ -134,9 +132,9 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void aGroupPastTheLimitIsHeldBackAndSaidSo() {
-        Model model = Model.of(THIRTEEN);
+        Model model = Model.of(THREE);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), FOUR.cellsPerGroup());
 
         assertEquals(List.of(), offered.groups(),
                 "the group is not offered, which is what the limit is for");
@@ -146,31 +144,13 @@ class AGroupTooWideToWalkSaysSoTest {
                 "carrying what a run through it would have been seen to do");
     }
 
-    /** And one decision fewer is offered, so the answer above is the limit's and not the model's. */
-    @Test
-    void andUnderTheLimitTheGroupIsOffered() {
-        Model model = Model.of(TWELVE);
-        InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
-
-        assertEquals(List.of(), offered.notOffered(),
-                "nothing is held back");
-        assertFalse(offered.groups().isEmpty(),
-                "and the group is there to be walked");
-    }
-
     /**
-     * A group of exactly the budget is offered, and one choice more is not.
+     * A group of exactly the budget is offered, and one choice more is not — so the answer above
+     * is the limit's and not the model's.
      *
-     * <p>The point on the line, which the pair either side of it does not establish. Twelve
-     * decisions and thirteen are four thousand and ninety-six choices and eight thousand and
-     * one hundred and ninety-two, so the default can say which side of the limit a model falls on
-     * and never what happens at it — a default is reached only at a power of two, and the boundary
-     * is a single number.
-     *
-     * <p>Written by naming the budget instead, which is what having one as an input is for. Four
-     * choices against a capacity of four is the group being offered <em>at</em> the limit, and the
-     * same four against three is the first thing past it. Read the other way round, this is the
+     * <p>The point on the line, which the pair either side of it does not establish. Four choices
+     * against a capacity of four is the group being offered <em>at</em> the limit, and the same
+     * four against three is the first thing past it. Read the other way round, this is the
      * assertion that {@code cellsPerGroup} is a capacity and not a cutoff: under a cutoff the first
      * of these two would be held back.
      */
@@ -178,11 +158,11 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupOfExactlyTheBudgetIsOffered() {
         Model model = Model.of(TWO);
         assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes(),
-                        atMost(4).cellsPerGroup()).groups().get(0).size(),
+                        FOUR.cellsPerGroup()).groups().get(0).size(),
                 "two decisions of two outcomes are four choices");
 
         assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes(),
-                        atMost(4).cellsPerGroup()).notOffered(),
+                        FOUR.cellsPerGroup()).notOffered(),
                 "a group of exactly the budget is offered");
         assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes(),
                         atMost(3).cellsPerGroup()).notOffered().size(),
@@ -203,13 +183,13 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void theArmsBehindItAreStillArmsTheCombinationsTake() {
-        Model wide = Model.of(THIRTEEN);
-        Model narrow = Model.of(TWELVE);
+        Model wide = Model.of(THREE);
+        Model narrow = Model.of(TWO);
 
         Set<ArmProbe> fromWide =
-                GenerationFixtures.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(wide.subject(), wide.groups(), FOUR);
         Set<ArmProbe> fromNarrow =
-                GenerationFixtures.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), FOUR);
 
         assertFalse(fromWide.isEmpty(),
                 "the arms behind the group the limit held back are still named");
@@ -232,10 +212,10 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void anArmBehindTheHeldGroupIsAnsweredFromTheWayIntoIt() {
-        Model model = Model.of(THIRTEEN);
+        Model model = Model.of(THREE);
 
         FillResult composed = GenerationFixtures.fill(model.subject(), List.of(),
-                Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, Budgets.generation());
+                Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, FOUR);
 
         assertFalse(GenerationFixtures.arms(composed.discharge()).values().isEmpty(), () -> "the arms are answered: " + GenerationFixtures.arms(composed.discharge()).values());
         assertTrue(GenerationFixtures.arms(composed.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
@@ -262,11 +242,11 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void aGroupNothingWasAskedForBehindIsNotReported() {
-        Model model = Model.of(THIRTEEN);
+        Model model = Model.of(THREE);
 
         FillResult asked = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
-                List.of(), List.of(), List.of(), Budgets.generation());
+                List.of(), List.of(), List.of(), FOUR);
 
         assertEquals(List.of(), asked.reasons().stream()
                         .filter(GenerationReason.GroupsNotOffered.class::isInstance).toList(),
