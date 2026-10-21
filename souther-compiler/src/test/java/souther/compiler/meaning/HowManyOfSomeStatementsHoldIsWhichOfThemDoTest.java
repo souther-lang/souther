@@ -46,19 +46,21 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         assertEquals(new Proposition.Always(false), howMany(List.of(P, P), Rel.EQ, 1));
     }
 
+    /** One of two is held as the count, and its choices are either of them and not both. */
     @Test
     void oneOfTwoIsEitherOfThemAndNotBoth() {
-        assertEquals(Proposition.any(List.of(
+        assertEquals(new CountsWrittenOut.Written(Proposition.any(List.of(
                         Proposition.all(List.of(P, Q.denied())),
-                        Proposition.all(List.of(P.denied(), Q)))),
-                howMany(List.of(P, Q), Rel.EQ, 1));
+                        Proposition.all(List.of(P.denied(), Q))))),
+                CountsWrittenOut.of(howMany(List.of(P, Q), Rel.EQ, 1)));
     }
 
     /** At least one holding is one of them holding, whatever the other does: a fewest set that
      *  comes to the number, and nothing said of the rest. */
     @Test
     void atLeastOneOfTwoIsEitherOfThem() {
-        assertEquals(Proposition.any(List.of(P, Q)), howMany(List.of(P, Q), Rel.GE, 1));
+        assertEquals(new CountsWrittenOut.Written(Proposition.any(List.of(P, Q))),
+                CountsWrittenOut.of(howMany(List.of(P, Q), Rel.GE, 1)));
     }
 
     /** At most one holding is the denial of both holding: one of them failing, whatever the other
@@ -83,14 +85,14 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
     }
 
     /**
-     * Exactly one of many is one choice for each of them, and not one for each way they could all
-     * come out: written out, as long as the choices come to no more parts than a step is concluded
-     * with.
+     * Exactly one of many is held as the count, and its choices are one for each of them and not
+     * one for each way they could all come out, for a reader that is handed them.
      */
     @Test
     void exactlyOneOfManyIsOneChoiceForEach() {
         List<Proposition> each = distinct(18);
-        assertEquals(exactlyOneOf(each), howMany(each, Rel.EQ, 1));
+        assertEquals(new CountsWrittenOut.Written(exactlyOneOf(each)),
+                CountsWrittenOut.of(howMany(each, Rel.EQ, 1)));
     }
 
     /**
@@ -260,23 +262,22 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
     }
 
     /**
-     * A count is written out as its choices only where they are no more than its statements, and
-     * otherwise held as the count: not by how many choices a reading takes in or how many parts a
-     * step concludes with, which are no part of what the count states. The counts either side of
-     * those figures are held alike.
+     * A count is held as the count whenever it is one, and not by how many choices it would be
+     * written out as: neither how many a reading takes in nor how many parts a step concludes with
+     * is part of what it states. Only a relation that comes to one choice or none is not a count,
+     * and is the statement itself or no row.
      */
     @Test
-    void aCountIsWrittenOutOnlyWhereItsChoicesAreNoMoreThanItsStatements() {
-        int[][] writtenOut = {{3, 1}, {4, 1}, {5, 1}, {5, 5}};
-        int[][] held = {{4, 2}, {5, 2}, {8, 4}, {10, 5}, {11, 5}, {13, 6}};
+    void aCountIsHeldAsTheCountWhateverHowManyChoicesItWouldBeWrittenOutAs() {
+        int[][] counts = {{2, 1}, {3, 1}, {4, 2}, {5, 4}, {8, 4}, {10, 5}, {11, 5}, {13, 6}};
 
-        for (int[] nk : writtenOut) {
-            assertTrue(!(howMany(distinct(nk[0]), Rel.EQ, nk[1]) instanceof Proposition.SoManyHold),
-                    () -> nk[1] + " of " + nk[0] + " is written out");
-        }
-        for (int[] nk : held) {
+        for (int[] nk : counts) {
             assertInstanceOf(Proposition.SoManyHold.class,
                     howMany(distinct(nk[0]), Rel.EQ, nk[1]), () -> nk[1] + " of " + nk[0]);
+        }
+        for (int[] nk : new int[][] {{3, 3}, {3, 0}}) {
+            assertTrue(!(howMany(distinct(nk[0]), Rel.EQ, nk[1]) instanceof Proposition.SoManyHold),
+                    () -> nk[1] + " of " + nk[0] + " is one choice");
         }
     }
 
