@@ -16,6 +16,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.runtime.ConstraintViolation;
+import souther.runtime.Lists;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -27,15 +29,17 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * What the elements of a key come to is read for every element of the run, whichever of them
- * could not be read, and a total is a number only where the program comes to one adding the
- * numbers up as it does.
+ * could not be read, and a total is the number a run comes to where it answers.
  *
  * <p>An element whose key is not read may be of any key, so every element's reading stops there —
  * and every element has one: a reading that answers for some of the elements reads to a caller as
- * the others having no number at all, which is a definite answer this never had. And the program
- * adds whole numbers one at a time in the order it is handed them, stopping at a step its
- * carrier does not hold, so a total past that step is no number though the exact sum of all of
- * them would be one.
+ * the others having no number at all, which is a definite answer this never had.
+ *
+ * <p>A total is read as the library's total answers: the numbers added up, and no number where
+ * the total, or one element's number, is past what the program holds. Not each sum on the way: the
+ * library adds wider on the way, and a walk adding with the operator, which stops where a sum on
+ * the way is past it, is a run that does not answer — which running the row says, and no reading
+ * of its elements does.
  */
 class WhatTheElementsOfAKeyComeToIsReadForEveryElementTest {
 
@@ -70,16 +74,22 @@ class WhatTheElementsOfAKeyComeToIsReadForEveryElementTest {
         }
     }
 
-    /** Two of one key, the first at the last number an {@code Int} holds: the program stops adding
-     *  the second, and one short of that it comes to the last number. */
+    /**
+     * A key's total past the last number an {@code Int} holds is none; one that comes back to it
+     * is that number, whatever order its elements stand in — a walk handed them so that a sum on
+     * the way passes it is a run that stops, which running the row says.
+     */
     @Test
-    void aKeysTotalPastWhatTheProgramHoldsIsNoNumber() {
+    void aKeysTotalIsNoNumberOnlyWherePastWhatTheProgramHolds() {
         TermOrders on = quantities().ordersOf(totalOf(0));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class, on.readEachUnderItsKey(List.of(
                 posting("a", Long.MAX_VALUE), posting("a", 1))).getFirst());
-        assertEquals(new NumericTerm.Reading.Number(count(Long.MAX_VALUE)),
-                on.readEachUnderItsKey(List.of(posting("a", Long.MAX_VALUE - 1),
-                        posting("a", 1))).getFirst());
+        for (List<Long> amounts : List.of(List.of(Long.MAX_VALUE, 1L, -1L),
+                List.of(-1L, 1L, Long.MAX_VALUE), List.of(Long.MAX_VALUE - 1, 1L))) {
+            assertEquals(new NumericTerm.Reading.Number(count(Long.MAX_VALUE)),
+                    on.readEachUnderItsKey(amounts.stream().map(each -> posting("a", each))
+                            .toList()).getFirst(), amounts::toString);
+        }
     }
 
     /**
@@ -95,23 +105,31 @@ class WhatTheElementsOfAKeyComeToIsReadForEveryElementTest {
     }
 
     /**
-     * And so is a total over a list whose running sum passes the last number on the way, though
-     * the numbers after bring it back: the program stops at the step that passed it.
+     * A total over a list reads what the library's total answers, held against the run time's own
+     * {@code List.sum}: the number where it comes to one, though a sum on the way passes the last
+     * number, and none where it aborts.
      */
     @Test
-    void aTotalWhoseRunningSumPassesWhatTheProgramHoldsIsNoNumber() {
+    void aTotalOverAListIsWhatTheLibrarysTotalAnswers() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         NumericTerm total = NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"),
                 RunSource.overTheOccurrencesAt(AMOUNT.from(TermPath.of("ps").element())),
                 Type.Prim.INT, rules.inners(), rules.symbols());
         TermOrders on = quantities().ordersOf(total);
-        assertInstanceOf(NumericTerm.Reading.NotNumber.class, on.readOver(List.of(
-                new ObservedValue.Integer(Long.MAX_VALUE), new ObservedValue.Integer(1),
-                new ObservedValue.Integer(-1))));
-        assertEquals(new NumericTerm.Reading.Number(count(Long.MAX_VALUE)), on.readOver(List.of(
-                new ObservedValue.Integer(-1), new ObservedValue.Integer(Long.MAX_VALUE),
-                new ObservedValue.Integer(1))));
+        for (List<Long> values : List.of(List.of(Long.MAX_VALUE, 1L, -1L),
+                List.of(-1L, 1L, Long.MAX_VALUE), List.of(Long.MAX_VALUE, -1L, 1L),
+                List.of(Long.MAX_VALUE, 1L))) {
+            NumericTerm.Reading read = on.readOver(values.stream()
+                    .<ObservedValue>map(ObservedValue.Integer::new).toList());
+            NumericTerm.Reading ran;
+            try {
+                ran = new NumericTerm.Reading.Number(count(Lists.sumInt(values)));
+            } catch (ConstraintViolation aborted) {
+                ran = new NumericTerm.Reading.NotNumber();
+            }
+            assertEquals(ran, read, values::toString);
+        }
     }
 
     private static Function<ElementProjection, ObservedValue> posting(String account,

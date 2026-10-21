@@ -592,28 +592,11 @@ final class TermReading {
             // field the element's own choice does not reach is no part of this element's number.
             OneElement fields = new OneElement(on, element, position++);
             ExactAnswer<ExactRatio> made = computed.computation().at(fields);
-            if (made == null) {
-                return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
+            Reading stopped = numberOf(made, fields, answeredPerElement);
+            if (stopped != null) {
+                return stopped;
             }
-            if (!(made instanceof ExactAnswer.Held<ExactRatio> exact)) {
-                return new Reading.NotWorkedOut(
-                        ((ExactAnswer.Unheld<ExactRatio>) made).why());
-            }
-            // The one the program computes, which is what the carrier of the answer holds.
-            switch (exact.value().writtenDecimal()) {
-                case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
-                    return new Reading.NotWorkedOut(unheld.why());
-                }
-                case ExactAnswer.Held<Optional<BigDecimal>> written -> {
-                    if (written.value().isEmpty()) {
-                        return new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
-                    }
-                    if (answeredPerElement.onTheGrid(new Count(written.value().get())) == null) {
-                        return new Reading.NotNumber();
-                    }
-                }
-            }
-            terms.add(exact.value());
+            terms.add(((ExactAnswer.Held<ExactRatio>) made).value());
         }
         return sumOf(terms, on.answered());
     }
@@ -1014,39 +997,30 @@ final class TermReading {
     }
 
     /**
-     * What the numbers add up to, as the number a term answers.
+     * What the numbers add up to, as the number a term answers: where the total is one
+     * {@code on}, what the program answers it as, holds — and no number where it is not, since no
+     * run answering comes to it.
      *
-     * <p>One sum of them all, for both of the readers that gather numbers a run holds: the one that
-     * reads a value at a place of each element and the one that computes one from several places of
-     * it. The two are one account of one operation, so what a sum too wide for the exact arithmetic
-     * comes to is one answer.
+     * <p>One sum of them all, for every reader that gathers numbers a run holds: the one that reads
+     * a value at a place of each element, the one that computes one from several places of it, and
+     * the one gathering the elements of a key. They are one account of one operation, so what a sum
+     * too wide for the exact arithmetic comes to is one answer.
+     *
+     * <p>The total and not the sums on the way to it. What is read is the number a run comes to
+     * where it answers, and whether a run comes to one is what running the row says
+     * ({@link #overElements}). A total of the library's adds wider than the carrier on the way
+     * and asks only the total to be held, so {@code [max, 1, -1]} answers {@code max}; a walk
+     * adding with the operator one element at a time stops where a sum on the way is past it,
+     * which is a run that does not answer — and no reading of the elements, in whatever order
+     * they were handed, says otherwise. A total past what the carrier holds is past it for both.
      */
     private static Reading sumOf(List<ExactRatio> terms, Carrier on) {
         Reading whole = sumOf(terms);
-        if (!(whole instanceof Reading.Number) || on == null) {
-            return whole;
-        }
-        // Added one at a time in the order the walk hands them, which is what the program does,
-        // and a step past what the carrier holds is where its run stops: whole numbers that pass
-        // the last one on the way come to no total, though those after would bring it back. Asked
-        // of each step and not of the total alone for that reason. A step this arithmetic cannot
-        // hold says nothing of the carrier, and the sum of them all is the answer then.
-        ExactRatio sofar = ExactRatio.ZERO;
-        for (ExactRatio each : terms) {
-            if (!(sofar.plus(each) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio next))
-                    || !(next.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>>(
-                            Optional<BigDecimal> written))
-                    || written.isEmpty()) {
-                return whole;
-            }
-            if (on.onTheGrid(new Count(written.get())) == null) {
-                return new Reading.NotNumber();
-            }
-            sofar = next;
-        }
-        return whole;
+        return whole instanceof Reading.Number(Place total) && on != null
+                && on.onTheGrid(total) == null ? new Reading.NotNumber() : whole;
     }
 
+    /** The exact sum of {@code terms}, as a written decimal, whatever holds it. */
     private static Reading sumOf(List<ExactRatio> terms) {
         // A container may hold a model's own decimals, spaced as widely apart in scale as any two
         // of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards against

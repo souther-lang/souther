@@ -1908,8 +1908,8 @@ final class TermRealizations {
                                            TermOrders orders, AskedAt asked,
                                            SearchRegion within, RuleReadingContext reading,
                                            DemandsInside inside) {
-        if (orders.answered() == null
-                || !(orders.term() instanceof NumericTerm.GatheredUnderItsKey gathered)) {
+        NumericTerm.GatheredUnderItsKey gathered = (NumericTerm.GatheredUnderItsKey) orders.term();
+        if (orders.answered() == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }

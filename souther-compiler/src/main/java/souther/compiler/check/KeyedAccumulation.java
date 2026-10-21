@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A map built by walking a list from the empty map, filing under the key of each element a value
@@ -67,20 +68,27 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         /**
          * The least or the greatest of what {@code value} is for the elements that have the key:
          * the first of them files its value, and each further one files the end of its own value
-         * and the one found that the closure keeps ({@link Extreme}). The value is a number of the
-         * element alone, and the same one filed first and compared after — a closure comparing
-         * against something else would file the first element's value on a law the rest do not
-         * follow.
+         * and the one found that the closure keeps ({@link Extreme}).
          *
-         * @param value   what each element files, read of the element
-         * @param extreme which end of its own value and the one found a further element keeps
-         * @param found   the name the step gives the value found under the key, which is that end
-         *                of the values of the earlier elements of the same key
+         * <p>That end only where what the closure compares the value found against is the value
+         * filed first, as {@link Summed} is a total only where what it adds is: a closure comparing
+         * against something else would file the first element's value on a law the rest do not
+         * follow. Whether {@code compared} and {@code value} are one number of each element is the
+         * element's reader's to say, for the reason it is there.
+         *
+         * @param value    what each element files, read of the element
+         * @param compared every value the closure answers or compares that is not the value found,
+         *                 as written: each is to be the same number of the element as {@code value}
+         * @param extreme  which end of its own value and the one found a further element keeps
+         * @param found    the name the step gives the value found under the key, which is that end
+         *                 of the values of the earlier elements of the same key
          */
-        record Kept(Core value, Extreme extreme, BindingId found) implements Filed {
+        record Kept(Core value, List<Core> compared, Extreme extreme, BindingId found)
+                implements Filed {
 
             public Kept {
                 Objects.requireNonNull(value, "an element files a value");
+                compared = List.copyOf(compared);
                 Objects.requireNonNull(extreme, "and one end of two of them is kept");
                 Objects.requireNonNull(found, "of what the step finds under the key");
             }
@@ -270,11 +278,20 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             if (added != null) {
                 return new Filed.Summed(first, added, found);
             }
-            Core filed = Extreme.comparedAs(first, firstAt, sides).value();
-            Extreme extreme = Extreme.keptBy(Extreme.casesOf(moved.value(), moved.at(), sides),
-                    e -> isThe(Extreme.comparedAs(e, moved.at(), sides).value(), found),
-                    e -> Core.sameValue(Extreme.comparedAs(e, moved.at(), sides).value(), filed));
-            return extreme == null ? null : new Filed.Kept(first, extreme, found);
+            List<Choice.ADefinitionCase> cases =
+                    Extreme.casesOf(moved.value(), moved.at(), sides);
+            Predicate<Core> isFound =
+                    e -> isThe(Extreme.comparedAs(e, moved.at(), sides).value(), found);
+            Extreme extreme = Extreme.keptBy(cases, isFound, isFound.negate());
+            List<Core> compared = Extreme.besides(cases, isFound);
+            for (Core each : compared) {
+                Core read = valueOf(each, moved.at());
+                if (WhatABodyReads.binding(read, found)
+                        || WhatABodyReads.binding(read, accumulator)) {
+                    return null;
+                }
+            }
+            return extreme == null ? null : new Filed.Kept(first, compared, extreme, found);
         }
 
         /** The value {@code body} files under the key read as {@code key} in the answer so far, as

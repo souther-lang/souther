@@ -156,28 +156,11 @@ final class ContainersAddingUp {
             return new NestedContainersAddingUp(flat.subjectPath()).to(answer, container,
                     keptApart, orders, within, reading, alsoHolding, inside);
         }
-        // A run computed of each element is written by solving for the one field its computation
-        // reads, so the elements are chosen on that field's order and stand at its place. A
-        // computation this does not solve for is a population this compiler writes none of, which
-        // is not the same as the model admitting no row.
-        if (orders.term() instanceof NumericTerm.TakenOver over
-                && over.source() instanceof RunSource.ComputedOccurrences computed) {
-            List<FieldSolved> ways = FieldSolved.of(computed, orders);
-            if (ways.isEmpty()) {
-                return new TermRealizations.Realization.Unexhausted(
-                        CompositionShortfall.writing(
-                                Set.of(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR)),
-                        null);
-            }
-            return throughEach(ways, solved -> composedThrough(solved, answer, container,
-                    keptApart, orders, within, reading, alsoHolding, inside));
-        }
-        // What the elements of one key come to, written as a container of elements of one key:
-        // the one way of writing a number of one element of it, alone or beside others alike.
-        if (orders.term() instanceof NumericTerm.GatheredUnderItsKey gathered
-                && gathered.value().asAPlace() == null) {
-            List<FieldSolved> ways = FieldSolved.of(gathered.elements(), gathered.value(), null,
-                    orders);
+        // A number computed of each element is written by solving for the one field its
+        // computation reads, so the elements are chosen on that field's order and stand at its
+        // place. A computation this does not solve for is a population this compiler writes none
+        // of, which is not the same as the model admitting no row.
+        if (FieldSolved.of(orders) instanceof List<FieldSolved> ways) {
             if (ways.isEmpty()) {
                 return new TermRealizations.Realization.Unexhausted(
                         CompositionShortfall.writing(
@@ -612,16 +595,32 @@ final class ContainersAddingUp {
         record Kept(ElementValue.PositionTest test, TraversalDirection direction,
                     ExactRatio rest) {}
 
-        /** Every field a computation is solved for: the one field of a form, each arm's of a
-         *  choice by case, the form's of a choice by the position between it and a number, and
-         *  none where it is none of these. */
-        static List<FieldSolved> of(RunSource.ComputedOccurrences run, TermOrders orders) {
-            return of(run.elements(), run.computation(),
-                    run.order() == null ? null : run.order().direction(), orders);
+        /**
+         * The ways the number {@code orders} is of is solved for, where it is made of what a
+         * computation makes of each element — a total over a run computed of each, or what a
+         * key's elements come to of a number computed of each — or null where each element's
+         * number is a place of it and nothing is solved for.
+         */
+        static List<FieldSolved> of(TermOrders orders) {
+            return switch (orders.term()) {
+                case NumericTerm.TakenOver over
+                        when over.source() instanceof RunSource.ComputedOccurrences run ->
+                        of(run.elements(), run.computation(),
+                                run.order() == null ? null : run.order().direction(), orders);
+                // The order a key's elements are gathered in is no part of what they come to.
+                case NumericTerm.GatheredUnderItsKey gathered
+                        when gathered.value().asAPlace() == null ->
+                        of(gathered.elements(), gathered.value(), null, orders);
+                case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.OfAnElementsNeighbours _,
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> null;
+            };
         }
 
         /**
-         * The same, of {@code computation} made of each element standing at {@code elements}.
+         * Every field {@code computation}, made of each element standing at {@code elements}, is
+         * solved for: the one field of a form, each arm's of a choice by case, the form's of a
+         * choice by the position between it and a number, and none where it is none of these.
          *
          * @param direction which end the elements are counted from, where the computation turns on
          *                  where each stands; null where it does not

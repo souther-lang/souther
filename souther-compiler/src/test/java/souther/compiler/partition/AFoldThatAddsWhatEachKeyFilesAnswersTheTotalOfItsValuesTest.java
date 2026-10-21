@@ -258,6 +258,103 @@ class AFoldThatAddsWhatEachKeyFilesAnswersTheTotalOfItsValuesTest {
     }
 
     /**
+     * What a key's elements come to is read where the run answers, and whether it answers is the
+     * run's: a row whose run stops — making one element's number, or at a sum on the way past the
+     * last number an {@code Int} holds, in the order the walk hands the elements — stands at no
+     * point, though what its elements come to is the number the point is at. The same elements
+     * walked the other way round answer, and stand there.
+     */
+    @Test
+    void aRowWhoseRunStopsStandsAtNoPointWhateverItsElementsComeTo() {
+        String model = """
+                module example.ledger
+
+                data Posting = { account: String, amount: Int }
+
+                let netOf (ps: List<Posting>): Map<String, Int> =
+                    List.fold((acc, p) -> Map.updateOrInsert(p.account, p.amount,
+                                              n -> n + %s, acc), Map.empty, %s)
+
+                behavior over : (ps: List<Posting>, limit: Int) -> Map<String, Int>
+
+                let over (ps, limit) = Map.filterEntries((_, t) -> t >= limit, netOf(ps))
+
+                example over
+                    | "row" : (%s, 9223372036854775807) -> [("a", 9223372036854775807)]
+                """;
+        String last = String.valueOf(Long.MAX_VALUE);
+        String passing = List.of(posting(last), posting("1"), posting("-1")).toString();
+        for (String stops : List.of(
+                model.formatted("(p.amount + 1 - 1)", "ps",
+                        List.of(posting("0"), posting(last)).toString()),
+                model.formatted("p.amount", "ps", passing))) {
+            Compilation compilation = ran(stops);
+            assertTrue(unmetOf(compilation).contains("ON"),
+                    () -> "a row whose run stops is at no point: " + report(compilation));
+        }
+        Compilation reversed = ran(model.formatted("p.amount", "List.reverse(ps)", passing));
+        assertFalse(unmetOf(reversed).contains("ON"),
+                () -> "the same elements walked the other way round answer: " + report(reversed));
+    }
+
+    private static String posting(String amount) {
+        return "Posting { account = \"a\", amount = " + amount + " }";
+    }
+
+    /** The source measured, whose examples may stop where they run. */
+    private static Compilation ran(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /**
+     * A record a map takes out of each element, the value standing at a place of it, is totalled
+     * where it stands, in one list and across the lists of an outer list alike — as a counter over
+     * the same walk counts its key there.
+     */
+    @Test
+    void aRecordAMapTakesOutOfEachElementIsTotalledWhereItStands() {
+        String model = """
+                module example.ledger
+
+                data Posting = { account: String, amount: Int }
+
+                data Entry = { inner: Posting, note: String }
+
+                let netOf (src: %1$s): Map<String, Int> =
+                    List.fold((acc, p) -> %2$s, Map.empty, %3$s)
+
+                behavior over : (src: %1$s, limit: Int) -> Map<String, Int>
+
+                let over (src, limit) = Map.filterEntries((_, t) -> t >= limit, netOf(src))
+                """;
+        Compilation one = measured(model.formatted("List<Entry>", ADDING,
+                "List.map(e -> e.inner, src)"));
+        assertTrue(json(one).contains("total(src[*].inner.amount by account)"),
+                () -> report(one));
+        Compilation across = measured(model.formatted("List<List<Entry>>", ADDING,
+                "List.map(e -> e.inner, List.flatMap(es -> es, src))"));
+        assertTrue(json(across).contains("total(src[*][*].inner.amount by account)"),
+                () -> report(across));
+    }
+
+    /**
+     * An end of what a helper makes of each element is kept under its key as a total of it is:
+     * the helper written twice in the step is one number of the element, which is what its two
+     * calls are read as, and not two names.
+     */
+    @Test
+    void anEndOfWhatAHelperMakesOfEachElementIsKeptUnderItsKey() {
+        String model = signedOverTheLists(Int.ANY, "").replace("on -> on + signed(p)",
+                "on -> Int.min(on, signed(p))");
+        Compilation compilation = measured(model);
+        assertTrue(report(compilation).contains("about `least({when side@Debit then 1·amount"),
+                () -> report(compilation));
+    }
+
+    /**
      * An element that is its own key is a key as much as a field of it is: the total of the
      * elements equal to each is the line, spelled by the element itself, and the rows offered for
      * it meet it.

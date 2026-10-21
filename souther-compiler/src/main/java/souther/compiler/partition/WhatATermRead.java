@@ -295,20 +295,10 @@ sealed interface WhatATermRead {
 
         @Override
         public TheKept readAt(BorderQuantity.Observation row) {
-            // Each container the place stands in, the outer one first, is read under each element
-            // of the one outside it: the occurrences are those of every one of them.
-            List<BorderQuantity.Observation> elements = List.of(row);
-            for (TermPath container : place.containersHoldingIt()) {
-                List<BorderQuantity.Observation> inside = new ArrayList<>();
-                for (BorderQuantity.Observation outer : elements) {
-                    if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
-                            List<BorderQuantity.Observation>>(
-                                    List<BorderQuantity.Observation> each))) {
-                        return stoppedAt(ReadingGap.COULD_NOT_WALK);
-                    }
-                    inside.addAll(each);
-                }
-                elements = inside;
+            if (!(everyElementAbove(row, place) instanceof WalkResult.Reached<
+                    List<BorderQuantity.Observation>>(
+                            List<BorderQuantity.Observation> elements))) {
+                return stoppedAt(ReadingGap.COULD_NOT_WALK);
             }
             List<ObservedValue> values = new ArrayList<>();
             for (BorderQuantity.Observation element : elements) {
@@ -440,18 +430,10 @@ sealed interface WhatATermRead {
         @Override
         public EveryKey readAt(BorderQuantity.Observation row) {
             TermPath elements = ((NumericTerm.GatheredUnderItsKey) on.term()).elements();
-            List<BorderQuantity.Observation> reached = List.of(row);
-            for (TermPath container : elements.containersHoldingIt()) {
-                List<BorderQuantity.Observation> inside = new ArrayList<>();
-                for (BorderQuantity.Observation outer : reached) {
-                    if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
-                            List<BorderQuantity.Observation>>(
-                                    List<BorderQuantity.Observation> each))) {
-                        return new EveryKey(null, new CameToNothing(ReadingGap.COULD_NOT_WALK));
-                    }
-                    inside.addAll(each);
-                }
-                reached = inside;
+            if (!(everyElementAbove(row, elements) instanceof WalkResult.Reached<
+                    List<BorderQuantity.Observation>>(
+                            List<BorderQuantity.Observation> reached))) {
+                return new EveryKey(null, new CameToNothing(ReadingGap.COULD_NOT_WALK));
             }
             WhatRowsLeft left = new WhatRowsLeft();
             List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
@@ -461,6 +443,31 @@ sealed interface WhatATermRead {
             Function<ObservedValue, NumericTerm.Reading> read = on.readUnderEachKey(each);
             return new EveryKey(read, left.stopped());
         }
+    }
+
+    /**
+     * Every element of the innermost container {@code place} stands in, in every occurrence of
+     * it, each read as the row with it chosen — or that one of them could not be walked to.
+     *
+     * <p>Each container the place stands in, the outer one first, is read under each element of
+     * the one outside it, so the elements are every occurrence's whichever a reading chose.
+     */
+    private static WalkResult<List<BorderQuantity.Observation>> everyElementAbove(
+            BorderQuantity.Observation row, TermPath place) {
+        List<BorderQuantity.Observation> elements = List.of(row);
+        for (TermPath container : place.containersHoldingIt()) {
+            List<BorderQuantity.Observation> inside = new ArrayList<>();
+            for (BorderQuantity.Observation outer : elements) {
+                if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
+                        List<BorderQuantity.Observation>>(
+                                List<BorderQuantity.Observation> each))) {
+                    return WalkResult.couldNotWalk();
+                }
+                inside.addAll(each);
+            }
+            elements = inside;
+        }
+        return WalkResult.reached(elements);
     }
 
     /**
