@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
@@ -7,6 +8,7 @@ import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -153,7 +155,22 @@ class HowManyCandidatesFitIsADecisionOverTheCasesTest {
         }
     }
 
-    private static Compilation measured(String source) {
+    /** Each model measured once for the class: three of the questions ask about the same one, and
+     *  none of them changes what it answered. */
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static synchronized void released() {
+        MEASURED.clear();
+    }
+
+    private static synchronized Compilation measured(String source) {
+        return MEASURED.computeIfAbsent(source,
+                HowManyCandidatesFitIsADecisionOverTheCasesTest::measuredAfresh);
+    }
+
+    private static Compilation measuredAfresh(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

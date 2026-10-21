@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -192,14 +193,15 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
-     * Every operator against every way the cancelled positions can leave a number.
+     * An ordering and an equality against every way the cancelled positions can leave a number.
      *
      * <p>Which rows a clause holds of, once its positions have cancelled, is what the number left
-     * over stands to nought — and the operator says which way that has to be. {@code lo - lo <= 1}
-     * holds of every row for the same reason {@code lo - lo >= 0} does, and neither is more read
-     * than the other.
+     * over stands to nought — and the operator says which way that has to be, by
+     * {@link Rel#holds}, which the test below holds for every operator. {@code lo - lo >= -1} holds
+     * of every row for the same reason {@code lo - lo >= 0} does, and neither is more read than the
+     * other.
      *
-     * <p>Both directions of every operator are here because the number left over is what
+     * <p>Both directions of the ordering are here because the number left over is what
      * {@code left - right} came to, and a reading that took it as what {@code right - left} came to
      * would answer every strict comparison backwards while still agreeing about the equalities.
      * Read at nought alone the two are the same reading.
@@ -209,19 +211,11 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         List<String> expected = List.of(
                 "lo - lo >= 0: every row", "lo - lo >= 1: not every row",
                 "lo - lo >= -1: every row",
-                "lo - lo > 0: not every row", "lo - lo > 1: not every row",
-                "lo - lo > -1: every row",
-                "lo - lo <= 0: every row", "lo - lo <= 1: every row",
-                "lo - lo <= -1: not every row",
-                "lo - lo < 0: not every row", "lo - lo < 1: every row",
-                "lo - lo < -1: not every row",
                 "lo - lo == 0: every row", "lo - lo == 1: not every row",
-                "lo - lo == -1: not every row",
-                "lo - lo /= 0: not every row", "lo - lo /= 1: every row",
-                "lo - lo /= -1: every row");
+                "lo - lo == -1: not every row");
 
         List<String> answered = new ArrayList<>();
-        for (String operator : List.of(">=", ">", "<=", "<", "==", "/=")) {
+        for (String operator : List.of(">=", "==")) {
             for (String against : List.of("0", "1", "-1")) {
                 String clause = "lo - lo " + operator + " " + against;
                 Measured measured = of("    invariant " + clause);
@@ -231,6 +225,25 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         }
 
         assertEquals(expected, answered);
+    }
+
+    /** Every operator, at every way the left can stand to the right. */
+    @Test
+    void everyOperatorHoldsAsItsSignSays() {
+        List<String> answered = new ArrayList<>();
+        for (Rel rel : Rel.values()) {
+            for (int sign : new int[] {-1, 0, 1}) {
+                answered.add(rel + " " + sign + ": " + rel.holds(sign));
+            }
+        }
+
+        assertEquals(List.of(
+                "GE -1: false", "GE 0: true", "GE 1: true",
+                "GT -1: false", "GT 0: false", "GT 1: true",
+                "LE -1: true", "LE 0: true", "LE 1: false",
+                "LT -1: true", "LT 0: false", "LT 1: false",
+                "EQ -1: false", "EQ 0: true", "EQ 1: false",
+                "NE -1: true", "NE 0: false", "NE 1: true"), answered);
     }
 
     /**

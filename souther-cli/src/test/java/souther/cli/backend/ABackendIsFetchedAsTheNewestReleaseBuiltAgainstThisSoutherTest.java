@@ -187,7 +187,8 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         }
         repository.metadata(WASM, versions.toArray(String[]::new));
         repository.jar(WASM, "0.3.0", "cli", jar("third", "wasm", HERE));
-        repository.slowPoms(300);
+        long pomWait = 100;
+        repository.slowPoms(pomWait);
 
         long started = System.nanoTime();
         BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
@@ -196,7 +197,7 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
 
         assertEquals("0.3.0", fetched.release().version());
         // Thirteen poms one at a time would be thirteen waits; two windows of them are two.
-        assertTrue(took.compareTo(Duration.ofMillis(300L * 13 / 2)) < 0, took.toString());
+        assertTrue(took.compareTo(Duration.ofMillis(pomWait * 13 / 2)) < 0, took.toString());
     }
 
     @Test

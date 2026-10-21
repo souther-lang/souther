@@ -199,7 +199,10 @@ class TwoEntriesOfOneContainerAreNotReadAsOneTest {
                     .append(") -> ").append(answer).append('\n');
         }
 
-        assertEquals(List.of(), errors(measured(model + examples)),
+        // Run and not measured: an example whose answer is not the program's is an error.
+        Compilation answered = Compilation.ofSource(model + examples, "Main");
+        answered.answerEverything();
+        assertEquals(List.of(), errors(answered),
                 () -> examples + report(measured(model + examples)));
     }
 }

@@ -239,10 +239,11 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             }
             """;
 
+    /** The rows offered for {@code source}, which ask what they read of its measurement; its
+     *  classes, examples and warnings are not read. */
     private static String rowsAskedOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "d");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         return souther.compiler.report.GeneratedRows.of(compilation, "d", "charge",
                 SourceRendering.namedByIdentity(compilation.texts())).text();
     }

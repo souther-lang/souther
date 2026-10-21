@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -298,6 +299,12 @@ class WhatGoesBetweenTwoTokensOnALineTest {
         }
     }
 
+    /** The written sources alone, for a question about runs of tokens rather than about the
+     *  constructs the library writes. */
+    static List<String> written() {
+        return WRITTEN;
+    }
+
     /** Every source the rule is read from: the bundled standard library, and the written sources. */
     static List<String> corpus() {
         List<String> out = new ArrayList<>();
@@ -360,8 +367,26 @@ class WhatGoesBetweenTwoTokensOnALineTest {
      * <p>Where a table's column stands at an adjacency, the run before the connector is the
      * separator and then the padding that carries the row out to the column. The two are different
      * rules' and the split between them is the layout's own answer, read from where it wrote the
-     * stop rather than guessed at from the spaces. */
-    static List<Adjacency> adjacencies() {
+     * stop rather than guessed at from the spaces.
+     *
+     * <p>Worked out once for whoever asks first: the corpus does not change, and every check here
+     * and each row of the table reads all of it. */
+    static synchronized List<Adjacency> adjacencies() {
+        if (adjacencies == null) {
+            adjacencies = everyAdjacency();
+        }
+        return adjacencies;
+    }
+
+    private static List<Adjacency> adjacencies;
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static synchronized void released() {
+        adjacencies = null;
+    }
+
+    private static List<Adjacency> everyAdjacency() {
         List<Adjacency> out = new ArrayList<>();
         for (String source : corpus()) {
             Formatter.CanonicalForm form = Formatter.canonicalize(CstParser.parse(source).root());
@@ -383,7 +408,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
                 }
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     // --- the range ---

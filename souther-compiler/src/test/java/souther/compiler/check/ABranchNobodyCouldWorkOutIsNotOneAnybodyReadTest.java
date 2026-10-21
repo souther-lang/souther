@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.WorkFigure;
@@ -64,8 +65,21 @@ class ABranchNobodyCouldWorkOutIsNotOneAnybodyReadTest {
                     && (p == "1" || p == "8")
             """;
 
+    private static FieldDomains pair;
+
+    /** The pair read once for the class: two tests ask the one reading of it different things. */
     private static FieldDomains read() {
-        return read(MODEL, "Pair");
+        if (pair == null) {
+            pair = read(MODEL, "Pair");
+        }
+        return pair;
+    }
+
+    /** And given back when the class is done with it: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        pair = null;
     }
 
     private static FieldDomains read(String model, String declared) {

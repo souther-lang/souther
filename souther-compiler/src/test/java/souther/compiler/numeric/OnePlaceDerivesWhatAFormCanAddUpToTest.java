@@ -73,7 +73,11 @@ class OnePlaceDerivesWhatAFormCanAddUpToTest {
             if (MAY_DERIVE_IT.contains(named)) {
                 continue;
             }
-            if (holds.test(withoutComments(Files.readString(source, StandardCharsets.UTF_8)))) {
+            // Asked of the whole file first. What each check asks is that some code is written, and
+            // taking the comments out only takes text away, so a file it does not hold of whole is
+            // one it does not hold of without them.
+            String text = Files.readString(source, StandardCharsets.UTF_8);
+            if (holds.test(text) && holds.test(withoutComments(text))) {
                 found.add(named);
             }
         }

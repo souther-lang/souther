@@ -2,10 +2,11 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DoesNotComeBack;
-import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmObligation;
@@ -41,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * it does apply.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryObligationTheCountHoldsIsMetOrNamedTest {
 
     /**
@@ -371,11 +373,11 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
 
     private static List<Reported> reports() {
         List<Reported> out = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            ConformanceCorpus.Analysed analysed = corpus.analyse();
-            out.add(new Reported(corpus.name(), analysed.report(),
-                    new SourceRendering(corpus.names(), analysed.compilation().texts())));
-        }
+        // The corpora as every reader of the repository's models takes them, compiled once for all
+        // of those.
+        RepositoryModels.conformance().forEach((corpus, compilation) -> out.add(new Reported(
+                corpus.name(), AdequacyReport.of(compilation),
+                new SourceRendering(corpus.names(), compilation.texts()))));
         Compilation unread = Compilation.ofSource(TOO_LARGE_TO_OBSERVE, "Main");
         unread.measure(Adequacy.Asked.fullReport());
         unread.answerEverything();

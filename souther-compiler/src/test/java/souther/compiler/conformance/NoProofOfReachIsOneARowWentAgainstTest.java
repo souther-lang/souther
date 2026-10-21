@@ -6,6 +6,7 @@ import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * by that, and nothing here asks whether a proof that held over these rows holds over every input.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class NoProofOfReachIsOneARowWentAgainstTest {
 
     @Test
@@ -37,7 +39,7 @@ class NoProofOfReachIsOneARowWentAgainstTest {
         List<String> wrong = new ArrayList<>();
         int read = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Compilation compilation = corpus.analyse().compilation();
+            Compilation compilation = RepositoryModels.analysed(corpus).compilation();
             for (String module : compilation.modules()) {
                 Map<String, PathReachability.Answers.AsRun> arrived =
                         compilation.db().ask(new Adequacy.Arrived(module)).value();

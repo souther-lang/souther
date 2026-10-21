@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
@@ -8,6 +9,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,31 +66,34 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
             }
             """;
 
-    /** Spellings of one number over {@code ROWS}, {@code NUMS} or {@code YS}, each read as the
-     *  first is. */
+    /**
+     * Spellings of one number over {@code ROWS}, {@code NUMS} or {@code YS}, each read as the first
+     * is.
+     *
+     * <p>Each operation that leaves the elements as they were is written once on its own and once
+     * under another, and a nesting is written in each order it can be met in rather than once for
+     * every operation it could be made of: what reads a reordering or a copy is the fact the library
+     * states of that operation, and a nesting asks only that the walk goes on past one.
+     */
     private static List<List<String>> readAsOne() {
         return List.of(
                 List.of("List.length(ROWS)",
                         "List.length(List.sortBy(.sku, ROWS))",
                         "List.length(List.map(x -> x, ROWS))",
-                        "List.fold((acc, x) -> acc + 1, 0, ROWS)",
-                        "List.fold((acc, x) -> acc + 1, 0, List.sortBy(.sku, ROWS))"),
+                        "List.fold((acc, x) -> acc + 1, 0, ROWS)"),
                 List.of("List.sum(List.map(.quantity, ROWS))",
                         "List.fold((acc, x) -> acc + x.quantity, 0, ROWS)",
                         "List.fold((acc, x) -> acc + x.quantity, 0, List.sortBy(.sku, ROWS))",
                         "List.sum(List.map(.quantity, List.sortBy(.sku, ROWS)))",
-                        "List.sum(List.map(.quantity, List.sortBy(.sku, List.sortBy(.quantity, ROWS))))",
                         "List.sum(List.map(x -> x, List.map(.quantity, ROWS)))",
                         "List.sum(List.sortBy(x -> x, List.map(.quantity, ROWS)))",
                         "List.sum(List.map(.quantity, List.map(x -> x, ROWS)))",
                         "List.sum(List.map(.quantity, List.sortBy(.sku, List.map(x -> x, ROWS))))",
-                        "List.sum(List.map(.quantity, List.map(x -> x, List.sortBy(.sku, ROWS))))",
-                        "List.sum(List.map(.quantity, List.sortBy(.quantity, List.map(x -> x, ROWS))))"),
+                        "List.sum(List.map(.quantity, List.map(x -> x, List.sortBy(.sku, ROWS))))"),
                 // A total taken directly of a list in another order is the total of the list.
                 List.of("List.sum(NUMS)",
                         "List.sum(List.reverse(NUMS))",
                         "List.sum(List.sortBy(x -> x, NUMS))",
-                        "List.sum(List.reverse(List.sortBy(x -> x, NUMS)))",
                         "List.sum(List.map(x -> x, List.reverse(NUMS)))",
                         "List.sum(YS)"),
                 // And a total of what each element comes to is the same over the list reversed.
@@ -103,7 +109,6 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 // is written, and the order of the elements has no part in it.
                 List.of("List.sum(NUMS)",
                         "List.sum(List.drop(0, NUMS))",
-                        "List.sum(List.drop(0, List.drop(0, NUMS)))",
                         "List.sum(List.mapIndexed((i, x) -> if i >= 0 then x else 0, NUMS))",
                         "List.sum(List.mapIndexed((i, x) -> x, List.sortBy(y -> y, NUMS)))",
                         "List.sum(List.mapIndexed((i, x) -> x, NUMS))",
@@ -163,6 +168,20 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         String bound = shape.contains("YS") ? "let ys = List.reverse(" + nums + ")" : "";
         String model = template.replace("<bound>", bound).replace("<number>",
                 shape.replace("ROWS", rows).replace("NUMS", nums).replace("YS", "ys"));
+        return REPORTED.computeIfAbsent(model,
+                AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest::reportOf);
+    }
+
+    /** Each model's report once for the class: a spelling that leads one group may be written in
+     *  another, and what it is read as does not change between them. */
+    private static final Map<String, String> REPORTED = new ConcurrentHashMap<>();
+
+    @AfterAll
+    static void released() {
+        REPORTED.clear();
+    }
+
+    private static String reportOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

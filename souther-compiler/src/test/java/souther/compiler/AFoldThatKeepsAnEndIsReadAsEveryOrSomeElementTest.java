@@ -7,10 +7,13 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -565,7 +568,26 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /**
+     * Each model compiled once for the class. Several questions here are asked of the same walk —
+     * what it is read as, what the report says of it, what the comparison inside it divides — and
+     * each only reads the compilation.
+     */
+    private static final Map<String, Compilation> COMPILED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them, so the classes after it do not run above
+     *  what this one kept. */
+    @AfterAll
+    static void released() {
+        COMPILED.clear();
+    }
+
     private static Compilation compiled(String model) {
+        return COMPILED.computeIfAbsent(model,
+                AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest::compiledAfresh);
+    }
+
+    private static Compilation compiledAfresh(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

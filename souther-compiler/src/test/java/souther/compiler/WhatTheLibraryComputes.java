@@ -1,12 +1,15 @@
 package souther.compiler;
 
 import souther.compiler.check.DeclaredArgument;
+import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.Slot;
+import souther.compiler.query.Compilation;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.CodePointClass;
@@ -116,7 +119,7 @@ public final class WhatTheLibraryComputes {
         }
         StringBuilder module = new StringBuilder("module demo\n\ndata Out = { holds: Bool }\n");
         written.forEach(each -> module.append('\n').append(each.source()));
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module.toString()),
+        BytesClassLoader loader = new BytesClassLoader(classesOf(module.toString()),
                 WhatTheLibraryComputes.class.getClassLoader());
         List<String> broken = new ArrayList<>();
         List<String> neverAnswered = new ArrayList<>();
@@ -168,7 +171,7 @@ public final class WhatTheLibraryComputes {
 
         public Program(String module, String source) {
             this.module = module;
-            this.loader = new BytesClassLoader(Compiler.compile(source),
+            this.loader = new BytesClassLoader(classesOf(source),
                     WhatTheLibraryComputes.class.getClassLoader());
         }
 
@@ -181,6 +184,22 @@ public final class WhatTheLibraryComputes {
             Object handed = Codecs.decoded(loader, module + "." + in, input);
             return Codecs.encode(loader, module + "." + out, Codecs.apply(running, handed));
         }
+    }
+
+    /**
+     * The classes {@code source} compiles to, or its failure.
+     *
+     * <p>The classes and what they need are asked, and not the warnings: what is run here is the
+     * program, and a warning about its paths would say nothing about what it computes.
+     */
+    private static Map<String, ClassFileImage> classesOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
+        Map<String, ClassFileImage> classes = compilation.classes();
+        CompileException failure = compilation.failure();
+        if (failure != null) {
+            throw failure;
+        }
+        return classes;
     }
 
     /** A value an argument is given: as the input carries it, and as a report shows it. */

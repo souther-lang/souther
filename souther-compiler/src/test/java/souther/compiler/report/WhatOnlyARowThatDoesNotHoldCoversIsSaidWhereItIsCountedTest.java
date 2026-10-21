@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DocumentShape;
@@ -11,7 +12,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -472,8 +475,23 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
         assertTrue(human.contains("1 row does not hold:"), human);
     }
 
+    /** Each model measured once for the class: most are read both as the page and as the document,
+     *  and some by more than one question, none of which changes what was answered. */
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static synchronized void released() {
+        MEASURED.clear();
+    }
+
     /** {@code model} compiled, with every measure asked for and its rows run. */
-    private static Compilation measured(String model) {
+    private static synchronized Compilation measured(String model) {
+        return MEASURED.computeIfAbsent(model,
+                WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest::measuredAfresh);
+    }
+
+    private static Compilation measuredAfresh(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

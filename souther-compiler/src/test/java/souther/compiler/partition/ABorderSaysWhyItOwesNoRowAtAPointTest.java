@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ARuleNoReadingTakesIn;
@@ -15,6 +16,7 @@ import souther.compiler.query.ItemAssessment;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -790,10 +792,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
 
     /** The one line a guard of this model draws, without the two the bounds of the range draw. */
     private static Border onlyLineOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        List<Border> drawn = Adequacy.boundariesOf(compilation.db(), "example.owed").values()
+        List<Border> drawn = Adequacy.boundariesOf(compiled(model).db(), "example.owed").values()
                 .stream().flatMap(List::stream).map(BorderAssessment::border)
                 .filter(each -> !(each.origin() instanceof LineOrigin.InvariantOrigin)).toList();
         assertEquals(1, drawn.size(), () -> "this model draws one line of its own: " + drawn);
@@ -805,10 +804,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     private static List<String> linesDrawnBy(String... guards) {
         List<String> drawn = new java.util.ArrayList<>();
         for (String guard : guards) {
-            Compilation compilation = Compilation.ofSource(
-                    model("Int", ">= 0 && value <= 100", guard, "50"), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = compiled(model("Int", ">= 0 && value <= 100", guard, "50"));
             drawn.add(guard + " -> " + Adequacy.boundariesOf(compilation.db(), "example.owed")
                     .values().stream().flatMap(List::stream)
                     .filter(each -> !(each.origin() instanceof LineOrigin.InvariantOrigin))
@@ -1122,21 +1118,31 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
 
     /** Every border of the one behavior {@code model} declares, by the line it is at. */
     private static Map<String, BorderAssessment> bordersOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         Map<String, List<BorderAssessment>> boundaries =
-                Adequacy.boundariesOf(compilation.db(), "example.owed");
+                Adequacy.boundariesOf(compiled(model).db(), "example.owed");
         assertNotNull(boundaries, "the model under test compiles");
         Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
         boundaries.values().forEach(each -> each.forEach(b -> out.put(b.label(), b)));
         return out;
     }
 
+    /** Each model measured once for the class: a test asks one model its borders, the rows
+     *  offered at them and what was searched, and only reads them. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
+    /** {@code model} measured: what is read of it is the measure's, which asks for what it reads. */
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(model, source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            return compilation;
+        });
     }
 }

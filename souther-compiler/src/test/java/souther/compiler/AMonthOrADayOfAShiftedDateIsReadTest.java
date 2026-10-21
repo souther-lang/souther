@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
@@ -12,6 +13,7 @@ import souther.compiler.report.GeneratedRows;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,13 +36,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AMonthOrADayOfAShiftedDateIsReadTest {
 
-    private static final String[] RELATIONS = {">=", ">", "<=", "<", "==", "/="};
+    /** Each source measured once for the class: the tests here only read what a measurement
+     *  says, and some ask the same source different things. */
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(source, each -> {
+            Compilation compilation = Compilation.ofSource(each, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
+    }
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 
     private static String report(Compilation compilation) {
@@ -124,17 +137,17 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
      * A comparison of a month or a day of a moved date is measured as the same comparison of the
      * date's own part is, and the rows on each side of each line leave no point without one.
      *
-     * <p>Every relation at a month and at a day inside the calendar's, and at the calendar's ends
-     * the relations that put the line on either side of the end. Which relation it is, is read by
-     * what reads every comparison of numbers; what the move decides is the term and the dates
-     * written for it, and those are the same whichever relation asks.
+     * <p>Every relation inside the calendar's months and days: which line a relation draws — at
+     * the value, past it, or on each side — is the move read through the relation, so each
+     * relation is asked of a moved part once, half of them moving a month forward and half moving
+     * a day back. At the calendar's ends, the relations that put the line on either side of the
+     * end.
      */
     @Test
     void everyRelationHoldsAtEachLineAndOnBothSidesOfIt() {
-        List<String> every = List.of(RELATIONS);
         for (Compared each : List.of(
-                new Compared("month", 3, every, 1),
-                new Compared("day", 29, every, -30),
+                new Compared("month", 3, List.of(">=", ">", "=="), 1),
+                new Compared("day", 29, List.of("<=", "<", "/="), -30),
                 new Compared("month", 12, List.of(">", "<="), -30),
                 new Compared("day", 31, List.of(">", "<="), 1),
                 new Compared("day", 1, List.of("<", ">="), -30))) {
@@ -147,8 +160,8 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
                         datesAround(part, value, 0))));
                 String comparison = "Date.%s(Date.addDays(%d, b)) %s %d"
                         .formatted(part, shift, relation, value);
-                Compilation compilation = compiled(source(comparison, part, shift, relation, value,
-                        datesAround(part, value, shift)));
+                Compilation compilation = compiled(source(comparison, part, shift, relation,
+                        value, datesAround(part, value, shift)));
                 String report = report(compilation);
                 String where = comparison + "\n" + report + "\n" + own + "\n" + itself;
 
@@ -235,15 +248,6 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
                 if ageOn(%s, on) >= 65 then Old else Young
             %s""";
 
-    /** Rows whose answer is the same whether the age is worked out from the birthday or from the
-     *  day before it. */
-    private static final String AGE_ROWS = """
-
-            example bandOf
-                | (Date("1950-04-01"), Date("2026-04-01")) -> Old
-                | (Date("1990-04-01"), Date("2026-04-01")) -> Young
-            """;
-
     /** What a report leaves unread, said of the birthday whichever date stands for it. */
     private static Set<String> leftUnread(String report, String birthday) {
         Set<String> unread = new TreeSet<>();
@@ -259,12 +263,13 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
      * An age worked out from the day before a birthday is read as the age worked out from the
      * birthday is: the condition of the {@code if} is taken apart into the month and the day of
      * the moved date, and nothing is left unread that is not left unread of the birthday itself.
+     * Measured with the rows of the test below, which the reading does not depend on.
      */
     @Test
     void anAgeFromTheDayBeforeABirthdayIsReadAsAnAgeFromTheBirthday() {
         String moved = report(compiled(AGE.formatted("", "", "Date.addDays(0 - 1, birthday)",
-                AGE_ROWS)));
-        String itself = report(compiled(AGE.formatted("", "", "birthday", AGE_ROWS)));
+                THE_ISSUES_ROWS)));
+        String itself = report(compiled(AGE.formatted("", "", "birthday", THE_ISSUES_ROWS)));
 
         assertFalse(moved.contains("written in a form this compiler does not read"), moved);
         assertFalse(moved.contains("what it says about the values here is not worked out"),

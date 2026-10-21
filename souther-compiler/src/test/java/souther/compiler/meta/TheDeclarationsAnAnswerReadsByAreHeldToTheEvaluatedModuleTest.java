@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
@@ -8,6 +9,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -1149,12 +1151,33 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 ? new PublishedClasses.Carried.NoSuchClass() : classes.of(binaryName);
     }
 
+    /**
+     * What each build emitted, by the sources it was made of, built once for the class.
+     *
+     * <p>A build is a function of its sources, and the questions here hold one model against several
+     * others — and against itself — so the same model is asked for many times over.
+     */
+    private static final Map<String, PublishedClasses> BUILT = new HashMap<>();
+
+    /** The same, for a model spread over several sources. */
+    private static final Map<List<String>, PublishedClasses> BUILT_FROM_SEVERAL = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM. */
+    @AfterAll
+    static void released() {
+        BUILT.clear();
+        BUILT_FROM_SEVERAL.clear();
+    }
+
     /** The classes one build of a model spread over several sources emits. */
     private static PublishedClasses declarationsOf(List<String> sources) {
-        Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
-        Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
-        assertEquals(List.of(), diagnosed(compiled), "the model this is measured against compiles");
-        return ModulePath.of(classes).declarations();
+        return BUILT_FROM_SEVERAL.computeIfAbsent(List.copyOf(sources), _ -> {
+            Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
+            Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
+            assertEquals(List.of(), diagnosed(compiled),
+                    "the model this is measured against compiles");
+            return ModulePath.of(classes).declarations();
+        });
     }
 
     /**
@@ -1166,10 +1189,13 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      * answer that would look like the one being asked for.
      */
     private static PublishedClasses declarationsOf(String source) {
-        Compilation compiled = Compilation.ofSource(source, "Main");
-        Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
-        assertEquals(List.of(), diagnosed(compiled), "the model this is measured against compiles");
-        return ModulePath.of(classes).declarations();
+        return BUILT.computeIfAbsent(source, _ -> {
+            Compilation compiled = Compilation.ofSource(source, "Main");
+            Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
+            assertEquals(List.of(), diagnosed(compiled),
+                    "the model this is measured against compiles");
+            return ModulePath.of(classes).declarations();
+        });
     }
 
     /** What a compile refused, as codes — nothing, for every model measured here.

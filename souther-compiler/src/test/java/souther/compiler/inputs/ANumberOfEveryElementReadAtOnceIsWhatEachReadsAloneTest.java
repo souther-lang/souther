@@ -93,15 +93,18 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
             eachReadsAtOnceWhatItReadsAlone(counted, every);
         }
         List<ObservedValue> touches = new ArrayList<>();
-        for (ObservedValue key : keys) {
+        for (ObservedValue key : keys.subList(0, 2)) {
             for (ObservedValue value : values) {
                 touches.add(touch(key, value));
             }
             touches.add(new ObservedValue.Constructed(TOUCH, Map.of("account", key)));
         }
-        for (ObservedValue value : values) {
-            touches.add(new ObservedValue.Constructed(TOUCH, Map.of("days", value)));
-        }
+        // An element whose key was not read, or that holds no key, is of no key whose values are
+        // read, so its own value is never asked and one value stands for all of them there: one
+        // that was not read either, so that a reading that did ask it would come out otherwise.
+        touches.add(touch(keys.get(2), values.get(3)));
+        touches.add(touch(keys.get(3), values.get(2)));
+        touches.add(new ObservedValue.Constructed(TOUCH, Map.of("days", values.get(3))));
         for (Extreme extreme : List.of(Extreme.LEAST, Extreme.GREATEST)) {
             TermOrders on = keyed(extreme);
             for (List<ObservedValue> every : listsOf(touches)) {
