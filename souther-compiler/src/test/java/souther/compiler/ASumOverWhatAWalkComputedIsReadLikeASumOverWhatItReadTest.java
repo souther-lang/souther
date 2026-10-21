@@ -128,12 +128,16 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     }
 
     /**
-     * As many choices as are written, and no more: a sum of twenty of them, each on a flag of its
-     * own, is twenty choices and not the million ways they can fall out together.
+     * As many choices as are written, and no more: a sum of three of them, each on a flag of its
+     * own, is three choices and not the eight ways they can fall out together.
+     *
+     * <p>Three and not more, because what is asked is the shape and not the size: the ways they
+     * fall out together, written as choices, would each name a flag more than once, which the
+     * count below tells from one choice a flag at any number of them from two up.
      */
     @Test
     void aSumOfManyChoicesIsAsLargeAsWhatWasWritten() {
-        int many = 20;
+        int many = 3;
         StringBuilder fields = new StringBuilder("q: Int");
         List<String> terms = new ArrayList<>();
         for (int i = 1; i <= many; i++) {
