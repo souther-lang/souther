@@ -136,10 +136,14 @@ class DecodeMessageLocalizationTest {
      *  the value breaks reports alone, so neither failure may name the end the other one holds — the
      *  two-sided wording the code also covers would name both. */
     @Test
-    void aTwoSidedInvariantReportsWhicheverSideBrokeAndOnlyThat() {
-        String source = intBounded("both", "value >= 0 && value <= 100");
-        Runner.RunException low = failure("both.sou", source, "-1");
-        Runner.RunException high = failure("both.sou", source, "101");
+    void aTwoSidedInvariantReportsWhicheverSideBrokeAndOnlyThat() throws Exception {
+        java.nio.file.Path file = dir.resolve("both.sou");
+        Files.writeString(file, intBounded("both", "value >= 0 && value <= 100"));
+        Runner.Program program = Runner.compile(file);
+        Runner.RunException low =
+                assertThrows(Runner.RunException.class, () -> program.run(null, "-1"));
+        Runner.RunException high =
+                assertThrows(Runner.RunException.class, () -> program.run(null, "101"));
 
         assertEquals("must be non-negative", reason(low, Locale.ENGLISH));
         assertEquals("0以上で入力してください", reason(low, Locale.JAPANESE));
