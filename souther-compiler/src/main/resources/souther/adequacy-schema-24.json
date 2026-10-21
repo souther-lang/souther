@@ -1202,6 +1202,37 @@
           }
         },
         {
+          "description": "What the elements standing at `elements` come to, among the elements holding at `key` what the element under consideration holds there: the total of what `computation` makes of each, or the least or the greatest of it. The elements are every occurrence of the place, in one container or in the containers inside another put end to end. No one position holds it.",
+          "required": [
+            "gathering",
+            "elements",
+            "key",
+            "computation"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "gathered_under_its_key"
+            },
+            "gathering": {
+              "enum": [
+                "total",
+                "least",
+                "greatest"
+              ]
+            },
+            "elements": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "computation": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
           "description": "What the code points of the string a position holds come to, each added as the number it is.",
           "required": [
             "position"

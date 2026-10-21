@@ -1564,10 +1564,12 @@ class EverySchemaWordIsAccountedForTest {
         // about it for the same reason.
         held.add("/$defs/partition/properties/boundaries/items/properties/besides/items"
                 + "/properties/standing");
-        // Which code points a count of a string is of, and which end of a key's values a number
-        // takes: each written by a switch over a sealed type's arms for the same reason.
+        // Which code points a count of a string is of, which end of a key's values a number
+        // takes, and how the numbers of a key are gathered: each written by a switch over a
+        // sealed type's arms for the same reason.
         held.add("/$defs/termId/oneOf/3/properties/class");
         held.add("/$defs/termId/oneOf/5/properties/extreme");
+        held.add("/$defs/termId/oneOf/6/properties/gathering");
         // How a choice by position compares it, held to the relations by
         // `theWordsAPositionIsComparedByAreTheRelationsThereAre`.
         held.add("/" + String.join("/", A_POSITION_RELATION));

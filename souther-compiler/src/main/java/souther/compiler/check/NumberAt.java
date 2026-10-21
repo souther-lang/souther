@@ -266,6 +266,26 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                 return end + "(" + position + " by " + String.join(".", key) + ")";
             }
         }
+
+        /**
+         * The total of what the elements of the run the place stands in come to, among the
+         * elements holding at {@code key} what the element under consideration holds there.
+         *
+         * <p>Not an end of them: the total of four and ten is fourteen, which no element holds. The
+         * key is part of which number it is, as it is of an end.
+         */
+        record OfTheTotalOfItsKey(List<String> key) implements OfWhatNumber {
+
+            public OfTheTotalOfItsKey {
+                key = List.copyOf(key);
+            }
+
+            /** This number of what stands at the place spelled {@code position}, in the words a
+             *  report and a diagnostic write it in. */
+            public String spelledAt(String position) {
+                return "total(" + position + " by " + String.join(".", key) + ")";
+            }
+        }
     }
 
     /**
@@ -298,6 +318,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                     "occurrences(" + position + " equal to " + asked.key() + ")";
             case OfWhatNumber.OfTheExtremeOfItsKey extremeOf ->
                     extremeOf.spelledAt(position.toString());
+            case OfWhatNumber.OfTheTotalOfItsKey total -> total.spelledAt(position.toString());
         };
     }
 }

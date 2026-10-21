@@ -7405,6 +7405,7 @@ public final class Generator {
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
             case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
             case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
+            case RealizationTarget.UnderItsKey(NumericTerm.GatheredUnderItsKey term) -> term;
             case RealizationTarget.AmongEveryOccurrence(
                     NumericTerm.OccurrencesOfItsValue term) -> term;
             case RealizationTarget.AmongEveryOccurrenceEqualToAKey(
@@ -7943,6 +7944,9 @@ public final class Generator {
             case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
                     target.term().subjectPath();
+            // Every element of every container, which is what a key's elements are gathered
+            // from.
+            case NumericTerm.GatheredUnderItsKey gathered -> gathered.elements();
         };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
@@ -7977,8 +7981,8 @@ public final class Generator {
             case NumericTerm.OfAnElementsNeighbours _ -> values.stream().allMatch(each -> AnOccurrence.of(each)
                             instanceof AnOccurrence.Read(List<ObservedValue> held)
                             && held.isEmpty());
-            case NumericTerm.FromOnePosition _, NumericTerm.OccurrencesOfItsValue _ ->
-                    values.isEmpty();
+            case NumericTerm.FromOnePosition _, NumericTerm.OccurrencesOfItsValue _,
+                 NumericTerm.GatheredUnderItsKey _ -> values.isEmpty();
             case NumericTerm.TakenOver _, NumericTerm.OccurrencesOfAKey _ -> false;
         };
         if (nothingToRead) {
@@ -8071,6 +8075,25 @@ public final class Generator {
                     }
                 }
                 for (NumericTerm.Reading read : on.readEachAmong(counted)) {
+                    switch (read) {
+                        case NumericTerm.Reading.Number number ->
+                                any |= number.value().compareTo(at) == 0;
+                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
+                        case NumericTerm.Reading.NotNumber _ -> { }
+                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                notWorkedOut.add(why);
+                    }
+                }
+                yield any;
+            }
+            // A row stands at a point where some element's key comes to it.
+            case NumericTerm.GatheredUnderItsKey _ -> {
+                boolean any = false;
+                List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+                for (ObservedValue element : values) {
+                    each.add(field -> on.in(field, element));
+                }
+                for (NumericTerm.Reading read : on.readEachUnderItsKey(each)) {
                     switch (read) {
                         case NumericTerm.Reading.Number number ->
                                 any |= number.value().compareTo(at) == 0;
@@ -12891,7 +12914,8 @@ public final class Generator {
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                     NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _ -> null;
+                     NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _,
+                     NumericTerm.GatheredUnderItsKey _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.
             case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;

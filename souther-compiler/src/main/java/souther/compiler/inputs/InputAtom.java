@@ -150,6 +150,7 @@ sealed interface InputAtom {
                 case NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey asked ->
                         "occurrences(" + at + " equal to " + asked.key() + ")";
                 case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme -> extreme.spelledAt(at);
+                case NumberAt.OfWhatNumber.OfTheTotalOfItsKey total -> total.spelledAt(at);
             };
         }
     }

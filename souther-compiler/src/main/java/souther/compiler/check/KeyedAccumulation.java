@@ -85,6 +85,29 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                 Objects.requireNonNull(found, "of what the step finds under the key");
             }
         }
+
+        /**
+         * The total of what {@code value} is for the elements that have the key: the first of them
+         * files its value, and each further one adds {@code added} to the value found.
+         *
+         * <p>That total only where {@code value} and {@code added} are one number of each element,
+         * which is a question about the element and not about the names this reads: the two are
+         * often written twice, as two calls of one helper, and two copies of a call are two
+         * expressions. So both are held, and the reader of the element asks it ({@code
+         * Pullback}); one that cannot read them as one number reads no total.
+         *
+         * @param value what the first element of a key files, read of the element
+         * @param added what each further one adds to the value found, read of the element
+         * @param found the name the step gives the value found under the key
+         */
+        record Summed(Core value, Core added, BindingId found) implements Filed {
+
+            public Summed {
+                Objects.requireNonNull(value, "an element files a value");
+                Objects.requireNonNull(added, "and a further one adds one");
+                Objects.requireNonNull(found, "to what the step finds under the key");
+            }
+        }
     }
 
     private static final ValueName.Stdlib.Operation EMPTY =
@@ -243,6 +266,10 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             if (WhatABodyReads.binding(firstRead, accumulator)) {
                 return null;
             }
+            Core added = addedTo(moved, found);
+            if (added != null) {
+                return new Filed.Summed(first, added, found);
+            }
             Core filed = Extreme.comparedAs(first, firstAt, sides).value();
             Extreme extreme = Extreme.keptBy(Extreme.casesOf(moved.value(), moved.at(), sides),
                     e -> isThe(Extreme.comparedAs(e, moved.at(), sides).value(), found),
@@ -259,6 +286,36 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     && Core.sameValue(valueOf(filing.args().get(0), body.at()), key)
                     && isThe(valueOf(filing.args().get(2), body.at()), accumulator)
                     ? new ValueStanding.ReadThrough<>(filing.args().get(1), body.at()) : null;
+        }
+
+        /**
+         * What {@code moved} adds to the value {@code found} it is handed, as written, where it is
+         * that value and something read of no other: {@code n + v}, {@code v + n}, and an operation
+         * the library says computes the same addition, as {@code Decimal.add(n, v)} does — or null
+         * where it is anything else.
+         */
+        Core addedTo(ValueStanding.ReadThrough<E> moved, BindingId found) {
+            Core written = Core.withoutStanding(moved.value());
+            List<Core> operands;
+            if (written instanceof Core.Binary(BinOp op, Core l, Core r, var _, var _, var _,
+                    var _, var _) && op == BinOp.ADD) {
+                operands = List.of(l, r);
+            } else if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
+                    && DischargeRules.operator(applied.operation()) == BinOp.ADD
+                    && applied.args().size() == 2) {
+                operands = applied.args();
+            } else {
+                return null;
+            }
+            for (int i = 0; i < 2; i++) {
+                Core other = operands.get(1 - i);
+                if (isThe(valueOf(operands.get(i), moved.at()), found)
+                        && !WhatABodyReads.binding(valueOf(other, moved.at()), found)
+                        && !WhatABodyReads.binding(valueOf(other, moved.at()), accumulator)) {
+                    return other;
+                }
+            }
+            return null;
         }
 
         /**

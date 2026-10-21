@@ -255,6 +255,35 @@ public final class TermOrders {
         return TermReading.overElements(this, each);
     }
 
+    /**
+     * What each element of a run comes to under its key, one reading per element in the order
+     * they are given ({@link NumericTerm.GatheredUnderItsKey}).
+     *
+     * @param each the fields of each element of the run, every occurrence of it
+     */
+    public List<NumericTerm.Reading> readEachUnderItsKey(
+            List<Function<ElementProjection, ObservedValue>> each) {
+        return underItsKey(each).ofEachElement();
+    }
+
+    /**
+     * What each key of the elements {@code each} holds comes to, asked of the key: read once for
+     * every element asked about, since what a key comes to does not turn on which of its elements
+     * asks.
+     */
+    public Function<ObservedValue, NumericTerm.Reading> readUnderEachKey(
+            List<Function<ElementProjection, ObservedValue>> each) {
+        return underItsKey(each)::ofTheKey;
+    }
+
+    private TermReading.UnderItsKey underItsKey(
+            List<Function<ElementProjection, ObservedValue>> each) {
+        if (!(term instanceof NumericTerm.GatheredUnderItsKey)) {
+            throw new IllegalArgumentException(term + " is not gathered under a key");
+        }
+        return TermReading.underItsKey(this, each);
+    }
+
     /** What the value at {@code field} of an element is decoded on, for a term computed of each
      *  element, or null where nothing orders it. */
     public Carrier fieldCarrier(ElementProjection field) {

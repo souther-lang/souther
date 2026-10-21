@@ -454,6 +454,17 @@ final class ReadQuantities implements Quantities {
                     onTheWay(computed.computation().reads(), computed.elements()),
                     ruleReading.source().symbols(), ruleReading.source().declarations());
         }
+        if (term instanceof NumericTerm.GatheredUnderItsKey gathered) {
+            // As a computed run is: what a key's numbers come to stands as what each of them
+            // does, and the key and the fields each number reads are read on their own types.
+            Map<ElementProjection, Type> fieldTypes = new LinkedHashMap<>();
+            for (ElementProjection field : gathered.fieldsRead()) {
+                fieldTypes.put(field, typeAt.apply(field.from(gathered.elements())));
+            }
+            return TermOrdering.of(term, gathered.each(), fieldTypes,
+                    onTheWay(gathered.fieldsRead(), gathered.elements()),
+                    ruleReading.source().symbols(), ruleReading.source().declarations());
+        }
         if (term instanceof NumericTerm.OfAnElementsNeighbours among) {
             Map<ElementProjection, Type> onTheWay =
                     onTheWay(among.fieldsRead(), among.container().element());
@@ -2119,6 +2130,8 @@ final class ReadQuantities implements Quantities {
                     NumberAt.occurrencesOfAKey(at.named(), asked.key().discriminated());
             case NumericTerm.ExtremeOfItsKey extreme ->
                     NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().fields());
+            case NumericTerm.GatheredUnderItsKey gathered ->
+                    new NumberAt<>(at.named(), gathered.ofWhatNumber());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenAsItStands(at.named(), over.operation());
         };
@@ -2468,6 +2481,12 @@ final class ReadQuantities implements Quantities {
             // what the place was read to hold is.
             case NumericTerm.ExtremeOfItsKey extreme ->
                     ownOf(extreme.valuesTakenFrom());
+            // An end of the values of a place is one of them, and is where they are. A total, and
+            // an end of what each element computed, is bounded by what the rules guarantee each
+            // number, which nothing here adds up.
+            case NumericTerm.GatheredUnderItsKey gathered ->
+                    gathered.valuesTakenFrom() instanceof NumericTerm.ValueOf each
+                            ? ownOf(each) : null;
         };
     }
 

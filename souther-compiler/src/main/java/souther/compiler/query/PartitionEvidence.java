@@ -273,6 +273,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                         "occurrences(" + at() + " equal to " + asked.key() + ")";
                                 case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                                         extreme.spelledAt(at());
+                                case NumberAt.OfWhatNumber.OfTheTotalOfItsKey total ->
+                                        total.spelledAt(at());
                             };
                 };
                 // The number the walk had named when it stopped, where it named one. Not what the

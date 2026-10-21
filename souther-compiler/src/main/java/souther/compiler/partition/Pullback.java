@@ -43,6 +43,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.ACopyOfAnApplication;
@@ -54,6 +55,7 @@ import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
@@ -5267,10 +5269,88 @@ final class Pullback {
                 NumericTerm.ExtremeOfItsKey extreme = where == null || where.value() == null ? null
                         : NumericTerm.ExtremeOfItsKey.of(where.container(), where.key(),
                                 where.value(), kept.extreme());
+                if (extreme == null) {
+                    yield gathered(whole, filed, kept.value(), kept.value(),
+                            new NumericTerm.GatheredUnderItsKey.Gathering.End(kept.extreme()));
+                }
                 yield readOnAnOrder(extreme)
                         ? LinearForm.atom(new DecisionAtom.OfTheInput(extreme)) : null;
             }
+            case KeyedAccumulation.Filed.Summed summed -> gathered(whole, filed, summed.value(),
+                    summed.added(), NumericTerm.GatheredUnderItsKey.Gathering.TOTAL);
         };
+    }
+
+    /** What the elements of each key come to by {@code gathering}, as a number of the input
+     *  read on an order — or null where it is not read ({@link #gatheredUnderItsKey}). */
+    private LinearForm<Quantity> gathered(Denotation whole, KeyedAccumulation filed, Core value,
+                                          Core added,
+                                          NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        NumericTerm.GatheredUnderItsKey term =
+                gatheredUnderItsKey(whole, filed, value, added, gathering);
+        return readOnAnOrder(term) ? LinearForm.atom(new DecisionAtom.OfTheInput(term)) : null;
+    }
+
+    /**
+     * What the elements a fold files under each key come to by {@code gathering}, each as what
+     * {@code value} computes of it and {@code added} computes of every further one — or null where
+     * the two are not one number of the element, the list is not every occurrence of the elements
+     * of the input, or the number is not read down the walk the key is.
+     *
+     * <p>The key and every field the number reads are read down one walk ({@link
+     * InputReads#occurrencesOf}), and each has to stand where the number reads it of the element.
+     * So the elements of a key are elements of the input, and the number of each is made of the
+     * element the key is. A walk that made something new of each element — a map building a record
+     * of a field doubled — answers a field of what it built that stands at no place, and is read as
+     * nothing rather than as the field it was made from.
+     *
+     * <p>The elements are some of the occurrences only where every one of them is filed; a list
+     * some of whose elements a statement keeps is not read here.
+     */
+    private NumericTerm.GatheredUnderItsKey gatheredUnderItsKey(
+            Denotation whole, KeyedAccumulation filed, Core value, Core added,
+            NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        OnePerElement.ReadOff key = readOff(whole, filed, filed.key());
+        InputReads.Occurrences keys = key == null ? null
+                : occurrencesOf(whole, filed, List.of(key));
+        if (keys == null || !keys.keptBy().isEmpty()
+                || !(keys.reads().getFirst() instanceof InputReads.Occurrences.Read.At(
+                        TermPath keyAt, var _))
+                || keyAt.containersHoldingIt().isEmpty()) {
+            return null;
+        }
+        TermPath elements = keyAt.containersHoldingIt().getLast().element();
+        BindingId element = filed.element().binding();
+        ElementValue first = InputNumber.computedOfTheElement(value, element, whole.at(),
+                elements, read.rules());
+        ElementValue further = InputNumber.computedOfTheElement(added, element, whole.at(),
+                elements, read.rules());
+        if (first == null || !first.equals(further)) {
+            return null;
+        }
+        List<ElementProjection> fields = List.copyOf(first.reads());
+        List<OnePerElement.ReadOff> reads = new ArrayList<>(List.of(key));
+        for (ElementProjection field : fields) {
+            reads.add(new OnePerElement.ReadOff(field.steps().stream()
+                    .<OnePerElement.ReadOff.Taken>map(OnePerElement.ReadOff.Taken.Inside::new)
+                    .toList(), false));
+        }
+        InputReads.Occurrences placed = occurrencesOf(whole, filed, reads);
+        if (placed == null || !placed.keptBy().isEmpty()
+                || !(placed.reads().getFirst() instanceof InputReads.Occurrences.Read.At(
+                        TermPath keyPlaced, var _))
+                || !keyPlaced.equals(keyAt)) {
+            return null;
+        }
+        for (int i = 0; i < fields.size(); i++) {
+            if (!(placed.reads().get(i + 1) instanceof InputReads.Occurrences.Read.At(
+                    TermPath at, var _)) || !at.equals(fields.get(i).from(elements))) {
+                return null;
+            }
+        }
+        return NumericTerm.GatheredUnderItsKey.of(elements, ElementProjection.below(elements,
+                        keyAt), first, TypeOps.base(value.type(), read.rules().inners()),
+                gathering);
     }
 
     /**
@@ -5598,7 +5678,9 @@ final class Pullback {
         TermOrders orders = read.quantities().ordersOf(term);
         return orders != null && orders.observed() != null
                 && !(term instanceof NumericTerm.ExtremeOfItsKey extreme
-                && orders.fieldCarrier(extreme.keyField()) == null);
+                && orders.fieldCarrier(extreme.keyField()) == null)
+                && !(term instanceof NumericTerm.GatheredUnderItsKey gathered
+                && orders.fieldCarrier(gathered.key()) == null);
     }
 
     /**

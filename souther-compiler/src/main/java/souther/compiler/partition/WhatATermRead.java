@@ -397,6 +397,73 @@ sealed interface WhatATermRead {
     }
 
     /**
+     * What {@code on} reads of the element this reading chose among the elements a run gathers
+     * under keys: what the elements holding its key come to ({@link
+     * NumericTerm.GatheredUnderItsKey}).
+     *
+     * <p>The key is the reading's own, and the elements gathered are every occurrence's, whichever
+     * a reading chose: every element of every container the elements stand in, the outer one first.
+     * So a row that wrote no element there has no key for the number, and one whose elements could
+     * not be walked to has none to gather.
+     */
+    static WhatATermRead underItsKey(TermOrders on, BorderQuantity.Observation row) {
+        NumericTerm.GatheredUnderItsKey term = (NumericTerm.GatheredUnderItsKey) on.term();
+        return switch (row.at(term.key().from(term.elements()))) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue own) -> {
+                    EveryKey every = row.keptOf(new EveryKeyOf(on));
+                    yield every.stopped() != null ? every.stopped() : of(every.read().apply(own));
+                }
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
+            };
+        };
+    }
+
+    /**
+     * What every key of a row's elements came to, or what stopped them being read.
+     *
+     * @param read    what the key asked of comes to, where nothing stopped them
+     * @param stopped why they could not be read, or null where they were
+     */
+    record EveryKey(Function<ObservedValue, NumericTerm.Reading> read, WhatATermRead stopped) {}
+
+    /**
+     * What every key of the elements {@code on}'s term gathers comes to, which no reading's choice
+     * turns: every element of every container the elements stand in, the outer one first, each
+     * read as the row with it chosen.
+     */
+    record EveryKeyOf(TermOrders on) implements BorderQuantity.ReadAlike<EveryKey> {
+
+        @Override
+        public EveryKey readAt(BorderQuantity.Observation row) {
+            TermPath elements = ((NumericTerm.GatheredUnderItsKey) on.term()).elements();
+            List<BorderQuantity.Observation> reached = List.of(row);
+            for (TermPath container : elements.containersHoldingIt()) {
+                List<BorderQuantity.Observation> inside = new ArrayList<>();
+                for (BorderQuantity.Observation outer : reached) {
+                    if (!(outer.eachElementOf(container) instanceof WalkResult.Reached<
+                            List<BorderQuantity.Observation>>(
+                                    List<BorderQuantity.Observation> each))) {
+                        return new EveryKey(null, new CameToNothing(ReadingGap.COULD_NOT_WALK));
+                    }
+                    inside.addAll(each);
+                }
+                reached = inside;
+            }
+            WhatRowsLeft left = new WhatRowsLeft();
+            List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+            for (BorderQuantity.Observation element : reached) {
+                each.add(field -> left.at(element, field.from(elements)));
+            }
+            Function<ObservedValue, NumericTerm.Reading> read = on.readUnderEachKey(each);
+            return new EveryKey(read, left.stopped());
+        }
+    }
+
+    /**
      * Why the row could not be read at a field, for the first one it could not.
      *
      * <p>Kept beside the reading and not inside it, which answers a field it cannot use as no value

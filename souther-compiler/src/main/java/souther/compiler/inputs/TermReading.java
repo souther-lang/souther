@@ -618,6 +618,119 @@ final class TermReading {
     }
 
     /**
+     * What the elements of a run come to under each key, read for every element of it
+     * ({@link NumericTerm.GatheredUnderItsKey}).
+     *
+     * <p>Alike as the key's order has them, as {@link KeyedEnds} has them, and each element's
+     * number read as a computation over a run reads it ({@link #overElements}), so a field is
+     * looked at only where the number asks for it. An element whose key is not read may be of any
+     * key, so what stopped the first of those stops every key; one whose number is not read stops
+     * its own key and no other.
+     *
+     * @param each the fields of each element of the run, in the order the row holds them
+     */
+    static UnderItsKey underItsKey(TermOrders on,
+                                   List<Function<ElementProjection, ObservedValue>> each) {
+        NumericTerm.GatheredUnderItsKey term = (NumericTerm.GatheredUnderItsKey) on.term();
+        Carrier keyedOn = on.fieldCarrier(term.key());
+        Reading everyKeyStopped = keyedOn == null ? new Reading.NotNumber() : null;
+        List<Place> keys = new ArrayList<>(each.size());
+        Map<Place, List<ExactRatio>> numbers = new HashMap<>();
+        Map<Place, Reading> stopped = new HashMap<>();
+        long position = 0;
+        for (Function<ElementProjection, ObservedValue> element : each) {
+            if (everyKeyStopped != null) {
+                break;
+            }
+            ObservedValue key = element.apply(term.key());
+            Where where = key == null ? new Where.Nowhere(new Reading.NotNumber())
+                    : whereTheOrderPuts(keyedOn, key);
+            if (!(where instanceof Where.At(Place place))) {
+                everyKeyStopped = ((Where.Nowhere) where).why();
+                break;
+            }
+            Place itsKey = place.canonical();
+            keys.add(itsKey);
+            if (stopped.containsKey(itsKey)) {
+                position++;
+                continue;
+            }
+            OneElement fields = new OneElement(on, element, position++);
+            ExactAnswer<ExactRatio> made = term.value().at(fields);
+            Reading stop = made == null
+                    ? (fields.stopped != null ? fields.stopped : new Reading.NotNumber())
+                    : made instanceof ExactAnswer.Unheld<ExactRatio>(UnheldNumber why)
+                            ? new Reading.NotWorkedOut(why) : null;
+            if (stop != null) {
+                stopped.put(itsKey, stop);
+            } else {
+                numbers.computeIfAbsent(itsKey, _ -> new ArrayList<>())
+                        .add(((ExactAnswer.Held<ExactRatio>) made).value());
+            }
+        }
+        Map<Place, Reading> ofEachKey = new HashMap<>();
+        if (everyKeyStopped == null) {
+            numbers.forEach((key, gathered) -> ofEachKey.put(key,
+                    gatheredBy(term.gathering(), gathered)));
+            ofEachKey.putAll(stopped);
+        }
+        return new UnderItsKey(keyedOn, keys, ofEachKey, everyKeyStopped);
+    }
+
+    /** What the numbers of one key come to by {@code gathering}, which are some. */
+    private static Reading gatheredBy(NumericTerm.GatheredUnderItsKey.Gathering gathering,
+                                      List<ExactRatio> numbers) {
+        return switch (gathering) {
+            case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> sumOf(numbers);
+            case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) -> {
+                ExactRatio end = numbers.getFirst();
+                for (ExactRatio other : numbers) {
+                    int against = other.compareTo(end);
+                    if (extreme instanceof Extreme.Least ? against < 0 : against > 0) {
+                        end = other;
+                    }
+                }
+                yield sumOf(List.of(end));
+            }
+        };
+    }
+
+    /**
+     * What every key of a run's elements came to, read once for every element asked about.
+     *
+     * @param keyedOn   what a key is decoded on
+     * @param keys      each element's key, in the order the row holds them, as far as they were
+     *                  read
+     * @param ofEachKey what each key read came to
+     * @param stopped   why no key's number is read, where an element's key was not; else null
+     */
+    record UnderItsKey(Carrier keyedOn, List<Place> keys, Map<Place, Reading> ofEachKey,
+                       Reading stopped) {
+
+        /** What each element's key comes to, one reading per element. */
+        List<Reading> ofEachElement() {
+            if (stopped != null) {
+                return keys.stream().map(_ -> stopped).toList();
+            }
+            return keys.stream().map(ofEachKey::get).toList();
+        }
+
+        /** What the key {@code own}, one of the elements' keys, comes to. */
+        Reading ofTheKey(ObservedValue own) {
+            if (stopped != null) {
+                return stopped;
+            }
+            return switch (whereTheOrderPuts(keyedOn, own)) {
+                case Where.Nowhere nowhere -> nowhere.why();
+                case Where.At(Place place) -> {
+                    Reading read = ofEachKey.get(place.canonical());
+                    yield read == null ? new Reading.NotNumber() : read;
+                }
+            };
+        }
+    }
+
+    /**
      * What one element holds at the fields a computation asks it for, and why it stopped where it
      * did.
      *

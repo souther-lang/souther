@@ -1181,7 +1181,8 @@ public final class InvariantChecker {
                      NumberAt.OfWhatNumber.OfItsMultiplicity _,
                      NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                      NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,
-                     NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
+                     NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _,
+                     NumberAt.OfWhatNumber.OfTheTotalOfItsKey _ -> null;
             };
             if (atom == null) {
                 continue;

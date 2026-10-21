@@ -518,6 +518,8 @@ final class NumericWitness {
             // One of the values at its place, so none the place does not admit.
             case NumericTerm.ExtremeOfItsKey extreme ->
                     looking.toNarrowBy(extreme.valuesTakenFrom(), within);
+            case NumericTerm.GatheredUnderItsKey gathered -> gathered.valuesTakenFrom() == null
+                    ? ValueSet.ANY : looking.toNarrowBy(gathered.valuesTakenFrom(), within);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
                     ValueSet.ANY;
@@ -531,7 +533,8 @@ final class NumericWitness {
             case NumericTerm.FromOnePosition one -> within.apartAt(one);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                 NumericTerm.ExtremeOfItsKey _ -> PlacesApart.NONE;
+                 NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _ ->
+                    PlacesApart.NONE;
         };
     }
 
