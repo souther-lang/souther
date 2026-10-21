@@ -104,14 +104,15 @@ public final class HeldWholeAndNotTakenOut {
         return new ArrayList<>(old);
     }
 
-    /** An array says what it is and not what it holds. */
+    /** An array says what it is and not what it holds, which is the point of asking it. */
+    @SuppressWarnings("ArrayToString")
     public static String theTextOfAnArrayThatHoldsACopy(Set<CompositionBudget> values) {
         Object[] array = new Object[1];
         array[0] = Set.copyOf(values);
         return array.toString() + array;
     }
 
-    public static List<CompositionBudget> aComputeWhoseFunctionIsGivenOnlyTheKey(
+    public static List<String> aComputeWhoseFunctionIsGivenOnlyTheKey(
             Set<CompositionBudget> values) {
         Map<String, Set<CompositionBudget>> holder = new LinkedHashMap<>();
         holder.put("k", Set.copyOf(values));
@@ -120,7 +121,7 @@ public final class HeldWholeAndNotTakenOut {
             keys.add(key);
             return current;
         });
-        return new ArrayList<>(List.of());
+        return keys;
     }
 
     public static List<CompositionBudget> aReplaceWhoseExpectedValueIsTheCopy(

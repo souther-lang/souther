@@ -303,7 +303,7 @@ public final class HeldWholeAndTakenOut {
             out.addAll(current);
             return current;
         });
-        return out;
+        return holder.isEmpty() ? List.of() : out;
     }
 
     public static List<CompositionBudget> theSecondElementAComparatorIsGiven(
@@ -312,11 +312,11 @@ public final class HeldWholeAndTakenOut {
         holder.add(Set.copyOf(values));
         holder.add(Set.of());
         List<CompositionBudget> out = new ArrayList<>();
-        holder.sort((first, second) -> {
+        holder.sort((_, second) -> {
             out.addAll(second);
             return 0;
         });
-        return out;
+        return holder.isEmpty() ? List.of() : out;
     }
 
     public static List<CompositionBudget> theElementsAStaticSortGivesItsComparator(
@@ -324,7 +324,7 @@ public final class HeldWholeAndTakenOut {
         List<Set<CompositionBudget>> holder = new ArrayList<>();
         holder.add(Set.copyOf(values));
         List<CompositionBudget> out = new ArrayList<>();
-        Collections.sort(holder, (first, second) -> {
+        Collections.sort(holder, (first, _) -> {
             out.addAll(first);
             return 0;
         });
