@@ -5,6 +5,7 @@ import souther.bench.SaltedOrder.Tag;
 import souther.bench.SaltedOrder.Val;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.publish.CanonicalArrangement;
 import souther.compiler.publish.CanonicalSelection;
@@ -104,7 +105,8 @@ final class SaltedOrderVocabulary {
         Outcome feeding(List<Feed> more, boolean returns) {
             List<Feed> all = new ArrayList<>(feeds);
             for (Feed each : more) {
-                all.add(new Feed(each.functions(), each.elements(), returns, each.keptBy()));
+                all.add(new Feed(each.functions(), each.elements(), returns, each.keptBy(),
+                        each.into()));
             }
             return new Outcome(result, pushes, clears, all, crossedBy, unmodeled, endsAs);
         }
@@ -120,12 +122,34 @@ final class SaltedOrderVocabulary {
      * @param elements  what each argument after the ones they captured is
      * @param returns   whether what they return is part of what the call returns
      * @param keptBy    what holds what they return, where the call stores it, or null
+     * @param into      what a copy they return becomes in what the call hands back
      */
-    record Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns, Val keptBy) {
+    record Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns, Val keptBy,
+                HeldCopies.Into into) {
+
+        Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns, Val keptBy) {
+            this(functions, elements, returns, keptBy, HeldCopies.Into.NOTHING);
+        }
 
         Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns) {
             this(functions, elements, returns, null);
         }
+    }
+
+    /** The same, with these also put in the objects they name. */
+    static Outcome alsoPushing(Outcome outcome, List<Push> more) {
+        List<Push> all = new ArrayList<>(outcome.pushes());
+        all.addAll(more);
+        return new Outcome(outcome.result(), all, outcome.clears(), outcome.feeds(),
+                outcome.crossedBy(), outcome.unmodeled(), outcome.endsAs());
+    }
+
+    /** The same, with this also emptied of what it held before the call. */
+    static Outcome alsoClearing(Outcome outcome, Val emptied) {
+        List<Val> all = new ArrayList<>(outcome.clears());
+        all.add(emptied);
+        return new Outcome(outcome.result(), outcome.pushes(), all, outcome.feeds(),
+                outcome.crossedBy(), outcome.unmodeled(), outcome.endsAs());
     }
 
     /** One call: what it was made on, with what, and what it says it returns. */
@@ -179,6 +203,7 @@ final class SaltedOrderVocabulary {
                 Collection.class)));
         out.add(Signature.of(method(NumericTerms.class, "inOrder", Collection.class)));
         out.add(Signature.of(method(NumericTerms.class, "entriesInOrder", Map.class)));
+        out.add(Signature.of(method(Figure.class, "inOrder", Collection.class)));
         return out;
     }
 
@@ -448,7 +473,8 @@ final class SaltedOrderVocabulary {
             "ifPresentOrElse", "orElseGet", "getOrDefault");
 
     private static final Set<String> VISITS = Set.of(
-            "forEach", "forEachOrdered", "forEachRemaining", "ifPresent", "ifPresentOrElse",
+            "forEach", "forEachOrdered", "forEachRemaining", "tryAdvance", "ifPresent",
+            "ifPresentOrElse",
             "removeIf", "replaceAll", "anyMatch", "allMatch", "noneMatch", "computeIfAbsent",
             "computeIfPresent", "compute", "merge");
 
@@ -460,6 +486,20 @@ final class SaltedOrderVocabulary {
             "offerLast", "set", "replace", "append", "insert");
 
     private static final Set<String> PUTS_MANY_IN = Set.of("addAll", "putAll");
+
+    /**
+     * Whether a call puts one element in what it is made on: a name of the list above, or an
+     * operation the table of held copies says stores what it is given, which is the one place that
+     * says where an operation stores and so what it is.
+     */
+    static Set<String> namesThatPutOneIn() {
+        return PUTS_ONE_IN;
+    }
+
+    private static boolean putsOneIn(Call call) {
+        return PUTS_ONE_IN.contains(call.name())
+                || HeldCopies.placementOf(call.name(), call.args().size()).isPresent();
+    }
 
     private static final Set<String> MAKES_TEXT = Set.of(
             "toString", "join", "valueOf", "format", "formatted", "concat", "repeat", "strip",
@@ -492,7 +532,15 @@ final class SaltedOrderVocabulary {
         return out;
     }
 
+    /**
+     * What a call does to the order of what it is handed, and, whatever that is, to the copies
+     * that what it is handed holds whole.
+     */
     private static Outcome classify(Call call) {
+        return HeldCopies.through(call, classifyTheOrder(call));
+    }
+
+    private static Outcome classifyTheOrder(Call call) {
         Set<Tag> came = call.tainted();
         String name = call.name();
         Outcome comparator = comparatorOf(call);
@@ -587,7 +635,8 @@ final class SaltedOrderVocabulary {
                 || owner.equals("java/util/stream/DoubleStream");
         boolean ofANumberArray = owner.equals("java/util/Arrays")
                 && call.descriptor().matches("\\(\\[[IJDCBSF].*");
-        return ofNumbers || ofANumberArray;
+        boolean ofTexts = owner.equals("java/util/stream/Stream") && walksTexts(call.receiver());
+        return ofNumbers || ofANumberArray || ofTexts;
     }
 
     private static Outcome constructed(Call call, Set<Tag> came) {
@@ -686,6 +735,28 @@ final class SaltedOrderVocabulary {
                 switch (tag.kind()) {
                     case COLLECTION, TRAVERSAL, SEQUENCE, PICKED ->
                             out.add(new Tag(Kind.COLLECTION, tag.origin()));
+                    case CHOSEN -> {
+                        out.add(new Tag(Kind.COLLECTION, tag.origin()));
+                        out.add(tag);
+                    }
+                    default -> { }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What something made without an order of the elements it is given holds. A copy given as an
+     * element is held and is not the set's own order, so it is not carried; what a walk gave, and
+     * what an order chose, is.
+     */
+    private static Set<Tag> unorderedFromElements(List<Val> given) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Val each : given) {
+            for (Tag tag : each.tags()) {
+                switch (tag.kind()) {
+                    case SEQUENCE, PICKED -> out.add(new Tag(Kind.COLLECTION, tag.origin()));
                     case CHOSEN -> {
                         out.add(new Tag(Kind.COLLECTION, tag.origin()));
                         out.add(tag);
@@ -799,8 +870,8 @@ final class SaltedOrderVocabulary {
             return Outcome.returning(Val.of(walked.tags())).holding(alreadyChosen);
         }
         if (KEEPS_TRAVERSING.contains(name) && walked.cameOutOfACopy()) {
-            return Outcome.returning(reconsidered(walked, Kind.TRAVERSAL)).holding(alreadyChosen)
-                    .feeding(feeds, true);
+            return Outcome.returning(afterStep(name, call, reconsidered(walked, Kind.TRAVERSAL)))
+                    .holding(alreadyChosen).feeding(feeds, true);
         }
         if (CUTS_BY_POSITION.contains(name) && walked.cameOutOfACopy()) {
             Set<Tag> chosen = new LinkedHashSet<>(walked.as(Kind.TRAVERSAL));
@@ -841,7 +912,7 @@ final class SaltedOrderVocabulary {
         }
         if (name.equals("toString") && call.descriptor().startsWith("()")
                 && walked.cameOutOfACopy()) {
-            return Outcome.returning(Val.of(walked.as(Kind.SEQUENCE)));
+            return Outcome.returning(Val.of(textFrom(walked.tags())));
         }
         boolean leastOrGreatest = name.equals("min") || name.equals("max");
         if (leastOrGreatest && byAComparator(call) && hasATotalOrder(call.args())
@@ -917,13 +988,20 @@ final class SaltedOrderVocabulary {
             return Outcome.returning(call.returnsAReference() ? everything : Val.CLEAN);
         }
         if (library && materializesInOrder(call)) {
-            return Outcome.returning(Val.of(orderedFrom(List.of(walkedOrArgs(call)), true)));
+            // A list made of a copy walks it; a list made of elements holds them, and a copy given
+            // as an element is held by it and is not walked.
+            return Outcome.returning(Val.of(orderedFrom(List.of(walkedOrArgs(call)),
+                    !holdsItsArguments(name))));
         }
-        if (library && (name.equals("copyOf") || name.equals("of") || name.equals("ofEntries")
-                || name.equals("toSet") || name.equals("toUnmodifiableSet"))) {
+        if (library && (name.equals("copyOf") || name.equals("toSet")
+                || name.equals("toUnmodifiableSet"))) {
             return Outcome.returning(Val.of(unorderedFrom(call.everything())));
         }
-        if (library && (PUTS_ONE_IN.contains(name) || PUTS_MANY_IN.contains(name))) {
+        if (library && (name.equals("of") || name.equals("ofEntries"))) {
+            return Outcome.returning(Val.of(unorderedFromElements(call.everything())));
+        }
+        if (library && (putsOneIn(call) || PUTS_MANY_IN.contains(name)
+                || HeldCopies.putsAllIn(name))) {
             return filled(call, feeds);
         }
         if ((call.owner().startsWith("java/lang/") && MAKES_TEXT.contains(name))
@@ -952,11 +1030,17 @@ final class SaltedOrderVocabulary {
                 || owner.equals("java/lang/CharSequence");
     }
 
+    /** Whether what the call of this name makes holds what it is given as its elements. */
+    private static boolean holdsItsArguments(String name) {
+        return name.equals("of") || name.equals("asList");
+    }
+
     private static boolean materializesInOrder(Call call) {
         String name = call.name();
         String owner = call.owner();
         return name.equals("toArray") || name.equals("toList") || name.equals("asList")
                 || name.equals("toUnmodifiableList")
+                || (name.equals("list") && owner.equals("java/util/Collections"))
                 || ((name.equals("copyOf") || name.equals("of")) && owner.equals("java/util/List"));
     }
 
@@ -982,9 +1066,76 @@ final class SaltedOrderVocabulary {
             if (!tag.cameOutOfACopy()) {
                 continue;
             }
-            out.add(tag.isPositional() ? tag : new Tag(kind, tag.origin()));
+            out.add(tag.isPositional() || (kind == Kind.TRAVERSAL && tag.isATraversalOfTexts())
+                    ? tag : new Tag(kind, tag.origin()));
         }
         return Val.of(out);
+    }
+
+    /**
+     * A walk after a step that makes something of each element: of texts where the function that
+     * does returns one, and of what it was before where the step leaves the elements as they are.
+     */
+    private static Val afterStep(String name, Call call, Val traversal) {
+        boolean makesSomethingOfEach = name.startsWith("map") || name.startsWith("flatMap");
+        if (!makesSomethingOfEach) {
+            return traversal;
+        }
+        boolean texts = (name.equals("map") || name.equals("mapToObj"))
+                && returnsTexts(call);
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Tag tag : traversal.tags()) {
+            if (tag.kind() == Kind.TRAVERSAL) {
+                out.add(texts ? Tag.traversalOfTexts(tag.origin())
+                        : new Tag(Kind.TRAVERSAL, tag.origin()));
+            } else {
+                out.add(tag);
+            }
+        }
+        return Val.of(out);
+    }
+
+    /**
+     * Whether every function a call is given returns a {@link String}, which its descriptor says:
+     * the body of a lambda and the method a reference names are both read by what they declare, and
+     * nothing else is evidence of what an element is.
+     */
+    private static boolean returnsTexts(Call call) {
+        Set<Tag> functions = new LinkedHashSet<>();
+        for (Val each : call.args()) {
+            functions.addAll(each.functions());
+        }
+        if (functions.isEmpty()) {
+            return false;
+        }
+        for (Tag function : functions) {
+            String[] parts = function.origin().split("\\|");
+            String signature = parts[0].equals("ref") && parts.length > 1 ? parts[1] : parts[0];
+            if (!signature.endsWith(")Ljava/lang/String;")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether what a call is made on is a walk, and every one of its tags says its elements are
+     * texts. A natural order of texts ties no two that differ, since two of them compare equal only
+     * where they are equal; the natural order of a number of any other kind does not say so.
+     */
+    private static boolean walksTexts(Val walk) {
+        boolean any = false;
+        for (Tag tag : walk.tags()) {
+            if (tag.kind() == Kind.TRAVERSAL) {
+                if (!tag.isATraversalOfTexts()) {
+                    return false;
+                }
+                any = true;
+            } else if (tag.kind() == Kind.COLLECTION || tag.kind() == Kind.SEQUENCE) {
+                return false;
+            }
+        }
+        return any;
     }
 
     /** The functions in a call, each to be handed what a walk of what the call is on gives. */
@@ -1022,6 +1173,10 @@ final class SaltedOrderVocabulary {
     private static Set<Tag> textFrom(Set<Tag> came) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag tag : came) {
+            // A stream or a cursor says what it is, and a tag that is no copy says nothing.
+            if (tag.kind() == Kind.TRAVERSAL || !tag.cameOutOfACopy()) {
+                continue;
+            }
             out.add(tag.kind() == Kind.PICKED || tag.kind() == Kind.CHOSEN ? tag
                     : new Tag(Kind.SEQUENCE, tag.origin()));
         }
@@ -1035,7 +1190,7 @@ final class SaltedOrderVocabulary {
         String made = target.isHeldInAMap() ? null : target.made();
         // Text put into a builder is the whole of what it says of what it is given, which for a
         // plurality is every element in the order it iterates.
-        boolean many = PUTS_MANY_IN.contains(call.name())
+        boolean many = PUTS_MANY_IN.contains(call.name()) || HeldCopies.putsAllIn(call.name())
                 || call.name().equals("append") || call.name().equals("insert");
         boolean ownOrder = putsInItsOwnOrder(made) && !target.has(Kind.TIES_LEFT_TO_THE_WALK);
         boolean keepsOrder = made != null
@@ -1044,7 +1199,7 @@ final class SaltedOrderVocabulary {
         // What a map answers in the order of is its keys, and a value put beside a key is that key's
         // and takes no place of its own.
         boolean keyed = !many && call.args().size() == 2
-                && (call.owner().endsWith("Map") || (made != null && made.endsWith("Map")));
+                && (HeldCopies.isAMap(call.owner()) || (made != null && HeldCopies.isAMap(made)));
         Set<Tag> into;
         if (ownOrder) {
             // Kept in its own order, but which one of several an order chose stays what it was.
@@ -1069,12 +1224,37 @@ final class SaltedOrderVocabulary {
         Val result = call.name().equals("append") || call.name().equals("insert")
                 ? target.plus(into) : Val.CLEAN;
         List<Push> pushes = into.isEmpty() ? List.of() : List.of(new Push(target, into));
-        // A plurality put in whole as one element is held, and what is asked of it is asked of the
-        // holder.
-        String ends = !many && !call.args().isEmpty() && hasAPlurality(call.args())
-                ? "held as one element of another" : "";
-        return new Outcome(result, pushes, List.of(), feeds, crossed, false, ends);
+        return new Outcome(result, pushes, List.of(), feeds, crossed, false);
     }
+
+    /** Whether a call of this name takes one element out of what it is made on. */
+    static boolean takesOneOut(String name) {
+        return SELECTS_ONE.contains(name) || STEPS.contains(name);
+    }
+
+    /** Whether a call of this name hands back a view of what it is made on. */
+    static boolean isAView(String name) {
+        return IS_A_VIEW.contains(name);
+    }
+
+    /**
+     * Whether a call of this name hands back a walk over, or a cut of, the very elements it is made
+     * on, as against one that makes something else of each.
+     */
+    static boolean keepsTheElementsOfAWalk(String name) {
+        return CUTS_BY_POSITION.contains(name)
+                || (KEEPS_TRAVERSING.contains(name) && !MAKES_SOMETHING_ELSE_OF_EACH.contains(name));
+    }
+
+    /** Whether a call of this name starts a walk, a stream or a cursor, over what it is made on. */
+    static boolean startsATraversal(String name) {
+        return STARTS_A_TRAVERSAL.contains(name);
+    }
+
+    /** The steps of a walk that make something else of each element than the element it was. */
+    private static final Set<String> MAKES_SOMETHING_ELSE_OF_EACH = Set.of(
+            "map", "mapToObj", "mapToInt", "mapToLong", "mapToDouble", "flatMap", "flatMapToInt",
+            "flatMapToLong", "flatMapToDouble", "mapMulti", "asLongStream", "asDoubleStream");
 
     /**
      * Whether a call hands back the very element it is given, or takes the one a walk is at, as
@@ -1136,7 +1316,7 @@ final class SaltedOrderVocabulary {
     }
 
     private static boolean isAMap(Call call) {
-        return call.owner().endsWith("Map");
+        return HeldCopies.isAMap(call.owner());
     }
 
     /**
@@ -1158,15 +1338,6 @@ final class SaltedOrderVocabulary {
                 : List.of(new Feed(function.functions(), List.of(), false, target));
         List<Push> pushes = left.isEmpty() ? List.of() : List.of(new Push(target, left));
         return new Outcome(heldIn(target), pushes, List.of(), keeps, List.of(), false, "visited");
-    }
-
-    private static boolean hasAPlurality(List<Val> values) {
-        for (Val each : values) {
-            if (each.collections().cameOutOfACopy()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

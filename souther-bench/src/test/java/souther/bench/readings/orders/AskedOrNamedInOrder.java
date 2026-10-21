@@ -19,6 +19,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -52,6 +53,22 @@ public final class AskedOrNamedInOrder {
         return held.figures().contains(one) && !held.figures().isEmpty()
                 && held.figures().size() > 1 && held.named().containsKey("a")
                 && held.named().get("b") == one;
+    }
+
+    public static List<String> madeTextByAReferenceAndSortedAsText(Held held) {
+        return held.figures().stream().map(Enum::name).sorted().toList();
+    }
+
+    public static List<String> madeTextByALambdaKeptAndSortedAsText(Held held) {
+        return held.figures().stream().map(each -> each.name().toLowerCase(Locale.ROOT))
+                .filter(each -> !each.isEmpty()).sorted().toList();
+    }
+
+    /** A stream and a cursor over a copy say what they are, and nothing of the copy's order. */
+    @SuppressWarnings("StreamToString")
+    public static String theTextOfAStreamAndACursorOverACopy(Held held) {
+        return "walks: " + held.figures().stream() + String.valueOf(held.figures().iterator())
+                + held.figures().stream().toString();
     }
 
     public static int summedOverAWalk(Held held) {

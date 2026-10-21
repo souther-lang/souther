@@ -25,6 +25,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Readers that take the order of a copy into an answer, one way apiece.
@@ -44,6 +45,11 @@ public final class WalkedIntoAnAnswer {
 
     public static List<CompositionBudget> copiedIntoAList(Held held) {
         return List.copyOf(held.figures());
+    }
+
+    /** Looking at each of a walk's elements as it passes is not choosing among them. */
+    public static List<CompositionBudget> listedAfterBeingLookedAtOnTheWay(Held held) {
+        return held.figures().stream().peek(_ -> { }).toList();
     }
 
     public static List<CompositionBudget> gatheredOneAtATime(Held held) {
@@ -128,6 +134,22 @@ public final class WalkedIntoAnAnswer {
         return held.figures().stream().map(Enum::name).toList();
     }
 
+    public static List<BigDecimal> sortedByANaturalOrderThatTiesWhatDiffers(Held held) {
+        return held.figures().stream().map(each -> BigDecimal.valueOf(each.maximum(), 1))
+                .sorted().toList();
+    }
+
+    public static List<String> sortedAsTextWithNothingSayingTheyAreText(Held held) {
+        return held.named().keySet().stream().sorted().toList();
+    }
+
+    public static List<Comparable<?>> sortedOverTextAndWhatIsNotText(Held held, boolean text) {
+        Stream<? extends Comparable<?>> either = text
+                ? held.figures().stream().map(Enum::name)
+                : held.figures().stream().map(each -> BigDecimal.valueOf(each.maximum(), 1));
+        return either.sorted().collect(Collectors.toList());
+    }
+
     public static List<CompositionBudget> namedByAnImpostor(Held held) {
         return Impostor.keep(held.figures());
     }
@@ -182,10 +204,6 @@ public final class WalkedIntoAnAnswer {
         List<CompositionBudget> out = new ArrayList<>(held.figures());
         out.sort(Comparator.comparingInt(each -> each.name().length() / 2));
         return out;
-    }
-
-    public static List<String> sortedByTheNaturalOrderOfNames(Held held) {
-        return held.figures().stream().map(Enum::name).sorted().toList();
     }
 
     public static List<CompositionBudget> sortedByTheNaturalOrderOfTheElements(Held held) {
