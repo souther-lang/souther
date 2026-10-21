@@ -480,6 +480,61 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                 () -> "an emptiness no one established is not said: " + report(compilation));
     }
 
+    /**
+     * The end of a key's values is written as one element, which is a way of writing it and not
+     * what an end is: a container its type makes hold two elements has none the end is one of,
+     * and the end of the values of a key is still a number it comes to. It is said to be an end
+     * this does not write, and not to be a number no row comes to — for the end of a key an input
+     * holds and for the end of the key of an element alike.
+     */
+    @Test
+    void anEndOfAContainerItsTypeMakesHoldTwoIsSaidNotToBeComposed() {
+        String saidSome = "the ends of a key's values among more than one element of the key";
+        Compilation asked = measured("""
+                module example.ledger
+
+                data Posting = { account: String, amount: Int }
+
+                data Pair = List<Posting>
+                    invariant List.length(value) == 2
+
+                let least (ps: List<Posting>): Map<String, Int> =
+                    List.fold((acc, p) -> %s, Map.empty, ps)
+
+                behavior few : (ps: Pair, key: String) -> Bool
+
+                let few (ps, key) =
+                    match Map.get(key, least(ps.value)) with
+                        | Some n -> n >= 100
+                        | None -> false
+                """.formatted(LEAST));
+        assertTrue(report(asked).contains(saidSome), () -> report(asked));
+        assertFalse(report(asked).contains("no row can stand at the"),
+                () -> "an emptiness no one established is not said: " + report(asked));
+        Compilation ofItsOwnKey = measured("""
+                module example.ledger
+
+                data Posting = { account: String, amount: Int }
+
+                data Pair = List<Posting>
+                    invariant List.length(value) == 2
+
+                data Entry = { postings: Pair }
+
+                let least (entries: List<Entry>): Map<String, Int> =
+                    List.fold((acc, p) -> %s, Map.empty,
+                              List.flatMap(e -> e.postings.value, entries))
+
+                behavior few : (entries: List<Entry>) -> Map<String, Int>
+
+                let few (entries) =
+                    Map.filterEntries((_, least) -> least >= 100, least(entries))
+                """.formatted(LEAST));
+        assertTrue(report(ofItsOwnKey).contains(saidSome), () -> report(ofItsOwnKey));
+        assertFalse(report(ofItsOwnKey).contains("no row can stand at the"),
+                () -> "an emptiness no one established is not said: " + report(ofItsOwnKey));
+    }
+
     private static String twoKeys(String arm, String more) {
         return """
                 module example.ledger

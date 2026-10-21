@@ -379,6 +379,7 @@ public final class PublicationOrders {
                             CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT,
                             CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
                             CompositionRepertoire.KEYS_OF_ONE_FOLD_ASKED_TOGETHER,
+                            CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
                             CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
                             CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
                             CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT,

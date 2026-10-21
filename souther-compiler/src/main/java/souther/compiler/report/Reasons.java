@@ -173,6 +173,8 @@ final class Reasons {
                         "the keys of one fold asked for together at values other than the ones"
                                 + " tried, and a key only counted at a number other than the"
                                 + " first total's";
+                case ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT ->
+                        "the ends of a key's values among more than one element of the key";
                 case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
                         "the elements whose computed number is made of several fields, chosen"
                                 + " by a flag, chosen by their case or chosen by where they"

@@ -2213,7 +2213,7 @@ final class TermRealizations {
         // and is not a count no key has.
         if (anEnd && howMany != null && !howMany.holds(Count.of(1), Carrier.WHOLE)) {
             return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
-                    CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO)),
+                    CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT)),
                     "an end of the elements of a key is written as one element, and the key is"
                             + " asked to have more");
         }
@@ -2221,10 +2221,14 @@ final class TermRealizations {
         // of the counts in it is the size.
         ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
                 howMany == null || anEnd ? some : howMany, Carrier.WHOLE, 1);
-        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+        Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
                         reading, elements, inside));
+        // And an end that is not written is not an end no row has: the container may be one its
+        // type makes hold more of the key's elements than one, which the end is among.
+        return anEnd ? someOf(made, CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT)
+                : made;
     }
 
     /**

@@ -126,6 +126,18 @@ public enum CompositionRepertoire {
     KEYS_OF_ONE_FOLD_ASKED_TOGETHER,
 
     /**
+     * The elements of a key whose least or greatest value is asked for, written as one element.
+     *
+     * <p>One element is its own least and its own greatest, so an end is written as one. A
+     * container that must hold more of that key's elements — its type holds two, or a count of the
+     * key's elements asks for more than one — has the end among several, and so does a key whose
+     * end is not any one element's number; they are written by none of these. Raising no figure
+     * reaches them; what would is a way of writing the end with the other elements of the key
+     * around it.
+     */
+    ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
+
+    /**
      * The elements whose computed number is made of the fields of one element in ways this
      * compiler solves for.
      *
@@ -196,7 +208,8 @@ public enum CompositionRepertoire {
             case WAYS_A_TOTAL_IS_SPREAD, PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
                  VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
                  ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
-                 KEYS_OF_ONE_FOLD_ASKED_TOGETHER, MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                 KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
+                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
                  TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
         };
     }
