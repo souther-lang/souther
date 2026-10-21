@@ -136,6 +136,36 @@ final class SaltedOrderFlow {
     private final Set<MethodKey> asksForExactlyOne = new HashSet<>();
     private final Predicate<String> beginsAt;
 
+    /** The methods that make a copy the reading begins at, which are the first ones read. */
+    private final Set<MethodKey> makesACopy = new LinkedHashSet<>();
+
+    /**
+     * For each field, and for each class whose text says its fields, the methods that read it.
+     *
+     * <p>A method read with nothing handed finds nothing until something it reads holds what came
+     * out of a copy: nothing else makes a value that did. So it is read the first time one of these
+     * does, or what a method it calls hands back does, and not before.
+     */
+    private final Map<String, Set<MethodKey>> askedBy = new HashMap<>();
+
+    /** The methods that make text of an object they are handed, of whatever class. */
+    private final Set<MethodKey> makesTextOfAnObject = new HashSet<>();
+
+    /** For each parameter declared as a class of the library, the program's classes it was handed. */
+    private final Map<String, Set<String>> handed = new HashMap<>();
+
+    /** A call written in a method, of what its owner, descriptor and staticness name. */
+    private record CallSite(MethodKey in, String owner, String descriptor, boolean isStatic) {}
+
+    /** The calls of the program, by the name of what they call. */
+    private final Map<String, List<CallSite>> callsTo = new HashMap<>();
+
+    /** For each method that is a function's body, the methods that make the function. */
+    private final Map<MethodKey, Set<MethodKey>> functionsMadeIn = new HashMap<>();
+
+    /** The methods that, read with nothing handed, hand something back, so their callers are read. */
+    private final Set<MethodKey> handsBack = new HashSet<>();
+
     private final Map<String, Set<Tag>> facts = new HashMap<>();
     private final Map<String, Set<Unit>> readers = new HashMap<>();
     private final Map<String, Set<String>> fieldsOf = new HashMap<>();
@@ -174,21 +204,125 @@ final class SaltedOrderFlow {
                 MethodKey in = new MethodKey(model.thisClass().asInternalName(),
                         method.methodName().stringValue(), method.methodType().stringValue());
                 method.code().ifPresent(code -> {
-                    for (CodeElement each : code) {
+                    List<CodeElement> elements = code.elementList();
+                    for (CodeElement each : elements) {
                         if (each instanceof InvokeInstruction call) {
                             called.add(call.name().stringValue() + call.type().stringValue());
+                            callMadeIn(in, call);
                         } else if (each instanceof InvokeDynamicInstruction dynamic) {
                             for (var argument : dynamic.bootstrapArgs()) {
                                 if (argument instanceof DirectMethodHandleDesc handle) {
                                     called.add(handle.methodName() + handle.lookupDescriptor());
                                 }
                             }
+                            functionOrTextMadeIn(in, dynamic);
+                        } else if (each instanceof FieldInstruction field
+                                && (field.opcode() == Opcode.GETFIELD
+                                        || field.opcode() == Opcode.GETSTATIC)) {
+                            asks(in, fieldKey(field.owner().asInternalName(),
+                                    field.name().stringValue()));
                         }
                     }
-                    if (comparesASizeWithOne(code.elementList())) {
+                    if (comparesASizeWithOne(elements)) {
                         asksForExactlyOne.add(in);
                     }
+                    textOfAnyObjectMadeIn(in, elements);
                 });
+            }
+        }
+    }
+
+    /**
+     * Where a method makes text of an object of whatever class, what the fields of each class it
+     * may hold a value as are asked by it.
+     *
+     * <p>Which value the text is made of is settled only by reading the method, so every class a
+     * value in it is held as stands in for it: its own, its parameters', and what it makes, casts
+     * to, reads from a field or is handed back by a call.
+     */
+    private void textOfAnyObjectMadeIn(MethodKey in, List<CodeElement> elements) {
+        boolean makesText = false;
+        for (CodeElement each : elements) {
+            if (each instanceof InvokeInstruction call
+                    && makesTextOfAnyObject(call.owner().asInternalName(),
+                            call.name().stringValue())) {
+                makesText = true;
+                break;
+            }
+        }
+        if (!makesText) {
+            return;
+        }
+        makesTextOfAnObject.add(in);
+        Set<String> heldAs = new LinkedHashSet<>();
+        heldAs.add("L" + in.owner() + ";");
+        for (ClassDesc each : MethodTypeDesc.ofDescriptor(in.descriptor()).parameterList()) {
+            heldAs.add(each.descriptorString());
+        }
+        for (CodeElement each : elements) {
+            switch (each) {
+                case InvokeInstruction call ->
+                        heldAs.add(call.typeSymbol().returnType().descriptorString());
+                case InvokeDynamicInstruction dynamic ->
+                        heldAs.add(dynamic.typeSymbol().returnType().descriptorString());
+                case FieldInstruction field -> heldAs.add(field.typeSymbol().descriptorString());
+                case NewObjectInstruction made ->
+                        heldAs.add(made.className().asSymbol().descriptorString());
+                case TypeCheckInstruction check when check.opcode() == Opcode.CHECKCAST ->
+                        heldAs.add(check.type().asSymbol().descriptorString());
+                default -> { }
+            }
+        }
+        for (String each : heldAs) {
+            if (each.startsWith("L") && !isJava(each.substring(1))) {
+                asks(in, "C:" + each.substring(1, each.length() - 1));
+            }
+        }
+    }
+
+    private void asks(MethodKey reader, String fact) {
+        askedBy.computeIfAbsent(fact, k -> new LinkedHashSet<>()).add(reader);
+    }
+
+    /**
+     * Where a call is made, so that what the methods it may run hand back, read with nothing
+     * handed, is read by it. And whether it is a copy the reading begins at.
+     */
+    private void callMadeIn(MethodKey in, InvokeInstruction call) {
+        String owner = call.owner().asInternalName();
+        String name = call.name().stringValue();
+        boolean isStatic = call.opcode() == Opcode.INVOKESTATIC;
+        int count = call.typeSymbol().parameterCount();
+        if (isStatic && beginsAt.test(in.owner()) && isACopy(owner, name, count)) {
+            makesACopy.add(in);
+        }
+        if (!isJava(owner)) {
+            callsTo.computeIfAbsent(name, k -> new ArrayList<>())
+                    .add(new CallSite(in, owner, call.type().stringValue(), isStatic));
+        }
+    }
+
+    /**
+     * Where a function is made, which is where what its body returns is read, and what a text asks
+     * of the fields of the objects it is made of.
+     */
+    private void functionOrTextMadeIn(MethodKey in, InvokeDynamicInstruction dynamic) {
+        String owner = dynamic.bootstrapMethod().owner().displayName();
+        if (owner.equals("LambdaMetafactory")) {
+            for (var argument : dynamic.bootstrapArgs()) {
+                if (argument instanceof DirectMethodHandleDesc body) {
+                    String bodyOwner = body.owner().descriptorString();
+                    functionsMadeIn.computeIfAbsent(new MethodKey(
+                            bodyOwner.substring(1, bodyOwner.length() - 1), body.methodName(),
+                            body.lookupDescriptor()), k -> new LinkedHashSet<>()).add(in);
+                }
+            }
+        } else if (owner.equals("StringConcatFactory") || owner.equals("ObjectMethods")) {
+            for (ClassDesc each : dynamic.typeSymbol().parameterList()) {
+                String held = each.descriptorString();
+                if (held.startsWith("L")) {
+                    asks(in, "C:" + held.substring(1, held.length() - 1));
+                }
             }
         }
     }
@@ -228,8 +362,8 @@ final class SaltedOrderFlow {
     }
 
     /**
-     * Reads every method of {@code universe}, starting from each copy in a class {@code beginsAt}
-     * accepts.
+     * Reads the methods of {@code universe} that what comes out of a copy can reach, starting from
+     * each copy in a class {@code beginsAt} accepts.
      */
     static Reading read(List<ClassModel> universe, Predicate<String> beginsAt) {
         SaltedOrderFlow flow = new SaltedOrderFlow(universe, beginsAt);
@@ -237,11 +371,13 @@ final class SaltedOrderFlow {
         return flow.finish();
     }
 
+    /**
+     * Reads from the methods that make a copy, and then each method that asks a fact the first
+     * time that fact holds something, which is the only way anything from a copy reaches it.
+     */
     private void run() {
-        for (var each : methods.entrySet()) {
-            if (each.getValue().code().isPresent()) {
-                enqueueOnce(new Unit(each.getKey(), ""));
-            }
+        for (MethodKey each : makesACopy) {
+            enqueueOnce(new Unit(each, ""));
         }
         int reads = 0;
         int most = methods.size() * 60;
@@ -344,7 +480,7 @@ final class SaltedOrderFlow {
      * as long as the method that made it and hands what it is given on where it is called: carried
      * across every call, each lambda of the program would be a fact of its own.
      */
-    private void joinFact(String key, Set<Tag> given) {
+    private boolean joinFact(String key, Set<Tag> given) {
         Set<Tag> tags = new LinkedHashSet<>();
         for (Tag each : given) {
             if (each.cameOutOfACopy()) {
@@ -352,20 +488,48 @@ final class SaltedOrderFlow {
             }
         }
         if (tags.isEmpty()) {
-            return;
+            return false;
         }
         Set<Tag> held = facts.computeIfAbsent(key, k -> new LinkedHashSet<>());
-        if (held.addAll(tags)) {
-            for (Unit each : readers.getOrDefault(key, Set.of())) {
-                enqueue(each);
+        if (!held.addAll(tags)) {
+            return false;
+        }
+        changed(key);
+        if (key.startsWith("F:")) {
+            String owner = key.substring(2, key.lastIndexOf('.'));
+            fieldsOf.computeIfAbsent(owner, k -> new LinkedHashSet<>()).add(key);
+            changed("C:" + owner);
+        }
+        return true;
+    }
+
+    /** Reads again what asked a fact, and for the first time what would ask it. */
+    private void changed(String key) {
+        for (Unit each : readers.getOrDefault(key, Set.of())) {
+            enqueue(each);
+        }
+        for (MethodKey each : askedBy.getOrDefault(key, Set.of())) {
+            enqueueOnce(new Unit(each, ""));
+        }
+    }
+
+    /**
+     * Reads every method that may call {@code method} with nothing handed, or run it as a function,
+     * once what it hands back read that way holds something.
+     */
+    private void readItsCallers(MethodKey method) {
+        if (!handsBack.add(method)) {
+            return;
+        }
+        for (CallSite site : callsTo.getOrDefault(method.name(), List.of())) {
+            if (site.descriptor().equals(method.descriptor())
+                    && targetsOf(site.owner(), method.name(), method.descriptor(),
+                            site.isStatic()).contains(method)) {
+                enqueueOnce(new Unit(site.in(), ""));
             }
-            if (key.startsWith("F:")) {
-                String owner = key.substring(2, key.lastIndexOf('.'));
-                fieldsOf.computeIfAbsent(owner, k -> new LinkedHashSet<>()).add(key);
-                for (Unit each : readers.getOrDefault("C:" + owner, Set.of())) {
-                    enqueue(each);
-                }
-            }
+        }
+        for (MethodKey each : functionsMadeIn.getOrDefault(method, Set.of())) {
+            enqueueOnce(new Unit(each, ""));
         }
     }
 
@@ -595,7 +759,59 @@ final class SaltedOrderFlow {
             // What a walk hands a method is the one element that call is made for.
             tags.add(each.handedToACall());
         }
-        return new Val(tags, wide, -1, null, home);
+        Val seeded = new Val(tags, wide, -1, null, home, Set.of()).alsoHeldAs(descriptor);
+        boolean declaredByTheLibrary = descriptor.startsWith("L") && isJava(descriptor.substring(1));
+        return declaredByTheLibrary ? seeded.alsoHeldAs(handedAs(unit, parameter)) : seeded;
+    }
+
+    /** The classes the program's callers handed a parameter as, which it is read with. */
+    private Set<String> handedAs(Unit unit, int parameter) {
+        String key = handedKey(unit.method(), parameter);
+        readers.computeIfAbsent(key, k -> new HashSet<>()).add(unit);
+        return handed.getOrDefault(key, Set.of());
+    }
+
+    private static String handedKey(MethodKey method, int parameter) {
+        return "T:" + method + "#" + parameter;
+    }
+
+    /**
+     * That a call hands a parameter declared as a class of the library an object the program may
+     * hold as these classes of its own.
+     *
+     * <p>Only where the parameter's own class says nothing the program declares: that is where a
+     * method that makes text of what it is handed learns whose fields it says. Such a method is
+     * read when one of those classes' fields holds what came out of a copy, as it is for a class it
+     * holds a value as itself.
+     */
+    private void handAs(Unit callee, int parameter, String declared, Set<String> classes) {
+        if (classes.isEmpty() || !declared.startsWith("L") || !isJava(declared.substring(1))) {
+            return;
+        }
+        String key = null;
+        Set<String> held = null;
+        Set<String> added = new TreeSet<>();
+        for (String each : classes) {
+            if (held == null) {
+                key = handedKey(callee.method(), parameter);
+                held = handed.computeIfAbsent(key, k -> new TreeSet<>());
+            }
+            if (held.add(each)) {
+                added.add(each);
+            }
+        }
+        if (added.isEmpty()) {
+            return;
+        }
+        changed(key);
+        if (makesTextOfAnObject.contains(callee.method())) {
+            for (String each : added) {
+                asks(callee.method(), "C:" + each);
+                if (fieldsOf.containsKey(each)) {
+                    enqueueOnce(callee);
+                }
+            }
+        }
     }
 
     private static void merge(State[] in, BitSet pending, int to, State state) {
@@ -646,7 +862,8 @@ final class SaltedOrderFlow {
             case ArrayLoadInstruction load -> {
                 state.pop();
                 Val array = state.pop();
-                state.push(new Val(array.as(Kind.PICKED), isWide(load.typeKind()), -1, null, null));
+                state.push(new Val(array.as(Kind.PICKED), isWide(load.typeKind()), -1, null, null,
+                        Set.of()));
             }
             case ArrayStoreInstruction _ -> {
                 Val value = state.pop();
@@ -709,7 +926,8 @@ final class SaltedOrderFlow {
             case ThrowInstruction _ -> state.pop();
             case NewObjectInstruction made ->
                     state.push(Val.CLEAN.withAlloc(index + 1)
-                            .withMade(made.className().asInternalName()));
+                            .withMade(made.className().asInternalName())
+                            .alsoHeldAs(made.className().asSymbol().descriptorString()));
             case NewPrimitiveArrayInstruction _ -> {
                 state.pop();
                 state.push(Val.CLEAN.withAlloc(index + 1).withMade("array"));
@@ -736,7 +954,8 @@ final class SaltedOrderFlow {
                     if (value.isHeldInAMap() && !SaltedOrderVocabulary.inTheCollectionsLibrary(cast)) {
                         value = value.apartFromAnyPlace();
                     }
-                    state.push(narrowed(value, cast.startsWith("[") ? cast : "L" + cast + ";"));
+                    String castTo = cast.startsWith("[") ? cast : "L" + cast + ";";
+                    state.push(narrowed(value, castTo).alsoHeldAs(castTo));
                 }
             }
             case MonitorInstruction _ -> state.pop();
@@ -759,7 +978,9 @@ final class SaltedOrderFlow {
                 value = value.leavingTheWalkAt(unit.method() + " returns an element a walk was at",
                         true);
             }
-            joinFact("R:" + unit, value.tags());
+            if (joinFact("R:" + unit, value.tags()) && unit.context().isEmpty()) {
+                readItsCallers(unit.method());
+            }
             for (Tag each : value.tags()) {
                 if (each.kind() == Kind.COLLECTION) {
                     reach(Set.of(each.origin()), "returned by " + unit.method());
@@ -771,16 +992,20 @@ final class SaltedOrderFlow {
             }
         }
         int slot = isStatic ? 0 : 1;
+        boolean handedBack = false;
         if (!isStatic && state.locals[0] != null) {
-            joinFact("O:" + unit + "#0", state.locals[0].tags());
+            handedBack = joinFact("O:" + unit + "#0", state.locals[0].tags());
         }
         int parameter = isStatic ? 0 : 1;
         for (ClassDesc each : type.parameterList()) {
             if (slot < slots && state.locals[slot] != null) {
-                joinFact("O:" + unit + "#" + parameter, state.locals[slot].tags());
+                handedBack |= joinFact("O:" + unit + "#" + parameter, state.locals[slot].tags());
             }
             slot += isWide(each) ? 2 : 1;
             parameter++;
+        }
+        if (handedBack && unit.context().isEmpty()) {
+            readItsCallers(unit.method());
         }
     }
 
@@ -953,7 +1178,8 @@ final class SaltedOrderFlow {
                         tags.add(each);
                     }
                 }
-                state.push(new Val(narrowed(tags, type.descriptorString()), wide, -1, null, fact));
+                state.push(new Val(narrowed(tags, type.descriptorString()), wide, -1, null, fact,
+                        Set.of()).alsoHeldAs(type.descriptorString()));
             }
             default -> {
                 Val value = narrowed(state.pop(), type.descriptorString())
@@ -996,6 +1222,17 @@ final class SaltedOrderFlow {
 
     private static boolean isJava(String owner) {
         return owner.startsWith("java/") || owner.startsWith("javax/") || owner.startsWith("jdk/");
+    }
+
+    /** Whether a call of the library makes text of an object it is handed, of whatever class. */
+    private static boolean makesTextOfAnyObject(String owner, String name) {
+        return switch (owner) {
+            case "java/lang/String" -> name.equals("valueOf");
+            case "java/lang/StringBuilder", "java/lang/StringBuffer",
+                 "java/lang/AbstractStringBuilder" -> name.equals("append") || name.equals("insert");
+            case "java/util/Objects" -> name.equals("toString");
+            default -> false;
+        };
     }
 
     /**
@@ -1067,6 +1304,23 @@ final class SaltedOrderFlow {
         Set<Tag> result = new LinkedHashSet<>();
         Val made = null;
 
+        // An object handed where any object is taken, to be made text, is the text its class's
+        // toString makes of it. This is how a concatenation hands over every operand that is not a
+        // text or a primitive, so the operand's class is known only from where the value came, and
+        // it may be any of the classes it was held as on the ways that reach here. One held as no
+        // class the program declares says nothing here.
+        if (makesTextOfAnyObject(owner, name)) {
+            List<ClassDesc> parameters = type.parameterList();
+            for (int each = 0; each < args.size(); each++) {
+                if (!parameters.get(each).descriptorString().equals("Ljava/lang/Object;")) {
+                    continue;
+                }
+                for (String heldAs : args.get(each).types()) {
+                    args.set(each, args.get(each).plus(textOfTheFieldsOf(unit, heldAs)));
+                }
+            }
+        }
+
         Signature signature = new Signature(owner, name, descriptor);
         if (isStatic && SaltedOrderVocabulary.declaredTotalOrders().contains(signature)) {
             state.push(Val.of(new Tag(Kind.TOTAL_ORDER, "")));
@@ -1090,7 +1344,7 @@ final class SaltedOrderFlow {
                     }
                 }
                 state.push(new Val(narrowed(left, returns), isWide(type.returnType()), -1, null,
-                        null));
+                        null, Set.of()).alsoHeldAs(returns));
             }
             return;
         }
@@ -1134,8 +1388,14 @@ final class SaltedOrderFlow {
             for (int each = 0; each < args.size(); each++) {
                 joinFact("P:" + callee + "#" + (each + offset),
                         withoutElements(args.get(each).tags()));
+                handAs(callee, each + offset, type.parameterType(each).descriptorString(),
+                        args.get(each).types());
             }
-            enqueueOnce(callee);
+            // Read with nothing handed, the callee is read once something it reads holds what came
+            // out of a copy, and this call is read again when what it hands back changes.
+            if (tainted) {
+                enqueueOnce(callee);
+            }
             if (returnsAValue) {
                 result.addAll(readFact("R:" + callee, unit));
                 if (returnsAReference) {
@@ -1182,7 +1442,8 @@ final class SaltedOrderFlow {
             int object = heldInAMap ? made.alloc()
                     : SaltedOrderVocabulary.makesAFreshNode(owner, name) ? index + 1 : -1;
             state.push(new Val(narrowed(kept, returns), isWide(type.returnType()), object,
-                    made == null ? null : made.made(), heldInAMap ? made.home() : null));
+                    made == null ? null : made.made(), heldInAMap ? made.home() : null, Set.of())
+                    .alsoHeldAs(returns));
         }
     }
 
@@ -1527,7 +1788,7 @@ final class SaltedOrderFlow {
         if (!returns.equals("V")) {
             boolean reference = returns.startsWith("L") || returns.startsWith("[");
             state.push(new Val(reference ? narrowed(result, returns) : Set.of(), wide, -1, null,
-                    null));
+                    null, Set.of()).alsoHeldAs(returns));
         }
     }
 
