@@ -67,9 +67,18 @@ class WhereAValueCameFromIsClosedUnderMakingAndChoosingTest {
     }
 
     @Test
-    void aValueMadeOfSomethingThatCameFromNowhereTheInputHoldsHasNoPlaceToName() {
-        assertEquals(new PathResolution.NotAPosition(), PathResolution.madeOf(List.of(
+    void aPartThatCameFromNowhereTheInputHoldsAddsNoPlace() {
+        assertEquals(at(A), PathResolution.madeOf(List.of(
                 at(A), new PathResolution.NotAPosition())));
+        assertEquals(together(A, B), PathResolution.madeOf(List.of(
+                new PathResolution.NotAPosition(), at(A), at(B))));
+    }
+
+    @Test
+    void aValueEveryPartOfWhichCameFromNowhereHasNoPlaceToName() {
+        assertEquals(new PathResolution.NotAPosition(), PathResolution.madeOf(List.of(
+                new PathResolution.NotAPosition(), new PathResolution.NotAPosition())));
+        assertEquals(new PathResolution.NotAPosition(), PathResolution.madeOf(List.of()));
     }
 
     @Test
@@ -100,20 +109,33 @@ class WhereAValueCameFromIsClosedUnderMakingAndChoosingTest {
         assertEquals(at(A.then("count")), at(A).throughAField(path -> path.then("count")));
     }
 
-    @Test
-    void aValueMadeOfMoreWaysThanAnyReaderCanTellApartIsMadeOfAllOfThemTogether() {
-        List<PathResolution> chosen = new ArrayList<>();
-        List<TermPath> every = new ArrayList<>();
-        for (int i = 0; i < 7; i++) {
-            TermPath one = TermPath.of("p" + i).then("items").element();
-            TermPath other = TermPath.of("q" + i).then("items").element();
-            chosen.add(new PathResolution.MayStandAt(List.of(one, other)));
-            every.add(one);
-            every.add(other);
+    /** One part of {@code ways} places it may stand at, named {@code name} and a number. */
+    private static PathResolution mayStandAtOneOf(String name, int ways) {
+        List<TermPath> among = new ArrayList<>();
+        for (int i = 0; i < ways; i++) {
+            among.add(TermPath.of(name + i).then("items").element());
         }
-        PathResolution.MadeOf together = (PathResolution.MadeOf) PathResolution.madeOf(chosen);
-        assertEquals(1, together.alternatives().size());
-        assertEquals(Set.copyOf(every), Set.copyOf(together.alternatives().getFirst()));
+        return new PathResolution.MayStandAt(among);
+    }
+
+    @Test
+    void aValueMadeInAsManyWaysAsAnAnswerTellsApartKeepsEveryWay() {
+        PathResolution.MadeOf made = (PathResolution.MadeOf) PathResolution.madeOf(List.of(
+                mayStandAtOneOf("p", 4), mayStandAtOneOf("q", 4), mayStandAtOneOf("r", 4)));
+        assertEquals(PathResolution.MOST_WAYS_TOLD_APART, made.alternatives().size());
+        assertEquals(true, made.alternatives().stream().allMatch(each -> each.size() == 3));
+    }
+
+    @Test
+    void aValueMadeInMoreWaysThanThatIsMadeOfAllTheirPlacesTogether() {
+        PathResolution first = mayStandAtOneOf("p", 8);
+        PathResolution second = mayStandAtOneOf("q", 9);
+        PathResolution.MadeOf made = (PathResolution.MadeOf) PathResolution.madeOf(
+                List.of(first, second));
+        assertEquals(1, made.alternatives().size());
+        List<TermPath> every = new ArrayList<>(((PathResolution.MayStandAt) first).among());
+        every.addAll(((PathResolution.MayStandAt) second).among());
+        assertEquals(Set.copyOf(every), Set.copyOf(made.alternatives().getFirst()));
     }
 
     private static TypeSymbol leaf(String name) {

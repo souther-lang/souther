@@ -845,8 +845,8 @@ final class InputPath {
      * empty list of the seed alone, so one position is not where it came from: said to be the
      * elements, a rule about a value the seed handed over would be said of a list it is not made
      * of. It came from the elements and from what the seed holds, together
-     * ({@link PathResolution.MadeOf}), and from nowhere that can be named where the seed's elements
-     * stand at no position.
+     * ({@link PathResolution.MadeOf}), and from the elements alone where the seed holds nothing
+     * that stands at a position, as it does where the seed reads no name.
      */
     private PathResolution throughAWalkFromASeed(Core e, BindingEnvironment names) {
         SeededWalk walk = SeededWalk.enteredHoweverFar(e, InputPath::blockStanding);
@@ -855,15 +855,10 @@ final class InputPath {
         }
         Wanted elements = new Wanted.APart(HeldIn.Part.ELEMENT);
         PathResolution from = heldAt(walk.container(), elements, names);
-        if (from instanceof PathResolution.NotAPosition) {
-            return null;
-        }
-        if (!WhatABodyReads.anyBinding(walk.seed())) {
-            return from;
-        }
-        PathResolution together =
-                PathResolution.madeOf(List.of(heldAt(walk.seed(), elements, names), from));
-        return together instanceof PathResolution.NotAPosition ? null : together;
+        PathResolution came = WhatABodyReads.anyBinding(walk.seed())
+                ? PathResolution.madeOf(List.of(heldAt(walk.seed(), elements, names), from))
+                : from;
+        return came instanceof PathResolution.NotAPosition ? null : came;
     }
 
     /**

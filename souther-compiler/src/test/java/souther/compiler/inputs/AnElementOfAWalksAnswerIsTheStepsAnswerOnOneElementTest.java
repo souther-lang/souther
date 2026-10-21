@@ -288,10 +288,9 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
 
             """;
 
-    private List<String> derivedValueRulesIn(String behavior) {
-        return notReadIn(compiled(SEEDED_FOLD + behavior)).stream()
-                .filter(each -> each.endsWith(" " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE))
-                .sorted().toList();
+    /** Everything the measurement does not read, whatever the reason. */
+    private List<String> notReadWith(String behavior) {
+        return notReadIn(compiled(SEEDED_FOLD + behavior)).stream().sorted().toList();
     }
 
     private static List<String> derivedAt(String... positions) {
@@ -303,7 +302,7 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     /** A choice between two values each made of two places keeps all four. */
     @Test
     void aChoiceBetweenTwoValuesEachMadeOfTwoInputsIsMadeOfAllFour() {
-        assertEquals(derivedAt("other[*]", "start[*]", "xs[*]", "ys[*]"), derivedValueRulesIn("""
+        assertEquals(derivedAt("other[*]", "start[*]", "xs[*]", "ys[*]"), notReadWith("""
                 behavior busy : (flag: Bool, start: Map<String, Int>, other: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
                 let busy (flag, start, other, xs, ys) =
                     Map.filterEntries((_, count) -> count >= 3,
@@ -314,7 +313,7 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     /** A fold over a list chosen between two is made of the seed and of either list. */
     @Test
     void aFoldFromAnInputMapOverAListChosenBetweenTwoIsMadeOfTheMapAndEitherList() {
-        assertEquals(derivedAt("start[*]", "xs[*]", "ys[*]"), derivedValueRulesIn("""
+        assertEquals(derivedAt("start[*]", "xs[*]", "ys[*]"), notReadWith("""
                 behavior busy : (flag: Bool, start: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
                 let busy (flag, start, xs, ys) =
                     Map.filterEntries((_, count) -> count >= 3,
@@ -322,10 +321,27 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 """));
     }
 
+    /**
+     * A seed that reads a name but holds nothing that stands at a position of the input adds no
+     * place: the rule is about a value made of the list, and is said so.
+     */
+    @Test
+    void aFoldFromASeedWorkedOutOfAnInputNumberIsMadeOfTheListAlone() {
+        assertEquals(derivedAt("xs[*]"), notReadIn(compiled("""
+                let countsOf (n: Int, xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 0, c -> 127 - c, acc),
+                              Map.fromList([("k", n + 1)]), xs)
+
+                behavior busy : (n: Int, xs: List<String>) -> Map<String, Int>
+                let busy (n, xs) =
+                    Map.filterEntries((_, count) -> count >= 3, countsOf(n, xs))
+                """)).stream().sorted().toList());
+    }
+
     /** A fold seeded with what another fold made is made of all that fold was made of. */
     @Test
     void aFoldSeededWithAValueAFoldMadeIsMadeOfEverythingBothWereMadeOf() {
-        assertEquals(derivedAt("start[*]", "xs[*]", "ys[*]"), derivedValueRulesIn("""
+        assertEquals(derivedAt("start[*]", "xs[*]", "ys[*]"), notReadWith("""
                 behavior busy : (start: Map<String, Int>, xs: List<String>, ys: List<String>) -> Map<String, Int>
                 let busy (start, xs, ys) =
                     Map.filterEntries((_, count) -> count >= 3,

@@ -138,28 +138,31 @@ public sealed interface PathResolution {
      * The most alternatives an answer tells apart. Past that, the value is said to be made of every
      * place of every alternative together: more places than the value is made of on any run, and
      * none fewer, which is what a rule about it is filed at.
+     *
+     * <p>A bound and not a measurement: the choices a body writes by hand come to a handful of
+     * alternatives, and what it limits is the product of nested choices, which doubles with each.
      */
     int MOST_WAYS_TOLD_APART = 64;
 
     /**
      * Where a value made of every one of {@code these} came from: the places of each together with
-     * the places of the others, in every way the cases of each can come together, and no position
-     * where any of them is no position — a part of what a value is made of that came from nowhere
-     * the input holds is one the answer cannot name.
+     * the places of the others, in every way the cases of each can come together.
+     *
+     * <p>A part that came from nowhere the input holds adds no place, as a constant written into
+     * the body does not: the value came from the places of the others, and a rule about it is owed
+     * the sentence there. It is no position only where every part is.
      */
     static PathResolution madeOf(List<PathResolution> these) {
-        if (these.isEmpty()) {
-            return new NotAPosition();
-        }
         List<List<TermPath>> ways = List.of(List.of());
+        boolean any = false;
         for (PathResolution each : these) {
             List<List<TermPath>> cases = alternativesOf(each);
-            if (cases == null) {
-                return new NotAPosition();
+            if (cases != null) {
+                ways = together(ways, cases);
+                any = true;
             }
-            ways = together(ways, cases);
         }
-        return of(ways, true);
+        return any ? of(ways, true) : new NotAPosition();
     }
 
     /** Every alternative of {@code ways} with every one of {@code cases}, or all their places in
