@@ -9,7 +9,9 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,6 +38,9 @@ import java.util.Map;
  */
 public final class RepositoryModels {
 
+    /** The conformance corpora among them, each beside its compilation, in the manifest's order. */
+    private static final Map<ConformanceCorpus, Compilation> CONFORMANCE = new LinkedHashMap<>();
+
     private static final List<Compilation> ALL = compileEverything();
 
     /** What each of them has worked out about where its sets stop, made when first asked. */
@@ -47,6 +52,17 @@ public final class RepositoryModels {
     /** Every model this repository carries, each with everything about it answered. */
     public static List<Compilation> all() {
         return ALL;
+    }
+
+    /**
+     * The conformance corpora among them, each with the compilation {@link #all()} holds for it.
+     *
+     * <p>For a test whose subject is what the language declares it accepts and nothing written to be
+     * worked with: each of these was compiled the way {@link ConformanceCorpus#analyse()} compiles
+     * one, so the report built of it is the report that analysis writes.
+     */
+    public static Map<ConformanceCorpus, Compilation> conformance() {
+        return Collections.unmodifiableMap(CONFORMANCE);
     }
 
     /**
@@ -96,7 +112,10 @@ public final class RepositoryModels {
             if (corpus.getValue().equals(ConformanceCorpus.CONFORMANCE)) {
                 // The analysing entry point, which is what says a conformance corpus was analysed:
                 // it puts the adequacy questions as well as compiling.
-                out.add(ConformanceCorpus.load(corpus.getKey()).analyse().compilation());
+                ConformanceCorpus conformance = ConformanceCorpus.load(corpus.getKey());
+                Compilation compilation = conformance.analyse().compilation();
+                CONFORMANCE.put(conformance, compilation);
+                out.add(compilation);
             } else {
                 Compilation compilation = Compilation.ofSources(
                         ConformanceCorpus.sourcesOf(corpus.getKey()), ModulePath.EMPTY);
