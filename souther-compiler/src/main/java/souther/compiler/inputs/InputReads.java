@@ -1175,15 +1175,28 @@ public final class InputReads {
             if (found != null) {
                 return found;
             }
-            at = oneStepBeneath(at, symbols, newtypes, (operation, args, where) -> {
-                DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
-                return holds != null ? holds : keepingEveryElement(operation, args, where,
-                        symbols, newtypes);
-            });
+            at = oneStepBeneath(at, symbols, newtypes, (operation, args, where) ->
+                    holdingTheElementsOf(operation, args, where, symbols, newtypes));
             if (at == null) {
                 return null;
             }
         }
+    }
+
+    /**
+     * The argument whose very elements {@code operation}, applied to {@code args}, answers some of:
+     * the one its law says it holds the elements of — a filter, a reordering — or the one a closure
+     * answering each element as it is was handed. Null where it answers no argument's.
+     *
+     * <p>The one step down a list to the list its elements are the elements of, for every reader
+     * that follows an element back to where it was handed from.
+     */
+    private static DeclaredArgument holdingTheElementsOf(ValueName operation, List<Core> args,
+                                                         InputReads where, Symbols symbols,
+                                                         DeclarationNewtypes newtypes) {
+        DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
+        return holds != null ? holds
+                : keepingEveryElement(operation, args, where, symbols, newtypes);
     }
 
     /**
@@ -2865,9 +2878,9 @@ public final class InputReads {
      * key is not shown to be one of the map's.
      *
      * <p>The key is one of the map's where it is an element handed from a list of the map's keys,
-     * or from a list holding only elements of such a list: the operations crossed on the way are
-     * the ones every walk back from a value crosses ({@link InputPath#argumentWhoseElementsItHolds}),
-     * in whichever shape the application stands ({@link AnOperationApplied}).
+     * or from a list holding only elements of such a list: the step down to the list an element
+     * was handed from is the one every reader following an element back takes
+     * ({@link #holdingTheElementsOf}).
      *
      * <p>And the map whose keys were listed is the map looked in where the two are one value by
      * name ({@link #oneNamedValue}). Two maps written alike are two maps here, whatever they hold:
@@ -2896,24 +2909,19 @@ public final class InputReads {
      * holding only elements of what it was handed — the map as it was handed to the listing,
      * not read past its name — or null where it lists no map's keys.
      */
-    private static Denotation mapWhoseKeysAreListedBy(Denotation list, Symbols symbols,
-                                                      DeclarationNewtypes newtypes) {
+    private Denotation mapWhoseKeysAreListedBy(Denotation list, Symbols symbols,
+                                               DeclarationNewtypes newtypes) {
         Denotation at = list;
-        Set<Core> crossed = Collections.newSetFromMap(new IdentityHashMap<>());
-        while (AnOperationApplied.of(at.value()) instanceof AnOperationApplied applied
-                && crossed.add(Core.withoutStanding(at.value()))) {
-            BoundOperationFacts.Listed listed =
-                    DefaultBoundOperationFacts.get().listsAPartOf(applied.operation());
+        while (at != null) {
+            AnOperationApplied applied = AnOperationApplied.of(at.value());
+            BoundOperationFacts.Listed listed = applied == null ? null
+                    : DefaultBoundOperationFacts.get().listsAPartOf(applied.operation());
             if (listed != null) {
                 return listed.part() == MapPart.KEYS
                         ? new Denotation(applied.argument(listed.map()), at.at()) : null;
             }
-            DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(applied.operation());
-            Core beneath = holds == null ? null : applied.argument(holds);
-            if (beneath == null) {
-                return null;
-            }
-            at = at.at().standing(beneath, symbols, newtypes);
+            at = oneStepBeneath(at, symbols, newtypes, (operation, args, where) ->
+                    holdingTheElementsOf(operation, args, where, symbols, newtypes));
         }
         return null;
     }

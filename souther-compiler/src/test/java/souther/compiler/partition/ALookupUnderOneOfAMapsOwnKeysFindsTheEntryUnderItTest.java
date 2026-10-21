@@ -51,6 +51,12 @@ class ALookupUnderOneOfAMapsOwnKeysFindsTheEntryUnderItTest {
                                 | Some d -> d >= staleAfter
                                 | None -> false, Map.keys(since))""";
 
+    /** Each key looked up where it is walked, over the keys a map handed on as they are. */
+    private static final String LOOKED_UP_THROUGH_AN_IDENTITY_MAP = """
+            List.filter(a -> match Map.get(a, since) with
+                                | Some d -> d >= staleAfter
+                                | None -> false, List.map(k -> k, Map.keys(since)))""";
+
     /** Each key looked up by a helper that says the key is the map's own, over the keys sorted. */
     private static final String LOOKED_UP_BY_A_HELPER =
             "List.filter(a -> lookup(since, a) >= staleAfter, List.sort(Map.keys(since)))";
@@ -84,7 +90,8 @@ class ALookupUnderOneOfAMapsOwnKeysFindsTheEntryUnderItTest {
             Compilation entries = measured(modelOf(step, THROUGH_THE_ENTRIES, ""));
             List<String> line = axisOf(entries);
             assertEquals(1, line.size(), () -> step + ": " + report(entries));
-            for (String kept : List.of(LOOKED_UP_INLINE, LOOKED_UP_BY_A_HELPER)) {
+            for (String kept : List.of(LOOKED_UP_INLINE, LOOKED_UP_THROUGH_AN_IDENTITY_MAP,
+                    LOOKED_UP_BY_A_HELPER)) {
                 Compilation keys = measured(modelOf(step, kept, ""));
                 assertEquals(notReadOf(entries), notReadOf(keys),
                         () -> step + "\n" + kept + "\n" + report(keys));
