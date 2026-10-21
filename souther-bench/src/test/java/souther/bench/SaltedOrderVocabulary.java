@@ -516,11 +516,62 @@ final class SaltedOrderVocabulary {
                     List.of(), List.of(),
                     came.isEmpty() ? List.of() : List.of(call.owner().replace('/', '.')), false);
         }
+        Outcome outOfAHolder = outOfAHolder(call);
+        if (outOfAHolder != null) {
+            return outOfAHolder;
+        }
         if (came.isEmpty()) {
             return Outcome.returning(takesAValueOutOfAMap(call) ? heldIn(call.receiver())
                     : Val.CLEAN);
         }
         return over(call, came);
+    }
+
+    private static final Set<String> TAKES_ONE_OUT = Set.of(
+            "get", "getFirst", "getLast", "first", "last", "getOrDefault", "next", "previous",
+            "peek", "peekFirst", "peekLast", "element", "orElseThrow", "orElse");
+
+    /**
+     * What taking from a container that holds copies whole is: a view or a walk over it holds them
+     * too, and one taken out of it is the copy, whichever it is.
+     */
+    private static Outcome outOfAHolder(Call call) {
+        Val receiver = call.receiver();
+        if (receiver.cameOutOfACopy() || !receiver.has(Kind.HELD)) {
+            return null;
+        }
+        String name = call.name();
+        if (STARTS_A_TRAVERSAL.contains(name) || IS_A_VIEW.contains(name)) {
+            return Outcome.returning(Val.of(heldAs(receiver, Kind.HELD)));
+        }
+        if (TAKES_ONE_OUT.contains(name) && call.returnsAReference()) {
+            return Outcome.returning(Val.of(heldAs(receiver, Kind.COLLECTION)));
+        }
+        return null;
+    }
+
+    /** The copies a container holds whole, each as a tag of this kind. */
+    private static Set<Tag> heldAs(Val holder, Kind kind) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Tag tag : holder.tags()) {
+            if (tag.kind() == Kind.HELD) {
+                out.add(new Tag(kind, tag.origin()));
+            }
+        }
+        return out;
+    }
+
+    /** What putting these in whole, as one element or one value, leaves on the container. */
+    private static Set<Tag> heldWhole(List<Val> given) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Val each : given) {
+            for (Tag tag : each.tags()) {
+                if (tag.kind() == Kind.COLLECTION) {
+                    out.add(new Tag(Kind.HELD, tag.origin()));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -1068,6 +1119,13 @@ final class SaltedOrderVocabulary {
                 ? List.of(made.replace('/', '.')) : List.of();
         Val result = call.name().equals("append") || call.name().equals("insert")
                 ? target.plus(into) : Val.CLEAN;
+        if (!many) {
+            Set<Tag> whole = heldWhole(keyed ? call.args().subList(1, 2) : call.args());
+            if (!whole.isEmpty()) {
+                into = new LinkedHashSet<>(into);
+                into.addAll(whole);
+            }
+        }
         List<Push> pushes = into.isEmpty() ? List.of() : List.of(new Push(target, into));
         // A plurality put in whole as one element is held, and what is asked of it is asked of the
         // holder.

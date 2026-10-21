@@ -124,6 +124,18 @@ public final class WalkedIntoAnAnswer {
         return new LinkedHashSet<>(held.figures());
     }
 
+    public static List<CompositionBudget> aCopyHeldWholeInAListAndTakenOutAgain(Held held) {
+        List<Set<CompositionBudget>> into = new ArrayList<>();
+        into.add(held.figures());
+        return new ArrayList<>(into.getFirst());
+    }
+
+    public static List<CompositionBudget> aCopyHeldWholeAsAMapValueAndTakenOutAgain(Held held) {
+        Map<String, Set<CompositionBudget>> into = new HashMap<>();
+        into.put("figures", held.figures());
+        return new ArrayList<>(into.get("figures"));
+    }
+
     public static List<String> namedByAStreamAndKeptAsAList(Held held) {
         return held.figures().stream().map(Enum::name).toList();
     }

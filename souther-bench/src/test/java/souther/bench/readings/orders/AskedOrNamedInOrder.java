@@ -54,6 +54,30 @@ public final class AskedOrNamedInOrder {
                 && held.named().get("b") == one;
     }
 
+    public static boolean aCopyHeldWholeInAListAndOnlyAskedWhatItHolds(Held held,
+                                                                       CompositionBudget one) {
+        List<Set<CompositionBudget>> into = new ArrayList<>();
+        into.add(held.figures());
+        return into.getFirst().contains(one) && into.getFirst().size() > 1;
+    }
+
+    public static int theListThatHoldsACopyWholeWalkedForItsOwnSize(Held held) {
+        List<Set<CompositionBudget>> into = new ArrayList<>();
+        into.add(held.figures());
+        int total = 0;
+        for (Set<CompositionBudget> each : into) {
+            total += each.size();
+        }
+        return total;
+    }
+
+    public static List<CompositionBudget> aCopyHeldWholeInAListAndPutInAnOrderWhenTakenOut(
+            Held held) {
+        List<Set<CompositionBudget>> into = new ArrayList<>();
+        into.add(held.figures());
+        return PublicationOrders.COMPOSITION_BUDGETS.keep(into.getFirst()).written();
+    }
+
     public static int summedOverAWalk(Held held) {
         int total = 0;
         for (CompositionBudget each : held.figures()) {

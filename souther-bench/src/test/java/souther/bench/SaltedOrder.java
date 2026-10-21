@@ -47,6 +47,13 @@ final class SaltedOrder {
         /** An iterator or a stream over one of those. */
         TRAVERSAL,
 
+        /**
+         * A container, or a view or an iterator over one, that holds one of those whole as an
+         * element or a value. The container's own order is not the copy's, so it is no answer and
+         * no walk of it is a walk of the copy; what is taken out of it is the copy.
+         */
+        HELD,
+
         /** A list, an array or a text put together in the order a traversal gave. */
         SEQUENCE,
 
