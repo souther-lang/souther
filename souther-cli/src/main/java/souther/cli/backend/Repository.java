@@ -85,10 +85,12 @@ public final class Repository implements Configured {
                 either(variables, "NO_PROXY", "no_proxy").orElse(""))) {
             return new Repository(at, name, new Route.Direct());
         }
+        // The properties stand over the variable where they name a proxy, by the reading that
+        // finds the proxy they name, and the variable is the proxy where they name none.
         Optional<String> proxy = either(variables, "HTTPS_PROXY", "https_proxy");
-        if (properties.get("https.proxyHost") != null || proxy.isEmpty()) {
-            return new Repository(at, name, new Route.AsPropertiesSay(
-                    new ProxyProperties(properties)));
+        ProxyProperties java = new ProxyProperties(properties);
+        if (java.namesOneFor(at.getScheme()) || proxy.isEmpty()) {
+            return new Repository(at, name, new Route.AsPropertiesSay(java));
         }
         return switch (proxyNamed(proxy.get())) {
             case Named.At<InetSocketAddress>(InetSocketAddress through) ->

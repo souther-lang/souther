@@ -93,6 +93,27 @@ class TheProxyARepositoryIsAskedThroughIsTheOneTheRunWasToldTest {
                 Map.of("HTTPS_PROXY", "http://elsewhere.example:8080"), Map.of(), CENTRAL));
     }
 
+    /**
+     * Whether the properties name a proxy is the one answer whichever of them names it, so the
+     * variable stands aside for {@code proxyHost} as it does for {@code https.proxyHost}: the
+     * question of which proxy stands over which is not a second reading of the properties.
+     */
+    @Test
+    void theSchemeLessPropertyStandsOverTheVariableToo() {
+        assertEquals(List.of(http("internal.example", 8080)), sentThrough(
+                Map.of("HTTPS_PROXY", "http://elsewhere.example:8080"),
+                Map.of("proxyHost", "internal.example", "proxyPort", "8080"), CENTRAL));
+    }
+
+    /** A property set to nothing names no proxy, to which proxy stands over which as to the
+     *  proxy itself: the variable is the proxy. */
+    @Test
+    void aPropertySetToNothingLeavesTheVariableTheProxy() {
+        assertEquals(List.of(http("elsewhere.example", 8080)), sentThrough(
+                Map.of("HTTPS_PROXY", "http://elsewhere.example:8080"),
+                Map.of("https.proxyHost", ""), CENTRAL));
+    }
+
     @Test
     void nothingNamedIsNoProxy() {
         assertEquals(List.of(Proxy.NO_PROXY), sentThrough(Map.of(), Map.of(), CENTRAL));

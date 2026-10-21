@@ -76,6 +76,15 @@ final class ProxyProperties extends ProxySelector {
         system = Boolean.parseBoolean(properties.get("java.net.useSystemProxies"));
     }
 
+    /**
+     * Whether the properties name a proxy for {@code scheme}, read by the rule {@link #select}
+     * reads them by: {@code <scheme>.proxyHost} or {@code proxyHost}, set to something. What else
+     * names a proxy stands aside for these where they name one, and only where they do.
+     */
+    boolean namesOneFor(String scheme) {
+        return named.containsKey(scheme.toLowerCase(Locale.ROOT));
+    }
+
     @Override
     public List<Proxy> select(URI uri) {
         InetSocketAddress proxy = named.get(uri.getScheme().toLowerCase(Locale.ROOT));
