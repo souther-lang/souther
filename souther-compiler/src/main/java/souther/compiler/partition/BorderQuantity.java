@@ -1989,13 +1989,22 @@ public sealed interface BorderQuantity
         };
     }
 
-    /** Whether this is a number read over a run of values rather than a form over positions,
-     *  which is a different thing to tell a reader who found no partition. */
+    /**
+     * Whether this is a number read over a run of values rather than a form over positions, which
+     * is a different thing to tell a reader who found no partition.
+     *
+     * <p>A form, or a count with a form added, is that only where every number of it is read over
+     * a run. A position's number beside a total is related to the total, and which of its values
+     * settle the rule on their own turns on where the total can come to — what the relation is
+     * asked ({@link UndividedByARelation}), and not something the run says of every place beside
+     * it.
+     */
     private boolean readOverARun() {
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().keySet().stream()
-                    .anyMatch(term -> term.atOnePosition() == null);
-            case HowMany _ -> true;
+                    .allMatch(term -> term.atOnePosition() == null);
+            case HowMany count -> count.against().coefs().keySet().stream()
+                    .allMatch(term -> term.atOnePosition() == null);
             case RemainderOfAForm remainder -> remainder.dividend().direction().coefs().keySet()
                     .stream().anyMatch(term -> term.atOnePosition() == null);
             case ProductOfAPair _, RemainderOfAPair _ -> false;

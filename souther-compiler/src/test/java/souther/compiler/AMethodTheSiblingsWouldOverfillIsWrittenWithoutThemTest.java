@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.RunSensitivity;
@@ -70,11 +71,33 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
                 """.formatted(body, sum, atNine);
     }
 
+    private static Compilation measured;
+
+    /**
+     * The model measured, once for the class. Every test here reads what one measurement of it
+     * says, and none changes it; asked where the first test asks it rather than when the class is
+     * loaded, so a model that fails to measure fails the test that asked and not the class.
+     */
+    private static Compilation measured() {
+        if (measured == null) {
+            Compilation compilation = Compilation.ofSource(model(), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            measured = compilation;
+        }
+        return measured;
+    }
+
+    /** And given back when the class is done with it: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        measured = null;
+    }
+
     @Test
     void aMeasuredBuildOfABodyTheJvmHoldsCompiles() {
-        Compilation compilation = Compilation.ofSource(model(), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured();
 
         assertEquals(List.of(), compilation.errors().stream()
                         .map(e -> e.diagnostic().code()).toList(),
@@ -88,9 +111,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
      */
     @Test
     void theRewritesTheClassesCouldNotCarryAreSaidToBeThose() {
-        Compilation compilation = Compilation.ofSource(model(), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured();
         Map<String, ReplacementEvidence> measured = compilation.db()
                 .ask(new Replacements.Measured(compilation.modules().getFirst())).value();
 
@@ -110,9 +131,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
      */
     @Test
     void aRewriteTheJvmHadNoRoomForIsOneNoWiderRunAnswers() {
-        Compilation compilation = Compilation.ofSource(model(), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured();
         ReplacementEvidence measured = compilation.db()
                 .ask(new Replacements.Measured(compilation.modules().getFirst())).value().get("f");
 

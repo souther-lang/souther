@@ -5,6 +5,7 @@ import souther.compiler.collect.AppendOnly;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,9 +148,45 @@ public final class NumericDomain<A> {
      */
     private List<AffineConstraint<A>> rules() {
         if (distinctRules == null) {
-            distinctRules = stated.distinct();
+            distinctRules = tightest(stated.distinct());
         }
         return distinctRules;
+    }
+
+    /**
+     * {@code rules} with a sum held below several bounds held below the tightest of them, where the
+     * first of them was said.
+     *
+     * <p>The others say nothing the tightest does not: a sum below it is below each of them. Kept,
+     * they are rules every reader below reads again and every closure works again — a path that
+     * multiplies one value by many numbers states a bound on it for each, each tighter than the
+     * one before, and the closure asked at every step of that path would work over all of them.
+     */
+    private static <A> List<AffineConstraint<A>> tightest(List<AffineConstraint<A>> rules) {
+        Map<CanonicalForm<A>, ExactCut> below = new LinkedHashMap<>();
+        int halves = 0;
+        for (AffineConstraint<A> rule : rules) {
+            if (rule instanceof AffineConstraint.HalfSpace<A> half) {
+                below.merge(half.form(), half.bound(), ExactCut::tighterUpper);
+                halves++;
+            }
+        }
+        if (below.size() == halves) {
+            return rules;
+        }
+        List<AffineConstraint<A>> out = new ArrayList<>(rules.size());
+        for (AffineConstraint<A> rule : rules) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
+                out.add(rule);
+                continue;
+            }
+            ExactCut kept = below.remove(half.form());
+            if (kept != null) {
+                out.add(kept.equals(half.bound()) ? half
+                        : new AffineConstraint.HalfSpace<>(half.form(), kept));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

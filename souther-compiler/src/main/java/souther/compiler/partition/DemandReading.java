@@ -1735,7 +1735,8 @@ final class DemandReading {
         List<WhyUnread> past = new ArrayList<>();
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
-                case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> {
+                case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
+                     DecisionAtom.ComputedOverAnAnswer _ -> {
                     return anAnswerARowStandsIn(compared);
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;

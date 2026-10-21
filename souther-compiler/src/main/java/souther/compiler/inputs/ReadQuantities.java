@@ -653,6 +653,28 @@ final class ReadQuantities implements Quantities {
          */
         private final CanonicalOrder<InputAtom> order = InputAtom.inOneOrder();
 
+        /**
+         * Where each number taken over a run runs ({@link RunReach}), and empty where nothing
+         * bounds it.
+         *
+         * <p>Kept here and not on a reading, because it is no reading's: what the values a run
+         * walks guarantee is the declarations', and fixing a position or taking a condition in
+         * says nothing of it. Every refinement is a new reading and would walk the run again.
+         */
+        private final Map<NumericTerm.TakenOver, Optional<NumericDomain.Bounds>> runs =
+                new ConcurrentHashMap<>();
+
+        NumericDomain.Bounds runOf(NumericTerm.TakenOver over, ReadQuantities asking) {
+            Optional<NumericDomain.Bounds> had = runs.get(over);
+            if (had != null) {
+                return had.orElse(null);
+            }
+            NumericDomain.Bounds made = RunReach.of(over, asking.ordersOf(over), asking.typeAt,
+                    asking.ruleReading);
+            runs.put(over, Optional.ofNullable(made));
+            return made;
+        }
+
         UnderAContext under(StructuralContext context, ReadQuantities asking) {
             UnderAContext had = read.get(context);
             if (had != null) {
@@ -2437,8 +2459,7 @@ final class ReadQuantities implements Quantities {
     private NumericDomain.Bounds whereItsValuesAre(NumericTerm term) {
         return switch (term) {
             case NumericTerm.FromOnePosition one -> ownOf(one);
-            case NumericTerm.TakenOver over ->
-                    RunReach.of(over, ordersOf(over), typeAt, ruleReading);
+            case NumericTerm.TakenOver over -> contexts.runOf(over, this);
             // Nothing the rules of the elements say bounds how often one of them occurs besides
             // the term's own floor, which every term is read with.
             case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,

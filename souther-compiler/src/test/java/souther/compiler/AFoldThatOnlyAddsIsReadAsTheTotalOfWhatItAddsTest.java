@@ -11,8 +11,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -179,7 +181,14 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                     asked <= limit - List.fold((acc, n) -> acc + n.gross, 0, ns)
                 """);
         assertTrue(report.contains("List.sum(ns[*].gross)"), report);
-        assertFalse(report.contains("not read"), report);
+        // Read to the end, it relates the two numbers and the total; that none of the three is
+        // shown to reach every value of the others is all it leaves unread, at each of them.
+        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
+        assertTrue(unread.stream()
+                .allMatch(line -> line.contains("not shown to reach every value here")), report);
+        assertEquals(Set.of("List.sum(ns[*].gross)", "asked", "limit"), unread.stream()
+                .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
+                .collect(Collectors.toSet()), report);
     }
 
     /**
