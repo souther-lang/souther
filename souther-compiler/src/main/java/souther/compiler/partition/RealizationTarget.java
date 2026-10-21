@@ -362,11 +362,14 @@ public sealed interface RealizationTarget {
          * @param behavior the behavior whose input the statement reads
          */
         public static Optional<ElementsMeetingTogether> of(String behavior, OnTheWay several) {
-            if (!(several instanceof OnTheWay.OneOf oneOf) || oneOf.stated().isEmpty()
-                    || !AStatementAtARow.askable(oneOf.stated().get())) {
+            Proposition stated = switch (several) {
+                case OnTheWay.OneOf oneOf -> oneOf.stated().orElse(null);
+                case OnTheWay.Counted counted -> counted.stated();
+                default -> null;
+            };
+            if (stated == null || !AStatementAtARow.askable(stated)) {
                 return Optional.empty();
             }
-            Proposition stated = oneOf.stated().get();
             TermPath container = AStatementAtARow.containerItIsAbout(stated);
             return container == null || !container.steps().isEmpty() ? Optional.empty()
                     : Optional.of(new ElementsMeetingTogether(behavior, container, stated));

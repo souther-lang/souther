@@ -291,6 +291,8 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
                         new ReachabilityGap.Why.NoValueComposedForItsPositions()));
                 case OnTheWay.OneOf several -> gaps.add(new ReachabilityGap.LookedAlongWhole(
                         several, CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
+                case OnTheWay.Counted counted -> gaps.add(new ReachabilityGap.LookedAlongWhole(
+                        counted, CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
                 case OnTheWay.Settled _, OnTheWay.Narrowed _, OnTheWay.Declined _ -> { }
             }
         }

@@ -248,6 +248,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             case DemandReading.Read.Unread(var whys, var _) -> whys.forEach(why -> limitOf(why, into));
             case DemandReading.Read.OneOf oneOf -> oneOf.alternatives()
                     .forEach(each -> each.forEach(one -> limitsIn(one, into)));
+            case DemandReading.Read.Counted counted ->
+                    counted.parts().forEach(one -> limitsIn(one, into));
             case DemandReading.Read.Demands _, DemandReading.Read.Settled _,
                  DemandReading.Read.Narrows _ -> { }
         }

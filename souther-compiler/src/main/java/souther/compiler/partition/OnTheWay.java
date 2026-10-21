@@ -75,6 +75,15 @@ public sealed interface OnTheWay {
     }
 
     /**
+     * Whether a row past this is along one of several ways that the walk of the way finds, which
+     * are the alternatives of a condition of several ways, and for a count the assignments of its
+     * statements ({@link CountedWays}).
+     */
+    default boolean splitsTheWay() {
+        return ofSeveralWays();
+    }
+
+    /**
      * A condition a search can compose a row against, and what it came to.
      *
      * <p>The demand is what says which condition this is. Two of them asking one thing of a row are
@@ -294,6 +303,129 @@ public sealed interface OnTheWay {
         @Override
         public boolean ofSeveralWays() {
             return true;
+        }
+    }
+
+    /**
+     * A condition that is how many of some statements hold: a row past it meets what each statement
+     * asks on the side it comes out, and the number that hold is one of {@code admitted}.
+     *
+     * <p>Not a condition of several ways. Which of the statements hold is not chosen where the
+     * walk of the way's choices ({@link OneOfEach}) is, since the sets of statements that come to an
+     * admitted count are most of what the statements could come out as; whether the statements can
+     * come out as a count admitted, beside everything else on the way, is
+     * {@link WayToTheBorder#along}'s to judge, and the ways a row takes through it are the
+     * assignments it finds.
+     *
+     * <p><b>A class and not a record, for its hash</b>, for the reason {@link OneOf} is.
+     */
+    final class Counted implements OnTheWay {
+
+        /**
+         * One statement counted.
+         *
+         * @param weight how many times it was written
+         * @param holding what a row meets where it holds
+         * @param failing what a row meets where it fails
+         */
+        public record Statement(int weight, List<OnTheWay> holding, List<OnTheWay> failing) {
+
+            public Statement {
+                if (weight < 1) {
+                    throw new IllegalArgumentException(
+                            "a statement counted is written at least once: " + weight);
+                }
+                holding = List.copyOf(holding);
+                failing = List.copyOf(failing);
+            }
+        }
+
+        private final ConditionOccurrence condition;
+        private final ConditionReportAnchor anchor;
+        private final List<Statement> statements;
+        private final List<Integer> admitted;
+        private final Proposition stated;
+        private final int hash;
+
+        /**
+         * The condition {@code condition}, a count of {@code statements} that is one of
+         * {@code admitted}.
+         *
+         * @param admitted the counts it holds at, rising
+         * @param stated   the statement read
+         */
+        public Counted(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                       List<Statement> statements, List<Integer> admitted, Proposition stated) {
+            if (condition == null || stated == null || statements.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a count is of some statements of some condition the reading met");
+            }
+            if (Proposition.SoManyHold.settledByTheWeights(
+                    statements.stream().map(Statement::weight).toList(), admitted) != null) {
+                throw new IllegalArgumentException("a count the weights alone settle is the same"
+                        + " for every row, and is settled and not counted: " + admitted);
+            }
+            this.condition = condition;
+            this.anchor = anchor;
+            this.statements = List.copyOf(statements);
+            this.admitted = List.copyOf(admitted);
+            this.stated = stated;
+            this.hash = Objects.hash(condition, anchor, this.statements, this.admitted, stated);
+        }
+
+        public ConditionOccurrence condition() {
+            return condition;
+        }
+
+        @Override
+        public ConditionReportAnchor anchor() {
+            return anchor;
+        }
+
+        @Override
+        public boolean splitsTheWay() {
+            return true;
+        }
+
+        public List<Statement> statements() {
+            return statements;
+        }
+
+        public List<Integer> admitted() {
+            return admitted;
+        }
+
+        public Proposition stated() {
+            return stated;
+        }
+
+        /** Every entry of every statement, on either side, in the order the statements are kept. */
+        public List<OnTheWay> parts() {
+            List<OnTheWay> out = new ArrayList<>();
+            for (Statement each : statements) {
+                out.addAll(each.holding());
+                out.addAll(each.failing());
+            }
+            return out;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Counted that && hash == that.hash
+                    && condition.equals(that.condition) && Objects.equals(anchor, that.anchor)
+                    && statements.equals(that.statements) && admitted.equals(that.admitted)
+                    && stated.equals(that.stated));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return "Counted[condition=" + condition + ", admitted=" + admitted + ", statements="
+                    + statements + "]";
         }
     }
 

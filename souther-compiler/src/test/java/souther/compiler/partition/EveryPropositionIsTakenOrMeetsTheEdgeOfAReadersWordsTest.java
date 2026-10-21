@@ -236,6 +236,8 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
             case DemandReading.Read.Unread(var whys, var _) -> out.addAll(whys);
             case DemandReading.Read.OneOf oneOf -> oneOf.alternatives()
                     .forEach(each -> each.forEach(one -> collect(one, out)));
+            case DemandReading.Read.Counted counted ->
+                    counted.parts().forEach(one -> collect(one, out));
             case DemandReading.Read.Demands _, DemandReading.Read.Settled _,
                  DemandReading.Read.Narrows _ -> { }
         }

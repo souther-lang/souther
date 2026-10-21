@@ -3142,6 +3142,8 @@ public final class Generator {
                     case OnTheWay.TakenIn in -> writesAnyOf(in.demand(), against);
                     case OnTheWay.Narrowed narrowed -> WayToTheBorder.positionsOf(narrowed)
                             .stream().anyMatch(position -> against.contains(position.head()));
+                    case OnTheWay.Counted counted -> WayToTheBorder.positionsOf(counted)
+                            .stream().anyMatch(position -> against.contains(position.head()));
                     case OnTheWay.Settled _, OnTheWay.Declined _, OnTheWay.OneOf _ -> false;
                 };
                 if (writes) {

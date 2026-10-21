@@ -96,7 +96,7 @@ class ASizeThatTurnsOnHowTheArgumentsStandIsReadInEachCaseTest {
             case OnTheWay.OneOf one -> one.alternatives().stream()
                     .anyMatch(each -> holds(each, wanted, items));
             case OnTheWay.Settled settled -> settled.thisWay();
-            case OnTheWay.Narrowed _, OnTheWay.Declined _ ->
+            case OnTheWay.Narrowed _, OnTheWay.Declined _, OnTheWay.Counted _ ->
                     throw new AssertionError("a size in cases is read whole: " + asked);
         };
     }

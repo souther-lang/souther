@@ -264,7 +264,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 case OnTheWay.TakenIn in -> demands.add(in.demand());
                 case OnTheWay.Narrowed narrowed -> cases.add(narrowed);
                 case OnTheWay.Settled _ -> { }
-                case OnTheWay.Declined _ -> {
+                // Which of the statements counted hold is not chosen here, so what the alternative
+                // brings is not said.
+                case OnTheWay.Declined _, OnTheWay.Counted _ -> {
                     return new HeldOutcome.Bringing.NothingFound();
                 }
                 case OnTheWay.OneOf _ -> throw new IllegalStateException(
@@ -808,6 +810,14 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                             .map(one -> onTheWay(condition, at, one, input, readOff, by, entered))
                             .toList()).toList(),
                     oneOf.stated());
+            case DemandReading.Read.Counted counted -> new OnTheWay.Counted(condition, at,
+                    counted.statements().stream().map(each -> new OnTheWay.Counted.Statement(
+                            each.weight(),
+                            each.holding().stream().map(one -> onTheWay(condition, at, one, input,
+                                    readOff, by, entered)).toList(),
+                            each.failing().stream().map(one -> onTheWay(condition, at, one, input,
+                                    readOff, by, entered)).toList())).toList(),
+                    counted.admitted(), counted.stated());
             case DemandReading.Read.Unread(var whys, boolean alone) ->
                     new OnTheWay.Declined(condition, at, whys, entered, alone);
         };

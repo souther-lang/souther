@@ -361,7 +361,10 @@ final class DecisionPath {
                 case OnTheWay.TakenIn taken -> out.add(taken);
                 case OnTheWay.OneOf several ->
                         several.alternatives().forEach(way -> out.addAll(takenIn(way)));
-                case OnTheWay.Narrowed _, OnTheWay.Settled _, OnTheWay.Declined _ -> { }
+                // Which of the statements counted hold is no entry a search of one alternative
+                // holds the row to.
+                case OnTheWay.Narrowed _, OnTheWay.Settled _, OnTheWay.Declined _,
+                     OnTheWay.Counted _ -> { }
             }
         }
         return out;
