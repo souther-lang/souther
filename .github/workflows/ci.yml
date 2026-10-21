@@ -36,6 +36,12 @@ jobs:
   # compiler runners finish together: the compiler's own package is the largest share and cannot
   # be split by package, so it is in `compiler-b` with the small ones, and the rest are here.
   #
+  # The tests that read the repository's models are a fourth runner of their own, and the other
+  # two compiler runners leave them out by their tag. Reading the models costs compiling them, once
+  # for a JVM; spread over the forks of the runners above, every fork one of them reached first
+  # compiled them again. Here they are one fork, and the models are compiled once. Which tests
+  # carry the tag is read off what they reach, so a test added among them lands here.
+  #
   # Error Prone is not run here. The `lint` profile is on wherever `CI` is set, which every runner
   # is, and it reads the whole reactor at every compile — the same findings three times over, in
   # the time each runner spends before its first test. The `lint` job below asks it once, beside
@@ -51,12 +57,23 @@ jobs:
           - name: rest
             modules: ''
             tests: '!souther/compiler/**,!**/*IT'
+            tags: '-Dtest.excluded.groups=nightly'
+            forks: '$(nproc)'
           - name: compiler-a
             modules: '-pl souther-compiler -am'
             tests: 'souther/compiler/partition/**,souther/compiler/check/**,souther/compiler/doc/**,souther/compiler/inputs/**,souther/compiler/report/**,souther/compiler/meta/**'
+            tags: '-Dtest.excluded.groups=nightly,repository-models'
+            forks: '$(nproc)'
           - name: compiler-b
             modules: '-pl souther-compiler -am'
             tests: 'souther/compiler/**,!souther/compiler/partition/**,!souther/compiler/check/**,!souther/compiler/doc/**,!souther/compiler/inputs/**,!souther/compiler/report/**,!souther/compiler/meta/**'
+            tags: '-Dtest.excluded.groups=nightly,repository-models'
+            forks: '$(nproc)'
+          - name: compiler-models
+            modules: '-pl souther-compiler -am'
+            tests: 'souther/compiler/**'
+            tags: '-Dgroups=repository-models -Dtest.excluded.groups=nightly'
+            forks: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up JDK 25
@@ -68,14 +85,15 @@ jobs:
       - name: Build and test
         # As many as the runner has, and printed so that a run says how many it was given. The
         # number in the pom is a ceiling for a machine somebody is also working on, and a runner
-        # is nobody's. A module a filter matches nothing in runs no tests rather than failing.
-        # Naming tests in the pom empties the tag left out, so the tag is named here again.
+        # is nobody's, except where a runner is kept to one fork. A module a filter matches nothing
+        # in runs no tests rather than failing. Naming tests in the pom empties the tag left out, so
+        # the tags are named here again.
         run: |
-          echo "forks: $(nproc)"
+          echo "forks: ${{ matrix.shard.forks }}"
           mvn -B --no-transfer-progress verify ${{ matrix.shard.modules }} \
             -P '!lint' \
-            -DforkCount=$(nproc) \
-            -Dtest.excluded.groups=nightly \
+            -DforkCount=${{ matrix.shard.forks }} \
+            ${{ matrix.shard.tags }} \
             -Dsurefire.failIfNoSpecifiedTests=false \
             '-Dtest=${{ matrix.shard.tests }}'
 

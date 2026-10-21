@@ -13,6 +13,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.test.ClosedWorldContract;
 import souther.test.Nightly;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -50,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 @ClosedWorldContract
 @Nightly
+@ReadsTheRepositorysModels
 class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
 
     /**
