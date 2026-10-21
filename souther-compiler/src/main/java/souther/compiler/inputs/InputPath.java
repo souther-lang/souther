@@ -544,7 +544,7 @@ final class InputPath {
 
     /**
      * Where a place of the pair an element is stands, following the names the pair is read under.
-     * Asked only once no pair written in this tree stands behind them, which {@link #componentOf}
+     * Asked only once no pair written in this tree stands behind them, which {@link #componentsOf}
      * has followed to the end, so it is not asked again at each name.
      */
     private PathResolution placeOfAnElementsPair(Core.TupleGet get, BindingEnvironment names) {
