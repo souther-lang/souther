@@ -8920,7 +8920,10 @@ public final class Generator {
          * the body on it came to where a search already ran it, or null where it did not.
          */
         Acceptance of(GeneratedRow row, ObservedRun written) {
-            ObservedRun body = written != null ? written : run(row);
+            // One value for the row, handed to both runs: a run keeps the row it was last asked
+            // about built, and keeps it by this value.
+            RowToRun toRun = row.toRun();
+            ObservedRun body = written != null ? written : run(toRun);
             if (body == null) {
                 return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE, runsReached());
             }
@@ -8928,7 +8931,7 @@ public final class Generator {
             switch (asked) {
                 case ReplacementOwed.OfAnArm arm -> {
                     Optional<AnswerObservation> answered =
-                            trial.runReplacing(row.toRun(), arm.replacing(), this::spend);
+                            trial.runReplacing(toRun, arm.replacing(), this::spend);
                     if (answered == null) {
                         return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE,
                                 runsReached());
@@ -8962,8 +8965,8 @@ public final class Generator {
         }
 
         /** The body run on {@code row}, once per line, or null where no run is left. */
-        private ObservedRun run(GeneratedRow row) {
-            return trial.run(row.toRun(), this::spend);
+        private ObservedRun run(RowToRun row) {
+            return trial.run(row, this::spend);
         }
 
         /** One more run of this search's own, where one is left. */

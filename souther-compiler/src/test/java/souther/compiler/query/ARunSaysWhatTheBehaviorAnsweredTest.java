@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.AnswerChange;
@@ -23,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -170,33 +172,52 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
         Sig sig = db.ask(new Bodies.Signatures(module)).value().get("discount");
         int[] built = {0};
         RowTrials running = Adequacy.trialling(db, module);
-        RowTrials counting = (behavior, of) -> {
-            RowTrials.OfBehavior inner = running.forBehavior(behavior, of);
-            return new RowTrials.OfBehavior() {
-                @Override
-                public Optional<RowTrials.Prepared> prepare(List<Hir.Expr> inputs,
-                                                            List<RowTrials.AnsweredWith> answers) {
-                    built[0]++;
-                    return inner.prepare(inputs, answers);
-                }
+        RowTrials counting = new RowTrials() {
+            @Override
+            public ArmReplacements carried() {
+                return running.carried();
+            }
 
-                @Override
-                public AnswerChange change(AnswerObservation was, AnswerObservation now) {
-                    return inner.change(was, now);
-                }
-            };
+            @Override
+            public RowTrials.OfBehavior forBehavior(String behavior, Sig of) {
+                RowTrials.OfBehavior inner = running.forBehavior(behavior, of);
+                return new RowTrials.OfBehavior() {
+                    @Override
+                    public Optional<RowTrials.Prepared> prepare(
+                            List<Hir.Expr> inputs, List<RowTrials.AnsweredWith> answers) {
+                        built[0]++;
+                        return inner.prepare(inputs, answers);
+                    }
+
+                    @Override
+                    public AnswerChange change(AnswerObservation was, AnswerObservation now) {
+                        return inner.change(was, now);
+                    }
+                };
+            }
         };
+        RequiredDependencies requires = RequiredDependencies.of(db, module, "discount");
         Generator.Trial trial = Adequacy.runningRowsOf(db, module, counting, "discount", sig,
-                RequiredDependencies.of(db, module, "discount"));
+                requires);
+        Generator.Trial fresh = Adequacy.runningRowsOf(db, module, running, "discount", sig,
+                requires);
         RowToRun row = rowOf(compilation, "discount", "below nothing");
 
-        trial.run(row);
-        trial.runReplacing(row, Map.of(0, 0));
-        trial.runReplacing(row, Map.of(0, 1));
+        Generator.ObservedRun ran = trial.run(row);
+        for (Map<Integer, Integer> replacing : List.of(Map.of(0, 0), Map.of(0, 1))) {
+            Optional<AnswerObservation> shared = trial.runReplacing(row, replacing);
+            assertTrue(shared.isPresent(), "the rewrite ran");
+            assertEquals(
+                    fresh.runReplacing(rowOf(compilation, "discount", "below nothing"), replacing),
+                    shared, "a rewrite answers what it does on a row built for it alone");
+        }
 
+        assertEquals(fresh.run(rowOf(compilation, "discount", "below nothing")).answer(),
+                ran.answer(), "and the run answers the same");
         assertEquals(1, built[0], "the run and each rewrite of it are of the values built once");
 
-        trial.runReplacing(rowOf(compilation, "discount", "below nothing"), Map.of(0, 2));
+        trial.runReplacing(rowOf(compilation, "discount", "below nothing"),
+                Map.of(0, 99));
 
         assertEquals(2, built[0], "and another row is built for itself");
     }
