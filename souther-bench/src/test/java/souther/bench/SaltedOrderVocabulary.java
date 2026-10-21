@@ -1132,7 +1132,7 @@ final class SaltedOrderVocabulary {
                 answers.add(each);
             }
         }
-        return new Val(answers, false, map.alloc(), Val.HELD_IN_A_MAP, map.home(), null);
+        return new Val(answers, false, map.alloc(), Val.HELD_IN_A_MAP, map.home(), Set.of());
     }
 
     private static boolean isAMap(Call call) {

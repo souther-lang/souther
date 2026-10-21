@@ -14,6 +14,9 @@ import java.util.Set;
  *
  * <p>And one is handed the object by nothing in the program: what it says of it is still what the
  * class's fields hold.
+ *
+ * <p>The rest hold the object as any object: where two ways of making it meet, as one of two
+ * records, and as what a helper is handed. What the text says is what the class it may be says.
  */
 public final class ReachedThroughATextOfAClass {
 
@@ -41,5 +44,45 @@ public final class ReachedThroughATextOfAClass {
 
     public static String saidByItsOwnText() {
         return new Kept(Set.of()).toString();
+    }
+
+    /**
+     * What a copy made, held in a field of another record whose text says it.
+     *
+     * @param figures a set of the figures a search is held to
+     */
+    public record KeptBeside(Set<CompositionBudget> figures) {
+
+        public KeptBeside {
+            figures = Set.copyOf(figures);
+        }
+    }
+
+    public static String saidThroughMerge(boolean choose) {
+        Object value;
+        if (choose) {
+            value = new Kept(Set.of());
+        } else {
+            value = "other";
+        }
+        return String.valueOf(value);
+    }
+
+    public static String saidOfEitherThroughMerge(boolean choose) {
+        Object value;
+        if (choose) {
+            value = new Kept(Set.of());
+        } else {
+            value = new KeptBeside(Set.of());
+        }
+        return String.valueOf(value);
+    }
+
+    public static String saidByAHelperHandedAnyObject() {
+        return textOf(new Kept(Set.of()));
+    }
+
+    private static String textOf(Object any) {
+        return String.valueOf(any);
     }
 }

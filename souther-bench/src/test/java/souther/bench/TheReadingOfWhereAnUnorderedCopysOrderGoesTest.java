@@ -220,6 +220,32 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
     }
 
     @Test
+    void anObjectMadeOnOneOfTwoWaysSaysWhatTheClassItMayBeHolds() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "saidThroughMerge",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
+    void anObjectThatIsOneOfTwoRecordsSaysWhatEachOfThemHolds() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class, "saidOfEitherThroughMerge",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@",
+                ReachedThroughATextOfAClass.KeptBeside.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
+    void anObjectHandedToAHelperAsAnyObjectSaysWhatItsCallerMadeItAs() {
+        Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
+
+        assertFoundOnlyIn(reading, ReachedThroughATextOfAClass.class,
+                "saidByAHelperHandedAnyObject",
+                ReachedThroughATextOfAClass.Kept.class.getName() + "#<init>:Set.copyOf@");
+    }
+
+    @Test
     void aReaderHandedNothingIsReadWhenTheTextItAsksAnObjectForSaysACopy() {
         Reading reading = readingOfOnly(ReachedThroughATextOfAClass.class);
 
@@ -237,7 +263,7 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
      * origin begins {@code copy}.
      */
     private static void assertFoundOnlyIn(Reading reading, Class<?> holder, String reader,
-                                          String copy) {
+                                          String... copies) {
         List<Finding> found = findingsIn(reading, holder, reader + "(");
         assertEquals(1, found.size(), () -> holder.getSimpleName() + "#" + reader + " was not"
                 + " named once, so the copy that reaches it was not followed to it: "
@@ -245,11 +271,13 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
         Finding finding = found.get(0);
         assertTrue(finding.what().startsWith("returns an order the run gave"),
                 () -> "the reader was named for something else: " + reading.described());
-        assertEquals(1, finding.origins().size(), () -> "the reader was named for more than the"
-                + " one copy: " + finding.origins());
-        assertTrue(finding.origins().iterator().next().startsWith(copy),
-                () -> "the order the reader hands out was not traced to " + copy + ": "
-                        + finding.origins());
+        assertEquals(copies.length, finding.origins().size(), () -> "the reader was not named"
+                + " for exactly the copies " + Arrays.toString(copies) + ": " + finding.origins());
+        for (String copy : copies) {
+            assertTrue(finding.origins().stream().anyMatch(each -> each.startsWith(copy)),
+                    () -> "the order the reader hands out was not traced to " + copy + ": "
+                            + finding.origins());
+        }
     }
 
     private static Reading readingOver(Class<?> readers) {

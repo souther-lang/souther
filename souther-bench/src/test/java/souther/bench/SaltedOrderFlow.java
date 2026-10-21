@@ -148,6 +148,12 @@ final class SaltedOrderFlow {
      */
     private final Map<String, Set<MethodKey>> askedBy = new HashMap<>();
 
+    /** The methods that make text of an object they are handed, of whatever class. */
+    private final Set<MethodKey> makesTextOfAnObject = new HashSet<>();
+
+    /** For each parameter declared as a class of the library, the program's classes it was handed. */
+    private final Map<String, Set<String>> handed = new HashMap<>();
+
     /** A call written in a method, of what its owner, descriptor and staticness name. */
     private record CallSite(MethodKey in, String owner, String descriptor, boolean isStatic) {}
 
@@ -261,6 +267,7 @@ final class SaltedOrderFlow {
         if (!makesText) {
             return;
         }
+        makesTextOfAnObject.add(in);
         for (String each : heldAs) {
             if (each.startsWith("L") && !isJava(each.substring(1))) {
                 asks(in, "C:" + each.substring(1, each.length() - 1));
@@ -747,7 +754,57 @@ final class SaltedOrderFlow {
             // What a walk hands a method is the one element that call is made for.
             tags.add(each.handedToACall());
         }
-        return new Val(tags, wide, -1, null, home, null).heldAs(descriptor);
+        return new Val(tags, wide, -1, null, home, Set.of()).alsoHeldAs(descriptor)
+                .alsoHeldAs(handedAs(unit, parameter));
+    }
+
+    /** The classes the program's callers handed a parameter as, which it is read with. */
+    private Set<String> handedAs(Unit unit, int parameter) {
+        String key = handedKey(unit.method(), parameter);
+        readers.computeIfAbsent(key, k -> new HashSet<>()).add(unit);
+        return handed.getOrDefault(key, Set.of());
+    }
+
+    private static String handedKey(MethodKey method, int parameter) {
+        return "T:" + method + "#" + parameter;
+    }
+
+    /**
+     * That a call hands a parameter declared as a class of the library an object the program may
+     * hold as these classes of its own.
+     *
+     * <p>Only where the parameter's own class says nothing the program declares: that is where a
+     * method that makes text of what it is handed learns whose fields it says. Such a method is
+     * read when one of those classes' fields holds what came out of a copy, as it is for a class it
+     * holds a value as itself.
+     */
+    private void handAs(Unit callee, int parameter, String declared, Set<String> classes) {
+        if (!declared.startsWith("L") || !isJava(declared.substring(1))) {
+            return;
+        }
+        Set<String> own = new TreeSet<>();
+        for (String each : classes) {
+            if (!isJava(each)) {
+                own.add(each);
+            }
+        }
+        String key = handedKey(callee.method(), parameter);
+        Set<String> held = handed.computeIfAbsent(key, k -> new TreeSet<>());
+        Set<String> added = new TreeSet<>(own);
+        added.removeAll(held);
+        if (added.isEmpty()) {
+            return;
+        }
+        held.addAll(added);
+        changed(key);
+        if (makesTextOfAnObject.contains(callee.method())) {
+            for (String each : added) {
+                asks(callee.method(), "C:" + each);
+                if (fieldsOf.containsKey(each)) {
+                    enqueueOnce(callee);
+                }
+            }
+        }
     }
 
     private static void merge(State[] in, BitSet pending, int to, State state) {
@@ -799,7 +856,7 @@ final class SaltedOrderFlow {
                 state.pop();
                 Val array = state.pop();
                 state.push(new Val(array.as(Kind.PICKED), isWide(load.typeKind()), -1, null, null,
-                        null));
+                        Set.of()));
             }
             case ArrayStoreInstruction _ -> {
                 Val value = state.pop();
@@ -863,7 +920,7 @@ final class SaltedOrderFlow {
             case NewObjectInstruction made ->
                     state.push(Val.CLEAN.withAlloc(index + 1)
                             .withMade(made.className().asInternalName())
-                            .heldAs(made.className().asSymbol().descriptorString()));
+                            .alsoHeldAs(made.className().asSymbol().descriptorString()));
             case NewPrimitiveArrayInstruction _ -> {
                 state.pop();
                 state.push(Val.CLEAN.withAlloc(index + 1).withMade("array"));
@@ -891,7 +948,7 @@ final class SaltedOrderFlow {
                         value = value.apartFromAnyPlace();
                     }
                     String castTo = cast.startsWith("[") ? cast : "L" + cast + ";";
-                    state.push(narrowed(value, castTo).heldAs(castTo));
+                    state.push(narrowed(value, castTo).alsoHeldAs(castTo));
                 }
             }
             case MonitorInstruction _ -> state.pop();
@@ -1115,7 +1172,7 @@ final class SaltedOrderFlow {
                     }
                 }
                 state.push(new Val(narrowed(tags, type.descriptorString()), wide, -1, null, fact,
-                        null).heldAs(type.descriptorString()));
+                        Set.of()).alsoHeldAs(type.descriptorString()));
             }
             default -> {
                 Val value = narrowed(state.pop(), type.descriptorString())
@@ -1242,14 +1299,19 @@ final class SaltedOrderFlow {
 
         // An object handed where any object is taken, to be made text, is the text its class's
         // toString makes of it. This is how a concatenation hands over every operand that is not a
-        // text or a primitive, so the operand's class is known only from where the value came.
+        // text or a primitive, so the operand's class is known only from where the value came, and
+        // it may be any of the classes it was held as on the ways that reach here. One held as no
+        // class the program declares says nothing here.
         if (makesTextOfAnyObject(owner, name)) {
             List<ClassDesc> parameters = type.parameterList();
             for (int each = 0; each < args.size(); each++) {
-                String heldAs = args.get(each).type();
-                if (parameters.get(each).descriptorString().equals("Ljava/lang/Object;")
-                        && heldAs != null && !isJava(heldAs)) {
-                    args.set(each, args.get(each).plus(textOfTheFieldsOf(unit, heldAs)));
+                if (!parameters.get(each).descriptorString().equals("Ljava/lang/Object;")) {
+                    continue;
+                }
+                for (String heldAs : args.get(each).types()) {
+                    if (!isJava(heldAs)) {
+                        args.set(each, args.get(each).plus(textOfTheFieldsOf(unit, heldAs)));
+                    }
                 }
             }
         }
@@ -1277,7 +1339,7 @@ final class SaltedOrderFlow {
                     }
                 }
                 state.push(new Val(narrowed(left, returns), isWide(type.returnType()), -1, null,
-                        null, null).heldAs(returns));
+                        null, Set.of()).alsoHeldAs(returns));
             }
             return;
         }
@@ -1321,6 +1383,8 @@ final class SaltedOrderFlow {
             for (int each = 0; each < args.size(); each++) {
                 joinFact("P:" + callee + "#" + (each + offset),
                         withoutElements(args.get(each).tags()));
+                handAs(callee, each + offset, type.parameterType(each).descriptorString(),
+                        args.get(each).types());
             }
             // Read with nothing handed, the callee is read once something it reads holds what came
             // out of a copy, and this call is read again when what it hands back changes.
@@ -1373,8 +1437,8 @@ final class SaltedOrderFlow {
             int object = heldInAMap ? made.alloc()
                     : SaltedOrderVocabulary.makesAFreshNode(owner, name) ? index + 1 : -1;
             state.push(new Val(narrowed(kept, returns), isWide(type.returnType()), object,
-                    made == null ? null : made.made(), heldInAMap ? made.home() : null, null)
-                    .heldAs(returns));
+                    made == null ? null : made.made(), heldInAMap ? made.home() : null, Set.of())
+                    .alsoHeldAs(returns));
         }
     }
 
@@ -1719,7 +1783,7 @@ final class SaltedOrderFlow {
         if (!returns.equals("V")) {
             boolean reference = returns.startsWith("L") || returns.startsWith("[");
             state.push(new Val(reference ? narrowed(result, returns) : Set.of(), wide, -1, null,
-                    null, null).heldAs(returns));
+                    null, Set.of()).alsoHeldAs(returns));
         }
     }
 
