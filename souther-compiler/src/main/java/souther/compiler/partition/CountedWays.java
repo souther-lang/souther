@@ -33,9 +33,13 @@ import java.util.function.BiFunction;
  * of statements ({@link OnTheWay.Counted}), so a search with no assignment and nothing to say why
  * is the third answer and never the second.
  *
- * <p><b>One figure for everything a way's count costs.</b> The steps are taken from one
- * {@link Steps} for the search, the walks of the assignments and every count in them, so the work
- * is bounded by the figure however the counts and choices on a way nest.
+ * <p><b>One figure for everything a way's counts cost.</b> The steps are taken from one
+ * {@link Steps} for the first walk of the way, the search for assignments, every probe of whether
+ * a count can hold and the walks of the assignments, so the entries asked of the vocabulary are
+ * bounded by the figure however the counts and choices on a way nest. The alternatives a walk
+ * looks at are its own figure, which a walk cannot be asked to share, so how often an assignment
+ * is walked is bounded instead ({@link Steps#takeAWalk}) to the ways looked along: the work is at
+ * most that many walks, each held to its figure.
  */
 final class CountedWays {
 
@@ -49,6 +53,7 @@ final class CountedWays {
     static final class Steps {
 
         private int left;
+        private int walksLeft = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
         private boolean past;
 
         Steps(int most) {
@@ -73,6 +78,20 @@ final class CountedWays {
                 return false;
             }
             left--;
+            return true;
+        }
+
+        /**
+         * Takes one walk of a list of entries again, or says there is none left. A walk looks at
+         * alternatives by a figure of its own, which the steps cannot see, so how often one is
+         * walked again is bounded here: no more than ways are looked along.
+         */
+        boolean takeAWalk() {
+            if (walksLeft <= 0) {
+                past = true;
+                return false;
+            }
+            walksLeft--;
             return true;
         }
 
@@ -179,7 +198,13 @@ final class CountedWays {
 
         @Override
         public Step<S, R> with(S so, OnTheWay entry) {
-            return steps.take() ? asked.with(so, entry) : new Step.Held<>(so);
+            if (!steps.take()) {
+                return new Step.Held<>(so);
+            }
+            // A count taken in is probed through this vocabulary, so that the probe's steps are
+            // taken from the same figure.
+            return entry instanceof OnTheWay.Counted counted ? admits(this, so, counted)
+                    : asked.with(so, entry);
         }
     }
 
@@ -333,21 +358,28 @@ final class CountedWays {
      * walked again for the choices inside their statements, and are handed on as many as a way is
      * looked along; past them the figure is said, and no more is claimed.
      *
-     * <p>The steps of the search for assignments and of every walk of them are taken from one
+     * <p>The first walk, the search for assignments and the walks of them take their steps from one
      * {@link Steps}, so that counts and choices nested in each other cost no more than a way's
-     * figure together.
+     * figure together. Where the steps ran out in the first walk, the ways it hands on are not
+     * said to be every way.
      *
-     * @param again walks a list of entries as {@code walked} was walked, with the vocabulary it
-     *              is given
+     * @param entries what is on the way
+     * @param walk    walks a list of entries with the vocabulary it is given
      */
-    static <S, R> Walked<OnTheWay, R> expanded(
-            Walked<OnTheWay, R> walked, Vocabulary<OnTheWay, S, R> asked,
-            BiFunction<List<OnTheWay>, Vocabulary<OnTheWay, S, R>, Walked<OnTheWay, R>> again) {
-        if (!(walked instanceof Walked.Open<OnTheWay, R>(var ways, var stoppedBy))
-                || ways.stream().noneMatch(CountedWays::holdsACount)) {
-            return walked;
+    static <S, R> Walked<OnTheWay, R> walkedWithCounts(
+            List<OnTheWay> entries, Vocabulary<OnTheWay, S, R> asked,
+            BiFunction<List<OnTheWay>, Vocabulary<OnTheWay, S, R>, Walked<OnTheWay, R>> walk) {
+        Steps steps = Steps.ofAWay();
+        Walked<OnTheWay, R> first = walk.apply(entries, new Metered<>(asked, steps));
+        if (steps.ranOut() && first instanceof Walked.Open<OnTheWay, R>(var ways, var by)
+                && by == null) {
+            first = new Walked.Open<>(ways, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
         }
-        Expansion<S, R> out = new Expansion<>(asked, again, stoppedBy, Steps.ofAWay());
+        if (!(first instanceof Walked.Open<OnTheWay, R>(var ways, var stoppedBy))
+                || ways.stream().noneMatch(CountedWays::holdsACount)) {
+            return first;
+        }
+        Expansion<S, R> out = new Expansion<>(asked, walk, stoppedBy, steps);
         ways.forEach(out::add);
         return out.result(entriesOf(ways.getFirst()));
     }
@@ -464,6 +496,10 @@ final class CountedWays {
 
         /** The assignment {@code replaced}, walked for the choices inside its statements. */
         private void walkInto(List<OnTheWay> replaced, List<OneOfEach.Choice<OnTheWay>> choices) {
+            if (!steps.takeAWalk()) {
+                stoppedAt(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                return;
+            }
             switch (again.apply(replaced, metered)) {
                 case Walked.Closed<OnTheWay, R>(var _, R closed) -> closedBy(closed);
                 case Walked.Stopped<OnTheWay, R>(CompositionBudget figure) -> stoppedAt(figure);

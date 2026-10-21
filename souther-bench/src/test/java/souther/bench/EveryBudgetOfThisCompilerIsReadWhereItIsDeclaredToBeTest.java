@@ -694,6 +694,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/lang/Object;I)Lsouther/compiler/partition/CountedWays$Found;",
                     "hands on the figure the search ran past, or the one that left assignments"
                             + " unhanded, so that no way is said to be every way past it"),
+            Map.entry("souther.compiler.partition.CountedWays$Steps#<init>(I)V",
+                    "starts the walks an assignment may be walked again in at as many as ways are"
+                            + " looked along, and says when there are none left"),
+            Map.entry("souther.compiler.partition.CountedWays#walkedWithCounts("
+                            + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;"
+                            + "Ljava/util/function/BiFunction;)"
+                            + "Lsouther/compiler/partition/OneOfEach$Walked;",
+                    "says the figure the steps ran out at on the ways the first walk handed on,"
+                            + " so that they are not said to be every way"),
             Map.entry("souther.compiler.partition.CountedWays$Steps#ofAWay()"
                             + "Lsouther/compiler/partition/CountedWays$Steps;",
                     "the steps a whole way's counts take together, which the searches and the walks"

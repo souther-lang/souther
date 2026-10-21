@@ -296,7 +296,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
                 for (int against = 0; against <= each.size(); against++) {
                     Proposition stated = howMany(each, rel, against);
                     Proposition denied = Proposition.compared(relation(each, rel, against), false);
-                    for (int ways = 0; ways < 1 << each.size(); ways++) {
+                    for (int ways = 0; ways < (1 << each.size()); ways++) {
                         Set<String> holding = holdingIn(each, ways);
                         int count = (int) each.stream()
                                 .filter(one -> holds(one, holding)).count();
@@ -319,7 +319,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         Set<String> out = new HashSet<>();
         List<Proposition> once = each.stream().distinct().toList();
         for (int at = 0; at < once.size(); at++) {
-            if ((ways >> at & 1) == 1) {
+            if (((ways >> at) & 1) == 1) {
                 out.add(((Proposition.Truth) once.get(at)).of().toString());
             }
         }

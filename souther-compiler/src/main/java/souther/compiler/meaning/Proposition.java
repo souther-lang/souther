@@ -1064,7 +1064,7 @@ public sealed interface Proposition {
                     }
                 }
             }
-            return some && other ? null : some;
+            return (some && other) ? null : some;
         }
 
         /**

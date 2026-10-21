@@ -288,15 +288,32 @@ class ACountOfStatementsIsJudgedAsACountTest {
                 each, vocabulary, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                 CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
 
-        OneOfEach.Walked<OnTheWay, String> expanded = CountedWays.expanded(
-                walk.apply(entries, counting), counting, walk);
+        OneOfEach.Walked<OnTheWay, String> expanded = CountedWays.walkedWithCounts(entries,
+                counting, walk);
 
         if (!(expanded instanceof OneOfEach.Walked.Open<OnTheWay, String> open)) {
             throw new AssertionError("some ways are open: " + expanded);
         }
         assertTrue(open.stoppedBy() != null, "not every way is said to be looked at");
-        assertTrue(counting.asked <= CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum() + 2000,
+        assertTrue(counting.asked <= CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum(),
                 "asked " + counting.asked + " times");
+    }
+
+    /**
+     * A walk looks at alternatives by a figure of its own, which the steps cannot see; so each
+     * walk of an assignment is charged a way's share of them, and a way is walked again no more
+     * often than ways are looked along.
+     */
+    @Test
+    void aWayIsWalkedAgainNoMoreOftenThanWaysAreLookedAlong() {
+        CountedWays.Steps steps = CountedWays.Steps.ofAWay();
+        int walks = 0;
+        while (steps.takeAWalk()) {
+            walks++;
+        }
+
+        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(), walks);
+        assertTrue(steps.ranOut());
     }
 
     /**
