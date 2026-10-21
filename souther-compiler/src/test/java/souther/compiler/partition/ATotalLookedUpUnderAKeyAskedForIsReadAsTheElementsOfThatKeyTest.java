@@ -15,6 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.BinaryOperator;
 import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
@@ -340,15 +341,50 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
     }
 
     /**
-     * Two keys asked for of one fold are two totals of one container, and a container composed for
-     * several of its totals at once is not written: the second total stands at no point the first
-     * does not already hold, and says it was not composed against, not that no row is there. The
-     * same holds of two totals of different fields of one container, so this is the container's
-     * and not the key's.
+     * What an example says a lookup answers is checked against what the program answers, so the
+     * rows these tests write as examples are held to the answers computed for them: an example
+     * that says nothing is found under a key whose elements come to a hundred is an example that
+     * does not hold, and the compilation says so.
      */
     @Test
-    void severalKeysAskedForOfOneFoldAreSaidNotToBeComposedTogether() {
+    void anExampleThatSaysWhatTheLookupDoesNotAnswerIsRefused() {
+        String examples = """
+
+                example large
+                    | "wrong" : (%s, "A") -> false
+                """.formatted(postings(new Posting("A", 60), new Posting("A", 40)));
+        Compilation compilation = ran(overOneList(ADDING, examples));
+        assertFalse(compilation.errors().isEmpty(),
+                () -> "an example that does not hold is refused: " + report(compilation));
+    }
+
+    /**
+     * What several keys come to is composed together because the elements of each key are the
+     * elements of that key alone. Two totals of different fields of the same elements are not:
+     * one element holds both, and nothing here chooses it for both. They are said to be not
+     * composed together, and not to have no row.
+     */
+    @Test
+    void severalTotalsOfDifferentFieldsOfOneContainerAreSaidNotToBeComposedTogether() {
         Compilation compilation = measured("""
+                module example.ledger
+
+                data Posting = { amount: Int, fee: Int }
+
+                behavior both : (ps: List<Posting>) -> Bool
+
+                let both (ps) =
+                    List.sum(List.map(p -> p.amount, ps)) >= 100
+                            && List.sum(List.map(p -> p.fee, ps)) >= 5
+                """);
+        assertTrue(report(compilation).contains("a condition on another number taken where this"
+                + " row is already being written for one"), () -> report(compilation));
+        assertFalse(report(compilation).contains("no row can stand at the"),
+                () -> "an emptiness no one established is not said: " + report(compilation));
+    }
+
+    private static String twoKeys(String more) {
+        return """
                 module example.ledger
 
                 data Posting = { account: String, amount: Int }
@@ -362,16 +398,44 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                     match Map.get(one, totals(ps)) with
                         | Some a ->
                             match Map.get(other, totals(ps)) with
-                                | Some b -> a >= 100 && b >= 200
+                                | Some b -> a >= 100 && b < 50
                                 | None -> false
                         | None -> false
-                """.formatted(ADDING));
-        assertTrue(report(compilation).contains("a condition on another number taken where this"
-                + " row is already being written for one"), () -> report(compilation));
-        assertTrue(report(compilation).contains("does not make it unreachable"),
-                () -> report(compilation));
-        assertFalse(report(compilation).contains("no row can stand at the ON point"),
-                () -> "an emptiness no one established is not said: " + report(compilation));
+                %s""".formatted(ADDING, more);
+    }
+
+    /**
+     * Two keys asked for of one fold are two totals of one container, and the container is
+     * composed for both at once: the elements of each key are written holding it, the totals of
+     * the two are what each line is drawn on, and a row at the point of one holds the other where
+     * the way to it asks.
+     */
+    @Test
+    void severalKeysAskedForOfOneFoldAreComposedTogether() {
+        Compilation before = measured(twoKeys(""));
+        Pattern row = Pattern.compile(
+                "^(.*), \"((?:[^\"\\\\]|\\\\.)*)\", \"((?:[^\"\\\\]|\\\\.)*)\"$");
+        StringBuilder examples = new StringBuilder("\nexample both\n");
+        int named = 0;
+        for (String each : offeredInputs(before, "both")) {
+            Matcher matched = row.matcher(each);
+            assertTrue(matched.matches(), () -> "an offered row is one this reads back: " + each);
+            String postings = matched.group(1);
+            Row read = new Row(List.of(postingsIn(postings.substring(1, postings.length() - 1))),
+                    matched.group(2));
+            Row other = new Row(read.lists(), matched.group(3));
+            Integer one = read.found(Integer::sum);
+            Integer two = other.found(Integer::sum);
+            examples.append("    | \"offered ").append(named++).append("\" : (").append(each)
+                    .append(") -> ").append(one != null && one >= 100 && two != null && two < 50)
+                    .append("\n");
+        }
+        assertTrue(named > 0, () -> "rows are offered: " + report(before));
+        Compilation after = measured(twoKeys(examples.toString()));
+        assertEquals(List.of(), unmetOf(after),
+                () -> "the rows that were offered meet the lines: " + report(after));
+        assertFalse(report(after).contains("no row takes a decision rule"),
+                () -> "every way through the two lookups is taken: " + report(after));
     }
 
     private static String posting(String amount) {
@@ -638,31 +702,33 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
     }
 
     private static List<String> offeredInputs(Compilation compilation) {
+        return offeredInputs(compilation, "large");
+    }
+
+    private static List<String> offeredInputs(Compilation compilation, String behavior) {
         return Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.ledger"))
-                .rowsByBehavior().getOrDefault("large", List.of()).stream()
+                .rowsByBehavior().getOrDefault(behavior, List.of()).stream()
                 .map(row -> String.join(", ",
                         row.inputs().stream().map(FixtureTemplate::text).toList()))
                 .toList();
     }
 
-    /** The points of the lines drawn that no row is at, by name. */
+    /**
+     * The points of the lines drawn that no row is shown to be at, by name: those unmet, and
+     * those undecided because no row was composed there, which is not the same report and is the
+     * one a line nothing composes a row for comes back in.
+     */
     private static List<String> unmetOf(Compilation compilation) {
         List<String> out = new ArrayList<>();
         unmet(JSON.readTree(json(compilation)), out);
         return out;
     }
 
-    private static final Pattern POINT = Pattern.compile("^(ON|OFF|IN|OUT) point of ");
-
     private static void unmet(JsonNode node, List<String> out) {
-        if (node.isObject() && node.has("findings")) {
-            node.path("findings").forEach(finding -> {
-                Matcher point = POINT.matcher(finding.path("subject").asString());
-                if (point.find()) {
-                    out.add(point.group(1));
-                }
-            });
+        if (node.isObject() && node.has("point") && node.has("disposition")
+                && !node.path("disposition").asString().equals("met")) {
+            out.add(node.path("point").asString().toUpperCase(Locale.ROOT));
         }
         node.forEach(child -> unmet(child, out));
     }
@@ -677,6 +743,9 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** The source measured, which is a source that compiles and whose examples hold: an example
+     *  that says what the program does not answer is an error of the compilation
+     *  ({@link #anExampleThatSaysWhatTheLookupDoesNotAnswerIsRefused}). */
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

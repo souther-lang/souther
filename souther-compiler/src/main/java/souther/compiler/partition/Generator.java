@@ -6086,6 +6086,76 @@ public final class Generator {
     }
 
     /**
+     * The values the inputs hold that the targets are asked for — the key a count of elements, or
+     * a total of them, is of — placed before the elements are composed: they are composed holding
+     * them, and each is another input's.
+     *
+     * <p>The key of a fold asked for twice is two keys, and held at one value they would be one,
+     * whose elements come to the one number asked of both: so the later is held away from the
+     * earlier. A key that is what each element adds is chosen where the number is.
+     *
+     * @param keysPlaced the keys placed so far, by the target they are the key of, which this adds
+     *                   to
+     * @return the region with what was placed given to it
+     */
+    private static SearchRegion placeKeysAskedFor(
+            Collection<Map.Entry<RealizationTarget, Place>> targets, SearchRegion region,
+            MeasuredInput subject, Map<RealizationTarget, Place> out,
+            Map<NumericTerm, RealizationTarget> routed, Set<RealizationTarget> chosen,
+            List<ReachabilityGap> gaps, Map<RealizationTarget, Place> keysPlaced,
+            WitnessSearch looking, Reachability.Reaching reaching) {
+        SearchRegion here = region;
+        for (Map.Entry<RealizationTarget, Place> each : targets) {
+            TermPath keyAsked = each.getKey().keyAskedFor();
+            if (keyAsked == null) {
+                continue;
+            }
+            NumericTerm.FromOnePosition key = new NumericTerm.ValueOf(keyAsked);
+            if (out.containsKey(RealizationTarget.of(key))) {
+                continue;
+            }
+            for (Map.Entry<RealizationTarget, Place> earlier : keysPlaced.entrySet()) {
+                if (each.getKey().keyIsToldApartFrom(earlier.getKey())) {
+                    here = here.apartFrom(key, earlier.getValue());
+                }
+            }
+            Function<NumericTerm, Carrier> on = term -> {
+                TermOrders orders = subject.quantities().ordersOf(term);
+                return orders == null ? null : orders.observed();
+            };
+            if (each.getKey().keyIsTheNumber()) {
+                here = here.given(key, each.getValue());
+            }
+            switch (NumericWitness.of(here, List.of(key), on, looking)) {
+                case NumericWitness.Standing.Found beside -> {
+                    for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
+                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                        if (out.putIfAbsent(at, placed.place()) == null) {
+                            routed.put(placed.term(), at);
+                            chosen.add(at);
+                            here = here.given(placed.term(), placed.place());
+                        }
+                        if (placed.term().equals(key)) {
+                            keysPlaced.put(each.getKey(), placed.place());
+                        }
+                    }
+                }
+                // Said against a condition on the way where there is one; a row held to none is
+                // composed with the key at no one value, which the composing says.
+                case NumericWitness.Standing.ProvedImpossible _ ->
+                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
+                                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                        new ReachabilityGap.Why.NoValueComposedForItsPositions())));
+                case NumericWitness.Standing.NotFound(CompositionShortfall met) ->
+                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
+                                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                        ReachabilityGap.Why.ofAWalkThatFoundNothing(met))));
+            }
+        }
+        return here;
+    }
+
+    /**
      * The item's positions, and a place inside the region for each position the way to it bounds.
      *
      * <p><b>Chosen and not left to the range.</b> What the conditions above a line leave a position
@@ -6164,47 +6234,9 @@ public final class Generator {
         Requirements assumed = onTheWay;
         // The value a number of how often it occurs is counted for, placed before the occurrences
         // are composed: they are composed holding it, and it is another input's.
-        for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
-            TermPath keyAsked = each.getKey().keyAskedFor();
-            if (keyAsked == null) {
-                continue;
-            }
-            NumericTerm.FromOnePosition key = new NumericTerm.ValueOf(keyAsked);
-            if (out.containsKey(RealizationTarget.of(key))) {
-                continue;
-            }
-            Function<NumericTerm, Carrier> on = term -> {
-                TermOrders orders = subject.quantities().ordersOf(term);
-                return orders == null ? null : orders.observed();
-            };
-            // The key that is what each element adds is the number, so it is chosen where the
-            // number is: the elements of the key then come to it with one of them.
-            if (each.getKey().keyIsTheNumber()) {
-                here = here.given(key, each.getValue());
-            }
-            switch (NumericWitness.of(here, List.of(key), on, looking)) {
-                case NumericWitness.Standing.Found beside -> {
-                    for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
-                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
-                        if (out.putIfAbsent(at, placed.place()) == null) {
-                            routed.put(placed.term(), at);
-                            chosen.add(at);
-                            here = here.given(placed.term(), placed.place());
-                        }
-                    }
-                }
-                // Said against a condition on the way where there is one; a row held to none is
-                // composed with the key at no one value, which the composing says.
-                case NumericWitness.Standing.ProvedImpossible _ ->
-                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
-                                gaps.add(new ReachabilityGap.Uncomposed(cut,
-                                        new ReachabilityGap.Why.NoValueComposedForItsPositions())));
-                case NumericWitness.Standing.NotFound(CompositionShortfall met) ->
-                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
-                                gaps.add(new ReachabilityGap.Uncomposed(cut,
-                                        ReachabilityGap.Why.ofAWalkThatFoundNothing(met))));
-            }
-        }
+        Map<RealizationTarget, Place> keysPlaced = new LinkedHashMap<>();
+        here = placeKeysAskedFor(fixing.entrySet(), here, subject, out, routed, chosen, gaps,
+                keysPlaced, looking, reaching);
         // The count the item itself asks for, which is the one count its level is — by which
         // count it is, so a condition on the way asking for the same count asks it of this one.
         Map<CountedElements.Identity, RealizationTarget.ACount> itemCounts = new LinkedHashMap<>();
@@ -6333,6 +6365,10 @@ public final class Generator {
                 countsAsked.put(target, NumbersAskedFor.of(left));
             }
         });
+        // And the values the counts a condition asks for are counts of, which the container is
+        // composed holding as it is for the item's own.
+        here = placeKeysAskedFor(countsToCome.entrySet(), here, subject, out, routed, chosen, gaps,
+                keysPlaced, looking, reaching);
         // How a value is composed where a cut's numbers stand, asked as the row is composed: in the
         // way's region, for what each number is one of with the cut's own numbers routed beside the
         // ones already standing, under the bounds on the elements.
@@ -7220,8 +7256,8 @@ public final class Generator {
             // the one it took.
             List<ComposedAt> composedWith = new ArrayList<>();
             NumericWitness.Standing found = NumericWitness.of(
-                    here.given(remaindersStanding(alreadyStanding)), numbers,
-                    term -> carrierOf(term, subject.quantities()), looking,
+                    keysApart(here.given(remaindersStanding(alreadyStanding)), owing.keySet()),
+                    numbers, term -> carrierOf(term, subject.quantities()), looking,
                     assignment -> {
                         composedWith.clear();
                         return composer.composes(alreadyStanding, some, asked, owing,
@@ -7253,6 +7289,30 @@ public final class Generator {
                         new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
                                 ReachabilityGap.Why.ofAWalkThatFoundNothing(met)));
             };
+        }
+
+        /**
+         * {@code region} with the key of each target owed held away from the keys of the same
+         * fold already standing: the key of a fold asked for twice is two keys, and held at one
+         * value they would be one, whose elements come to the one number asked of both.
+         */
+        private SearchRegion keysApart(SearchRegion region, Collection<RealizationTarget> owing) {
+            SearchRegion apart = region;
+            for (RealizationTarget owed : owing) {
+                TermPath asked = owed.keyAskedFor();
+                if (asked == null) {
+                    continue;
+                }
+                for (RealizationTarget earlier : alreadyStanding.keySet()) {
+                    TermPath earlierAsked = earlier.keyAskedFor();
+                    Place earlierAt = earlierAsked == null ? null : alreadyStanding.get(
+                            RealizationTarget.of(new NumericTerm.ValueOf(earlierAsked)));
+                    if (earlierAt != null && owed.keyIsToldApartFrom(earlier)) {
+                        apart = apart.apartFrom(new NumericTerm.ValueOf(asked), earlierAt);
+                    }
+                }
+            }
+            return apart;
         }
 
         /** {@code standing} with nothing a condition chose. */

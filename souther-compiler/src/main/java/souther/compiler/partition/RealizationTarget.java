@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 
 import java.util.Optional;
@@ -53,8 +54,8 @@ public sealed interface RealizationTarget {
 
     /**
      * Where the value this target is for stands, where it is for a value an input holds that is
-     * not the target's own to write — the key a count or a total is asked for — and null where
-     * it is not.
+     * not the target's own to write — the key a count of elements, or a total of them, is asked
+     * for — and null where it is not.
      *
      * <p>Another parameter's, and fixed with the rest of the row before the container is
      * composed holding it.
@@ -70,6 +71,36 @@ public sealed interface RealizationTarget {
     default boolean keyIsTheNumber() {
         return false;
     }
+
+    /**
+     * Whether the key of this target is placed at another value than the key of {@code other}.
+     *
+     * <p>Two keys told apart by the same way from an element to its key are two keys of one
+     * fold, and the row that has them apart is the one whose elements of each come to a number
+     * of their own: held at one value they are one key, whose elements come to one number
+     * between them.
+     */
+    default boolean keyIsToldApartFrom(RealizationTarget other) {
+        AskedKey mine = askedKey();
+        AskedKey theirs = other.askedKey();
+        return mine != null && theirs != null && mine.elements().equals(theirs.elements())
+                && mine.keyAt().equals(theirs.keyAt()) && !mine.asked().equals(theirs.asked());
+    }
+
+    /**
+     * The key of the elements this target is asked about, and the input whose value it is —
+     * null where the target is about no such key.
+     *
+     * @param elements where the elements stand
+     * @param keyAt    the field of an element that is its key
+     * @param asked    the input whose value the key is asked for
+     */
+    default AskedKey askedKey() {
+        return null;
+    }
+
+    /** The key a target asks about ({@link #askedKey}). */
+    record AskedKey(TermPath elements, TermPath keyAt, TermPath asked) {}
 
     /**
      * The target of a number, which every number has.
@@ -344,6 +375,12 @@ public sealed interface RealizationTarget {
         }
 
         @Override
+        public AskedKey askedKey() {
+            return new AskedKey(term.gathered().elements(),
+                    term.gathered().key().from(term.gathered().elements()), term.asked());
+        }
+
+        @Override
         public String toString() {
             return term.toString();
         }
@@ -373,6 +410,28 @@ public sealed interface RealizationTarget {
         @Override
         public TermPath writeRoot() {
             return count.container().element().outermostContainer();
+        }
+
+        /** The key the elements counted have, where they are counted for having the value an
+         *  input holds for the field that is their key. */
+        @Override
+        public AskedKey askedKey() {
+            if (!(count.meeting() instanceof Proposition.SameValue(DecisionSubject one,
+                    DecisionSubject other, boolean holds, var _)) || !holds
+                    || !(one instanceof DecisionSubject.AnInput(TermPath oneAt))
+                    || !(other instanceof DecisionSubject.AnInput(TermPath otherAt))
+                    || oneAt.insideAContainer() == otherAt.insideAContainer()) {
+                return null;
+            }
+            TermPath inside = oneAt.insideAContainer() ? oneAt : otherAt;
+            return new AskedKey(count.container().element(), inside,
+                    inside == oneAt ? otherAt : oneAt);
+        }
+
+        @Override
+        public TermPath keyAskedFor() {
+            AskedKey key = askedKey();
+            return key == null ? null : key.asked();
         }
 
         @Override
