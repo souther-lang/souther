@@ -26,8 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>What makes the first one unprovable is the field beside the one the line is on. A row at the
  * line has to be a whole record, the name that record carries is admitted by a pattern rather than
- * by a range, and the projection has no value of it to offer; the decoder does, because it builds
- * one and runs it.
+ * by a range, and a rule of the record no range states names it beside the count — so the
+ * projection has no value of it to offer beside a count at the line; the decoder does, because it
+ * builds one and runs it. A name nothing ties to the count would not do: the pattern's language is
+ * read whole and holds a value, and a rule about the name alone refuses nothing at the count's
+ * line.
  *
  * <p>Read at the reading rather than through a report. What a person is finally offered goes through
  * a composition and a settlement afterwards, and either of those can drop a row for reasons of its
@@ -46,6 +49,7 @@ class WhatOnlyAComposedValueShowsIsUnknownWhereNothingComposedOneTest {
                 invariant value >= 1
 
             data Rec = { name: Name, count: Count }
+                invariant String.matches("[A-Z]{1,4}", name.value) || count.value >= 100
 
             data Ok
 

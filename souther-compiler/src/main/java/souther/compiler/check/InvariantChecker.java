@@ -35,9 +35,12 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.TextExtent;
 import souther.compiler.values.ValueSet;
+import java.math.BigInteger;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -2148,6 +2151,10 @@ public final class InvariantChecker {
      *                  rule's questions would name the positions of the conjunct written beside it
      *                  as well. Per place and not per part, because one part states as many rules
      *                  as its author wrote into it and each of them raises its own questions
+     * @param naming    which parts of the clauses name each place, as the walk met them. What a
+     *                  rule can refuse is a value of the places it names, so this is where a rule
+     *                  the bounds do not state is shown to leave a position alone
+     *                  ({@link FieldDomains#projectionAt})
      */
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
                    List<FieldDomains.WithoutAnEnd> withoutAnEnd,
@@ -2155,7 +2162,8 @@ public final class InvariantChecker {
                    Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef.Invariant, Required> raised,
                    Map<ReadingPlace, Required> raisedByPart,
-                   Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing) {}
+                   Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing,
+                   Map<RuleKey, Set<PartReading>> naming) {}
 
     /**
      * The numbers the clauses of one value can be about, each under the name they write for it.
@@ -2221,7 +2229,7 @@ public final class InvariantChecker {
         private final List<Written> stated;
         private final Denotations at;
         private final Coordinates byName;
-        private Map<RuleKey, Set<PartId<RuleRef.Invariant>>> named;
+        private Map<RuleKey, Set<PartReading>> named;
 
         PartsNaming(List<Written> stated, Denotations at, Coordinates byName) {
             this.stated = stated;
@@ -2234,9 +2242,9 @@ public final class InvariantChecker {
          *  having met the place and not on its having met nothing there. */
         boolean onlyNamedBy(RuleKey path, PartId<RuleRef.Invariant> part) {
             boolean seen = false;
-            for (Map.Entry<RuleKey, Set<PartId<RuleRef.Invariant>>> each : named().entrySet()) {
+            for (Map.Entry<RuleKey, Set<PartReading>> each : named().entrySet()) {
                 if (each.getKey().isAtOrUnder(path) || path.isAtOrUnder(each.getKey())) {
-                    if (!each.getValue().equals(Set.of(part))) {
+                    if (!each.getValue().stream().allMatch(read -> read.part().equals(part))) {
                         return false;
                     }
                     seen = true;
@@ -2245,7 +2253,56 @@ public final class InvariantChecker {
             return seen;
         }
 
-        private Map<RuleKey, Set<PartId<RuleRef.Invariant>>> named() {
+        /**
+         * Whether the parts other than {@code part} tie {@code one} to {@code other}: one of them
+         * names a place at, under or over each, or names a place at one of them beside a place
+         * another such part ties to the other.
+         *
+         * <p>Two places no chain of such parts joins take what the rest leave each of them
+         * whatever the other takes, so what the rest leave the two together is every pair of what
+         * they leave each. Under {@code low <= mid && mid <= high}, the first part leaves
+         * {@code mid} tied to {@code high} by the second and {@code low} tied to nothing.
+         */
+        boolean tiedWithout(PartId<RuleRef.Invariant> part, RuleKey one, RuleKey other) {
+            Map<PartReading, Set<RuleKey>> placesOf = new LinkedHashMap<>();
+            named().forEach((place, reads) -> reads.forEach(read ->
+                    placesOf.computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(place)));
+            Set<RuleKey> reached = new LinkedHashSet<>(List.of(one));
+            Deque<RuleKey> todo = new ArrayDeque<>(reached);
+            Set<PartReading> crossed = new HashSet<>();
+            while (!todo.isEmpty()) {
+                RuleKey at = todo.pop();
+                if (near(at, other)) {
+                    return true;
+                }
+                for (Map.Entry<RuleKey, Set<PartReading>> each : named().entrySet()) {
+                    if (!near(each.getKey(), at)) {
+                        continue;
+                    }
+                    for (PartReading read : each.getValue()) {
+                        if (!read.part().equals(part) && crossed.add(read)) {
+                            placesOf.get(read).stream().filter(reached::add).forEach(todo::add);
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static boolean near(RuleKey one, RuleKey other) {
+            return one.isAtOrUnder(other) || other.isAtOrUnder(one);
+        }
+
+        /** Every place a part names, with the readings of parts naming it, in the order the walk
+         *  met them. */
+        Map<RuleKey, Set<PartReading>> byPlace() {
+            Map<RuleKey, Set<PartReading>> out = new LinkedHashMap<>();
+            named().forEach((place, parts) -> out.put(place, Collections.unmodifiableSet(
+                    new LinkedHashSet<>(parts))));
+            return Collections.unmodifiableMap(out);
+        }
+
+        private Map<RuleKey, Set<PartReading>> named() {
             if (named == null) {
                 named = new LinkedHashMap<>();
                 stated.forEach(each -> each.parts().forEach(part ->
@@ -2254,13 +2311,22 @@ public final class InvariantChecker {
                                     inside(reached.crossed(), at), byName,
                                     Arrivals.inTheTree(each.clause()))) {
                                 named.computeIfAbsent(one.path(), _ -> new LinkedHashSet<>())
-                                        .add(part.id());
+                                        .add(new PartReading(each.opened(), part.id()));
                             }
                         })));
             }
             return named;
         }
     }
+
+    /**
+     * One part of a clause as one reading of it met it.
+     *
+     * <p>A rule is read once per place the walk opens a value at, and what one reading of a part
+     * names is that reading's: a newtype's rule read at two fields names each of them, and does
+     * not relate the two.
+     */
+    record PartReading(ReadingId reading, PartId<RuleRef.Invariant> part) {}
 
     /**
      * Which of the clauses in {@code stated} place an edge, and what each of them raises.
@@ -2318,7 +2384,8 @@ public final class InvariantChecker {
                         Map.Entry::getKey, each -> List.copyOf(each.getValue()))),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
-                Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
+                Collections.unmodifiableMap(new LinkedHashMap<>(standing)),
+                partsNaming.byPlace());
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
@@ -3447,8 +3514,12 @@ public final class InvariantChecker {
      * <p>A place another part names takes what the rest of the rules leave it, this part left
      * out: under {@code b >= c && a >= b}, what {@code a >= b} asks of {@code b} is what
      * {@code b >= c} leaves it, and {@code c} free leaves it every value. The rest may hold it
-     * beside the places they name, so that is taken only where every other place of the form is
-     * one no part but this one names, which nothing of the rest ties to anything.
+     * beside the places they name, so that is taken only where no chain of the rest ties it to
+     * another place of the form ({@link PartsNaming#tiedWithout}): an amount held at nought or
+     * more beside another, or the middle of {@code low <= mid && mid <= high} as the first part
+     * asks of it. What the rest leave it is then also every value it may
+     * take, and a place some values of which the clause holds at whatever the others are is one it
+     * refuses no value of ({@link #refusesNoValueOf}).
      *
      * @param leftWithoutIt the run every value of which the rules other than this part leave the
      *                      value at a place, or null where none is shown
@@ -3465,8 +3536,8 @@ public final class InvariantChecker {
                 return Set.of();
             }
             Coordinate at = each.getKey();
-            alone.add(at.at().of() instanceof NumberAt.OfWhatNumber.OfItsOwnValue
-                    && partsNaming.onlyNamedBy(at.path(), part));
+            boolean itsOwn = at.at().of() instanceof NumberAt.OfWhatNumber.OfItsOwnValue;
+            alone.add(itsOwn && partsNaming.onlyNamedBy(at.path(), part));
         }
         List<WhatARelationLeavesUndivided.Term<RuleKey>> terms = new ArrayList<>();
         // The same terms, each taking the values of its carrier, for how far apart two of them are.
@@ -3479,28 +3550,30 @@ public final class InvariantChecker {
             // Every value of the place, ending where its order ends at a value a model holds.
             NumericDomain.Bounds values = at.carrier() == null ? NumericDomain.Bounds.OPEN
                     : at.carrier().asARelationReadsIt();
-            // What the rest leave a place another part names, taken only where every other place
-            // is alone: the rest tie it to nothing here then, and otherwise it may be tied to one.
-            // And only on an order with no end a model holds, which would cut the run afterwards
-            // (Carrier#leavesARelatedRunWhole).
+            NumericDomain.Bounds stops = at.carrier() == null ? null : at.carrier().whereItStops();
+            // What the rest leave a place another part names, taken only where the rest tie it to
+            // no other place of the form, each of which is the value at its place: otherwise it may
+            // be held beside one of them. And only on an order with no end a model holds, which
+            // would cut the run afterwards (Carrier#leavesARelatedRunWhole).
             NumericDomain.Bounds left = null;
-            if (!every && itsPlace && othersAreAlone(alone, i) && at.carrier() != null
-                    && at.carrier().leavesARelatedRunWhole()) {
+            if (!every && itsPlace && apartFromTheOthers(weighed, i, part, partsNaming)
+                    && at.carrier() != null && at.carrier().leavesARelatedRunWhole()) {
                 NumericDomain.Bounds run = leftWithoutIt.apply(at.path());
                 left = run == null ? null : run.meet(values);
             }
+            // Where the rest leave it a run, that is every value it may take: the rest hold too.
             terms.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), weight,
-                    values, every ? values : left, null, itsPlace,
-                    at.carrier() == null ? null : at.carrier().spacingBetweenValues()));
+                    left != null ? left : values, every ? values : left, null, itsPlace,
+                    at.carrier() == null ? null : at.carrier().spacingBetweenValues(), stops));
             apart.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), weight,
                     values, every ? values : null, every ? at.carrier() : null, itsPlace,
-                    at.carrier() == null ? null : at.carrier().spacingBetweenValues()));
+                    at.carrier() == null ? null : at.carrier().spacingBetweenValues(), stops));
         }
         // Where the type the places take stops: read only where the two take the same values, so
         // the first place's is the other's.
         Carrier first = over.weights().keySet().iterator().next().carrier();
         NumericDomain.Bounds extent = first == null ? NumericDomain.Bounds.OPEN
-                : new NumericDomain.Bounds(first.extent().low(), first.extent().high());
+                : first.whereItStops();
         Rel relation = over.comparison().claim().statedRelation();
         BiPredicate<RuleKey, RuleKey> overlap =
                 (one, other) -> one.isAtOrUnder(other) || other.isAtOrUnder(one);
@@ -3511,14 +3584,57 @@ public final class InvariantChecker {
         out.addAll(WhatARelationLeavesUndivided.ofTheirDifference(apart, over.constant(), relation,
                 List.of(), new WhatARelationLeavesUndivided.WhereTheRepresentationStops(extent),
                 overlap));
+        for (int i = 0; i < terms.size(); i++) {
+            Carrier carrier = weighed.get(i).getKey().carrier();
+            if (!out.containsAll(terms.get(i).madeOf()) && carrier != null
+                    && refusesNoValueOf(terms, i, over.constant(), relation, overlap,
+                            carrier.greatestWholeNumber())) {
+                out.addAll(terms.get(i).madeOf());
+            }
+        }
         return out;
     }
 
-    /** Whether every place of {@code alone} but the one at {@code at} is named by no part but the
-     *  one asked of. */
-    private static boolean othersAreAlone(List<Boolean> alone, int at) {
-        for (int i = 0; i < alone.size(); i++) {
-            if (i != at && !alone.get(i)) {
+    /**
+     * Whether a clause held as an invariant holds, at every value the term at {@code at} may take,
+     * at some row the rest leave: some runs of its values hold the relation whatever the others
+     * are, and the values between leave it either way ({@link WhatARelationLeavesUndivided.Leaves}).
+     *
+     * <p>A run a clause comes out true at is one it refuses no row of, so a value there is held to
+     * nothing by this clause. Under {@code total <= subtotal} with both at nought or more, a total of
+     * nought is below every subtotal; every other total has a subtotal on each side. What an
+     * invariant refuses is no class of the place, so the line a body's comparison would draw at
+     * nought is none here. A run the clause fails at is a value no row takes, which the rule
+     * narrows the place to without stating an end, and nothing is shown.
+     *
+     * <p>Only where every other term is shown to take some run of values: a run holding the
+     * relation whatever the others are needs the others to be something.
+     */
+    private static boolean refusesNoValueOf(List<WhatARelationLeavesUndivided.Term<RuleKey>> terms,
+                                            int at, ExactRatio constant, Rel relation,
+                                            BiPredicate<RuleKey, RuleKey> overlap,
+                                            BigInteger greatest) {
+        for (int i = 0; i < terms.size(); i++) {
+            if (i != at && terms.get(i).realizes() == null) {
+                return false;
+            }
+        }
+        return WhatARelationLeavesUndivided.leavesOf(terms, at, constant, relation, overlap,
+                (one, other) -> true, terms.get(at).spacing(), greatest)
+                instanceof WhatARelationLeavesUndivided.Leaves.Settled settled
+                && settled.runs().stream().allMatch(WhatARelationLeavesUndivided.SettledRun::holds);
+    }
+
+    /** Whether every place of {@code weighed} but the one at {@code at} is the value at its place,
+     *  and the parts other than {@code part} tie none of them to the one at {@code at}. */
+    private static boolean apartFromTheOthers(List<Map.Entry<Coordinate, ExactRatio>> weighed,
+                                              int at, PartId<RuleRef.Invariant> part,
+                                              PartsNaming partsNaming) {
+        RuleKey here = weighed.get(at).getKey().path();
+        for (int i = 0; i < weighed.size(); i++) {
+            Coordinate other = weighed.get(i).getKey();
+            if (i != at && (!(other.at().of() instanceof NumberAt.OfWhatNumber.OfItsOwnValue)
+                    || partsNaming.tiedWithout(part, here, other.path()))) {
                 return false;
             }
         }

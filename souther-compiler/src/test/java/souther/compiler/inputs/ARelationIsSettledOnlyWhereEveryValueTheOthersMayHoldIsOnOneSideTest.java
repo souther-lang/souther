@@ -44,13 +44,16 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                                                                  NumericDomain.Bounds holds,
                                                                  NumericDomain.Bounds realizes) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
-                realizes, null, true, Granularity.DISCRETE);
+                realizes, null, true, Granularity.DISCRETE, INTS);
     }
+
+    /** Where an {@code Int} stops. */
+    private static final NumericDomain.Bounds INTS = run(Long.MIN_VALUE, Long.MAX_VALUE);
 
     private static WhatARelationLeavesUndivided.Term<String> denseTerm(
             String place, long weight, NumericDomain.Bounds holds, NumericDomain.Bounds realizes) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight),
-                holds, realizes, null, true, Granularity.DENSE);
+                holds, realizes, null, true, Granularity.DENSE, NumericDomain.Bounds.OPEN);
     }
 
     private static Leaves leavesOf(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
@@ -141,19 +144,23 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
-     * {@code a < b + c} over decimals is not read from the others together: a decimal sum or
+     * {@code a <= b + c} over decimals is not read from the others together: a decimal sum or
      * product stops for the scale of its factors and not only for the size of the number, so the
-     * ends of the others are no witness whatever their size. With {@code c} and {@code d} between
-     * minus and plus the least decimal there is, every product with a written {@code 1.0} stops,
-     * and the two rows the others' ends give are rows nothing computes.
+     * ends of the others are no witness whatever their size. With {@code a} from one to nine and
+     * the others to five each, only the two of them together come past every {@code a}, and that
+     * is not asked. With {@code c} and {@code d} between minus and plus the least decimal there
+     * is, every product with a written {@code 1.0} stops, and the two rows the others' ends give
+     * are rows nothing computes. {@code b} and {@code d} held at nought, though, leave {@code a}
+     * and {@code c} held against each other alone, which the reading of two terms answers as it
+     * answers them without the rest.
      */
     @Test
     void decimalsAreNotReadTogetherForTheirArithmeticStopsForMoreThanTheirSize() {
-        var a = denseTerm("a", 1, run(0L, 10L), run(0L, 10L));
+        var a = denseTerm("a", 1, run(1L, 9L), run(1L, 9L));
         var b = denseTerm("b", -1, run(0L, 5L), run(0L, 5L));
         var c = denseTerm("c", -1, run(0L, 5L), run(0L, 5L));
         assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(a, b, c), 0, ExactRatio.of(0),
-                Rel.LT, String::equals, (one, other) -> true, Granularity.DENSE, null));
+                Rel.LE, String::equals, (one, other) -> true, Granularity.DENSE, null));
 
         NumericDomain.Bounds tiny = new NumericDomain.Bounds(
                 Endpoint.inclusive(new Count(new BigDecimal(BigInteger.ONE.negate(),
@@ -163,9 +170,12 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         var beside = denseTerm("b", -1, run(0L, 0L), run(0L, 0L));
         var plus = denseTerm("c", -1, tiny, tiny);
         var more = denseTerm("d", -1, tiny, tiny);
-        assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(nought, beside, plus, more), 0,
-                ExactRatio.of(0), Rel.LT, String::equals, (one, other) -> true,
-                Granularity.DENSE, null));
+        assertEquals(new Leaves.Undivided(), WhatARelationLeavesUndivided.leavesOf(
+                List.of(nought, beside, plus, more), 0, ExactRatio.of(0), Rel.LT, String::equals,
+                (one, other) -> true, Granularity.DENSE, null));
+        assertEquals(new Leaves.Undivided(), WhatARelationLeavesUndivided.leavesOf(
+                List.of(nought, plus), 0, ExactRatio.of(0), Rel.LT, String::equals,
+                (one, other) -> true, Granularity.DENSE, null));
     }
 
     /**
@@ -192,7 +202,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 Endpoint.inclusive(Count.of(new BigDecimal(BigInteger.ONE, -Integer.MAX_VALUE))));
         var a = term("a", 1, run(1L, 12L), run(1L, 12L));
         var b = new WhatARelationLeavesUndivided.Term<>(List.of("b"), weight, far, far, null,
-                true, Granularity.DENSE);
+                true, Granularity.DENSE, NumericDomain.Bounds.OPEN);
         var c = term("c", -1, run(1L, 12L), run(1L, 12L));
         assertNull(leavesOf(List.of(a, b, c), 0, 0, Rel.LT));
     }

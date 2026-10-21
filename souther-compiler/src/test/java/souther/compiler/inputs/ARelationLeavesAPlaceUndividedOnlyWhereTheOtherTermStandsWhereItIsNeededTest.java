@@ -31,12 +31,26 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 Endpoint.inclusive(Count.of(high)));
     }
 
+    /** Where the order every term here is counted on stops, unless a case says otherwise: an
+     *  {@code Int}'s. */
+    private static final NumericDomain.Bounds INTS = run(Long.MIN_VALUE, Long.MAX_VALUE);
+
+    /** Where a date's order stops, as days. */
+    private static final NumericDomain.Bounds DAYS =
+            run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay());
+
     private static WhatARelationLeavesUndivided.Term<String> term(String place, long weight,
                                                                  NumericDomain.Bounds holds,
                                                                  NumericDomain.Bounds realizes,
                                                                  Object takes, boolean itsPlace) {
+        return runningTo(INTS, place, weight, holds, realizes, takes, itsPlace);
+    }
+
+    private static WhatARelationLeavesUndivided.Term<String> runningTo(
+            NumericDomain.Bounds stops, String place, long weight, NumericDomain.Bounds holds,
+            NumericDomain.Bounds realizes, Object takes, boolean itsPlace) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
-                realizes, takes, itsPlace, Granularity.DISCRETE);
+                realizes, takes, itsPlace, Granularity.DISCRETE, stops);
     }
 
     private static Set<String> undivided(List<WhatARelationLeavesUndivided.Term<String>> terms,
@@ -112,6 +126,91 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
         }
     }
 
+    /**
+     * {@code d < n}, a day count against an {@code Int}: each stands at the other's value, and
+     * every day has an {@code Int} on each side, but an {@code Int} past the last day has no day
+     * above it. So {@code n} is reached only by a term that runs on as far as an {@code Int}.
+     */
+    @Test
+    void aTermStandingAtTheOthersValueReachesItOnlyAsFarAsItsOwnOrderRuns() {
+        for (NumericDomain.Bounds dayStops : List.of(DAYS, INTS)) {
+            Set<String> left = undivided(List.of(
+                            runningTo(dayStops, "d", 1, NumericDomain.Bounds.OPEN,
+                                    NumericDomain.Bounds.OPEN, null, true),
+                            term("n", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN,
+                                    null, true)),
+                    ExactRatio.ZERO, Rel.LT);
+            assertEquals(dayStops == DAYS ? Set.of("d") : Set.of("d", "n"), left,
+                    "the day stopping at " + dayStops);
+        }
+    }
+
+    /** {@code d - r + w >= 0}, two dates and an {@code Int} taking {@code w}, each the value at its
+     *  place and every value of its type. */
+    private static List<WhatARelationLeavesUndivided.Term<String>> aWindow(NumericDomain.Bounds w) {
+        return List.of(
+                runningTo(DAYS, "d", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN,
+                        A_DATE, true),
+                runningTo(DAYS, "r", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN,
+                        A_DATE, true),
+                term("w", 1, NumericDomain.Bounds.OPEN, w, null, true));
+    }
+
+    /**
+     * {@code d - r + w >= 0}: with {@code w} held at nought the two dates are held against each
+     * other alone, and each reaches every value of the other. {@code w} is reached by neither:
+     * past the farthest two dates are apart, a count of days settles it. Held still, {@code w} has
+     * to be shown to take nought, and a {@code w} shown to take nothing holds the dates at nothing.
+     */
+    @Test
+    void aThirdTermHeldStillLeavesTwoTermsHeldAgainstEachOther() {
+        assertEquals(Set.of("d", "r"),
+                undivided(aWindow(NumericDomain.Bounds.OPEN), ExactRatio.ZERO, Rel.GE));
+        assertEquals(Set.of(), undivided(aWindow(run(1, 0)), ExactRatio.ZERO, Rel.GE));
+    }
+
+    /** The same, with {@code w} tied to {@code d}: holding it still may hold {@code d} too. */
+    @Test
+    void aThirdTermTiedToOneOfThemIsNotHeldStill() {
+        Set<String> left = WhatARelationLeavesUndivided.of(aWindow(NumericDomain.Bounds.OPEN),
+                ExactRatio.ZERO, Rel.GE, String::equals,
+                (one, other) -> !Set.of(one, other).equals(Set.of(0, 2)));
+        assertEquals(Set.of(), left);
+    }
+
+    private static WhatARelationLeavesUndivided.Term<String> decimal(
+            String place, long weight, NumericDomain.Bounds realizes,
+            NumericDomain.Bounds stops) {
+        NumericDomain.Bounds atNoughtOrMore =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), null);
+        return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight),
+                atNoughtOrMore, realizes, null, true, Granularity.DENSE, stops);
+    }
+
+    /**
+     * {@code n + t - g + s <= 0}, each at nought or more and {@code s} shown to take nothing. A
+     * {@code g} far enough up holds it wherever the rest stand and a {@code t} far enough up fails
+     * it, since a decimal runs on without end, so {@code n}, {@code t} and {@code s} are each left
+     * either way. {@code g} is not: nothing shown to run on takes the sum up past it while
+     * {@code s} may stand anywhere. With {@code t} counted on an {@code Int}'s order, it runs out,
+     * and nothing takes the sum up past an {@code n} beyond the greatest {@code Int}; {@code t}
+     * itself is still taken past by {@code n}.
+     */
+    @Test
+    void aDecimalRunningOnWithoutEndReachesEitherSideOfAnyValue() {
+        NumericDomain.Bounds upward = new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), null);
+        for (NumericDomain.Bounds tStops : List.of(NumericDomain.Bounds.OPEN, INTS)) {
+            Set<String> left = undivided(List.of(
+                            decimal("n", 1, upward, NumericDomain.Bounds.OPEN),
+                            decimal("t", 1, upward, tStops),
+                            decimal("g", -1, upward, NumericDomain.Bounds.OPEN),
+                            decimal("s", 1, null, NumericDomain.Bounds.OPEN)),
+                    ExactRatio.ZERO, Rel.LE);
+            assertEquals(tStops == INTS ? Set.of("t", "s") : Set.of("n", "t", "s"), left,
+                    "t stopping at " + tStops);
+        }
+    }
+
     /** Two values at their places, weighed {@code first} and {@code second}, the first a date and
      *  the second taking {@code takes}, each every value of what it takes. */
     private static List<WhatARelationLeavesUndivided.Term<String>> pair(long first, long second,
@@ -131,8 +230,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
 
     /** The days a date can be written on, which is where the type two dates take stops. */
     private static final WhatARelationLeavesUndivided.WhereTheRepresentationStops DATES =
-            new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
-                    run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay()));
+            new WhatARelationLeavesUndivided.WhereTheRepresentationStops(DAYS);
 
     private static Set<String> apart(List<WhatARelationLeavesUndivided.Term<String>> terms,
                                      long constant, Rel relation,

@@ -5614,6 +5614,1266 @@
         "code" : "E1935"
       } ]
     } ]
+  }, {
+    "module" : "conformance.stays",
+    "status" : "partial",
+    "weakening" : [ "rule_unread" ],
+    "incompleteness" : [ ],
+    "declarations" : [ {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.stays",
+        "name" : "Night"
+      } ],
+      "name" : "Night",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Night #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "0",
+        "knownWritable" : true,
+        "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "nightsOf",
+          "axis" : "nightsOf/stay.arrives",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : {
+            "kind" : "at_the_order_end",
+            "towards" : "above"
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Night #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 < value",
+        "knownWritable" : true,
+        "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "nightsOf",
+          "axis" : "nightsOf/stay.arrives",
+          "relation" : "in",
+          "against" : "0 < stay.arrives",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      } ],
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
+    }, {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.stays",
+        "name" : "Stay"
+      } ],
+      "name" : "Stay",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ {
+              "kind" : "declared",
+              "module" : "conformance.stays",
+              "name" : "Stay"
+            } ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Night #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "1",
+        "knownWritable" : true,
+        "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "nightsOf",
+          "axis" : "nightsOf/stay.leaves",
+          "relation" : "=",
+          "against" : "1",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ {
+              "kind" : "declared",
+              "module" : "conformance.stays",
+              "name" : "Stay"
+            } ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : {
+            "kind" : "at_the_order_end",
+            "towards" : "above"
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Night #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "1 < value",
+        "knownWritable" : true,
+        "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "nightsOf",
+          "axis" : "nightsOf/stay.leaves",
+          "relation" : "in",
+          "against" : "1 < stay.leaves",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Stay",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "a_count",
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Stay #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Stay",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "knownWritable" : true,
+        "writableBecause" : [ "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "nightsOf",
+          "axis" : "nightsOf/stay.arrives",
+          "relation" : "=",
+          "against" : "stay.leaves - 1",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Stay",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "a_count",
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : {
+            "kind" : "at_the_order_end",
+            "towards" : "below"
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Stay #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Stay",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "knownWritable" : true,
+        "writableBecause" : [ "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "nightsOf",
+          "axis" : "nightsOf/stay.arrives",
+          "relation" : "in",
+          "against" : "stay.arrives < stay.leaves - 1",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      } ],
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ {
+              "kind" : "declared",
+              "module" : "conformance.stays",
+              "name" : "Stay"
+            } ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "noPoint" : [ ]
+      }, {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Stay",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "a_count",
+            "at" : "0"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Stay",
+          "clause" : 0
+        },
+        "label" : "invariant Stay #1",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ {
+              "kind" : "declared",
+              "module" : "conformance.stays",
+              "name" : "Stay"
+            } ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Night",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ {
+              "kind" : "declared",
+              "module" : "conformance.stays",
+              "name" : "Stay"
+            } ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Night",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Stay",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "a_count",
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Stay",
+          "clause" : 0
+        },
+        "label" : "invariant Stay #1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.stays",
+                "declaredOn" : "Stay",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "a_count",
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Stay",
+          "clause" : 0
+        },
+        "label" : "invariant Stay #1",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
+    } ],
+    "behaviors" : [ {
+      "name" : "nightsOf",
+      "implementation" : "implemented",
+      "rows" : 0,
+      "pending" : 0,
+      "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
+      "status" : "partial",
+      "weakening" : [ "rule_unread" ],
+      "signature" : {
+        "status" : "unavailable",
+        "reason" : "not_a_sum",
+        "output" : {
+          "declared" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "unavailable",
+          "reason" : "nothing_is_divided"
+        },
+        "boundariesMeasure" : {
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
+        },
+        "axes" : [ ],
+        "unanswered" : [ {
+          "at" : "stay.leaves",
+          "rule" : "invariant Stay #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.stays",
+            "declaredOn" : "Stay",
+            "clause" : 0
+          },
+          "question" : "boundaryNotDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "stay.leaves"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        } ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "nightsOf",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "stay.arrives"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.stays",
+                  "declaredOn" : "Night",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "nightsOf/stay.arrives",
+          "origin" : "invariant Night #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < stay.arrives",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "nightsOf",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "stay.leaves"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "1"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.stays",
+                  "declaredOn" : "Night",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ {
+                "kind" : "declared",
+                "module" : "conformance.stays",
+                "name" : "Stay"
+              } ]
+            }
+          },
+          "axis" : "nightsOf/stay.leaves",
+          "origin" : "invariant Night #1 within Stay",
+          "kind" : "at_value",
+          "value" : "1",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "1",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "1 < stay.leaves",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "nightsOf",
+              "quantity" : {
+                "shape" : "between_positions",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "stay.arrives"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "stay.leaves"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.stays",
+                  "declaredOn" : "Stay",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "nightsOf/stay.arrives",
+          "origin" : "invariant Stay #1",
+          "kind" : "between_positions",
+          "value" : "stay.leaves",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "relation" : "=",
+            "against" : "stay.leaves - 1",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "stay.arrives < stay.leaves - 1",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          } ]
+        } ],
+        "obligations" : [ ],
+        "pairs" : {
+          "total" : 0,
+          "between" : [ ],
+          "status" : "complete",
+          "covered" : 0,
+          "unknown" : 0
+        },
+        "notDerivable" : [ ],
+        "notRead" : [ {
+          "position" : "stay.arrives",
+          "reason" : "rule_relating_two_values",
+          "rule" : "invariant Stay #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.stays",
+            "declaredOn" : "Stay",
+            "clause" : 0
+          }
+        }, {
+          "position" : "stay.leaves",
+          "reason" : "relation_not_shown_to_reach_every_value",
+          "rule" : "invariant Stay #1",
+          "ruleId" : {
+            "kind" : "invariant",
+            "declaredIn" : "conformance.stays",
+            "declaredOn" : "Stay",
+            "clause" : 0
+          }
+        } ]
+      },
+      "branch" : {
+        "status" : "unavailable",
+        "reason" : "no_arm_obligations"
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "complete"
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "nightsOf",
+            "conditions" : [ ]
+          },
+          "taken" : false,
+          "requirement" : "required"
+        } ]
+      },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
+      },
+      "findings" : [ {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "stay.arrives",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Stay",
+          "clause" : 0
+        },
+        "reason" : "rule_relating_two_values"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "stay.leaves",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Stay",
+          "clause" : 0
+        },
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "invariant Stay #1 — whether the values stop on stay.leaves",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.stays",
+          "declaredOn" : "Stay",
+          "clause" : 0
+        }
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "nightsOf",
+        "obligationId" : {
+          "behavior" : "nightsOf",
+          "conditions" : [ ]
+        },
+        "code" : "E1935"
+      } ]
+    } ]
   } ],
   "sources" : {
     "0" : "booking.sou",

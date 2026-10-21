@@ -41,7 +41,8 @@ class TermsReadOffOneValueAreAskedByTheCombinationsItGivesTest {
     private static WhatARelationLeavesUndivided.Term<String> term(String place, long weight,
                                                                  long low, long high) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight),
-                run(low, high), run(low, high), null, false, Granularity.DISCRETE);
+                run(low, high), run(low, high), null, false, Granularity.DISCRETE,
+                run(Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     /** Every month and day a date has, as the combinations of a support over a month and a day. */
