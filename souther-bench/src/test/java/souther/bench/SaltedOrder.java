@@ -178,11 +178,11 @@ final class SaltedOrder {
      * from, a local or a field, which is how a call on a value taken out of a field is written back
      * to it. {@code made} is the class it was made from, since a call that only names an interface
      * cannot say whether {@code add} on it keeps an order. {@code types} are the classes the code
-     * may hold it as, each named by an instruction that put it there: what it was made as, cast to,
-     * or read through a field, a parameter or a return, and what a caller handed a parameter as.
-     * Where two ways of reaching a place meet, it may be what either way held. A call that makes
-     * text of any object it is handed says what the fields of each of them hold, and the call itself
-     * names only {@code Object}.
+     * may hold it as, of those the program declares, each named by an instruction that put it
+     * there: what it was made as, cast to, or read through a field, a parameter or a return, and
+     * what a caller handed a parameter as. Where two ways of reaching a place meet, it may be what
+     * either way held. A call that makes text of any object it is handed says what the fields of
+     * each of them hold, and the call itself names only {@code Object}.
      */
     record Val(Set<Tag> tags, boolean wide, int alloc, String made, String home,
                Set<String> types) {
@@ -201,7 +201,6 @@ final class SaltedOrder {
             // Held in the order they were put in, so that walking them says the same twice: a copy
             // made by Set.copyOf is the very thing this walk is about.
             tags = Collections.unmodifiableSet(new LinkedHashSet<>(tags));
-            types = Set.copyOf(types);
         }
 
         static Val of(Set<Tag> tags) {
@@ -249,9 +248,14 @@ final class SaltedOrder {
             return new Val(tags, isWide, alloc, made, home, types);
         }
 
-        /** The same, which may also be held as the class a descriptor names, if it names one. */
+        /**
+         * The same, which may also be held as the class a descriptor names, if it names one the
+         * program declares. A class of the library has no fields of the program's to say, so it is
+         * not carried.
+         */
         Val alsoHeldAs(String descriptor) {
-            if (!descriptor.startsWith("L")) {
+            if (!descriptor.startsWith("L") || descriptor.startsWith("Ljava/")
+                    || descriptor.startsWith("Ljavax/") || descriptor.startsWith("Ljdk/")) {
                 return this;
             }
             return alsoHeldAs(Set.of(descriptor.substring(1, descriptor.length() - 1)));
@@ -262,9 +266,17 @@ final class SaltedOrder {
             if (types.containsAll(classes)) {
                 return this;
             }
-            Set<String> all = new TreeSet<>(types);
-            all.addAll(classes);
-            return new Val(tags, wide, alloc, made, home, all);
+            return new Val(tags, wide, alloc, made, home, union(types, classes));
+        }
+
+        /** Both sets of classes, as one that nothing changes afterwards. */
+        private static Set<String> union(Set<String> one, Set<String> other) {
+            if (one.isEmpty()) {
+                return Set.copyOf(other);
+            }
+            Set<String> all = new TreeSet<>(one);
+            all.addAll(other);
+            return Collections.unmodifiableSet(all);
         }
 
         Val plus(Collection<Tag> more) {
@@ -283,8 +295,8 @@ final class SaltedOrder {
             }
             Set<Tag> all = new LinkedHashSet<>(tags);
             all.addAll(other.tags);
-            Set<String> eitherType = new TreeSet<>(types);
-            eitherType.addAll(other.types);
+            Set<String> eitherType = types.containsAll(other.types) ? types
+                    : union(types, other.types);
             return new Val(all, wide || other.wide, alloc == other.alloc ? alloc : -1,
                     made != null && made.equals(other.made) ? made : null,
                     home != null && home.equals(other.home) ? home : null, eitherType);

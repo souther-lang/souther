@@ -242,6 +242,18 @@ final class SaltedOrderFlow {
      */
     private void textOfAnyObjectMadeIn(MethodKey in, List<CodeElement> elements) {
         boolean makesText = false;
+        for (CodeElement each : elements) {
+            if (each instanceof InvokeInstruction call
+                    && makesTextOfAnyObject(call.owner().asInternalName(),
+                            call.name().stringValue())) {
+                makesText = true;
+                break;
+            }
+        }
+        if (!makesText) {
+            return;
+        }
+        makesTextOfAnObject.add(in);
         Set<String> heldAs = new LinkedHashSet<>();
         heldAs.add("L" + in.owner() + ";");
         for (ClassDesc each : MethodTypeDesc.ofDescriptor(in.descriptor()).parameterList()) {
@@ -249,11 +261,8 @@ final class SaltedOrderFlow {
         }
         for (CodeElement each : elements) {
             switch (each) {
-                case InvokeInstruction call -> {
-                    makesText |= makesTextOfAnyObject(call.owner().asInternalName(),
-                            call.name().stringValue());
-                    heldAs.add(call.typeSymbol().returnType().descriptorString());
-                }
+                case InvokeInstruction call ->
+                        heldAs.add(call.typeSymbol().returnType().descriptorString());
                 case InvokeDynamicInstruction dynamic ->
                         heldAs.add(dynamic.typeSymbol().returnType().descriptorString());
                 case FieldInstruction field -> heldAs.add(field.typeSymbol().descriptorString());
@@ -264,10 +273,6 @@ final class SaltedOrderFlow {
                 default -> { }
             }
         }
-        if (!makesText) {
-            return;
-        }
-        makesTextOfAnObject.add(in);
         for (String each : heldAs) {
             if (each.startsWith("L") && !isJava(each.substring(1))) {
                 asks(in, "C:" + each.substring(1, each.length() - 1));
@@ -754,8 +759,9 @@ final class SaltedOrderFlow {
             // What a walk hands a method is the one element that call is made for.
             tags.add(each.handedToACall());
         }
-        return new Val(tags, wide, -1, null, home, Set.of()).alsoHeldAs(descriptor)
-                .alsoHeldAs(handedAs(unit, parameter));
+        Val seeded = new Val(tags, wide, -1, null, home, Set.of()).alsoHeldAs(descriptor);
+        boolean declaredByTheLibrary = descriptor.startsWith("L") && isJava(descriptor.substring(1));
+        return declaredByTheLibrary ? seeded.alsoHeldAs(handedAs(unit, parameter)) : seeded;
     }
 
     /** The classes the program's callers handed a parameter as, which it is read with. */
@@ -779,23 +785,24 @@ final class SaltedOrderFlow {
      * holds a value as itself.
      */
     private void handAs(Unit callee, int parameter, String declared, Set<String> classes) {
-        if (!declared.startsWith("L") || !isJava(declared.substring(1))) {
+        if (classes.isEmpty() || !declared.startsWith("L") || !isJava(declared.substring(1))) {
             return;
         }
-        Set<String> own = new TreeSet<>();
+        String key = null;
+        Set<String> held = null;
+        Set<String> added = new TreeSet<>();
         for (String each : classes) {
-            if (!isJava(each)) {
-                own.add(each);
+            if (held == null) {
+                key = handedKey(callee.method(), parameter);
+                held = handed.computeIfAbsent(key, k -> new TreeSet<>());
+            }
+            if (held.add(each)) {
+                added.add(each);
             }
         }
-        String key = handedKey(callee.method(), parameter);
-        Set<String> held = handed.computeIfAbsent(key, k -> new TreeSet<>());
-        Set<String> added = new TreeSet<>(own);
-        added.removeAll(held);
         if (added.isEmpty()) {
             return;
         }
-        held.addAll(added);
         changed(key);
         if (makesTextOfAnObject.contains(callee.method())) {
             for (String each : added) {
@@ -1309,9 +1316,7 @@ final class SaltedOrderFlow {
                     continue;
                 }
                 for (String heldAs : args.get(each).types()) {
-                    if (!isJava(heldAs)) {
-                        args.set(each, args.get(each).plus(textOfTheFieldsOf(unit, heldAs)));
-                    }
+                    args.set(each, args.get(each).plus(textOfTheFieldsOf(unit, heldAs)));
                 }
             }
         }
