@@ -5,6 +5,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -131,6 +132,35 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
             }
             read = sides.standing(last.target(), read.at());
         }
+    }
+
+    /**
+     * Every value the cases answer or compare that {@code isOne} does not name, in the order they
+     * are met: what a choice between that one and something else takes the something else to be,
+     * however many times and ways it is written.
+     *
+     * <p>A choice keeping one end of two values is one where these are all the one other value
+     * ({@link #keptBy}), and whether they are is a question about what they come to, which a
+     * reader of what they are made of answers and the names they are written with do not: one
+     * helper called twice is two expressions.
+     */
+    static List<Core> besides(List<Choice.ADefinitionCase> cases, Predicate<Core> isOne) {
+        List<Core> others = new ArrayList<>();
+        for (Choice.ADefinitionCase each : cases) {
+            Core answers = onlyValueOf(each.answers());
+            if (answers != null && !isOne.test(answers)) {
+                others.add(answers);
+            }
+            for (Choice.FormsStand stands : each.given()) {
+                for (LinearForm<Core> side : List.of(stands.left(), stands.right())) {
+                    Core value = onlyValueOf(side);
+                    if (value != null && !isOne.test(value)) {
+                        others.add(value);
+                    }
+                }
+            }
+        }
+        return List.copyOf(others);
     }
 
     /** The one value {@code each} answers, or null where it answers arithmetic. */

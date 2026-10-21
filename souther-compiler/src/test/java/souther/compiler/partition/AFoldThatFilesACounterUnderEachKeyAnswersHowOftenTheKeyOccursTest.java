@@ -392,10 +392,10 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                         "detail.label"))) {
             Read direct = directly.computeIfAbsent(taken.counted(), counted -> {
                 Compilation compiled =
-                        measured(modelOfIssues(countedUnder("k." + counted), "issues"));
+                        read(modelOfIssues(countedUnder("k." + counted), "issues"));
                 return new Read(axisOf(compiled), unreadOf(compiled));
             });
-            Compilation compilation = measured(modelOfIssues(taken.step(), taken.keys()));
+            Compilation compilation = read(modelOfIssues(taken.step(), taken.keys()));
             assertEquals(direct.axes(), axisOf(compilation),
                     () -> taken + ": " + report(compilation));
             assertTrue(json(compilation).contains(
@@ -520,7 +520,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 "{ let made = Outer { key = Key { label = i.label } }\n made.key.label }",
                 "{ let made = Shell { outer = Outer { key = Key { label = i.label } } }\n"
                         + " let inner = made.outer.key\n inner.label }")) {
-            Compilation compilation = measured("""
+            Compilation compilation = read("""
                     module example.popular
 
                     data Issue = { label: String }
@@ -561,7 +561,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                         + " issues)"),
                 new Wrapped("Label(k.label)", "issues"),
                 new Wrapped("{ let key = Label(k.label)\n key }", "issues"))) {
-            Compilation compilation = measured("""
+            Compilation compilation = read("""
                     module example.popular
 
                     data Label = String
@@ -1377,6 +1377,19 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 .filter(line -> line.contains("not read"))
                 .map(line -> line.replaceAll("comparison@\\S+ ", "comparison "))
                 .toList();
+    }
+
+    /**
+     * The source read for what the rules say without running anything: the lines it draws and
+     * what it leaves unread, and no row composed for any point of them.
+     */
+    private static Compilation read(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code().toString()).toList(),
+                () -> "the source compiles: " + source);
+        return compilation;
     }
 
     /** The source measured, which is a source that compiles: a model that did not would have no

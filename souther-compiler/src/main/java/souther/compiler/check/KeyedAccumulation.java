@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A map built by walking a list from the empty map, filing under the key of each element a value
@@ -67,22 +68,52 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         /**
          * The least or the greatest of what {@code value} is for the elements that have the key:
          * the first of them files its value, and each further one files the end of its own value
-         * and the one found that the closure keeps ({@link Extreme}). The value is a number of the
-         * element alone, and the same one filed first and compared after — a closure comparing
-         * against something else would file the first element's value on a law the rest do not
-         * follow.
+         * and the one found that the closure keeps ({@link Extreme}).
          *
-         * @param value   what each element files, read of the element
-         * @param extreme which end of its own value and the one found a further element keeps
-         * @param found   the name the step gives the value found under the key, which is that end
-         *                of the values of the earlier elements of the same key
+         * <p>That end only where what the closure compares the value found against is the value
+         * filed first, as {@link Summed} is a total only where what it adds is: a closure comparing
+         * against something else would file the first element's value on a law the rest do not
+         * follow. Whether {@code compared} and {@code value} are one number of each element is the
+         * element's reader's to say, for the reason it is there.
+         *
+         * @param value    what each element files, read of the element
+         * @param compared every value the closure answers or compares that is not the value found,
+         *                 as written: each is to be the same number of the element as {@code value}
+         * @param extreme  which end of its own value and the one found a further element keeps
+         * @param found    the name the step gives the value found under the key, which is that end
+         *                 of the values of the earlier elements of the same key
          */
-        record Kept(Core value, Extreme extreme, BindingId found) implements Filed {
+        record Kept(Core value, List<Core> compared, Extreme extreme, BindingId found)
+                implements Filed {
 
             public Kept {
                 Objects.requireNonNull(value, "an element files a value");
+                compared = List.copyOf(compared);
                 Objects.requireNonNull(extreme, "and one end of two of them is kept");
                 Objects.requireNonNull(found, "of what the step finds under the key");
+            }
+        }
+
+        /**
+         * The total of what {@code value} is for the elements that have the key: the first of them
+         * files its value, and each further one adds {@code added} to the value found.
+         *
+         * <p>That total only where {@code value} and {@code added} are one number of each element,
+         * which is a question about the element and not about the names this reads: the two are
+         * often written twice, as two calls of one helper, and two copies of a call are two
+         * expressions. So both are held, and the reader of the element asks it ({@code
+         * Pullback}); one that cannot read them as one number reads no total.
+         *
+         * @param value what the first element of a key files, read of the element
+         * @param added what each further one adds to the value found, read of the element
+         * @param found the name the step gives the value found under the key
+         */
+        record Summed(Core value, Core added, BindingId found) implements Filed {
+
+            public Summed {
+                Objects.requireNonNull(value, "an element files a value");
+                Objects.requireNonNull(added, "and a further one adds one");
+                Objects.requireNonNull(found, "to what the step finds under the key");
             }
         }
     }
@@ -243,11 +274,24 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             if (WhatABodyReads.binding(firstRead, accumulator)) {
                 return null;
             }
-            Core filed = Extreme.comparedAs(first, firstAt, sides).value();
-            Extreme extreme = Extreme.keptBy(Extreme.casesOf(moved.value(), moved.at(), sides),
-                    e -> isThe(Extreme.comparedAs(e, moved.at(), sides).value(), found),
-                    e -> Core.sameValue(Extreme.comparedAs(e, moved.at(), sides).value(), filed));
-            return extreme == null ? null : new Filed.Kept(first, extreme, found);
+            Core added = addedTo(moved, found);
+            if (added != null) {
+                return new Filed.Summed(first, added, found);
+            }
+            List<Choice.ADefinitionCase> cases =
+                    Extreme.casesOf(moved.value(), moved.at(), sides);
+            Predicate<Core> isFound =
+                    e -> isThe(Extreme.comparedAs(e, moved.at(), sides).value(), found);
+            Extreme extreme = Extreme.keptBy(cases, isFound, isFound.negate());
+            List<Core> compared = Extreme.besides(cases, isFound);
+            for (Core each : compared) {
+                Core read = valueOf(each, moved.at());
+                if (WhatABodyReads.binding(read, found)
+                        || WhatABodyReads.binding(read, accumulator)) {
+                    return null;
+                }
+            }
+            return extreme == null ? null : new Filed.Kept(first, compared, extreme, found);
         }
 
         /** The value {@code body} files under the key read as {@code key} in the answer so far, as
@@ -259,6 +303,36 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     && Core.sameValue(valueOf(filing.args().get(0), body.at()), key)
                     && isThe(valueOf(filing.args().get(2), body.at()), accumulator)
                     ? new ValueStanding.ReadThrough<>(filing.args().get(1), body.at()) : null;
+        }
+
+        /**
+         * What {@code moved} adds to the value {@code found} it is handed, as written, where it is
+         * that value and something read of no other: {@code n + v}, {@code v + n}, and an operation
+         * the library says computes the same addition, as {@code Decimal.add(n, v)} does — or null
+         * where it is anything else.
+         */
+        Core addedTo(ValueStanding.ReadThrough<E> moved, BindingId found) {
+            Core written = Core.withoutStanding(moved.value());
+            List<Core> operands;
+            if (written instanceof Core.Binary(BinOp op, Core l, Core r, var _, var _, var _,
+                    var _, var _) && op == BinOp.ADD) {
+                operands = List.of(l, r);
+            } else if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
+                    && DischargeRules.operator(applied.operation()) == BinOp.ADD
+                    && applied.args().size() == 2) {
+                operands = applied.args();
+            } else {
+                return null;
+            }
+            for (int i = 0; i < 2; i++) {
+                Core other = operands.get(1 - i);
+                if (isThe(valueOf(operands.get(i), moved.at()), found)
+                        && !WhatABodyReads.binding(valueOf(other, moved.at()), found)
+                        && !WhatABodyReads.binding(valueOf(other, moved.at()), accumulator)) {
+                    return other;
+                }
+            }
+            return null;
         }
 
         /**

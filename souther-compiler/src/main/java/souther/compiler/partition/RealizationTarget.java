@@ -68,6 +68,7 @@ public sealed interface RealizationTarget {
         return switch (term) {
             case NumericTerm.Multiplicity among -> new AmongTheElements(among);
             case NumericTerm.ExtremeOfItsKey extreme -> new AtItsKey(extreme);
+            case NumericTerm.GatheredUnderItsKey gathered -> new UnderItsKey(gathered);
             case NumericTerm.OccurrencesOfItsValue among -> new AmongEveryOccurrence(among);
             case NumericTerm.OccurrencesOfAKey asked -> new AmongEveryOccurrenceEqualToAKey(asked);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
@@ -258,6 +259,31 @@ public sealed interface RealizationTarget {
         @Override
         public TermPath writeRoot() {
             return term.value();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * What the elements of one key come to, realized by writing the container the elements stand
+     * in with elements whose numbers come to it.
+     *
+     * <p>Written as a total over the container is ({@link ContainersAddingUp}): an end as one
+     * element, which comes to its own number by either end, and a total as elements adding up to
+     * it. They come to the number where they are all of one key and no other element shares it,
+     * and whether they are is what the row holds beside them — read back whole ({@code
+     * Generator.readBack}), as {@link AtItsKey} is. The innermost container and not the outermost:
+     * the containers around it are another element's, and a row writing one value inside them
+     * holds the elements of the others it writes as it writes any position under them.
+     */
+    record UnderItsKey(NumericTerm.GatheredUnderItsKey term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.elements().containersHoldingIt().getLast();
         }
 
         @Override

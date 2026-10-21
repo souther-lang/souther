@@ -62,7 +62,7 @@ import java.util.function.UnaryOperator;
 public sealed interface NumericTerm
         permits NumericTerm.FromOnePosition, NumericTerm.TakenOver,
                 NumericTerm.OfAnElementsNeighbours, NumericTerm.OccurrencesOfItsValue,
-                NumericTerm.OccurrencesOfAKey {
+                NumericTerm.OccurrencesOfAKey, NumericTerm.GatheredUnderItsKey {
 
     /**
      * A number of an element read off the elements beside it in its container: how often its value
@@ -931,6 +931,196 @@ public sealed interface NumericTerm
     }
 
     /**
+     * What the elements of a run come to together, among those holding at {@link #key()} what the
+     * element under consideration holds there: the total of the number each of them is, or one end
+     * of those numbers. What a fold that files under each key what that key's elements come to
+     * answers for the key of an element.
+     *
+     * <p>A number of the run and not of one container's elements, which is why it is not one of
+     * {@link OfAnElementsNeighbours}: the elements may stand in every occurrence of a container
+     * inside another, the lists of an outer list put end to end, and an element of one is then
+     * gathered with an element of another under one key. Made only where a walk was shown to be
+     * over every occurrence of the place the elements stand at, as {@link
+     * RunSource.FlattenedOccurrences} is.
+     *
+     * <p>What each element contributes is {@link #value()}, a number made of the element, and not a
+     * place: a field of the element is the one such number that is a place ({@link
+     * ElementValue#asAPlace}), and a number a closure computed of the element stands nowhere in it.
+     * So the totals of {@code p.amount} and of {@code signed(p)} are two numbers of one run, and
+     * neither is a value standing at a position.
+     *
+     * <p>The end of the values of a place inside one container is {@link ExtremeOfItsKey}, which
+     * reads it among the elements of that container's one occurrence; this does not take that
+     * number, so it is spelled one way.
+     */
+    final class GatheredUnderItsKey implements NumericTerm {
+
+        /**
+         * How the numbers of the elements of one key are put together.
+         *
+         * <p>Sealed, and one arm per law, as {@code KeyedAccumulation.Filed} is: a reader of what
+         * a key comes to says what it is under each.
+         */
+        public sealed interface Gathering {
+
+            /** Every number of the key added up. */
+            record Total() implements Gathering {}
+
+            /** The least or the greatest of them. */
+            record End(Extreme extreme) implements Gathering {
+
+                public End {
+                    Objects.requireNonNull(extreme, "an end is one end or the other");
+                }
+            }
+
+            Gathering TOTAL = new Total();
+        }
+
+        private final TermPath elements;
+        private final ElementProjection key;
+        private final ElementValue value;
+        private final Type each;
+        private final Gathering gathering;
+        /** The hash, worked out once: the computation is a tree, and a term is asked for its hash
+         *  by every reading that files it. */
+        private final int hash;
+
+        private GatheredUnderItsKey(TermPath elements, ElementProjection key, ElementValue value,
+                                    Type each, Gathering gathering) {
+            this.elements = elements;
+            this.key = key;
+            this.value = value;
+            this.each = each;
+            this.gathering = gathering;
+            this.hash = Objects.hash(GatheredUnderItsKey.class, elements, key, value, each,
+                    gathering);
+        }
+
+        /**
+         * What the elements standing at {@code elements} that hold at {@code key} what the element
+         * under consideration holds there come to, each as {@code value}, by {@code gathering} —
+         * or null where the key is not reached from an element by fields alone — the element itself
+         * among them, reached by none — the value reads
+         * where each element stands, or the number is {@link ExtremeOfItsKey}'s.
+         *
+         * <p>Asked of elements a walk was shown to be over every occurrence of, and of no others:
+         * the path alone says no such thing of a place inside more than one container.
+         *
+         * @param elements where each element of the run stands, inside one container or several
+         * @param key      the way from an element to what makes two of them one key
+         * @param value    what each element contributes
+         * @param each     what one element's number stands as, with the names it is written under
+         *                 taken off: what the numbers of a key come to is on its order
+         */
+        public static GatheredUnderItsKey of(TermPath elements, ElementProjection key,
+                                             ElementValue value, Type each, Gathering gathering) {
+            // The key a way of fields alone, so one value of every element: none of them where the
+            // element is its own key.
+            if (elements == null || key == null || value == null || each == null
+                    || gathering == null || !elements.insideAContainer() || key.fields() == null
+                    || value.readsThePosition()) {
+                return null;
+            }
+            boolean ownPlaceInOneContainer = value.asAPlace() != null
+                    && elements.containersHoldingIt().size() == 1;
+            return gathering instanceof Gathering.End && ownPlaceInOneContainer ? null
+                    : new GatheredUnderItsKey(elements, key, value, each, gathering);
+        }
+
+        /** Where each element of the run stands. */
+        public TermPath elements() {
+            return elements;
+        }
+
+        /** The way from an element to what makes two of them one key. */
+        public ElementProjection key() {
+            return key;
+        }
+
+        /** What each element contributes. */
+        public ElementValue value() {
+            return value;
+        }
+
+        /** What one element's number stands as. */
+        public Type each() {
+            return each;
+        }
+
+        /** How the numbers of one key are put together. */
+        public Gathering gathering() {
+            return gathering;
+        }
+
+        /**
+         * The number this one is always one of the values of, where there is one: what stands at
+         * the place an end is taken of. Null for a total, which is none of its numbers, and for an
+         * end of what each element computed, which stands at no place.
+         */
+        public ValueOf valuesTakenFrom() {
+            ElementProjection place = value.asAPlace();
+            return gathering instanceof Gathering.End && place != null
+                    ? new ValueOf(place.from(elements)) : null;
+        }
+
+        /** Every way from an element to a value this number is read from: the key, and what the
+         *  value reads. */
+        public List<ElementProjection> fieldsRead() {
+            List<ElementProjection> read = new ArrayList<>();
+            read.add(key);
+            value.reads().stream().filter(each -> !each.equals(key)).forEach(read::add);
+            return List.copyOf(read);
+        }
+
+        /** Where the values gathered stand where they are a place of the element, and where the
+         *  elements do otherwise: where a reader is sent, and no place the number stands at. */
+        @Override
+        public TermPath subjectPath() {
+            ElementProjection place = value.asAPlace();
+            return place == null ? elements : place.from(elements);
+        }
+
+        /** The same number of the elements standing where {@code moved} puts them, or null where
+         *  they are not in as many containers there. */
+        @Override
+        public GatheredUnderItsKey movedTo(UnaryOperator<TermPath> moved) {
+            TermPath at = moved.apply(elements);
+            return at != null && at.containersHoldingIt().size()
+                    == elements.containersHoldingIt().size()
+                    ? of(at, key, value, each, gathering) : null;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof GatheredUnderItsKey that && hash == that.hash
+                    && elements.equals(that.elements) && key.equals(that.key)
+                    && value.equals(that.value) && each.equals(that.each)
+                    && gathering.equals(that.gathering);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            ElementProjection place = value.asAPlace();
+            String of = place == null ? "{" + value + " | " + elements + "}"
+                    : place.from(elements).toString();
+            return switch (gathering) {
+                case Gathering.Total _ -> "total(" + of + " by "
+                        + NumberAt.OfWhatNumber.OfTheExtremeOfItsKey.keySpelled(key.fields())
+                        + ")";
+                case Gathering.End(Extreme extreme) ->
+                        new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, key.fields())
+                                .spelledAt(of);
+            };
+        }
+    }
+
+    /**
      * A number an operation took over a run of values, which no single position answers.
      *
      * <p>The dual of {@link TakenOf} and named for it: one takes a number of the value at a place,
@@ -1148,6 +1338,63 @@ public sealed interface NumericTerm
             // Counted among the values of every occurrence, so no one place answers it either.
             case OccurrencesOfItsValue _ -> null;
             case OccurrencesOfAKey _ -> null;
+            // Gathered from every element of one key, so from no one place.
+            case GatheredUnderItsKey _ -> null;
+        };
+    }
+
+    /**
+     * Which number of what stands at {@link #subjectPath} this is, as a place and a kind of number
+     * name it — or null where they do not say which number it is.
+     *
+     * <p>The one answer to it. A number is named by a place where the place and the kind of
+     * number say it apart from every other, which is how a clause of a declaration and a statement
+     * of a body come to be about one number. Where they do not, a name made of them would be one
+     * name for several numbers: the totals of {@code q + 1} and of {@code q + 2} over one list are
+     * both a total at the list's elements, and the sums of two containers in every node of a tree
+     * are both a sum at its root. Such a number is named by the term itself, which is equal by
+     * everything that makes it the number it is.
+     *
+     * <p>By the operation, and not by something having been taken at the place: a count of a
+     * string and the magnitude of a number at one place are two numbers, and one name for both
+     * would read a guard on one against the clauses written about the other.
+     *
+     * <p>Exhaustive over the terms there are, with no {@code default}: a kind added says which of
+     * the two it is here, and every reader that names a number asks this.
+     */
+    default NumberAt.OfWhatNumber atItsPlace() {
+        return switch (this) {
+            case ValueOf _ -> new NumberAt.OfWhatNumber.OfItsOwnValue();
+            case TakenOf taken -> new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
+                    taken.operation(), taken.arguments(), taken.transformation());
+            case CodePointClassCount count ->
+                    new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted(),
+                            count.through());
+            case CodePointValueSum _ -> new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
+            case Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
+            case OccurrencesOfItsValue occurrences ->
+                    new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
+                            occurrences.selection() == null ? null
+                                    : occurrences.selection().key());
+            // The key by the whole place it stands at: what a rule calls a place is relative to the
+            // value it is a position of, and two parameters are both called the value.
+            case OccurrencesOfAKey asked ->
+                    new NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey(asked.key().discriminated());
+            case ExtremeOfItsKey extreme -> new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(
+                    extreme.extreme(), extreme.keyField().fields());
+            // The operation and the values at the place, where the values are what stands there.
+            // What a walk computed of each element, and which nodes of a tree a container is read
+            // in, are not said by the place the run is read from.
+            case TakenOver over -> switch (over.source()) {
+                case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _ ->
+                        new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(over.operation(),
+                                TakenArguments.NONE, ValueTransformation.NONE);
+                case RunSource.ComputedOccurrences _, RunSource.ReachableNodes _ -> null;
+            };
+            // What each element contributes is a number made of it, which the place does not say
+            // even where it reads one field: the field read as another kind of number is another
+            // number at the same place.
+            case GatheredUnderItsKey _ -> null;
         };
     }
 
@@ -1190,6 +1437,8 @@ public sealed interface NumericTerm
             case OccurrencesOfItsValue _ -> null;
             // The same, and the key it counts for is another place a moved place leaves behind.
             case OccurrencesOfAKey _ -> null;
+            // Gathered over a run, which a place moved alone is another one of.
+            case GatheredUnderItsKey _ -> null;
         };
     }
 
@@ -1241,6 +1490,10 @@ public sealed interface NumericTerm
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
             // One of the values the place holds, which is open where the place is.
             case ExtremeOfItsKey _ -> NumericDomain.Bounds.OPEN;
+            // An end is one of the numbers of its key and a total any number they add up to; what
+            // they are bounded by is what the elements' rules guarantee, which is a reading of
+            // the run and not of the term.
+            case GatheredUnderItsKey _ -> NumericDomain.Bounds.OPEN;
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it

@@ -104,6 +104,9 @@ final class TermReading {
     static <G> ElementsTogether<G> together(TermOrders on,
             List<Function<ElementProjection, Holding<G>>> each) {
         Objects.requireNonNull(each, "a term is read among the elements a walk came to");
+        if (on.term() instanceof NumericTerm.GatheredUnderItsKey) {
+            return new Gathered<>(on, each);
+        }
         return switch (on.amongItsNeighbours()) {
             case NumericTerm.Multiplicity often -> new Counted<>(on.observed(), often.placeField(),
                     each);
@@ -591,30 +594,171 @@ final class TermReading {
             // field the element's own choice does not reach is no part of this element's number.
             OneElement fields = new OneElement(on, element, position++);
             ExactAnswer<ExactRatio> made = computed.computation().at(fields);
-            if (made == null) {
-                return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
+            Reading stopped = whyNoNumberOf(made, fields, answeredPerElement);
+            if (stopped != null) {
+                return stopped;
             }
-            if (!(made instanceof ExactAnswer.Held<ExactRatio> exact)) {
-                return new Reading.NotWorkedOut(
-                        ((ExactAnswer.Unheld<ExactRatio>) made).why());
-            }
-            // The one the program computes, which is what the carrier of the answer holds.
-            switch (exact.value().writtenDecimal()) {
-                case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
-                    return new Reading.NotWorkedOut(unheld.why());
-                }
-                case ExactAnswer.Held<Optional<BigDecimal>> written -> {
-                    if (written.value().isEmpty()) {
-                        return new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
-                    }
-                    if (answeredPerElement.onTheGrid(new Count(written.value().get())) == null) {
-                        return new Reading.NotNumber();
-                    }
-                }
-            }
-            terms.add(exact.value());
+            terms.add(((ExactAnswer.Held<ExactRatio>) made).value());
         }
-        return sumOf(terms);
+        return sumOf(terms, on.answered());
+    }
+
+    /**
+     * What the elements of a run come to among those holding at the key what the element asked
+     * about does ({@link NumericTerm.GatheredUnderItsKey}).
+     *
+     * <p>Alike as the key's order has them, as {@link KeyedEnds} has them, and each element's
+     * number read as a computation over a run reads it ({@link #overElements}), so a field is
+     * looked at only where the number asks for it. What an element holds nothing at is said in
+     * the words it was handed in, and said of what it stops: an element holding nothing at its
+     * key, or a key that is no number, may be of any key, so the first of those stops every key;
+     * one holding nothing at a field its number reads, or whose number is none, stops its own key
+     * and no other. A key's numbers are read the first time an element of it is asked about.
+     */
+    private static final class Gathered<G> implements ElementsTogether<G> {
+
+        private final TermOrders on;
+        private final NumericTerm.GatheredUnderItsKey term;
+        private final Carrier keyedOn;
+        private final List<Function<ElementProjection, Holding<G>>> each;
+        /** What stops every key, the first element's in order that does; null where none. */
+        private final Neighbouring<G> everyKey;
+        /** Where each element of each key stands, by the key in its one representation. */
+        private final Map<Place, List<Integer>> ofEachKey = new HashMap<>();
+        /** What each key asked about came to. */
+        private final Map<Place, Neighbouring<G>> asked = new HashMap<>();
+
+        Gathered(TermOrders on, List<Function<ElementProjection, Holding<G>>> each) {
+            this.on = on;
+            this.term = (NumericTerm.GatheredUnderItsKey) on.term();
+            this.keyedOn = on.fieldCarrier(term.key());
+            this.each = List.copyOf(each);
+            Neighbouring<G> stop = keyedOn == null
+                    ? new Neighbouring.Read<>(new Reading.NotNumber()) : null;
+            for (int at = 0; at < this.each.size() && stop == null; at++) {
+                switch (this.each.get(at).apply(term.key())) {
+                    case Holding.Nothing<G>(G why) -> stop = new Neighbouring.HeldNothing<>(why);
+                    case Holding.Value<G>(ObservedValue key) -> {
+                        switch (whereTheOrderPuts(keyedOn, key)) {
+                            case Where.At(Place place) -> ofEachKey.computeIfAbsent(
+                                    place.canonical(), _ -> new ArrayList<>()).add(at);
+                            case Where.Nowhere nowhere ->
+                                    stop = new Neighbouring.Read<>(nowhere.why());
+                        }
+                    }
+                }
+            }
+            this.everyKey = stop;
+        }
+
+        @Override
+        public Neighbouring<G> numberOf(Function<ElementProjection, Holding<G>> own) {
+            ObservedValue ownKey;
+            switch (own.apply(term.key())) {
+                case Holding.Nothing<G>(G why) -> {
+                    return new Neighbouring.HeldNothing<>(why);
+                }
+                case Holding.Value<G>(ObservedValue value) -> ownKey = value;
+            }
+            if (everyKey != null) {
+                return everyKey;
+            }
+            return switch (whereTheOrderPuts(keyedOn, ownKey)) {
+                case Where.Nowhere nowhere -> new Neighbouring.Read<>(nowhere.why());
+                case Where.At(Place place) -> asked.computeIfAbsent(place.canonical(), this::read);
+            };
+        }
+
+        /** What the elements of {@code key} come to, read in order until one stops them. */
+        private Neighbouring<G> read(Place key) {
+            List<ExactRatio> numbers = new ArrayList<>();
+            for (int at : ofEachKey.getOrDefault(key, List.of())) {
+                HeldFields<G> fields = new HeldFields<>(each.get(at));
+                OneElement element = new OneElement(on, fields, at);
+                ExactAnswer<ExactRatio> made = term.value().at(element);
+                if (fields.nothing != null) {
+                    return new Neighbouring.HeldNothing<>(fields.nothing);
+                }
+                Reading stopped = whyNoNumberOf(made, element, on.observed());
+                if (stopped != null) {
+                    return new Neighbouring.Read<>(stopped);
+                }
+                numbers.add(((ExactAnswer.Held<ExactRatio>) made).value());
+            }
+            return new Neighbouring.Read<>(numbers.isEmpty() ? new Reading.NotNumber()
+                    : gatheredBy(term.gathering(), numbers, on.answered()));
+        }
+    }
+
+    /**
+     * An element's fields as a computation asks for them, keeping the first it holds nothing at
+     * in the words the element was handed in: a field holding nothing answers the computation as
+     * no value, which gives up on the element, and what the reader is told is why.
+     */
+    private static final class HeldFields<G> implements Function<ElementProjection, ObservedValue> {
+
+        private final Function<ElementProjection, Holding<G>> element;
+        private G nothing;
+
+        HeldFields(Function<ElementProjection, Holding<G>> element) {
+            this.element = element;
+        }
+
+        @Override
+        public ObservedValue apply(ElementProjection field) {
+            return switch (element.apply(field)) {
+                case Holding.Value<G>(ObservedValue value) -> value;
+                case Holding.Nothing<G>(G why) -> {
+                    if (nothing == null) {
+                        nothing = why;
+                    }
+                    yield null;
+                }
+            };
+        }
+    }
+
+    /**
+     * Why the number one element was made into is none the reading can use, or null where it is
+     * one: a field it needs that the element does not hold, a number the exact arithmetic could
+     * not hold, or one {@code on}, what the program computes it as, does not — where the program
+     * stops making it.
+     */
+    private static Reading whyNoNumberOf(ExactAnswer<ExactRatio> made, OneElement fields,
+                                         Carrier on) {
+        if (made == null) {
+            return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
+        }
+        if (!(made instanceof ExactAnswer.Held<ExactRatio>(ExactRatio number))) {
+            return new Reading.NotWorkedOut(((ExactAnswer.Unheld<ExactRatio>) made).why());
+        }
+        return switch (number.writtenDecimal()) {
+            case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
+                    new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value().isEmpty()
+                    ? new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS)
+                    : on == null || on.onTheGrid(new Count(written.value().get())) == null
+                            ? new Reading.NotNumber() : null;
+        };
+    }
+
+    /** What the numbers of one key come to by {@code gathering}, which are some, each added on
+     *  {@code on} as the program adds them. */
+    private static Reading gatheredBy(NumericTerm.GatheredUnderItsKey.Gathering gathering,
+                                      List<ExactRatio> numbers, Carrier on) {
+        return switch (gathering) {
+            case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> sumOf(numbers, on);
+            case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) -> {
+                ExactRatio end = numbers.getFirst();
+                for (ExactRatio other : numbers) {
+                    int against = other.compareTo(end);
+                    if (extreme instanceof Extreme.Least ? against < 0 : against > 0) {
+                        end = other;
+                    }
+                }
+                yield sumOf(List.of(end));
+            }
+        };
     }
 
     /**
@@ -870,17 +1014,34 @@ final class TermReading {
             }
             terms.add(count.exactly());
         }
-        return sumOf(terms);
+        return sumOf(terms, elements);
     }
 
     /**
-     * What the numbers add up to, as the number a term answers.
+     * What the numbers add up to, as the number a term answers: where the total is one
+     * {@code on}, what the program answers it as, holds — and no number where it is not, since no
+     * run answering comes to it.
      *
-     * <p>One sum of them all, for both of the readers that gather numbers a run holds: the one that
-     * reads a value at a place of each element and the one that computes one from several places of
-     * it. The two are one account of one operation, so what a sum too wide for the exact arithmetic
-     * comes to is one answer.
+     * <p>One sum of them all, for every reader that gathers numbers a run holds: the one that reads
+     * a value at a place of each element, the one that computes one from several places of it, and
+     * the one gathering the elements of a key. They are one account of one operation, so what a sum
+     * too wide for the exact arithmetic comes to is one answer.
+     *
+     * <p>The total and not the sums on the way to it. What is read is the number a run comes to
+     * where it answers, and whether a run comes to one is what running the row says
+     * ({@link #overElements}). A total of the library's adds wider than the carrier on the way
+     * and asks only the total to be held, so {@code [max, 1, -1]} answers {@code max}; a walk
+     * adding with the operator one element at a time stops where a sum on the way is past it,
+     * which is a run that does not answer — and no reading of the elements, in whatever order
+     * they were handed, says otherwise. A total past what the carrier holds is past it for both.
      */
+    private static Reading sumOf(List<ExactRatio> terms, Carrier on) {
+        Reading whole = sumOf(terms);
+        return whole instanceof Reading.Number(Place total) && on != null
+                && on.onTheGrid(total) == null ? new Reading.NotNumber() : whole;
+    }
+
+    /** The exact sum of {@code terms}, as a written decimal, whatever holds it. */
     private static Reading sumOf(List<ExactRatio> terms) {
         // A container may hold a model's own decimals, spaced as widely apart in scale as any two
         // of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards against
