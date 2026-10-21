@@ -1424,8 +1424,7 @@ public final class WhatARelationLeavesUndivided {
                 continue;
             }
             Term<P> each = terms.get(i);
-            Interval taken = each.realizes() == null ? null
-                    : wholeRunOf(each.realizes(), each.spacing());
+            Interval taken = wholeRunTakenOnItsOrder(each);
             if (!free[i] || taken == null || !each.weight().isWhole()) {
                 return false;
             }
@@ -1599,7 +1598,7 @@ public final class WhatARelationLeavesUndivided {
             }
             Term<P> each = terms.get(i);
             Interval run = i == at ? wholeRunOf(each.holds(), each.spacing())
-                    : each.realizes() == null ? null : wholeRunOf(each.realizes(), each.spacing());
+                    : wholeRunTakenOnItsOrder(each);
             if (run == null || !each.weight().isWhole()) {
                 return null;
             }
@@ -1669,6 +1668,21 @@ public final class WhatARelationLeavesUndivided {
             return null;
         }
         return new Interval(ExactRatio.of(whole.low), ExactRatio.of(whole.high));
+    }
+
+    /**
+     * The whole numbers {@code term} is shown to take, on the order it stands on: a position read
+     * as though its order ran on is cut to where its order stops, since a witness stands on a
+     * value the type has. Null where nothing is shown of the term.
+     */
+    private static <P> Interval wholeRunTakenOnItsOrder(Term<P> term) {
+        if (term.realizes() == null) {
+            return null;
+        }
+        NumericDomain.Bounds taken = endsAtNumbers(term.runsTo())
+                ? term.realizes().meet(term.runsTo())
+                : term.realizes();
+        return wholeRunOf(taken, term.spacing());
     }
 
     /** The weighed size of {@code run}'s farthest value from nought, or null where that is no
