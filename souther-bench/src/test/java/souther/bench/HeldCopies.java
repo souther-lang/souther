@@ -8,8 +8,12 @@ import souther.bench.SaltedOrderVocabulary.Feed;
 import souther.bench.SaltedOrderVocabulary.Outcome;
 import souther.bench.SaltedOrderVocabulary.Push;
 
+import java.lang.constant.MethodTypeDesc;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -22,35 +26,73 @@ import java.util.Set;
  * value, {@code k} for a key, outermost first. A list of lists of copies says {@code ee}, and a map
  * from a copy to anything says {@code k}.
  *
+ * <p><b>A path is at most {@link #MAX_DEPTH} slots.</b> Code that wraps a value as often as a
+ * number says has no deepest container, and a path that grew with it would give the reading no
+ * fixed point. A path that would be longer is widened to its first slots and {@code *}, which says
+ * that the copy is that deep or deeper: taking a slot out of it may be the copy itself, or may be a
+ * container that still holds it, and both are said. The set of paths is finite, so the reading
+ * settles, and a wider path says more than a narrower one.
+ *
  * <p>A path is all a container carries, so nothing is made per element or per call. What takes
  * something out says which slot, and the tag becomes the copy itself where the path is spent and
  * stays a held one where it is not. That is one table, here, and it is joined to what the order
  * reading says of the same call and does not stand in for it: a container can hold a copy and be
  * made of another's elements at once, and each is read.
  *
- * <p>Held copies are followed where the code follows them and are said to be lost where it does
- * not. A container that is changed other than by the operations below, a function that is handed
- * its elements, or an array, does not carry them on; the reading of a copy that is only held, and
- * never read by anything that takes it out, ends nowhere, and the test that asks where every copy
- * ends is what says so.
+ * <p><b>An operation is a name and the number of arguments it is given.</b> Where the value an
+ * operation stores stands among its arguments is a property of that pair and of nothing else:
+ * {@code replace} of a key and a value stores its second argument and {@code replace} of a key, the
+ * value it expects and a value stores its third. {@link #placementOf} is that table, and a test
+ * puts every method of the collections of the library that is named like one that stores to it.
+ *
+ * <p><b>What this does not follow.</b> A container is a set of paths and not of keys, so a put to
+ * a key a copy was put to before does not take the copy out: that is read as holding both, which
+ * says more than the code does. {@code clear} is the only operation that takes something out. A
+ * function that makes the value a map keeps, and a copy handed to {@code System.arraycopy}, are not
+ * followed either. A copy that is only held and never read by anything that takes it out ends
+ * nowhere, and the test that asks where every copy ends is what says so.
  */
 final class HeldCopies {
+
+    /** The most slots a path names before it is widened. */
+    static final int MAX_DEPTH = 3;
+
+    private static final String ANY = "*";
 
     private static final String ELEMENT = "e";
 
     private static final String KEY = "k";
 
-    private static final Set<String> PUTS_AN_ELEMENT = Set.of(
-            "add", "addFirst", "addLast", "push", "offer", "offerFirst", "offerLast", "set",
-            "addElement", "insertElementAt");
+    /**
+     * What a copy a function returns becomes in what the call that was given the function hands
+     * back: an element of it, as the function of a {@code map} makes one, or what the container the
+     * function returned held, as a {@code flatMap} spreads it.
+     */
+    enum Into {
+        NOTHING,
+        AS_ELEMENTS,
+        AS_THEY_ARE
+    }
 
-    private static final Set<String> PUTS_A_KEY_AND_A_VALUE = Set.of(
-            "put", "putIfAbsent", "putFirst", "putLast", "merge");
+    /** Where, among a call's arguments, the key and the value it stores are; none is -1. */
+    record Placement(int key, int value) {
 
-    private static final Set<String> PUTS_ALL = Set.of("addAll", "putAll");
+        static final int NONE = -1;
+    }
 
+    private static final Map<String, Map<Integer, Placement>> PLACEMENTS = placements();
+
+    private static final Set<String> PUTS_ALL = Set.of("addAll", "putAll", "addAllAbsent");
+
+    private static final Set<String> STORES_WHAT_A_FUNCTION_MAKES = Set.of(
+            "compute", "computeIfAbsent", "computeIfPresent", "replaceAll");
+
+    /** What takes the one value out that a container holds, or hands the one it held back. */
     private static final Set<String> TAKES_THE_ONLY_ONE_OUT = Set.of(
-            "get", "getOrDefault", "remove", "orElse", "orElseGet", "orElseThrow");
+            "get", "getOrDefault", "remove", "orElse", "orElseGet", "orElseThrow", "getValue",
+            "firstElement", "lastElement", "take", "takeFirst", "takeLast", "put", "putIfAbsent",
+            "replace", "set", "merge", "compute", "computeIfAbsent", "computeIfPresent",
+            "putFirst", "putLast", "push");
 
     private static final Set<String> KEY_VIEWS = Set.of("keySet", "sequencedKeySet");
 
@@ -61,12 +103,62 @@ final class HeldCopies {
     private static final Set<String> HOLDS_ITS_ARGUMENTS = Set.of(
             "of", "asList", "singleton", "singletonList", "ofNullable");
 
-    private static final Set<String> HANDS_BACK_ITS_ARGUMENT = Set.of("copyOf");
+    private static final Set<String> HANDS_BACK_ITS_ARGUMENT = Set.of(
+            "copyOf", "copyOfRange", "stream");
 
     private static final Set<String> SAME_ELEMENTS_IN_ANOTHER_FORM = Set.of(
-            "toList", "toArray", "sorted");
+            "toList", "toArray", "sorted", "clone");
 
     private HeldCopies() {}
+
+    private static Map<String, Map<Integer, Placement>> placements() {
+        Map<String, Map<Integer, Placement>> out = new HashMap<>();
+        for (String name : List.of("add", "addFirst", "addLast", "push", "addElement",
+                "addIfAbsent", "offer", "offerFirst", "offerLast", "set", "setValue", "put",
+                "putFirst", "putLast")) {
+            row(out, name, 1, Placement.NONE, 0);
+        }
+        for (String name : List.of("add", "set")) {
+            row(out, name, 2, Placement.NONE, 1);
+        }
+        for (String name : List.of("offer", "offerFirst", "offerLast")) {
+            row(out, name, 3, Placement.NONE, 0);
+        }
+        row(out, "setElementAt", 2, Placement.NONE, 0);
+        row(out, "insertElementAt", 2, Placement.NONE, 0);
+        for (String name : List.of("put", "putFirst", "putLast", "putIfAbsent", "replace")) {
+            row(out, name, 2, 0, 1);
+        }
+        row(out, "replace", 3, 0, 2);
+        row(out, "merge", 3, 0, 1);
+        return out;
+    }
+
+    private static void row(Map<String, Map<Integer, Placement>> into, String name, int arity,
+                            int key, int value) {
+        into.computeIfAbsent(name, each -> new HashMap<>()).put(arity, new Placement(key, value));
+    }
+
+    /** Where the call of this name with this many arguments stores what it stores, if it does. */
+    static Optional<Placement> placementOf(String name, int arity) {
+        return Optional.ofNullable(PLACEMENTS.getOrDefault(name, Map.of()).get(arity));
+    }
+
+    /** Whether the call puts every element of the container it is given in the one it is made on. */
+    static boolean putsAllIn(String name) {
+        return PUTS_ALL.contains(name);
+    }
+
+    /** Whether the call stores what a function it is given makes, which is not followed. */
+    static boolean storesWhatAFunctionMakes(String name) {
+        return STORES_WHAT_A_FUNCTION_MAKES.contains(name);
+    }
+
+    /** Whether the call of this name hands back a value, a key or an element a container held. */
+    static boolean takesOut(String name) {
+        return name.equals("getKey") || SaltedOrderVocabulary.takesOneOut(name)
+                || TAKES_THE_ONLY_ONE_OUT.contains(name);
+    }
 
     /** What the call does to held copies, joined to what the order reading made of it. */
     static Outcome through(Call call, Outcome order) {
@@ -93,9 +185,47 @@ final class HeldCopies {
     }
 
     /**
+     * What a copy a function returns is in what the call hands back, as the call says.
+     *
+     * @param returned what the function returned
+     */
+    static Set<Tag> handedBackBy(Into into, Set<Tag> returned) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Tag each : returned) {
+            switch (into) {
+                case AS_ELEMENTS -> {
+                    if (each.kind() == Kind.COLLECTION) {
+                        out.add(held(each.origin(), ELEMENT));
+                    } else if (each.isHeld()) {
+                        out.add(held(each.origin(), ELEMENT + each.site()));
+                    }
+                }
+                case AS_THEY_ARE -> {
+                    if (each.isHeld()) {
+                        out.add(each);
+                    }
+                }
+                case NOTHING -> { }
+            }
+        }
+        return out;
+    }
+
+    /** What storing a value in an array of references leaves on the array. */
+    static Set<Tag> storedInAnArray(Val value) {
+        return putIn(ELEMENT, value);
+    }
+
+    /** What loading from an array of references gives: the copies it holds. */
+    static Set<Tag> loadedFromAnArray(Val array) {
+        return takenOut(held(array), ELEMENT);
+    }
+
+    /**
      * The copies a container holds, as the elements of the functions the call is given: a function
      * handed to a walk over the container is run on each of them, and what it does with one is what
-     * is done with the copy.
+     * is done with the copy. What it returns is an element of what the call hands back where the
+     * call maps, and what the container it returns holds where the call spreads.
      */
     private static Feed handedToFunctions(Call call) {
         Set<Tag> functions = new LinkedHashSet<>();
@@ -110,7 +240,12 @@ final class HeldCopies {
         List<Set<Tag>> elements = keyedToo
                 ? List.of(takenOut(held, KEY), takenOut(held, ELEMENT))
                 : List.of(takenOut(held, ELEMENT));
-        return new Feed(functions, elements, false);
+        Into into = switch (call.name()) {
+            case "map", "mapToObj" -> Into.AS_ELEMENTS;
+            case "flatMap" -> Into.AS_THEY_ARE;
+            default -> Into.NOTHING;
+        };
+        return new Feed(functions, elements, false, null, into);
     }
 
     /** What the call hands back that holds, or is, a copy taken out of what it is made on. */
@@ -118,16 +253,14 @@ final class HeldCopies {
         if (call.isStatic()) {
             return madeOf(call);
         }
+        String name = call.name();
+        if (name.equals("push") && call.args().size() == 1 && call.returnsAReference()) {
+            // A stack answers the item it was given, which is what it now holds on top.
+            return itemsAsTheyAre(call.args().get(0));
+        }
         Set<Tag> held = held(call.receiver());
         if (held.isEmpty() || !call.returnsAReference()) {
             return Set.of();
-        }
-        String name = call.name();
-        if (name.equals("getKey")) {
-            return takenOut(held, KEY);
-        }
-        if (name.equals("getValue")) {
-            return takenOut(held, ELEMENT);
         }
         if (KEY_VIEWS.contains(name)) {
             return rekeyed(held);
@@ -138,13 +271,13 @@ final class HeldCopies {
         if (ENTRY_VIEWS.contains(name)) {
             return prefixed(held, ELEMENT);
         }
-        if (SaltedOrderVocabulary.takesOneOut(name) || TAKES_THE_ONLY_ONE_OUT.contains(name)) {
+        if (takesOut(name)) {
             if (call.descriptor().endsWith(")Ljava/util/Optional;") || name.endsWith("Entry")) {
                 // An optional of one element holds the slot its elements are in, and so does an
                 // entry of a map.
                 return held;
             }
-            return takenOut(held, name.endsWith("Key") ? KEY : ELEMENT);
+            return takenOut(held, name.endsWith("Key") || name.equals("getKey") ? KEY : ELEMENT);
         }
         if (SaltedOrderVocabulary.isAView(name)
                 || SaltedOrderVocabulary.keepsTheElementsOfAWalk(name)
@@ -154,19 +287,40 @@ final class HeldCopies {
         return Set.of();
     }
 
+    /** The copies a value is, or holds, as they are. */
+    private static Set<Tag> itemsAsTheyAre(Val value) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Tag each : value.tags()) {
+            if (each.kind() == Kind.COLLECTION || each.isHeld()) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
     /** What a call of the library that makes a container, or an element of one, holds. */
     private static Set<Tag> madeOf(Call call) {
         String name = call.name();
         List<Val> args = call.args();
+        boolean ofAnArray = !args.isEmpty() && call.descriptor().startsWith("([");
         Set<Tag> out = new LinkedHashSet<>();
-        if (call.owner().equals("java/util/Map") && name.equals("of")) {
+        if (call.owner().equals("java/util/Map") && name.equals("ofEntries") && ofAnArray) {
+            // The array holds entries, and an entry holds what a map does.
+            out.addAll(takenAlong(held(args.get(0)), ELEMENT, true));
+        } else if (call.owner().equals("java/util/Map") && name.equals("of")) {
             for (int each = 0; each < args.size(); each++) {
                 out.addAll(putIn(each % 2 == 0 ? KEY : ELEMENT, args.get(each)));
             }
-        } else if (call.owner().equals("java/util/Map") && name.equals("entry")
-                && args.size() == 2) {
+        } else if (((call.owner().equals("java/util/Map") && name.equals("entry"))
+                || name.equals("singletonMap")) && args.size() == 2) {
             out.addAll(putIn(KEY, args.get(0)));
             out.addAll(putIn(ELEMENT, args.get(1)));
+        } else if (name.equals("nCopies") && args.size() == 2) {
+            out.addAll(putIn(ELEMENT, args.get(1)));
+        } else if (ofAnArray && (HOLDS_ITS_ARGUMENTS.contains(name)
+                || HANDS_BACK_ITS_ARGUMENT.contains(name))) {
+            // A container made of an array holds what the array does, in the same slot.
+            out.addAll(held(args.get(0)));
         } else if (HOLDS_ITS_ARGUMENTS.contains(name)) {
             for (Val each : args) {
                 out.addAll(putIn(ELEMENT, each));
@@ -189,23 +343,26 @@ final class HeldCopies {
         String name = call.name();
         List<Val> args = call.args();
         Set<Tag> out = new LinkedHashSet<>();
-        boolean aPair = call.owner().startsWith("java/util/AbstractMap$Simple");
         if (name.equals("<init>")) {
-            if (aPair && args.size() == 2) {
+            if (call.owner().startsWith("java/util/AbstractMap$Simple") && args.size() == 2) {
                 out.addAll(putIn(KEY, args.get(0)));
                 out.addAll(putIn(ELEMENT, args.get(1)));
             } else if (args.size() == 1) {
                 // A container made of another holds what the other held.
                 out.addAll(held(args.get(0)));
             }
-        } else if (PUTS_AN_ELEMENT.contains(name) && !args.isEmpty()) {
-            out.addAll(putIn(ELEMENT, args.get(args.size() - 1)));
-        } else if ((PUTS_A_KEY_AND_A_VALUE.contains(name) || name.equals("replace"))
-                && args.size() >= 2) {
-            out.addAll(putIn(KEY, args.get(0)));
-            out.addAll(putIn(ELEMENT, args.get(1)));
-        } else if (PUTS_ALL.contains(name) && !args.isEmpty()) {
+            return out;
+        }
+        if (PUTS_ALL.contains(name) && !args.isEmpty()) {
             out.addAll(held(args.get(args.size() - 1)));
+            return out;
+        }
+        Optional<Placement> where = placementOf(name, args.size());
+        if (where.isPresent()) {
+            if (where.get().key() != Placement.NONE) {
+                out.addAll(putIn(KEY, args.get(where.get().key())));
+            }
+            out.addAll(putIn(ELEMENT, args.get(where.get().value())));
         }
         return out;
     }
@@ -221,14 +378,26 @@ final class HeldCopies {
         return out;
     }
 
+    /** A held copy at this path, widened where the path is longer than the reading follows. */
+    private static Tag held(String origin, String path) {
+        return Tag.held(origin, widened(path));
+    }
+
+    /** The path, or its first slots and {@code *} where it names more than {@link #MAX_DEPTH}. */
+    static String widened(String path) {
+        boolean any = path.endsWith(ANY);
+        String slots = any ? path.substring(0, path.length() - 1) : path;
+        return slots.length() <= MAX_DEPTH ? path : slots.substring(0, MAX_DEPTH) + ANY;
+    }
+
     /** What putting this value in one slot of a container leaves on the container. */
     private static Set<Tag> putIn(String slot, Val value) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag each : value.tags()) {
             if (each.kind() == Kind.COLLECTION) {
-                out.add(Tag.held(each.origin(), slot));
+                out.add(held(each.origin(), slot));
             } else if (each.isHeld()) {
-                out.add(Tag.held(each.origin(), slot + each.site()));
+                out.add(held(each.origin(), slot + each.site()));
             }
         }
         return out;
@@ -236,26 +405,58 @@ final class HeldCopies {
 
     /**
      * What is taken out of one slot: the copy itself where nothing is left of the path, and what
-     * the copy's own slots hold where something is.
+     * the copy's own slots hold where something is. Where what is left is {@code *} it is both, for
+     * the copy may be that slot or deeper.
      */
     private static Set<Tag> takenOut(Set<Tag> held, String slot) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag each : held) {
-            if (each.site().startsWith(slot)) {
-                String rest = each.site().substring(slot.length());
-                out.add(rest.isEmpty() ? new Tag(Kind.COLLECTION, each.origin())
-                        : Tag.held(each.origin(), rest));
+            String rest = restAfter(each, slot);
+            if (rest == null) {
+                continue;
+            }
+            if (rest.isEmpty()) {
+                out.add(new Tag(Kind.COLLECTION, each.origin()));
+            } else if (rest.equals(ANY)) {
+                out.add(new Tag(Kind.COLLECTION, each.origin()));
+                out.add(held(each.origin(), ANY));
+            } else {
+                out.add(held(each.origin(), rest));
             }
         }
         return out;
     }
 
+    /** What is left of the path once this slot is taken, or null where it is another slot's. */
+    private static String restAfter(Tag held, String slot) {
+        if (held.site().equals(ANY)) {
+            return ANY;
+        }
+        return held.site().startsWith(slot) ? held.site().substring(slot.length()) : null;
+    }
+
     /** What a view of the elements of a slot holds: the same, as elements of the view. */
     private static Set<Tag> takenAlong(Set<Tag> held, String slot) {
+        return takenAlong(held, slot, false);
+    }
+
+    /**
+     * The tags a slot holds, kept as they are, or with the slot taken off where {@code strip} says
+     * the elements are themselves containers whose slots are what is wanted.
+     */
+    private static Set<Tag> takenAlong(Set<Tag> held, String slot, boolean strip) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag each : held) {
-            if (each.site().startsWith(slot)) {
+            String rest = restAfter(each, slot);
+            if (rest == null) {
+                continue;
+            }
+            if (!strip) {
                 out.add(each);
+            } else if (rest.equals(ANY)) {
+                out.add(held(each.origin(), ANY));
+            } else if (!rest.isEmpty()) {
+                out.add(held(each.origin(), rest));
             }
         }
         return out;
@@ -265,9 +466,11 @@ final class HeldCopies {
     private static Set<Tag> rekeyed(Set<Tag> held) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag each : held) {
-            if (each.site().startsWith(KEY)) {
-                out.add(Tag.held(each.origin(), ELEMENT + each.site().substring(KEY.length())));
+            String rest = restAfter(each, KEY);
+            if (rest == null) {
+                continue;
             }
+            out.add(each.site().equals(ANY) ? each : held(each.origin(), ELEMENT + rest));
         }
         return out;
     }
@@ -276,8 +479,24 @@ final class HeldCopies {
     private static Set<Tag> prefixed(Set<Tag> held, String slot) {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag each : held) {
-            out.add(Tag.held(each.origin(), slot + each.site()));
+            out.add(held(each.origin(), slot + each.site()));
         }
         return out;
+    }
+
+    /** How many slots the longest path among these names, for the reading to say. */
+    static int longestPath(Set<Tag> tags) {
+        int longest = 0;
+        for (Tag each : tags) {
+            if (each.isHeld()) {
+                longest = Math.max(longest, each.site().length());
+            }
+        }
+        return longest;
+    }
+
+    /** The descriptor's argument count, for a table that is read by arity. */
+    static int arityOf(String descriptor) {
+        return MethodTypeDesc.ofDescriptor(descriptor).parameterCount();
     }
 }

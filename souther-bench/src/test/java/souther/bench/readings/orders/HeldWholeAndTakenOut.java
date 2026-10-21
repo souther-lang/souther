@@ -2,13 +2,21 @@ package souther.bench.readings.orders;
 
 import souther.compiler.partition.CompositionBudget;
 
+import java.util.AbstractMap;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.Vector;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Stream;
 
 /**
  * Readers that make a copy, hold it whole in a container, and take its order into an answer after
@@ -118,6 +126,122 @@ public final class HeldWholeAndTakenOut {
         holder.add(Set.copyOf(one));
         holder.addAll(Set.copyOf(other));
         return new ArrayList<>((Set<CompositionBudget>) holder.getFirst());
+    }
+
+    public static List<CompositionBudget> keptByAFunctionOfAStreamAndTakenOut(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = List.of(Set.copyOf(values));
+        return new ArrayList<>(holder.stream().map(each -> each).findFirst().orElseThrow());
+    }
+
+    public static List<CompositionBudget> keptByAFunctionThatMakesAStream(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = List.of(Set.copyOf(values));
+        return new ArrayList<>(holder.stream().flatMap(each -> Stream.of(each)).findFirst()
+                .orElseThrow());
+    }
+
+    public static List<CompositionBudget> keptByAFunctionOfAnOptional(
+            Set<CompositionBudget> values) {
+        return new ArrayList<>(Optional.of(Set.copyOf(values)).map(each -> each).orElseThrow());
+    }
+
+    public static List<CompositionBudget> putByTheThreeArgumentReplace(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new HashMap<>();
+        holder.put("k", Set.of());
+        holder.replace("k", Set.of(), Set.copyOf(values));
+        return new ArrayList<>(holder.get("k"));
+    }
+
+    public static List<CompositionBudget> putByTheTwoArgumentReplace(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new HashMap<>();
+        holder.put("k", Set.of());
+        holder.replace("k", Set.copyOf(values));
+        return new ArrayList<>(holder.get("k"));
+    }
+
+    public static List<CompositionBudget> insertedAtAnIndexOfAVector(
+            Set<CompositionBudget> values) {
+        Vector<Set<CompositionBudget>> holder = new Vector<>();
+        holder.insertElementAt(Set.copyOf(values), 0);
+        return new ArrayList<>(holder.firstElement());
+    }
+
+    public static List<CompositionBudget> putOnABlockingQueue(Set<CompositionBudget> values)
+            throws InterruptedException {
+        BlockingQueue<Set<CompositionBudget>> holder = new LinkedBlockingQueue<>();
+        holder.put(Set.copyOf(values));
+        return new ArrayList<>(holder.take());
+    }
+
+    public static List<CompositionBudget> setOnAnEntry(Set<CompositionBudget> values) {
+        Map.Entry<String, Set<CompositionBudget>> holder =
+                new AbstractMap.SimpleEntry<>("k", Set.of());
+        holder.setValue(Set.copyOf(values));
+        return new ArrayList<>(holder.getValue());
+    }
+
+    public static List<CompositionBudget> heldByASingletonMap(Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder =
+                Collections.singletonMap("k", Set.copyOf(values));
+        return new ArrayList<>(holder.get("k"));
+    }
+
+    public static List<CompositionBudget> heldByCopiesOfOneElement(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = Collections.nCopies(2, Set.copyOf(values));
+        return new ArrayList<>(holder.getFirst());
+    }
+
+    public static List<CompositionBudget> heldByTheEntriesOfAMap(Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder =
+                Map.ofEntries(Map.entry("k", Set.copyOf(values)));
+        return new ArrayList<>(holder.get("k"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public static List<CompositionBudget> heldInAnArray(Set<CompositionBudget> values) {
+        Set<CompositionBudget>[] holder = (Set<CompositionBudget>[]) new Set<?>[1];
+        holder[0] = Set.copyOf(values);
+        return new ArrayList<>(holder[0]);
+    }
+
+    public static List<CompositionBudget> heldByAListMadeOfAnArray(Set<CompositionBudget> values) {
+        @SuppressWarnings("unchecked")
+        Set<CompositionBudget>[] holder = (Set<CompositionBudget>[]) new Set<?>[1];
+        holder[0] = Set.copyOf(values);
+        return new ArrayList<>(Arrays.asList(holder).getFirst());
+    }
+
+    /** Wrapped as often as there are levels, which is a number the reading does not know. */
+    @SuppressWarnings("unchecked")
+    public static List<CompositionBudget> wrappedInAListAsOftenAsAskedAndTakenOut(
+            Set<CompositionBudget> values, int levels) {
+        Object holder = Set.copyOf(values);
+        for (int each = 0; each < levels; each++) {
+            holder = List.of(holder);
+        }
+        for (int each = 0; each < levels; each++) {
+            holder = ((List<Object>) holder).getFirst();
+        }
+        return new ArrayList<>((Set<CompositionBudget>) holder);
+    }
+
+    public static List<CompositionBudget> wrappedByARecursionAndTakenOut(
+            Set<CompositionBudget> values, int levels) {
+        return new ArrayList<>(unwrapped(wrapped(Set.copyOf(values), levels), levels));
+    }
+
+    private static Object wrapped(Object inner, int levels) {
+        return levels == 0 ? inner : wrapped(List.of(inner), levels - 1);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<CompositionBudget> unwrapped(Object outer, int levels) {
+        return levels == 0 ? (Set<CompositionBudget>) outer
+                : unwrapped(((List<Object>) outer).getFirst(), levels - 1);
     }
 
     public static List<CompositionBudget> heldAsAKeyAndTakenOutOfTheKeys(

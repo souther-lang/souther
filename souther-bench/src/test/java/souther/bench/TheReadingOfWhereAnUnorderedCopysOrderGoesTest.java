@@ -10,6 +10,7 @@ import souther.bench.readings.orders.HeldClasses;
 import souther.bench.readings.orders.HeldWholeAndNotTakenOut;
 import souther.bench.readings.orders.HeldWholeAndTakenOut;
 import souther.bench.readings.orders.HeldWholeInAField;
+import souther.bench.readings.orders.HeldWholeAndOverwritten;
 import souther.bench.readings.orders.ReachedThroughAField;
 import souther.bench.readings.orders.ReachedThroughAFunction;
 import souther.bench.readings.orders.ReachedThroughATextOfAClass;
@@ -201,6 +202,22 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
                 "a reader that holds a copy whole, and takes out something else or takes the copy"
                         + " out to ask it or put it in an order, was refused");
         assertFalse(reading.roots().isEmpty(), "the walk did not begin at the copies held");
+    }
+
+    /**
+     * A limit, held so that it is not lost: a put to a place a copy was put to leaves the copy held,
+     * so these are named for it though what they return is not its order. Where a reading tells the
+     * two apart this fails, and the readers move to the ones that are passed.
+     */
+    @Test
+    void aPlaceThatIsPutToAgainIsReadAsHoldingWhatItHeldBefore() {
+        Reading reading = readingOfOnly(HeldWholeAndOverwritten.class);
+
+        for (String reader : publicMethodsOf(HeldWholeAndOverwritten.class)) {
+            assertFalse(findingsIn(reading, HeldWholeAndOverwritten.class, reader).isEmpty(),
+                    () -> reader + " is passed now, so the limit this holds is gone: say so where"
+                            + " the table of held copies lists what it does not follow");
+        }
     }
 
     @Test

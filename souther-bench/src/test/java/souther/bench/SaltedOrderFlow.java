@@ -2,6 +2,7 @@ package souther.bench;
 
 import souther.bench.SaltedOrder.Finding;
 import souther.bench.SaltedOrder.Kind;
+import souther.bench.SaltedOrder.Measures;
 import souther.bench.SaltedOrder.Reading;
 import souther.bench.SaltedOrder.Tag;
 import souther.bench.SaltedOrder.Val;
@@ -172,6 +173,9 @@ final class SaltedOrderFlow {
     private final Map<MethodKey, List<MethodKey>> runs = new HashMap<>();
     private final Map<String, Integer> captured = new HashMap<>();
     private final Deque<Unit> queue = new ArrayDeque<>();
+
+    /** How many times a method was read, which is more than once where what it reads changed. */
+    private int reads;
     private final Set<Unit> queued = new HashSet<>();
     private final Set<Unit> started = new HashSet<>();
     private final Map<MethodKey, Val> handsOutAnAnswer = new LinkedHashMap<>();
@@ -379,7 +383,6 @@ final class SaltedOrderFlow {
         for (MethodKey each : makesACopy) {
             enqueueOnce(new Unit(each, ""));
         }
-        int reads = 0;
         int most = methods.size() * 60;
         while (!queue.isEmpty()) {
             Unit next = queue.poll();
@@ -390,6 +393,17 @@ final class SaltedOrderFlow {
                         + methods.size() + " methods, and " + queue.size() + " still waiting");
             }
         }
+    }
+
+    /** What the reading came to in size, for a test to hold it to what it is meant to be. */
+    private Measures measured() {
+        int longest = 0;
+        long tags = 0;
+        for (Set<Tag> each : facts.values()) {
+            tags += each.size();
+            longest = Math.max(longest, HeldCopies.longestPath(each));
+        }
+        return new Measures(reads, methods.size(), facts.size(), tags, longest);
     }
 
     private void enqueue(Unit unit) {
@@ -423,7 +437,7 @@ final class SaltedOrderFlow {
         for (var each : findings.entrySet()) {
             out.add(new Finding(each.getKey().reader(), each.getKey().what(), each.getValue()));
         }
-        return new Reading(roots, out, reached);
+        return new Reading(roots, out, reached, measured());
     }
 
     private static Set<String> originsOf(Set<Tag> tags) {
@@ -695,7 +709,16 @@ final class SaltedOrderFlow {
         in[0] = new State(seed, new ArrayList<>());
         BitSet pending = new BitSet();
         pending.set(0);
+        // What a place holds only grows, among a finite set of tags, so a method is read to the
+        // end; a method that is not is one where something grows without bound, and is said so
+        // rather than read for ever.
+        int steps = 0;
+        int mostSteps = 1000 * (size + 10);
         while (!pending.isEmpty()) {
+            if (++steps > mostSteps) {
+                throw new AssertionError("the reading of " + unit + " does not settle: " + steps
+                        + " steps over " + size + " instructions");
+            }
             int here = pending.nextSetBit(0);
             pending.clear(here);
             State state = in[here].copy();
@@ -862,8 +885,9 @@ final class SaltedOrderFlow {
             case ArrayLoadInstruction load -> {
                 state.pop();
                 Val array = state.pop();
-                state.push(new Val(array.as(Kind.PICKED), isWide(load.typeKind()), -1, null, null,
-                        Set.of()));
+                Set<Tag> loaded = new LinkedHashSet<>(array.as(Kind.PICKED));
+                loaded.addAll(HeldCopies.loadedFromAnArray(array));
+                state.push(new Val(loaded, isWide(load.typeKind()), -1, null, null, Set.of()));
             }
             case ArrayStoreInstruction _ -> {
                 Val value = state.pop();
@@ -876,6 +900,7 @@ final class SaltedOrderFlow {
                                 .madeAt(unit + ":" + index + " stores in an array"));
                     }
                 }
+                into.addAll(HeldCopies.storedInAnArray(value));
                 place(state, array, into);
             }
             case OperatorInstruction operator -> {
@@ -1455,6 +1480,7 @@ final class SaltedOrderFlow {
                     if (feed.returns()) {
                         result.addAll(back);
                     }
+                    result.addAll(HeldCopies.handedBackBy(feed.into(), back));
                     if (feed.keptBy() != null) {
                         place(state, feed.keptBy(), madeAt(SaltedOrderVocabulary.survivors(back,
                                 false), here));

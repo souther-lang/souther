@@ -105,7 +105,8 @@ final class SaltedOrderVocabulary {
         Outcome feeding(List<Feed> more, boolean returns) {
             List<Feed> all = new ArrayList<>(feeds);
             for (Feed each : more) {
-                all.add(new Feed(each.functions(), each.elements(), returns, each.keptBy()));
+                all.add(new Feed(each.functions(), each.elements(), returns, each.keptBy(),
+                        each.into()));
             }
             return new Outcome(result, pushes, clears, all, crossedBy, unmodeled, endsAs);
         }
@@ -121,8 +122,14 @@ final class SaltedOrderVocabulary {
      * @param elements  what each argument after the ones they captured is
      * @param returns   whether what they return is part of what the call returns
      * @param keptBy    what holds what they return, where the call stores it, or null
+     * @param into      what a copy they return becomes in what the call hands back
      */
-    record Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns, Val keptBy) {
+    record Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns, Val keptBy,
+                HeldCopies.Into into) {
+
+        Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns, Val keptBy) {
+            this(functions, elements, returns, keptBy, HeldCopies.Into.NOTHING);
+        }
 
         Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns) {
             this(functions, elements, returns, null);

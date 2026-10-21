@@ -473,14 +473,27 @@ final class SaltedOrder {
     record Finding(String reader, String what, Set<String> origins) {}
 
     /**
+     * How big the reading was, which a reading that follows too much shows before it fails.
+     *
+     * @param reads           how many times a method was read, again where a fact it read grew
+     * @param methods         how many methods there were to read
+     * @param facts           how many places held anything
+     * @param tags            how many tags those places held between them
+     * @param longestHeldPath how many slots the longest path of a held copy names
+     */
+    record Measures(int reads, int methods, int facts, long tags, int longestHeldPath) {}
+
+    /**
      * What the whole reading came to.
      *
      * @param roots   every copy the reading began at
      * @param findings every place an order became an answer
      * @param reached for each copy, where what came out of it went in the end: to a crossing that
      *                puts it in an order, or into a value that holds it and is asked, in turn
+     * @param measured how big the reading was
      */
-    record Reading(Set<String> roots, List<Finding> findings, Map<String, Set<String>> reached) {
+    record Reading(Set<String> roots, List<Finding> findings, Map<String, Set<String>> reached,
+                   Measures measured) {
 
         Reading {
             roots = Collections.unmodifiableSet(new LinkedHashSet<>(roots));

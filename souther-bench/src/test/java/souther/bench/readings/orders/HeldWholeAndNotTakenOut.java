@@ -75,6 +75,21 @@ public final class HeldWholeAndNotTakenOut {
         return new ArrayList<>(holder.getFirst());
     }
 
+    public static List<Integer> aFunctionOfTheCopiesThatIsNotAnyOfThem(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        return holder.stream().map(Set::size).toList();
+    }
+
+    public static List<CompositionBudget> aReplaceWhoseExpectedValueIsTheCopy(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new LinkedHashMap<>();
+        holder.put("k", Set.of());
+        holder.replace("k", Set.copyOf(values), new LinkedHashSet<>());
+        return new ArrayList<>(holder.get("k"));
+    }
+
     public static List<CompositionBudget> putInAnOrderWhenTakenOut(
             Set<CompositionBudget> values) {
         List<Set<CompositionBudget>> holder = new ArrayList<>();
