@@ -38,6 +38,9 @@ class WhatIsSettledAfterAChoiceIsObservedAndNotComposedAgainTest {
      * <p>Over every class this compiler holds and not over the type alone: an algebra written
      * beside it — a static method over two of them, a builder holding one and returning one — is
      * the same second answer arrived at from outside.
+     *
+     * <p>The classes the compiler compiles and no others: the modules below it cannot name this
+     * type, and a test's fixture holding one is no reader this is about.
      */
     @Test
     void nothingTakesASettledOrderAndAnswersWithAnother() {

@@ -123,8 +123,8 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
                 %s""".formatted(comparison, rows);
     }
 
-    /** A part compared with a value by a relation, after a move of some days. */
-    private record Compared(String part, int value, String relation, int shift) {
+    /** A part compared with a value by each of some relations, after a move of some days. */
+    private record Compared(String part, int value, List<String> relations, int shift) {
     }
 
     /** The lines of {@code report} that say how far it was measured and what it comes to. */
@@ -137,38 +137,39 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
      * A comparison of a month or a day of a moved date is measured as the same comparison of the
      * date's own part is, and the rows on each side of each line leave no point without one.
      *
-     * <p>Equality at a month and at a day inside the calendar's, which draws a line on each side
-     * of the value, and at the calendar's ends the relation that puts the line beyond the end.
-     * Which relation it is, is read by what reads every comparison of numbers; what the move
-     * decides is the term and the dates written for it, and those are the same whichever relation
-     * asks, so each line is asked by one.
+     * <p>Every relation inside the calendar's months and days: which line a relation draws — at
+     * the value, past it, or on each side — is the move read through the relation, so each
+     * relation is asked of a moved part once, half of them moving a month forward and half moving
+     * a day back. At the calendar's ends, the relations that put the line on either side of the
+     * end.
      */
     @Test
-    void eachLineHoldsOnBothSidesOfIt() {
+    void everyRelationHoldsAtEachLineAndOnBothSidesOfIt() {
         for (Compared each : List.of(
-                new Compared("month", 3, "==", 1),
-                new Compared("day", 29, "==", -30),
-                new Compared("month", 12, ">", -30),
-                new Compared("day", 31, ">", 1),
-                new Compared("day", 1, "<", -30))) {
+                new Compared("month", 3, List.of(">=", ">", "=="), 1),
+                new Compared("day", 29, List.of("<=", "<", "/="), -30),
+                new Compared("month", 12, List.of(">", "<="), -30),
+                new Compared("day", 31, List.of(">", "<="), 1),
+                new Compared("day", 1, List.of("<", ">="), -30))) {
             String part = each.part();
             int value = each.value();
             int shift = each.shift();
-            String relation = each.relation();
-            String own = "Date.%s(b) %s %d".formatted(part, relation, value);
-            String itself = report(compiled(source(own, part, 0, relation, value,
-                    datesAround(part, value, 0))));
-            String comparison = "Date.%s(Date.addDays(%d, b)) %s %d"
-                    .formatted(part, shift, relation, value);
-            Compilation compilation = compiled(source(comparison, part, shift, relation, value,
-                    datesAround(part, value, shift)));
-            String report = report(compilation);
-            String where = comparison + "\n" + report + "\n" + own + "\n" + itself;
+            for (String relation : each.relations()) {
+                String own = "Date.%s(b) %s %d".formatted(part, relation, value);
+                String itself = report(compiled(source(own, part, 0, relation, value,
+                        datesAround(part, value, 0))));
+                String comparison = "Date.%s(Date.addDays(%d, b)) %s %d"
+                        .formatted(part, shift, relation, value);
+                Compilation compilation = compiled(source(comparison, part, shift, relation,
+                        value, datesAround(part, value, shift)));
+                String report = report(compilation);
+                String where = comparison + "\n" + report + "\n" + own + "\n" + itself;
 
-            assertEquals(0, compilation.errors().size(), where);
-            assertFalse(report.contains("no row is at"), where);
-            assertFalse(report.contains("not read"), where);
-            assertEquals(verdicts(itself), verdicts(report), where);
+                assertEquals(0, compilation.errors().size(), where);
+                assertFalse(report.contains("no row is at"), where);
+                assertFalse(report.contains("not read"), where);
+                assertEquals(verdicts(itself), verdicts(report), where);
+            }
         }
     }
 

@@ -283,29 +283,75 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
             }
             """;
 
+    /** The class of a person of {@code age}, as the chain of comparisons is meant to put it. */
+    private static int classOf(int age, boolean ascendant) {
+        if (age >= 70 && ascendant) {
+            return 3;
+        }
+        if (age >= 70) {
+            return 2;
+        }
+        return age >= 19 ? 1 : 0;
+    }
+
+    /** One example row, answered with the class the calendar's age and the flag give. */
+    private static void example(StringBuilder into, LocalDate birthday, LocalDate on,
+                                boolean ascendant) {
+        into.append("    | (Date(\"").append(birthday).append("\"), Date(\"").append(on)
+                .append("\"), ").append(ascendant).append(") -> ")
+                .append(classOf(ageAttained(birthday, on), ascendant)).append('\n');
+    }
+
     /**
-     * The rows offered stand at both sides of each line of the age, as the calendar works the age
-     * of each out, apart from the compiler.
+     * The rows offered stand at both sides of each line of the age, and the class each is
+     * answered is the one the calendar's age and the flag give.
+     *
+     * <p>The answers are worked out here, apart from the compiler, and the rows are written back
+     * as examples the program is run on: an answer that is not the program's is an error. That
+     * holds the working out of the age, the chain of comparisons and the rows put at its lines to
+     * one account of the calendar together, which no test of one of them alone does. The rows run
+     * are the ones at the lines — the rows offered, and past seventy the day each age is attained
+     * and the day before at both values of the flag, which the rows offered stand at only where a
+     * comparison asks it.
      */
     @Test
-    void theRowsOfferedForAChainOfAgeComparisonsStandAtBothSidesOfEachLine() {
+    void theRowsOfferedForAChainOfAgeComparisonsAreAnsweredAsTheCalendarWorksTheClassOut() {
         Compilation offering = Measured.CHAIN_OF_AGES;
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(offering.texts()), offering.db())
                 .text();
 
-        Pattern row = Pattern.compile("Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\)");
+        Pattern row = Pattern.compile(
+                "Date\\(\"([^\"]+)\"\\), Date\\(\"([^\"]+)\"\\), (true|false)");
+        StringBuilder examples = new StringBuilder();
         Set<Integer> ages = new HashSet<>();
         for (String line : offered.lines().toList()) {
             Matcher found = row.matcher(line);
             if (found.find()) {
-                ages.add(ageAttained(LocalDate.parse(found.group(1)),
-                        LocalDate.parse(found.group(2))));
+                LocalDate birthday = LocalDate.parse(found.group(1));
+                LocalDate on = LocalDate.parse(found.group(2));
+                ages.add(ageAttained(birthday, on));
+                example(examples, birthday, on, Boolean.parseBoolean(found.group(3)));
             }
         }
         assertTrue(ages.containsAll(List.of(18, 19, 69, 70)),
                 () -> "a row at each side of each line: " + ages + "\n" + offered);
+
+        LocalDate born = LocalDate.of(1950, 6, 15);
+        for (int age : List.of(69, 70)) {
+            LocalDate attained = born.minusDays(1).plusYears(age);
+            for (LocalDate on : List.of(attained, attained.minusDays(1))) {
+                example(examples, born, on, true);
+                example(examples, born, on, false);
+            }
+        }
+
+        // Run and not measured: an example whose answer is not the program's is an error, which
+        // is all this asks of the rows.
+        Compilation answered = Compilation.ofSource(CHAIN + "\nexample f\n" + examples, "Main");
+        answered.answerEverything();
+        assertEquals(0, answered.errors().size(), () -> answered.errors() + "\n" + examples);
     }
 
     /**

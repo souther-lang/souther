@@ -71,12 +71,18 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
         };
     }
 
-    /** The dates an equality with {@code year} turns over at: where the year begins, and where the
-     *  next one does. */
-    private static List<LocalDate> linesOf(long year, int shift) {
+    private static final String[] RELATIONS = {">=", ">", "<=", "<", "==", "/="};
+
+    /** The dates the comparison turns over at: where the year it is made against begins, where
+     *  the next one does, or both. */
+    private static List<LocalDate> linesOf(String relation, long year, int shift) {
         List<LocalDate> lines = new ArrayList<>();
-        lineAt(lines, year, shift);
-        lineAt(lines, year + 1, shift);
+        if (!relation.equals(">") && !relation.equals("<=")) {
+            lineAt(lines, year, shift);
+        }
+        if (!relation.equals(">=") && !relation.equals("<")) {
+            lineAt(lines, year + 1, shift);
+        }
         return lines;
     }
 
@@ -167,15 +173,17 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
     }
 
     /**
-     * Each line is held on both sides of it, by an equality, which draws a line where the year
-     * begins and another where the next one does. Which relation draws a line is read by what
-     * reads every comparison of numbers; what the move decides is the date the line falls on, so
-     * each year is asked once forward and once back: the first year, a leap year a year of days
+     * Each line is held on both sides of it, for every relation, forward and back. What the move
+     * decides is the date a line falls on, and which of the two lines a relation draws — where
+     * the year begins, where the next one does, or both — is the move read through the relation,
+     * so each relation is asked once moving forward and once moving back. The years and moves are
+     * the ones the calendar makes a difference at: the first year, a leap year a year of days
      * crosses, a year in the middle, the last of four digits, one past them, and the last year the
-     * calendar has, whose next year begins at no date.
+     * calendar has, whose next year begins at no date; each relation meets a different pair of
+     * them.
      */
     @Test
-    void eachLineHoldsOnBothSidesOfIt() {
+    void everyRelationHoldsAtEachLineAndOnBothSidesOfIt() {
         long[][] yearsAndShifts = {
                 {1, 1}, {1, -366},
                 {2024, 30}, {2024, -366},
@@ -183,12 +191,16 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
                 {9999, 30}, {9999, -1},
                 {20000, 1}, {20000, -366},
                 {Year.MAX_VALUE, 1}, {Year.MAX_VALUE, -366}};
-        for (long[] each : yearsAndShifts) {
-            long year = each[0];
-            int shift = (int) each[1];
-            List<LocalDate> lines = linesOf(year, shift);
-            String comparison = "Date.year(Date.addDays(%d, b)) == %d".formatted(shift, year);
-            Compilation compilation = compiled(source(comparison, shift, "==", year,
+        for (int at = 0; at < yearsAndShifts.length; at++) {
+            long year = yearsAndShifts[at][0];
+            int shift = (int) yearsAndShifts[at][1];
+            // Forward with the relation of the year's place among the six, back with the one
+            // half the list round: every relation once each way.
+            String relation = RELATIONS[(at / 2 + (at % 2) * 3) % RELATIONS.length];
+            List<LocalDate> lines = linesOf(relation, year, shift);
+            String comparison = "Date.year(Date.addDays(%d, b)) %s %d"
+                    .formatted(shift, relation, year);
+            Compilation compilation = compiled(source(comparison, shift, relation, year,
                     datesAround(lines, shift)));
             String report = report(compilation);
             String where = comparison + "\n" + report;

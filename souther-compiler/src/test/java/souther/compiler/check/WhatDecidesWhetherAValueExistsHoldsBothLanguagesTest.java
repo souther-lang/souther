@@ -56,6 +56,9 @@ class WhatDecidesWhetherAValueExistsHoldsBothLanguagesTest {
      * <p>So the halves are not separately in hand anywhere. What a reader wants of one of them is a
      * question with a name on this type, and the question about both has one implementation that no
      * holder can answer around.
+     *
+     * <p>Over the classes the compiler compiles and no others: the modules below it cannot name
+     * where the positions stop, and a test's fixture holding it is no reader this is about.
      */
     @Test
     void whereThePositionsStopIsHeldByTheConfinementAndByNothingElse() throws Exception {
