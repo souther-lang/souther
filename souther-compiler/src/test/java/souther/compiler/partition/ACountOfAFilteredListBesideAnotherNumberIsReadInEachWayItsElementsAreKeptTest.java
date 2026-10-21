@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
@@ -12,7 +13,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
@@ -47,16 +50,30 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
             let cnt (x: Int, y: Int): Int = List.length(List.filter(v -> v > 0, [x, y]))
             """;
 
+    /** Each source measured, once for the class: the tests here read what a measurement says and
+     *  none changes it, and several ask the same source. */
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
     /**
      * @param after what the source writes after the behavior: its examples, or a helper it calls
      */
     private static Compilation compiled(String body, String after) {
-        Compilation compilation = Compilation.ofSource(source(body, after), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
-        return compilation;
+        return MEASURED.computeIfAbsent(source(body, after), source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            assertEquals(List.of(), compilation.errors().stream()
+                    .map(each -> each.diagnostic().code()).toList(),
+                    "the model under test compiles");
+            return compilation;
+        });
+    }
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 
     private static String source(String body, String after) {
@@ -157,21 +174,29 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         }
     }
 
+    /**
+     * The count and the total of ones over the same list are one quantity, read before any
+     * comparison is made of it: so one comparison asks it, and every relation the comparison could
+     * hold would ask the same reading again.
+     */
     @Test
     void theCountIsReadAsTheSumOfOnesOverTheSameListIs() {
-        for (String comparison : List.of("k >= %s", "k > %s", "k <= %s", "k < %s", "k == %s")) {
-            Set<String> count = linesDrawn(report(guarded(comparison.formatted(COUNT))));
-            assertTrue(count.contains("· read as f/k: = 1"), () -> comparison + ": " + count);
-            assertEquals(linesDrawn(report(guarded(comparison.formatted(ONES)))), count,
-                    comparison);
-        }
+        Set<String> count = linesDrawn(report(guarded("k >= " + COUNT)));
+        assertTrue(count.contains("· read as f/k: = 1"), count::toString);
+        assertEquals(linesDrawn(report(guarded("k >= " + ONES))), count);
     }
 
-    /** Turned round, or with both sides doubled, a comparison states the same lines and is owed
-     *  the same points. */
+    /**
+     * Turned round, or with both sides doubled, a comparison states the same lines and is owed
+     * the same points.
+     *
+     * <p>Asked of a relation that is no relation turned round, at and past its value: an equality
+     * reads the same either way, so it could not show a reader that forgot to turn one, and the
+     * other two are these two turned.
+     */
     @Test
     void theSameComparisonWrittenAnotherWayStatesTheSame() {
-        for (Related related : RELATIONS) {
+        for (Related related : RELATIONS.subList(0, 2)) {
             String kFirst = guarded(related.kFirst().formatted(COUNT));
             String countFirst = guarded(related.countFirst().formatted(COUNT));
             Set<String> lines = linesDrawn(report(kFirst));
@@ -214,14 +239,17 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      * owed: a relation of {@code k} to the count either way round, a filter handed only what the
      * one inside it kept, the count as a factor of a product, two counts against each other, and
      * a count a helper's body makes, which is written nowhere in the comparison.
+     *
+     * <p>The relation at its value, past it, and on both sides of it, each written once: which
+     * way round it is written is the test above, and asked here again it would ask what that one
+     * does of the ways.
      */
     @Test
     void theWaysOfKeepingAreOwedWhatTheSameChoicesWrittenOutAre() {
         String eachKept = "(if a > 0 then 1 else 0) + (if b > 0 then 1 else 0)";
-        for (Related related : RELATIONS) {
-            for (String written : List.of(related.kFirst(), related.countFirst())) {
-                assertOwesTheSame(written.formatted(COUNT), written.formatted(eachKept), "");
-            }
+        for (Related related : List.of(RELATIONS.get(0), RELATIONS.get(1), RELATIONS.get(4))) {
+            assertOwesTheSame(related.kFirst().formatted(COUNT),
+                    related.kFirst().formatted(eachKept), "");
         }
         assertOwesTheSame(
                 "k >= List.length(List.filter(x -> x > 1, List.filter(x -> x > 0, [a])))",

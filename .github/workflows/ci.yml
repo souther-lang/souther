@@ -31,6 +31,15 @@ jobs:
   # and a package added under the compiler lands in `compiler-b`. Naming tests replaces the
   # classes surefire takes by default, so `rest` leaves out `*IT` again: those run after
   # packaging, in failsafe, which the filter does not reach.
+  #
+  # The packages in `compiler-a` are chosen for the time their tests take, so that the two
+  # compiler runners finish together: the compiler's own package is the largest share and cannot
+  # be split by package, so it is in `compiler-b` with the small ones, and the rest are here.
+  #
+  # Error Prone is not run here. The `lint` profile is on wherever `CI` is set, which every runner
+  # is, and it reads the whole reactor at every compile — the same findings three times over, in
+  # the time each runner spends before its first test. The `lint` job below asks it once, beside
+  # these, and a change waits on it as on them.
   build:
     if: github.event_name != 'schedule'
     name: build (${{ matrix.shard.name }})
@@ -44,10 +53,10 @@ jobs:
             tests: '!souther/compiler/**,!**/*IT'
           - name: compiler-a
             modules: '-pl souther-compiler -am'
-            tests: 'souther/compiler/partition/**,souther/compiler/check/**,souther/compiler/doc/**,souther/compiler/inputs/**,souther/compiler/values/**'
+            tests: 'souther/compiler/partition/**,souther/compiler/check/**,souther/compiler/doc/**,souther/compiler/inputs/**,souther/compiler/report/**,souther/compiler/meta/**'
           - name: compiler-b
             modules: '-pl souther-compiler -am'
-            tests: 'souther/compiler/**,!souther/compiler/partition/**,!souther/compiler/check/**,!souther/compiler/doc/**,!souther/compiler/inputs/**,!souther/compiler/values/**'
+            tests: 'souther/compiler/**,!souther/compiler/partition/**,!souther/compiler/check/**,!souther/compiler/doc/**,!souther/compiler/inputs/**,!souther/compiler/report/**,!souther/compiler/meta/**'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up JDK 25
@@ -64,10 +73,27 @@ jobs:
         run: |
           echo "forks: $(nproc)"
           mvn -B --no-transfer-progress verify ${{ matrix.shard.modules }} \
+            -P '!lint' \
             -DforkCount=$(nproc) \
             -Dtest.excluded.groups=nightly \
             -Dsurefire.failIfNoSpecifiedTests=false \
             '-Dtest=${{ matrix.shard.tests }}'
+
+  # Error Prone over every module's sources and tests, once. It runs no test: what it finds is in
+  # the code as written, and the runners above build the same code without it.
+  lint:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Compile with Error Prone
+        run: mvn -B --no-transfer-progress test-compile
 
   # And the slow ones, asked where waiting for them costs nobody an edit: once a night, and nowhere
   # a change is on its way in. Emptying the property is what asks them; everything the job above
