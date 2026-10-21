@@ -10,6 +10,7 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -341,7 +342,7 @@ public final class HeldWholeAndTakenOut {
         PrintStream printer = new PrintStream(out);
         printer.print(Set.copyOf(values));
         printer.flush();
-        return out.toString();
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     /** A writer nothing here made is a window onto wherever whoever made it wrote to. */
