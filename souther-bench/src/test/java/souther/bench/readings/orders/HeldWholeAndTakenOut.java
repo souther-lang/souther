@@ -162,6 +162,8 @@ public final class HeldWholeAndTakenOut {
         return new ArrayList<>(holder.get("k"));
     }
 
+    /** A vector because inserting an element at an index is a way only it has. */
+    @SuppressWarnings("JdkObsolete")
     public static List<CompositionBudget> insertedAtAnIndexOfAVector(
             Set<CompositionBudget> values) {
         Vector<Set<CompositionBudget>> holder = new Vector<>();
