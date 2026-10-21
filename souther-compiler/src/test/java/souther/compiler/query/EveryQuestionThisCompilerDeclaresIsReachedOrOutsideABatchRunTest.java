@@ -126,11 +126,21 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
     private static synchronized Set<String> declared() throws Exception {
         if (declaredOnce == null) {
             Set<String> out = new TreeSet<>();
-            DeclaredQuestions.found(DeclaredQuestions.scan())
-                    .forEach(each -> out.add(each.getName()));
+            DeclaredQuestions.found(scanned()).forEach(each -> out.add(each.getName()));
             declaredOnce = Collections.unmodifiableSet(out);
         }
         return declaredOnce;
+    }
+
+    /** The scan itself, made once: what it counted and whether it read all it found are two
+     *  questions about one scan. */
+    private static Covered<Class<?>> scannedOnce;
+
+    private static synchronized Covered<Class<?>> scanned() throws Exception {
+        if (scannedOnce == null) {
+            scannedOnce = DeclaredQuestions.scan();
+        }
+        return scannedOnce;
     }
 
     /** Where the query vocabulary is kept. */
@@ -165,8 +175,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
     @Test
     void theScanReadEveryClassItFound() throws Exception {
         Set<String> fellShort = new TreeSet<>();
-        if (DeclaredQuestions.scan()
-                instanceof Covered.Partly<Class<?>>(List<Class<?>> _, List<Gap> gaps)) {
+        if (scanned() instanceof Covered.Partly<Class<?>>(List<Class<?>> _, List<Gap> gaps)) {
             gaps.forEach(each -> fellShort.add(each.toString()));
         }
 
@@ -190,21 +199,18 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
     private static Set<String> workedOutWhatIsReached() {
         Set<String> out = new TreeSet<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            // Analysing a corpus and writing the report, which is `souther examples`.
-            into(corpus.analyse().compilation(), out);
-
-            // Offering an author the rows nothing covers, which is `souther examples --generate`.
-            ConformanceCorpus.Analysed generating = corpus.analyse();
-            GeneratedRows.of(generating.compilation(), null, null,
-                    new SourceRendering(corpus.names(), generating.compilation().texts())).text();
-            into(generating.compilation(), out);
-
-            // Asking a compilation what a module declares, which is what the command line reads to
-            // narrow what it is about to do to one behavior.
-            ConformanceCorpus.Analysed asking = corpus.analyse();
-            asking.compilation().modules()
-                    .forEach(module -> asking.compilation().declaredBehaviors(module));
-            into(asking.compilation(), out);
+            // Analysing a corpus and writing the report, which is `souther examples`; offering an
+            // author the rows nothing covers, which is `souther examples --generate`; and asking a
+            // compilation what a module declares, which is what the command line reads to narrow
+            // what it is about to do to one behavior. One analysis asked all three: what is kept is
+            // every question any of them put, and a question one of them put is in the store
+            // whichever of them came first.
+            ConformanceCorpus.Analysed analysed = corpus.analyse();
+            Compilation compilation = analysed.compilation();
+            GeneratedRows.of(compilation, null, null,
+                    new SourceRendering(corpus.names(), compilation.texts())).text();
+            compilation.modules().forEach(compilation::declaredBehaviors);
+            into(compilation, out);
 
             // And a build, which measures what the rows already established and composes no values.
             // Its own operation and not a smaller `souther examples`: what it asks for at a line is a

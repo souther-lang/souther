@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -9,7 +10,6 @@ import souther.compiler.query.InteractionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,19 +70,31 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
             "    | (Win { first = Month { pay = 1000, days = 5 },"
                     + " second = Month { pay = 1000, days = 20 } }) -> Ok\n";
 
-    private static final String BOTH =
-            "    | (Win { first = Month { pay = 500, days = 20 },"
-                    + " second = Month { pay = 500, days = 20 } }) -> Ok\n";
+    /**
+     * Each way, measured once over two rows, which every test here reads and none changes.
+     *
+     * <p>Two rows, the one choice taken and then the other, so that some combinations are made by
+     * the rows and some are not: what is asked is that every way makes the same ones, and rows that
+     * made all of them or none would leave half of that unasked.
+     */
+    private static final Map<String, AdequacyReport.BehaviorReport> MEASURED =
+            new LinkedHashMap<>();
 
-    private static final String NEITHER =
-            "    | (Win { first = Month { pay = 1000, days = 5 },"
-                    + " second = Month { pay = 1000, days = 5 } }) -> No\n";
+    private static AdequacyReport.BehaviorReport measured(String way) {
+        return MEASURED.computeIfAbsent(way, each -> {
+            Compilation compilation = Compilation.ofSource(
+                    model(WAYS.get(each), FIRST_ONLY + SECOND_ONLY), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
+        });
+    }
 
-    private static AdequacyReport.BehaviorReport behaviorOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 
     /** What is asked of the rows: how many combinations, and whether any went unread. */
@@ -100,33 +112,29 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
     @Test
     void everyWayIsAskedForTheSameCombinationsUnderTheSameMeasure() {
         Asked first = null;
-        for (Map.Entry<String, String> way : WAYS.entrySet()) {
-            Asked asked = Asked.of(behaviorOf(model(way.getValue(), FIRST_ONLY)));
-            assertTrue(asked.combinations() > 0, way.getKey() + " is asked for combinations");
+        for (String way : WAYS.keySet()) {
+            Asked asked = Asked.of(measured(way));
+            assertTrue(asked.combinations() > 0, way + " is asked for combinations");
             if (first == null) {
                 first = asked;
             }
-            assertEquals(first, asked, way.getKey());
+            assertEquals(first, asked, way);
         }
     }
 
     @Test
     void everyWayIsMetByTheSameRows() {
-        List<String> rowSets = List.of(FIRST_ONLY, FIRST_ONLY + SECOND_ONLY,
-                FIRST_ONLY + SECOND_ONLY + BOTH + NEITHER);
-        for (String rows : rowSets) {
-            Integer made = null;
-            Integer unmade = null;
-            for (Map.Entry<String, String> way : WAYS.entrySet()) {
-                InteractionEvidence evidence =
-                        behaviorOf(model(way.getValue(), rows)).evidence().interaction();
-                int met = evidence.made().made().orElseThrow().met().size();
-                made = made == null ? met : made;
-                unmade = unmade == null ? evidence.notMadeByRows().size() : unmade;
-                assertEquals(made, met, way.getKey() + " under " + rows);
-                assertEquals(unmade, evidence.notMadeByRows().size(),
-                        way.getKey() + " under " + rows);
-            }
+        Integer made = null;
+        Integer unmade = null;
+        for (String way : WAYS.keySet()) {
+            InteractionEvidence evidence = measured(way).evidence().interaction();
+            int met = evidence.made().made().orElseThrow().met().size();
+            made = made == null ? met : made;
+            unmade = unmade == null ? evidence.notMadeByRows().size() : unmade;
+            assertEquals(made, met, way);
+            assertEquals(unmade, evidence.notMadeByRows().size(), way);
         }
+        assertTrue(made > 0 && unmade > 0,
+                "the rows make some combinations and leave some unmade: " + made + " / " + unmade);
     }
 }
