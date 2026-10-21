@@ -118,4 +118,33 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
         assertEquals(List.of(count(others, 4), count(others, 6)),
                 doubled.cases().stream().map(DecidingCase::condition).toList());
     }
+
+    /**
+     * A value and its denial among the statements: exactly one of them holds whatever the value is,
+     * so the count is the count of the rest, and the value's own line decides nowhere. The other
+     * two lines decide where the rest, with the pair among them, come to the numbers around it.
+     */
+    @Test
+    void aStatementAndItsDenialAmongTheStatementsMoveTheCountTogether() {
+        Proposition.Compared above = positive(0);
+        Proposition notAbove = above.denied();
+        Proposition y = positive(1);
+        Proposition z = positive(2);
+        Proposition stated = count(List.of(above, notAbove, y, z), 2);
+
+        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+
+        WhereEachLineDecides.Decides ofTheValue = lines.stream()
+                .filter(line -> line.line().key().equals(above.key())).findFirst().orElseThrow();
+        assertEquals(List.of(), ofTheValue.cases());
+        for (Proposition other : List.of(y, z)) {
+            WhereEachLineDecides.Decides line = lines.stream()
+                    .filter(each -> each.line().key().equals(other.key())).findFirst()
+                    .orElseThrow();
+            List<Proposition> rest = new ArrayList<>(List.of(above, notAbove, y, z));
+            rest.removeIf(each -> each.key().equals(other.key()));
+            assertEquals(List.of(count(rest, 1), count(rest, 2)),
+                    line.cases().stream().map(DecidingCase::condition).toList());
+        }
+    }
 }

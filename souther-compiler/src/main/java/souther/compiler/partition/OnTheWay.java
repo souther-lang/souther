@@ -360,6 +360,11 @@ public sealed interface OnTheWay {
                 throw new IllegalArgumentException(
                         "a count is of some statements of some condition the reading met");
             }
+            if (Proposition.SoManyHold.settledByTheWeights(
+                    statements.stream().map(Statement::weight).toList(), admitted) != null) {
+                throw new IllegalArgumentException("a count the weights alone settle is the same"
+                        + " for every row, and is settled and not counted: " + admitted);
+            }
             this.condition = condition;
             this.anchor = anchor;
             this.statements = List.copyOf(statements);

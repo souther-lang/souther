@@ -978,30 +978,42 @@ public final class WhereEachLineDecides {
          * Where {@code part} decides a count of statements, as a case for each number of the
          * others that holds — or null where the statement is not that.
          *
-         * <p>The part is one statement of the count, written as many times as the count weighs it,
-         * and crossing its line moves every one of those writings at once. It decides where the
-         * others come to a number {@code c} such that the count admits {@code c} with the part
-         * failing and does not with it holding, or the other way round — and a row on each side of
+         * <p>The part stands in some statements of the count as it is and in some as its denial,
+         * each written as many times as the count weighs it, and crossing its line moves every
+         * one of those writings at once: the ones that are the part come to {@code held} more
+         * where it holds, the ones that are its denial {@code denied} more where it fails. It
+         * decides where the others come to a number {@code c} that the count admits at
+         * {@code c + held} and not at {@code c + denied}, or the other way round — none at all
+         * where the two weigh the same, as a value beside its denial does. A row on each side of
          * the line is in the same case only if the others come to the same number there. That is
          * one case for each such {@code c}, and not one for each set of the others that comes to
          * it: the sets are as many as the ways of choosing, and a number of them is a case.
          *
          * <p>Only where the others are free of each other and of the part ({@link #canBe} says
-         * nothing of them) and none of them asks the part again, so that the others come to the
-         * same number on both sides of the line.
+         * nothing of them) and none of them asks the part inside a statement of more than the
+         * part, so that the others come to the same number on both sides of the line. And no more
+         * cases than a line is said in; past them, the line is taken apart as any other.
          */
         private List<DecidingCase> inEachCountOfTheOthers(Proposition part) {
             if (!(stated instanceof Proposition.SoManyHold counted) || !canBe.isEmpty()) {
                 return null;
             }
-            int at = -1;
+            int held = 0;
+            int denied = 0;
+            List<Proposition> others = new ArrayList<>();
+            List<Integer> weighed = new ArrayList<>();
             for (int one = 0; one < counted.statements().size(); one++) {
                 Proposition statement = counted.statements().get(one);
+                int weight = counted.weights().get(one);
                 if (!(statement instanceof Proposition.All || statement instanceof Proposition.Any
                         || statement instanceof Proposition.WhereItAnswers
                         || statement instanceof Proposition.SoManyHold)
                         && held(statement).key().equals(part.key())) {
-                    at = one;
+                    if (statement.key().equals(part.key())) {
+                        held += weight;
+                    } else {
+                        denied += weight;
+                    }
                     continue;
                 }
                 Map<String, Proposition> asked = new TreeMap<>();
@@ -1009,24 +1021,22 @@ public final class WhereEachLineDecides {
                 if (asked.containsKey(part.key())) {
                     return null;
                 }
+                others.add(statement);
+                weighed.add(weight);
             }
-            if (at < 0) {
+            if (held + denied == 0) {
                 return null;
             }
-            int weight = counted.weights().get(at);
-            List<Proposition> others = new ArrayList<>(counted.statements());
-            List<Integer> weighed = new ArrayList<>(counted.weights());
-            others.remove(at);
-            weighed.remove(at);
+            int most = counted.weight() - held - denied;
             List<DecidingCase> out = new ArrayList<>();
-            for (int count = 0; count + weight <= counted.weight(); count++) {
-                if (counted.admitted().contains(count)
-                        != counted.admitted().contains(count + weight)) {
+            for (int count = 0; count <= most; count++) {
+                if (counted.admitted().contains(count + held)
+                        != counted.admitted().contains(count + denied)) {
                     out.add(DecidingCase.alone(Proposition.SoManyHold.counting(others, weighed,
                             List.of(count))));
                 }
             }
-            return out;
+            return out.size() <= MOST_CASES ? out : null;
         }
 
         /**

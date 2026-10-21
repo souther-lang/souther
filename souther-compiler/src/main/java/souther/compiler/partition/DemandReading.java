@@ -919,6 +919,13 @@ final class DemandReading {
      */
     private static Read counted(Proposition.SoManyHold counted, InputReading read,
                                 Projection projection) {
+        // A count the weights alone settle is the same for every row, and is read as that: no
+        // assignment of its statements is to be found, or any is.
+        Boolean settled = Proposition.SoManyHold.settledByTheWeights(counted.weights(),
+                counted.admitted());
+        if (settled != null) {
+            return new Read.Settled(settled);
+        }
         List<Read.Counted.Statement> each = new ArrayList<>(counted.statements().size());
         for (int at = 0; at < counted.statements().size(); at++) {
             Proposition statement = counted.statements().get(at);

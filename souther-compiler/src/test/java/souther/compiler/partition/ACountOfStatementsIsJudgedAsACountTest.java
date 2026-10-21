@@ -14,17 +14,20 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -223,40 +226,124 @@ class ACountOfStatementsIsJudgedAsACountTest {
      */
     @Test
     void theStepsToFindTheWaysAreTheStatementsTimesTheWaysAndNotTheChoices() {
-        int[] asked = {0};
-        OneOfEach.Vocabulary<OnTheWay, Integer, String> counting = new OneOfEach.Vocabulary<>() {
-
-            @Override
-            public List<List<OnTheWay>> alternatives(OnTheWay entry) {
-                return null;
-            }
-
-            @Override
-            public Set<TermPath> positions(OnTheWay entry) {
-                return Set.of();
-            }
-
-            @Override
-            public Integer nothing() {
-                return 0;
-            }
-
-            @Override
-            public OneOfEach.Step<Integer, String> with(Integer so, OnTheWay entry) {
-                asked[0]++;
-                return new OneOfEach.Step.Held<>(so + 1);
-            }
-        };
+        Counting counting = new Counting();
         int most = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
 
         CountedWays.Found<String> found = CountedWays.of(counting, 0, ofPositives(20, 10), most,
-                true);
+                true, CountedWays.Steps.ofAWay());
 
-        assertEquals(most, found.assignments().size());
-        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, found.stoppedBy());
+        if (!(found instanceof CountedWays.Found.Some<String> some)) {
+            throw new AssertionError("assignments are found: " + found);
+        }
+        assertEquals(most, some.assignments().size());
+        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, some.stoppedBy());
         // One more than is handed on is looked for, and each of those shares its first steps with
         // the one before it.
-        assertTrue(asked[0] <= (most + 1) * 20, "asked " + asked[0] + " times");
+        assertTrue(counting.asked <= (most + 1) * 20, "asked " + counting.asked + " times");
+    }
+
+    /** A vocabulary that holds every entry and counts how often it was asked. */
+    private static final class Counting implements OneOfEach.Vocabulary<OnTheWay, Integer, String> {
+
+        int asked;
+
+        @Override
+        public List<List<OnTheWay>> alternatives(OnTheWay entry) {
+            return entry.ofSeveralWays() ? entry.alternatives() : null;
+        }
+
+        @Override
+        public Set<TermPath> positions(OnTheWay entry) {
+            return Set.of();
+        }
+
+        @Override
+        public Integer nothing() {
+            return 0;
+        }
+
+        @Override
+        public OneOfEach.Step<Integer, String> with(Integer so, OnTheWay entry) {
+            asked++;
+            return new OneOfEach.Step.Held<>(so + 1);
+        }
+    }
+
+    /**
+     * Counts and choices nested in each other cost no more than a way's figure together: three
+     * counts, each with more assignments than are looked along, beside a choice, are walked again
+     * under every assignment of the one before, and the steps of all of them are the one figure's.
+     */
+    @Test
+    void countsAndChoicesNestedInEachOtherAreHeldToOneFigureTogether() {
+        Counting counting = new Counting();
+        OnTheWay.OneOf choice = new OnTheWay.OneOf(
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 2), WHERE,
+                List.of(List.of(ofPositives(14, 7)), List.of(ofPositives(14, 6))),
+                Optional.empty());
+        List<OnTheWay> entries = List.of(ofPositives(14, 7), ofPositives(14, 5), choice);
+        BiFunction<List<OnTheWay>,
+                OneOfEach.Vocabulary<OnTheWay, Integer, String>,
+                OneOfEach.Walked<OnTheWay, String>> walk = (each, vocabulary) -> OneOfEach.walk(
+                each, vocabulary, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+
+        OneOfEach.Walked<OnTheWay, String> expanded = CountedWays.expanded(
+                walk.apply(entries, counting), counting, walk);
+
+        if (!(expanded instanceof OneOfEach.Walked.Open<OnTheWay, String> open)) {
+            throw new AssertionError("some ways are open: " + expanded);
+        }
+        assertTrue(open.stoppedBy() != null, "not every way is said to be looked at");
+        assertTrue(counting.asked <= CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum() + 2000,
+                "asked " + counting.asked + " times");
+    }
+
+    /**
+     * The steps are one figure for everything asked of a way: once a search has taken them, the
+     * next one is handed none and says so, and neither claims a way is closed, and neither takes
+     * a step more than there were.
+     */
+    @Test
+    void theStepsOfOneSearchAreNoneLeftForTheNext() {
+        Counting counting = new Counting();
+        CountedWays.Steps steps = new CountedWays.Steps(30);
+
+        CountedWays.Found<String> first = CountedWays.of(counting, 0, ofPositives(20, 10), 16,
+                true, steps);
+        int afterTheFirst = counting.asked;
+        CountedWays.Found<String> second = CountedWays.of(counting, 0, ofPositives(20, 10), 16,
+                true, steps);
+
+        assertTrue(steps.ranOut());
+        assertTrue(afterTheFirst <= 30, "asked " + afterTheFirst + " times");
+        assertEquals(afterTheFirst, counting.asked, "the second takes no step");
+        assertInstanceOf(CountedWays.Found.Unknown.class, second);
+        assertTrue(!(first instanceof CountedWays.Found.None<String>), first::toString);
+    }
+
+    /**
+     * Statements weighing two each come to an even number however they come out, so a count
+     * admitting one of them admits nothing. That is the same for every row and is settled where
+     * the count is read, and a way is never left open on it.
+     */
+    @Test
+    void aCountTheWeightsAloneSettleIsNoCountOnTheWay() {
+        assertThrows(IllegalArgumentException.class, () -> counted(List.of(1),
+                new OnTheWay.Counted.Statement(2, List.of(positive(0, true)),
+                        List.of(positive(0, false))),
+                new OnTheWay.Counted.Statement(2, List.of(positive(1, true)),
+                        List.of(positive(1, false)))));
+
+        List<Proposition> two = List.of(
+                new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("r").then("a")), true),
+                new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("r").then("b")), true));
+        Proposition.SoManyHold odd = new Proposition.SoManyHold(two, List.of(2, 2), List.of(1));
+
+        assertEquals(Boolean.FALSE, Proposition.SoManyHold.settledByTheWeights(odd.weights(),
+                odd.admitted()));
+        assertEquals(new DemandReading.Read.Settled(false), DemandReading.projectedOff(null, odd,
+                inputReading(), ModelOccurrences.NONE).reads().getFirst());
     }
 
     /**
@@ -294,6 +381,10 @@ class ACountOfStatementsIsJudgedAsACountTest {
     }
 
     private static SearchRegion region() {
+        return inputReading().quantities().region();
+    }
+
+    private static InputReading inputReading() {
         String fields = IntStream.range(0, FIELDS).mapToObj(at -> "x" + at + ": Int")
                 .collect(Collectors.joining(", "));
         Compilation compilation = Compilation.ofSource("""
@@ -307,7 +398,6 @@ class ACountOfStatementsIsJudgedAsACountTest {
                 """.formatted(fields), "Main");
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
-        InputReading reading = inputs.reading(RuleReadings.of(compilation, "m"));
-        return reading.quantities().region();
+        return inputs.reading(RuleReadings.of(compilation, "m"));
     }
 }

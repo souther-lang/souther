@@ -418,11 +418,15 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * it is judged by the same walk, as the one way it is.
      */
     OneOfEach.Walked<OnTheWay, Reachability> along() {
-        return CountedWays.expanded(walked(onTheWay), ASKED_OF_A_ROW, WayToTheBorder::walked);
+        return CountedWays.expanded(walked(onTheWay, ASKED_OF_A_ROW), ASKED_OF_A_ROW,
+                WayToTheBorder::walked);
     }
 
-    private static OneOfEach.Walked<OnTheWay, Reachability> walked(List<OnTheWay> entries) {
-        return OneOfEach.walk(entries, ASKED_OF_A_ROW, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+    private static OneOfEach.Walked<OnTheWay, Reachability> walked(
+            List<OnTheWay> entries,
+            OneOfEach.Vocabulary<OnTheWay, HeldTogether, Reachability> vocabulary) {
+        return OneOfEach.walk(entries, vocabulary,
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                 CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
     }
 

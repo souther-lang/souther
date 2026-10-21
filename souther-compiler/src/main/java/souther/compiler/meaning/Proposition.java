@@ -1023,8 +1023,48 @@ public sealed interface Proposition {
             if (counts.size() == all + 1) {
                 return new Always(true);
             }
-            return SharedPropositions.shared(new SoManyHold(List.copyOf(kept.values()),
-                    kept.keySet().stream().map(weighed::get).toList(), counts));
+            List<Integer> merged = kept.keySet().stream().map(weighed::get).toList();
+            Boolean settled = settledByTheWeights(merged, counts);
+            if (settled != null) {
+                return new Always(settled);
+            }
+            return SharedPropositions.shared(new SoManyHold(List.copyOf(kept.values()), merged,
+                    counts));
+        }
+
+        /**
+         * What the weights alone say of a count admitted at {@code admitted}, whatever the
+         * statements are: false where no set of them weighs a number it admits, true where every
+         * set does, and null where some do and some do not.
+         *
+         * <p>Statements weighing two each come to an even number however they come out, so
+         * admitting one of them is admitting nothing. A count like that is made — the denial of
+         * one admitting every even number is — and is a fact of the model and not of any row.
+         *
+         * @param weights  how many times each statement was written
+         * @param admitted the counts admitted
+         */
+        public static Boolean settledByTheWeights(List<Integer> weights, List<Integer> admitted) {
+            int all = weights.stream().mapToInt(Integer::intValue).sum();
+            boolean[] weighs = new boolean[all + 1];
+            weighs[0] = true;
+            for (int weight : weights) {
+                for (int sum = all; sum >= weight; sum--) {
+                    weighs[sum] |= weighs[sum - weight];
+                }
+            }
+            boolean some = false;
+            boolean other = false;
+            for (int sum = 0; sum <= all; sum++) {
+                if (weighs[sum]) {
+                    if (admitted.contains(sum)) {
+                        some = true;
+                    } else {
+                        other = true;
+                    }
+                }
+            }
+            return some && other ? null : some;
         }
 
         /**
