@@ -8,7 +8,10 @@ import java.lang.reflect.TypeVariable;
 import java.util.AbstractMap;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Objects;
 import java.util.Deque;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -41,6 +44,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -79,6 +83,55 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
             "reduceValues", "answers what a function it is given returns, which is not followed",
             "reduceEntries", "answers what a function it is given returns, which is not followed");
 
+    /**
+     * The methods that are given a function and are not followed. A container that holds a copy,
+     * handed to one, is said so; so is a function that returns a copy and is handed to one.
+     */
+    private static final Map<String, String> NOT_FOLLOWED_THOUGH_GIVEN_A_FUNCTION =
+            notFollowed();
+
+    private static Map<String, String> notFollowed() {
+        Map<String, String> out = new java.util.TreeMap<>();
+        String bulk = "a bulk operation of a concurrent map, which runs a function over entries in"
+                + " parallel and answers what a function returns";
+        for (String name : List.of("forEach", "forEachEntry", "forEachKey", "forEachValue",
+                "reduceEntries", "reduceKeys", "reduceValues", "search", "searchEntries",
+                "searchKeys", "searchValues", "reduceEntriesToDouble", "reduceEntriesToInt",
+                "reduceEntriesToLong", "reduceKeysToDouble", "reduceKeysToInt",
+                "reduceKeysToLong", "reduceToDouble", "reduceToInt", "reduceToLong",
+                "reduceValuesToDouble", "reduceValuesToInt", "reduceValuesToLong")) {
+            out.put(name, bulk);
+        }
+        String primitive = "makes numbers of the elements, which are no copy";
+        for (String name : List.of("mapToInt", "mapToLong", "mapToDouble", "flatMapToInt",
+                "flatMapToLong", "flatMapToDouble")) {
+            out.put(name, primitive);
+        }
+        out.put("collect", "gathers by a collector, which is a value and not a function run here");
+        out.put("mapMulti", "hands the elements to a consumer that decides what goes on");
+        out.put("iterate", "makes elements of what a function returns of the last one");
+        out.put("toArray", "makes an array by a function of its size");
+        out.put("requireNonNull", "a message is made by the function, which is text");
+        out.put("orElseThrow", "makes the exception thrown, which is no copy");
+        out.put("parallelSort", "orders by a comparator, as sort does, in parallel");
+        out.put("parallelPrefix", "folds neighbours of an array by a function");
+        out.put("parallelSetAll", "sets an array by a function of the index");
+        String compares = "compares the elements of arrays by a comparator and answers a number, or"
+                + " makes a comparator, and says nothing of where an element goes";
+        for (String name : List.of("binarySearch", "compare", "equals", "mismatch",
+                "reverseOrder", "comparingByKey", "comparingByValue")) {
+            out.put(name, compares);
+        }
+        out.put("ofLazy", "makes a collection whose elements a function computes when asked");
+        out.put("onClose", "runs a handler when a stream is closed, which is given nothing");
+        for (String name : List.of("mapMultiToInt", "mapMultiToLong", "mapMultiToDouble")) {
+            out.put(name, primitive);
+        }
+        out.put("reduce", bulk + "; or a fold of three arguments, whose combiner is given the"
+                + " partial results of parallel folds");
+        return out;
+    }
+
     /** What a method does that neither reveals nor keeps a copy a container holds, said by name. */
     private static final Map<String, String> NOT_AN_OPERATION_ON_WHAT_IS_HELD = Map.of();
 
@@ -103,7 +156,7 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
             String name = each.getName();
             boolean read = HeldCopies.placementOf(name, each.getParameterCount()).isPresent()
                     || HeldCopies.putsAllIn(name)
-                    || HeldCopies.storesWhatAFunctionMakes(name)
+                    || HeldCopies.hasACallback(name, each.getParameterCount())
                     || STORES_NO_ELEMENT.containsKey(name);
             if (!read) {
                 unread.add(describe(each));
@@ -164,7 +217,8 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
         List<String> unread = new ArrayList<>();
         for (Method each : methods()) {
             if (!HeldCopies.understands(each.getName(), each.getParameterCount())
-                    && !NOT_AN_OPERATION_ON_WHAT_IS_HELD.containsKey(each.getName())) {
+                    && !NOT_AN_OPERATION_ON_WHAT_IS_HELD.containsKey(each.getName())
+                    && !NOT_FOLLOWED_THOUGH_GIVEN_A_FUNCTION.containsKey(each.getName())) {
                 unread.add(describe(each));
             }
         }
@@ -199,6 +253,49 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
                 "the order reading calls a name a put and the table of held copies has no row");
     }
 
+    /**
+     * Every method that is given a function is a row of the table of what a function is handed and
+     * where it goes, or is said not to be followed and why.
+     *
+     * <p>A function is run by the method it is given to, with what the method chooses, and what it
+     * returns goes where the method puts it. That is a fact about the method and nothing else: the
+     * second argument of a comparator is the second of two elements, the first of a map's compute is
+     * its key, a supplier is handed nothing and what it returns is what the call answers. A method
+     * this has no row for is not followed, and is said so where a copy reaches it.
+     */
+    @Test
+    void everyMethodThatIsGivenAFunctionHasARowOrIsSaidNotToBeFollowed() {
+        List<String> unread = new ArrayList<>();
+        for (Method each : methodsWithFunctions()) {
+            if (!HeldCopies.hasACallback(each.getName(), each.getParameterCount())
+                    && !NOT_FOLLOWED_THOUGH_GIVEN_A_FUNCTION.containsKey(each.getName())) {
+                unread.add(describe(each));
+            }
+        }
+
+        assertEquals(List.of(), unread.stream().distinct().sorted().toList(),
+                "a method is given a function and has no row of what the function is handed and"
+                        + " where its result goes, so a copy that reaches it, or that the function"
+                        + " makes, is not followed there");
+    }
+
+    /** The control: what is said not to be followed is a method that is given a function. */
+    @Test
+    void whatIsSaidNotToBeFollowedIsGivenAFunction() {
+        Set<String> given = new java.util.TreeSet<>();
+        methodsWithFunctions().forEach(each -> given.add(each.getName()));
+
+        List<String> notGiven = new ArrayList<>();
+        for (String name : NOT_FOLLOWED_THOUGH_GIVEN_A_FUNCTION.keySet()) {
+            if (!given.contains(name)) {
+                notGiven.add(name);
+            }
+        }
+
+        assertEquals(List.of(), notGiven.stream().sorted().toList(),
+                "a method said not to be followed is not given a function by any class read here");
+    }
+
     /** The control: the tables hold the cases that are known to be easy to get wrong. */
     @Test
     void theValueAnOperationStoresIsWhereItsArgumentsPutIt() {
@@ -228,6 +325,24 @@ class EveryOperationOfTheCollectionsThatStoresOrTakesIsInTheHeldCopiesTableTest 
         assertTrue(methods().stream().anyMatch(each ->
                         each.getGenericReturnType() instanceof TypeVariable<?>),
                 "no method answering an element was read");
+    }
+
+    /** Every method, static or not, of these and of the streams, that has a function parameter. */
+    private static List<Method> methodsWithFunctions() {
+        List<Class<?>> hosts = new ArrayList<>(COLLECTIONS);
+        hosts.addAll(List.of(Stream.class, Collections.class, Arrays.class, Objects.class));
+        List<Method> out = new ArrayList<>();
+        for (Class<?> each : hosts) {
+            for (Method method : each.getMethods()) {
+                for (Class<?> parameter : method.getParameterTypes()) {
+                    if (parameter.isAnnotationPresent(FunctionalInterface.class)) {
+                        out.add(method);
+                        break;
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     private static List<Method> methods() {

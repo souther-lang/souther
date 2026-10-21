@@ -104,6 +104,25 @@ public final class HeldWholeAndNotTakenOut {
         return new ArrayList<>(old);
     }
 
+    /** An array says what it is and not what it holds. */
+    public static String theTextOfAnArrayThatHoldsACopy(Set<CompositionBudget> values) {
+        Object[] array = new Object[1];
+        array[0] = Set.copyOf(values);
+        return array.toString() + array;
+    }
+
+    public static List<CompositionBudget> aComputeWhoseFunctionIsGivenOnlyTheKey(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new LinkedHashMap<>();
+        holder.put("k", Set.copyOf(values));
+        List<String> keys = new ArrayList<>();
+        holder.compute("k", (key, current) -> {
+            keys.add(key);
+            return current;
+        });
+        return new ArrayList<>(List.of());
+    }
+
     public static List<CompositionBudget> aReplaceWhoseExpectedValueIsTheCopy(
             Set<CompositionBudget> values) {
         Map<String, Set<CompositionBudget>> holder = new LinkedHashMap<>();

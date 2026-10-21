@@ -179,11 +179,15 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
         List<String> wrong = new ArrayList<>();
         for (String reader : readers) {
             String own = HeldWholeAndTakenOut.class.getName() + "#" + reader + ":Set.copyOf@";
+            // A copy a lambda makes is made by the method the lambda was compiled to.
+            String ownInALambda = HeldWholeAndTakenOut.class.getName() + "#lambda$" + reader
+                    + "$";
             List<Finding> found = findingsIn(reading, HeldWholeAndTakenOut.class, reader);
             Set<String> named = new LinkedHashSet<>();
             found.forEach(each -> named.addAll(each.origins()));
             boolean ownCopiesOnly = !named.isEmpty()
-                    && named.stream().allMatch(each -> each.startsWith(own));
+                    && named.stream().allMatch(each -> each.startsWith(own)
+                            || each.startsWith(ownInALambda));
             int made = reader.equals("heldBesideTheElementsOfAnotherCopy") ? 2 : 1;
             if (!ownCopiesOnly || named.size() != made) {
                 wrong.add(reader + " named " + named);

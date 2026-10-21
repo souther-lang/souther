@@ -9,6 +9,7 @@ import souther.bench.SaltedOrderVocabulary.Outcome;
 import souther.bench.SaltedOrderVocabulary.Push;
 
 import java.lang.constant.MethodTypeDesc;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -55,9 +56,21 @@ import java.util.Set;
  * <p><b>What this does not follow.</b> A container is a set of paths and not of keys, so a put to
  * a key a copy was put to before does not take the copy out: that is read as holding both, which
  * says more than the code does. {@code clear} is the only operation that takes something out. A
- * function that makes the value a map keeps, and a copy handed to {@code System.arraycopy}, are not
- * followed either. A copy that is only held and never read by anything that takes it out ends
- * nowhere, and the test that asks where every copy ends is what says so.
+ * copy that is only held and never read by anything that takes it out ends nowhere, and the test
+ * that asks where every copy ends is what says so.
+ *
+ * <p><b>What a function is handed, and where its result goes, is a row.</b> A method that runs a
+ * function says which of its arguments is the function, which container the function is run over,
+ * what each of its parameters is (an element, a key, one of the call's own arguments) and where
+ * what it returns goes ({@link Into}). The row does not depend on a container holding anything
+ * when the call is made: a function that makes a copy and is handed to a {@code map} returns it to
+ * the call whatever the stream was. A method with no row is not followed, and that is said where
+ * a container that holds a copy is handed to it and where a function that returns a copy is.
+ * The bulk operations of a concurrent map and the comparisons of arrays by a comparator are
+ * those, and a test puts every method of the library that is given a function to the table.
+ *
+ * <p>The text of a container is the text of what it holds; an array, a stream and a cursor name
+ * themselves and say nothing of their elements.
  */
 final class HeldCopies {
 
@@ -71,15 +84,55 @@ final class HeldCopies {
     private static final String KEY = "k";
 
     /**
-     * What a copy a function returns becomes in what the call that was given the function hands
-     * back: an element of it, as the function of a {@code map} makes one, or what the container the
-     * function returned held, as a {@code flatMap} spreads it.
+     * Where what a function returns goes, in the call that was given the function: nowhere, as a
+     * predicate's answer does; an element of what the call hands back, as the function of a
+     * {@code map} makes one; what the container the function returned held, as a {@code flatMap}
+     * spreads it; what the call hands back as it is, as a supplier's does; an element of the
+     * container the call is made on, as a {@code replaceAll} puts it; or both of those last two,
+     * as a {@code compute} puts the value in the map and answers it.
      */
     enum Into {
         NOTHING,
         AS_ELEMENTS,
-        AS_THEY_ARE
+        AS_THEY_ARE,
+        AS_RETURNED,
+        KEPT_AS_ELEMENTS,
+        KEPT_AND_RETURNED
     }
+
+    /** What a function a call is given is handed, one source for each of its parameters. */
+    private enum Source {
+        /** An element of the container, or the value of an entry. */
+        ELEMENT,
+        /** A key of the container. */
+        KEY,
+        /** The first argument of the call, which is not the function. */
+        FIRST_ARGUMENT,
+        /** The second argument of the call. */
+        SECOND_ARGUMENT
+    }
+
+    /** Which kinds of container a row is about: a map hands a function a key as well. */
+    private enum On {
+        ANY,
+        MAPS,
+        THE_REST
+    }
+
+    /**
+     * What the call of this name with this many arguments does with a function it is given.
+     *
+     * @param function  which argument is the function
+     * @param container which argument is the container the function is run over: -1 is the one the
+     *                  call is made on
+     * @param on        the kind of container the row is about
+     * @param handed    what each parameter of the function is
+     * @param into      where what the function returns goes
+     */
+    private record Callback(String name, int arity, int function, int container, On on,
+                            List<Source> handed, Into into) {}
+
+    private static final List<Callback> CALLBACKS = callbacks();
 
     /** Where, among a call's arguments, the key and the value it stores are; none is -1. */
     record Placement(int key, int value) {
@@ -90,9 +143,6 @@ final class HeldCopies {
     private static final Map<String, Map<Integer, Placement>> PLACEMENTS = placements();
 
     private static final Set<String> PUTS_ALL = Set.of("addAll", "putAll", "addAllAbsent");
-
-    private static final Set<String> STORES_WHAT_A_FUNCTION_MAKES = Set.of(
-            "compute", "computeIfAbsent", "computeIfPresent", "replaceAll");
 
     /** What takes the one value out that a container holds, or hands the one it held back. */
     private static final Set<String> TAKES_THE_ONLY_ONE_OUT = Set.of(
@@ -123,19 +173,6 @@ final class HeldCopies {
     /** What hands back the container it is given, or one that holds what it did. */
     private static final Set<String> HANDS_BACK_THE_CONTAINER = Set.of(
             "requireNonNull", "requireNonNullElse", "requireNonNullElseGet", "concat");
-
-    /**
-     * What runs the functions it is given over the elements, keys or values it holds. The copies
-     * go to the functions as their arguments, and what the functions do with them is read where the
-     * functions are.
-     */
-    private static final Set<String> RUNS_FUNCTIONS = Set.of(
-            "forEach", "forEachEntry", "forEachKey", "forEachValue", "forEachRemaining",
-            "removeIf", "ifPresent", "ifPresentOrElse", "map", "flatMap", "or", "reduceEntries",
-            "reduceKeys", "reduceValues", "reduceEntriesToInt", "reduceEntriesToLong",
-            "reduceEntriesToDouble", "reduceKeysToInt", "reduceKeysToLong", "reduceKeysToDouble",
-            "reduceValuesToInt", "reduceValuesToLong", "reduceValuesToDouble", "reduceToInt",
-            "reduceToLong", "reduceToDouble", "searchEntries", "searchKeys", "searchValues");
 
     /** What stores what it holds in a container it is given. */
     private static final Set<String> STORES_WHAT_IT_HOLDS_IN_ITS_ARGUMENT = Set.of(
@@ -183,6 +220,79 @@ final class HeldCopies {
         return out;
     }
 
+    /**
+     * The functions the library's collections and streams run, and what each is handed and does.
+     * A function handed to anything that is not here is not followed: it is said so where a
+     * container that holds a copy is handed to it, and where what the function returns is one.
+     */
+    private static List<Callback> callbacks() {
+        List<Callback> out = new ArrayList<>();
+        List<Source> element = List.of(Source.ELEMENT);
+        List<Source> two = List.of(Source.ELEMENT, Source.ELEMENT);
+        List<Source> keyAndValue = List.of(Source.KEY, Source.ELEMENT);
+        out.add(new Callback("forEach", 1, 0, -1, On.THE_REST, element, Into.NOTHING));
+        out.add(new Callback("forEach", 1, 0, -1, On.MAPS, keyAndValue, Into.NOTHING));
+        for (String name : List.of("forEachRemaining", "forEachOrdered", "removeIf", "ifPresent",
+                "filter", "peek", "takeWhile", "dropWhile", "anyMatch", "allMatch", "noneMatch")) {
+            out.add(new Callback(name, 1, 0, -1, On.ANY, element, Into.NOTHING));
+        }
+        out.add(new Callback("ifPresentOrElse", 2, 0, -1, On.ANY, element, Into.NOTHING));
+        out.add(new Callback("replaceAll", 1, 0, -1, On.THE_REST, element,
+                Into.KEPT_AS_ELEMENTS));
+        out.add(new Callback("replaceAll", 1, 0, -1, On.MAPS, keyAndValue,
+                Into.KEPT_AS_ELEMENTS));
+        for (String name : List.of("sort", "sorted", "min", "max")) {
+            out.add(new Callback(name, 1, 0, -1, On.ANY, two, Into.NOTHING));
+        }
+        out.add(new Callback("reduce", 1, 0, -1, On.ANY, two, Into.AS_ELEMENTS));
+        out.add(new Callback("reduce", 2, 1, -1, On.ANY, two, Into.AS_RETURNED));
+        for (String name : List.of("map", "mapToObj")) {
+            out.add(new Callback(name, 1, 0, -1, On.ANY, element, Into.AS_ELEMENTS));
+        }
+        out.add(new Callback("flatMap", 1, 0, -1, On.ANY, element, Into.AS_THEY_ARE));
+        for (String name : List.of("compute", "computeIfPresent")) {
+            out.add(new Callback(name, 2, 1, -1, On.ANY,
+                    List.of(Source.FIRST_ARGUMENT, Source.ELEMENT), Into.KEPT_AND_RETURNED));
+        }
+        out.add(new Callback("computeIfAbsent", 2, 1, -1, On.ANY,
+                List.of(Source.FIRST_ARGUMENT), Into.KEPT_AND_RETURNED));
+        out.add(new Callback("merge", 3, 2, -1, On.ANY,
+                List.of(Source.ELEMENT, Source.SECOND_ARGUMENT), Into.KEPT_AND_RETURNED));
+        out.add(new Callback("orElseGet", 1, 0, -1, On.ANY, List.of(), Into.AS_RETURNED));
+        out.add(new Callback("or", 1, 0, -1, On.ANY, List.of(), Into.AS_THEY_ARE));
+        out.add(new Callback("requireNonNullElseGet", 2, 1, -1, On.ANY, List.of(),
+                Into.AS_RETURNED));
+        out.add(new Callback("generate", 1, 0, -1, On.ANY, List.of(), Into.AS_ELEMENTS));
+        for (String name : List.of("sort", "max", "min")) {
+            out.add(new Callback(name, 2, 1, 0, On.ANY, two, Into.NOTHING));
+        }
+        out.add(new Callback("sort", 4, 3, 0, On.ANY, two, Into.NOTHING));
+        out.add(new Callback("setAll", 2, 1, 0, On.ANY, List.of(), Into.KEPT_AS_ELEMENTS));
+        return out;
+    }
+
+    /** The row for this call, if the library's function it is given has one. */
+    private static Optional<Callback> callbackOf(Call call) {
+        boolean ofAMap = call.owner().endsWith("Map");
+        for (Callback each : CALLBACKS) {
+            boolean kind = each.on() == On.ANY || (each.on() == On.MAPS) == ofAMap;
+            if (each.name().equals(call.name()) && each.arity() == call.args().size() && kind) {
+                return Optional.of(each);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** Whether any call of this name with this many arguments is one the table has a row for. */
+    static boolean hasACallback(String name, int arity) {
+        for (Callback each : CALLBACKS) {
+            if (each.name().equals(name) && each.arity() == arity) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static void row(Map<String, Map<Integer, Placement>> into, String name, int arity,
                             int key, int value) {
         into.computeIfAbsent(name, each -> new HashMap<>()).put(arity, new Placement(key, value));
@@ -196,11 +306,6 @@ final class HeldCopies {
     /** Whether the call puts every element of the container it is given in the one it is made on. */
     static boolean putsAllIn(String name) {
         return PUTS_ALL.contains(name);
-    }
-
-    /** Whether the call stores what a function it is given makes, which is not followed. */
-    static boolean storesWhatAFunctionMakes(String name) {
-        return STORES_WHAT_A_FUNCTION_MAKES.contains(name);
     }
 
     /** Whether the call of this name hands back a value, a key or an element a container held. */
@@ -301,13 +406,26 @@ final class HeldCopies {
         for (Val each : call.args()) {
             addTextOf(each, out);
         }
-        if (ofTheReceiver) {
+        if (ofTheReceiver && !saysWhatItIsAndNotWhatItHolds(call.owner())) {
             addTextOf(call.receiver(), out);
         }
         return out;
     }
 
+    /**
+     * Whether what is of this class gives text that is not made of what it holds: a stream and a
+     * cursor name themselves, and so does an array, which is known by how it was made.
+     */
+    private static boolean saysWhatItIsAndNotWhatItHolds(String owner) {
+        return owner.startsWith("java/util/stream/") || owner.equals("java/util/Iterator")
+                || owner.equals("java/util/ListIterator") || owner.equals("java/util/Enumeration")
+                || owner.equals("java/util/Spliterator");
+    }
+
     private static void addTextOf(Val value, Set<Tag> into) {
+        if ("array".equals(value.made())) {
+            return;
+        }
         for (Tag each : value.tags()) {
             if (each.isHeld()) {
                 into.add(new Tag(Kind.SEQUENCE, each.origin()));
@@ -365,12 +483,12 @@ final class HeldCopies {
                 || SaltedOrderVocabulary.keepsTheElementsOfAWalk(name)
                 || SAME_ELEMENTS_IN_ANOTHER_FORM.contains(name) || name.equals("clear")
                 || name.equals("<init>") || ASKS_ONLY.contains(name)
-                || RUNS_FUNCTIONS.contains(name) || STORES_WHAT_IT_HOLDS_IN_ITS_ARGUMENT.contains(name)
+                || hasACallback(name, arity)
+                || STORES_WHAT_IT_HOLDS_IN_ITS_ARGUMENT.contains(name)
                 || (name.equals("search") && arity <= 2)
                 || MAKES_TEXT_OF_ITS_ARGUMENTS.contains(name)
                 || HOLDS_ITS_ARGUMENTS.contains(name) || HANDS_BACK_ITS_ARGUMENT.contains(name)
                 || HANDS_BACK_THE_CONTAINER.contains(name)
-                || STORES_WHAT_A_FUNCTION_MAKES.contains(name)
                 || name.startsWith("unmodifiable") || name.startsWith("synchronized")
                 || name.startsWith("checked") || name.equals("entry")
                 || name.equals("singletonMap") || name.equals("nCopies")
@@ -385,9 +503,9 @@ final class HeldCopies {
      */
     static Set<String> unresolvedBy(Call call) {
         Set<String> out = new LinkedHashSet<>();
-        boolean functionsRunOverIt = false;
+        boolean givenAFunction = false;
         for (Val each : call.args()) {
-            functionsRunOverIt |= !each.functions().isEmpty();
+            givenAFunction |= !each.functions().isEmpty();
         }
         boolean handed = false;
         for (Val each : call.everything()) {
@@ -397,7 +515,11 @@ final class HeldCopies {
                 }
             }
         }
-        if (handed && !functionsRunOverIt && !understands(call.name(), call.args().size())) {
+        // A function is run over what the container holds only where the library's function it
+        // is given has a row; a function given to anything else is not followed.
+        boolean read = givenAFunction ? callbackOf(call).isPresent()
+                : understands(call.name(), call.args().size());
+        if (handed && !read) {
             for (Val each : call.everything()) {
                 for (Tag tag : each.tags()) {
                     if (tag.isHeld()) {
@@ -434,6 +556,18 @@ final class HeldCopies {
         return call.receiver().isAView();
     }
 
+    /** The functions the call is given that no row of the table says it runs. */
+    static Set<Tag> functionsNotRun(Call call) {
+        if (callbackOf(call).isPresent()) {
+            return Set.of();
+        }
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Val each : call.args()) {
+            out.addAll(each.functions());
+        }
+        return out;
+    }
+
     /** What the reading says of a call that holds a copy whole and is not followed. */
     static String unresolvedSaid(Call call) {
         String what = call.owner().replace('/', '.') + "." + call.name();
@@ -453,22 +587,43 @@ final class HeldCopies {
         Set<Tag> out = new LinkedHashSet<>();
         for (Tag each : returned) {
             switch (into) {
-                case AS_ELEMENTS -> {
-                    if (each.kind() == Kind.COLLECTION) {
-                        out.add(held(each.origin(), ELEMENT));
-                    } else if (each.isHeld()) {
-                        out.add(held(each.origin(), ELEMENT + each.site()));
-                    }
-                }
+                case AS_ELEMENTS -> out.addAll(asAnElement(each));
                 case AS_THEY_ARE -> {
                     if (each.isHeld()) {
                         out.add(each);
                     }
                 }
-                case NOTHING -> { }
+                case AS_RETURNED, KEPT_AND_RETURNED -> {
+                    if (each.kind() == Kind.COLLECTION || each.isHeld()) {
+                        out.add(each);
+                    }
+                }
+                case NOTHING, KEPT_AS_ELEMENTS -> { }
             }
         }
         return out;
+    }
+
+    /**
+     * What a copy a function returns is in the container the call was made on, where the call puts
+     * the value in it: an element, or a value.
+     */
+    static Set<Tag> keptBy(Into into, Set<Tag> returned) {
+        Set<Tag> out = new LinkedHashSet<>();
+        if (into == Into.KEPT_AS_ELEMENTS || into == Into.KEPT_AND_RETURNED) {
+            for (Tag each : returned) {
+                out.addAll(asAnElement(each));
+            }
+        }
+        return out;
+    }
+
+    private static Set<Tag> asAnElement(Tag returned) {
+        if (returned.kind() == Kind.COLLECTION) {
+            return Set.of(held(returned.origin(), ELEMENT));
+        }
+        return returned.isHeld() ? Set.of(held(returned.origin(), ELEMENT + returned.site()))
+                : Set.of();
     }
 
     /** What storing a value in an array of references leaves on the array. */
@@ -488,24 +643,30 @@ final class HeldCopies {
      * call maps, and what the container it returns holds where the call spreads.
      */
     private static Feed handedToFunctions(Call call) {
-        Set<Tag> functions = new LinkedHashSet<>();
-        for (Val each : call.args()) {
-            functions.addAll(each.functions());
-        }
-        Set<Tag> held = held(call.receiver());
-        if (functions.isEmpty() || held.isEmpty() || call.isStatic()) {
+        Optional<Callback> row = callbackOf(call);
+        if (row.isEmpty()) {
             return null;
         }
-        boolean keyedToo = call.owner().endsWith("Map") && call.name().equals("forEach");
-        List<Set<Tag>> elements = keyedToo
-                ? List.of(takenOut(held, KEY), takenOut(held, ELEMENT))
-                : List.of(takenOut(held, ELEMENT));
-        Into into = switch (call.name()) {
-            case "map", "mapToObj" -> Into.AS_ELEMENTS;
-            case "flatMap" -> Into.AS_THEY_ARE;
-            default -> Into.NOTHING;
-        };
-        return new Feed(functions, elements, false, null, into);
+        Callback spec = row.get();
+        Set<Tag> functions = call.args().get(spec.function()).functions();
+        if (functions.isEmpty()) {
+            return null;
+        }
+        Val container = spec.container() == -1 ? call.receiver()
+                : call.args().get(spec.container());
+        Set<Tag> held = held(container);
+        List<Set<Tag>> elements = new ArrayList<>();
+        for (Source each : spec.handed()) {
+            elements.add(switch (each) {
+                case ELEMENT -> takenOut(held, ELEMENT);
+                case KEY -> takenOut(held, KEY);
+                case FIRST_ARGUMENT -> itemsAsTheyAre(call.args().get(0));
+                case SECOND_ARGUMENT -> itemsAsTheyAre(call.args().get(1));
+            });
+        }
+        boolean keeps = spec.into() == Into.KEPT_AS_ELEMENTS
+                || spec.into() == Into.KEPT_AND_RETURNED;
+        return new Feed(functions, elements, false, keeps ? container : null, spec.into());
     }
 
     /** What the call hands back that holds, or is, a copy taken out of what it is made on. */

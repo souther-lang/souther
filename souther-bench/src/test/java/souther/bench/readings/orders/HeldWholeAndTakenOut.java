@@ -282,6 +282,91 @@ public final class HeldWholeAndTakenOut {
         return new ArrayList<>(holder.getFirst());
     }
 
+    public static List<CompositionBudget> theOldValueAComputeIsGiven(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new HashMap<>();
+        holder.put("k", Set.copyOf(values));
+        List<CompositionBudget> out = new ArrayList<>();
+        holder.compute("k", (key, current) -> {
+            out.addAll(current);
+            return current;
+        });
+        return out;
+    }
+
+    public static List<CompositionBudget> theValueAMapReplaceAllIsGiven(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new HashMap<>();
+        holder.put("k", Set.copyOf(values));
+        List<CompositionBudget> out = new ArrayList<>();
+        holder.replaceAll((key, current) -> {
+            out.addAll(current);
+            return current;
+        });
+        return out;
+    }
+
+    public static List<CompositionBudget> theSecondElementAComparatorIsGiven(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        holder.add(Set.of());
+        List<CompositionBudget> out = new ArrayList<>();
+        holder.sort((first, second) -> {
+            out.addAll(second);
+            return 0;
+        });
+        return out;
+    }
+
+    public static List<CompositionBudget> theElementsAStaticSortGivesItsComparator(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder = new ArrayList<>();
+        holder.add(Set.copyOf(values));
+        List<CompositionBudget> out = new ArrayList<>();
+        Collections.sort(holder, (first, second) -> {
+            out.addAll(first);
+            return 0;
+        });
+        return out;
+    }
+
+    public static List<CompositionBudget> madeByTheFunctionOfAMapOverAnotherStream(
+            Set<CompositionBudget> values) {
+        return new ArrayList<>(Stream.of("x").map(each -> Set.copyOf(values)).findFirst()
+                .orElseThrow());
+    }
+
+    public static List<CompositionBudget> madeByTheSupplierOfRequireNonNullElseGet(
+            Set<CompositionBudget> values) {
+        List<Set<CompositionBudget>> holder =
+                Objects.requireNonNullElseGet(null, () -> List.of(Set.copyOf(values)));
+        return new ArrayList<>(holder.getFirst());
+    }
+
+    public static List<CompositionBudget> madeByTheFunctionOfAComputeIfAbsent(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new HashMap<>();
+        holder.computeIfAbsent("k", key -> Set.copyOf(values));
+        return new ArrayList<>(holder.get("k"));
+    }
+
+    public static List<CompositionBudget> madeByTheFunctionOfAMerge(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> holder = new HashMap<>();
+        holder.put("k", Set.of());
+        holder.merge("k", Set.of(), (old, given) -> Set.copyOf(values));
+        return new ArrayList<>(holder.get("k"));
+    }
+
+    /** What a function returns is a copy, and the call it is handed to is not one this reads. */
+    public static List<CompositionBudget> returnedByTheValueFunctionOfACollectorNobodyReads(
+            Set<CompositionBudget> values) {
+        Map<String, Set<CompositionBudget>> made = Stream.of("x").collect(
+                Collectors.toMap(each -> each, each -> Set.copyOf(values)));
+        return new ArrayList<>(made.get("x"));
+    }
+
     /** Handed to what nothing says what it does with: said so, and not taken for followed. */
     public static List<CompositionBudget> handedToACollectorNothingFollows(
             Set<CompositionBudget> values) {

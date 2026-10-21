@@ -419,7 +419,39 @@ final class SaltedOrderFlow {
         }
     }
 
+    /** A function a call of the library was given that the table of held copies has no row for. */
+    private record HandedFunction(String where, String call, String function) {}
+
+    private final List<HandedFunction> handedToUnread = new ArrayList<>();
+
+    /**
+     * The copies a function returns, which are where it is called and not where it was made, so
+     * that a function handed to a call nothing here reads is said so when it returns one.
+     */
+    private Set<String> copiesReturnedBy(String function) {
+        Unit body = bodyOf(function);
+        if (body == null) {
+            return Set.of();
+        }
+        Set<String> out = new TreeSet<>();
+        for (String key : List.of("R:" + body, "R:" + new Unit(body.method(), ""))) {
+            for (Tag each : facts.getOrDefault(key, Set.of())) {
+                if (each.kind() == Kind.COLLECTION || each.isHeld()) {
+                    out.add(each.origin());
+                }
+            }
+        }
+        return out;
+    }
+
     private Reading finish() {
+        for (HandedFunction each : handedToUnread) {
+            Set<String> origins = copiesReturnedBy(each.function());
+            if (!origins.isEmpty()) {
+                note(each.where(), "hands a function that returns a copy to " + each.call()
+                        + ", which nothing says where it goes", origins);
+            }
+        }
         for (var each : handsOutAnAnswer.entrySet()) {
             MethodKey method = each.getKey();
             String signature = method.name() + method.descriptor();
@@ -1481,6 +1513,10 @@ final class SaltedOrderFlow {
                         result.addAll(back);
                     }
                     result.addAll(HeldCopies.handedBackBy(feed.into(), back));
+                    Set<Tag> keptInTheContainer = HeldCopies.keptBy(feed.into(), back);
+                    if (feed.keptBy() != null && !keptInTheContainer.isEmpty()) {
+                        place(state, feed.keptBy(), keptInTheContainer);
+                    }
                     if (feed.keptBy() != null) {
                         place(state, feed.keptBy(), madeAt(SaltedOrderVocabulary.survivors(back,
                                 false), here));
@@ -1517,6 +1553,10 @@ final class SaltedOrderFlow {
         Set<String> unresolved = HeldCopies.unresolvedBy(call);
         if (!unresolved.isEmpty()) {
             note(where, HeldCopies.unresolvedSaid(call), unresolved);
+        }
+        for (Tag function : HeldCopies.functionsNotRun(call)) {
+            handedToUnread.add(new HandedFunction(where,
+                    owner.replace('/', '.') + "." + name, function.origin()));
         }
         if (SaltedOrderVocabulary.writesOut(owner, name)) {
             // A write is a sink whatever else is known of the call: what is written is written
@@ -1836,8 +1876,9 @@ final class SaltedOrderFlow {
                     if (tag.cameOutOfACopy()) {
                         result.add(tag.kind() == Kind.PICKED || tag.kind() == Kind.CHOSEN ? tag
                                 : new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
-                    } else if (tag.isHeld()) {
-                        // The text of a container says the copies it holds, in their order.
+                    } else if (tag.isHeld() && !"array".equals(args.get(each).made())) {
+                        // The text of a container says the copies it holds, in their order; an
+                        // array says what it is.
                         result.add(new Tag(Kind.SEQUENCE, tag.origin()).madeAt(here));
                     }
                 }
