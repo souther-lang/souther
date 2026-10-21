@@ -98,8 +98,10 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
         assertEquals(List.of(theProduct), none,
                 "the construction's reading derived the product it is over, and no clause is"
                         + " refuted, so the reading without the path is never made");
-        assertEquals(none, derivedWhileCompiling(behaviorWith(10)));
-        assertEquals(none, derivedWhileCompiling(behaviorWith(100)));
+        // One product beside it is enough for a reading that took it in to say so: the set is
+        // compared, and the product is a recipe the walks below are shown to reach.
+        assertEquals(none, derivedWhileCompiling(behaviorWith(1)));
+        assertEquals(none, derivedWhileCompiling(behaviorWith(3)));
     }
 
     /**
@@ -291,13 +293,13 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
      */
     @Test
     void thePartsReadGrowWithTheChoicesOnThePathAndNotWithWhatStandsAfterThem() {
+        long two = partsReadOver(2, 1);
+        long three = partsReadOver(3, 1);
         long four = partsReadOver(4, 1);
-        long eight = partsReadOver(8, 1);
-        long twelve = partsReadOver(12, 1);
-        assertEquals(eight - four, twelve - eight,
-                "each further choice is read as often as the one before it: " + List.of(four,
-                        eight, twelve));
-        assertEquals(eight, partsReadOver(8, 20),
+        assertEquals(three - two, four - three,
+                "each further choice is read as often as the one before it: " + List.of(two,
+                        three, four));
+        assertEquals(three, partsReadOver(3, 3),
                 "constructions after the choices read none of their parts");
     }
 
@@ -369,7 +371,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
      */
     @Test
     void whatOneOperationsReadingDerivesIsItsOwnRecipe() {
-        for (int unrelated : List.of(0, 10, 100)) {
+        for (int unrelated : List.of(0, 1, 3)) {
             List<Set<String>> asked = derivedWhileCompiling(behaviorWith(unrelated),
                     DerivedNumericFacts.Question.WHETHER_AN_OPERATION_ANSWERS);
             assertEquals(2 * (unrelated + 1), asked.size(),

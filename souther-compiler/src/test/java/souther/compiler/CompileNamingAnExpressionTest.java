@@ -2,6 +2,8 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Severity;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -17,8 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a construction from an expression, it answers the same for a construction from a name bound to
  * that expression, and from a name bound to that name.
  *
- * <p>Each expression is put through every shape against every target, and the shapes are required to
- * agree with each other — not to give any particular answer. What the check can prove is free to
+ * <p>Each expression is put through every shape against every target — named down a chain of names,
+ * and named under a guard — and each shape is required to agree with the expression written in
+ * place, not to give any particular answer. What the check can prove is free to
  * change; that it proves the same thing of one value written two ways is not.
  */
 class CompileNamingAnExpressionTest {
@@ -58,10 +61,6 @@ class CompileNamingAnExpressionTest {
             let mk (c, p, n, xs) = %s
             """;
 
-    private static String named(String e) {
-        return "{\n        let v = " + e + "\n        %s\n    }";
-    }
-
     /**
      * What the invariant-discharge check says, as one string — the code of an error, or how many of
      * its warnings.
@@ -70,13 +69,28 @@ class CompileNamingAnExpressionTest {
      * source as written, and an expression written twice is two branches where a name for it is
      * evaluated once: a guard that rules out the second copy's other arm makes that arm dead, which
      * a name has no copy of.
+     *
+     * <p>So the check is what is asked, over the bodies it reads, and not the classes or the other
+     * warnings of the module: an error the check or anything it reads raises is the failure, and
+     * its warnings are what is counted.
      */
     private static String said(String source) {
         try {
-            Compiler.Compiled c = Compiler.compileWithWarnings(source);
-            return "warnings=" + c.warnings().stream()
-                    .filter(d -> d.severity() == Severity.WARNING)
-                    .filter(d -> "E2011".equals(d.code())).count();
+            Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
+            CompileException structural = compilation.structuralFailure();
+            if (structural != null) {
+                throw structural;
+            }
+            for (String module : compilation.modules()) {
+                compilation.db().ask(new Bodies.InvariantWarnings(module));
+            }
+            CompileException failure = compilation.failure();
+            if (failure != null) {
+                throw failure;
+            }
+            return "warnings=" + compilation.warnings().stream()
+                    .filter(d -> d.diagnostic().severity() == Severity.WARNING)
+                    .filter(d -> "E2011".equals(d.diagnostic().code())).count();
         } catch (CompileException e) {
             String code = e.diagnostic().code();
             return code == null ? "error: " + e.getMessage() : code;
@@ -113,16 +127,11 @@ class CompileNamingAnExpressionTest {
         return rows;
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("rows")
-    void namingAnExpressionDoesNotChangeWhatIsKnownOfIt(Row row) {
-        String construct = row.target() + "(%s)";
-        String written = said(module(row.target(), construct.formatted(row.expression())));
-        String bound = said(module(row.target(),
-                named(row.expression()).formatted(construct.formatted("v"))));
-        assertEquals(written, bound, "a name for the expression is that expression");
-    }
-
+    /**
+     * A name for the expression, a name for that name and a name for that one, each read as what it
+     * was given: the first name is the expression, and each after it is the name before it, so a
+     * name that read less than the expression would leave the end of the chain reading less too.
+     */
     @ParameterizedTest(name = "{0}")
     @MethodSource("rows")
     void aChainOfNamesEndsAtTheExpression(Row row) {

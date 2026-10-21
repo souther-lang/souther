@@ -1,7 +1,7 @@
 package souther.compiler.frontend;
 
-import souther.compiler.WhereItSits;
 import souther.compiler.ast.Ast;
+import souther.compiler.cst.SourceLayout;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.test.RepositoryLayout;
@@ -216,12 +216,15 @@ class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
      * it to number.
      */
     private static String withAProbe(Ast.Module written, String source, String probe) {
-        int firstDefinition = Integer.MAX_VALUE;
-        for (SourcePos pos : whereItsDefinitionsBegin(written)) {
-            firstDefinition = Math.min(firstDefinition, WhereItSits.in(source, pos).line());
-        }
-        if (firstDefinition == Integer.MAX_VALUE) {
+        List<SourcePos> begins = whereItsDefinitionsBegin(written);
+        if (begins.isEmpty()) {
             return null;
+        }
+        // Laid out once for the source and not once for each place asked about in it.
+        SourceLayout layout = SourceLayout.of(source, begins.getFirst().placement());
+        int firstDefinition = Integer.MAX_VALUE;
+        for (SourcePos pos : begins) {
+            firstDefinition = Math.min(firstDefinition, layout.resolve(pos).line());
         }
         List<String> lines = new ArrayList<>(List.of(source.split("\n", -1)));
         lines.add(firstDefinition - 1, probe);

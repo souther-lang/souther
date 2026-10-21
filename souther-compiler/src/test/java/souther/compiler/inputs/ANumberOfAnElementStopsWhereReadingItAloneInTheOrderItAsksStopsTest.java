@@ -40,14 +40,25 @@ class ANumberOfAnElementStopsWhereReadingItAloneInTheOrderItAsksStopsTest {
 
     private static final TypeSymbol TOUCH = TypeSymbols.declared(new TypeKey("demo", "Touch"));
 
+    /**
+     * Keys of each kind the reading tells apart, once each: two that were read, so that one key's
+     * values are told from another's; one not read; and one of no order. The two that stop a
+     * reading stop it for different reasons — one cut short, one unreadable — so which of them
+     * stopped it is something the answer says. A key unreadable for having been unread is left
+     * out: it stops a reading with the same answer as one of no order.
+     */
     private static final List<ObservedValue> KEYS = List.of(new ObservedValue.Text("a"),
-            new ObservedValue.Text("b"), new ObservedValue.Unknown("unreadable"),
+            new ObservedValue.Text("b"),
             new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()),
             new ObservedValue.Sequence(List.of()));
 
+    /**
+     * Values the same way: two that were read, so that an end is one of them; and one not read,
+     * for another reason than a key cut short, so that a value stopping the reading is told from a
+     * key stopping it.
+     */
     private static final List<ObservedValue> VALUES = List.of(new ObservedValue.Integer(1),
-            new ObservedValue.Integer(2), new ObservedValue.Unknown("unreadable"),
-            new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()));
+            new ObservedValue.Integer(2), new ObservedValue.Unknown("unreadable"));
 
     @Test
     void howOftenAValueOccursStopsWhereReadingItAloneStops() {

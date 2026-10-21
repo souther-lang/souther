@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -169,15 +170,34 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
             let optional (n) = Held { at = n }
             """;
 
-    /** Every behavior body the conformance corpora compile to, and one model beside them. */
+    private static List<Core> checked;
+
+    /**
+     * Every behavior body the conformance corpora compile to, and one model beside them.
+     *
+     * <p>Checked and no further, since a checked body is what the walks are of, and checked once
+     * for the class: the three questions above walk the same bodies and none of them changes one.
+     */
     private static List<Core> bodies() {
+        if (checked == null) {
+            checked = List.copyOf(checkedBodies());
+        }
+        return checked;
+    }
+
+    /** And given back when the class is done with them: a fork keeps its JVM. */
+    @AfterAll
+    static void released() {
+        checked = null;
+    }
+
+    private static List<Core> checkedBodies() {
         List<Core> out = new ArrayList<>();
         List<List<String>> sources = new ArrayList<>();
         ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
         sources.add(List.of(BESIDE_THE_CORPORA));
         for (List<String> each : sources) {
             Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

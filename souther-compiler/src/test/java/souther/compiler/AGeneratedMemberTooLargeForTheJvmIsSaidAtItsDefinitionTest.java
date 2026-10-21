@@ -30,20 +30,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AGeneratedMemberTooLargeForTheJvmIsSaidAtItsDefinitionTest {
 
+    /** Said at the behavior, and saying which generated method it could not write and the limit
+     *  that method went past. */
     @Test
-    void aBodyLongerThanOneMethodHoldsIsSaidAtTheBehavior() {
+    void aBodyLongerThanOneMethodHoldsIsSaidAtTheBehaviorNamingTheMethodAndTheLimit() {
         assertDoesNotThrow(() -> Compiler.compile(behaviorOverAListOf(100)));
 
         String src = behaviorOverAListOf(8000);
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E2102", e.code(), e.getMessage());
         assertTrue(e.getMessage().contains("f"), e.getMessage());
-    }
-
-    @Test
-    void itSaysWhichGeneratedMethodAndHowFarPastTheLimit() {
-        String src = behaviorOverAListOf(8000);
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
 
         String said = new HumanRenderer(false).render(e.diagnostic(),
                 new SourceContext("demo.sou", src, SourceLayout.of(src)), Locale.ENGLISH);

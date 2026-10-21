@@ -44,13 +44,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * turns nothing in as well as the ones it turns in. The line is read in the cases that divide rows
  * and no other, so a row in the condition is not by that alone a row at the line.
  *
- * <p>Which cases the line is drawn in is asked of the guards, for each way the cases come: said
- * one by one (four truths beside the part), said as one and taken apart again into as many as are
- * said one by one (five), and said as one with more than that dividing rows, kept as one (six).
- * That a row is at the line's point only in a case the line is drawn in is asked of the report
- * once, with the cases said one by one: what reads a row against a point is the same however the
- * cases it was drawn in came, and how many cases there are against the figure is asked without a
- * compilation in {@code meaning.WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest}.
+ * <p>Which cases the line is drawn in is asked of the guards, for each way the cases come past the
+ * cases said one by one: said as one and taken apart again into as many as are said one by one
+ * (five truths beside the part), and said as one with more than that dividing rows, kept as one
+ * (six). That a row is at the line's point only in a case the line is drawn in is asked of the
+ * report once, with the cases said one by one and as few as there can be — one truth beside the
+ * part, two cases: what reads a row against a point is the same however the cases it was drawn in
+ * came, and how many cases there are against the figure is asked without a compilation in
+ * {@code meaning.WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest}.
  */
 class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
 
@@ -65,7 +66,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
      */
     @Test
     void aRowInACaseTheLineTurnsNothingInIsNotAtItsPoint() {
-        assertFalse(atNought(statement(4), "0, MB(0)", 4, 2),
+        assertFalse(atNought(statement(1), "0, MB(0)", 1, 0),
                 "x + y > 0 fails and the line turns nothing there");
     }
 
@@ -75,7 +76,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
      */
     @Test
     void aRowInACaseTheLineTurnsInIsAtItsPoint() {
-        assertTrue(atNought(statement(4), "0, MB(1)", 4, 1),
+        assertTrue(atNought(statement(1), "0, MB(1)", 1, 1),
                 "x + y > 0 holds and the line turns there");
     }
 

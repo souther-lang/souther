@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
@@ -9,6 +10,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.UnreadReason;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -195,7 +197,22 @@ class ALimitIsAnsweredForByWhatAskedForItTest {
         return printed.substring(printed.indexOf('(') + 1, printed.indexOf(')'));
     }
 
+    /** Each declaration read once for the class: three tests ask the one beside a rule that asks
+     *  for nothing costly, and only read it. */
     private static FieldDomains read(String source) {
+        return READ.computeIfAbsent(source, ALimitIsAnsweredForByWhatAskedForItTest::reading);
+    }
+
+    private static final Map<String, FieldDomains> READ = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        READ.clear();
+    }
+
+    private static FieldDomains reading(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()

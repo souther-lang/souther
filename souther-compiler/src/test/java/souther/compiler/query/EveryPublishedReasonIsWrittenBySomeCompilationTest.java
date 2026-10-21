@@ -481,25 +481,18 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: N) -> Answer
                 let f (n) = if n.value < 0 - 5 then Yes else No
                 """.formatted(ANSWER)));
-        // A comparison over nine values each chosen by cases on a position of its own, read once
-        // for each way the cases can fall: no way is closed by another, so it is more readings
-        // than one condition is read on.
+        // A comparison of the larger of two values whose readings stopped at two different
+        // operations: neither operation is what stopped the statement, so what it states has a
+        // part that was not read. The same word is written where the reading stops at a figure,
+        // and AReadingStoppedAtAFigureSaysWhichFigureTest is what holds a document to that.
         out.put(UndividedPosition.Reason.RULE_MEANING_NOT_READ, of("""
                 module m
                 %s
-                data N = { a: Int, b: Int, c: Int, d: Int, e: Int, g: Int, h: Int, i: Int, j: Int }
-                behavior f : (n: N) -> Answer
-                let f (n) = {
-                    let a = if n.a > 0 then 1 else 0
-                    let b = if n.b > 0 then 1 else 0
-                    let c = if n.c > 0 then 1 else 0
-                    let d = if n.d > 0 then 1 else 0
-                    let e = if n.e > 0 then 1 else 0
-                    let g = if n.g > 0 then 1 else 0
-                    let h = if n.h > 0 then 1 else 0
-                    let i = if n.i > 0 then 1 else 0
-                    let j = if n.j > 0 then 1 else 0
-                    if a + b + c + d + e + g + h + i + j > 4 then Yes else No
+                behavior f : (a: Int, b: Int, c: Int) -> Answer
+                let f (a, b, c) = {
+                    let p = a * b
+                    let q = Int.floorMod(a, b)
+                    if Int.max(p, q) <= c then Yes else No
                 }
                 """.formatted(ANSWER)));
         // And a line the declarations do leave values at, that no row arriving at the comparison

@@ -488,13 +488,9 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
             namespaces.add(key.substring(0, key.indexOf('.')));
         }
         Set<String> named = new TreeSet<>();
-        for (Path source : mainSources()) {
-            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
-            while (m.find()) {
-                String key = m.group(1);
-                if (namespaces.contains(key.substring(0, key.indexOf('.')))) {
-                    named.add(key);
-                }
+        for (String key : keyLiterals()) {
+            if (namespaces.contains(key.substring(0, key.indexOf('.')))) {
+                named.add(key);
             }
         }
         assertFalse(named.isEmpty(), "found no message keys at all — the source scan missed the tree");
@@ -514,13 +510,7 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      */
     @Test
     void noExampleMessageIsDefinedAndNeverShown() throws IOException {
-        Set<String> named = new TreeSet<>();
-        for (Path source : mainSources()) {
-            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
-            while (m.find()) {
-                named.add(m.group(1));
-            }
-        }
+        Set<String> named = keyLiterals();
         Set<String> unshown = new TreeSet<>();
         for (String key : keysOf(baseCatalog().path())) {
             if (key.startsWith("check.example.") && !named.contains(key)) {
@@ -542,13 +532,7 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      */
     @Test
     void noMessageIsDefinedAndNeverShown() throws IOException {
-        Set<String> named = new TreeSet<>();
-        for (Path source : mainSources()) {
-            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
-            while (m.find()) {
-                named.add(m.group(1));
-            }
-        }
+        Set<String> named = keyLiterals();
         Set<String> unshown = new TreeSet<>();
         for (String key : keysOf(baseCatalog().path())) {
             if (key.endsWith(".hint") || key.startsWith("check.typearg.") || key.startsWith("kind.")
@@ -731,17 +715,31 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
                 "a code names a rule a reader looks up, and nothing raises these");
     }
 
-    /** Every {@code Area.Record} a main source builds. */
+    /**
+     * Every {@code Area.Record} a main source builds, found once for the class.
+     *
+     * <p>Looked for only in a source that names a message at all, since what is built is spelled
+     * with the word.
+     */
     private static Set<String> built() throws IOException {
+        if (builtMessages != null) {
+            return builtMessages;
+        }
         Set<String> found = new TreeSet<>();
-        for (Path source : mainSources()) {
-            Matcher m = BUILT.matcher(Files.readString(source, StandardCharsets.UTF_8));
+        for (String text : mainSourceTexts()) {
+            if (!text.contains("Message")) {
+                continue;
+            }
+            Matcher m = BUILT.matcher(text);
             while (m.find()) {
                 found.add(m.group(1) + "." + m.group(2));
             }
         }
-        return found;
+        builtMessages = Set.copyOf(found);
+        return builtMessages;
     }
+
+    private static Set<String> builtMessages;
 
     /** What a message cites: {@code (spec <anchor>)}, in any language.
      *
@@ -912,6 +910,51 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
 
     private static final Pattern KEY_LITERAL =
             Pattern.compile("\"([a-z][a-z0-9]*(?:\\.[a-z0-9]+)+)\"");
+
+    private static Set<String> keys;
+
+    /**
+     * Every string literal shaped like a message key in a main source, found once for the class:
+     * three checks ask of the same literals.
+     *
+     * <p>Looked for at each quotation mark, where a literal opens, and taken up again after the
+     * literal it found — which is where looking for the pattern anywhere would take it up too.
+     */
+    private static Set<String> keyLiterals() throws IOException {
+        if (keys != null) {
+            return keys;
+        }
+        Set<String> found = new TreeSet<>();
+        for (String text : mainSourceTexts()) {
+            Matcher m = KEY_LITERAL.matcher(text);
+            int at = text.indexOf('"');
+            while (at >= 0) {
+                if (m.region(at, text.length()).lookingAt()) {
+                    found.add(m.group(1));
+                    at = text.indexOf('"', m.end());
+                } else {
+                    at = text.indexOf('"', at + 1);
+                }
+            }
+        }
+        keys = Set.copyOf(found);
+        return keys;
+    }
+
+    private static List<String> texts;
+
+    /** What every main source says, read once for the class. */
+    private static List<String> mainSourceTexts() throws IOException {
+        if (texts != null) {
+            return texts;
+        }
+        List<String> read = new ArrayList<>();
+        for (Path source : mainSources()) {
+            read.add(Files.readString(source, StandardCharsets.UTF_8));
+        }
+        texts = List.copyOf(read);
+        return texts;
+    }
 
     /**
      * The catalogs that ship, found in the tree rather than listed here. Read off the repository

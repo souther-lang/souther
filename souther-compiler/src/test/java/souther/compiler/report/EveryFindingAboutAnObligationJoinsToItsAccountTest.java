@@ -2,9 +2,11 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -15,6 +17,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * kinds it would have caught are the ones this class now reaches on purpose.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryFindingAboutAnObligationJoinsToItsAccountTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -732,7 +736,23 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         return document.get("modules").get(0);
     }
 
-    private static JsonNode reportOf(String model) {
+    /** The document of each model this class writes, written once: the sweeps read every one of
+     *  them and the case each was written for reads it again. Declared before {@link #DOCUMENTS},
+     *  which is made of them when the class is initialised. */
+    private static final Map<String, JsonNode> WRITTEN = new HashMap<>();
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static synchronized void released() {
+        WRITTEN.clear();
+    }
+
+    private static synchronized JsonNode reportOf(String model) {
+        return WRITTEN.computeIfAbsent(model,
+                EveryFindingAboutAnObligationJoinsToItsAccountTest::written);
+    }
+
+    private static JsonNode written(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -744,17 +764,17 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
      * The documents both sweeps read, written once for the class that asks.
      *
      * <p>Both questions are about the same models and the compiling is nearly all of what they
-     * cost. Asked per question, the corpus would be analysed again for each.
+     * cost. Asked per question, the corpus would be analysed again for each; and the corpora are
+     * the ones every reader of the repository's models reads, so they are taken as compiled for
+     * all of those.
      */
     private static final List<JsonNode> DOCUMENTS = documents();
 
     private static List<JsonNode> documents() {
         List<JsonNode> out = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            ConformanceCorpus.Analysed analysed = corpus.analyse();
-            out.add(JSON.readTree(analysed.report().json(
-                    new SourceRendering(corpus.names(), analysed.compilation().texts()))));
-        }
+        RepositoryModels.conformance().forEach((corpus, compilation) -> out.add(JSON.readTree(
+                AdequacyReport.of(compilation).json(
+                        new SourceRendering(corpus.names(), compilation.texts())))));
         out.add(reportOf(TWO_RULES_AT_ONE_FORK));
         out.add(reportOf(TWO_POSITIONS_ONE_CLASS_NAME));
         out.add(reportOf(TWO_RULES_ONE_ARM));

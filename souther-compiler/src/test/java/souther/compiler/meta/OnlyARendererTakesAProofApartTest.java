@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import souther.compiler.WhatWasCompiled;
 
@@ -164,8 +165,26 @@ class OnlyARendererTakesAProofApartTest {
         return nested < 0 ? binaryName : binaryName.substring(0, nested);
     }
 
-    /** Every call and construction the compiled classes hold, the answers' own aside. */
+    private static List<Use> read;
+
+    /**
+     * Every call and construction the compiled classes hold, the answers' own aside, read once for
+     * the class: two checks ask of the same calls.
+     */
     private static List<Use> uses() {
+        if (read == null) {
+            read = List.copyOf(readUses());
+        }
+        return read;
+    }
+
+    /** And given back when the class is done with them: a fork keeps its JVM. */
+    @AfterAll
+    static void released() {
+        read = null;
+    }
+
+    private static List<Use> readUses() {
         List<Use> found = new ArrayList<>();
         for (ClassModel model : WhatWasCompiled.compiled().all()) {
             String from = model.thisClass().asInternalName().replace('/', '.');

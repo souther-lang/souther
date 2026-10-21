@@ -226,7 +226,6 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
     private static List<ItemAssessment.Owed> pointsOfTheInnerLine(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         List<BorderAssessment> edges = compilation.db()
                 .ask(new Adequacy.BoundarySearch("example.either", "f")).value();
         assertNotNull(edges, "the lines of this behavior were searched");

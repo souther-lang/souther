@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -266,9 +268,7 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                     Ok
                 }
                 """;
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measuredModel(model);
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read);
         assertEquals(List.of("0"), read.get("f").stream().map(BorderAssessment::value).toList());
@@ -439,10 +439,7 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                 %s    Ok
                 }
                 """.formatted(body.indent(4));
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return measuredModel(model);
     }
 
     /** The place moved by a number, named before its remainder is compared, is the same rule. */
@@ -461,9 +458,7 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                     Ok
                 }
                 """;
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measuredModel(model);
         List<String> named = Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
                 .map(BorderAssessment::value).toList();
         assertEquals(bordersOf("x: Int", "Int.floorMod(x + 1, 7) < 2"), named);
@@ -644,10 +639,28 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                 }
                 """.formatted(parameters,
                 parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return measuredModel(model);
+    }
+
+    /** Each model measured once for the class: tests ask one model its lines and its classes, and
+     *  only read them. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
+    /** {@code model} measured and asked nothing else: what is read of it is the measure's, which
+     *  asks for what it reads. */
+    private static Compilation measuredModel(String model) {
+        return MEASURED.computeIfAbsent(model, source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            return compilation;
+        });
     }
 
     private static List<String> bordersOf(String parameters, String condition) {

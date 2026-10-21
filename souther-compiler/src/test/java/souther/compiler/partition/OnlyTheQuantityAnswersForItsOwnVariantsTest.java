@@ -9,9 +9,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -71,17 +74,27 @@ class OnlyTheQuantityAnswersForItsOwnVariantsTest {
         List<Path> sources = EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources();
         assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
 
+        // The name as a word of its own, wherever it stands in the file.
+        Map<String, Pattern> asAWord = new LinkedHashMap<>();
+        variants.forEach(variant -> asAWord.put(variant,
+                Pattern.compile("\\b" + Pattern.quote(variant) + "\\b")));
         Set<String> naming = new TreeSet<>();
         for (Path source : sources) {
             String named = source.toString().replace('\\', '/').replaceAll(".*/src/main/java/", "");
             if (MAY_NAME_ONE.contains(named)) {
                 continue;
             }
-            String code = withoutComments(Files.readString(source, StandardCharsets.UTF_8));
+            String text = Files.readString(source, StandardCharsets.UTF_8);
+            // A file that spells no variant anywhere spells none in its code either.
+            if (variants.stream().noneMatch(text::contains)) {
+                continue;
+            }
+            String code = withoutComments(text);
             for (String variant : variants) {
                 if (code.contains("BorderQuantity." + variant)
                         || (named.startsWith("souther/compiler/partition/")
-                                && code.matches("(?s).*\\b" + variant + "\\b.*"))) {
+                                && code.contains(variant)
+                                && asAWord.get(variant).matcher(code).find())) {
                     naming.add(named + " names " + variant);
                 }
             }

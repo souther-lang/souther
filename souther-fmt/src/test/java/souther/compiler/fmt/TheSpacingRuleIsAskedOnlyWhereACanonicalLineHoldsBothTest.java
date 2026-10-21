@@ -51,9 +51,17 @@ class TheSpacingRuleIsAskedOnlyWhereACanonicalLineHoldsBothTest {
             return left + " " + right + " under " + joining;
         }
 
+        /** In the order the lines {@link #toString} writes sort in, read off the names one at a
+         *  time rather than off a line written for every comparison: a name sorts below every name
+         *  it begins, as the space after it does in the line. */
         @Override
         public int compareTo(Adjacency other) {
-            return toString().compareTo(other.toString());
+            int byLeft = left.name().compareTo(other.left.name());
+            if (byLeft != 0) {
+                return byLeft;
+            }
+            int byRight = right.name().compareTo(other.right.name());
+            return byRight != 0 ? byRight : joining.name().compareTo(other.joining.name());
         }
     }
 

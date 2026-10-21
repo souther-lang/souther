@@ -3,16 +3,11 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.DeclaredSig;
-import souther.compiler.check.RuleReadingContext;
-import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.RuleReadings;
-import souther.compiler.check.TypeCardinality;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.query.Bodies;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.ReadAs;
 import souther.test.ClosedWorldContract;
 import souther.test.ReadsTheRepositorysModels;
 
@@ -128,9 +123,8 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
     /**
      * The reading of every behavior of every model this repository carries.
      *
-     * <p>Read once for the class, as the models are compiled once for the JVM: two questions here
-     * walk the same readings and neither changes one, so reading them per question is the same
-     * work over — and reading the population is most of what this class costs.
+     * <p>Gathered once for the class, as the models are compiled once for the JVM: two questions
+     * here walk the same readings and neither changes one.
      *
      * <p>Read when one of them asks, and not while the class is initialised. What this population
      * failing to be read looks like is the regression this class is about, and a class that could
@@ -162,17 +156,16 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
         everyReading = null;
     }
 
+    /**
+     * Each behavior's reading as the compilation made it for the measurement, which answering the
+     * model has already done.
+     */
     private static void readings(Compilation compilation, List<InputDomain> out) {
         for (String module : compilation.modules()) {
-            Map<String, DeclaredSig> sigs =
-                    compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
-            RuleReadingSource rules = RuleReadings.of(compilation, module);
-            for (DeclaredSig declared : sigs.values()) {
-                RuleReadingContext reading = RuleReadingContext.of(rules,
-                        ReadAs.THE_COMPILATION_DOES, RepositoryModels.knownTo(compilation));
-                out.add(InputDomain.of(declared, reading,
-                        TypeCardinality.Counts.workedOutIn(reading),
-                        souther.compiler.carrier.Membership.none()));
+            Answer<Map<String, InputDomain>> read =
+                    compilation.db().ask(new Adequacy.Inputs(module));
+            if (read.present()) {
+                out.addAll(read.value().values());
             }
         }
     }

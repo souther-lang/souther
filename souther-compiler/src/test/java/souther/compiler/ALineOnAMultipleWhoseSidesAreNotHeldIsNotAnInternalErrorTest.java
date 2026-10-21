@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -10,12 +9,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -73,19 +71,26 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
     private static final String THE_GUARD = "guard t62 * h.a.value <= 1.0m else Ok\n    No";
 
     /**
-     * The reasons the document of this source names in {@code notRead}, measured as a report is.
+     * What one compile of this source says: the errors it raised, by code, and the reasons the
+     * document names in {@code notRead}, measured as a report is.
      *
      * <p>Compiling reads the rule and measuring reads the values beside its line, which is where a
-     * count too wide for the host was written out, so it is the measurement that is asked.
+     * count too wide for the host was written out, so it is the measurement that is asked. The
+     * errors are read off the same compile: it answers everything a compile does and the
+     * measurement besides, so a rule that raised anything compiling would raise it here.
      */
-    private static Set<String> notRead(String source) {
+    private record Measured(List<String> errors, Set<String> notRead) {}
+
+    private static Measured measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code().toString()).toList();
         Set<String> out = new LinkedHashSet<>();
         collect(JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts()))), out);
-        return out;
+        return new Measured(errors, out);
     }
 
     private static void collect(JsonNode node, Set<String> out) {
@@ -103,10 +108,10 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
 
     @Test
     void aMultipleWhoseValuesBesideItsLineAreBeyondTheHostIsReportedAsASideNotWorkedOut() {
-        String source = model(squarings(62), THE_GUARD, "");
+        Measured measured = measured(model(squarings(62), THE_GUARD, ""));
 
-        assertDoesNotThrow(() -> Compiler.compile(source));
-        Set<String> words = notRead(source);
+        assertEquals(List.of(), measured.errors());
+        Set<String> words = measured.notRead();
         assertTrue(words.contains(THE_SIDE), () -> "the side is what was not worked out: " + words);
         assertFalse(words.contains(THE_LINE), () -> "and the line has a place: " + words);
     }
@@ -115,20 +120,20 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
      *  it is reported the same. */
     @Test
     void anExampleThatRunsTheMultipleIsRefusedAsAnExampleAndTheRuleIsReportedTheSame() {
-        String source = model(squarings(62), THE_GUARD, EXAMPLE);
+        Measured measured = measured(model(squarings(62), THE_GUARD, EXAMPLE));
 
-        CompileException refused = assertThrows(CompileException.class,
-                () -> Compiler.compile(source));
-        assertEquals("E1905", refused.code(), "the example does not hold, and that is all it says");
-        assertTrue(notRead(source).contains(THE_SIDE));
+        assertEquals(List.of("E1905"), measured.errors(),
+                "the example does not hold, and that is all it says");
+        assertTrue(measured.notRead().contains(THE_SIDE));
     }
 
     @Test
     void theSameLineAsACondition() {
-        String source = model(squarings(62), "if t62 * h.a.value <= 1.0m then Ok else No", "");
+        Measured measured =
+                measured(model(squarings(62), "if t62 * h.a.value <= 1.0m then Ok else No", ""));
 
-        assertDoesNotThrow(() -> Compiler.compile(source));
-        assertTrue(notRead(source).contains(THE_SIDE));
+        assertEquals(List.of(), measured.errors());
+        assertTrue(measured.notRead().contains(THE_SIDE));
     }
 
     /** The line beside another on one quantity: the two are read through what the first is a
@@ -138,10 +143,10 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
         for (String body : new String[] {
                 "guard t62 * h.a.value <= 1.0m else Ok\n    guard h.a.value <= 1.0m else Ok\n    No",
                 "guard h.a.value <= 1.0m else Ok\n    guard t62 * h.a.value <= 1.0m else Ok\n    No"}) {
-            String source = model(squarings(62), body, "");
+            Measured measured = measured(model(squarings(62), body, ""));
 
-            assertDoesNotThrow(() -> Compiler.compile(source), body);
-            Set<String> words = notRead(source);
+            assertEquals(List.of(), measured.errors(), body);
+            Set<String> words = measured.notRead();
             assertTrue(words.contains(THE_SIDE), () -> body + ": " + words);
             assertFalse(words.contains(THE_LINE), () -> body + ": " + words);
         }
@@ -151,10 +156,10 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
      *  about the multiple and not about every rule that writes one. */
     @Test
     void aMultipleTheHostHasRoomForIsReportedNoSuchWay() {
-        String source = model("", "guard 2.0m * h.a.value <= 1.0m else Ok\n    No", "");
+        Measured measured = measured(model("", "guard 2.0m * h.a.value <= 1.0m else Ok\n    No", ""));
 
-        assertDoesNotThrow(() -> Compiler.compile(source));
-        Set<String> words = notRead(source);
+        assertEquals(List.of(), measured.errors());
+        Set<String> words = measured.notRead();
         assertFalse(words.contains(THE_SIDE), () -> "nothing was left unworked: " + words);
         assertFalse(words.contains(THE_LINE), () -> "and the line has a place: " + words);
     }

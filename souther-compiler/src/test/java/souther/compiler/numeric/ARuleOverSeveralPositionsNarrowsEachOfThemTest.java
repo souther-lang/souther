@@ -287,8 +287,24 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             if (!tightened.atLeast().isEmpty() || !tightened.atMost().isEmpty()) {
                 narrowed++;
             }
-            for (Map<String, Integer> point : admitted) {
-                for (String position : POSITIONS) {
+            // A box holds every admitted point exactly when, at each position, it holds the least
+            // and the greatest value an admitted point has there — so those two points are the
+            // ones asked about.
+            for (String position : POSITIONS) {
+                Map<String, Integer> lowest = null;
+                Map<String, Integer> highest = null;
+                for (Map<String, Integer> point : admitted) {
+                    if (lowest == null || point.get(position) < lowest.get(position)) {
+                        lowest = point;
+                    }
+                    if (highest == null || point.get(position) > highest.get(position)) {
+                        highest = point;
+                    }
+                }
+                if (lowest == null) {
+                    continue;
+                }
+                for (Map<String, Integer> point : List.of(lowest, highest)) {
                     ExactRatio at = num(point.get(position));
                     assertTrue(admits(after.leastOf(position), at, false)
                                     && admits(after.mostOf(position), at, true),

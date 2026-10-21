@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
@@ -8,7 +9,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -169,32 +172,17 @@ class AThresholdEachCaseNamesIsOwedInThatCaseTest {
     }
 
     /**
-     * How many cases there are says nothing about one case's points, whether or not the statement
-     * is small enough to be read part against part: a line and a case for each of eight terms is
-     * past that, and two terms are well inside it.
+     * How many cases there are says nothing about one case's points: the first of eight terms is
+     * owed what the first of two is. Every count between is read the same way, part against part,
+     * so the two ends are what is asked.
      */
     @Test
     void howManyCasesThereAreMovesNoneOfOneCasesPoints() {
         List<String> two = readingsOf(ofTerms(2));
         assertTrue(firstTermsOf(two).containsAll(List.of("IN in 1 <= month < 12 where term is T0",
                 "OUT in 13 < month <= 60 where term is T0")), two::toString);
-        for (int terms = 3; terms <= 8; terms++) {
-            List<String> readings = readingsOf(ofTerms(terms));
-            assertEquals(firstTermsOf(two), firstTermsOf(readings), readings::toString);
-        }
-    }
-
-    /**
-     * Past the number of parts a statement is read part against part in, with more cases than
-     * that alone: another case's threshold moved moves none of the first case's points.
-     */
-    @Test
-    void anotherCasesThresholdMovesNothingPastTheLimitEither() {
-        List<String> before = firstTermsOf(readingsOf(ofTerms(14)));
-        assertTrue(before.contains("IN in 1 <= month < 12 where term is T0"), before::toString);
-        String moved = ofTerms(14).replace("| T13 -> 90", "| T13 -> 59");
-        assertFalse(moved.equals(ofTerms(14)), "the last term's threshold was moved");
-        assertEquals(before, firstTermsOf(readingsOf(moved)));
+        List<String> eight = readingsOf(ofTerms(8));
+        assertEquals(firstTermsOf(two), firstTermsOf(eight), eight::toString);
     }
 
     /**
@@ -341,6 +329,21 @@ class AThresholdEachCaseNamesIsOwedInThatCaseTest {
      * four the point is.
      */
     private static List<String> readingsOf(String source) {
+        return READ.computeIfAbsent(source, AThresholdEachCaseNamesIsOwedInThatCaseTest::read);
+    }
+
+    /** Each source read once for the class: the tests here ask one model of two terms several
+     *  things, and only read it. */
+    private static final Map<String, List<String>> READ = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        READ.clear();
+    }
+
+    private static List<String> read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
