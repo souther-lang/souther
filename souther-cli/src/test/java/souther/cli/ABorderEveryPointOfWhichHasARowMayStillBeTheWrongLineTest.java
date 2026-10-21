@@ -2,11 +2,8 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -174,19 +171,7 @@ class ABorderEveryPointOfWhichHasARowMayStillBeTheWrongLineTest {
         try {
             Path file = Files.createTempDirectory("souther-borders").resolve("m.sou");
             Files.writeString(file, source);
-            PrintStream out = System.out;
-            PrintStream err = System.err;
-            ByteArrayOutputStream said = new ByteArrayOutputStream();
-            System.setOut(new PrintStream(said, true, StandardCharsets.UTF_8));
-            System.setErr(new PrintStream(new ByteArrayOutputStream(), true,
-                    StandardCharsets.UTF_8));
-            try {
-                Main.main(new String[] {"examples", file.toString()});
-            } finally {
-                System.setOut(out);
-                System.setErr(err);
-            }
-            return said.toString(StandardCharsets.UTF_8);
+            return CliInProcess.printed("examples", file.toString());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

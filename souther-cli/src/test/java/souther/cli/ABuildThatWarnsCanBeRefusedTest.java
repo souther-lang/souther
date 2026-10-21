@@ -4,9 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -56,20 +55,8 @@ class ABuildThatWarnsCanBeRefusedTest {
     private record Said(int code, String err, String out) {}
 
     private Said run(String... args) {
-        PrintStream originalErr = System.err;
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            int code = Main.dispatch(args);
-            return new Said(code, err.toString(StandardCharsets.UTF_8),
-                    out.toString(StandardCharsets.UTF_8));
-        } finally {
-            System.setErr(originalErr);
-            System.setOut(originalOut);
-        }
+        Ran ran = CliInProcess.run(args);
+        return new Said(ran.code(), ran.err(), ran.out());
     }
 
     private Path source(String text) throws Exception {
@@ -139,9 +126,10 @@ class ABuildThatWarnsCanBeRefusedTest {
      */
     @Test
     void aRefusedCompileWritesNoClasses() throws Exception {
-        run("compile", source(WARNS).toString(), "-d", outDir().toString(),
+        Said said = run("compile", source(WARNS).toString(), "-d", outDir().toString(),
                 "--warnings", "error", "--lang", "en");
 
+        assertEquals(1, said.code(), said.err());
         assertEquals(List.of(), written(), "the refused build wrote classes");
     }
 
@@ -154,6 +142,7 @@ class ABuildThatWarnsCanBeRefusedTest {
         Said said = run("compile", source(WARNS).toString(), "-d", outDir().toString(),
                 "--warnings", "error", "--lang", "en");
 
+        assertEquals(1, said.code(), said.err());
         assertTrue(said.err().contains("INVARIANT (WARNING)"), said.err());
         assertTrue(said.err().contains("E2011"), said.err());
         assertFalse(said.err().contains("INVARIANT  E2011"),
@@ -165,6 +154,7 @@ class ABuildThatWarnsCanBeRefusedTest {
         Said said = run("compile", source(WARNS).toString(), "-d", outDir().toString(),
                 "--warnings", "error", "--lang", "en");
 
+        assertEquals(1, said.code(), said.err());
         assertTrue(said.err().contains("warnings are treated as errors"),
                 "an exit code alone does not say which flag decided it: " + said.err());
     }
@@ -174,6 +164,7 @@ class ABuildThatWarnsCanBeRefusedTest {
         Said said = run("compile", source(WARNS).toString(), "-d", outDir().toString(),
                 "--warnings", "error", "--lang", "ja");
 
+        assertEquals(1, said.code(), said.err());
         assertTrue(said.err().contains("警告"), said.err());
         assertFalse(said.err().contains("warnings are treated as errors"), said.err());
     }

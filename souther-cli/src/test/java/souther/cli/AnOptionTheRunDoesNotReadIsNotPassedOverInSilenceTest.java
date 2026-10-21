@@ -3,9 +3,8 @@ package souther.cli;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,7 +12,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -53,20 +51,8 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
 
     /** Runs the command line and answers with its exit code and what it wrote. */
     private Said run(String... args) {
-        PrintStream originalErr = System.err;
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            int code = Main.dispatch(args);
-            return new Said(code, err.toString(StandardCharsets.UTF_8),
-                    out.toString(StandardCharsets.UTF_8));
-        } finally {
-            System.setErr(originalErr);
-            System.setOut(originalOut);
-        }
+        Ran ran = CliInProcess.run(args);
+        return new Said(ran.code(), ran.err(), ran.out());
     }
 
     /**
@@ -101,6 +87,7 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
     void limitWithoutSearchReportsNothing() {
         Said said = run("doc", "--limit", "5");
 
+        assertEquals(2, said.code(), said.err());
         assertEquals("", said.out(), said.out());
     }
 
@@ -129,6 +116,7 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
         Said all = run("doc", "--search", "type", "--limit", "0");
 
         assertEquals(0, said.code(), said.err());
+        assertEquals(0, all.code(), all.err());
         assertTrue(hits(all) > 2, "a term with no more hits than the limit measures nothing: " + all.out());
         assertEquals(2, hits(said), said.out());
     }
@@ -189,6 +177,9 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
 
             Said said = run(line.toArray(String[]::new));
 
+            // The line is taken (not 2); what the command then answers about the file is its own.
+            assertTrue(said.code() == 0 || said.code() == 1,
+                    line + " exited " + said.code() + ": " + said.err());
             assertFalse(said.err().contains("at least one .sou file"),
                     line + ": the file was read as this option's value: " + said.err());
             assertFalse(said.err().contains("io error"),
@@ -612,7 +603,8 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
     void aShortOptionAnotherCommandOwnsIsStillAPath() throws Exception {
         Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(), "-w");
 
-        assertNotEquals(2, said.code(), said.err());
+        assertEquals(1, said.code(),
+                "read as a source, which is not there, and not refused as an option: " + said.err());
         assertFalse(said.err().contains("unknown option"), said.err());
     }
 

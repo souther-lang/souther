@@ -1,14 +1,13 @@
 package souther.cli;
 
+import souther.cli.CliProcess.Ran;
 import souther.compiler.fmt.Formatter;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -50,74 +49,40 @@ class MainTest {
         String messy = "module m\ndata X = { a: Int }\n";
         Files.writeString(f, messy);
 
-        PrintStream original = System.out;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[]{"fmt", f.toString()});
-        } finally {
-            System.setOut(original);
-        }
-        assertEquals(Formatter.format(messy), captured.toString(StandardCharsets.UTF_8));
+        assertEquals(Formatter.format(messy), CliInProcess.printed("fmt", f.toString()));
     }
 
     @Test
     void docPrintsASpecificationSectionByItsAnchor() throws Exception {
-        PrintStream original = System.out;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[]{"doc", "purpose"});
-        } finally {
-            System.setOut(original);
-        }
-        assertTrue(captured.toString(StandardCharsets.UTF_8).contains("JVM-targeted language"),
-                "the purpose section is printed");
+        String printed = CliInProcess.printed("doc", "purpose");
+        assertTrue(printed.contains("JVM-targeted language"), "the purpose section is printed");
     }
 
     @Test
     void apiListsTheStdlibSurface() throws Exception {
-        PrintStream original = System.out;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[]{"api", "Option"});
-        } finally {
-            System.setOut(original);
-        }
-        assertTrue(captured.toString(StandardCharsets.UTF_8).lines().anyMatch(l -> l.startsWith("Option.map(")),
+        String printed = CliInProcess.printed("api", "Option");
+        assertTrue(printed.lines().anyMatch(l -> l.startsWith("Option.map(")),
                 "the Option module's surface is printed");
     }
 
     @Test
     void japiPrintsAJarsPublicApi() throws Exception {
-        PrintStream original = System.out;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[]{"japi", "net.unit8.raoh.Issues"});
-        } finally {
-            System.setOut(original);
-        }
-        assertTrue(captured.toString(StandardCharsets.UTF_8).contains("record net.unit8.raoh.Issues"),
+        Path scratch = Files.createTempDirectory("souther-japi");
+        Ran ran = CliInProcess.run(scratch, scratch, Map.of(),
+                Map.of("java.class.path", System.getProperty("java.class.path")), "",
+                "japi", "net.unit8.raoh.Issues");
+        assertEquals(0, ran.code(), ran.err());
+        assertTrue(ran.out().contains("record net.unit8.raoh.Issues"),
                 "raoh's Issues is answered from the test classpath");
     }
 
     @Test
     void mcpServesTheProtocolOnStdinAndLeavesAtItsEnd() throws Exception {
-        java.io.InputStream originalIn = System.in;
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setIn(new java.io.ByteArrayInputStream(
-                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n".getBytes(StandardCharsets.UTF_8)));
-        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[]{"mcp"});
-        } finally {
-            System.setIn(originalIn);
-            System.setOut(originalOut);
-        }
-        assertTrue(captured.toString(StandardCharsets.UTF_8).contains("\"doc_search\""),
+        Path scratch = Files.createTempDirectory("souther-mcp");
+        Ran ran = CliInProcess.run(scratch, scratch, Map.of(), Map.of(),
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n", "mcp");
+        assertEquals(0, ran.code(), ran.err());
+        assertTrue(ran.out().contains("\"doc_search\""),
                 "the server answered on stdout and returned at end of input");
     }
 
@@ -127,7 +92,7 @@ class MainTest {
         String messy = "module m\ndata X = { a: Int }\n";
         Files.writeString(f, messy);
 
-        Main.main(new String[]{"fmt", "-w", f.toString()});
+        assertEquals(0, CliInProcess.run("fmt", "-w", f.toString()).code());
 
         assertEquals(Formatter.format(messy), Files.readString(f));
     }

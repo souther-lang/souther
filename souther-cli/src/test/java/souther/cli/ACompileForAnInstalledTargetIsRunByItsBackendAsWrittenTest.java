@@ -96,6 +96,7 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
         Ran both = cli(work, home(home), Map.of("souther.backends", packaged.toString()),
                 "compile", "--target", "fake");
 
+        assertEquals(0, both.code(), both.err());
         assertTrue(both.out().contains("marker=from-home\n"), both.out() + both.err());
     }
 

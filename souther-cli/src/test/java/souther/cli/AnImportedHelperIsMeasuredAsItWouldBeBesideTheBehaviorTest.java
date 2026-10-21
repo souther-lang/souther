@@ -2,9 +2,8 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -100,20 +99,7 @@ class AnImportedHelperIsMeasuredAsItWouldBeBesideTheBehaviorTest {
         for (Path file : files) {
             args.add(file.toString());
         }
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        int code;
-        try {
-            code = Main.run(args.toArray(String[]::new), Environment.ofThisProcess());
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
-        return new Run(code, out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+        Ran ran = CliInProcess.run(args.toArray(String[]::new));
+        return new Run(ran.code(), ran.out(), ran.err());
     }
 }

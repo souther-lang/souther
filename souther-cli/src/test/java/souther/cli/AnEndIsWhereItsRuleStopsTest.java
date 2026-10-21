@@ -1,11 +1,7 @@
 package souther.cli;
 
-import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -280,14 +276,6 @@ class AnEndIsWhereItsRuleStopsTest {
         Files.writeString(file, model);
         List<String> args = new java.util.ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(extra));
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(args.toArray(String[]::new));
-        } finally {
-            System.setOut(was);
-        }
-        return out.toString(StandardCharsets.UTF_8);
+        return CliInProcess.printed(args.toArray(String[]::new));
     }
 }

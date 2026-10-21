@@ -2,15 +2,13 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
+import souther.cli.CliProcess.Ran;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.RowWitnesses;
 import souther.compiler.report.AdequacyReport;
 
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -126,20 +124,7 @@ class ABuildIsHeldToEveryObligationTheAccountDerivesTest {
     }
 
     private static Run cli(String... args) {
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        int code;
-        try {
-            code = Main.dispatch(args);
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
-        return new Run(code, out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+        Ran ran = CliInProcess.run(args);
+        return new Run(ran.code(), ran.out(), ran.err());
     }
 }
