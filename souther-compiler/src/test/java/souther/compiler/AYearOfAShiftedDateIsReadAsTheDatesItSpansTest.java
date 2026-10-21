@@ -38,8 +38,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
-    private static final String[] RELATIONS = {">=", ">", "<=", "<", "==", "/="};
-
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -73,15 +71,12 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
         };
     }
 
-    /** The dates the comparison turns over at: where the year it is made against begins. */
-    private static List<LocalDate> linesOf(String relation, long year, int shift) {
+    /** The dates an equality with {@code year} turns over at: where the year begins, and where the
+     *  next one does. */
+    private static List<LocalDate> linesOf(long year, int shift) {
         List<LocalDate> lines = new ArrayList<>();
-        if (!relation.equals(">") && !relation.equals("<=")) {
-            lineAt(lines, year, shift);
-        }
-        if (!relation.equals(">=") && !relation.equals("<")) {
-            lineAt(lines, year + 1, shift);
-        }
+        lineAt(lines, year, shift);
+        lineAt(lines, year + 1, shift);
         return lines;
     }
 
@@ -171,27 +166,37 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
         assertTrue(report.contains("Date.year((b +1 days)): = 2028"), report);
     }
 
+    /**
+     * Each line is held on both sides of it, by an equality, which draws a line where the year
+     * begins and another where the next one does. Which relation draws a line is read by what
+     * reads every comparison of numbers; what the move decides is the date the line falls on, so
+     * each year is asked once forward and once back: the first year, a leap year a year of days
+     * crosses, a year in the middle, the last of four digits, one past them, and the last year the
+     * calendar has, whose next year begins at no date.
+     */
     @Test
-    void everyRelationHoldsAtEachLineAndOnBothSidesOfIt() {
-        long[] years = {1, 2024, 2027, 9999, 20000, Year.MAX_VALUE};
-        int[] shifts = {1, -1, 30, -366};
-        for (String relation : RELATIONS) {
-            for (long year : years) {
-                for (int shift : shifts) {
-                    List<LocalDate> lines = linesOf(relation, year, shift);
-                    String comparison = "Date.year(Date.addDays(%d, b)) %s %d"
-                            .formatted(shift, relation, year);
-                    Compilation compilation = compiled(source(comparison, shift, relation, year,
-                            datesAround(lines, shift)));
-                    String report = report(compilation);
-                    String where = comparison + "\n" + report;
+    void eachLineHoldsOnBothSidesOfIt() {
+        long[][] yearsAndShifts = {
+                {1, 1}, {1, -366},
+                {2024, 30}, {2024, -366},
+                {2027, 1}, {2027, -1},
+                {9999, 30}, {9999, -1},
+                {20000, 1}, {20000, -366},
+                {Year.MAX_VALUE, 1}, {Year.MAX_VALUE, -366}};
+        for (long[] each : yearsAndShifts) {
+            long year = each[0];
+            int shift = (int) each[1];
+            List<LocalDate> lines = linesOf(year, shift);
+            String comparison = "Date.year(Date.addDays(%d, b)) == %d".formatted(shift, year);
+            Compilation compilation = compiled(source(comparison, shift, "==", year,
+                    datesAround(lines, shift)));
+            String report = report(compilation);
+            String where = comparison + "\n" + report;
 
-                    assertEquals(0, compilation.errors().size(), where);
-                    assertTrue(report.contains("measurement: complete"), where);
-                    assertFalse(report.contains("no row is at the ON point"), where);
-                    assertFalse(report.contains("no row is at the OFF point"), where);
-                }
-            }
+            assertEquals(0, compilation.errors().size(), where);
+            assertTrue(report.contains("measurement: complete"), where);
+            assertFalse(report.contains("no row is at the ON point"), where);
+            assertFalse(report.contains("no row is at the OFF point"), where);
         }
     }
 

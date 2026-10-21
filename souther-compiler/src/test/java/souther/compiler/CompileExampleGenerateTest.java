@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.source.SourceId;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.CameToNothing;
@@ -13,6 +14,7 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -58,13 +60,30 @@ class CompileExampleGenerateTest {
                 | (Request { kind = Domestic, urgent = true }) -> Accepted { at = "now" }
             """;
 
+    /**
+     * {@code source} measured, once for the class: the tests here read what is offered and composed
+     * of a measurement, and several ask one source.
+     *
+     * <p>The classes, the examples and the warnings are not asked: what is offered asks what it
+     * reads of them, and no test here reads the rest.
+     */
     private static Compilation compiledOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        // What `souther examples` asks for. A line a `guard` drew is only decidable where the arms
-        // were measured, so below this the generator has nothing to say about one.
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(source, each -> {
+            Compilation compilation = Compilation.ofSource(each, "Main");
+            // What `souther examples` asks for. A line a `guard` drew is only decidable where the
+            // arms were measured, so below this the generator has nothing to say about one.
+            compilation.measure(Adequacy.Asked.fullReport());
+            return compilation;
+        });
+    }
+
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 
     /**
@@ -1158,7 +1177,6 @@ class CompileExampleGenerateTest {
         Compilation compilation = Compilation.ofSources(List.of(model, companion),
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         String block = GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).text();
 
         assertEquals(declared, block.lines()

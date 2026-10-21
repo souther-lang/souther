@@ -6,9 +6,11 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Output;
 import souther.compiler.query.ReplacementEvidence;
 import souther.compiler.query.Replacements;
 import souther.compiler.query.Weakening;
+import souther.compiler.source.SourceId;
 
 import java.util.List;
 import java.util.Map;
@@ -28,14 +30,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * could not carry.
  *
  * <p>The body here is four forks of two arms, each arm a sum of hundreds of terms: as written it is
- * a method the JVM holds, and five such forks are not. Each arm is well under what one fork may
- * carry, so it is the method and not the fork that has no room.
+ * a method the JVM holds, and with the siblings beside every arm it is not. Each arm is well under
+ * what one fork may carry, so it is the method and not the fork that has no room.
+ *
+ * <p>The terms are decimals. A product of decimals runs past no end of a type, so a run past one
+ * holds nothing it did not hold before it, and the bytes each term is written in fill the method
+ * with nothing for a reading of the paths to take in term by term.
  */
 class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
 
     private static final int FORKS = 4;
 
-    private static final int TERMS = 450;
+    private static final int TERMS = 350;
 
     private static String model() {
         StringBuilder body = new StringBuilder();
@@ -44,21 +50,21 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
             StringBuilder held = new StringBuilder();
             StringBuilder other = new StringBuilder();
             for (int t = 1; t <= TERMS; t++) {
-                held.append(t == 1 ? "" : ", ").append("x * ").append(t);
-                other.append(t == 1 ? "" : ", ").append("x * ").append(t + 1000);
+                held.append(t == 1 ? "" : ", ").append("x * ").append(t).append(".0m");
+                other.append(t == 1 ? "" : ", ").append("x * ").append(t + 1000).append(".0m");
             }
             body.append("    let a").append(f).append(" = if x > ").append(f)
-                    .append(" then List.sum([").append(held).append("]) else List.sum([")
+                    .append(".0m then List.sum([").append(held).append("]) else List.sum([")
                     .append(other).append("])\n");
             sum.append(f == 0 ? "" : " + ").append("a").append(f);
         }
         // At nought every fork takes its second arm and every term is nought; at nine every fork
-        // takes its first, and each sums nine times one to four hundred and fifty.
+        // takes its first, and each sums nine times one to three hundred and fifty.
         long atNine = (long) FORKS * 9 * TERMS * (TERMS + 1) / 2;
         return """
                 module example.wide
 
-                behavior f : (x: Int) -> Int
+                behavior f : (x: Decimal) -> Decimal
 
                 let f (x) = {
                 %s
@@ -66,8 +72,8 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
                 }
 
                 example f
-                    | (0) -> 0
-                    | (9) -> %d
+                    | (0.0m) -> 0.0m
+                    | (9.0m) -> %d.0m
                 """.formatted(body, sum, atNine);
     }
 
@@ -77,12 +83,21 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
      * The model measured, once for the class. Every test here reads what one measurement of it
      * says, and none changes it; asked where the first test asks it rather than when the class is
      * loaded, so a model that fails to measure fails the test that asked and not the class.
+     *
+     * <p>Its classes and its examples are asked, which is what says whether it compiles and runs.
+     * The warnings are not: none is read here, and the reachability of every path through the
+     * sums is most of what asking them would cost.
      */
     private static Compilation measured() {
         if (measured == null) {
             Compilation compilation = Compilation.ofSource(model(), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            compilation.db().ask(new Output.All());
+            for (String module : compilation.modules()) {
+                for (SourceId id : compilation.exampleSourcesOf(module)) {
+                    compilation.db().ask(Output.Examples.asked(compilation.db(), module, id));
+                }
+            }
             measured = compilation;
         }
         return measured;

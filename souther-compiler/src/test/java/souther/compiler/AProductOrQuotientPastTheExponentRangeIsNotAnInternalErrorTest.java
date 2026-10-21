@@ -21,100 +21,76 @@ class AProductOrQuotientPastTheExponentRangeIsNotAnInternalErrorTest {
         return chain.toString();
     }
 
-    private static String model(String squarings, String guard) {
-        return """
-                module probe.follow
-
-                %s
-                data A = Decimal
-                data H = { a: A }
-                data Ok
-                data No
-                data Verdict = Ok | No
-
-                behavior take : (h: H) -> Verdict
-                let take (h) = { guard %s else Ok
-                    No }
-                """.formatted(squarings, guard);
-    }
-
-    @Test
-    void aBoundThatIsTheSquareOfTheLeastExponentIsNotAnInternalError() {
-        assertDoesNotThrow(() -> Compiler.compile(model(squarings(64), "h.a.value <= t64")));
-    }
-
-    @Test
-    void aCoefficientAtTheLeastExponentIsNotAnInternalError() {
-        assertDoesNotThrow(() -> Compiler.compile(model(squarings(63), "t63 * h.a.value <= 1.0m")));
-    }
-
-    @Test
-    void aCoefficientPastTheLeastExponentIsNotAnInternalError() {
-        assertDoesNotThrow(() -> Compiler.compile(model(squarings(64), "t64 * h.a.value <= 1.0m")));
-    }
-
-    /** Two positions and a body of statements, for the shapes a rule over one position does not
-     *  reach. */
-    private static String overTwoPositions(String squarings, String declarations, String body) {
-        return """
-                module probe.follow
-
-                %s
-                data A = Decimal
-                %s
-                data H = { a: A, b: A }
-                data Ok
-                data No
-                data Verdict = Ok | No
-
-                behavior take : (h: H) -> Verdict
-                let take (h) = { %s }
-                """.formatted(squarings, declarations, body);
-    }
-
     /**
-     * Each side of the comparison is a form held one by one — a coefficient at the least exponent
-     * and a coefficient of one — and the difference of the two is not. The reading of the comparison
-     * is what canonicalises it, so it is the reading that meets a number no ratio holds.
+     * Every shape a rule at the end of the exponents takes, each a behavior of its own over values
+     * no other behavior's rules are about, compiled together: a phase meets each where it reads that
+     * behavior, and an internal error at any of them stops the compile.
+     *
+     * <ul>
+     *   <li>a bound that is the square of the least exponent, and a coefficient at it and past it;
+     *   <li>a comparison whose two sides are each a form held one by one — a coefficient at the
+     *       least exponent and a coefficient of one — while their difference is not, so it is the
+     *       reading of the comparison that meets a number no ratio holds; written either way round,
+     *       as a condition, and as a clause of a declaration, on a type only that behavior takes;
+     *   <li>a line that is a distance between two positions, and a form over several;
+     *   <li>two rules on one quantity, one written at each end of the exponents, the second read
+     *       through what the first is a multiple of.
+     * </ul>
      */
     @Test
-    void aDifferenceOfTwoFormsHeldOneByOneIsNotAnInternalError() {
-        assertDoesNotThrow(() -> Compiler.compile(
-                model(squarings(63), "t63 * h.a.value <= h.a.value")));
-        assertDoesNotThrow(() -> Compiler.compile(
-                model(squarings(63), "h.a.value <= t63 * h.a.value")));
-    }
+    void everyShapeOfARuleAtTheEndOfTheExponentsIsNotAnInternalError() {
+        String source = """
+                module probe.follow
 
-    @Test
-    void theSameComparisonAsACondition() {
-        assertDoesNotThrow(() -> Compiler.compile(overTwoPositions(squarings(63), "",
-                "if t63 * h.a.value <= h.a.value then Ok else No")));
-    }
+                %s
+                data A = Decimal
+                data Tied = Decimal
+                    invariant tied = t63 * value <= value
+                data H = { a: A, b: A }
+                data HeldTied = { a: Tied, b: Tied }
+                data Ok
+                data No
+                data Verdict = Ok | No
 
-    @Test
-    void theSameComparisonAsAClauseOfADeclaration() {
-        assertDoesNotThrow(() -> Compiler.compile(overTwoPositions(squarings(63),
-                "    invariant tied = t63 * value <= value", "Ok")));
-    }
+                behavior squareOfTheLeast : (h: H) -> Verdict
+                let squareOfTheLeast (h) = { guard h.a.value <= t64 else Ok
+                    No }
+                behavior atTheLeast : (h: H) -> Verdict
+                let atTheLeast (h) = { guard t63 * h.a.value <= 1.0m else Ok
+                    No }
+                behavior pastTheLeast : (h: H) -> Verdict
+                let pastTheLeast (h) = { guard t64 * h.a.value <= 1.0m else Ok
+                    No }
+                behavior aDifference : (h: H) -> Verdict
+                let aDifference (h) = { guard t63 * h.a.value <= h.a.value else Ok
+                    No }
+                behavior theOtherWayRound : (h: H) -> Verdict
+                let theOtherWayRound (h) = { guard h.a.value <= t63 * h.a.value else Ok
+                    No }
+                behavior asACondition : (h: H) -> Verdict
+                let asACondition (h) = { if t63 * h.a.value <= h.a.value then Ok else No }
+                behavior asAClause : (h: HeldTied) -> Verdict
+                let asAClause (h) = { Ok }
+                behavior aDistance : (h: H) -> Verdict
+                let aDistance (h) = { guard h.a.value - h.b.value <= t63 else Ok
+                    No }
+                behavior overSeveral : (h: H) -> Verdict
+                let overSeveral (h) = { guard t63 * h.a.value + h.b.value <= 1.0m else Ok
+                    No }
+                behavior oneOfEach : (h: H) -> Verdict
+                let oneOfEach (h) = { guard t63 * h.a.value <= 1.0m else Ok
+                    guard h.b.value <= t63 else Ok
+                    No }
+                behavior bothEndsAfterTheLeast : (h: H) -> Verdict
+                let bothEndsAfterTheLeast (h) = { guard t63 * h.a.value <= 1.0m else Ok
+                    guard h.a.value <= 1.0m else Ok
+                    No }
+                behavior bothEndsAfterAMultiple : (h: H) -> Verdict
+                let bothEndsAfterAMultiple (h) = { guard h.a.value <= t63 else Ok
+                    guard 2.0m * h.a.value <= 1.0m else Ok
+                    No }
+                """.formatted(squarings(64));
 
-    /** The line a rule draws is a distance between two positions, and a form over several. */
-    @Test
-    void everyShapeOfALineAtTheEndOfTheExponentsIsNotAnInternalError() {
-        assertDoesNotThrow(() -> Compiler.compile(overTwoPositions(squarings(63), "",
-                "guard h.a.value - h.b.value <= t63 else Ok\n No")));
-        assertDoesNotThrow(() -> Compiler.compile(overTwoPositions(squarings(63), "",
-                "guard t63 * h.a.value + h.b.value <= 1.0m else Ok\n No")));
-        assertDoesNotThrow(() -> Compiler.compile(overTwoPositions(squarings(63), "",
-                "guard t63 * h.a.value <= 1.0m else Ok\n guard h.b.value <= t63 else Ok\n No")));
-    }
-
-    /** Two rules on one quantity, one written at each end of the exponents: the second is read
-     *  through what the first is a multiple of. */
-    @Test
-    void twoRulesOnOneQuantityAtBothEndsAreNotAnInternalError() {
-        assertDoesNotThrow(() -> Compiler.compile(overTwoPositions(squarings(63), "",
-                "guard t63 * h.a.value <= 1.0m else Ok\n guard h.a.value <= 1.0m else Ok\n No")));
-        assertDoesNotThrow(() -> Compiler.compile(overTwoPositions(squarings(63), "",
-                "guard h.a.value <= t63 else Ok\n guard 2.0m * h.a.value <= 1.0m else Ok\n No")));
+        assertDoesNotThrow(() -> Compiler.compile(source));
     }
 }

@@ -7,10 +7,13 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -433,14 +436,28 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     }
 
     private static String report(Compilation compilation) {
+        compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** Each model measured once for the class: some are asked for their report and for their
+     *  rows. The rows ask what they read of the measurement; the rest is asked where a report is
+     *  made. */
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(model, each -> {
+            Compilation compilation = Compilation.ofSource(each, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            return compilation;
+        });
+    }
+
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 }
