@@ -262,6 +262,10 @@ public final class Runner {
      * <p>Every run reads the same compilation: which behavior a name picks, the signature it is
      * decoded and encoded by, and the classes it runs. A run builds a fresh instance of the behavior's
      * class, so one run leaves nothing behind that the next one reads.
+     *
+     * <p><b>One run at a time.</b> A run asks the compilation it holds, and a compilation's store is
+     * not safe to ask from two threads at once; runs of one program are made one after another. A
+     * caller that would run behaviors on several threads compiles a program for each.
      */
     public static final class Program {
         private final Compilation compilation;
