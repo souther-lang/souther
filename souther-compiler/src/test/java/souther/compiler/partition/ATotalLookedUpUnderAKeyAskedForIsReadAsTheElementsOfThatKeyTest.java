@@ -444,14 +444,14 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
     @Test
     void aLineOnTheTotalOfAKeyAskedForIsOwedOfferedAndThenMet() {
         for (Keys keys : Keys.values()) {
-            assertTheLineIsOfferedAndMet(keys, false, modelOf(keys, false, ADDING), Integer::sum);
+            assertTheLineIsOfferedAndMet(keys, false, ADDING, Integer::sum);
         }
     }
 
     @Test
     void aLineOnTheTotalAcrossTheListsIsOwedOfferedAndThenMet() {
         for (Keys keys : Keys.values()) {
-            assertTheLineIsOfferedAndMet(keys, true, modelOf(keys, true, ADDING), Integer::sum);
+            assertTheLineIsOfferedAndMet(keys, true, ADDING, Integer::sum);
         }
     }
 
@@ -459,16 +459,14 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
      *  of a total do, so the keys held to a name are asked of the total alone. */
     @Test
     void aLineOnTheLeastOfAKeyAskedForIsOwedOfferedAndThenMet() {
-        assertTheLineIsOfferedAndMet(Keys.ANY, false, modelOf(Keys.ANY, false, LEAST), Math::min);
-        assertTheLineIsOfferedAndMet(Keys.ANY, true, modelOf(Keys.ANY, true, LEAST), Math::min);
+        assertTheLineIsOfferedAndMet(Keys.ANY, false, LEAST, Math::min);
+        assertTheLineIsOfferedAndMet(Keys.ANY, true, LEAST, Math::min);
     }
 
     @Test
     void aLineOnTheGreatestOfAKeyAskedForIsOwedOfferedAndThenMet() {
-        assertTheLineIsOfferedAndMet(Keys.ANY, false, modelOf(Keys.ANY, false, GREATEST),
-                Math::max);
-        assertTheLineIsOfferedAndMet(Keys.ANY, true, modelOf(Keys.ANY, true, GREATEST),
-                Math::max);
+        assertTheLineIsOfferedAndMet(Keys.ANY, false, GREATEST, Math::max);
+        assertTheLineIsOfferedAndMet(Keys.ANY, true, GREATEST, Math::max);
     }
 
     /**
@@ -478,13 +476,16 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
      */
     @Test
     void aLineOnTheTotalOfWhatAHelperMakesOfEachElementIsOwedOfferedAndThenMet() {
-        assertTheLineIsOfferedAndMet(Keys.ANY, false, signedOverOneList(), Integer::sum);
-        assertTheLineIsOfferedAndMet(Keys.ANY, true, signedOverTheLists(), Integer::sum);
+        assertTheLineIsOfferedAndMet(Keys.ANY, false,
+                ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest::signedOverOneList,
+                Integer::sum);
+        assertTheLineIsOfferedAndMet(Keys.ANY, true,
+                ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest::signedOverTheLists,
+                Integer::sum);
     }
 
-    private static UnaryOperator<String> modelOf(Keys keys, boolean acrossTheLists, String step) {
-        return more -> acrossTheLists ? overTheLists(keys, step, more)
-                : overOneList(keys, step, more);
+    private static String over(Keys keys, boolean acrossTheLists, String step, String more) {
+        return acrossTheLists ? overTheLists(keys, step, more) : overOneList(keys, step, more);
     }
 
     private static final String SIGNED = """
@@ -500,8 +501,8 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                     | Credit -> 0 - p.amount
             """;
 
-    private static UnaryOperator<String> signedOverOneList() {
-        return more -> SIGNED + """
+    private static String signedOverOneList(String more) {
+        return SIGNED + """
 
                 let totals (ps: List<Posting>): Map<String, Int> =
                     List.fold((acc, p) -> Map.updateOrInsert(p.account, signed(p),
@@ -516,8 +517,8 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                 """ + more;
     }
 
-    private static UnaryOperator<String> signedOverTheLists() {
-        return more -> SIGNED + """
+    private static String signedOverTheLists(String more) {
+        return SIGNED + """
 
                 data Entry = { postings: List<Posting> }
 
@@ -533,6 +534,13 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                         | Some amount -> amount >= 100
                         | None -> false
                 """ + more;
+    }
+
+    private static void assertTheLineIsOfferedAndMet(Keys keys, boolean acrossTheLists,
+                                                     String step,
+                                                     BinaryOperator<Integer> gathered) {
+        assertTheLineIsOfferedAndMet(keys, acrossTheLists,
+                more -> over(keys, acrossTheLists, step, more), gathered);
     }
 
     private static void assertTheLineIsOfferedAndMet(Keys keys, boolean acrossTheLists,
