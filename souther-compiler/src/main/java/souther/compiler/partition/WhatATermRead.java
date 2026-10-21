@@ -393,55 +393,49 @@ sealed interface WhatATermRead {
      *
      * <p>The key is the reading's own, and the elements gathered are every occurrence's, whichever
      * a reading chose: every element of every container the elements stand in, the outer one first.
-     * So a row that wrote no element there has no key for the number, and one whose elements could
-     * not be walked to has none to gather.
+     * Each is handed as what the row holds at each way into it, or why it holds nothing there in
+     * this layer's words, and the number says which of those it came to first and of which key
+     * ({@link TermOrders#together}): a field another key's element holds nothing at is no part of
+     * this key's number.
      */
     static WhatATermRead underItsKey(TermOrders on, BorderQuantity.Observation row) {
-        NumericTerm.GatheredUnderItsKey term = (NumericTerm.GatheredUnderItsKey) on.term();
-        return switch (row.at(term.key().from(term.elements()))) {
-            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+        TermPath elements = ((NumericTerm.GatheredUnderItsKey) on.term()).elements();
+        return switch (row.keptOf(new EveryKeyOf(on))) {
+            case WalkResult.CouldNotWalk<TermOrders.ElementsTogether<WhatATermRead>> _ ->
                     new CameToNothing(ReadingGap.COULD_NOT_WALK);
-            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
-                case ObservationAtPoint.Value(ObservedValue own) -> {
-                    EveryKey every = row.keptOf(new EveryKeyOf(on));
-                    yield every.stopped() != null ? every.stopped() : of(every.read().apply(own));
-                }
-                case ObservationAtPoint.WroteNothing _,
-                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
-            };
+            case WalkResult.Reached(TermOrders.ElementsTogether<WhatATermRead> together) ->
+                    switch (together.numberOf(heldBy(row, elements))) {
+                        case TermOrders.Neighbouring.Read<WhatATermRead>(
+                                NumericTerm.Reading read) -> of(read);
+                        case TermOrders.Neighbouring.HeldNothing<WhatATermRead>(
+                                WhatATermRead why) -> why;
+                    };
         };
     }
 
     /**
-     * What every key of a row's elements came to, or what stopped them being read.
-     *
-     * @param read    what the key asked of comes to, where nothing stopped them
-     * @param stopped why they could not be read, or null where they were
+     * Every element of the run {@code on}'s term gathers under keys, put together once, which no
+     * reading's choice turns: every element of every container the elements stand in, the outer
+     * one first, each read as the row with it chosen.
      */
-    record EveryKey(Function<ObservedValue, NumericTerm.Reading> read, WhatATermRead stopped) {}
-
-    /**
-     * What every key of the elements {@code on}'s term gathers comes to, which no reading's choice
-     * turns: every element of every container the elements stand in, the outer one first, each
-     * read as the row with it chosen.
-     */
-    record EveryKeyOf(TermOrders on) implements BorderQuantity.ReadAlike<EveryKey> {
+    record EveryKeyOf(TermOrders on) implements
+            BorderQuantity.ReadAlike<WalkResult<TermOrders.ElementsTogether<WhatATermRead>>> {
 
         @Override
-        public EveryKey readAt(BorderQuantity.Observation row) {
+        public WalkResult<TermOrders.ElementsTogether<WhatATermRead>> readAt(
+                BorderQuantity.Observation row) {
             TermPath elements = ((NumericTerm.GatheredUnderItsKey) on.term()).elements();
             if (!(everyElementAbove(row, elements) instanceof WalkResult.Reached<
                     List<BorderQuantity.Observation>>(
                             List<BorderQuantity.Observation> reached))) {
-                return new EveryKey(null, new CameToNothing(ReadingGap.COULD_NOT_WALK));
+                return WalkResult.couldNotWalk();
             }
-            WhatRowsLeft left = new WhatRowsLeft();
-            List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+            List<Function<ElementProjection, TermOrders.Holding<WhatATermRead>>> each =
+                    new ArrayList<>(reached.size());
             for (BorderQuantity.Observation element : reached) {
-                each.add(field -> left.at(element, field.from(elements)));
+                each.add(heldBy(element, elements));
             }
-            Function<ObservedValue, NumericTerm.Reading> read = on.readUnderEachKey(each);
-            return new EveryKey(read, left.stopped());
+            return WalkResult.reached(on.together(each));
         }
     }
 

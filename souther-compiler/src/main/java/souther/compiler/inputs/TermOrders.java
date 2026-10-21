@@ -138,15 +138,16 @@ public final class TermOrders {
 
     /**
      * The elements of one occurrence of the container a term read off an element's neighbours is
-     * taken over, put together once for the number of any of them.
+     * taken over, put together once for the number of any of them — or every element of the run a
+     * term gathers under keys ({@link NumericTerm.GatheredUnderItsKey}), every occurrence's.
      *
      * <p>Each element is handed as what it holds at each way into it. Whatever is asked of it is
      * what the number of an element asks and no more, and an element is asked only when some
      * number needs it: how often a value occurs reads every element's value, and the end of a
-     * key's values reads every element's key and the values of that key's elements alone, the
-     * first time that key is asked about.
+     * key's values, or what they come to, reads every element's key and the values of that key's
+     * elements alone, the first time that key is asked about.
      *
-     * @param each every element of the occurrence, in the order the container holds them
+     * @param each every element of the occurrence, or of the run, in the order they are held
      */
     public <G> ElementsTogether<G> together(List<Function<ElementProjection, Holding<G>>> each) {
         return TermReading.together(this, each);
@@ -253,35 +254,6 @@ public final class TermOrders {
             throw new IllegalArgumentException(term + " is not computed of each element");
         }
         return TermReading.overElements(this, each);
-    }
-
-    /**
-     * What each element of a run comes to under its key, one reading per element in the order
-     * they are given ({@link NumericTerm.GatheredUnderItsKey}).
-     *
-     * @param each the fields of each element of the run, every occurrence of it
-     */
-    public List<NumericTerm.Reading> readEachUnderItsKey(
-            List<Function<ElementProjection, ObservedValue>> each) {
-        return underItsKey(each).ofEachElement();
-    }
-
-    /**
-     * What each key of the elements {@code each} holds comes to, asked of the key: read once for
-     * every element asked about, since what a key comes to does not turn on which of its elements
-     * asks.
-     */
-    public Function<ObservedValue, NumericTerm.Reading> readUnderEachKey(
-            List<Function<ElementProjection, ObservedValue>> each) {
-        return underItsKey(each)::ofTheKey;
-    }
-
-    private TermReading.UnderItsKey underItsKey(
-            List<Function<ElementProjection, ObservedValue>> each) {
-        if (!(term instanceof NumericTerm.GatheredUnderItsKey)) {
-            throw new IllegalArgumentException(term + " is not gathered under a key");
-        }
-        return TermReading.underItsKey(this, each);
     }
 
     /** What the value at {@code field} of an element is decoded on, for a term computed of each

@@ -23,7 +23,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
@@ -105,6 +104,9 @@ final class TermReading {
     static <G> ElementsTogether<G> together(TermOrders on,
             List<Function<ElementProjection, Holding<G>>> each) {
         Objects.requireNonNull(each, "a term is read among the elements a walk came to");
+        if (on.term() instanceof NumericTerm.GatheredUnderItsKey) {
+            return new Gathered<>(on, each);
+        }
         return switch (on.amongItsNeighbours()) {
             case NumericTerm.Multiplicity often -> new Counted<>(on.observed(), often.placeField(),
                     each);
@@ -592,7 +594,7 @@ final class TermReading {
             // field the element's own choice does not reach is no part of this element's number.
             OneElement fields = new OneElement(on, element, position++);
             ExactAnswer<ExactRatio> made = computed.computation().at(fields);
-            Reading stopped = numberOf(made, fields, answeredPerElement);
+            Reading stopped = whyNoNumberOf(made, fields, answeredPerElement);
             if (stopped != null) {
                 return stopped;
             }
@@ -602,60 +604,118 @@ final class TermReading {
     }
 
     /**
-     * What the elements of a run come to under each key, read for every element of it
-     * ({@link NumericTerm.GatheredUnderItsKey}).
+     * What the elements of a run come to among those holding at the key what the element asked
+     * about does ({@link NumericTerm.GatheredUnderItsKey}).
      *
      * <p>Alike as the key's order has them, as {@link KeyedEnds} has them, and each element's
      * number read as a computation over a run reads it ({@link #overElements}), so a field is
-     * looked at only where the number asks for it. An element whose key is not read may be of any
-     * key, so what stopped the first of those stops every key; one whose number is not read stops
-     * its own key and no other.
-     *
-     * @param each the fields of each element of the run, in the order the row holds them
+     * looked at only where the number asks for it. What an element holds nothing at is said in
+     * the words it was handed in, and said of what it stops: an element holding nothing at its
+     * key, or a key that is no number, may be of any key, so the first of those stops every key;
+     * one holding nothing at a field its number reads, or whose number is none, stops its own key
+     * and no other. A key's numbers are read the first time an element of it is asked about.
      */
-    static UnderItsKey underItsKey(TermOrders on,
-                                   List<Function<ElementProjection, ObservedValue>> each) {
-        NumericTerm.GatheredUnderItsKey term = (NumericTerm.GatheredUnderItsKey) on.term();
-        Carrier keyedOn = on.fieldCarrier(term.key());
-        Reading everyKeyStopped = keyedOn == null ? new Reading.NotNumber() : null;
-        List<Place> keys = new ArrayList<>(each.size());
-        Map<Place, List<ExactRatio>> numbers = new HashMap<>();
-        Map<Place, Reading> stopped = new HashMap<>();
-        long position = 0;
-        for (Function<ElementProjection, ObservedValue> element : each) {
-            if (everyKeyStopped != null) {
-                break;
+    private static final class Gathered<G> implements ElementsTogether<G> {
+
+        private final TermOrders on;
+        private final NumericTerm.GatheredUnderItsKey term;
+        private final Carrier keyedOn;
+        private final List<Function<ElementProjection, Holding<G>>> each;
+        /** What stops every key, the first element's in order that does; null where none. */
+        private final Neighbouring<G> everyKey;
+        /** Where each element of each key stands, by the key in its one representation. */
+        private final Map<Place, List<Integer>> ofEachKey = new HashMap<>();
+        /** What each key asked about came to. */
+        private final Map<Place, Neighbouring<G>> asked = new HashMap<>();
+
+        Gathered(TermOrders on, List<Function<ElementProjection, Holding<G>>> each) {
+            this.on = on;
+            this.term = (NumericTerm.GatheredUnderItsKey) on.term();
+            this.keyedOn = on.fieldCarrier(term.key());
+            this.each = List.copyOf(each);
+            Neighbouring<G> stop = keyedOn == null
+                    ? new Neighbouring.Read<>(new Reading.NotNumber()) : null;
+            for (int at = 0; at < this.each.size() && stop == null; at++) {
+                switch (this.each.get(at).apply(term.key())) {
+                    case Holding.Nothing<G>(G why) -> stop = new Neighbouring.HeldNothing<>(why);
+                    case Holding.Value<G>(ObservedValue key) -> {
+                        switch (whereTheOrderPuts(keyedOn, key)) {
+                            case Where.At(Place place) -> ofEachKey.computeIfAbsent(
+                                    place.canonical(), _ -> new ArrayList<>()).add(at);
+                            case Where.Nowhere nowhere ->
+                                    stop = new Neighbouring.Read<>(nowhere.why());
+                        }
+                    }
+                }
             }
-            ObservedValue key = element.apply(term.key());
-            Where where = key == null ? new Where.Nowhere(new Reading.NotNumber())
-                    : whereTheOrderPuts(keyedOn, key);
-            if (!(where instanceof Where.At(Place place))) {
-                everyKeyStopped = ((Where.Nowhere) where).why();
-                break;
-            }
-            Place itsKey = place.canonical();
-            keys.add(itsKey);
-            if (stopped.containsKey(itsKey)) {
-                position++;
-                continue;
-            }
-            OneElement fields = new OneElement(on, element, position++);
-            ExactAnswer<ExactRatio> made = term.value().at(fields);
-            Reading stop = numberOf(made, fields, on.observed());
-            if (stop != null) {
-                stopped.put(itsKey, stop);
-            } else {
-                numbers.computeIfAbsent(itsKey, _ -> new ArrayList<>())
-                        .add(((ExactAnswer.Held<ExactRatio>) made).value());
-            }
+            this.everyKey = stop;
         }
-        Map<Place, Reading> ofEachKey = new HashMap<>();
-        if (everyKeyStopped == null) {
-            numbers.forEach((key, gathered) -> ofEachKey.put(key,
-                    gatheredBy(term.gathering(), gathered, on.answered())));
-            ofEachKey.putAll(stopped);
+
+        @Override
+        public Neighbouring<G> numberOf(Function<ElementProjection, Holding<G>> own) {
+            ObservedValue ownKey;
+            switch (own.apply(term.key())) {
+                case Holding.Nothing<G>(G why) -> {
+                    return new Neighbouring.HeldNothing<>(why);
+                }
+                case Holding.Value<G>(ObservedValue value) -> ownKey = value;
+            }
+            if (everyKey != null) {
+                return everyKey;
+            }
+            return switch (whereTheOrderPuts(keyedOn, ownKey)) {
+                case Where.Nowhere nowhere -> new Neighbouring.Read<>(nowhere.why());
+                case Where.At(Place place) -> asked.computeIfAbsent(place.canonical(), this::read);
+            };
         }
-        return new UnderItsKey(keyedOn, each.size(), keys, ofEachKey, everyKeyStopped);
+
+        /** What the elements of {@code key} come to, read in order until one stops them. */
+        private Neighbouring<G> read(Place key) {
+            List<ExactRatio> numbers = new ArrayList<>();
+            for (int at : ofEachKey.getOrDefault(key, List.of())) {
+                HeldFields<G> fields = new HeldFields<>(each.get(at));
+                OneElement element = new OneElement(on, fields, at);
+                ExactAnswer<ExactRatio> made = term.value().at(element);
+                if (fields.nothing != null) {
+                    return new Neighbouring.HeldNothing<>(fields.nothing);
+                }
+                Reading stopped = whyNoNumberOf(made, element, on.observed());
+                if (stopped != null) {
+                    return new Neighbouring.Read<>(stopped);
+                }
+                numbers.add(((ExactAnswer.Held<ExactRatio>) made).value());
+            }
+            return new Neighbouring.Read<>(numbers.isEmpty() ? new Reading.NotNumber()
+                    : gatheredBy(term.gathering(), numbers, on.answered()));
+        }
+    }
+
+    /**
+     * An element's fields as a computation asks for them, keeping the first it holds nothing at
+     * in the words the element was handed in: a field holding nothing answers the computation as
+     * no value, which gives up on the element, and what the reader is told is why.
+     */
+    private static final class HeldFields<G> implements Function<ElementProjection, ObservedValue> {
+
+        private final Function<ElementProjection, Holding<G>> element;
+        private G nothing;
+
+        HeldFields(Function<ElementProjection, Holding<G>> element) {
+            this.element = element;
+        }
+
+        @Override
+        public ObservedValue apply(ElementProjection field) {
+            return switch (element.apply(field)) {
+                case Holding.Value<G>(ObservedValue value) -> value;
+                case Holding.Nothing<G>(G why) -> {
+                    if (nothing == null) {
+                        nothing = why;
+                    }
+                    yield null;
+                }
+            };
+        }
     }
 
     /**
@@ -664,7 +724,8 @@ final class TermReading {
      * not hold, or one {@code on}, what the program computes it as, does not — where the program
      * stops making it.
      */
-    private static Reading numberOf(ExactAnswer<ExactRatio> made, OneElement fields, Carrier on) {
+    private static Reading whyNoNumberOf(ExactAnswer<ExactRatio> made, OneElement fields,
+                                         Carrier on) {
         if (made == null) {
             return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
         }
@@ -698,46 +759,6 @@ final class TermReading {
                 yield sumOf(List.of(end));
             }
         };
-    }
-
-    /**
-     * What every key of a run's elements came to, read once for every element asked about.
-     *
-     * @param keyedOn   what a key is decoded on
-     * @param elements  how many elements there are, read or not
-     * @param keys      each element's key, in the order the row holds them, as far as they were
-     *                  read: every one of them where {@code stopped} is null
-     * @param ofEachKey what each key read came to
-     * @param stopped   why no key's number is read, where an element's key was not; else null
-     */
-    record UnderItsKey(Carrier keyedOn, int elements, List<Place> keys,
-                       Map<Place, Reading> ofEachKey, Reading stopped) {
-
-        /**
-         * What each element's key comes to, one reading per element whether or not its key was
-         * read: an element whose number nothing read is one a reader is told stopped, and never
-         * one left out of what it counts.
-         */
-        List<Reading> ofEachElement() {
-            if (stopped != null) {
-                return Collections.nCopies(elements, stopped);
-            }
-            return keys.stream().map(ofEachKey::get).toList();
-        }
-
-        /** What the key {@code own}, one of the elements' keys, comes to. */
-        Reading ofTheKey(ObservedValue own) {
-            if (stopped != null) {
-                return stopped;
-            }
-            return switch (whereTheOrderPuts(keyedOn, own)) {
-                case Where.Nowhere nowhere -> nowhere.why();
-                case Where.At(Place place) -> {
-                    Reading read = ofEachKey.get(place.canonical());
-                    yield read == null ? new Reading.NotNumber() : read;
-                }
-            };
-        }
     }
 
     /**

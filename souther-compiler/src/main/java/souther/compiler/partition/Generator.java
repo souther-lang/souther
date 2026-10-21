@@ -8086,21 +8086,27 @@ public final class Generator {
                 }
                 yield any;
             }
-            // A row stands at a point where some element's key comes to it.
+            // A row stands at a point where some element's key comes to it, read among every
+            // element of the run by the one law the elements beside an element are read by.
             case NumericTerm.GatheredUnderItsKey _ -> {
                 boolean any = false;
-                List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
-                for (ObservedValue element : values) {
-                    each.add(field -> on.in(field, element));
-                }
-                for (NumericTerm.Reading read : on.readEachUnderItsKey(each)) {
-                    switch (read) {
-                        case NumericTerm.Reading.Number number ->
-                                any |= number.value().compareTo(at) == 0;
-                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
-                        case NumericTerm.Reading.NotNumber _ -> { }
-                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
-                                notWorkedOut.add(why);
+                for (TermOrders.Neighbouring<AnOccurrence.OfAnotherShape> each
+                        : readEachOf(on, values)) {
+                    switch (each) {
+                        case TermOrders.Neighbouring.HeldNothing<
+                                AnOccurrence.OfAnotherShape> _ -> ofAnotherShape = true;
+                        case TermOrders.Neighbouring.Read<AnOccurrence.OfAnotherShape>(
+                                NumericTerm.Reading read) -> {
+                            switch (read) {
+                                case NumericTerm.Reading.Number number ->
+                                        any |= number.value().compareTo(at) == 0;
+                                case NumericTerm.Reading.Missing missing ->
+                                        unread.add(missing.code());
+                                case NumericTerm.Reading.NotNumber _ -> { }
+                                case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                        notWorkedOut.add(why);
+                            }
+                        }
                     }
                 }
                 yield any;
