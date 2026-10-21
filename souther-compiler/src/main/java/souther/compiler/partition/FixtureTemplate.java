@@ -271,7 +271,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
             }
             values.addAll(list.elements());
             String elements = each.text().substring(1, each.text().length() - 1);
-            if (!elements.isBlank()) {
+            if (!elements.isEmpty()) {
                 written.add(elements);
             }
         }
