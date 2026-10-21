@@ -5,7 +5,9 @@ import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PublishedRules;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
@@ -14,6 +16,7 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
@@ -29,6 +32,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -194,13 +198,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * of.
      *
      * @param undivided  the places shown undivided
-     * @param settled    each term shown to be settled by some of its values, and those values
+     * @param settled    each term shown to be settled by some of its values, and those values —
+     *                   kept whether or not the term is the number at one position, and whether
+     *                   or not the lines parting them are the model's. A term whose every line
+     *                   the orders' ends alone draw is also among the places shown undivided, as
+     *                   the model draws no line on it
      * @param rowsArrive whether any row comes along the way this is of; where none does it says
      *                   nothing of any row, and a way put beside it is what the two come to
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
-                        Map<NumericTerm.FromOnePosition,
-                                WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                        Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                         boolean rowsArrive) {
 
         WhatItLeaves {
@@ -209,8 +216,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,
-                     Map<NumericTerm.FromOnePosition,
-                             WhatARelationLeavesUndivided.Leaves.Settled> settled) {
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled) {
             this(undivided, settled, true);
         }
 
@@ -232,7 +238,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
             both.retainAll(other.undivided);
-            Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> alike =
+            Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> alike =
                     new LinkedHashMap<>();
             settled.forEach((term, runs) -> {
                 if (runs.equals(other.settled.get(term))) {
@@ -432,8 +438,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // And the order each side's values are counted on, which says where its type ends.
         List<Carrier> carriers = new ArrayList<>();
         for (Side each : sides) {
-            TermOrders orders = each.readOff() == null ? null
-                    : read.quantities().ordersOf(each.readOff());
+            NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
+                    : summedAs(each.number());
+            TermOrders orders = countedAs == null ? null : read.quantities().ordersOf(countedAs);
             carriers.add(orders == null ? null : orders.answered());
         }
         // Where each side stands is compared with where the others do, which says something only
@@ -673,14 +680,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
                                    List<Carrier> carriers, SearchRegion region,
-                                   List<OnAWay> stated, boolean heldWhole) {
+                                   List<OnAWay> written, boolean heldWhole) {
+        // A way stating nothing but that the rows are off the line this relation draws — the form
+        // held unequal to nought, as `sign == 0` taken the other way holds
+        // `Decimal.compare(a, b)` — ties no side to anything: it takes the rows on the line away,
+        // and each side is asked of the rows the declarations leave either side of it
+        // (WhatARelationLeavesUndivided#leavesOffItsLine). Only where that is all it states: the
+        // region it answers holds the line taken out, which no run is, and beside another
+        // statement there is no region of the rest to ask instead.
+        TakenConstraint.Affine asStated = remainder == null ? askedAsAStatement() : null;
+        boolean offItsLine = asStated != null && !written.isEmpty()
+                && written.stream().allMatch(each -> keepsOffTheLineOf(each, asStated));
+        List<OnAWay> stated = offItsLine ? List.of() : written;
+        SearchRegion along = offItsLine ? read.quantities().region() : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
         List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
-                termsAlong(read, sources, carriers, region, conditions, stating, heldWhole);
+                termsAlong(read, sources, carriers, along, conditions, stating, heldWhole);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
-        Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled =
+        Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
         WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
                 conditions.stream().map(OnAWay::affine).toList(), askedAsAStatement());
@@ -728,9 +747,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.JointSupport> supports =
                 datePartsTogether(sources, stating, heldWhole, left.years());
         for (int at = 0; at < sides.size(); at++) {
-            WhatARelationLeavesUndivided.Leaves each = WhatARelationLeavesUndivided.leavesOf(
-                    terms, at, constant, relation, UndividedByARelation::overlap, independent,
-                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), supports);
+            WhatARelationLeavesUndivided.Leaves each = offItsLine
+                    ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
+                            UndividedByARelation::overlap, independent,
+                            granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
+                            supports)
+                    : WhatARelationLeavesUndivided.leavesOf(terms, at, constant, relation,
+                            UndividedByARelation::overlap, independent,
+                            granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
+                            supports);
             leaves.add(each);
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 // The remainder is left undivided by every number of its form at once, and a
@@ -741,7 +766,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         : sides.get(at).madeOf());
             }
         }
-        if (!out.containsAll(places())) {
+        // How far apart two sides are is asked of the relation as it stands, line and all.
+        if (!out.containsAll(places()) && !offItsLine) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
                     read.quantities().region()));
         }
@@ -813,6 +839,33 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         coefs.values().removeIf(ExactRatio::isZero);
         return coefs.isEmpty() ? null
                 : new TakenConstraint.Affine(new LinearForm<>(constant, coefs), relation);
+    }
+
+    /**
+     * Whether {@code statement} holds the form {@code asked} is of unequal to nought: the same
+     * numbers, each weighed the same times one number, the constant too, held apart from it.
+     */
+    private static boolean keepsOffTheLineOf(OnAWay statement, TakenConstraint.Affine asked) {
+        TakenConstraint.Affine affine = statement.affine();
+        if (affine == null || affine.rel() != Rel.NE
+                || !affine.form().coefs().keySet().equals(asked.form().coefs().keySet())) {
+            return false;
+        }
+        Map.Entry<NumericTerm, ExactRatio> first =
+                asked.form().coefs().entrySet().iterator().next();
+        if (!(affine.form().coefs().get(first.getKey()).dividedBy(first.getValue())
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio times))) {
+            return false;
+        }
+        for (Map.Entry<NumericTerm, ExactRatio> each : asked.form().coefs().entrySet()) {
+            if (!(each.getValue().times(times) instanceof ExactAnswer.Held<ExactRatio>(
+                    ExactRatio weighed)) || weighed.compareTo(affine.form().coefs()
+                            .get(each.getKey())) != 0) {
+                return false;
+            }
+        }
+        return asked.form().constant().times(times) instanceof ExactAnswer.Held<ExactRatio>(
+                ExactRatio moved) && moved.compareTo(affine.form().constant()) == 0;
     }
 
     /** The conditions of a way, marked, and the years its statements of years put the dates in,
@@ -926,18 +979,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return out;
     }
 
-    /** What {@code leaves} says of the side at {@code at}, put where it goes. */
+    /**
+     * What {@code leaves} says of the side at {@code at}, put where it goes. Values settling it
+     * are kept against the side's number, whatever number it is; where only the orders' ends
+     * draw the lines between them, the model draws none on the side and it is undivided too.
+     */
     private void putDown(int at, WhatARelationLeavesUndivided.Leaves leaves,
                         Set<FilingCoordinate> undivided,
-                        Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled>
-                                settled) {
+                        Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled) {
         switch (leaves) {
             case null -> { }
             case WhatARelationLeavesUndivided.Leaves.Undivided _ ->
                     undivided.addAll(sides.get(at).madeOf());
             case WhatARelationLeavesUndivided.Leaves.Settled runs -> {
-                if (sides.get(at).atOnePosition() != null) {
-                    settled.put(sides.get(at).atOnePosition(), runs);
+                if (sides.get(at).number() != null) {
+                    settled.put(sides.get(at).number(), runs);
+                }
+                if (!runs.ofTheTypeAlone().isEmpty() && runs.linesOfTheModel().isEmpty()) {
+                    undivided.addAll(sides.get(at).madeOf());
                 }
             }
         }
@@ -960,6 +1019,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return carrier == null ? null : carrier.spacingBetweenValues();
     }
 
+    /** Where {@code carrier} stops, or null where there is none. */
+    private static NumericDomain.Bounds whereItStops(Carrier carrier) {
+        return carrier == null ? null : carrier.whereItStops();
+    }
+
     /** How the values of {@code carrier} are spaced, or null where they are no numbers a
      *  relation's settling values are worked out over. */
     private static Granularity granularityOf(Carrier carrier) {
@@ -973,21 +1037,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** The greatest whole number {@code carrier} holds, or null where it holds no greatest or none
      *  this reads as a number. */
     private static BigInteger greatestOf(Carrier carrier) {
-        if (carrier == null || carrier.extent().high() == null
-                || !(carrier.extent().high().at() instanceof Count greatest)) {
-            return null;
-        }
-        return greatest.exactly().floor().orNull();
+        return carrier == null ? null : carrier.greatestWholeNumber();
     }
 
     /** The least whole number {@code carrier} holds, or null where it holds no least or none this
      *  reads as a number. */
     private static BigInteger leastOf(Carrier carrier) {
-        if (carrier == null || carrier.extent().low() == null
-                || !(carrier.extent().low().at() instanceof Count least)) {
-            return null;
-        }
-        return least.exactly().ceiling().orNull();
+        return carrier == null ? null : carrier.leastWholeNumber();
     }
 
     /** Where {@code carrier} stops at either end. */
@@ -1036,8 +1092,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             // Where it lies is asked of the number whatever it is a number of: a total over a run
             // lies where what the values it walks guarantee leave it. What it is shown to take is
-            // asked only of a position's, so a total is shown to take nothing — a total of evens
-            // lies at nought or more and is never odd.
+            // asked of a position's, and of a total only as the totals of one element
+            // (summedOverOneElement): a total of evens lies at nought or more and is never odd.
             NumericDomain.Bounds holds = asARelationReadsIt(each.number() != null
                     && region.projectionOf(each.number())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
@@ -1050,14 +1106,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             SearchRegion answering = way == Way.UNTOUCHED && conditions.stream()
                     .anyMatch(statement -> statement.leavesAlone(each.atOnePosition()))
                     ? read.quantities().region() : region;
-            NumericDomain.Bounds realizes = source == null ? null
-                    : asARelationReadsIt(realized(each.atOnePosition(), source, answering, way),
-                            carriers.get(i));
+            NumericDomain.Bounds realizes = source != null
+                    ? asARelationReadsIt(realized(each.atOnePosition(), source, answering, way),
+                            carriers.get(i))
+                    : each.number() instanceof NumericTerm.TakenOver over
+                    ? asARelationReadsIt(summedOverOneElement(over, read, region, conditions,
+                            heldWhole, carriers.get(i)), carriers.get(i))
+                    : each.number() instanceof NumericTerm.OccurrencesOfItsValue counted
+                    ? asARelationReadsIt(occurrencesOfOneValue(counted, read, region, conditions,
+                            heldWhole), carriers.get(i))
+                    : null;
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
                     realizes, takes, each.number() instanceof NumericTerm.ValueOf,
-                    spacingOf(carriers.get(i))));
+                    spacingOf(carriers.get(i)), whereItStops(carriers.get(i))));
         }
         return terms;
     }
@@ -1074,7 +1137,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Side side = sides.getFirst();
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(), runs,
                 reachesEveryRemainder(null, read, conditions, heldWhole) ? runs : null, null,
-                false, Granularity.DISCRETE);
+                false, Granularity.DISCRETE, null);
     }
 
     /**
@@ -1267,7 +1330,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Start start = startOf(kept, region, read, conditions, heldWhole);
         if (start == null) {
             return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
-                    NumericDomain.Bounds.OPEN, null, null, false, spacingOf(carrier));
+                    NumericDomain.Bounds.OPEN, null, null, false, spacingOf(carrier),
+                    whereItStops(carrier));
         }
         NumericDomain.Bounds seed = start.lies();
         NumericDomain.Bounds seedTakes = start.takes();
@@ -1302,7 +1366,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
                 asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
-                false, spacingOf(carrier));
+                false, spacingOf(carrier), whereItStops(carrier));
     }
 
     /**
@@ -1494,7 +1558,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
                     on.asARelationReadsIt(), realizes, source.takes(),
-                    each.number() instanceof NumericTerm.ValueOf, on.spacingBetweenValues()));
+                    each.number() instanceof NumericTerm.ValueOf, on.spacingBetweenValues(),
+                    on.whereItStops()));
         }
         // A statement about both sides is in each side's list; it is one statement.
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));
@@ -1512,10 +1577,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // operation is given only when that is where the representation stops.
         NumericDomain.Bounds run = sides.get(0).number() instanceof NumericTerm.TakenOf
                 ? terms.get(0).realizes()
-                : new NumericDomain.Bounds(on.extent().low(), on.extent().high());
+                : on.whereItStops();
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, constant, relation, held,
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
-                UndividedByARelation::overlap);
+                UndividedByARelation::overlap, greatestOf(on));
     }
 
     /**
@@ -1625,14 +1690,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * it ties the term to is asked apart ({@link TiedOnTheWay}). A form held against nought and an
      * end on one position's own order are both that. A relation over another number of a place
      * the term is read off — a string's length beside the string — is one the region holds as two
-     * numbers it does not tie, so it is not this. Nor is a relation keeping the term off a value,
-     * which leaves a hole where a run is answered by its ends.
+     * numbers it does not tie, so it is not this. A form over the term alone held off a value is:
+     * the region answers the run whole only where its rules prove the hole outside it
+     * ({@link NumericDomain#projectionCertification}), as a divisor kept above nought and off
+     * nought runs from one. Keeping it off another number is not.
      */
     private static boolean inTheRegion(NumericTerm.FromOnePosition term, OnAWay statement) {
         Set<NumericTerm> over = switch (statement.relation()) {
             case null -> Set.of();
-            case TakenConstraint.Affine affine ->
-                    affine.rel() == Rel.NE ? Set.of() : affine.form().coefs().keySet();
+            case TakenConstraint.Affine affine -> affine.rel() != Rel.NE
+                    || affine.form().coefs().size() == 1 ? affine.form().coefs().keySet()
+                    : Set.of();
             case TakenConstraint.Ordered ordered -> Set.of(ordered.term());
             case TakenConstraint.AwayFrom _ -> Set.of();
         };
@@ -1830,6 +1898,136 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? region.wholeRunOf(taken) : null;
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> null;
         };
+    }
+
+    /**
+     * The value at the element a total over one container's elements is counted as, or null
+     * where {@code number} is no such total. A sum answers what its elements are
+     * ({@link TakenAs.TheSumOfWhatItHolds}), so it is counted on the order they are.
+     */
+    private static NumericTerm.FromOnePosition summedAs(NumericTerm number) {
+        return number instanceof NumericTerm.TakenOver over
+                && over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                && over.source() instanceof RunSource.ProjectedOccurrences
+                ? new NumericTerm.ValueOf(over.subjectPath()) : null;
+    }
+
+    /** Starting from nought and adding, which is the accumulation a sum declares. */
+    private static final Accumulation SUMMED =
+            new Accumulation(Accumulation.Identity.ZERO, Accumulation.Combine.ADD);
+
+    /**
+     * A run every value of which the total {@code over} is shown to take — or null where none is
+     * shown: what the element's number is shown to take, and nought beside it where the container
+     * may hold nothing and no value lies between.
+     *
+     * <p>Read off the accumulation the operation declares, and not off its name: starting from
+     * nought and adding, a container of one element comes to that element's number, and one of
+     * none comes to nought. So every value the number at the element is shown to take is a total,
+     * where the container may hold one element and that element may stand at the value alone.
+     * What the element is shown to take is a run some row holds it at with every rule read
+     * ({@link #realized}), and a rule over the elements together or around the container leaves
+     * it nothing shown; so the one element is a row's, and nothing the way states may touch it.
+     * Which totals a container of two reaches is not asked, so this is a run only where one
+     * element is.
+     *
+     * <p>That nought is a total is one value, and joins the run only where the run starts just
+     * past it; between the two, nothing is shown.
+     */
+    private static NumericDomain.Bounds summedOverOneElement(NumericTerm.TakenOver over,
+                                                             InputReading read,
+                                                             SearchRegion region,
+                                                             List<OnAWay> conditions,
+                                                             boolean heldWhole, Carrier carrier) {
+        if (!heldWhole || carrier == null
+                || !(over.source() instanceof RunSource.ProjectedOccurrences)
+                || !SUMMED.equals(DefaultBoundOperationFacts.get().accumulation(over.operation()))) {
+            return null;
+        }
+        List<TermPath> containers = over.subjectPath().containersHoldingIt();
+        if (containers.size() != 1) {
+            return null;
+        }
+        NumericTerm.ValueOf element = new NumericTerm.ValueOf(over.subjectPath());
+        Source source = sourceOf(element, read);
+        if (source == null
+                || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
+            return null;
+        }
+        NumericDomain.Bounds each = realized(element, source, region, Way.UNTOUCHED);
+        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
+        if (each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))) {
+            return null;
+        }
+        return held.admits(Count.ZERO) ? withNought(each, carrier) : each;
+    }
+
+    /**
+     * A run every value of which how many times the value at an element occurs among the values
+     * of {@code counted}'s run is shown to take — or null where none is shown.
+     *
+     * <p>Built from one element repeated. Where every container inside the list may hold one
+     * element, some row holds an element of the list whose containers each hold one, the
+     * innermost holding some value: that element is a row's, so every rule inside it holds. A list
+     * holding it over again is a run in which that value occurs as many times as the list holds
+     * elements. So every count the list may hold from one on is a count of the value, where
+     * elements alike break nothing: no rule of a value around the list reads inside its elements
+     * — a rule keeping them apart by an id would need as many ids as elements — and nothing the
+     * way states touches them. A set holds an element once, so a set outermost holds no element
+     * over again and shows nothing.
+     */
+    private static NumericDomain.Bounds occurrencesOfOneValue(
+            NumericTerm.OccurrencesOfItsValue counted, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, boolean heldWhole) {
+        TermPath at = counted.subjectPath();
+        List<TermPath> containers = at.containersHoldingIt();
+        if (!heldWhole || counted.selection() != null || containers.isEmpty()) {
+            return null;
+        }
+        TermPath list = containers.getFirst();
+        NumericTerm.ValueOf element = new NumericTerm.ValueOf(list.element());
+        if (!read.domain().holdsAnElementOverAgain(list, read.rules())
+                || namedDownTo(list.element(), list.steps().size(), read, null) != Named.NOT
+                || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
+            return null;
+        }
+        for (TermPath inside : containers.subList(1, containers.size())) {
+            NumericDomain.Bounds held = howManyAreHeld(inside, read, region);
+            if (held == null || !held.admits(Count.of(1))) {
+                return null;
+            }
+        }
+        NumericDomain.Bounds held = howManyAreHeld(list, read, region);
+        NumericDomain.Bounds fromOne = held == null ? null : held.meet(
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null));
+        return fromOne != null && fromOne.holdsAValue() ? fromOne : null;
+    }
+
+    /** A run of how many {@code container} holds, every value of which some row in
+     *  {@code region} takes — or null where that is not shown. */
+    private static NumericDomain.Bounds howManyAreHeld(TermPath container, InputReading read,
+                                                       SearchRegion region) {
+        RuleReadingSource rules = read.rules();
+        Type type = read.domain().typeAt(container, rules);
+        NumericTerm.TakenOf count = type == null ? null
+                : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
+                        container, type, rules.inners(), rules.symbols());
+        return count == null ? null : region.wholeRunOf(count);
+    }
+
+    /** {@code run} with nought, where nought is in it or it starts just past nought on
+     *  {@code carrier} — and {@code run} alone otherwise. */
+    private static NumericDomain.Bounds withNought(NumericDomain.Bounds run, Carrier carrier) {
+        Endpoint least = run.min();
+        if (run.admits(ExactRatio.ZERO) || least == null || !(least.at() instanceof Count from)) {
+            return run;
+        }
+        ExactRatio at = from.exactly();
+        boolean justPast = (at.isZero() && !least.inclusive())
+                || (carrier.spacingBetweenValues() == Granularity.DISCRETE
+                        && at.equals(ExactRatio.ONE) && least.inclusive());
+        return justPast ? new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), run.max())
+                : run;
     }
 
     /**

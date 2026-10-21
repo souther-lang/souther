@@ -167,7 +167,14 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
         assertFalse(wrapped.contains("not read"), wrapped);
     }
 
-    /** A total that is a number among others in a comparison is read as one of them. */
+    /**
+     * A total that is a number among others in a comparison is read as one of them. A list of one
+     * note totals that note, so the total takes every {@code Int} a gross does; held at nought it
+     * leaves the ask and the limit held against each other, each at every value the other takes,
+     * and both are left either way. The total itself is what an operation answers and not the
+     * value at a place, so the limit is not taken past the greatest {@code Int} for it, and that
+     * it reaches every value of the total is all it leaves unread.
+     */
     @Test
     void aTotalBesideAnotherNumberIsRead() {
         String report = report("""
@@ -181,14 +188,19 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                     asked <= limit - List.fold((acc, n) -> acc + n.gross, 0, ns)
                 """);
         assertTrue(report.contains("List.sum(ns[*].gross)"), report);
-        // Read to the end, it relates the two numbers and the total; that none of the three is
-        // shown to reach every value of the others is all it leaves unread, at each of them.
-        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
-        assertTrue(unread.stream()
-                .allMatch(line -> line.contains("not shown to reach every value here")), report);
-        assertEquals(Set.of("List.sum(ns[*].gross)", "asked", "limit"), unread.stream()
+        assertEquals(Set.of("asked", "limit"), placesSaying(report,
+                "rather than dividing the values here"), report);
+        assertEquals(Set.of("List.sum(ns[*].gross)"), placesSaying(report,
+                "not shown to reach every value here"), report);
+    }
+
+    /** The places the lines of {@code report} saying {@code words} of a rule's line are about. */
+    private static Set<String> placesSaying(String report, String words) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.startsWith("· no line") || line.startsWith("· not read"))
+                .filter(line -> line.contains(words))
                 .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
-                .collect(Collectors.toSet()), report);
+                .collect(Collectors.toSet());
     }
 
     /**

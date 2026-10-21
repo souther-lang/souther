@@ -66,17 +66,17 @@ class ARuleIsFiledAtWhatItsQuantityIsAboutTest {
      * And the surviving positions of a form over several are all of them.
      *
      * <p>The word is one a relation between positions gets, which is what the rule that survives
-     * the cancellation is — a sum held against a number, which neither is shown to reach at the
-     * ends of the other. Said at {@code y} as well, an author would be sent looking for a pair the
+     * the cancellation is — a sum held against a number, which each reaches but where the other's
+     * type stops. Said at {@code y} as well, an author would be sent looking for a pair the
      * rule does not name.
      */
     @Test
     void everyPositionTheQuantityRunsOverIsFiledAt() {
         FieldDomains read = read(ONE_CANCELS_OF_THREE);
 
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "x"));
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "z"));
         assertEquals(List.of(), reasonsAt(read, "y"));
     }

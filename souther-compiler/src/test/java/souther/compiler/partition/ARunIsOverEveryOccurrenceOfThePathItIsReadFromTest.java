@@ -82,7 +82,9 @@ class ARunIsOverEveryOccurrenceOfThePathItIsReadFromTest {
      *
      * <p>The shape a claim's central rule is written in: the closure decides one thing about a
      * candidate and the total it decides it by is of a list the behavior was given. The threshold
-     * it is held against is a position, related to the total rather than divided by a run.
+     * it is held against is a position, related to the total rather than divided by a run: a list
+     * of one line totals that line, and the total settles the rule on its own only where the
+     * threshold's type stops.
      */
     @Test
     void aWalkOverASequenceFromOutsideTheClosureIsReadAsARun() {
@@ -91,9 +93,8 @@ class ARunIsOverEveryOccurrenceOfThePathItIsReadFromTest {
                 "the rule is about the total, which was read, and not about a value made from the"
                         + " place it walks");
         assertTrue(reasonsOf("overASequenceFromOutsideTheClosure")
-                        .contains(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
-                "the threshold is related to the total, which is not shown to reach every value of"
-                        + " it");
+                        .contains(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
+                "the threshold is related to the total, which reaches every value of it");
         String report = report();
         for (String point : List.of("ON", "OFF", "IN", "OUT")) {
             assertTrue(report.contains("the " + point + " point "),

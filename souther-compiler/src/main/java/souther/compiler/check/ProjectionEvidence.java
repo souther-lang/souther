@@ -13,7 +13,9 @@ import java.util.Set;
  * leave a position is settled by the rules and holds or fails whatever this manages to show, so
  * neither answer here is about how wide the bounds actually are. What an edge stands on is having a
  * proof: a row at an edge is a whole value with that edge in it, so a rule the bounds cannot express
- * is a way that value can be refused however plainly the numbers themselves were read.
+ * is a way that value can be refused however plainly the numbers themselves were read — unless it is
+ * shown to refuse only what some other value of the places it names takes the place of
+ * ({@link StandsApart}).
  *
  * <p>Asked of the reading that built the bounds because that is what the answer is about — a second
  * walk of the declarations asking which clauses could have become a bound answers with what this
@@ -29,22 +31,54 @@ import java.util.Set;
 public sealed interface ProjectionEvidence {
 
     /**
-     * Something established that the bounds are the whole of what the rules leave every position,
-     * and what it was.
+     * Something established that the bounds are the whole of what the rules leave the positions it
+     * is asked about, and what it was.
      *
      * <p>Named for the proof and not for the world. Whether the bounds are the whole of it is
      * settled by the rules, and holds or fails whatever anything here manages to show — so this is
      * that a proof was found, and {@link NotCertified} is that none was. Neither of them is a
      * reading of how wide the bounds actually are.
      *
-     * @param by which proof it was, kept rather than reduced to the fact that there is one: a reader
-     *           saying why an edge may be promised cannot get it back from the fact that it may be
+     * <p>A value can hold rules the bounds do not state and still have its edges here proven, where
+     * each of those rules stands apart: it names only places no rule relates to the one asked
+     * about, and what it leaves those places is shown to hold some value. Every value the bounds
+     * leave the position is then part of a whole value, with any of the values left the places
+     * apart beside it — the rules split into two systems sharing no place, and the second is not
+     * empty.
+     *
+     * @param by    which proof it was, kept rather than reduced to the fact that there is one: a
+     *              reader saying why an edge may be promised cannot get it back from the fact that it
+     *              may be
+     * @param apart the rules the bounds do not state that were shown to stand apart, each where it
+     *              stands. Empty where the bounds state every rule
      */
-    record CertifiedExact(ProjectionCertificate by) implements ProjectionEvidence {
+    record CertifiedExact(ProjectionCertificate by, List<StandsApart> apart)
+            implements ProjectionEvidence {
 
         public CertifiedExact {
             if (by == null) {
                 throw new IllegalArgumentException("certified by something, or not certified");
+            }
+            apart = List.copyOf(apart);
+        }
+    }
+
+    /**
+     * A rule the bounds do not state, shown to leave the position asked about alone.
+     *
+     * <p>It names only places under {@code at}; no rule naming a place under {@code at} names one
+     * related to the position asked about; and the rules leave {@code at} a set of values read in
+     * full and holding at least one. So whatever the rule refuses, some value of {@code at} is not
+     * refused, and it fits beside every value the bounds leave the position.
+     *
+     * @param rule the rule
+     * @param at   the place everything it names is at or under, in the value's own words
+     */
+    record StandsApart(RuleRef rule, RuleKey at) {
+
+        public StandsApart {
+            if (rule == null || at == null) {
+                throw new IllegalArgumentException("a rule stands apart somewhere");
             }
         }
     }

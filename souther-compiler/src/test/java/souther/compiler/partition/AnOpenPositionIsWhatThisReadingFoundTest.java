@@ -237,6 +237,6 @@ class AnOpenPositionIsWhatThisReadingFoundTest {
                 () -> new CutEvidence.Present(List.of(),
                         new souther.compiler.check.ProjectionEvidence.CertifiedExact(
                                 new souther.compiler.numeric.ProjectionCertificate
-                                        .ByBoxAndClosedDifferences())));
+                                        .ByBoxAndClosedDifferences(), List.of())));
     }
 }

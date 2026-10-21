@@ -233,7 +233,9 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     /**
      * The model the line was first missed in, as it was written: the map kept to its keys and
      * handed back inside a record. The comparison is read, and its line is on the least of a key's
-     * values against the threshold.
+     * values against the threshold. The least settles it whatever the threshold is only at the
+     * greatest {@code Int}, where the threshold's type stops, so it is read; the threshold is not
+     * shown every value.
      */
     @Test
     void theStaleAccountsModelReadsItsComparison() {
@@ -257,7 +259,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 .filter(line -> line.contains("not read")).toList();
         assertTrue(unread.stream().allMatch(line -> line.contains(NOT_SHOWN_TO_REACH)),
                 () -> report(compilation));
-        assertEquals(Set.of("least(touches[*].days by account)", "staleAfter"), unread.stream()
+        assertEquals(Set.of("staleAfter"), unread.stream()
                 .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
                 .collect(Collectors.toSet()), () -> report(compilation));
         assertEquals(1, bordersOf(compilation).size(), () -> report(compilation));

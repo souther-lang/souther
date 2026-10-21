@@ -578,6 +578,19 @@ final class Witnesses {
         return at;
     }
 
+    /** The strings up to {@code many} values of {@code type} told apart wrap
+     *  ({@link #distinctValuesOf}), under whatever names they are written in; a value that wraps
+     *  no string is left out. */
+    static List<String> stringsOf(Type type, int many, RuleReadingContext reading) {
+        List<String> out = new ArrayList<>();
+        for (FixtureTemplate each : distinctValuesOf(type, many, reading, Set.of()).values()) {
+            if (bare(each.value()) instanceof Hir.StringLit written) {
+                out.add(written.value());
+            }
+        }
+        return out;
+    }
+
     /** {@code value} with the names a fixture writes around it taken off, so that two values are
      *  compared as what they wrap. */
     private static Hir.Expr bare(Hir.Expr value) {

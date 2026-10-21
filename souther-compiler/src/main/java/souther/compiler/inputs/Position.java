@@ -78,13 +78,15 @@ public sealed interface Position permits ReadPosition {
     boolean nothingExists();
 
     /**
-     * How much of what the rules say the bounds of the value this position sits in are able to
-     * state.
+     * How much of what the rules say the bounds of this position are able to state, as a promise
+     * that each value they leave it is part of some whole value.
      *
-     * <p>Asked of the whole value and not of this position, because that is what it is about: a rule
-     * the bounds cannot express is a way the value can be refused wherever in it the rule is
-     * written, so an edge at one of its positions is only as certain as the projection of all of
-     * them.
+     * <p>Every rule of the value this position sits in is asked, and not only the ones naming it: a
+     * rule the bounds cannot express is a way the value can be refused wherever in it the rule is
+     * written, so an edge at this position is only as certain as the projection of all of them.
+     * Except a rule shown to stand apart from it — one naming only places no rule relates to this
+     * one, which it leaves some value — since a value it refuses is replaced by one it does not
+     * without moving anything here.
      *
      * <p>Not whether a rule was answered, which is the wider question and is not this one:
      * {@code invariant nonzero = value /= 0} is read whole by the reading that turns clauses into

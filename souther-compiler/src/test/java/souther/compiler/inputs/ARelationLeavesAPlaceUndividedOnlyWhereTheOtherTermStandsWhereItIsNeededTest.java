@@ -9,11 +9,14 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which places a relation of terms is shown to leave undivided, asked of the terms themselves.
@@ -31,18 +34,35 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 Endpoint.inclusive(Count.of(high)));
     }
 
+    /** Where the order every term here is counted on stops, unless a case says otherwise: an
+     *  {@code Int}'s. */
+    private static final NumericDomain.Bounds INTS = run(Long.MIN_VALUE, Long.MAX_VALUE);
+
+    /** The greatest {@code Int}, which the form is worked out in. */
+    private static final BigInteger GREATEST_INT = BigInteger.valueOf(Long.MAX_VALUE);
+
+    /** Where a date's order stops, as days. */
+    private static final NumericDomain.Bounds DAYS =
+            run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay());
+
     private static WhatARelationLeavesUndivided.Term<String> term(String place, long weight,
                                                                  NumericDomain.Bounds holds,
                                                                  NumericDomain.Bounds realizes,
                                                                  Object takes, boolean itsPlace) {
+        return runningTo(INTS, place, weight, holds, realizes, takes, itsPlace);
+    }
+
+    private static WhatARelationLeavesUndivided.Term<String> runningTo(
+            NumericDomain.Bounds stops, String place, long weight, NumericDomain.Bounds holds,
+            NumericDomain.Bounds realizes, Object takes, boolean itsPlace) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
-                realizes, takes, itsPlace, Granularity.DISCRETE);
+                realizes, takes, itsPlace, Granularity.DISCRETE, stops);
     }
 
     private static Set<String> undivided(List<WhatARelationLeavesUndivided.Term<String>> terms,
                                          ExactRatio constant, Rel relation) {
         return WhatARelationLeavesUndivided.of(terms, constant, relation, String::equals,
-                (one, other) -> true);
+                (one, other) -> true, GREATEST_INT);
     }
 
     /**
@@ -112,6 +132,91 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
         }
     }
 
+    /**
+     * {@code d < n}, a day count against an {@code Int}: each stands at the other's value, and
+     * every day has an {@code Int} on each side, but an {@code Int} past the last day has no day
+     * above it. So {@code n} is reached only by a term that runs on as far as an {@code Int}.
+     */
+    @Test
+    void aTermStandingAtTheOthersValueReachesItOnlyAsFarAsItsOwnOrderRuns() {
+        for (NumericDomain.Bounds dayStops : List.of(DAYS, INTS)) {
+            Set<String> left = undivided(List.of(
+                            runningTo(dayStops, "d", 1, NumericDomain.Bounds.OPEN,
+                                    NumericDomain.Bounds.OPEN, null, true),
+                            term("n", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN,
+                                    null, true)),
+                    ExactRatio.ZERO, Rel.LT);
+            assertEquals(dayStops == DAYS ? Set.of("d") : Set.of("d", "n"), left,
+                    "the day stopping at " + dayStops);
+        }
+    }
+
+    /** {@code d - r + w >= 0}, two dates and an {@code Int} taking {@code w}, each the value at its
+     *  place and every value of its type. */
+    private static List<WhatARelationLeavesUndivided.Term<String>> aWindow(NumericDomain.Bounds w) {
+        return List.of(
+                runningTo(DAYS, "d", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN,
+                        A_DATE, true),
+                runningTo(DAYS, "r", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN,
+                        A_DATE, true),
+                term("w", 1, NumericDomain.Bounds.OPEN, w, null, true));
+    }
+
+    /**
+     * {@code d - r + w >= 0}: with {@code w} held at nought the two dates are held against each
+     * other alone, and each reaches every value of the other. {@code w} is reached by neither:
+     * past the farthest two dates are apart, a count of days settles it. Held still, {@code w} has
+     * to be shown to take nought, and a {@code w} shown to take nothing holds the dates at nothing.
+     */
+    @Test
+    void aThirdTermHeldStillLeavesTwoTermsHeldAgainstEachOther() {
+        assertEquals(Set.of("d", "r"),
+                undivided(aWindow(NumericDomain.Bounds.OPEN), ExactRatio.ZERO, Rel.GE));
+        assertEquals(Set.of(), undivided(aWindow(run(1, 0)), ExactRatio.ZERO, Rel.GE));
+    }
+
+    /** The same, with {@code w} tied to {@code d}: holding it still may hold {@code d} too. */
+    @Test
+    void aThirdTermTiedToOneOfThemIsNotHeldStill() {
+        Set<String> left = WhatARelationLeavesUndivided.of(aWindow(NumericDomain.Bounds.OPEN),
+                ExactRatio.ZERO, Rel.GE, String::equals,
+                (one, other) -> !Set.of(one, other).equals(Set.of(0, 2)), GREATEST_INT);
+        assertEquals(Set.of(), left);
+    }
+
+    private static WhatARelationLeavesUndivided.Term<String> decimal(
+            String place, long weight, NumericDomain.Bounds realizes,
+            NumericDomain.Bounds stops) {
+        NumericDomain.Bounds atNoughtOrMore =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), null);
+        return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight),
+                atNoughtOrMore, realizes, null, true, Granularity.DENSE, stops);
+    }
+
+    /**
+     * {@code n + t - g + s <= 0}, each at nought or more and {@code s} shown to take nothing. A
+     * {@code g} far enough up holds it wherever the rest stand and a {@code t} far enough up fails
+     * it, since a decimal runs on without end, so {@code n}, {@code t} and {@code s} are each left
+     * either way. {@code g} is not: nothing shown to run on takes the sum up past it while
+     * {@code s} may stand anywhere. With {@code t} counted on an {@code Int}'s order, it runs out,
+     * and nothing takes the sum up past an {@code n} beyond the greatest {@code Int}; {@code t}
+     * itself is still taken past by {@code n}.
+     */
+    @Test
+    void aDecimalRunningOnWithoutEndReachesEitherSideOfAnyValue() {
+        NumericDomain.Bounds upward = new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), null);
+        for (NumericDomain.Bounds tStops : List.of(NumericDomain.Bounds.OPEN, INTS)) {
+            Set<String> left = undivided(List.of(
+                            decimal("n", 1, upward, NumericDomain.Bounds.OPEN),
+                            decimal("t", 1, upward, tStops),
+                            decimal("g", -1, upward, NumericDomain.Bounds.OPEN),
+                            decimal("s", 1, null, NumericDomain.Bounds.OPEN)),
+                    ExactRatio.ZERO, Rel.LE);
+            assertEquals(tStops == INTS ? Set.of("t", "s") : Set.of("n", "t", "s"), left,
+                    "t stopping at " + tStops);
+        }
+    }
+
     /** Two values at their places, weighed {@code first} and {@code second}, the first a date and
      *  the second taking {@code takes}, each every value of what it takes. */
     private static List<WhatARelationLeavesUndivided.Term<String>> pair(long first, long second,
@@ -131,14 +236,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
 
     /** The days a date can be written on, which is where the type two dates take stops. */
     private static final WhatARelationLeavesUndivided.WhereTheRepresentationStops DATES =
-            new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
-                    run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay()));
+            new WhatARelationLeavesUndivided.WhereTheRepresentationStops(DAYS);
 
     private static Set<String> apart(List<WhatARelationLeavesUndivided.Term<String>> terms,
                                      long constant, Rel relation,
                                      WhatARelationLeavesUndivided.OnTheDifference... held) {
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, ExactRatio.of(constant),
-                relation, List.of(held), DATES, String::equals);
+                relation, List.of(held), DATES, String::equals, GREATEST_INT);
     }
 
     /**
@@ -170,7 +274,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
         assertEquals(Set.of("a", "b"), WhatARelationLeavesUndivided.ofTheirDifference(
                 pair(1, -1, A_DATE), ExactRatio.of(-10_000_000_000_000L), Rel.GT, List.of(),
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
-                        NumericDomain.Bounds.OPEN), String::equals));
+                        NumericDomain.Bounds.OPEN), String::equals, GREATEST_INT));
     }
 
     /**
@@ -253,5 +357,77 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 held(1, 0, Rel.GE), held(1, -1, Rel.LE)));
         assertEquals(Set.of(), apart(pair(2, -2, A_DATE), -1, Rel.LT,
                 held(1, 0, Rel.GT), held(1, -1, Rel.LT)));
+    }
+
+    /**
+     * {@code 2^62 x - y < 0}, {@code x} from nought to a hundred and {@code y} an {@code Int} read
+     * as though its order ran on: at two, the true side needs a {@code y} past the greatest
+     * {@code Int}. The run {@code y} has to stand in is a finite one, and still runs past where
+     * {@code y}'s order stops, so {@code y} is no witness there. Held to a run inside its order —
+     * a weight of one — it is.
+     */
+    @Test
+    void aFiniteRunPastWhereTheReachingOrderStopsIsNoWitness() {
+        var y = term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true);
+        var weighedPast = term("x", 1L << 62, run(0, 100), run(0, 100), null, true);
+        var inside = term("x", 2, run(0, 100), run(0, 100), null, true);
+        assertFalse(undivided(List.of(weighedPast, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+        assertTrue(undivided(List.of(inside, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+    }
+
+    /**
+     * {@code 2^62 x - 2^62 y < 0}, {@code y} any {@code Int}: at an {@code x} of nought a {@code y}
+     * of one makes it true and one of nought false, and both rows are computed; at one, the true
+     * side needs a {@code y} of two, which weighed passes the type. So {@code x} from nought to one
+     * is not left either way at every value, and {@code x} at nought alone is.
+     */
+    @Test
+    void aWitnessIsComputedAtEveryValueItIsAskedOfAndNotAtOne() {
+        long k = 1L << 62;
+        var y = term("y", -k, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true);
+        var upToOne = term("x", k, run(0, 1), run(0, 1), null, true);
+        var nought = term("x", k, run(0, 0), run(0, 0), null, true);
+        assertFalse(undivided(List.of(upToOne, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+        assertTrue(undivided(List.of(nought, y), ExactRatio.ZERO, Rel.LT).contains("x"));
+    }
+
+    /**
+     * Read by their difference, two terms weighed one leave rows past the type only beside its
+     * ends; weighed two, every value past half the type has no row on one side, and weighed
+     * {@code 2^62} nearly every value. Two dates weighed two are inside an {@code Int} at every
+     * day, and stay shown.
+     */
+    @Test
+    void aDifferenceUnderAWeightIsShownOnlyWhereItsRowsAreComputedAtEveryValue() {
+        for (long weight : new long[] {1, 2, 1L << 62}) {
+            var a = term("a", weight, INTS, NumericDomain.Bounds.OPEN, "same", true);
+            var b = term("b", -weight, INTS, NumericDomain.Bounds.OPEN, "same", true);
+            assertEquals(weight == 1 ? Set.of("a", "b") : Set.of(),
+                    WhatARelationLeavesUndivided.ofTheirDifference(List.of(a, b), ExactRatio.ZERO,
+                            Rel.LT, List.of(),
+                            new WhatARelationLeavesUndivided.WhereTheRepresentationStops(INTS),
+                            String::equals, GREATEST_INT),
+                    "Ints weighed " + weight);
+        }
+        assertEquals(Set.of("a", "b"), apart(pair(2, -2, A_DATE), 0, Rel.LT));
+    }
+
+    /**
+     * {@code x - y + z - 1000 > 0}, {@code z} read as though its order ran on but counted on an
+     * order stopping at a hundred: brought to nought by a {@code z} of a thousand, the rest would
+     * leave {@code x} to {@code y}, and no {@code z} is there. Counted on an order reaching a
+     * thousand, it is.
+     */
+    @Test
+    void aTermIsHeldOnlyAtAValueItsOrderHolds() {
+        var x = term("x", 1, run(0, 10), run(0, 10), null, true);
+        var y = term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true);
+        var shortOrder = runningTo(run(0, 100), "z", 1, NumericDomain.Bounds.OPEN,
+                NumericDomain.Bounds.OPEN, null, true);
+        var longOrder = runningTo(run(0, 1000), "z", 1, NumericDomain.Bounds.OPEN,
+                NumericDomain.Bounds.OPEN, null, true);
+        ExactRatio constant = ExactRatio.of(-1000);
+        assertFalse(undivided(List.of(x, y, shortOrder), constant, Rel.GT).contains("x"));
+        assertTrue(undivided(List.of(x, y, longOrder), constant, Rel.GT).contains("x"));
     }
 }

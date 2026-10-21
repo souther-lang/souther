@@ -6,6 +6,8 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ValueSet;
 
+import java.util.List;
+
 /**
  * The rules written about a value, or the fact that a value of this kind has none to write.
  *
@@ -89,7 +91,8 @@ public sealed interface Rules {
     }
 
     /**
-     * How much of what the rules say the bounds these leave are able to state.
+     * How much of what the rules say the bounds these leave at {@code place} are able to state
+     * ({@link FieldDomains#projectionAt}).
      *
      * <p>The same two answers this type exists to keep apart, asked of a projection. A value of a
      * kind that carries no clause has no rule for a projection to have been short of, so its bounds
@@ -97,9 +100,9 @@ public sealed interface Rules {
      * caller that stopped, every plain {@code String} in every model would be a place no edge
      * could be promised at.
      */
-    default ProjectionEvidence projection() {
+    default ProjectionEvidence projectionAt(RuleKey place) {
         return switch (this) {
-            case Read read -> read.domains().projection();
+            case Read read -> read.domains().projectionAt(place);
             case NoneWritten _ -> NOTHING_WAS_WRITTEN;
         };
     }
@@ -118,7 +121,7 @@ public sealed interface Rules {
         return switch (souther.compiler.numeric.NumericDomain.top(FactSubject.inOneOrder())
                 .projectionCertification()) {
             case souther.compiler.numeric.ProjectionCertification.Certified it ->
-                    new ProjectionEvidence.CertifiedExact(it.by());
+                    new ProjectionEvidence.CertifiedExact(it.by(), List.of());
             // The arms below are the algebra changing what it takes a certificate to be, and not
             // anything about a value: a system of no rules leaves nothing unproven and relates no
             // two subjects of different kinds.

@@ -447,6 +447,11 @@ public sealed interface Carrier extends ValueOrder {
         };
     }
 
+    /** Every value this order has, as the run {@link #extent} is: open on a side it has no end. */
+    default NumericDomain.Bounds whereItStops() {
+        return new NumericDomain.Bounds(extent().low(), extent().high());
+    }
+
     /**
      * Every value this order has, as a relation between two of its values is read over: open where
      * the order stops only because what carries it does, and ending where a value a model writes
@@ -463,8 +468,7 @@ public sealed interface Carrier extends ValueOrder {
     default NumericDomain.Bounds asARelationReadsIt() {
         return switch (this) {
             case Whole _, Dense _, Days _, Seconds _, Nanos _ -> NumericDomain.Bounds.OPEN;
-            case SecondsOfDay _, Text _, Ordinal _ ->
-                    new NumericDomain.Bounds(extent().low(), extent().high());
+            case SecondsOfDay _, Text _, Ordinal _ -> whereItStops();
         };
     }
 
@@ -480,6 +484,20 @@ public sealed interface Carrier extends ValueOrder {
      */
     default boolean leavesARelatedRunWhole() {
         return asARelationReadsIt().saysNothing();
+    }
+
+    /** The greatest whole number this order holds, or null where it holds no greatest or none this
+     *  reads as a number. */
+    default BigInteger greatestWholeNumber() {
+        return extent().high() == null || !(extent().high().at() instanceof Count greatest)
+                ? null : greatest.exactly().floor().orNull();
+    }
+
+    /** The least whole number this order holds, or null where it holds no least or none this reads
+     *  as a number. */
+    default BigInteger leastWholeNumber() {
+        return extent().low() == null || !(extent().low().at() instanceof Count least)
+                ? null : least.exactly().ceiling().orNull();
     }
 
     /**

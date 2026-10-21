@@ -26,6 +26,10 @@ import souther.compiler.values.ValueSet;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.ProjectionCertification;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.OperationLaw;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,6 +44,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -83,7 +88,7 @@ public final class FieldDomains {
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(),
                     List.of(), List.of(), PartsLeftOut.NONE, Map.of(),
-                    Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
+                    Map.of(), Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
                     Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
                     ConstraintState.top(FactSubject.inOneOrder()), null, null, Map.of(),
@@ -125,6 +130,8 @@ public final class FieldDomains {
 
     /** What the reading answered for each boundary question it raised and left standing. */
     private final Map<BoundaryQuestion, BoundaryStanding> standing;
+    /** Which parts of the clauses name each place — see {@link #projectionAt}. */
+    private final Map<RuleKey, Set<InvariantChecker.PartReading>> naming;
     /** Where a choice of a rule left an end of it open — see {@link #endsLeftOpenAt}. */
     private final Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen;
     /**
@@ -263,6 +270,15 @@ public final class FieldDomains {
      */
     private final Map<RuleKey, HeldClass> classes = new ConcurrentHashMap<>();
 
+    /**
+     * The readings of the declarations the elements of this value's containers are of, made when
+     * whether one of them holds a value is first asked ({@link #elementHoldsAValue}).
+     *
+     * <p>Beside the state, as {@link #counterfactuals} are: each is that declaration read in the
+     * world this one was, and nothing here answers anything its rules do not already say.
+     */
+    private final Map<TypeSymbol.AtModule, FieldDomains> elements = new ConcurrentHashMap<>();
+
     /** The place {@link #classLeavingNothing} found, worked out the first time it is asked. */
     private volatile Optional<RuleKey> leavingNothing;
 
@@ -292,7 +308,9 @@ public final class FieldDomains {
                          PartsLeftOut withoutParts,
                          Map<RuleRef.Invariant, Required> raised,
                          Map<InvariantChecker.ReadingPlace, Required> raisedByPart,
-                         Map<BoundaryQuestion, BoundaryStanding> standing, ReadingEvidence took,
+                         Map<BoundaryQuestion, BoundaryStanding> standing,
+                         Map<RuleKey, Set<InvariantChecker.PartReading>> naming,
+                         ReadingEvidence took,
                          Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                          Map<RuleKey, Set<RulesMissed>> notGathered, Set<RuleKey> handedOn,
                          SequencedMap<FactSubject, RuleKey> namedBy,
@@ -331,6 +349,7 @@ public final class FieldDomains {
         this.raised = raised;
         this.raisedByPart = raisedByPart;
         this.standing = standing;
+        this.naming = naming;
         this.took = took;
         this.narrowers = narrowers;
         this.notGathered = notGathered;
@@ -557,7 +576,7 @@ public final class FieldDomains {
                 seeded.reading().withoutAnEnd(), seeded.reading().aboutOneCoordinate(),
                 reach.withoutParts(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(),
-                seeded.reading().standing(), seeded.took(),
+                seeded.reading().standing(), seeded.reading().naming(), seeded.took(),
                 seeded.reading().narrowers(),
                 seeded.notGathered(), seeded.handedOn(), placeOf,
                 seeded.constraints(), named, reading, settled,
@@ -2476,8 +2495,335 @@ public final class FieldDomains {
      */
     NumericDomain.Bounds wholeRunAt(RuleKey path) {
         FactSubject atom = atomAt.get(path);
-        return atom == null || !projection().isCertified() ? null
+        return atom == null || !projectionAt(path).isCertified() ? null
                 : constraints.numbers().wholeRunOf(atom);
+    }
+
+    /**
+     * How much of what the rules say the bounds at {@code place} are able to state.
+     *
+     * <p>What {@link #projection} says, except where everything that stood in its way is a rule
+     * shown to stand apart from the place ({@link ProjectionEvidence.StandsApart}). The algebra was
+     * given every rule but those and proved what it was given, and each of those names a place no
+     * rule relates to this one and leaves that place some value: so every value the bounds leave
+     * this place is part of a whole value, whatever those rules refuse.
+     *
+     * <p>Anything else in the way is in the way here too. A rule the reading never met may name any
+     * place, a rule the algebra was given and could not prove may be about this one, and a value
+     * whose rules leave nothing has no place to be exact about.
+     */
+    public ProjectionEvidence projectionAt(RuleKey place) {
+        ProjectionEvidence whole = projection();
+        if (place.isTheValueItself()
+                || !(constraints.numbers().projectionCertification()
+                        instanceof ProjectionCertification.Certified(var by))) {
+            return whole;
+        }
+        List<ProjectionEvidence.StandsApart> apart = standingApart(whole, place, Set.of(named));
+        return apart == null ? whole : new ProjectionEvidence.CertifiedExact(by, apart);
+    }
+
+    /**
+     * The rules shown to stand apart from {@code place}, where they are all that kept
+     * {@code whole} from being certified — or null where it is certified, or where anything else
+     * stood in its way.
+     *
+     * @param place the place asked about, or null where what is asked is whether this value holds
+     *              anything at all, which no place has to stand apart from
+     * @param asked the declarations a value of which is being shown to exist, this one among them:
+     *              a value holding one of its own kind is not shown to exist by asking it again
+     */
+    private List<ProjectionEvidence.StandsApart> standingApart(ProjectionEvidence whole,
+                                                               RuleKey place,
+                                                               Set<TypeSymbol.AtModule> asked) {
+        if (!(whole instanceof ProjectionEvidence.NotCertified(
+                        List<ProjectionEvidence.Cause> causes))
+                || !notGathered.isEmpty()
+                || !(constraints.numbers().projectionCertification()
+                        instanceof ProjectionCertification.Certified)) {
+            return null;
+        }
+        Set<RuleRef> unheld = new LinkedHashSet<>();
+        for (ProjectionEvidence.Cause each : causes) {
+            if (!(each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _))) {
+                return null;
+            }
+            unheld.add(rule);
+        }
+        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = placesEachReadingNames();
+        List<ProjectionEvidence.StandsApart> apart = new ArrayList<>();
+        for (RuleRef rule : unheld) {
+            List<ProjectionEvidence.StandsApart> shown =
+                    standsApart(rule, place, placesOf, unheld, asked);
+            if (shown == null) {
+                return null;
+            }
+            shown.stream().filter(one -> !apart.contains(one)).forEach(apart::add);
+        }
+        return apart;
+    }
+
+    /** The places each reading of a part names. */
+    private Map<InvariantChecker.PartReading, Set<RuleKey>> placesEachReadingNames() {
+        Map<InvariantChecker.PartReading, Set<RuleKey>> out = new LinkedHashMap<>();
+        naming.forEach((named, reads) -> reads.forEach(read ->
+                out.computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(named)));
+        return out;
+    }
+
+    /**
+     * Where {@code rule} stands apart from {@code place}, at each place a reading of it names, or
+     * null where that is not shown.
+     *
+     * <p>Shown at a place where the reading names nothing else; no other place at or under it, or
+     * above it, is named; every reading of a part naming it names nothing else; it is neither at
+     * nor under {@code place}, nor is {@code place} under it; and the rules are shown to leave it
+     * some value ({@link #holdsAValueAt}). A part naming a place above it reads it as well, so it
+     * is not alone there. Each reading is its own: a newtype's rule read at two fields refuses a
+     * value of each, and a value of one has nothing to do with the other.
+     *
+     * @param placesOf the places each reading of a part names
+     * @param unheld   the rules the bounds do not hold
+     */
+    private List<ProjectionEvidence.StandsApart> standsApart(
+            RuleRef rule, RuleKey place, Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
+            Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
+        List<ProjectionEvidence.StandsApart> out = new ArrayList<>();
+        for (Map.Entry<InvariantChecker.PartReading, Set<RuleKey>> read : placesOf.entrySet()) {
+            if (!read.getKey().part().rule().equals(rule)) {
+                continue;
+            }
+            if (read.getValue().size() != 1) {
+                return null;
+            }
+            RuleKey at = read.getValue().iterator().next();
+            if (!aloneAt(at, place, placesOf)
+                    || !holdsAValueAt(at, placesOf, unheld, asked)) {
+                return null;
+            }
+            out.add(new ProjectionEvidence.StandsApart(rule, at));
+        }
+        return out.isEmpty() ? null : out;
+    }
+
+    /** Whether {@code at} is a place apart from {@code place} that only parts naming nothing else
+     *  name — see {@link #standsApart}. */
+    private boolean aloneAt(RuleKey at, RuleKey place,
+                            Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf) {
+        if (at.isTheValueItself()
+                || (place != null && (at.isAtOrUnder(place) || place.isAtOrUnder(at)))) {
+            return false;
+        }
+        for (RuleKey named : naming.keySet()) {
+            if ((named.isAtOrUnder(at) || at.isAtOrUnder(named)) && !named.equals(at)) {
+                return false;
+            }
+        }
+        return naming.getOrDefault(at, Set.of()).stream()
+                .allMatch(read -> placesOf.get(read).equals(Set.of(at)));
+    }
+
+    /**
+     * Whether the rules are shown to leave the place {@code at} some value, at a place only parts
+     * naming nothing else name.
+     *
+     * <p>That one value is there, and nothing about the rest: what the place admits stays as it was
+     * read. Two ways to show it. A set read in full with a value in it is one. The other is for a
+     * container whose elements are values of a declaration of their own, which no set read here
+     * speaks for: one of no element or of one is shown to be a value where the arithmetic leaves
+     * it that size, every part naming it is either a bound on its size the arithmetic took in or a
+     * call whose law holds of every container that size ({@link WhatALawSaysOfAFewElements}), and,
+     * for one element, the element's declaration is shown to hold a value. Under
+     * {@code List.length(value) >= 1 && List.allDistinctBy(.product, value)}, a list of one line is
+     * that value whatever the line is.
+     *
+     * @param unheld the rules the bounds do not hold, which only a law can be taken in place of
+     */
+    private boolean holdsAValueAt(RuleKey at,
+                                  Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
+                                  Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
+        if (!handedOn.contains(at)) {
+            AdmissibleSet left = admits(at);
+            return left.completeness() instanceof AdmissibleSet.Completeness.Complete
+                    && !left.approximation().isEmpty();
+        }
+        Counted counted = countAt.get(at);
+        NumericDomain.Bounds sizes = counted == null ? NumericDomain.Bounds.OPEN
+                : constraints.numbers().wholeRunOf(counted.atom());
+        if (sizes == null) {
+            return false;
+        }
+        List<IntFunction<Boolean>> laws = new ArrayList<>();
+        for (InvariantChecker.PartReading read : naming.getOrDefault(at, Set.of())) {
+            InvariantChecker.Written written = writtenBy(read.reading());
+            if (written == null || !placesOf.get(read).equals(Set.of(at))) {
+                return false;
+            }
+            if (unheld.contains(read.part().rule())) {
+                IntFunction<Boolean> law = lawOfTheWholeClause(written, read.part());
+                if (law == null) {
+                    return false;
+                }
+                laws.add(law);
+            } else if (!boundsOnlyTheSize(written, read.part(), counted)) {
+                return false;
+            }
+        }
+        for (int size = 0; size <= 1; size++) {
+            int held = size;
+            if (sizes.admits(ExactRatio.of(size))
+                    && laws.stream().allMatch(law -> Boolean.TRUE.equals(law.apply(held)))
+                    && (size == 0 || elementHoldsAValue(at, asked))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The reading {@code opened}, or null where none of this value's readings is. */
+    private InvariantChecker.Written writtenBy(InvariantChecker.ReadingId opened) {
+        for (InvariantChecker.Written each : readings) {
+            if (each.opened().equals(opened)) {
+                return each;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * What {@code written}'s clause comes to at a container of nought or one element, where the
+     * clause is {@code part} alone and is a call of an operation whose truth a law settles, the
+     * container being one of its arguments as written — or null where it is not.
+     *
+     * <p>The container is the one argument that is a value read off as it stands: the others are a
+     * closure or another value the law says nothing of at that size, and a law that turns on them
+     * answers null for every size.
+     */
+    private static IntFunction<Boolean> lawOfTheWholeClause(InvariantChecker.Written written,
+                                                            PartId<RuleRef.Invariant> part) {
+        if (!written.constrained().keySet().equals(Set.of(part))
+                || !(Core.withoutStanding(written.clause()) instanceof Core.PreservedCall call)
+                || !(DefaultBoundOperationFacts.get().settled(call.declared().operation(),
+                        OperationLaw.Observed.TRUTH)
+                        instanceof BoundOperationFacts.Settled.ByALaw(
+                                OperationLaw.Observation<DeclaredArgument>(
+                                        AnswerAspect aspect,
+                                        LawProposition<DeclaredArgument> law), var _))
+                || aspect != AnswerAspect.TRUTH) {
+            return null;
+        }
+        int container = -1;
+        for (int i = 0; i < call.args().size(); i++) {
+            if (readOffAsItStands(call.args().get(i))) {
+                if (container >= 0) {
+                    return null;
+                }
+                container = i;
+            }
+        }
+        int at = container;
+        return at < 0 ? null : size -> WhatALawSaysOfAFewElements.holds(law, at, size);
+    }
+
+    /** Whether {@code value} is a value read off as it stands: a name, or a field of one, whatever
+     *  wider type it is let stand as. */
+    private static boolean readOffAsItStands(Core value) {
+        return switch (value) {
+            case Core.Widen widen -> readOffAsItStands(widen.value());
+            case Core.Read _ -> true;
+            case Core.FieldAccess access -> readOffAsItStands(access.target());
+            case Core.FieldProjection projection -> readOffAsItStands(projection.base());
+            default -> false;
+        };
+    }
+
+    /** Whether every reading of {@code part} in {@code written} states something of how many
+     *  {@code counted} counts and of nothing else. */
+    private static boolean boundsOnlyTheSize(InvariantChecker.Written written,
+                                             PartId<RuleRef.Invariant> part, Counted counted) {
+        Map<ClauseOccurrence, InvariantChecker.PartAsRead> read = written.constrained().get(part);
+        if (counted == null || read == null || read.isEmpty()) {
+            return false;
+        }
+        Set<FactSubject> size = Set.of(counted.atom());
+        return read.values().stream().allMatch(each -> each.said().narrowable().equals(size)
+                && !each.said().stated().isEmpty()
+                && each.said().stated().stream().allMatch(stated ->
+                        size.containsAll(stated.form().coefs().keySet())));
+    }
+
+    /**
+     * Whether a value of the declaration the elements of the container at {@code at} are of is
+     * shown to exist — none where they are not of a declaration this reads.
+     */
+    private boolean elementHoldsAValue(RuleKey at, Set<TypeSymbol.AtModule> asked) {
+        TypeSymbol.AtModule element = elementOf(at);
+        if (element == null || asked.contains(element)) {
+            return false;
+        }
+        Set<TypeSymbol.AtModule> deeper = new LinkedHashSet<>(asked);
+        deeper.add(element);
+        return elements.computeIfAbsent(element, each -> of(each, RuleReadingContext.of(source,
+                        policy, DeclarationReadings.borrowing(named.key(), stringMachines,
+                                revision))))
+                .shownToHoldAValue(deeper);
+    }
+
+    /** The declaration the elements of the list or set at {@code at} are of, or null where they are
+     *  not of one, or {@code at} is not reached through fields. */
+    private TypeSymbol.AtModule elementOf(RuleKey at) {
+        Type here = new Type.Ref(named);
+        for (String step : at.steps()) {
+            if (!(source.inners().terminal(here) instanceof Type.Ref(TypeSymbol.AtModule record))) {
+                return null;
+            }
+            here = source.fieldTypes().of(record).get(step);
+            if (here == null) {
+                return null;
+            }
+        }
+        Type element = switch (source.inners().terminal(here)) {
+            case Type.ListOf list -> list.element();
+            case Type.SetOf set -> set.element();
+            case null, default -> null;
+        };
+        return element instanceof Type.Ref(TypeSymbol.AtModule declared) ? declared : null;
+    }
+
+    /**
+     * Whether some value of this declaration is shown to exist.
+     *
+     * <p>Where what the bounds say is certified, or every rule in its way stands apart and is shown
+     * to leave its place a value ({@link #standingApart}); and every container whose elements are
+     * read as a declaration of their own is shown to hold a value as well
+     * ({@link #holdsAValueAt}). A certificate speaks for this value's own rules and for none of
+     * those.
+     */
+    private boolean shownToHoldAValue(Set<TypeSymbol.AtModule> asked) {
+        if (!notGathered.isEmpty() || infeasible()) {
+            return false;
+        }
+        ProjectionEvidence whole = projection();
+        Set<RuleRef> unheld = new LinkedHashSet<>();
+        Set<RuleKey> shown = new LinkedHashSet<>();
+        if (!(whole instanceof ProjectionEvidence.CertifiedExact)) {
+            List<ProjectionEvidence.StandsApart> apart = standingApart(whole, null, asked);
+            if (apart == null) {
+                return false;
+            }
+            apart.forEach(each -> {
+                unheld.add(each.rule());
+                shown.add(each.at());
+            });
+        }
+        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = placesEachReadingNames();
+        for (RuleKey container : handedOn) {
+            if (!shown.contains(container) && (!aloneAt(container, null, placesOf)
+                    || !holdsAValueAt(container, placesOf, unheld, asked))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -2664,7 +3010,7 @@ public final class FieldDomains {
         causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
         if (certification instanceof souther.compiler.numeric.ProjectionCertification.Certified(
                 var by) && causes.isEmpty()) {
-            return new ProjectionEvidence.CertifiedExact(by);
+            return new ProjectionEvidence.CertifiedExact(by, List.of());
         }
         return new ProjectionEvidence.NotCertified(causes);
     }

@@ -182,7 +182,7 @@ class ALookupUnderOneOfAMapsOwnKeysFindsTheEntryUnderItTest {
         // About the entries of the map looked in, and at the second call alone: the report names
         // every call a reading of the rule was made at.
         assertEquals(List.of("multiplicity(others[*].account) in over@" + SECOND_CALL),
-                notReadOf(compilation).stream()
+                saidOf(compilation).stream()
                         .filter(each -> each.contains("multiplicity("))
                         .map(each -> each.replaceAll(".*about `([^`]*)`", "$1")).toList(),
                 () -> report(compilation));
@@ -190,6 +190,20 @@ class ALookupUnderOneOfAMapsOwnKeysFindsTheEntryUnderItTest {
 
     private static final Pattern NOT_READ =
             Pattern.compile("not read: comparison@\\d+:\\d+ — (.*)$", Pattern.MULTILINE);
+
+    private static final Pattern SAID = Pattern.compile(
+            "(?:not read|no line): comparison@\\d+:\\d+ — (.*)$", Pattern.MULTILINE);
+
+    /** What the report says of a rule it drew no line from, read or not, without where the
+     *  comparison was written. */
+    private static List<String> saidOf(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        Matcher each = SAID.matcher(report(compilation));
+        while (each.find()) {
+            out.add(each.group(1));
+        }
+        return out;
+    }
 
     /** What the report says was not read, and why, without where the comparison was written. */
     private static List<String> notReadOf(Compilation compilation) {

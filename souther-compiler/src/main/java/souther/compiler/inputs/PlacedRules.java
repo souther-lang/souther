@@ -425,8 +425,11 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      *
      * <p>What it licenses is a whole value: a row at an edge is a value with that edge in it, so a
      * rule the bounds cannot express is a way that value can be refused however plainly the numbers
-     * beside it were read. Which is why it is one answer for every position of a value — and why it
-     * is asked at a position all the same, because a position can be of two values.
+     * beside it were read. Unless the rule is shown to stand apart from this position — it names
+     * only places no rule relates to this one, and leaves them some value — which is a question
+     * about where the rule is and so is asked at the position
+     * ({@link FieldDomains#projectionAt}). And a position can be of two
+     * values.
      *
      * <p><b>A shared field belongs to the case and to the value the sum sits in.</b> A clause
      * written up there is about the field a row writes down here, so the rules reaching this
@@ -464,7 +467,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * stopping at the first empty one would lose the ones above it.
      */
     private Proof proofAt(TermPath path) {
-        ProjectionEvidence here = rules.projection();
+        RuleKey where = keyOf(path);
+        ProjectionEvidence here =
+                rules.projectionAt(where == null ? RuleKey.THE_VALUE : where);
         int mine = rules.anythingWasWritten() ? 1 : 0;
         TermPath above = alsoAt(path);
         if (above == null) {

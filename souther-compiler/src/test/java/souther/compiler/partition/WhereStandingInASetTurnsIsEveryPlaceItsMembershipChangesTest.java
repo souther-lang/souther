@@ -8,6 +8,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
 import souther.compiler.numeric.Towards;
+import souther.compiler.partition.CardinalityComposer.OfTheType;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -63,7 +64,7 @@ class WhereStandingInASetTurnsIsEveryPlaceItsMembershipChangesTest {
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
 
         List<Place> chosen = CardinalityComposer.valuesAlongAnOrder(Carrier.TEXT,
-                NumericDomain.Bounds.OPEN, awayFromEmpty.turnsAt(), 1, unnamed);
+                NumericDomain.Bounds.OPEN, awayFromEmpty.turnsAt(), 1, OfTheType.ANY, unnamed);
 
         assertTrue(chosen.stream().anyMatch(each -> each.sameAs(Text.of(""))),
                 () -> "the place the set turns at is offered: " + chosen);

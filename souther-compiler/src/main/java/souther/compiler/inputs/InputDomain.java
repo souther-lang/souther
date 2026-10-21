@@ -749,6 +749,14 @@ public final class InputDomain {
     }
 
     /**
+     * Whether what stands at {@code path} may hold one element over again: a list, and not a set
+     * or the keys of a map, each of which holds a value once.
+     */
+    public boolean holdsAnElementOverAgain(TermPath path, RuleReadingSource source) {
+        return typeAt(path, source) instanceof Type.ListOf;
+    }
+
+    /**
      * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
      *
      * <p>The position first and the declarations only where there is none, which is the one

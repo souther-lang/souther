@@ -141,6 +141,41 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "d"));
     }
 
+    private static final String CODED = """
+            data Yen = Int invariant value >= 0
+            data Code = String invariant String.matches("[a-z]{3}", value)""";
+
+    /**
+     * A rule the bounds cannot state, about a field nothing relates to the amount, leaves the
+     * amount every value its own rules leave it: a code it refuses is replaced by one it does not,
+     * and the amount stays where it was. So whether the code is the field's own type, written on
+     * the record, or the same type at two fields, the amount reaches every gross from nought on —
+     * and a deduction of nought settles the comparison, as beside a gross alone.
+     */
+    @Test
+    void aRuleTheBoundsCannotStateLeavesAnAmountItNamesNothingBesideAlone() {
+        for (String record : List.of("data Rec = { c: Code, d: Yen }",
+                "data Rec = { c: String, d: Yen } invariant String.matches(\"[a-z]{3}\", c)",
+                "data Rec = { c: Code, k: Code, d: Yen }")) {
+            assertEquals(Map.of("g", RELATES),
+                    leftAt("g: Yen, r: Rec", CODED + "\n" + record, "g.value >= r.d.value", 24),
+                    record);
+        }
+    }
+
+    /**
+     * A rule the bounds cannot state that names the amount as well can refuse a value of it, so
+     * the amount reaches nothing it is not shown to: here the code is free only where the amount
+     * is thirty or more.
+     */
+    @Test
+    void aRuleTheBoundsCannotStateThatAlsoNamesTheAmountKeepsItBack() {
+        assertEquals(Map.of("g", NOT_SHOWN),
+                leftAt("g: Yen, r: Rec", CODED + "\ndata Rec = { c: String, d: Yen } invariant"
+                                + " String.matches(\"[a-z]{3}\", c) || d.value >= 30",
+                        "g.value >= r.d.value", 24));
+    }
+
     /**
      * Two amounts held equal take the same values, however much of the rules beside one of them
      * was read: a rule of the record over another of its fields leaves the amount's ends not shown
@@ -219,26 +254,219 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * A total of numbers held at nought or more is a term of the relation beside it, as the count
      * of them is. Every value of the total has a gross on either side, so the total is left
-     * undivided; the total never stands below nought, but is not shown to reach each value from
-     * there, so which grosses settle the comparison is not worked out. Doubled, the total is still
-     * never below nought and never odd: where it lies is not taken for every value it reaches.
+     * undivided. A list of one element totals that element, so the total takes every value the
+     * element does: never below nought, and every value from there. So a gross below nought fails
+     * whatever the total is, and every other gross has a total on either side. Doubled, the total
+     * is still never below nought and never odd: what each element is made into is not what it
+     * takes, and nothing is shown of the gross.
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
         assertEquals(Map.of("List.length(ns)", RELATES, "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", 27));
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(ns[*])", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
+        assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
+                NAT, "gross >= " + TOTAL, "gross"));
         assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
                         "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
     }
 
-    /** Beside a total, two positions are each a term of the relation and not of the run. */
+    /**
+     * A total of one element is that element, and of none is nought. Elements from one up total
+     * every value from one, and nought where the list may be empty, so a gross below nought fails
+     * whatever the total. Held to one element or more, the total takes every value from one and
+     * not nought; where it may lie is still read from nought, so a gross of nought is neither
+     * shown to fail nor shown to be left either way, and nothing is shown of the gross. Elements
+     * that are even are not every value from nought, and the total is shown to take nothing, so
+     * nothing is shown of the gross; the total is left either way by a gross taking every value,
+     * wherever it may lie, as the totals above are.
+     */
+    @Test
+    void aTotalTakesWhatOneElementTakesAndNoughtWhereTheListMayBeEmpty() {
+        String positive = "data Pos = Int invariant value >= 1\n";
+        assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt(
+                "gross: Int, ns: List<Pos>", positive, "gross >= " + TOTAL, "gross"));
+        assertEquals(NOT_SHOWN, leftAt("gross: Int, ns: Ps",
+                positive + "data Ps = List<Pos> invariant List.length(value) >= 1",
+                "gross >= List.sum(List.map(n -> n.value, ns.value))", 27).get("gross"));
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", NOT_SHOWN),
+                leftAt("gross: Int, ns: List<Even>",
+                        "data Even = Int invariant Int.floorMod(value, 2) == 0",
+                        "gross >= " + TOTAL, 27));
+    }
+
+    private static final String ITS_TOTAL = "List.sum(List.map(n -> n.value, ns.value))";
+
+    /**
+     * Reached along a way holding the list to two elements or more, no list there totals one
+     * element, and which totals two reach is not asked. Along a way holding every element to five
+     * or less, an element is not every value the declarations leave it. Held by a rule of the list
+     * to a total of ten or less, an element is not every value it takes alone. Each time the total
+     * is shown to take nothing, and nothing is shown of the gross — though under the third a gross
+     * of eleven or more holds whatever a total is.
+     */
+    @Test
+    void aTotalIsWhatOneElementTakesOnlyWhereOneElementStandsAlone() {
+        String inputs = "gross: Int, ns: List<Nat>";
+        String body = "if List.length(ns) >= 2 then gross >= " + TOTAL + " else false";
+        assertEquals(NOT_SHOWN, left(inputs, NAT, body,
+                atThe(">= List.sum", NAT, inputs, body)).get("gross"));
+        String small = "if List.all(n -> n.value <= 5, ns) then gross >= " + TOTAL + " else false";
+        assertEquals(NOT_SHOWN, left(inputs, NAT, small,
+                atThe(">= List.sum", NAT, inputs, small)).get("gross"));
+        assertEquals(NOT_SHOWN, leftAt("gross: Int, ns: Ns",
+                NAT + "\ndata Ns = List<Nat> invariant List.sum(List.map(n -> n.value, value)) <= 10",
+                "gross >= " + ITS_TOTAL, 27).get("gross"));
+    }
+
+    /** Where {@code operator} stands in the body of a behavior over {@code inputs}, below
+     *  {@code declarations}. */
+    private static String atThe(String operator, String declarations, String inputs,
+                                String body) {
+        String head = "let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ";
+        return (declarations.lines().count() + 3) + ":" + (head.length() + body.indexOf(operator)
+                + 1);
+    }
+
+    private static final String CREDITED =
+            "Decimal.compare(Decimal.add(net.value, tax.value),"
+                    + " Decimal.subtract(gross.value, List.sum(List.map(n -> n.value, ns)))) <= 0";
+
+    /**
+     * What is asked against what is left of a gross once the notes so far are taken off it. At a
+     * gross of nought it holds only with the ask, the tax and the total of the notes all at
+     * nought in one row, and each of them is apart from the others and takes nought, a list of
+     * none totalling nought. Held above nought, none of them takes nought, and nothing is shown of
+     * the gross: that a value as near nought as asked of is taken shows no row at nought.
+     */
+    @Test
+    void aTotalHeldStillBesideOtherTermsAtNoughtLeavesTheRestEitherWay() {
+        String inputs = "gross: Amount, ns: List<Amount>, net: Amount, tax: Amount";
+        String closed = "data Amount = Decimal invariant value >= 0.0m";
+        String at = atThe("<=", closed, inputs, CREDITED);
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", RELATES, "net", RELATES,
+                        "tax", RELATES), left(inputs, closed, CREDITED, at));
+        assertEquals(NOT_SHOWN,
+                left(inputs, "data Amount = Decimal invariant value > 0.0m", CREDITED, at)
+                        .get("gross"));
+    }
+
+    /** The same, with the ask and its tax held together to one or more: no row holds both at
+     *  nought, and holding either still holds the other too. */
+    @Test
+    void termsNoRowHoldsAtNoughtTogetherAreNotHeldThere() {
+        String body = CREDITED.replace("net.value, tax.value", "ask.net.value, ask.tax.value");
+        String inputs = "gross: Amount, ns: List<Amount>, ask: Ask";
+        String declarations = "data Amount = Decimal invariant value >= 0.0m\n"
+                + "data Ask = { net: Amount, tax: Amount }"
+                + " invariant Decimal.add(net.value, tax.value) >= 1.0m";
+        assertEquals(NOT_SHOWN, left(inputs, declarations, body,
+                atThe("<=", declarations, inputs, body)).get("gross"));
+    }
+
+    private static final String LABELLED = """
+            data Issue = { id: String, labels: Set<String> }
+            let counts (issues: List<Issue>): Map<String, Int> =
+                List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty,
+                    List.flatMap(i -> Set.toList(i.labels), issues))""";
+
+    private static final String BUSY =
+            "Map.size(Map.filterEntries((_, count) -> count >= atLeast, counts(issues))) == 0";
+
+    /**
+     * How many issues carry a label, held at a bar: a list of that one issue over again, each
+     * carrying the label alone, carries it as many times as the list holds issues, so the count
+     * takes every value from one. A bar of one or less is met by every label, and above that each
+     * bar has counts on either side: one line, at one.
+     *
+     * <p>Kept apart by their ids, issues alike are no list, and as many issues as a count needs
+     * would need as many ids. Each held to two labels or more — by a rule of the issue, or along a
+     * way — no issue carries the label alone. Each time the count is shown to take nothing, and
+     * no line is drawn on the bar.
+     */
+    @Test
+    void howOftenAValueOccursTakesEveryCountItsListMayHoldElementsTo() {
+        assertEquals(List.of("atLeast/x <= 1", "atLeast/1 < x"),
+                classesAt("issues: List<Issue>, atLeast: Int", LABELLED, BUSY, "atLeast"));
+        assertEquals(List.of(), classesAt("board: Board, atLeast: Int", LABELLED + """
+
+                data Board = { issues: List<Issue> }
+                    invariant List.allDistinctBy(i -> i.id, issues)""",
+                BUSY.replace("counts(issues)", "counts(board.issues)"), "atLeast"));
+        assertEquals(List.of(), classesAt("issues: List<Issue>, atLeast: Int",
+                LABELLED.replace("labels: Set<String> }",
+                        "labels: Set<String> }\n    invariant Set.size(labels) >= 2"),
+                BUSY, "atLeast"));
+        assertEquals(List.of(), classesAt("issues: List<Issue>, atLeast: Int", LABELLED,
+                "if List.all(i -> Set.size(i.labels) >= 2, issues) then " + BUSY + " else false",
+                "atLeast"));
+    }
+
+    /**
+     * The count itself: at the greatest count no bar is greater, so the comparison holds there
+     * whatever the bar is, and below it there are bars either side of every count. That line is
+     * where the bar's type stops and no class of the model's, so the count is read and no line is
+     * drawn on it; the bar is parted by its line at one. A rule putting the bar at the greatest
+     * {@code Int} at most draws the same line as the model's, and a count has no position to draw
+     * it at.
+     */
+    @Test
+    void aCountSettledOnlyWhereTheOtherTypeStopsIsRead() {
+        String inputs = "issues: List<Issue>, atLeast: Int";
+        assertEquals(Map.of("occurrences(issues[*].labels[*])", RELATES),
+                left(inputs, LABELLED, BUSY, atThe(">=", LABELLED, inputs, BUSY)));
+
+        String barred = "issues: List<Issue>, atLeast: Bar";
+        String ruled = LABELLED + "\ndata Bar = Int invariant value <= 9223372036854775807";
+        String body = BUSY.replace("atLeast", "atLeast.value");
+        assertEquals(Map.of("occurrences(issues[*].labels[*])", NOT_SHOWN),
+                left(barred, ruled, body, atThe(">=", ruled, barred, body)));
+    }
+
+    /**
+     * {@code x <= Int.min(s, t)}: at the least {@code x} it holds whatever the two are, only because
+     * the least of two {@code Int}s is no less than the least {@code Int}; and the least of them
+     * holds it whatever {@code x} is only at the greatest {@code Int}, where both stop. Both are
+     * where the type stops, and every place is read with no line drawn on it.
+     */
+    @Test
+    void aValueSettledOnlyWhereTheAnswerStopsWithItsTypeIsRead() {
+        assertEquals(Map.of("x", RELATES, "s", RELATES, "t", RELATES),
+                left("x: Int, s: Int, t: Int", "data Unused = Int", "x <= Int.min(s, t)",
+                        "4:21"));
+    }
+
+    /**
+     * A way keeping {@code b} from nought where it already keeps it above nought, as a quotient's
+     * way keeps its divisor, leaves {@code b} every value from one: the line on {@code a} it
+     * draws is the one {@code b > 0} alone draws. Kept from five instead, {@code b} runs with a
+     * gap, and every value of {@code a} between the settling ones is not shown reached.
+     */
+    @Test
+    void aValueHeldApartOutsideTheRunTakesNothingFromIt() {
+        Map<String, String> above = keptAbove("");
+        assertFalse(above.containsKey("a"), () -> "a is parted at what settles it: " + above);
+        assertEquals(above, keptAbove(" && b /= 0"));
+        assertEquals(NOT_SHOWN, keptAbove(" && b /= 5").get("a"));
+    }
+
+    /** What {@code a >= 100 * b} leaves its places along a way keeping {@code b} above nought and
+     *  saying {@code also} of it besides. */
+    private static Map<String, String> keptAbove(String also) {
+        String inputs = "a: Int, b: Int";
+        String body = "if b > 0" + also + " then a >= 100 * b else false";
+        return left(inputs, "data Unused = Int", body,
+                atThe(">=", "data Unused = Int", inputs, body));
+    }
+
+    /** Beside a total, two positions are each a term of the relation and not of the run. The
+     *  adjustment held at nought, the gross stands at every value the total takes. */
     @Test
     void positionsBesideATotalAreAskedOfTheRelation() {
-        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "adjustment", NOT_SHOWN,
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", NOT_SHOWN,
                         "gross", NOT_SHOWN),
                 leftAt("gross: Int, adjustment: Int, ns: List<Nat>", NAT,
                         "gross + adjustment >= " + TOTAL, 52));
@@ -310,14 +538,16 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * A day apart, the last date has no date after it and the first none before; that is where the
      * dates stop and no line the model draws. Moved together, two dates are a day apart wherever
      * they stand, and only how far apart they are settles it. A date and a count of days are not
-     * moved together.
+     * moved together: a count past the days from the first date to the last or short of those to
+     * the first settles the comparison, which is where the dates stop and no line the model
+     * draws, so the count is read; the days to a date past which no count runs are not shown.
      */
     @Test
     void twoValuesADayApartRelateEachOther() {
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int", "Date.daysBetween(a, b) == 1",
                         "4:39"));
-        assertEquals(Map.of("a", NOT_SHOWN, "n", NOT_SHOWN),
+        assertEquals(Map.of("a", NOT_SHOWN, "n", RELATES),
                 left("a: Date, n: Int", "data Unused = Int",
                         "Date.daysBetween(Date(\"2026-01-01\"), a) <= n", "4:56"));
     }
@@ -567,6 +797,34 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("d: Date, k: Int", "data Unused = Int", wider, "4:56"));
         assertEquals(List.of("k/x < 0", "k/0 <= x <= 1", "k/1 < x < 13", "k/13 <= x <= 13",
                 "k/13 < x"), classesAt("d: Date, k: Int", "data Unused = Int", wider, "k"));
+    }
+
+    /**
+     * A way that keeps the rows off the relation's own line leaves each side the rows either side
+     * of it. Past {@code p == g}, a payment of nought is below every gross a row can hold, since a
+     * gross of nought is the line; and a gross of nought is below no payment. So each is parted at
+     * nought, and every other value of either has a row on each side.
+     */
+    @Test
+    void aWayKeepingTheRowsOffTheLineLeavesEachSideTheRowsEitherSideOfIt() {
+        String amount = "data Amount = Decimal invariant value >= 0.0m";
+        String body = "if p.value == g.value then false else p.value < g.value";
+        assertEquals(Map.of(), left("p: Amount, g: Amount", amount, body, "4:62"),
+                "neither is left unshown: each is parted at the value that settles it");
+        assertEquals(List.of("p/0 <= x <= 0", "p/0 < x"),
+                classesAt("p: Amount, g: Amount", amount, body, "p"));
+        assertEquals(List.of("g/0 <= x <= 0", "g/0 < x"),
+                classesAt("p: Amount, g: Amount", amount, body, "g"));
+    }
+
+    /** And a way stating anything beside that is a way the line is not all it takes away, which
+     *  ties the sides as it did. */
+    @Test
+    void aWayStatingMoreThanThatTheRowsAreOffTheLineTiesTheSides() {
+        assertEquals(Map.of("p", NOT_SHOWN, "g", NOT_SHOWN),
+                left("p: Amount, g: Amount", "data Amount = Decimal invariant value >= 0.0m",
+                        "if p.value == g.value || p.value > 100.0m then false"
+                                + " else p.value < g.value", "4:82"));
     }
 
     /**

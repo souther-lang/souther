@@ -1,0 +1,18 @@
+// A relation between two fields that refuses a value of one of them without stating an end.
+//
+// No night is below nought, so a stay never leaves on night nought: nothing arrives before it. The
+// rule says that only by relating the two, and what it leaves `leaves` is not read here, so the
+// position carries the rule as one whose reading stopped. `arrives` is refused at no night, which
+// is read. The two sides are a pair the compiler answers differently on purpose, and the second is
+// what a reading that stopped looks like once nothing else in the corpus does.
+module conformance.stays exposing ( Night, Stay, nightsOf )
+
+data Night = Int
+    invariant value >= 0
+
+data Stay = { arrives: Night, leaves: Night }
+    invariant arrives.value < leaves.value
+
+behavior nightsOf : (stay: Stay) -> Int
+
+let nightsOf (stay) = Int.subtract(stay.leaves.value, stay.arrives.value)

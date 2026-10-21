@@ -21,7 +21,9 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Which values of a term settle a relation, asked of where the other terms may lie, and whether
@@ -44,13 +46,16 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                                                                  NumericDomain.Bounds holds,
                                                                  NumericDomain.Bounds realizes) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
-                realizes, null, true, Granularity.DISCRETE);
+                realizes, null, true, Granularity.DISCRETE, INTS);
     }
+
+    /** Where an {@code Int} stops. */
+    private static final NumericDomain.Bounds INTS = run(Long.MIN_VALUE, Long.MAX_VALUE);
 
     private static WhatARelationLeavesUndivided.Term<String> denseTerm(
             String place, long weight, NumericDomain.Bounds holds, NumericDomain.Bounds realizes) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight),
-                holds, realizes, null, true, Granularity.DENSE);
+                holds, realizes, null, true, Granularity.DENSE, NumericDomain.Bounds.OPEN);
     }
 
     private static Leaves leavesOf(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
@@ -141,19 +146,23 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
-     * {@code a < b + c} over decimals is not read from the others together: a decimal sum or
+     * {@code a <= b + c} over decimals is not read from the others together: a decimal sum or
      * product stops for the scale of its factors and not only for the size of the number, so the
-     * ends of the others are no witness whatever their size. With {@code c} and {@code d} between
-     * minus and plus the least decimal there is, every product with a written {@code 1.0} stops,
-     * and the two rows the others' ends give are rows nothing computes.
+     * ends of the others are no witness whatever their size. With {@code a} from one to nine and
+     * the others to five each, only the two of them together come past every {@code a}, and that
+     * is not asked. With {@code c} and {@code d} between minus and plus the least decimal there
+     * is, every product with a written {@code 1.0} stops, and the two rows the others' ends give
+     * are rows nothing computes. {@code b} and {@code d} held at nought, though, leave {@code a}
+     * and {@code c} held against each other alone, which the reading of two terms answers as it
+     * answers them without the rest.
      */
     @Test
     void decimalsAreNotReadTogetherForTheirArithmeticStopsForMoreThanTheirSize() {
-        var a = denseTerm("a", 1, run(0L, 10L), run(0L, 10L));
+        var a = denseTerm("a", 1, run(1L, 9L), run(1L, 9L));
         var b = denseTerm("b", -1, run(0L, 5L), run(0L, 5L));
         var c = denseTerm("c", -1, run(0L, 5L), run(0L, 5L));
         assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(a, b, c), 0, ExactRatio.of(0),
-                Rel.LT, String::equals, (one, other) -> true, Granularity.DENSE, null));
+                Rel.LE, String::equals, (one, other) -> true, Granularity.DENSE, null));
 
         NumericDomain.Bounds tiny = new NumericDomain.Bounds(
                 Endpoint.inclusive(new Count(new BigDecimal(BigInteger.ONE.negate(),
@@ -163,9 +172,12 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         var beside = denseTerm("b", -1, run(0L, 0L), run(0L, 0L));
         var plus = denseTerm("c", -1, tiny, tiny);
         var more = denseTerm("d", -1, tiny, tiny);
-        assertNull(WhatARelationLeavesUndivided.leavesOf(List.of(nought, beside, plus, more), 0,
-                ExactRatio.of(0), Rel.LT, String::equals, (one, other) -> true,
-                Granularity.DENSE, null));
+        assertEquals(new Leaves.Undivided(), WhatARelationLeavesUndivided.leavesOf(
+                List.of(nought, beside, plus, more), 0, ExactRatio.of(0), Rel.LT, String::equals,
+                (one, other) -> true, Granularity.DENSE, null));
+        assertEquals(new Leaves.Undivided(), WhatARelationLeavesUndivided.leavesOf(
+                List.of(nought, plus), 0, ExactRatio.of(0), Rel.LT, String::equals,
+                (one, other) -> true, Granularity.DENSE, null));
     }
 
     /**
@@ -192,7 +204,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 Endpoint.inclusive(Count.of(new BigDecimal(BigInteger.ONE, -Integer.MAX_VALUE))));
         var a = term("a", 1, run(1L, 12L), run(1L, 12L));
         var b = new WhatARelationLeavesUndivided.Term<>(List.of("b"), weight, far, far, null,
-                true, Granularity.DENSE);
+                true, Granularity.DENSE, NumericDomain.Bounds.OPEN);
         var c = term("c", -1, run(1L, 12L), run(1L, 12L));
         assertNull(leavesOf(List.of(a, b, c), 0, 0, Rel.LT));
     }
@@ -251,12 +263,118 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 term("n", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
                 term("len", -1, run(0L, null), run(0L, null))), 0, 0, Rel.LE);
         assertEquals(settledIn(null, null, settled(null, 0L, true)), fromNought);
-        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) fromNought).lines());
+        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) fromNought).linesOfTheModel());
 
         assertEquals(new Leaves.Undivided(), leavesOf(List.of(
                 term("n", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
                 term("len", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 0, 0,
                 Rel.LE));
+    }
+
+    /**
+     * {@code k - count <= 0}, the count what an operation answers, from one on, and {@code k} any
+     * {@code Int}. At the greatest count no {@code k} is greater, so the relation holds there
+     * whatever {@code k} is; below it {@code k} is either side of every count. The line at the
+     * greatest count is there only because {@code k} stops where its type does: free to run on,
+     * {@code k} would be above that count too. So it is kept, and kept apart as the type's.
+     */
+    @Test
+    void aValueSettledOnlyBecauseTheOtherStopsWhereItsTypeDoesIsTheTypesLine() {
+        long most = Long.MAX_VALUE;
+        Leaves.Settled count = (Leaves.Settled) leavesOf(List.of(
+                term("k", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                answer("count", -1, run(1L, null), run(1L, null))), 1, 0, Rel.LE);
+        assertEquals(List.of(settled(most, most, true)), count.runs());
+        assertEquals(List.of(line(Rel.GE, most)), count.ofTheTypeAlone());
+        assertEquals(List.of(), count.linesOfTheModel());
+
+        // A rule that puts k at the greatest Int at most draws the same line, and it is the
+        // model's: the rule stops k there, wherever its type stops.
+        Leaves.Settled ruled = (Leaves.Settled) leavesOf(List.of(
+                term("k", 1, run(null, most), NumericDomain.Bounds.OPEN),
+                answer("count", -1, run(1L, null), run(1L, null))), 1, 0, Rel.LE);
+        assertEquals(List.of(line(Rel.GE, most)), ruled.linesOfTheModel());
+        assertEquals(List.of(), ruled.ofTheTypeAlone());
+    }
+
+    /**
+     * The same count, with {@code k} not shown to take any value: that the greatest count is
+     * settled by the type alone says nothing of the counts below it, which no {@code k} is shown
+     * to reach either side of, and nothing is shown.
+     */
+    @Test
+    void aLineOfTheTypeShowsNothingOfTheValuesNoOtherTermIsShownToReach() {
+        assertNull(leavesOf(List.of(
+                term("k", 1, NumericDomain.Bounds.OPEN, null),
+                answer("count", -1, run(1L, null), run(1L, null))), 1, 0, Rel.LE));
+    }
+
+    /**
+     * {@code x - y - 2 < 0}, both any {@code Int}: at the two greatest {@code y} the relation holds
+     * whatever {@code x} is, but only as {@code y + 2}, which passes where the type stops. Cut where
+     * the type stops, the run is still one no row computes, and nothing is shown.
+     */
+    @Test
+    void aRunCutWhereTheTypeStopsIsStillNoRowWhereItsSumPassesTheEnd() {
+        assertNull(leavesOf(List.of(
+                answer("x", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                answer("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 1, -2,
+                Rel.LT));
+    }
+
+    /**
+     * {@code x - y <= 0}, both from nought on and {@code y} shown to take every {@code Int} from
+     * nought. At nought {@code x} holds it whatever {@code y} is, because the rules hold {@code y}
+     * at nought or above: a line of the model's, whether or not the values of {@code x} past every
+     * {@code y} the type writes are shown reached.
+     */
+    @Test
+    void aLineTheRulesDrawStaysTheModelsWhereTheFreeTermsShowNothing() {
+        long most = Long.MAX_VALUE;
+        Leaves.Settled x = (Leaves.Settled) leavesOf(List.of(
+                term("x", 1, run(0L, null), run(0L, null)),
+                term("y", -1, run(0L, null), run(0L, most))), 0, 0, Rel.LE);
+        assertEquals(List.of(line(Rel.LE, 0)), x.linesOfTheModel());
+    }
+
+    /**
+     * {@code x - y + z - M > 0}, {@code M} the greatest {@code Int}: true only where
+     * {@code x - y + z} passes the greatest {@code Int}, which no row computes. Holding {@code z}
+     * at {@code M} brings the constant to nought, and {@code x - y > 0} is reached at every
+     * {@code x}; but every row it reaches the true side with is one whose sum passes the type.
+     */
+    @Test
+    void aTermHeldWhereItCancelsTheConstantIsNoWitnessWhereTheRowPassesTheType() {
+        long most = Long.MAX_VALUE;
+        Leaves x = leavesOf(List.of(
+                term("x", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                term("z", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 0, -most,
+                Rel.GT);
+        assertFalse(x instanceof Leaves.Undivided, () -> "x: " + x);
+    }
+
+    /**
+     * {@code x - y - M > 0} with {@code x} from nought to ten: a {@code y} below
+     * {@code x - M} is one every {@code y} the type writes is, but {@code x - y} then passes the
+     * greatest {@code Int}, so no row is on the true side.
+     */
+    @Test
+    void anOtherTermIsNoWitnessWhereTheRowItStandsInPassesTheType() {
+        long most = Long.MAX_VALUE;
+        Leaves x = leavesOf(List.of(
+                term("x", 1, run(0L, 10L), run(0L, 10L)),
+                term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 0, -most,
+                Rel.GT);
+        assertFalse(x instanceof Leaves.Undivided, () -> "x: " + x);
+    }
+
+    /** A term that is what an operation answers, counted on the {@code Int}s. */
+    private static WhatARelationLeavesUndivided.Term<String> answer(String place, long weight,
+                                                                   NumericDomain.Bounds holds,
+                                                                   NumericDomain.Bounds realizes) {
+        return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
+                realizes, null, false, Granularity.DISCRETE, INTS);
     }
 
     /**
@@ -539,7 +657,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     private static Set<String> undivided(WhatARelationLeavesUndivided.Term<String> x,
                                          WhatARelationLeavesUndivided.Term<String> y, Rel relation) {
         return WhatARelationLeavesUndivided.of(List.of(x, y), ExactRatio.ZERO, relation,
-                String::equals, (one, two) -> true);
+                String::equals, (one, two) -> true, null);
     }
 
     /**
@@ -688,17 +806,85 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 BigInteger.valueOf(3)))), ((Leaves.Settled) leaves).lines());
     }
 
+    /**
+     * {@code xy < 1000}, {@code x} from one to five and {@code y} read as though its order ran on:
+     * over every {@code x}, {@code y} has to stand from two hundred to a thousand. Counted on an
+     * order stopping at a hundred, no {@code y} is there and nothing is shown; on one reaching a
+     * thousand, {@code y} leaves every {@code x} either way.
+     */
+    @Test
+    void aFactorPastWhereItsOrderStopsIsNoWitness() {
+        NumericDomain.Bounds fromOne = run(1L, 5L);
+        for (long stops : new long[] {100, 1000}) {
+            var y = new WhatARelationLeavesUndivided.Term<>(List.of("y"), ExactRatio.of(1),
+                    NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true,
+                    Granularity.DISCRETE, run(-stops, stops));
+            Leaves leaves = WhatARelationLeavesUndivided.leavesOfAProduct(
+                    term("x", 1, fromOne, fromOne), y, ExactRatio.of(1000), Rel.LT, true,
+                    GREATEST_INT);
+            assertEquals(stops == 1000 ? new Leaves.Undivided() : null, leaves,
+                    "y counted up to " + stops);
+        }
+    }
+
+    /**
+     * {@code xy = 0}, {@code x} from one to five: only a {@code y} of nought makes it hold, and a
+     * {@code y} counted on an order starting at one never is, however its run is read.
+     */
+    @Test
+    void aFactorWhoseOrderHoldsNoNoughtIsNoWitnessOfIt() {
+        NumericDomain.Bounds fromOne = run(1L, 5L);
+        for (long least : new long[] {1, 0}) {
+            var y = new WhatARelationLeavesUndivided.Term<>(List.of("y"), ExactRatio.of(1),
+                    NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true,
+                    Granularity.DISCRETE, run(least, 100L));
+            Leaves leaves = WhatARelationLeavesUndivided.leavesOfAProduct(
+                    term("x", 1, fromOne, fromOne), y, ExactRatio.ZERO, Rel.EQ, true,
+                    GREATEST_INT);
+            assertEquals(least == 0 ? new Leaves.Undivided() : null, leaves,
+                    "y counted from " + least);
+        }
+    }
+
+    /** A value is taken only on the order it is counted on: a run taken past where the order
+     *  stops is no term. */
+    @Test
+    void aTermTakesNoValuePastItsOrder() {
+        assertThrows(IllegalArgumentException.class, () -> new WhatARelationLeavesUndivided.Term<>(
+                List.of("y"), ExactRatio.of(1), run(0L, 200L), run(0L, 200L), null, true,
+                Granularity.DISCRETE, run(0L, 100L)));
+    }
+
+    /**
+     * {@code a - 100b >= 0}, {@code b} from one: below a hundred it fails whatever {@code b} is,
+     * the model's line. Within a hundred of the greatest {@code Int} it holds whatever {@code b}
+     * is, because a {@code b} past it weighed passes the type: a line of the arithmetic, and none
+     * of the model's.
+     */
+    @Test
+    void aValueSettledOnlyBecauseTheOtherWeighedPassesTheTypeIsTheArithmeticsLine() {
+        var a = term("a", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN);
+        var b = term("b", -100, run(1L, null), run(1L, null));
+        Leaves.Settled settled = (Leaves.Settled) leavesOf(List.of(a, b), 0, 0, Rel.GE);
+        long lastWhole = Long.MAX_VALUE / 100 * 100;
+        assertEquals(List.of(new Line(Rel.GE, ExactRatio.of(lastWhole))),
+                settled.ofTheTypeAlone());
+        assertEquals(List.of(new Line(Rel.LE, ExactRatio.of(99))), settled.linesOfTheModel());
+    }
+
     /** Runs a point apart are lines apart: a point both leave out is not covered. */
     @Test
     void aPointNoRunTakesIsAGapBetweenTwoDenseRuns() {
         ExactRatio five = ExactRatio.of(5);
         Leaves.Settled apart = new Leaves.Settled(List.of(
                 new SettledRun(null, ExactCut.exclusive(five), true),
-                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false);
+                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false,
+                List.of());
         assertEquals(List.of(new Line(Rel.LT, five), new Line(Rel.GT, five)), apart.lines());
         Leaves.Settled touching = new Leaves.Settled(List.of(
                 new SettledRun(null, ExactCut.inclusive(five), true),
-                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false);
+                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false,
+                List.of());
         assertEquals(List.of(new Line(Rel.LE, five)), touching.lines());
     }
 }
