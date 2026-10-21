@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -89,14 +90,21 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
     }
 
     /**
+     * The fewest truths whose every combination is more readings than one condition is read in.
+     */
+    private static final int PAST_THE_READINGS = Integer.numberOfTrailingZeros(
+            Integer.highestOneBit(CompositionBudget.READINGS_OF_ONE_CONDITION.maximum())) + 1;
+
+    /**
      * A filter is handed only what the one inside it kept, so a chain of them is as many ways as
      * it has filters and one more. Read as every combination of their truths, the ways of this
-     * chain would be more than one condition is read in.
+     * chain would be more than one condition is read in — which the fewest filters past that
+     * figure already are.
      */
     @Test
     void aChainOfFiltersIsAsManyWaysAsItHasFiltersAndOneMore() {
         StringBuilder list = new StringBuilder("[ p.x ]");
-        for (int days = 1; days <= 10; days++) {
+        for (int days = 1; days <= PAST_THE_READINGS; days++) {
             list = new StringBuilder("List.filter(r -> r.days >= " + days + ", " + list + ")");
         }
         String report = report(guarded("List.sum(List.map(r -> r.pay, " + list + ")) >= 900"));
@@ -106,11 +114,13 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
 
     /**
      * Independent truths are as many ways as there are combinations of them, and the budget says
-     * so before they are counted out: asked to count them all, this would not come back.
+     * so before they are counted out. As few of them as make more combinations than the figure:
+     * counted out, those are read and the total of the first is drawn, which is what says the
+     * budget stopped them.
      */
     @Test
     void manyIndependentTruthsAreStoppedByTheBudgetBeforeTheyAreCountedOut() {
-        int elements = 30;
+        int elements = PAST_THE_READINGS;
         StringBuilder fields = new StringBuilder();
         StringBuilder list = new StringBuilder();
         for (int i = 1; i <= elements; i++) {
@@ -130,10 +140,13 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
     /**
      * The elements a way reads are charged as the elements of a total that nothing keeps are: a
      * list too long to read element by element is too long whether or not a filter is over it.
+     * One element past how many times one condition is read is that, each element being a reading.
      */
     @Test
     void aListTooLongToBeReadElementByElementIsTooLongKeptOrNot() {
-        String list = IntStream.range(0, 300).mapToObj(i -> "p.x")
+        String list = IntStream.range(0,
+                        CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() + 1)
+                .mapToObj(i -> "p.x")
                 .collect(Collectors.joining(", ", "[ ", " ]"));
         String plain = report(guarded("List.sum(List.map(r -> r.pay, " + list + ")) >= 900"));
         String filtered = report(guarded("List.sum(List.map(r -> r.pay, List.filter("
