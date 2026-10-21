@@ -137,6 +137,7 @@ class ASelectorThatResolvesToNothingIsRefusedTest {
         Run whole = examples(List.of(NO_BEHAVIOR), "--strict");
 
         assertEquals(0, selected.code(), selected.out() + selected.err());
+        assertEquals(0, whole.code(), whole.out() + whole.err());
         assertEquals(whole.out(), selected.out());
     }
 

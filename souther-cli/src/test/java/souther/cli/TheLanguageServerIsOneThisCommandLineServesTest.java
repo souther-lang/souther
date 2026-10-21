@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -108,9 +109,13 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
         AtomicInteger code = new AtomicInteger(-1);
         Thread serving = Thread.ofPlatform().name("souther-lsp-under-test")
                 .start(() -> code.set(Main.run(new String[] {"lsp"}, environment)));
-        conversation.accept(new Said(toServer, wrote));
-        toServer.close();
-        serving.join(WAIT_MILLIS);
+        try {
+            conversation.accept(new Said(toServer, wrote));
+        } finally {
+            toServer.close();
+            serving.join(WAIT_MILLIS);
+        }
+        assertFalse(serving.isAlive(), "the server returned at the end of its input");
         return new Answer(code.get(), framesSoFar(wrote.toByteArray()),
                 complained.toString(StandardCharsets.UTF_8));
     }

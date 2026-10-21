@@ -140,7 +140,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         Files.writeString(file, model);
         List<String> args = new java.util.ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(extra));
-        return CliInProcess.run(args.toArray(String[]::new)).out();
+        return CliInProcess.printed(args.toArray(String[]::new));
     }
 
     @Test

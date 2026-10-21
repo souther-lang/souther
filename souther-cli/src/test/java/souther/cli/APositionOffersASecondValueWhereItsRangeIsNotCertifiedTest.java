@@ -44,7 +44,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
                 """.replace("CLAUSE", clause);
         Path file = Files.createTempDirectory("souther-uncertified").resolve("model.sou");
         Files.writeString(file, model);
-        return CliInProcess.run("examples", "--generate", file.toString()).out();
+        return CliInProcess.printed("examples", "--generate", file.toString());
     }
 
     /** A hole in a range, which a range cannot hold. Nothing certifies the range, so the position is
@@ -112,7 +112,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
                 """;
         Path file = Files.createTempDirectory("souther-bare").resolve("model.sou");
         Files.writeString(file, model);
-        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
+        String rows = CliInProcess.printed("examples", "--generate", file.toString());
 
         assertTrue(rows.contains("R { a = 0m, b = 0.5m }"),
                 () -> "half way between the ends `b` has:\n" + rows);
@@ -148,7 +148,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
                 """;
         Path file = Files.createTempDirectory("souther-halfopen").resolve("model.sou");
         Files.writeString(file, model);
-        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
+        String rows = CliInProcess.printed("examples", "--generate", file.toString());
 
         assertTrue(rows.contains("Pair { low = Rate(0m), high = Rate(1m) }"),
                 () -> "`low` reaches its end and `high` starts a step past it:\n" + rows);

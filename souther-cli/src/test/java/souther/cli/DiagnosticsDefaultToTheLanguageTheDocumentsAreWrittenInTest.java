@@ -137,7 +137,9 @@ class DiagnosticsDefaultToTheLanguageTheDocumentsAreWrittenInTest {
         args.add(file.toString());
         args.add("-d");
         args.add(scratch.resolve("classes").toString());
-        return CliInProcess.run(scratch, Map.of(), args.toArray(String[]::new));
+        Ran ran = CliInProcess.run(scratch, Map.of(), args.toArray(String[]::new));
+        assertEquals(0, ran.code(), "a warning does not fail the compile: " + ran.err());
+        return ran;
     }
 
     private static Path write(String content) throws Exception {

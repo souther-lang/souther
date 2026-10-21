@@ -70,6 +70,6 @@ class GeneratedRowsOfferAValueAtASumOfRecordsTest {
     private static String generated() throws Exception {
         Path file = Files.createTempDirectory("souther-651").resolve("model.sou");
         Files.writeString(file, MODULE);
-        return CliInProcess.run("examples", file.toString(), "--generate").out();
+        return CliInProcess.printed("examples", file.toString(), "--generate");
     }
 }

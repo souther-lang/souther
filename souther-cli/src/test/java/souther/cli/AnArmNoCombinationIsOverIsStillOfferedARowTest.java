@@ -109,6 +109,7 @@ class AnArmNoCombinationIsOverIsStillOfferedARowTest {
     void anArmInsideABlockIsSaidNothingAboutWhereAnOfferedRowGoesThroughIt() throws Exception {
         Run run = examples(IN_A_BLOCK, "--generate");
 
+        assertEquals(0, run.code(), run.out() + run.err());
         assertTrue(run.out().contains("no row goes through `case Off`"), run.out());
         assertTrue(run.out().contains("// fills case Off")
                         && run.out().contains("// fills flags[*]=Off")

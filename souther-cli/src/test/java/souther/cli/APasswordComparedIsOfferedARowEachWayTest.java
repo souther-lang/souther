@@ -64,6 +64,6 @@ class APasswordComparedIsOfferedARowEachWayTest {
     private static String examples(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-login").resolve("login.sou");
         Files.writeString(file, model);
-        return CliInProcess.run("examples", file.toString(), "--generate").out();
+        return CliInProcess.printed("examples", file.toString(), "--generate");
     }
 }

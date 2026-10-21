@@ -7,6 +7,7 @@ import souther.cli.CliProcess.Ran;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,6 +55,7 @@ class ALineAtAFineDecimalIsNamedWithoutWritingItOutTest {
         Ran ran = CliInProcess.run("examples", file.toString());
         String said = ran.out() + ran.err();
 
+        assertEquals(1, ran.code(), () -> "an example that does not hold fails the run:\n" + said);
         assertFalse(said.contains("internal compiler error"), () -> "the run completes:\n" + said);
         // Reached the example at all, so the absence above is of a failure and not of a run.
         assertTrue(said.contains("This example does not hold"),

@@ -111,6 +111,6 @@ class BranchCoverageDoesNotReplaceAnEqualAnswerDistinctionTest {
     private static String reportOn(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-equal-answers").resolve("model.sou");
         Files.writeString(file, model);
-        return CliInProcess.run("examples", file.toString()).out();
+        return CliInProcess.printed("examples", file.toString());
     }
 }

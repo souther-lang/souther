@@ -1,10 +1,12 @@
 package souther.cli;
 
+import souther.cli.CliProcess.Ran;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -38,8 +40,11 @@ class ADisagreementReachesTheExamplesReportTest {
         Path file = Files.createTempDirectory("souther-disagree").resolve("clash.sou");
         Files.writeString(file, CLASHING);
 
-        String reported = CliInProcess.run("examples", "--lang", "en", file.toString()).err();
+        Ran ran = CliInProcess.run("examples", "--lang", "en", file.toString());
+        String reported = ran.err();
 
+        assertEquals(0, ran.code(), "a disagreement is reported, and the run still answers: "
+                + reported);
         assertTrue(reported.contains("E1919"), reported);
         assertTrue(reported.contains("clash.sou:"), reported);
     }

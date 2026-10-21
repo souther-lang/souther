@@ -58,8 +58,10 @@ class AStrictBuildRefusesRowsNoArmCanBeToldApartByTest {
      */
     @Test
     void eachGapNamesTheArmAndTheArmItAnsweredAs() throws Exception {
-        String report = run("--strict").out();
+        Ran ran = run("--strict");
+        String report = ran.out();
 
+        assertEquals(1, ran.code(), report);
         assertEquals(List.of(
                         "! no row would come out differently if `then` (7:5) answered as `else`",
                         "! no row would come out differently if `else` (7:5) answered as `then`",

@@ -134,6 +134,7 @@ class ACompilationThatFailedStillReportsWhatItsRowsCoverTest {
     void theReportIsWrittenForAModuleOneOfWhoseBehaviorsDidNotCheck() throws Exception {
         Streams ran = run(ONE_BEHAVIOR_DOES_NOT_CHECK, "--format", "json");
 
+        assertEquals(1, ran.code(), ran.err());
         assertFalse(ran.out().isBlank(),
                 "the report is what this command answers with; stderr said: " + ran.err());
         JsonNode report = JSON.readTree(ran.out());

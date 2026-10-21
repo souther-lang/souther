@@ -62,8 +62,9 @@ class AFormatCheckSaysWhichRuleEachDifferenceAnswersToTest {
     @Test
     void aFileInItsCanonicalFormIsAnsweredWithNothing() throws Exception {
         Path file = source("m.sou", UNFORMATTED);
-        String canonical = run("fmt", file.toString()).out();
-        Path formatted = source("f.sou", canonical);
+        Said printed = run("fmt", file.toString());
+        assertEquals(0, printed.code(), printed.err());
+        Path formatted = source("f.sou", printed.out());
 
         Said said = run("fmt", formatted.toString(), "--check");
 

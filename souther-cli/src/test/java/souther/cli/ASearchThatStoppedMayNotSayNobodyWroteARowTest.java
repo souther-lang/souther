@@ -152,6 +152,6 @@ class ASearchThatStoppedMayNotSayNobodyWroteARowTest {
     private static String run(String source) throws Exception {
         Path file = Files.createTempDirectory("souther-readings").resolve("m.sou");
         Files.writeString(file, source);
-        return CliInProcess.run("examples", file.toString()).out();
+        return CliInProcess.printed("examples", file.toString());
     }
 }

@@ -197,7 +197,7 @@ class ANameIsCanonicalWhereverItEntersTest {
         Files.writeString(file, source);
         List<String> argv = new ArrayList<>(List.of("examples", file.toString()));
         argv.addAll(List.of(args));
-        return CliInProcess.run(argv.toArray(String[]::new)).out();
+        return CliInProcess.printed(argv.toArray(String[]::new));
     }
 
     @Test

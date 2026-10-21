@@ -171,7 +171,7 @@ class ABorderEveryPointOfWhichHasARowMayStillBeTheWrongLineTest {
         try {
             Path file = Files.createTempDirectory("souther-borders").resolve("m.sou");
             Files.writeString(file, source);
-            return CliInProcess.run("examples", file.toString()).out();
+            return CliInProcess.printed("examples", file.toString());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

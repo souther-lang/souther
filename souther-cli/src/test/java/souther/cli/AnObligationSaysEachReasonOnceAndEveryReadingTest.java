@@ -128,6 +128,7 @@ class AnObligationSaysEachReasonOnceAndEveryReadingTest {
         List<String> args = new ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(extra));
         Ran ran = CliInProcess.run(args.toArray(String[]::new));
+        assertEquals(0, ran.code(), ran.err());
         return new Run(ran.code(), ran.out(), ran.err());
     }
 }

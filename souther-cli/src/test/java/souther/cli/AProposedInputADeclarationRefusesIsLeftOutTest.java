@@ -91,6 +91,7 @@ class AProposedInputADeclarationRefusesIsLeftOutTest {
             Path file = Files.createTempDirectory("souther-refused").resolve("m.sou");
             Files.writeString(file, source);
             Ran ran = CliInProcess.run("examples", "--generate", file.toString());
+            assertEquals(0, ran.code(), ran.err());
             return ran.out() + ran.err();
         } catch (IOException e) {
             throw new UncheckedIOException(e);

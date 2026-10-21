@@ -76,6 +76,7 @@ class ARunReachesTheModulesItWasCompiledAgainstTest {
         Said said = cli("run", source("enrollment.sou", ENROLLMENT).toString(),
                 "-cp", path.toString(), "--behavior", "register", "--input", "\"c-1\"");
 
+        assertEquals(0, said.code(), said.err());
         assertFalse(said.err().contains("run takes a single .sou file"), said.err());
     }
 
@@ -133,6 +134,7 @@ class ARunReachesTheModulesItWasCompiledAgainstTest {
         Said said = cli("run", source("enrollment.sou", ENROLLMENT).toString(),
                 "--lang", "en", "--behavior", "register", "--input", "\"c-1\"");
 
+        assertEquals(1, said.code(), said.err());
         assertTrue(said.err().contains("Unknown module `enrollment.catalog`"), said.err());
         assertTrue(said.err().contains("-cp"), said.err());
         assertTrue(said.err().contains("--class-path"), said.err());
@@ -162,6 +164,7 @@ class ARunReachesTheModulesItWasCompiledAgainstTest {
         Said said = cli("run", source("enrollment.sou", twoImports).toString(),
                 "--lang", "en", "--behavior", "register", "--input", "\"c-1\"");
 
+        assertEquals(1, said.code(), said.err());
         assertEquals(1, said.err().split("--class-path", -1).length - 1, said.err());
     }
 

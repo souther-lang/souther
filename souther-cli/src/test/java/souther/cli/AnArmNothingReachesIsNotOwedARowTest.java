@@ -72,7 +72,9 @@ class AnArmNothingReachesIsNotOwedARowTest {
     private static Ran examples(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-arms").resolve("model.sou");
         Files.writeString(file, model);
-        return CliInProcess.run("examples", file.toString());
+        Ran ran = CliInProcess.run("examples", file.toString());
+        assertEquals(0, ran.code(), ran.err());
+        return ran;
     }
 
     private static String reportOn(String model) throws Exception {

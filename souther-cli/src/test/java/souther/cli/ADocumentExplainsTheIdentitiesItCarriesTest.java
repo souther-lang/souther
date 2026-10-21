@@ -382,6 +382,8 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
             args.add(file.toString());
         }
         Ran ran = CliInProcess.run(args.toArray(String[]::new));
+        // Every run here holds a source that names a stage nothing declares, which fails the run.
+        assertEquals(1, ran.code(), ran.err());
         assertFalse(ran.out().isBlank(), "the command wrote a report: " + ran.err());
         return new Streams(ran.code(), ran.out(), ran.err());
     }

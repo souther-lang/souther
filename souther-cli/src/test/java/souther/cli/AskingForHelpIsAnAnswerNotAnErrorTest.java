@@ -6,7 +6,6 @@ import souther.cli.CliProcess.Ran;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -141,7 +140,9 @@ class AskingForHelpIsAnAnswerNotAnErrorTest {
 
         Said said = run("run", "m.sou", "--input", "--help");
 
-        assertNotEquals(0, said.code());
+        assertEquals(1, said.code(),
+                "the line was read, and the run went on to a source that is not there: "
+                        + said.err());
     }
 
     /**

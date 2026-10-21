@@ -186,6 +186,8 @@ class ASourceThatProducedNoObservationSaysSoTest {
             args.add(file.toString());
         }
         Ran ran = CliInProcess.run(args.toArray(String[]::new));
+        // Every run here holds a source that does not compile, which fails the run.
+        assertEquals(1, ran.code(), ran.err());
         return new Streams(ran.code(), ran.out(), ran.err());
     }
 }

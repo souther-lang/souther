@@ -1,5 +1,6 @@
 package souther.cli;
 
+import souther.cli.CliProcess.Ran;
 import souther.compiler.fmt.Formatter;
 import org.junit.jupiter.api.Test;
 
@@ -48,19 +49,18 @@ class MainTest {
         String messy = "module m\ndata X = { a: Int }\n";
         Files.writeString(f, messy);
 
-        String printed = CliInProcess.run("fmt", f.toString()).out();
-        assertEquals(Formatter.format(messy), printed);
+        assertEquals(Formatter.format(messy), CliInProcess.printed("fmt", f.toString()));
     }
 
     @Test
     void docPrintsASpecificationSectionByItsAnchor() throws Exception {
-        String printed = CliInProcess.run("doc", "purpose").out();
+        String printed = CliInProcess.printed("doc", "purpose");
         assertTrue(printed.contains("JVM-targeted language"), "the purpose section is printed");
     }
 
     @Test
     void apiListsTheStdlibSurface() throws Exception {
-        String printed = CliInProcess.run("api", "Option").out();
+        String printed = CliInProcess.printed("api", "Option");
         assertTrue(printed.lines().anyMatch(l -> l.startsWith("Option.map(")),
                 "the Option module's surface is printed");
     }
@@ -68,19 +68,21 @@ class MainTest {
     @Test
     void japiPrintsAJarsPublicApi() throws Exception {
         Path scratch = Files.createTempDirectory("souther-japi");
-        String printed = CliInProcess.run(scratch, scratch, Map.of(),
+        Ran ran = CliInProcess.run(scratch, scratch, Map.of(),
                 Map.of("java.class.path", System.getProperty("java.class.path")), "",
-                "japi", "net.unit8.raoh.Issues").out();
-        assertTrue(printed.contains("record net.unit8.raoh.Issues"),
+                "japi", "net.unit8.raoh.Issues");
+        assertEquals(0, ran.code(), ran.err());
+        assertTrue(ran.out().contains("record net.unit8.raoh.Issues"),
                 "raoh's Issues is answered from the test classpath");
     }
 
     @Test
     void mcpServesTheProtocolOnStdinAndLeavesAtItsEnd() throws Exception {
         Path scratch = Files.createTempDirectory("souther-mcp");
-        String printed = CliInProcess.run(scratch, scratch, Map.of(), Map.of(),
-                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n", "mcp").out();
-        assertTrue(printed.contains("\"doc_search\""),
+        Ran ran = CliInProcess.run(scratch, scratch, Map.of(), Map.of(),
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n", "mcp");
+        assertEquals(0, ran.code(), ran.err());
+        assertTrue(ran.out().contains("\"doc_search\""),
                 "the server answered on stdout and returned at end of input");
     }
 

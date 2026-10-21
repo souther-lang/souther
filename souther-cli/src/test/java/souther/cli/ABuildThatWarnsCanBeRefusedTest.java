@@ -126,9 +126,10 @@ class ABuildThatWarnsCanBeRefusedTest {
      */
     @Test
     void aRefusedCompileWritesNoClasses() throws Exception {
-        run("compile", source(WARNS).toString(), "-d", outDir().toString(),
+        Said said = run("compile", source(WARNS).toString(), "-d", outDir().toString(),
                 "--warnings", "error", "--lang", "en");
 
+        assertEquals(1, said.code(), said.err());
         assertEquals(List.of(), written(), "the refused build wrote classes");
     }
 
@@ -141,6 +142,7 @@ class ABuildThatWarnsCanBeRefusedTest {
         Said said = run("compile", source(WARNS).toString(), "-d", outDir().toString(),
                 "--warnings", "error", "--lang", "en");
 
+        assertEquals(1, said.code(), said.err());
         assertTrue(said.err().contains("INVARIANT (WARNING)"), said.err());
         assertTrue(said.err().contains("E2011"), said.err());
         assertFalse(said.err().contains("INVARIANT  E2011"),
@@ -152,6 +154,7 @@ class ABuildThatWarnsCanBeRefusedTest {
         Said said = run("compile", source(WARNS).toString(), "-d", outDir().toString(),
                 "--warnings", "error", "--lang", "en");
 
+        assertEquals(1, said.code(), said.err());
         assertTrue(said.err().contains("warnings are treated as errors"),
                 "an exit code alone does not say which flag decided it: " + said.err());
     }
@@ -161,6 +164,7 @@ class ABuildThatWarnsCanBeRefusedTest {
         Said said = run("compile", source(WARNS).toString(), "-d", outDir().toString(),
                 "--warnings", "error", "--lang", "ja");
 
+        assertEquals(1, said.code(), said.err());
         assertTrue(said.err().contains("警告"), said.err());
         assertFalse(said.err().contains("warnings are treated as errors"), said.err());
     }

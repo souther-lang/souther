@@ -37,7 +37,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 """.replace("CLAUSE", clauses);
         Path file = Files.createTempDirectory("souther-paired").resolve("model.sou");
         Files.writeString(file, model);
-        return CliInProcess.run("examples", "--generate", file.toString()).out();
+        return CliInProcess.printed("examples", "--generate", file.toString());
     }
 
     @Test
@@ -106,7 +106,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 """.replace("FIELDS", fields.toString()).replace("RULE", rule.toString());
         Path file = Files.createTempDirectory("souther-budget").resolve("model.sou");
         Files.writeString(file, model);
-        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
+        String rows = CliInProcess.printed("examples", "--generate", file.toString());
 
         assertTrue(rows.contains("the search left something untried"),
                 () -> "it ran out of assignments to compose:\n" + rows);
@@ -142,7 +142,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 """.replace("FIELDS", fields.toString());
         Path file = Files.createTempDirectory("souther-exact").resolve("model.sou");
         Files.writeString(file, model);
-        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
+        String rows = CliInProcess.printed("examples", "--generate", file.toString());
 
         assertTrue(rows.contains("every value tried was refused"),
                 () -> "256 assignments, all composed and all refused:\n" + rows);
@@ -181,7 +181,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 """;
         Path file = Files.createTempDirectory("souther-band").resolve("model.sou");
         Files.writeString(file, model);
-        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
+        String rows = CliInProcess.printed("examples", "--generate", file.toString());
 
         // Read off the values a row is written with rather than off what it is called: a row is named
         // for the one obligation it was composed for, and an edge met by a row composed for a cell is

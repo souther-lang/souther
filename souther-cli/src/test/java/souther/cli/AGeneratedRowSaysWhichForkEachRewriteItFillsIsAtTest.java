@@ -149,6 +149,6 @@ class AGeneratedRowSaysWhichForkEachRewriteItFillsIsAtTest {
     private static String generated(String name, String source) throws Exception {
         Path file = Files.createTempDirectory("souther-generate").resolve(name);
         Files.writeString(file, source);
-        return CliInProcess.run("examples", "--generate", file.toString()).out();
+        return CliInProcess.printed("examples", "--generate", file.toString());
     }
 }

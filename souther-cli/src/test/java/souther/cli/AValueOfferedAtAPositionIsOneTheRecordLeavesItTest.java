@@ -21,7 +21,7 @@ class AValueOfferedAtAPositionIsOneTheRecordLeavesItTest {
     private static String rowsFor(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-offered").resolve("model.sou");
         Files.writeString(file, model);
-        return CliInProcess.run("examples", "--generate", file.toString()).out();
+        return CliInProcess.printed("examples", "--generate", file.toString());
     }
 
     private static String model(String clauses, String field) {

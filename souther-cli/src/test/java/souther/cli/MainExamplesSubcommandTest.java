@@ -81,6 +81,7 @@ class MainExamplesSubcommandTest {
         args.addAll(List.of(extraArgs));
 
         Ran ran = CliInProcess.run(args.toArray(String[]::new));
+        assertEquals(0, ran.code(), ran.err());
         return new Streams(ran.out(), ran.err(), ran.code());
     }
 

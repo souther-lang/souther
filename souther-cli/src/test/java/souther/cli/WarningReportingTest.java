@@ -204,8 +204,10 @@ class WarningReportingTest {
      *  tests is that the two carry different things. */
     private record Captured(String out, String err) {}
 
+    /** A run that warns, which a warning does not fail. */
     private static Captured capture(String... args) {
         Ran ran = CliInProcess.run(args);
+        assertEquals(0, ran.code(), "a warning does not fail the command: " + ran.err());
         return new Captured(ran.out(), ran.err());
     }
 

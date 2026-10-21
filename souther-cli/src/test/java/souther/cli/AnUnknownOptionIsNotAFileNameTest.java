@@ -142,6 +142,10 @@ class AnUnknownOptionIsNotAFileNameTest {
             for (String owner : Main.optionOwners(option).split("/")) {
                 Said said = run(owner, option);
 
+                // Answered, or refused for what else the line lacks: an option written alone may be
+                // missing its value or the operand its command reads. Neither is a failed run.
+                assertTrue(said.code() == 0 || said.code() == 2,
+                        owner + " " + option + " exited " + said.code() + ": " + said.err());
                 assertFalse(said.err().contains("unknown option `" + option + "`"),
                         owner + " is named as an owner of " + option + ": " + said.err());
             }

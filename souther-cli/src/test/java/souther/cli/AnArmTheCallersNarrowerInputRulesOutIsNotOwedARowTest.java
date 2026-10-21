@@ -22,8 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reached by a value.
  *
  * <p>What the type says a value can be is asked as such: a record is the one case it is, a newtype
- * over a sum is the cases of the sum, and a sum inside a sum is its leaves. Where the declaration
- * says nothing this can follow — an optional — nothing is ruled out.
+ * over a sum is the cases of the sum, a sum inside a sum is its leaves, and the value an optional
+ * holds is what the optional is declared over.
  */
 class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
 
@@ -171,19 +171,17 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
                 | "live" : (Live { n = 1 }) -> 1
             """;
 
-    /** An optional is a position the declaration does not say the cases of this way, so the arms
-     *  over it are owed rows however narrow what it holds. */
+    /** An optional over the narrower sum, whose present value is handed to the helper over the
+     *  wider one. */
     private static final String AN_OPTIONAL = TYPES + """
 
             data Box = { stage: OpenStage? }
 
-            let present (s: Stage?): Int =
-                match s with
+            behavior weigh : (b: Box) -> Int
+            let weigh (b) =
+                match b.stage with
                     | Some stage -> weightOf(stage)
                     | None -> 0
-
-            behavior weigh : (b: Box) -> Int
-            let weigh (b) = present(b.stage)
 
             example weigh
                 | "none" : (Box { stage = None }) -> 0
@@ -245,6 +243,7 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     void anArmOneCallerReachesIsOwedAndIsNoDeadBranchForTheOther() throws Exception {
         Output output = run(BOTH, false);
 
+        assertEquals(0, output.exit(), () -> output.report() + output.warnings());
         assertTrue(output.report().contains("branch      2/2")
                         && output.report().contains("branch      2/3"),
                 () -> "each behavior counts the arms its own input can reach:\n"
@@ -311,11 +310,13 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     }
 
     @Test
-    void whatTheDeclarationSaysNothingOfIsNotRuledOut() throws Exception {
+    void whatAnOptionalHoldsIsWhatItsDeclarationSays() throws Exception {
         Output output = run(AN_OPTIONAL, false);
 
-        assertFalse(output.warnings().contains("E1327"),
-                () -> "an optional is no position whose cases this reading follows:\n"
+        assertEquals(0, output.exit(), () -> output.report() + output.warnings());
+        assertTrue(output.warnings().contains("E1327")
+                        && output.warnings().contains("`b.stage@Some` is declared as Draft, Live"),
+                () -> "the value an optional holds is an `OpenStage`, and no `Done` arrives:\n"
                         + output.warnings());
     }
 

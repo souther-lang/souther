@@ -169,6 +169,6 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
     private static String reportOf(String module) throws Exception {
         Path file = Files.createTempDirectory("souther-823").resolve("model.sou");
         Files.writeString(file, module);
-        return CliInProcess.run("examples", file.toString(), "--generate").out();
+        return CliInProcess.printed("examples", file.toString(), "--generate");
     }
 }

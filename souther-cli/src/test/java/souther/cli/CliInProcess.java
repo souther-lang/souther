@@ -12,8 +12,12 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * The CLI run in this JVM, in an {@link Environment} the test names, for what the command line does
@@ -71,10 +75,39 @@ final class CliInProcess {
     /**
      * Run in a directory of its own, with no variable, no property of its own and no input: what
      * the command line answers wherever it is run, whatever the person running the tests exported.
+     * The directory is this method's, and is gone when it returns; a test that reads back what a run
+     * wrote names the directory with {@link #run(Path, Map, String...)}.
      */
     static Ran run(String... args) {
+        Path scratch;
         try {
-            return run(Files.createTempDirectory("souther-cli-in-process"), Map.of(), args);
+            scratch = Files.createTempDirectory("souther-cli-in-process");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        try {
+            return run(scratch, Map.of(), args);
+        } finally {
+            delete(scratch);
+        }
+    }
+
+    /**
+     * What a run in a directory of its own writes on stdout, for a test whose run is meant to
+     * succeed: an exit code other than zero fails the test, with what the run wrote on stderr, so
+     * a command that writes what is looked for and then fails is not read as having answered.
+     */
+    static String printed(String... args) {
+        Ran ran = run(args);
+        assertEquals(0, ran.code(), () -> "the run failed:\n" + ran.err());
+        return ran.out();
+    }
+
+    private static void delete(Path root) {
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

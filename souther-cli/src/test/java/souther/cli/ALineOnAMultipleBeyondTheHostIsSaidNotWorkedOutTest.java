@@ -7,6 +7,7 @@ import souther.cli.CliProcess.Ran;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -21,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
 
-    private static String reported(String example) throws Exception {
+    private static String reported(String example, int code) throws Exception {
         StringBuilder model = new StringBuilder("""
                 module probe.follow
 
@@ -49,12 +50,14 @@ class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
         Files.writeString(file, model);
 
         Ran ran = CliInProcess.run("examples", file.toString());
-        return ran.out() + ran.err();
+        String said = ran.out() + ran.err();
+        assertEquals(code, ran.code(), said);
+        return said;
     }
 
     @Test
     void theMeasurementNamesTheRuleItCouldNotReadRatherThanFailing() throws Exception {
-        String said = reported("");
+        String said = reported("", 0);
 
         assertFalse(said.contains("internal compiler error"), () -> "the run completes:\n" + said);
         assertTrue(said.contains(THE_SIDE),
@@ -69,7 +72,7 @@ class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
 
                 example take
                     | "one" : (H { a = A(50.0m) }) -> No
-                """);
+                """, 1);
 
         assertFalse(said.contains("internal compiler error"), () -> "the run completes:\n" + said);
         assertTrue(said.contains(THE_SIDE),

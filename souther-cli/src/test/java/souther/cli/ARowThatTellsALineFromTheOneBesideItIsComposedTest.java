@@ -181,7 +181,7 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
         try {
             Path file = Files.createTempDirectory("souther-apart").resolve("m.sou");
             Files.writeString(file, source);
-            return CliInProcess.run("examples", "--generate", file.toString()).out();
+            return CliInProcess.printed("examples", "--generate", file.toString());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
