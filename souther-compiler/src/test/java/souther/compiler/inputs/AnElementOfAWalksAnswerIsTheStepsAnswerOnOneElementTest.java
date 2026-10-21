@@ -10,6 +10,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -294,7 +295,7 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     }
 
     private static List<String> derivedAt(String... positions) {
-        return java.util.Arrays.stream(positions)
+        return Arrays.stream(positions)
                 .map(each -> each + " " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
                 .sorted().toList();
     }
@@ -322,11 +323,14 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     }
 
     /**
-     * A seed that reads a name but holds nothing that stands at a position of the input adds no
-     * place: the rule is about a value made of the list, and is said so.
+     * A seed worked out of an input number stands at no position, and what it was worked out of is
+     * not followed through arithmetic: the rule is said at the list the fold walked, which it is
+     * made of, and not at the number, which it is too — over an empty list the answer is the seed.
+     * Pinned so that the limit is a fact somebody wrote down, and the answer is not taken for the
+     * whole of where the value came from.
      */
     @Test
-    void aFoldFromASeedWorkedOutOfAnInputNumberIsMadeOfTheListAlone() {
+    void aFoldFromASeedWorkedOutOfAnInputNumberIsSaidAtTheListAndNotFollowedToTheNumber() {
         assertEquals(derivedAt("xs[*]"), notReadIn(compiled("""
                 let countsOf (n: Int, xs: List<String>): Map<String, Int> =
                     List.fold((acc, x) -> Map.updateOrInsert(x, 0, c -> 127 - c, acc),
@@ -367,6 +371,47 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 let busy (start, xs) =
                     Map.filterEntries((_, c) -> c.count >= 3, tally(start, xs))
                 """)));
+    }
+
+    /** A value taken out of a pair a helper chose between is the component of whichever it chose. */
+    @Test
+    void aValueTakenOutOfAPairAHelperChoseBetweenComesFromEitherPlace() {
+        List<String> notRead = notReadIn(compiled("""
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> 127 - n, acc), Map.empty, xs)
+
+                let pick (flag: Bool, a: Map<String, Int>, b: Map<String, Int>)
+                        : (Int, Map<String, Int>) =
+                    if flag then (1, a) else (2, b)
+
+                behavior busy : (flag: Bool, xs: List<String>, ys: List<String>) -> List<String>
+                let busy (flag, xs, ys) = {
+                    let (_, m) = pick(flag, countsOf(xs), countsOf(ys))
+                    List.filter(a -> match Map.get(a, m) with
+                                        | Some n -> n > 1
+                                        | None -> false, Map.keys(m))
+                }
+                """));
+        assertEquals(2, notRead.stream().filter(each -> each.startsWith("xs[*] ")
+                || each.startsWith("ys[*] ")).count(), () -> notRead.toString());
+    }
+
+    /**
+     * A fold whose answer holds lists, flattened, is made of the lists it was seeded with and of the
+     * strings it walked, and a rule about it is said at those two.
+     */
+    @Test
+    void aFlattenedFoldMadeOfListsAndStringsIsSaidAtBoth() {
+        List<String> notRead = notReadIn(compiled("""
+                let listsOf (start: Map<String, List<Int>>, xs: List<String>): Map<String, List<Int>> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, [], l -> List.reverse(l), acc),
+                              start, xs)
+
+                behavior busy : (start: Map<String, List<Int>>, xs: List<String>) -> List<Int>
+                let busy (start, xs) =
+                    List.filter(n -> n >= 3, List.flatMap(l -> l, Map.values(listsOf(start, xs))))
+                """));
+        assertEquals(derivedAt("start[*]", "xs[*]"), notRead.stream().sorted().toList());
     }
 
     /** A value taken out of a pair a helper built is the component the helper put there. */

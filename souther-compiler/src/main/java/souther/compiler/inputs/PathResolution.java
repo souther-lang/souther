@@ -156,9 +156,16 @@ public sealed interface PathResolution {
      * Where a value made of every one of {@code these} came from: the places of each together with
      * the places of the others, in every way the cases of each can come together.
      *
-     * <p>A part that came from nowhere the input holds adds no place, as a constant written into
-     * the body does not: the value came from the places of the others, and a rule about it is owed
-     * the sentence there. It is no position only where every part is.
+     * <p>A part that stands at no position adds no place, as a constant written into the body does
+     * not: the value came from the places of the others, and a rule about it is owed the sentence
+     * there. It is no position only where every part is.
+     *
+     * <p><b>That is not a claim that the part came from no input.</b> A part worked out of a name
+     * by arithmetic, or built out of one, stands at no position either, and what it was worked out
+     * of is not followed: a reading of provenance leaves arithmetic rather than file a rule at a
+     * position the rule says nothing about ({@code BehaviorSetStatements#positionsItCameFrom}). So
+     * the places here are the ones that are followed and the answer is not that they are all of
+     * them.
      */
     static PathResolution madeOf(List<PathResolution> these) {
         List<List<TermPath>> ways = List.of(List.of());
@@ -310,7 +317,9 @@ public sealed interface PathResolution {
      * <p>For a reader whose question is about where a value stands rather than about which place it
      * is: a field of what stands here stands at the field of it, and an element of what stands here
      * at an element of it. Such a reader has nothing to decide between the answers — the step is
-     * the same step wherever the value came from — so it says the step and this says where.
+     * the same step wherever the value stands — so it says the step and this says where. Where the
+     * value is made of several places together it does not stand at them, and the step is no step
+     * of theirs: they stay the places it is made of.
      *
      * <p><b>Written here because a reader that decides for itself stops deciding.</b> A walk over
      * the arms is exhaustive only while there is an arm for each, and a reader that took a step at
@@ -323,36 +332,18 @@ public sealed interface PathResolution {
         return switch (this) {
             case At(var at) -> new At(step.apply(at));
             case NotAPosition _ -> this;
-            // What a value made of several places holds is made of what each of them holds, so a
-            // step that reaches into every container takes the same step at each place. A step into
-            // a field is not that: the places differ in what they are, and throughAField is the
-            // one that says so.
+            // A place the value is takes the step, and places it is made of together keep their
+            // names: they are not alike, so a field or an element of the value is not known to be
+            // a field or an element of each, and a step taken at one that has none names a path
+            // nothing holds.
             case MadeOf(var alternatives) -> of(alternatives.stream()
-                    .map(each -> each.stream().map(step).toList()).toList(),
-                    alternatives.size() == 1);
+                    .map(each -> each.size() == 1 ? List.of(step.apply(each.getFirst())) : each)
+                    .toList(), false);
             // Still may, and still at each of them: a step taken at a place a value may stand is a
             // place a step of it may stand. Two of them the step takes to one place are one place
             // among the ones it may be, and it may still be none of them.
             case MayStandAt(var among) -> of(among.stream().map(step).map(List::of).toList(),
                     false);
-        };
-    }
-
-    /**
-     * The same answer for a field of the value, with {@code step} taken at the places it stands at.
-     *
-     * <p>A field of a value that stands at a place is at the field of that place, and of one that
-     * may stand at several, at the field of each: it stands at one of them on the run it is on, and
-     * that is the place whose value has the field. A value made of several places is made of
-     * places that are not alike — a map's entries and the list elements a fold counted into it — so
-     * a field of it is not known to be at the field of each, and a path through a field one of them
-     * has none of names nothing. It is made of the places the value is, which is where a rule about
-     * it is owed the sentence.
-     */
-    default PathResolution throughAField(UnaryOperator<TermPath> step) {
-        return switch (this) {
-            case MadeOf _ -> this;
-            case At _, NotAPosition _, MayStandAt _ -> deeper(step);
         };
     }
 }

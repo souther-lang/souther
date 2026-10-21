@@ -97,16 +97,18 @@ class WhereAValueCameFromIsClosedUnderMakingAndChoosingTest {
     }
 
     @Test
-    void anElementOfWhatIsMadeOfSeveralContainersIsMadeOfAnElementOfEach() {
-        assertEquals(together(A.then("x"), B.then("x")),
-                together(A, B).deeper(path -> path.then("x")));
+    void aStepIntoAValueMadeOfSeveralPlacesIsMadeOfThosePlacesAndNotOfAStepOfEach() {
+        PathResolution made = together(A, B);
+        assertEquals(made, made.deeper(path -> path.then("count")));
+        assertEquals(at(A.then("count")), at(A).deeper(path -> path.then("count")));
     }
 
     @Test
-    void aFieldOfAValueMadeOfSeveralPlacesIsMadeOfThosePlacesAndNotOfAFieldOfEach() {
-        PathResolution made = together(A, B);
-        assertEquals(made, made.throughAField(path -> path.then("count")));
-        assertEquals(at(A.then("count")), at(A).throughAField(path -> path.then("count")));
+    void aPlaceTheValueIsTakesTheStepWhereOthersItIsMadeOfDoNot() {
+        PathResolution either = PathResolution.anyOf(List.of(at(A), together(B, C)));
+        PathResolution.MadeOf stepped = (PathResolution.MadeOf) either.deeper(
+                path -> path.then("count"));
+        assertEquals(List.of(List.of(A.then("count")), List.of(B, C)), stepped.alternatives());
     }
 
     /** One part of {@code ways} places it may stand at, named {@code name} and a number. */

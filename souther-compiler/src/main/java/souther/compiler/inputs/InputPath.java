@@ -284,7 +284,7 @@ final class InputPath {
             // A field of what the target stands at, at every place the target stands. Where the
             // field is not a step of a path — a newtype's own value is the value under it — the
             // place is the target's, which is the step this takes there.
-            case Core.FieldAccess fa -> named(fa.target(), names).throughAField(
+            case Core.FieldAccess fa -> named(fa.target(), names).deeper(
                     // Asked of {@link Location}, which owns the rule, from the answer this walk was
                     // handed. Whether a name wears one value was settled when the module was
                     // indexed, so a path through a field does not turn on what the declaration
@@ -446,7 +446,7 @@ final class InputPath {
         Type read = from.type();
         for (int i = next; i < steps.size(); i++) {
             Core.FieldProjection.Step step = steps.get(i);
-            at = at.throughAField(Location.isStep(read, step.field(), newtypes)
+            at = at.deeper(Location.isStep(read, step.field(), newtypes)
                     ? base -> base.then(step.field()) : base -> base);
             read = step.type();
         }
@@ -512,9 +512,34 @@ final class InputPath {
      * filed under it. Any other pair says nothing about where its places stand.
      */
     private PathResolution placeOf(Core.TupleGet get, BindingEnvironment names) {
-        Held written = componentOf(get.tuple(), get.index(), names);
-        return written != null ? named(written.value(), written.names())
+        List<Held> written = componentsOf(get.tuple(), get.index(), names);
+        return written != null
+                ? alongEachCase(written.stream().map(one -> named(one.value(), one.names())).toList())
                 : placeOfAnElementsPair(get, names);
+    }
+
+    /**
+     * How the answers on each case a value is chosen between come together, in the question being
+     * asked: where it may be, or the one place it is whichever case is taken. One case is that
+     * case's answer.
+     */
+    private PathResolution alongEachCase(List<PathResolution> each) {
+        if (each.size() == 1) {
+            return each.getFirst();
+        }
+        return switch (asked) {
+            case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
+            case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> PathResolution.inEveryCase(each);
+            case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
+        };
+    }
+
+    /** Whether the question being asked has an answer across the cases a value is chosen between. */
+    private boolean asksAcrossCases() {
+        return switch (asked) {
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> true;
+            case ONE_PER_ELEMENT, SAME_EMPTINESS -> false;
+        };
     }
 
     /**
@@ -657,9 +682,12 @@ final class InputPath {
             };
         }
         // A place of a pair written in this tree holds what the value written there holds.
-        if (e instanceof Core.TupleGet get
-                && componentOf(get.tuple(), get.index(), names) instanceof Held written) {
-            return heldAt(written.value(), wanted, written.names());
+        if (e instanceof Core.TupleGet get) {
+            List<Held> written = componentsOf(get.tuple(), get.index(), names);
+            if (written != null) {
+                return alongEachCase(written.stream()
+                        .map(one -> heldAt(one.value(), wanted, one.names())).toList());
+            }
         }
         // What a binding's body answers is read with the binding in scope, as a body a call was
         // expanded into binds its parameters around what it answers.
@@ -684,11 +712,7 @@ final class InputPath {
                     each.add(heldAt(arm, wanted, names));
                 }
             }
-            return switch (asked) {
-                case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
-                case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> PathResolution.inEveryCase(each);
-                case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
-            };
+            return alongEachCase(each);
         }
         // What an operation does to the order of what it was given is said of the ones declared
         // to turn it round, and of none other: a walk after the order stops at every other one,
@@ -862,24 +886,41 @@ final class InputPath {
     }
 
     /**
-     * The value at {@code index} of the pair {@code tuple} stands for, and the names it is read
-     * under, or null where {@code tuple} stands for no pair written in this tree.
+     * The values at {@code index} of the pair {@code tuple} stands for, one for each pair it may be
+     * and the names each is read under, or null where {@code tuple} is not a pair written in this
+     * tree on every case it is chosen between.
      *
      * <p>A pair and the projection of one of its places cancel, the way a construction and the
      * projection of a field do ({@link #introducing}): a helper that answers {@code (a, b)} and a
      * destructuring that reads the second place read {@code b}, wherever the helper's answer is
-     * bound on the way.
+     * bound on the way. A helper that answers one pair or another has the place of either.
      */
-    private Held componentOf(Core tuple, int index, BindingEnvironment names) {
+    private List<Held> componentsOf(Core tuple, int index, BindingEnvironment names) {
         return switch (Core.withoutStanding(tuple)) {
             case Core.Tuple pair -> index < pair.elements().size()
-                    ? new Held(pair.elements().get(index), names) : null;
+                    ? List.of(new Held(pair.elements().get(index), names)) : null;
             case Core.Read r when names.roleOf(r.binding()) instanceof BindingRole.Alias(var held) ->
-                    trail.through(r.binding(), () -> componentOf(held, index, names));
+                    trail.through(r.binding(), () -> componentsOf(held, index, names));
             case Core.LetIn let ->
-                    componentOf(let.body(), index, names.inside(let.binder(), let.value()));
+                    componentsOf(let.body(), index, names.inside(let.binder(), let.value()));
+            case Core.If iff when asksAcrossCases() ->
+                    componentsInEach(List.of(iff.then(), iff.els()), index, names);
+            case Core.Match match when asksAcrossCases() -> componentsInEach(
+                    match.cases().stream().map(Core.Case::body).toList(), index, names);
             case null, default -> null;
         };
+    }
+
+    private List<Held> componentsInEach(List<Core> cases, int index, BindingEnvironment names) {
+        List<Held> out = new ArrayList<>();
+        for (Core one : cases) {
+            List<Held> in = componentsOf(one, index, names);
+            if (in == null) {
+                return null;
+            }
+            out.addAll(in);
+        }
+        return out;
     }
 
     /** A value and the names it is read under. */
