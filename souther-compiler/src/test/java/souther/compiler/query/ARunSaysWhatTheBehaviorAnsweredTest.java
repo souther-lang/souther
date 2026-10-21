@@ -201,11 +201,13 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
                 requires);
         Generator.Trial fresh = Adequacy.runningRowsOf(db, module, running, "discount", sig,
                 requires);
-        RowToRun row = rowOf(compilation, "discount", "below nothing");
 
-        Generator.ObservedRun ran = trial.run(row);
+        // Each ask is of a RowToRun made for it, as a generated row makes one every time it is
+        // asked to run, so that the row is the same by what it is written as and not by instance.
+        Generator.ObservedRun ran = trial.run(rowOf(compilation, "discount", "below nothing"));
         for (Map<Integer, Integer> replacing : List.of(Map.of(0, 0), Map.of(0, 1))) {
-            Optional<AnswerObservation> shared = trial.runReplacing(row, replacing);
+            Optional<AnswerObservation> shared = trial.runReplacing(
+                    rowOf(compilation, "discount", "below nothing"), replacing);
             assertTrue(shared.isPresent(), "the rewrite ran");
             assertEquals(
                     fresh.runReplacing(rowOf(compilation, "discount", "below nothing"), replacing),
@@ -216,10 +218,12 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
                 ran.answer(), "and the run answers the same");
         assertEquals(1, built[0], "the run and each rewrite of it are of the values built once");
 
-        trial.runReplacing(rowOf(compilation, "discount", "below nothing"),
+        RowToRun written = rowOf(compilation, "discount", "below nothing");
+        trial.runReplacing(RowToRun.of(written.inputs().stream()
+                .map(each -> new FixtureTemplate("written otherwise", each.value())).toList()),
                 Map.of(0, 99));
 
-        assertEquals(2, built[0], "and another row is built for itself");
+        assertEquals(2, built[0], "and a row written otherwise is built for itself");
     }
 
     private static Compilation compiled() {

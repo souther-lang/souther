@@ -12,6 +12,7 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.partition.BehaviorInputs;
+import souther.compiler.partition.ComposedRow;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
@@ -6673,14 +6674,18 @@ public final class Adequacy {
             }
 
             private Optional<RowTrials.Prepared> builtFor(RowToRun row) {
+                // Kept by what the row is written as, which is how Generator.once tells one row
+                // from another, and not by the RowToRun a caller happened to make: a row asked
+                // about again is handed a value made again.
+                List<String> written = new ComposedRow(row.inputs(), row.answers()).writtenAs();
                 BuiltRow held = last;
-                if (held != null && held.composed() == row) {
+                if (held != null && held.written().equals(written)) {
                     return held.built();
                 }
                 List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
                 Optional<RowTrials.Prepared> built = standing == null ? Optional.empty()
                         : application.prepare(valuesOf(row), standing);
-                last = new BuiltRow(row, built);
+                last = new BuiltRow(written, built);
                 return built;
             }
 
@@ -6702,7 +6707,7 @@ public final class Adequacy {
     }
 
     /** A row, and what building it came to. */
-    private record BuiltRow(RowToRun composed,Optional<RowTrials.Prepared> built) {}
+    private record BuiltRow(List<String> written, Optional<RowTrials.Prepared> built) {}
 
     /**
      * What one measure found and nothing filled.
