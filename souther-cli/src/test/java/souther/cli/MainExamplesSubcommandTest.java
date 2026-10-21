@@ -5,10 +5,9 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.cli.CliProcess.Ran;
 import souther.compiler.report.AdequacyReport;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -81,21 +80,8 @@ class MainExamplesSubcommandTest {
         List<String> args = new ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(extraArgs));
 
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        int exitCode;
-        try {
-            exitCode = Main.run(args.toArray(String[]::new), Environment.ofThisProcess());
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
-        return new Streams(out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8), exitCode);
+        Ran ran = CliInProcess.run(args.toArray(String[]::new));
+        return new Streams(ran.out(), ran.err(), ran.code());
     }
 
     @Test

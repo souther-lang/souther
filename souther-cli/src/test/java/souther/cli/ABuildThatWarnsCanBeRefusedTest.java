@@ -4,9 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -56,20 +55,8 @@ class ABuildThatWarnsCanBeRefusedTest {
     private record Said(int code, String err, String out) {}
 
     private Said run(String... args) {
-        PrintStream originalErr = System.err;
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            int code = Main.dispatch(args);
-            return new Said(code, err.toString(StandardCharsets.UTF_8),
-                    out.toString(StandardCharsets.UTF_8));
-        } finally {
-            System.setErr(originalErr);
-            System.setOut(originalOut);
-        }
+        Ran ran = CliInProcess.run(args);
+        return new Said(ran.code(), ran.err(), ran.out());
     }
 
     private Path source(String text) throws Exception {

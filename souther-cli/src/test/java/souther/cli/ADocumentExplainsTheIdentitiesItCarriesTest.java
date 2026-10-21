@@ -2,14 +2,12 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
+import souther.cli.CliProcess.Ran;
 import souther.compiler.report.AdequacyReport;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -383,22 +381,8 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
             Files.writeString(file, source.getValue());
             args.add(file.toString());
         }
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        int code;
-        try {
-            code = Main.dispatch(args.toArray(String[]::new));
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
-        assertFalse(out.toString(StandardCharsets.UTF_8).isBlank(),
-                "the command wrote a report: " + err.toString(StandardCharsets.UTF_8));
-        return new Streams(code, out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+        Ran ran = CliInProcess.run(args.toArray(String[]::new));
+        assertFalse(ran.out().isBlank(), "the command wrote a report: " + ran.err());
+        return new Streams(ran.code(), ran.out(), ran.err());
     }
 }

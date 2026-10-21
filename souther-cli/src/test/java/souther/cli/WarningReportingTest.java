@@ -1,13 +1,13 @@
 package souther.cli;
 
+import souther.cli.CliProcess.Ran;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.Located;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -135,9 +135,8 @@ class WarningReportingTest {
                 data Box = { it: Eaches }
                 """);
 
-        String reported = capture(() -> Main.main(new String[]{
-                "compile", "--lang", "en", a.toString(), b.toString(),
-                "-d", Files.createTempDirectory("souther-warn-out").toString()})).err();
+        String reported = capture("compile", "--lang", "en", a.toString(), b.toString(),
+                "-d", Files.createTempDirectory("souther-warn-out").toString()).err();
 
         assertTrue(reported.contains("a.sou:10:5"),
                 "the warning belongs to the module that declares the construction: " + reported);
@@ -148,8 +147,7 @@ class WarningReportingTest {
     void runWarnsOnStderrAndKeepsItsResultOnStdout() throws Exception {
         Path file = write("probe.sou", UNPROVEN);
 
-        Captured ran = capture(() -> Main.main(
-                new String[]{"run", "--lang", "en", file.toString(), "--input", "5"}));
+        Captured ran = capture("run", "--lang", "en", file.toString(), "--input", "5");
 
         assertEquals("5", ran.out().strip(),
                 "a caller piping the result reads the behavior's output and nothing else");
@@ -169,8 +167,11 @@ class WarningReportingTest {
         Path file = write("probe.sou", UNPROVEN);
         List<Located> warnings = new ArrayList<>();
 
+        Environment environment = CliInProcess.environment(file.getParent(),
+                InputStream.nullInputStream(), OutputStream.nullOutputStream(),
+                OutputStream.nullOutputStream());
         Runner.Invocation invocation = Runner.parse(new String[]{file.toString(), "--input", "-1"},
-                Environment.ofThisProcess());
+                environment);
         assertThrows(Runner.RunException.class,
                 () -> Runner.run(invocation, invocation.sources(), warnings));
 
@@ -182,8 +183,8 @@ class WarningReportingTest {
     void runKeepsTheStreamsApartInJsonToo() throws Exception {
         Path file = write("probe.sou", UNPROVEN);
 
-        Captured ran = capture(() -> Main.main(new String[]{
-                "run", "--format", "json", "--lang", "en", file.toString(), "--input", "5"}));
+        Captured ran = capture(
+                "run", "--format", "json", "--lang", "en", file.toString(), "--input", "5");
 
         assertEquals("5", ran.out().strip());
         assertTrue(ran.err().contains("\"severity\":\"warning\""), ran.err());
@@ -196,37 +197,21 @@ class WarningReportingTest {
         args.add(file.toString());
         args.add("-d");
         args.add(Files.createTempDirectory("souther-warn-out").toString());
-        return capture(() -> Main.main(args.toArray(new String[0]))).err();
+        return capture(args.toArray(new String[0])).err();
     }
 
-    /** What an action wrote to each stream. Both are captured because the point of several of these
+    /** What a run wrote to each stream. Both are captured because the point of several of these
      *  tests is that the two carry different things. */
     private record Captured(String out, String err) {}
 
-    private static Captured capture(Action action) throws Exception {
-        PrintStream outWas = System.out;
-        PrintStream errWas = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        try {
-            action.run();
-        } finally {
-            System.setOut(outWas);
-            System.setErr(errWas);
-        }
-        return new Captured(out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+    private static Captured capture(String... args) {
+        Ran ran = CliInProcess.run(args);
+        return new Captured(ran.out(), ran.err());
     }
 
     private static Path write(String name, String content) throws Exception {
         Path file = Files.createTempDirectory("souther-warn").resolve(name);
         Files.writeString(file, content);
         return file;
-    }
-
-    private interface Action {
-        void run() throws Exception;
     }
 }

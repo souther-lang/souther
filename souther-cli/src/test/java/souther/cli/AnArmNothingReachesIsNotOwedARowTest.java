@@ -2,7 +2,7 @@ package souther.cli;
 
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.WeakeningSet;
-import souther.cli.Main;
+import souther.cli.CliProcess.Ran;
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
@@ -18,9 +18,6 @@ import souther.compiler.query.RowWitnesses;
 import souther.compiler.query.Weakening;
 import souther.compiler.reach.Reachability;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -72,32 +69,20 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 | "small" : (Pair { a = Count(0), b = Count(1) }) -> Small
             """;
 
-    private static String reportOn(String model) throws Exception {
+    private static Ran examples(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-arms").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        return out.toString(StandardCharsets.UTF_8);
+        return CliInProcess.run("examples", file.toString());
+    }
+
+    private static String reportOn(String model) throws Exception {
+        return examples(model).out();
     }
 
     /** What the command prints about the model where the report is not: the warnings, and the
      *  hints under them. */
     private static String warnedOn(String model) throws Exception {
-        PrintStream was = System.err;
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        try {
-            reportOn(model);
-        } finally {
-            System.setErr(was);
-        }
-        return err.toString(StandardCharsets.UTF_8);
+        return examples(model).err();
     }
 
     /**

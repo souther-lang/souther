@@ -2,11 +2,10 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
+import souther.cli.CliProcess.Ran;
+
 import java.io.IOException;
-import java.io.PrintStream;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -91,18 +90,8 @@ class AProposedInputADeclarationRefusesIsLeftOutTest {
         try {
             Path file = Files.createTempDirectory("souther-refused").resolve("m.sou");
             Files.writeString(file, source);
-            PrintStream out = System.out;
-            PrintStream err = System.err;
-            ByteArrayOutputStream said = new ByteArrayOutputStream();
-            System.setOut(new PrintStream(said, true, StandardCharsets.UTF_8));
-            System.setErr(new PrintStream(said, true, StandardCharsets.UTF_8));
-            try {
-                Main.dispatch(new String[] {"examples", "--generate", file.toString()});
-            } finally {
-                System.setOut(out);
-                System.setErr(err);
-            }
-            return said.toString(StandardCharsets.UTF_8);
+            Ran ran = CliInProcess.run("examples", "--generate", file.toString());
+            return ran.out() + ran.err();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

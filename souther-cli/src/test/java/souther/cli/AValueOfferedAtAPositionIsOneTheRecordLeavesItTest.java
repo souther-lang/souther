@@ -1,11 +1,7 @@
 package souther.cli;
 
-import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -25,15 +21,7 @@ class AValueOfferedAtAPositionIsOneTheRecordLeavesItTest {
     private static String rowsFor(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-offered").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        return out.toString(StandardCharsets.UTF_8);
+        return CliInProcess.run("examples", "--generate", file.toString()).out();
     }
 
     private static String model(String clauses, String field) {

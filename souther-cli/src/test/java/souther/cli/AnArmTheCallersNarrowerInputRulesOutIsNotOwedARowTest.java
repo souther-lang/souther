@@ -2,9 +2,8 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -205,23 +204,10 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     private static Output run(String model, boolean strict) throws Exception {
         Path file = Files.createTempDirectory("souther-narrower").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream out = System.out;
-        PrintStream err = System.err;
-        ByteArrayOutputStream said = new ByteArrayOutputStream();
-        ByteArrayOutputStream warned = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(said, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(warned, true, StandardCharsets.UTF_8));
-        int exit;
-        try {
-            exit = Main.dispatch(strict
-                    ? new String[] {"examples", "--strict", file.toString()}
-                    : new String[] {"examples", file.toString()});
-        } finally {
-            System.setOut(out);
-            System.setErr(err);
-        }
-        return new Output(said.toString(StandardCharsets.UTF_8),
-                warned.toString(StandardCharsets.UTF_8), exit);
+        Ran ran = CliInProcess.run(strict
+                ? new String[] {"examples", "--strict", file.toString()}
+                : new String[] {"examples", file.toString()});
+        return new Output(ran.out(), ran.err(), ran.code());
     }
 
     @Test

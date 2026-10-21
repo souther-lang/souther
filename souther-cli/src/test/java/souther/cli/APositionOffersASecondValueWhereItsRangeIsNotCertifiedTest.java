@@ -1,11 +1,7 @@
 package souther.cli;
 
-import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -48,15 +44,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
                 """.replace("CLAUSE", clause);
         Path file = Files.createTempDirectory("souther-uncertified").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        return out.toString(StandardCharsets.UTF_8);
+        return CliInProcess.run("examples", "--generate", file.toString()).out();
     }
 
     /** A hole in a range, which a range cannot hold. Nothing certifies the range, so the position is
@@ -124,15 +112,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
                 """;
         Path file = Files.createTempDirectory("souther-bare").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        String rows = out.toString(StandardCharsets.UTF_8);
+        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
 
         assertTrue(rows.contains("R { a = 0m, b = 0.5m }"),
                 () -> "half way between the ends `b` has:\n" + rows);
@@ -168,15 +148,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
                 """;
         Path file = Files.createTempDirectory("souther-halfopen").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        String rows = out.toString(StandardCharsets.UTF_8);
+        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
 
         assertTrue(rows.contains("Pair { low = Rate(0m), high = Rate(1m) }"),
                 () -> "`low` reaches its end and `high` starts a step past it:\n" + rows);

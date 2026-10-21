@@ -1,11 +1,7 @@
 package souther.cli;
 
-import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -41,15 +37,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 """.replace("CLAUSE", clauses);
         Path file = Files.createTempDirectory("souther-paired").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        return out.toString(StandardCharsets.UTF_8);
+        return CliInProcess.run("examples", "--generate", file.toString()).out();
     }
 
     @Test
@@ -118,15 +106,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 """.replace("FIELDS", fields.toString()).replace("RULE", rule.toString());
         Path file = Files.createTempDirectory("souther-budget").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        String rows = out.toString(StandardCharsets.UTF_8);
+        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
 
         assertTrue(rows.contains("the search left something untried"),
                 () -> "it ran out of assignments to compose:\n" + rows);
@@ -162,15 +142,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 """.replace("FIELDS", fields.toString());
         Path file = Files.createTempDirectory("souther-exact").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        String rows = out.toString(StandardCharsets.UTF_8);
+        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
 
         assertTrue(rows.contains("every value tried was refused"),
                 () -> "256 assignments, all composed and all refused:\n" + rows);
@@ -209,15 +181,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 """;
         Path file = Files.createTempDirectory("souther-band").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        String rows = out.toString(StandardCharsets.UTF_8);
+        String rows = CliInProcess.run("examples", "--generate", file.toString()).out();
 
         // Read off the values a row is written with rather than off what it is called: a row is named
         // for the one obligation it was composed for, and an edge met by a row composed for a cell is

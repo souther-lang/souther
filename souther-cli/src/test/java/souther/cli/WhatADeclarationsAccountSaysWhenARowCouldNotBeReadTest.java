@@ -2,9 +2,8 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -128,20 +127,7 @@ class WhatADeclarationsAccountSaysWhenARowCouldNotBeReadTest {
         Files.writeString(file, model);
         List<String> args = new ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(extra));
-        PrintStream wasOut = System.out;
-        PrintStream wasErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        int code;
-        try {
-            code = Main.dispatch(args.toArray(String[]::new));
-        } finally {
-            System.setOut(wasOut);
-            System.setErr(wasErr);
-        }
-        return new Run(code, out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+        Ran ran = CliInProcess.run(args.toArray(String[]::new));
+        return new Run(ran.code(), ran.out(), ran.err());
     }
 }

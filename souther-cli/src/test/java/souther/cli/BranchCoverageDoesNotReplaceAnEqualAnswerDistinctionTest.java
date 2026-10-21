@@ -2,9 +2,6 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -114,14 +111,6 @@ class BranchCoverageDoesNotReplaceAnEqualAnswerDistinctionTest {
     private static String reportOn(String model) throws Exception {
         Path file = Files.createTempDirectory("souther-equal-answers").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", file.toString()});
-        } finally {
-            System.setOut(was);
-        }
-        return out.toString(StandardCharsets.UTF_8);
+        return CliInProcess.run("examples", file.toString()).out();
     }
 }

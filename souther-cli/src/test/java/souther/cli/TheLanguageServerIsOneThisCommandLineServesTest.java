@@ -11,10 +11,9 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.UncheckedIOException;
 import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -104,24 +103,14 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
         PipedInputStream serverIn = new PipedInputStream(toServer, 1 << 16);
         ByteArrayOutputStream wrote = new ByteArrayOutputStream();
         ByteArrayOutputStream complained = new ByteArrayOutputStream();
-        InputStream in = System.in;
-        PrintStream out = System.out;
-        PrintStream err = System.err;
+        Environment environment = CliInProcess.environment(Files.createTempDirectory("souther-lsp"),
+                serverIn, wrote, complained);
         AtomicInteger code = new AtomicInteger(-1);
-        try {
-            System.setIn(serverIn);
-            System.setOut(new PrintStream(wrote, true, StandardCharsets.UTF_8));
-            System.setErr(new PrintStream(complained, true, StandardCharsets.UTF_8));
-            Thread serving = Thread.ofPlatform().name("souther-lsp-under-test")
-                    .start(() -> code.set(Main.dispatch(new String[] {"lsp"})));
-            conversation.accept(new Said(toServer, wrote));
-            toServer.close();
-            serving.join(WAIT_MILLIS);
-        } finally {
-            System.setIn(in);
-            System.setOut(out);
-            System.setErr(err);
-        }
+        Thread serving = Thread.ofPlatform().name("souther-lsp-under-test")
+                .start(() -> code.set(Main.run(new String[] {"lsp"}, environment)));
+        conversation.accept(new Said(toServer, wrote));
+        toServer.close();
+        serving.join(WAIT_MILLIS);
         return new Answer(code.get(), framesSoFar(wrote.toByteArray()),
                 complained.toString(StandardCharsets.UTF_8));
     }
@@ -194,25 +183,19 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
 
     /** Runs {@code souther lsp} over the given input, on streams of this test's own. */
     private static Answer run(byte[] input, String... arguments) {
-        InputStream in = System.in;
-        PrintStream out = System.out;
-        PrintStream err = System.err;
         ByteArrayOutputStream wrote = new ByteArrayOutputStream();
         ByteArrayOutputStream complained = new ByteArrayOutputStream();
-        int code;
+        Environment environment;
         try {
-            System.setIn(new ByteArrayInputStream(input));
-            System.setOut(new PrintStream(wrote, true, StandardCharsets.UTF_8));
-            System.setErr(new PrintStream(complained, true, StandardCharsets.UTF_8));
-            String[] line = new String[arguments.length + 1];
-            line[0] = "lsp";
-            System.arraycopy(arguments, 0, line, 1, arguments.length);
-            code = Main.dispatch(line);
-        } finally {
-            System.setIn(in);
-            System.setOut(out);
-            System.setErr(err);
+            environment = CliInProcess.environment(Files.createTempDirectory("souther-lsp"),
+                    new ByteArrayInputStream(input), wrote, complained);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
+        String[] line = new String[arguments.length + 1];
+        line[0] = "lsp";
+        System.arraycopy(arguments, 0, line, 1, arguments.length);
+        int code = Main.run(line, environment);
         return new Answer(code, readFrames(wrote.toByteArray()),
                 complained.toString(StandardCharsets.UTF_8));
     }

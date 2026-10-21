@@ -121,14 +121,6 @@ public final class Main {
     }
 
     /**
-     * As {@link #dispatch(String[], Environment)}, in this process's environment and on its standard
-     * streams as they stand when this is called.
-     */
-    static int dispatch(String[] args) {
-        return dispatch(args, Environment.ofThisProcess());
-    }
-
-    /**
      * The command's answer as its exit code, which only {@link #main} turns into one.
      *
      * <p>Ending the process is a fact about the process, not about the command, and a command that
