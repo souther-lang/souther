@@ -176,6 +176,10 @@ public record TermPath(String head, List<Step> steps) {
 
         @Override
         public int hashCode() {
+            // One word, so a thread that sees it sees all of it. Nought stands for not worked out,
+            // which leaves a list that hashes to nought worked out each time it is asked: the
+            // same answer, without the saving, and a second field for the flag would be two plain
+            // writes that another thread may see apart.
             int had = hash;
             if (had == 0) {
                 had = of.hashCode();

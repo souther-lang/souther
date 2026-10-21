@@ -56,6 +56,27 @@ class APathIsTheSameWhereItsStepsAreTest {
     }
 
     @Test
+    void equalHashesDoNotMakeDifferentPathsEqual() {
+        TermPath one = TermPath.of("request").then("Aa");
+        TermPath other = TermPath.of("request").then("BB");
+
+        assertEquals(one.hashCode(), other.hashCode(), "the two spellings hash alike");
+        assertNotEquals(one, other);
+    }
+
+    @Test
+    void stepsThatHashToNoughtAreHashedAndComparedAsTheyAre() {
+        TermPath path = TermPath.of("request").then("xwhiaoxk");
+        List<TermPath.Step> written = List.of(new TermPath.Step.Field("xwhiaoxk"));
+
+        assertEquals(0, written.hashCode(), "a list that hashes to nought");
+        assertEquals(0, path.steps().hashCode());
+        assertEquals(0, path.steps().hashCode(), "and again");
+        assertEquals(new TermPath("request", written), path);
+        assertNotEquals(TermPath.of("request").then("other"), path);
+    }
+
+    @Test
     void theStepsAreTheListTheyWereMadeFromAndCannotBeChanged() {
         TermPath path = new TermPath("request", STEPS);
 
