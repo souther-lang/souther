@@ -56,7 +56,6 @@ class AComparisonIsNumberedWhereverItIsWrittenTest {
     /** Every comparison of {@code twice}, by the source construct that wrote it. */
     private static Map<SourceConstructOrigin, ConstructOccurrence> comparisonsOfTwice() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(MODULE)).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("twice");

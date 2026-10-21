@@ -65,7 +65,6 @@ class EveryForkTheNumberingReachesIsOneTheDeclarationsAnsweredForTest {
     @Test
     void everyForkTheNumberingReachesWasAnsweredFor() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         Bodies.Elaborated checked =
                 compilation.db().ask(new Bodies.Checked(MODULE)).value();
         assertNotNull(checked, "the model under test compiles");

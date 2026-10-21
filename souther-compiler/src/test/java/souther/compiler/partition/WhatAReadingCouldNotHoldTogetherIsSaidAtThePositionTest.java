@@ -39,7 +39,6 @@ class WhatAReadingCouldNotHoldTogetherIsSaidAtThePositionTest {
     private static Partitions.Partitioning of(String source, String behavior) {
         Compilation compilation = Compilation.ofSources(List.of(source),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().getFirst();
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

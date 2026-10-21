@@ -58,7 +58,6 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
 
     private static FieldDomains of(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         return FieldDomains.of(name, RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),

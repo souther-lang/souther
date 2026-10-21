@@ -61,7 +61,6 @@ class ARewriteSearchedWhereNothingRunsSaysNothingRanTest {
     /** What looking for a row the body answering zero always is told apart on came to. */
     private static ReplacementDisposition searchedWith(Generator.Trial trial) {
         Compilation compilation = Compilation.ofSource(DOUBLED, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().getFirst();
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

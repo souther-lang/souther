@@ -126,7 +126,6 @@ class WhatAConjunctWasHoldingIsReadByLeavingItOutTest {
                 let take (n) = Ok
                 """.formatted(declaration);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
         return Rules.of(subject, RuleReadingContext.unshared(RuleReadings.of(compilation, module),

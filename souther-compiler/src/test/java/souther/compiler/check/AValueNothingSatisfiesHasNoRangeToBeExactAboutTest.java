@@ -59,7 +59,6 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
     /** The causes a declaration's projection names, by kind, in the order it files them. */
     private static List<String> causesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);

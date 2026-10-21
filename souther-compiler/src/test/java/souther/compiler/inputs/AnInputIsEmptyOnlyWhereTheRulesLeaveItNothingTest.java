@@ -443,13 +443,11 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
 
     private static RuleReadingSource rulesOf(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     private static InputDomain reading(String source, String behavior) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

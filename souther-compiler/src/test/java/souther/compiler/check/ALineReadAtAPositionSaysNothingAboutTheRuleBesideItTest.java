@@ -38,7 +38,6 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
 
     private static FieldDomains readingOf(String source, String type) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model under test compiles");

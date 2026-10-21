@@ -81,7 +81,6 @@ class WhatARuleRaisesDependsOnTheValueItAppliesToTest {
     /** What the clause of {@code Price} raises at {@code type}. */
     private static Required raisedBy(String type) {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);

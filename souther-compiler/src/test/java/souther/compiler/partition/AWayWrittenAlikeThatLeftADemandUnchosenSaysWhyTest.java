@@ -101,7 +101,6 @@ class AWayWrittenAlikeThatLeftADemandUnchosenSaysWhyTest {
                 behavior f : (xs: List<E>, ys: List<F>) -> Yes
                 let f (xs, ys) = Yes
                 """.formatted(fields), "Main");
-        compilation.answerEverything();
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

@@ -61,7 +61,6 @@ class ALineOfAClauseIsNamedWithinThePartThatDrewItTest {
     /** The lines one behavior's clauses draw, through the readings a report is built from. */
     private static EnsuresThresholds.Clauses drawn(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);

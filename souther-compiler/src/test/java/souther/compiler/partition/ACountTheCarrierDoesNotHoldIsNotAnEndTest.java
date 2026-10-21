@@ -193,7 +193,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
     /** What stands for a position of {@code name}, written. */
     private static List<String> representatives(String source, String name) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.representativesOf(
@@ -207,7 +206,6 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
     /** Every obligation the one position of {@code source}'s behavior owes, written. */
     private static List<String> obligations(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

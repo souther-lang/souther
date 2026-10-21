@@ -225,7 +225,6 @@ class EveryParameterAnImplementationWroteStandsForSomethingTest {
      */
     private static Hir.Module moduleOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Hir.Module resolved = compilation.db().ask(new Names.Resolved(module)).value();
         assertNotNull(resolved, "the source under test resolves");

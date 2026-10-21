@@ -97,7 +97,6 @@ class AComparisonBelongsToWhoWroteItNotToTheForkTestingItTest {
 
     private static List<CoverageSites.Obligation> comparisonsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");

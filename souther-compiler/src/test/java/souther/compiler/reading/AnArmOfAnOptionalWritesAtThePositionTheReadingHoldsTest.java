@@ -136,7 +136,6 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
 
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

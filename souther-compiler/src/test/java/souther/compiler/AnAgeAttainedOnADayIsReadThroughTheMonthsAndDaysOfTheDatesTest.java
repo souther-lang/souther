@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
@@ -11,6 +12,7 @@ import souther.compiler.report.GeneratedRows;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -47,11 +49,24 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
             behavior f : (birthday: Date, on: Date) -> Bool
             """;
 
+    /** Each source measured once for the class: the tests here only read what a measurement says,
+     *  and three ask the age at sixty. */
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(source, each -> {
+            Compilation compilation = Compilation.ofSource(each, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
+    }
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 
     private static String report(String source) {

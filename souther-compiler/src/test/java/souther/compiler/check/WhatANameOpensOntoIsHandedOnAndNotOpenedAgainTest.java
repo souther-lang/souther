@@ -37,7 +37,6 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
     private static Map<TypeSymbol, Cardinality> countsAlike(Map<String, String> documents) {
         Compilation c = Compilation.ofDocuments(
                 new LinkedHashMap<>(documents), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
         List<Hir.Def> declared = c.module(MODULE).defs().stream()
                 .map(each -> each.declaration().node()).toList();
         RuleReadingSource source = Shapes.ruleReading(c.db(), MODULE).value();

@@ -143,7 +143,6 @@ class ObservedFixturesTest {
 
     private static RuleReadingContext reading() {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.answerEverything();
         return RuleReadingContext.unshared(
                 RuleReadings.of(compilation, compilation.modules().get(0)),
                 ReadAs.THE_COMPILATION_DOES);

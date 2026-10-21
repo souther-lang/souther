@@ -39,7 +39,6 @@ class AReasonBelongsToTheConjunctItCameFromTest {
                 data Pair = { x: Int, y: Int }
                     %s
                 """.formatted(clause), "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Pair"));
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),

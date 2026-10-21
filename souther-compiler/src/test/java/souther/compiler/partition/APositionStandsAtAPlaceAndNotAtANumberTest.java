@@ -168,7 +168,6 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
 
     private static Quantities quantities() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs =

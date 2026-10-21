@@ -155,6 +155,10 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         Set<String> fellShort = new TreeSet<>();
         int opened = 0;
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
+            // The stores walked are the first of the two compared: walking reads the answers and
+            // asks nothing, so the comparison sees them as they were compiled.
+            List<Db> first = storesOf(scenario);
+            WALKED.put(scenario, first.stream().map(AnswerWalk::of).toList());
             for (AnswerWalk.Walked walked : walkedStoresOf(scenario)) {
                 opened += walked.opened();
                 List<AnswerWalk.Found> found = switch (walked.covered()) {
@@ -170,8 +174,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
                         .add(new AnswerClosure.Observation(
                                 AnswerClosure.Detector.ONE_ANSWER_WALKED, scenario).toString()));
             }
-            // And the same scenario compiled twice, which is what the other detector needs.
-            List<Db> first = storesOf(scenario);
+            // And the same scenario compiled again, which is what the other detector needs.
             List<Db> again = storesOf(scenario);
             for (int i = 0; i < first.size(); i++) {
                 List<TwoStores.Found> found = switch (TwoStores.compared(first.get(i), again.get(i))) {

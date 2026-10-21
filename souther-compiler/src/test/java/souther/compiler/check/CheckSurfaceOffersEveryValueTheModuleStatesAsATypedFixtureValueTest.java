@@ -136,7 +136,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
     void anOwnValueCallingAnImportedHelperIsACandidate() {
         Compilation compilation = Compilation.ofSources(
                 List.of(HELPER_LIB, CALLED_AN_IMPORTED_HELPER), ModulePath.EMPTY);
-        compilation.answerEverything();
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.calls")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -174,7 +173,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
     void anOwnValueCallingAnImportedHelperThatCallsAFurtherHelperIsACandidate() {
         Compilation compilation = Compilation.ofSources(
                 List.of(HELPER_LIB_A_CHAIN_DEEP, CALLED_AN_IMPORTED_HELPER), ModulePath.EMPTY);
-        compilation.answerEverything();
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.calls")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -197,7 +195,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
     void anImportedValueIsACandidate() {
         Compilation compilation = Compilation.ofSources(List.of(IMPORTED, IMPORTING),
                 ModulePath.EMPTY);
-        compilation.answerEverything();
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -221,7 +218,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                 let junk = Irrelevant { x = 1 }
                 """);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -279,7 +275,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                 let junk = Accepted { at = "x" }
                 """);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -323,7 +318,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         Compilation compilation = Compilation.ofSource(TAKES_A_LIST + """
                 let regulars: List<Customer> = [ vip, vip ]
                 """, "Main");
-        compilation.answerEverything();
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -344,7 +338,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         Compilation compilation = Compilation.ofSource(TAKES_A_LIST + """
                 let regulars = [ vip, vip ]
                 """, "Main");
-        compilation.answerEverything();
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -402,7 +395,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
     void aValueOfACompositionsInputTypeIsNotACandidate() {
         Compilation compilation = Compilation.ofSources(List.of(STAGE, COMPOSED),
                 ModulePath.EMPTY);
-        compilation.answerEverything();
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.composed")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -422,7 +414,6 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
 
     private static List<ReachName.Declaration> candidatesOf(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface(module)).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
         return surface.typedFixtureValues().getOrDefault(customerType(compilation, module),

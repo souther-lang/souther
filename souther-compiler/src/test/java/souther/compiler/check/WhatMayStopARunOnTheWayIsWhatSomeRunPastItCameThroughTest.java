@@ -45,7 +45,6 @@ class WhatMayStopARunOnTheWayIsWhatSomeRunPastItCameThroughTest {
                     Ok
                 }
                 """.formatted(lines), "Main");
-        compilation.answerEverything();
         Answer<Map<String, PathReachability.Answers.AsRun>> arrived =
                 compilation.db().ask(new Adequacy.Arrived("w1"));
         Set<WhatMayStopARun> out = new LinkedHashSet<>();

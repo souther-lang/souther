@@ -89,7 +89,6 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
 
     private static SearchRegion region() {
         Compilation compilation = Compilation.ofSource(ONE_DECIMAL_FIELD, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

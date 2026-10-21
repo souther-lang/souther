@@ -184,9 +184,7 @@ class WhatAnApplicationStatesComesFromTheDeclarationItAppliesTest {
             compilation.db().ask(new Bodies.ModuleDefinitions(module)).value();
 
     private static Compilation compiled() {
-        Compilation c = Compilation.ofSource(MODULE, "Main");
-        c.answerEverything();
-        return c;
+        return Compilation.ofSource(MODULE, "Main");
     }
 
     /** The model these answers are read off compiles, so an answer of nothing here is this reading
@@ -470,14 +468,12 @@ class WhatAnApplicationStatesComesFromTheDeclarationItAppliesTest {
      *  for a model this class does not hold, read the same way this one is. */
     private static Type declaredTypeIn(String source, String name) {
         Compilation read = Compilation.ofSource(source, "Main");
-        read.answerEverything();
         return declaredTypeOf(read, read.modules().get(0), name);
     }
 
     /** The same, for a value one module of a compile of several declares. */
     private static Type declaredTypeAcross(List<String> sources, String module, String name) {
         Compilation read = Compilation.ofSources(sources, ModulePath.EMPTY);
-        read.answerEverything();
         return declaredTypeOf(read, module, name);
     }
 

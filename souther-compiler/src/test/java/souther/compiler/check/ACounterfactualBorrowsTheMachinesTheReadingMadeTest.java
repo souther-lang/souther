@@ -100,7 +100,6 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
     @Test
     void whatTheReadingBuiltOnTopIsHandedOnToo() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
         TypeKey held = new TypeKey("demo", "Held");
         StringFacts whole = compilation.db().ask(new Machines.OfDeclaration(held)).value();
         assertFalse(whole.extents().isEmpty(),
@@ -133,7 +132,6 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
     @Test
     void readingTheDeclarationMakesMachines() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
 
         long before = StringMachineAnswers.machinesMade();
         FieldDomains.of(TypeSymbols.declared(new TypeKey("demo", "Held")),
