@@ -229,8 +229,21 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
             }
             assertFalse(closed.holdsNothing(),
                     () -> "said nothing is left, but " + written + " admits " + admitted.size());
-            for (Map<String, Integer> point : admitted) {
-                for (String position : POSITIONS) {
+            // A box holds every admitted point exactly when, at each position, it holds the least
+            // and the greatest value an admitted point has there — so those two points are the
+            // ones asked about.
+            for (String position : POSITIONS) {
+                Map<String, Integer> lowest = admitted.getFirst();
+                Map<String, Integer> highest = admitted.getFirst();
+                for (Map<String, Integer> point : admitted) {
+                    if (point.get(position) < lowest.get(position)) {
+                        lowest = point;
+                    }
+                    if (point.get(position) > highest.get(position)) {
+                        highest = point;
+                    }
+                }
+                for (Map<String, Integer> point : List.of(lowest, highest)) {
                     ExactRatio at = num(point.get(position));
                     assertTrue(admits(closed.box().leastOf(position), at, false)
                                     && admits(closed.box().mostOf(position), at, true),

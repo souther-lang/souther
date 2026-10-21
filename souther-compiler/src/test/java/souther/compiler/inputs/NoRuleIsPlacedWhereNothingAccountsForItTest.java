@@ -7,9 +7,10 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
-import souther.compiler.check.TypeCardinality;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Answer;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -202,11 +203,21 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
         return List.copyOf(out);
     }
 
-    /** The reading of every behavior of every model this repository carries. */
+    /**
+     * The reading of every behavior of every model this repository carries, as the compilation made
+     * it for the measurement — the one whose placements a report is built from, and already made
+     * when the models were answered.
+     */
     private static List<InputDomain> everyReading() {
         List<InputDomain> out = new ArrayList<>();
         for (Compilation compilation : ASKED_ABOUT) {
-            readings(compilation, out);
+            for (String module : compilation.modules()) {
+                Answer<Map<String, InputDomain>> read =
+                        compilation.db().ask(new Adequacy.Inputs(module));
+                if (read.present()) {
+                    out.addAll(read.value().values());
+                }
+            }
         }
         return out;
     }
@@ -255,21 +266,6 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
                             RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
                                     RepositoryModels.knownTo(compilation))));
                 }
-            }
-        }
-    }
-
-    private static void readings(Compilation compilation, List<InputDomain> out) {
-        for (String module : compilation.modules()) {
-            Map<String, DeclaredSig> sigs =
-                    compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
-            RuleReadingSource rules = RuleReadings.of(compilation, module);
-            for (DeclaredSig declared : sigs.values()) {
-                RuleReadingContext reading = RuleReadingContext.of(rules,
-                        ReadAs.THE_COMPILATION_DOES, RepositoryModels.knownTo(compilation));
-                out.add(InputDomain.of(declared, reading,
-                        TypeCardinality.Counts.workedOutIn(reading),
-                        souther.compiler.carrier.Membership.none()));
             }
         }
     }

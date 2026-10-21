@@ -9,6 +9,7 @@ import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlement;
 import souther.compiler.query.Settlements;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -44,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * asserting something nothing establishes.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
     @Test
@@ -54,7 +56,7 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
         int items = 0;
         int settledNotComposedFor = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            ConformanceCorpus.Analysed analysed = corpus.analyse();
+            ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
             for (String module : analysed.compilation().modules()) {
                 java.util.Map<String, Adequacy.Filling> filled =
                         Adequacy.generatedOf(analysed.compilation().db(), module);

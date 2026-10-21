@@ -8,6 +8,8 @@ import java.lang.classfile.CodeElement;
 import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.Instruction;
+import java.lang.classfile.constantpool.PoolEntry;
+import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.classfile.instruction.ArrayLoadInstruction;
 import java.lang.classfile.instruction.ArrayStoreInstruction;
 import java.lang.classfile.instruction.BranchInstruction;
@@ -589,6 +591,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
     private static List<String> hasAnOperator() {
         List<String> out = new ArrayList<>();
         forEachClass((owner, model) -> {
+            // Every way a class names a type is written in its constant pool, so a class whose pool
+            // never spells the operator names it nowhere — in no signature, no field and no
+            // instruction — and its code is not read.
+            if (!spellsTheOperator(model)) {
+                return;
+            }
             for (MethodModel method : model.methods()) {
                 boolean has = method.methodType().stringValue().contains(BIN_OP);
                 for (CodeElement element
@@ -680,6 +688,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     private interface EachClass {
         void read(String owner, ClassModel model);
+    }
+
+    private static boolean spellsTheOperator(ClassModel model) {
+        for (PoolEntry entry : model.constantPool()) {
+            if (entry instanceof Utf8Entry text && text.stringValue().contains(OPERATOR)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void forEachClass(EachClass each) {

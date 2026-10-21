@@ -199,18 +199,25 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
     }
 
     /**
-     * A value whose body is a block, holding a chain of {@code names} values at its first
-     * statement, named by a behavior so that substituting it is what the second count is of.
+     * A value whose body is a block, holding {@code additions} additions at its first statement,
+     * named by a behavior so that substituting it is what the second count is of.
      *
-     * <p>The chain is what makes the block expensive. Written nesting cannot: the parser bounds it
-     * at a depth far under this one, so a block that holds a lot holds it through names.
+     * <p>A chain of values is what makes the block expensive. Written nesting alone cannot: the
+     * parser bounds it at a depth far under this one, so a block that holds a lot holds it through
+     * names. Each name in the chain writes fifty of the additions and the statement writes what is
+     * left over, so the chain is a handful of values rather than one per addition — each of which
+     * the compile emits whole, and the count is the same either way.
      */
-    private static String aValueHoldingABlock(int names) {
+    private static String aValueHoldingABlock(int additions) {
+        int perName = 50;
+        int names = additions / perName;
         StringBuilder sb = new StringBuilder("module m exposing (f)\n\nlet v0 = 1\n");
         for (int i = 1; i <= names; i++) {
-            sb.append("let v").append(i).append(" = v").append(i - 1).append(" + 1\n");
+            sb.append("let v").append(i).append(" = v").append(i - 1)
+              .append(" + 1".repeat(perName)).append("\n");
         }
-        sb.append("\nlet held = {\n    let a = v").append(names).append("\n    a\n}\n\n");
+        sb.append("\nlet held = {\n    let a = v").append(names)
+          .append(" + 1".repeat(additions % perName)).append("\n    a\n}\n\n");
         return sb.append("behavior f : (x: Int) -> Int\nlet f (x) = x + held\n").toString();
     }
 

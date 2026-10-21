@@ -127,7 +127,7 @@ class ReadingsHoldTheirContractTest {
             Type expected = Readings.of(readings);
             for (List<Type> order : orders(readings)) {
                 assertEquals(expected, Readings.of(order),
-                        show(readings) + " read as " + show(order));
+                        () -> show(readings) + " read as " + show(order));
             }
         }
     }
@@ -138,7 +138,8 @@ class ReadingsHoldTheirContractTest {
         for (List<Type> readings : everything()) {
             List<Type> twice = new ArrayList<>(readings);
             twice.addAll(readings);
-            assertEquals(Readings.of(readings), Readings.of(twice), show(readings) + " given twice");
+            assertEquals(Readings.of(readings), Readings.of(twice),
+                    () -> show(readings) + " given twice");
         }
     }
 
@@ -156,10 +157,11 @@ class ReadingsHoldTheirContractTest {
                     all.add(reading);
                 }
                 Type answer = all.answer();
-                assertEquals(answer, all.answer(), show(readings) + " asked twice");
+                assertEquals(answer, all.answer(), () -> show(readings) + " asked twice");
                 if (answer != null) {
                     all.add(answer);
-                    assertEquals(answer, all.answer(), show(readings) + " read back into itself");
+                    assertEquals(answer, all.answer(),
+                            () -> show(readings) + " read back into itself");
                 }
             }
         }

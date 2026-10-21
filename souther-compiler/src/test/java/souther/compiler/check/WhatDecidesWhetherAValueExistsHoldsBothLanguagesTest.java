@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.WhatWasCompiled;
 import souther.compiler.numeric.OrderedIntervals;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
@@ -9,10 +10,10 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.ValueSet;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.lang.reflect.Field;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.FieldModel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,7 +24,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -58,14 +58,19 @@ class WhatDecidesWhetherAValueExistsHoldsBothLanguagesTest {
      * holder can answer around.
      */
     @Test
-    void whereThePositionsStopIsHeldByTheConfinementAndByNothingElse() {
+    void whereThePositionsStopIsHeldByTheConfinementAndByNothingElse() throws Exception {
         Set<String> apart = new TreeSet<>();
         int found = 0;
-        for (Class<?> each : compiled()) {
-            if (!holdsWhereThePositionsStop(each)) {
+        for (ClassModel model : WhatWasCompiled.compiled().all()) {
+            if (!holdsWhereThePositionsStop(model)) {
                 continue;
             }
             found++;
+            // Loaded only once its class file says it holds one, and not initialised: what is asked
+            // of it is what it is, and its static initialisers would make this depend on what they
+            // touch.
+            Class<?> each = Class.forName(model.thisClass().asInternalName().replace('/', '.'),
+                    false, getClass().getClassLoader());
             if (!Confinement.class.isAssignableFrom(each)) {
                 apart.add(each.getName());
             }
@@ -76,10 +81,13 @@ class WhatDecidesWhetherAValueExistsHoldsBothLanguagesTest {
                         + " can ask each of them whether anything satisfies the rules");
     }
 
-    /** Whether a class holds where a value's positions stop. */
-    private static boolean holdsWhereThePositionsStop(Class<?> of) {
-        for (Field each : of.getDeclaredFields()) {
-            if (each.getType() == OrderedIntervals.class) {
+    /** Where a value's positions stop, as a class file names the type of a field holding it. */
+    private static final String AN_ORDER = OrderedIntervals.class.descriptorString();
+
+    /** Whether a class holds where a value's positions stop, read off what it compiled to. */
+    private static boolean holdsWhereThePositionsStop(ClassModel of) {
+        for (FieldModel each : of.fields()) {
+            if (each.fieldType().equalsString(AN_ORDER)) {
                 return true;
             }
         }
@@ -182,45 +190,6 @@ class WhatDecidesWhetherAValueExistsHoldsBothLanguagesTest {
             return Files.readString(source, StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
-        }
-    }
-
-    /**
-     * Every class of this compiler, loaded for what it declares.
-     *
-     * <p>Not initialised: what is read here is the fields a type holds, and running its static
-     * initialisers would make this test depend on what they touch.
-     */
-    private static List<Class<?>> compiled() {
-        List<Class<?>> found = new ArrayList<>();
-        for (String entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
-            Path root = Path.of(entry);
-            if (!entry.contains("souther-") || !Files.isDirectory(root)) {
-                continue;
-            }
-            try (Stream<Path> walk = Files.walk(root)) {
-                walk.filter(each -> each.toString().endsWith(".class"))
-                        .map(each -> root.relativize(each).toString())
-                        .forEach(name -> load(name, found));
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        }
-        return found;
-    }
-
-    private static void load(String path, List<Class<?>> into) {
-        String named = path.substring(0, path.length() - ".class".length())
-                .replace(File.separatorChar, '.').replace('/', '.');
-        if (!named.startsWith("souther.") || named.endsWith("package-info")
-                || named.endsWith("module-info")) {
-            return;
-        }
-        try {
-            into.add(Class.forName(named, false,
-                    WhatDecidesWhetherAValueExistsHoldsBothLanguagesTest.class.getClassLoader()));
-        } catch (ClassNotFoundException | LinkageError _) {
-            // a class this test's path cannot resolve says nothing about the rule
         }
     }
 }
