@@ -84,7 +84,7 @@ class ARowALimitStoppedSaysTheNumberItWasHeldToTest {
     @Test
     void aRowThatStoppedAnsweringSaysTheWaitItWasGivenAllTheWayToTheReport() {
         Compilation compilation = Compilation.ofSource(LOOPS, "Main");
-        compilation.withEvaluationPolicy(EvaluationPolicy.DEFAULT.withCompilerTimeout(
+        compilation.withEvaluationPolicy(DoesNotComeBack.POLICY.withCompilerTimeout(
                 DoesNotComeBack.WAIT));
         compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf("run")));
