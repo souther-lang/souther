@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.ToIntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -124,6 +125,42 @@ class AnOrderThatCannotTellTwoPositionsApartRefusesTheWalkTest {
         assertEquals(List.of(Written.FIRST, Written.SECOND),
                 CanonicalOrder.<Written>asTheyAreDeclared()
                         .walking(List.of(Written.SECOND, Written.FIRST), Function.identity()));
+    }
+
+    /** The same order, giving each position's place as a number, which a walk sorts by. */
+    private static final CanonicalOrder<String> BY_ITS_FIRST_LETTER_PLACED =
+            new CanonicalOrder<>() {
+                @Override
+                public int compare(String one, String other) {
+                    return BY_ITS_FIRST_LETTER.compare(one, other);
+                }
+
+                @Override
+                public ToIntFunction<String> placeOf() {
+                    return each -> each.charAt(0);
+                }
+            };
+
+    /**
+     * An order that gives its places walks as the same order does without them, and is held to
+     * the same refusal: reading each place once is how it is walked, and no other answer.
+     */
+    @Test
+    void anOrderGivingItsPlacesWalksAndRefusesAsItsComparisonDoes() {
+        for (List<String> these : List.<List<String>>of(List.of("cow", "ant", "bee", "ant"),
+                List.of("bee", "ant"), List.of(), List.of("ant"))) {
+            assertEquals(BY_ITS_FIRST_LETTER.walking(these, Function.identity()),
+                    BY_ITS_FIRST_LETTER_PLACED.walking(these, Function.identity()),
+                    these::toString);
+        }
+        for (List<String> pair : List.of(List.of("ant", "ape"), List.of("ape", "cow", "ant"))) {
+            assertEquals(assertThrows(IllegalStateException.class,
+                            () -> BY_ITS_FIRST_LETTER.walking(pair, Function.identity()))
+                            .getMessage(),
+                    assertThrows(IllegalStateException.class,
+                            () -> BY_ITS_FIRST_LETTER_PLACED.walking(pair, Function.identity()))
+                            .getMessage(), pair::toString);
+        }
     }
 
     /** Two constants, to be walked in the order they are written here. */
