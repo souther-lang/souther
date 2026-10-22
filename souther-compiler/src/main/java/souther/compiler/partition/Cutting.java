@@ -1220,7 +1220,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                      DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
                      Quantity.HowManyMeet _,
-                     Quantity.HowManyHold _, Quantity.HowManyDifferent _, Quantity.SumOver _,
+                     Quantity.HowManyHold _, Quantity.HowManyDifferent _,
+                     Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
+                     Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                      Quantity.WhatAnOperationAnswers _, Quantity.APieceOf _,
                      Quantity.IsAmongThePieces _ -> { }
@@ -1259,6 +1261,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         values -> related.addAll(values);
                 case Quantity.HowManyDifferent different ->
                         related.add(FilingCoordinate.at(different.ofTheElement().inputPosition()));
+                case Quantity.HowManyDifferentAcross across -> related.add(
+                        FilingCoordinate.at(across.ofTheOccurrence().inputPosition()));
+                // The values the nodes reached collect are the ones relating: the position of
+                // the key a node looks its entry up by, the key that entry is filed under, and the
+                // value taken of it. No coordinate of the map's own entries is claimed.
+                case Quantity.HowManyDifferentBelow below -> {
+                    related.add(FilingCoordinate.at(below.keyOfTheRoot()));
+                    related.add(FilingCoordinate.at(below.map().key()));
+                    related.add(FilingCoordinate.at(below.valueOfAnEntry()));
+                }
                 default -> {
                     return null;
                 }
@@ -1531,6 +1543,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     case Quantity.HowManyDifferent different -> relations.add(
                             UndividedByARelation.amongTheValuesAt(
                                     different.ofTheElement().inputPosition()));
+                    case Quantity.HowManyDifferentAcross across -> relations.add(
+                            UndividedByARelation.amongTheValuesAt(
+                                    across.ofTheOccurrence().inputPosition()));
+                    // The values collected are held against one another, and so are the keys that
+                    // pick them: a key is only asked to be, or not to be, the key of an entry.
+                    // Neither is put in order, so no line is drawn on either, and no equality of
+                    // two of them is a rule here.
+                    case Quantity.HowManyDifferentBelow below -> relations.add(
+                            UndividedByARelation.amongTheValuesAt(List.of(below.keyOfTheRoot(),
+                                    below.map().key(), below.valueOfAnEntry())));
                     default -> { }
                 }
             }

@@ -87,10 +87,10 @@ class ANumberNoPlaceNamesIsNamedByItsTermTest {
 
     private static NumericTerm totalOf(int added) {
         return NumericTerm.GatheredUnderItsKey.of(TermPath.of("ps").element(),
-                ElementProjection.ofFields(List.of("account")),
+                new ElementKey.At(ElementProjection.ofFields(List.of("account"))),
                 new ElementValue.Affine(new LinearForm<>(ExactRatio.of(added),
                         Map.of(ElementProjection.ofFields(List.of("amount")), ExactRatio.ONE))),
-                Type.Prim.INT, NumericTerm.GatheredUnderItsKey.Gathering.TOTAL);
+                Type.Prim.INT, NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, null);
     }
 
     private static NumericTerm sumBelow(String container, RuleReadingSource rules) {

@@ -935,6 +935,48 @@ public final class InputNumber {
     }
 
     /**
+     * The same, where {@code value} may add numbers of the input that stand the same for every
+     * element beside what it computes of the element ({@link ElementValue#readBeside}) — or null
+     * where it is not read.
+     *
+     * <p>Of the element as {@code walked} says it was made, read through the names the walks on
+     * the way hand it by. A number stands the same for every element where it is read in
+     * {@code reads} as a position and that position is not at or under where the elements stand:
+     * where the walk is, it holds one value, whichever element is being handed.
+     *
+     * <p>Where the arm making an element is chosen by its case, the number is read of each arm and
+     * is the choice by that case ({@link ElementValue.OfItsCase}), so it is chosen as the key read
+     * of the same element is ({@link InputReads#keyOf}). What stands beside every element is read
+     * only where every arm adds the same of it.
+     */
+    public static ElementComputation computedOfTheElementBeside(Core value,
+                                                                InputReads.WalkedElement walked,
+                                                                InputReads reads,
+                                                                RuleReadingSource source) {
+        TermPath elements = walked.elements();
+        List<ElementValue.OfItsCase.Arm> arms = new ArrayList<>();
+        LinearForm<NumericTerm> beside = null;
+        for (InputReads.WalkedElement.Arm arm : walked.arms()) {
+            ElementComputation read = ElementValue.readBeside(
+                    new ElementAnswer(walked.element(), value, null), arm.standing(), arm.held(),
+                    source, new ElementValue.ElementsAt(elements, reads.declared()),
+                    e -> reads.pathOf(e, source.newtypes()) instanceof PathResolution.At(
+                            TermPath at) && !at.isAtOrUnder(elements) && !elements.isAtOrUnder(at)
+                            ? new NumericTerm.ValueOf(at) : null);
+            if (read == null || (beside != null && !beside.equals(read.invariant()))) {
+                return null;
+            }
+            if (walked.subject() == null) {
+                return read;
+            }
+            beside = read.invariant();
+            arms.add(new ElementValue.OfItsCase.Arm(arm.cases(), read.relative()));
+        }
+        return new ElementComputation(
+                ElementValue.choosingByCase(walked.subject(), arms, null), beside);
+    }
+
+    /**
      * The number {@code operation} takes of what {@code computed} makes of each element of the list
      * at {@code list}, handed in {@code direction} — the term a total of the same computation over a
      * list of the input is — or null where the elements are not one run.

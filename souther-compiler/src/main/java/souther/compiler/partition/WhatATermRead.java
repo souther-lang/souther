@@ -399,7 +399,15 @@ sealed interface WhatATermRead {
      * this key's number.
      */
     static WhatATermRead underItsKey(TermOrders on, BorderQuantity.Observation row) {
-        TermPath elements = ((NumericTerm.GatheredUnderItsKey) on.term()).elements();
+        NumericTerm.GatheredUnderItsKey term = (NumericTerm.GatheredUnderItsKey) on.term();
+        TermPath elements = term.elements();
+        // The element the reading chose is filed under its key only where it is kept.
+        if (term.selection() != null) {
+            WhatATermRead ownKept = keptOrNot(term.selection().perElement().at(row));
+            if (ownKept != null) {
+                return ownKept;
+            }
+        }
         return switch (row.keptOf(new EveryKeyOf(on))) {
             case WalkResult.CouldNotWalk<TermOrders.ElementsTogether<WhatATermRead>> _ ->
                     new CameToNothing(ReadingGap.COULD_NOT_WALK);
@@ -486,9 +494,20 @@ sealed interface WhatATermRead {
                             List<BorderQuantity.Observation> reached))) {
                 return WalkResult.couldNotWalk();
             }
+            KeptOccurrences kept = ((NumericTerm.GatheredUnderItsKey) on.term()).selection();
             List<Function<ElementProjection, TermOrders.Holding<WhatATermRead>>> each =
                     new ArrayList<>(reached.size());
             for (BorderQuantity.Observation element : reached) {
+                // An occurrence the statement drops is filed under no key.
+                if (kept != null) {
+                    AStatementAtARow.Answer answer = kept.perElement().at(element);
+                    if (answer instanceof AStatementAtARow.Answer.CouldNotTell) {
+                        return WalkResult.couldNotWalk();
+                    }
+                    if (!(answer instanceof AStatementAtARow.Answer.Holds)) {
+                        continue;
+                    }
+                }
                 each.add(heldBy(element, elements));
             }
             return WalkResult.reached(on.together(each));

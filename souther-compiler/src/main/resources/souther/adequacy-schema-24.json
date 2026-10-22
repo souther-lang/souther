@@ -1230,6 +1230,44 @@
             },
             "computation": {
               "$ref": "#/$defs/elementComputation"
+            },
+            "kept_by": {
+              "type": "string",
+              "description": "The statement the elements gathered are kept by, where only some occurrences are: one that does not meet it is filed under no key. Absent where every occurrence is gathered. Two keepings of one place are two numbers."
+            },
+            "key_by_case": {
+              "type": "object",
+              "description": "Where the key is chosen by the case of the value at `subject`: an element is filed under what it holds at the `key` of the arm whose `taken` its case is, and two elements holding one value are one key whichever arm each was read by. `key` then spells the arms. Absent where every element holds its key at one place.",
+              "required": [
+                "subject",
+                "arms"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "arms": {
+                  "type": "array",
+                  "minItems": 2,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "taken",
+                      "key"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "taken": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },

@@ -343,11 +343,17 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 "List.length(List.fold((acc, i) -> acc ++ i.parts, [], b.items))")) {
             assertEquals(flattened, stated(added + " + List.length(b.xs) >= 1"), added);
         }
-        for (String byCases : List.of("e -> if e > 0 then [e] else []",
-                "e -> if e > 0 then [e] else [e, e]")) {
-            assertInstanceOf(Proposition.Unread.class, stated("List.length(List.flatMap("
-                    + byCases + ", b.xs)) + List.length(b.items) >= 1"), byCases);
-        }
+        // One answering a number by cases holds, for each case, that many for every element
+        // taking it: how many elements meet the case, as a filter keeping them counts them.
+        assertEquals(stated("List.length(List.filter(e -> e > 0, b.xs))"
+                        + " + List.length(b.items) >= 1"),
+                stated("List.length(List.flatMap(e -> if e > 0 then [e] else [], b.xs))"
+                        + " + List.length(b.items) >= 1"));
+        assertEquals(stated("List.length(List.filter(e -> e > 0, b.xs))"
+                        + " + 2 * List.length(List.filter(e -> e <= 0, b.xs))"
+                        + " + List.length(b.items) >= 1"),
+                stated("List.length(List.flatMap(e -> if e > 0 then [e] else [e, e], b.xs))"
+                        + " + List.length(b.items) >= 1"));
     }
 
     /**

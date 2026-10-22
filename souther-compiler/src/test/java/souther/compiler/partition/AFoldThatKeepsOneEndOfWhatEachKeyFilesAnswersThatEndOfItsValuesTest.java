@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BinaryOperator;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -372,23 +373,30 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
 
     /**
      * A value worked out of what an element holds, alone or with another input, is no place of
-     * the element: the comparison is left unread, and no end of what some place holds is said to
-     * be what the key keeps.
+     * the element: the end the key keeps is the end of that value, read as a fold over the touches
+     * writing it of each touch reads it, and no end of what some place holds is said to be it.
      */
     @Test
-    void aValueWorkedOutOfWhatTheElementHoldsLeavesTheComparisonUnread() {
-        for (String walked : List.of(
-                "List.map(t -> Seen { who = t.account, since = t.days + 1 }, touches)",
-                "List.map(t -> Seen { who = t.account,"
-                        + " since = Date.daysBetween(t.on, today) }, touches)")) {
-            Compilation compilation = read(OVER_WHAT_A_MAP_BUILT.formatted(
+    void aValueWorkedOutOfWhatTheElementHoldsIsTheEndOfThatValue() {
+        for (String since : List.of("t.days + 1", "Date.daysBetween(t.on, today)")) {
+            Compilation built = read(OVER_WHAT_A_MAP_BUILT.formatted(
                     "Map.updateOrInsert(p.who, p.since, seen -> Int.min(seen, p.since), acc)",
-                    walked));
-            assertTrue(report(compilation).contains("not read"),
-                    () -> walked + ": " + report(compilation));
-            assertFalse(json(compilation).contains("least("),
-                    () -> walked + ": " + report(compilation));
+                    "List.map(t -> Seen { who = t.account, since = " + since + " }, touches)"));
+            String direct = since.replace("t.", "p.");
+            Compilation written = read(OVER_WHAT_A_MAP_BUILT.formatted(
+                    "Map.updateOrInsert(p.account, " + direct + ", seen -> Int.min(seen, "
+                            + direct + "), acc)", "touches"));
+            assertFalse(endsOf(built).isEmpty(), () -> since + ": " + report(built));
+            assertEquals(endsOf(written), endsOf(built), () -> since + ": " + report(built));
+            assertFalse(json(built).contains("least(touches[*].days"),
+                    () -> since + ": " + report(built));
         }
+    }
+
+    /** Each end of a key a document names. */
+    private static List<String> endsOf(Compilation compilation) {
+        return Pattern.compile("least\\([^\"]*?by account\\)").matcher(json(compilation))
+                .results().map(MatchResult::group).distinct().sorted().toList();
     }
 
     /** The line is written in a document the schema shipped beside this accepts. */

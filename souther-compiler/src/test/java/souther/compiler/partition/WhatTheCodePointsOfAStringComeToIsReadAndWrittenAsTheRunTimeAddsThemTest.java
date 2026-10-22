@@ -16,6 +16,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
@@ -83,7 +84,7 @@ class WhatTheCodePointsOfAStringComeToIsReadAndWrittenAsTheRunTimeAddsThemTest {
         assertEquals(summed(AT), summed(TermPath.of("t")));
         assertNotEquals(summed(AT), summed(TermPath.of("u")));
         assertEquals(TermPath.of("t").then("name"),
-                summed(AT).movedTo(path -> path.then("name")).position());
+                summed(AT).movedTo(PlacesMoved.by(path -> path.then("name"))).position());
 
         NumericTerm length = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("String", "length"), AT, Type.STRING, INNERS, SYMBOLS);

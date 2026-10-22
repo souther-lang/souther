@@ -145,6 +145,11 @@ public sealed interface Proposition {
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
+            case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject _) ->
+                    isAnElementOf(counted, container);
+            case Quantity.HowManyDifferentBelow below ->
+                    isAnElementOf(new DecisionSubject.AnInput(below.root()), container)
+                            || isAnElementOf(new DecisionSubject.AnInput(below.map()), container);
             case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
                     isAnElementOf(summed, container) || mayBeAnElementOf(each, container);
             case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
@@ -1348,6 +1353,10 @@ public sealed interface Proposition {
             case Quantity.HowManyDifferent different ->
                     different.container() instanceof DecisionSubject.AnAnswer
                             && different.ofTheElement() instanceof DecisionSubject.AnAnswer;
+            case Quantity.HowManyDifferentAcross across ->
+                    across.container() instanceof DecisionSubject.AnAnswer
+                            && across.ofTheOccurrence() instanceof DecisionSubject.AnAnswer;
+            case Quantity.HowManyDifferentBelow _ -> false;
             case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
                     && namesNothingOfTheInput(sum.ofTheElement());
         };
@@ -1371,6 +1380,10 @@ public sealed interface Proposition {
             case Quantity.HowManyDifferent different ->
                     different.container() instanceof DecisionSubject.AnAnswer
                             || different.ofTheElement() instanceof DecisionSubject.AnAnswer;
+            case Quantity.HowManyDifferentAcross across ->
+                    across.container() instanceof DecisionSubject.AnAnswer
+                            || across.ofTheOccurrence() instanceof DecisionSubject.AnAnswer;
+            case Quantity.HowManyDifferentBelow _ -> false;
             case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
                     || anAnswerIn(sum.ofTheElement());
         };

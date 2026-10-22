@@ -186,10 +186,11 @@ class WhatTheElementsOfAKeyComeToIsReadForEveryElementTest {
 
     /** The total under the account of {@code amount + added}. */
     private static NumericTerm totalOf(int added) {
-        return NumericTerm.GatheredUnderItsKey.of(TermPath.of("ps").element(), ACCOUNT,
+        return NumericTerm.GatheredUnderItsKey.of(TermPath.of("ps").element(),
+                new ElementKey.At(ACCOUNT),
                 new ElementValue.Affine(new LinearForm<>(ExactRatio.of(added),
                         Map.of(AMOUNT, ExactRatio.ONE))),
-                Type.Prim.INT, NumericTerm.GatheredUnderItsKey.Gathering.TOTAL);
+                Type.Prim.INT, NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, null);
     }
 
     private static Quantities quantities() {

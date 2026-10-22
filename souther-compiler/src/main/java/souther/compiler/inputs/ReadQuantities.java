@@ -8,6 +8,7 @@ import souther.compiler.check.HeldClass;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Congruences;
@@ -464,8 +465,20 @@ final class ReadQuantities implements Quantities {
             for (ElementProjection field : gathered.fieldsRead()) {
                 fieldTypes.put(field, typeAt.apply(field.from(gathered.elements())));
             }
+            // An element is put to the statement keeping some of them as it stands, so what is
+            // written on the way to each place the statement reads is said there too.
+            Set<ElementProjection> walked = new LinkedHashSet<>(gathered.fieldsRead());
+            if (gathered.selection() != null) {
+                for (TermPath read : PositionsAStatementReads.of(gathered.selection().meeting())
+                        .orElse(List.of())) {
+                    ElementProjection within = ElementProjection.below(gathered.elements(), read);
+                    if (within != null) {
+                        walked.add(within);
+                    }
+                }
+            }
             return TermOrdering.of(term, gathered.each(), fieldTypes,
-                    onTheWay(gathered.fieldsRead(), gathered.elements()),
+                    onTheWay(walked, gathered.elements()),
                     ruleReading.source().symbols(), ruleReading.source().declarations());
         }
         if (term instanceof NumericTerm.OfAnElementsNeighbours among) {

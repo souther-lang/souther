@@ -1878,7 +1878,8 @@ final class DemandReading {
                     return anAnswerARowStandsIn(compared);
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;
-                case Quantity.HowManyDifferent _, Quantity.SumOver _,
+                case Quantity.HowManyDifferent _, Quantity.HowManyDifferentBelow _,
+                     Quantity.HowManyDifferentAcross _, Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _ -> overElements = true;
                 case Quantity.RemainderOfADividend _ -> remainder = true;
                 case Quantity.RemainderByAnInput _ -> remainderByAnInput = true;

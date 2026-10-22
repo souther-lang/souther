@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.ToIntFunction;
 
 /**
  * Everything a closure of rules is worked out from, as one value.
@@ -200,8 +201,24 @@ final class ClosureQuestion<A> {
      * refuses rather than guessing a place for it.
      */
     CanonicalOrder<A> order() {
-        return (one, other) -> Integer.compare(known(place.get(one), one),
-                known(place.get(other), other));
+        return new CanonicalOrder<>() {
+            @Override
+            public int compare(A one, A other) {
+                return Integer.compare(ClosureQuestion.this.placeOf(one),
+                        ClosureQuestion.this.placeOf(other));
+            }
+
+            /** The places themselves, which are what this order is. */
+            @Override
+            public ToIntFunction<A> placeOf() {
+                return ClosureQuestion.this::placeOf;
+            }
+        };
+    }
+
+    /** Where {@code position} stands among the positions the rules weigh. */
+    private int placeOf(A position) {
+        return known(place.get(position), position);
     }
 
     private static <T> T known(T answer, Object position) {

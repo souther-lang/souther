@@ -313,8 +313,6 @@ public final class OperationFacts {
             // map holds it under the key, in place of what was there.
             about("Set", "insert", putsIn(at(0), at(1))),
             about("Map", "insert", putsIn(at(1), at(2))),
-            // And a set keeps what it held: inserting answers it and the value.
-            about("Set", "insert", gathersIn(at(0), at(1))),
             // Every value in the answer came from the map it was given: the one under the key is
             // what the closure made of it, and every other is the value that was there. Read as a
             // closure result alone, what is true of one value would be said of all of them.
@@ -775,6 +773,14 @@ public final class OperationFacts {
                             answerOf("Map", "insert", the(at(0)), the(at(1)), the(at(2))))),
                     any(alike(the(ANY), the(at(0))),
                             isTrue(answerOf("Map", "containsKey", the(ANY), the(at(2)))))))),
+            // Either way the key is looked up, its value is inserted under it: what the answer
+            // holds a key of is the key and what the map held one of, proved against the body.
+            about("Map", "updateOrInsert", lemma(related(iff(
+                    isTrue(answerOf("Map", "containsKey", the(ANY),
+                            answerOf("Map", "updateOrInsert", the(at(0)), the(at(1)), the(at(2)),
+                                    the(at(3))))),
+                    any(alike(the(ANY), the(at(0))),
+                            isTrue(answerOf("Map", "containsKey", the(ANY), the(at(3))))))))),
             about("Map", "empty", related(
                     isTrue(answerOf("Map", "containsKey", the(ANY), answerOf("Map", "empty")))
                             .denied())),
@@ -782,6 +788,12 @@ public final class OperationFacts {
                     isTrue(answerOf("Set", "contains", the(ANY),
                             answerOf("Set", "insert", the(at(0)), the(at(1))))),
                     any(alike(the(ANY), the(at(0))),
+                            isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
+            // A union holds exactly what either set held.
+            about("Set", "union", related(iff(
+                    isTrue(answerOf("Set", "contains", the(ANY),
+                            answerOf("Set", "union", the(at(0)), the(at(1))))),
+                    any(isTrue(answerOf("Set", "contains", the(ANY), the(at(0)))),
                             isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
 
             // Which values of a set are left: some other than the one taken out, some of one also
@@ -1057,11 +1069,6 @@ public final class OperationFacts {
     /** The answer is {@code into} with {@code value} put in. */
     private static OperationFact putsIn(ArgumentRef value, ArgumentRef into) {
         return new OperationFact.PutsAValueIn(value, into);
-    }
-
-    /** The answer is a set holding exactly what {@code into} holds and {@code value}. */
-    private static OperationFact gathersIn(ArgumentRef value, ArgumentRef into) {
-        return new OperationFact.GathersIn(value, into);
     }
 
     /** The answer is keyed by keys {@code map} was keyed by. */

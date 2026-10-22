@@ -33,6 +33,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -872,8 +873,30 @@ public sealed interface ElementValue {
      */
     static ElementValue read(ElementAnswer answer, Map<BindingId, Core> held,
                              RuleReadingSource source, ElementsAt elements) {
-        return new Reader(answer.parameter(), answer.position(), Map.of(), held, source, elements)
-                .value(answer.body());
+        return new Reader(answer.parameter(), answer.position(), Map.of(), held, source, elements,
+                null).value(answer.body());
+    }
+
+    /**
+     * The same, where the closure's answer may add to what it computes of the element numbers
+     * that stand the same for every element: what it computes of the element, and the form of
+     * those beside it — or null where it is not read.
+     *
+     * <p>Only beside it, added once to the whole answer. A number like that inside a choice is
+     * added for some elements and not others, and is not read here.
+     *
+     * @param standing    where in the element each name an arm on the way to the closure bound
+     *                    stands
+     * @param invariantAt the number of the input {@code e} is, where it stands the same for every
+     *                    element the walk hands the closure, or null where it is not
+     */
+    static ElementComputation readBeside(ElementAnswer answer,
+                                         Map<BindingId, ElementProjection> standing,
+                                         Map<BindingId, Core> held,
+                                         RuleReadingSource source, ElementsAt elements,
+                                         Function<Core, NumericTerm> invariantAt) {
+        return new Reader(answer.parameter(), answer.position(), standing, held, source,
+                elements, invariantAt).computation(answer.body());
     }
 
     /**
@@ -885,8 +908,8 @@ public sealed interface ElementValue {
      */
     static ElementValue readWithoutAPlace(ElementAnswer answer, Map<BindingId, Core> held,
                                           RuleReadingSource source) {
-        return new Reader(answer.parameter(), answer.position(), Map.of(), held, source, null)
-                .value(answer.body());
+        return new Reader(answer.parameter(), answer.position(), Map.of(), held, source, null,
+                null).value(answer.body());
     }
 
     /**
@@ -919,16 +942,21 @@ public sealed interface ElementValue {
         private final RuleReadingSource source;
         /** Where the elements stand, or null where they stand at no place of the input. */
         private final ElementsAt elements;
+        /** The number of the input standing the same for every element a leaf is, or null
+         *  where no such number is read. */
+        private final Function<Core, NumericTerm> invariantAt;
 
         private Reader(BindingId element, BindingId position,
                        Map<BindingId, ElementProjection> standing, Map<BindingId, Core> held,
-                       RuleReadingSource source, ElementsAt elements) {
+                       RuleReadingSource source, ElementsAt elements,
+                       Function<Core, NumericTerm> invariantAt) {
             this.element = element;
             this.position = position;
             this.standing = standing;
             this.held = held;
             this.source = source;
             this.elements = elements;
+            this.invariantAt = invariantAt;
         }
 
         /** The same reading, inside an arm whose name {@code bound} stands at {@code at}. */
@@ -938,7 +966,8 @@ public sealed interface ElementValue {
             }
             Map<BindingId, ElementProjection> wider = new LinkedHashMap<>(standing);
             wider.put(bound.binding(), at);
-            return new Reader(element, position, Map.copyOf(wider), held, source, elements);
+            return new Reader(element, position, Map.copyOf(wider), held, source, elements,
+                    invariantAt);
         }
 
         private ElementProjection placeOf(Core e, Map<BindingId, Core> at) {
@@ -959,18 +988,43 @@ public sealed interface ElementValue {
             return form == null ? null : valueOf(form);
         }
 
-        /** {@code form} as what it comes to of the element, put together as {@link #summed} puts
-         *  it; or null where the exact arithmetic cannot hold it. */
-        private static ElementValue valueOf(LinearForm<Atom> form) {
+        /** {@code answer} as what it comes to of the element and the numbers beside it, which are
+         *  read only at the top of it ({@link #readBeside}). */
+        private ElementComputation computation(Core answer) {
+            LinearForm<Atom> form = AffineForms.of(answer, held, atoms());
+            if (form == null) {
+                return null;
+            }
             Map<Atom, ExactRatio> ofTheElement = new LinkedHashMap<>();
-            Map<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
+            Map<NumericTerm, ExactRatio> beside = new LinkedHashMap<>();
             form.coefs().forEach((atom, weight) -> {
-                if (atom instanceof Atom.Chosen(ElementValue choice)) {
-                    chosen.put(choice, weight);
+                if (atom instanceof Atom.Invariant(NumericTerm term)) {
+                    beside.put(term, weight);
                 } else {
                     ofTheElement.put(atom, weight);
                 }
             });
+            ElementValue relative = valueOf(new LinearForm<>(form.constant(), ofTheElement));
+            return relative == null ? null : new ElementComputation(relative,
+                    new LinearForm<>(ExactRatio.ZERO, beside));
+        }
+
+        /** {@code form} as what it comes to of the element, put together as {@link #summed} puts
+         *  it; or null where the exact arithmetic cannot hold it, or where it adds a number that
+         *  stands beside the element, which is no part of what the element comes to. */
+        private static ElementValue valueOf(LinearForm<Atom> form) {
+            Map<Atom, ExactRatio> ofTheElement = new LinkedHashMap<>();
+            Map<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
+            for (Map.Entry<Atom, ExactRatio> each : form.coefs().entrySet()) {
+                switch (each.getKey()) {
+                    case Atom.Chosen(ElementValue choice) -> chosen.put(choice, each.getValue());
+                    case Atom.Invariant _ -> {
+                        return null;
+                    }
+                    case Atom.Place _, Atom.ThePosition _, Atom.PositionTimes _ ->
+                            ofTheElement.put(each.getKey(), each.getValue());
+                }
+            }
             return ElementValue.summed(formOf(form.constant(), ofTheElement), chosen);
         }
 
@@ -990,8 +1044,9 @@ public sealed interface ElementValue {
                     case Atom.PositionTimes(ElementProjection place) ->
                             moved.put(place, each.getValue());
                     case Atom.ThePosition _ -> step = each.getValue();
-                    case Atom.Chosen _ -> throw new IllegalArgumentException(
-                            "a choice is no part of a form: " + each);
+                    case Atom.Chosen _, Atom.Invariant _ -> throw new IllegalArgumentException(
+                            "a choice, or a number beside the element, is no part of a form: "
+                                    + each);
                 }
             }
             Affine base = new Affine(new LinearForm<>(constant, places));
@@ -1017,6 +1072,9 @@ public sealed interface ElementValue {
             record PositionTimes(ElementProjection place) implements Atom {}
 
             record Chosen(ElementValue choice) implements Atom {}
+
+            /** A number of the input that stands the same for every element. */
+            record Invariant(NumericTerm term) implements Atom {}
         }
 
         /** What a branch on a flag of the element or on a test of its position comes to, or null
@@ -1213,6 +1271,10 @@ public sealed interface ElementValue {
                     }
                     if (position != null && isThePosition(e)) {
                         return LinearForm.atom(new Atom.ThePosition());
+                    }
+                    NumericTerm beside = invariantAt == null ? null : invariantAt.apply(e);
+                    if (beside != null) {
+                        return LinearForm.atom(new Atom.Invariant(beside));
                     }
                     ElementValue choice = switch (Core.withoutStanding(e)) {
                         case Core.If branch -> byCondition(branch);
@@ -1494,7 +1556,7 @@ public sealed interface ElementValue {
      */
     static Added addedTo(ElementAnswer step, BindingId accumulator, Map<BindingId, Core> held,
                          RuleReadingSource source, ElementsAt elements) {
-        return new Reader(step.parameter(), step.position(), Map.of(), held, source, elements)
+        return new Reader(step.parameter(), step.position(), Map.of(), held, source, elements, null)
                 .addedTo(step.body(), accumulator);
     }
 

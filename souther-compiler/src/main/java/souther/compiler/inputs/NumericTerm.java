@@ -27,10 +27,11 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.UnaryOperator;
+import java.util.Set;
 
 /**
  * The number a rule compares, and where that number is read from.
@@ -117,15 +118,15 @@ public sealed interface NumericTerm
         /** The same number, of the one value standing where {@code moved} puts {@link
          *  #position()}: never null, since one place moved is one place. */
         @Override
-        FromOnePosition movedTo(UnaryOperator<TermPath> moved);
+        FromOnePosition movedTo(PlacesMoved moved);
     }
 
     /** The number a location holds: a numeric parameter, a field of one, a numeric newtype's value. */
     record ValueOf(TermPath position) implements FromOnePosition {
 
         @Override
-        public ValueOf movedTo(UnaryOperator<TermPath> moved) {
-            return new ValueOf(moved.apply(position));
+        public ValueOf movedTo(PlacesMoved moved) {
+            return new ValueOf(moved.put(position));
         }
 
         @Override
@@ -302,7 +303,7 @@ public sealed interface NumericTerm
          *  there is a value of the same type, so the account the operation is taken by holds of it
          *  as it did here. */
         @Override
-        public TakenOf movedTo(UnaryOperator<TermPath> moved) {
+        public TakenOf movedTo(PlacesMoved moved) {
             return new TakenOf(operation, source.movedTo(moved), arguments);
         }
 
@@ -439,8 +440,8 @@ public sealed interface NumericTerm
         }
 
         @Override
-        public CodePointClassCount movedTo(UnaryOperator<TermPath> moved) {
-            return new CodePointClassCount(moved.apply(position), counted, through);
+        public CodePointClassCount movedTo(PlacesMoved moved) {
+            return new CodePointClassCount(moved.put(position), counted, through);
         }
 
         @Override
@@ -498,8 +499,8 @@ public sealed interface NumericTerm
         }
 
         @Override
-        public CodePointValueSum movedTo(UnaryOperator<TermPath> moved) {
-            return new CodePointValueSum(moved.apply(position));
+        public CodePointValueSum movedTo(PlacesMoved moved) {
+            return new CodePointValueSum(moved.put(position));
         }
 
         @Override
@@ -588,8 +589,8 @@ public sealed interface NumericTerm
         /** The same number of where {@code moved} puts its places, or null where the place moved is
          *  no longer one value of each element of the container moved. */
         @Override
-        public Multiplicity movedTo(UnaryOperator<TermPath> moved) {
-            return of(moved.apply(container), moved.apply(place));
+        public Multiplicity movedTo(PlacesMoved moved) {
+            return of(moved.put(container), moved.put(place));
         }
 
         @Override
@@ -726,8 +727,8 @@ public sealed interface NumericTerm
         /** The same number of where {@code moved} puts its places, or null where the places moved
          *  are no longer one value of each element of the container moved. */
         @Override
-        public ExtremeOfItsKey movedTo(UnaryOperator<TermPath> moved) {
-            return of(moved.apply(container), moved.apply(key), moved.apply(value), extreme);
+        public ExtremeOfItsKey movedTo(PlacesMoved moved) {
+            return of(moved.put(container), moved.put(key), moved.put(value), extreme);
         }
 
         @Override
@@ -824,16 +825,13 @@ public sealed interface NumericTerm
         }
 
         /** The same number of the run read from where {@code moved} puts this one's — or null
-         *  where that is no run of every occurrence. */
+         *  where that is no run this counts among ({@link #of(RunSource, KeptOccurrences)}), or
+         *  the move takes a place the selection reads elsewhere
+         *  ({@link NumericTerm#selectionStays}). */
         @Override
-        public OccurrencesOfItsValue movedTo(UnaryOperator<TermPath> moved) {
-            // A selection names places of the input it was read in, and moves with none of them.
-            if (selection != null) {
-                return null;
-            }
+        public OccurrencesOfItsValue movedTo(PlacesMoved moved) {
             RunSource at = run.movedTo(moved);
-            return at instanceof RunSource.FlattenedOccurrences flat
-                    ? new OccurrencesOfItsValue(flat, null) : null;
+            return NumericTerm.selectionStays(selection, moved) ? of(at, selection) : null;
         }
 
         @Override
@@ -904,9 +902,9 @@ public sealed interface NumericTerm
         /** The same number read from where {@code moved} puts the run and the key — or null where
          *  that is no run of every occurrence, or the key stands inside a container. */
         @Override
-        public OccurrencesOfAKey movedTo(UnaryOperator<TermPath> moved) {
+        public OccurrencesOfAKey movedTo(PlacesMoved moved) {
             return run.movedTo(moved) instanceof RunSource.FlattenedOccurrences flat
-                    ? of(flat, moved.apply(key)) : null;
+                    ? of(flat, moved.put(key)) : null;
         }
 
         @Override
@@ -979,47 +977,75 @@ public sealed interface NumericTerm
         }
 
         private final TermPath elements;
-        private final ElementProjection key;
+        private final ElementKey key;
         private final ElementValue value;
         private final Type each;
         private final Gathering gathering;
+        private final KeptOccurrences selection;
         /** The hash, worked out once: the computation is a tree, and a term is asked for its hash
          *  by every reading that files it. */
         private final int hash;
 
-        private GatheredUnderItsKey(TermPath elements, ElementProjection key, ElementValue value,
-                                    Type each, Gathering gathering) {
+        private GatheredUnderItsKey(TermPath elements, ElementKey key, ElementValue value,
+                                    Type each, Gathering gathering, KeptOccurrences selection) {
             this.elements = elements;
             this.key = key;
             this.value = value;
             this.each = each;
             this.gathering = gathering;
+            this.selection = selection;
             this.hash = Objects.hash(GatheredUnderItsKey.class, elements, key, value, each,
-                    gathering);
+                    gathering, selection);
         }
 
         /**
          * What the elements standing at {@code elements} that hold at {@code key} what the element
          * under consideration holds there come to, each as {@code value}, by {@code gathering} —
-         * or null where the key is not reached from an element by fields alone — the element itself
-         * among them, reached by none — the value reads
-         * where each element stands, or the number is {@link ExtremeOfItsKey}'s.
+         * or null where some element the key reads a way for holds nothing along it ({@link
+         * ElementKey#heldByEveryElementItTakes}), the value reads where each element stands, or
+         * the number is {@link ExtremeOfItsKey}'s.
          *
          * <p>Asked of elements a walk was shown to be over every occurrence of, and of no others:
          * the path alone says no such thing of a place inside more than one container.
          *
          * @param elements where each element of the run stands, inside one container or several
-         * @param key      the way from an element to what makes two of them one key
+         * @param key      what makes two elements one key
          * @param value    what each element contributes
-         * @param each     what one element's number stands as, with the names it is written under
-         *                 taken off: what the numbers of a key come to is on its order
+         * @param each      what one element's number stands as, with the names it is written under
+         *                  taken off: what the numbers of a key come to is on its order
+         * @param selection the occurrences gathered where a statement keeps some of them, or null
+         *                  where every one is
          */
-        public static GatheredUnderItsKey of(TermPath elements, ElementProjection key,
-                                             ElementValue value, Type each, Gathering gathering) {
-            GatheredUnderItsKey made = underAnyKey(elements, key, value, each, gathering);
+        public static GatheredUnderItsKey of(TermPath elements, ElementKey key,
+                                             ElementValue value, Type each, Gathering gathering,
+                                             KeptOccurrences selection) {
+            GatheredUnderItsKey made = underAnyKey(elements, key, value, each, gathering,
+                    selection);
             boolean ownPlaceInOneContainer = made != null && value.asAPlace() != null
                     && elements.containersHoldingIt().size() == 1;
-            return gathering instanceof Gathering.End && ownPlaceInOneContainer ? null : made;
+            return gathering instanceof Gathering.End && ownPlaceInOneContainer
+                    && selection == null ? null : made;
+        }
+
+        /**
+         * The number the elements of each key come to by {@code gathering}, spelled the one way
+         * it is spelled: the end of the values of a place inside one container, of every element
+         * of it, is an {@link ExtremeOfItsKey}, and every other is this — or null where it is
+         * neither.
+         */
+        public static NumericTerm spelled(TermPath elements, ElementKey key,
+                                          ElementValue value, Type each, Gathering gathering,
+                                          KeptOccurrences selection) {
+            if (selection == null && gathering instanceof Gathering.End(Extreme extreme)
+                    && value != null
+                    && value.asAPlace() instanceof ElementProjection place && elements != null
+                    && elements.containersHoldingIt().size() == 1
+                    && key instanceof ElementKey.At(ElementProjection one)
+                    && one.fields() != null) {
+                TermPath at = place.from(elements);
+                return at == null ? null : ExtremeOfItsKey.ofTheValueAt(at, one.fields(), extreme);
+            }
+            return of(elements, key, value, each, gathering, selection);
         }
 
         /**
@@ -1027,17 +1053,26 @@ public sealed interface NumericTerm
          * #of} leaves to {@link ExtremeOfItsKey}: for the key an input holds ({@link
          * GatheredUnderAKey}) there is no other spelling of it.
          */
-        static GatheredUnderItsKey underAnyKey(TermPath elements, ElementProjection key,
+        static GatheredUnderItsKey underAnyKey(TermPath elements, ElementKey key,
                                                ElementValue value, Type each,
-                                               Gathering gathering) {
-            // The key a way of fields alone, so one value of every element: none of them where the
-            // element is its own key.
+                                               Gathering gathering, KeptOccurrences selection) {
+            // One value of every element along the way it is read: none of them where the element
+            // is its own key.
             if (elements == null || key == null || value == null || each == null
-                    || gathering == null || !elements.insideAContainer() || key.fields() == null
-                    || value.readsThePosition()) {
+                    || gathering == null || !elements.insideAContainer()
+                    || !key.heldByEveryElementItTakes() || value.readsThePosition()) {
                 return null;
             }
-            return new GatheredUnderItsKey(elements, key, value, each, gathering);
+            // What keeps some of them is a statement about these elements and no others: the
+            // elements of the container it keeps some of, or those of them of the cases they are
+            // narrowed to.
+            ElementProjection narrowed = selection == null ? null : ElementProjection.below(
+                    selection.container().inputPosition().element(), elements);
+            if (selection != null && (narrowed == null || !narrowed.steps().stream()
+                    .allMatch(TermPath.Step.Refine.class::isInstance))) {
+                return null;
+            }
+            return new GatheredUnderItsKey(elements, key, value, each, gathering, selection);
         }
 
         /** Where each element of the run stands. */
@@ -1045,8 +1080,8 @@ public sealed interface NumericTerm
             return elements;
         }
 
-        /** The way from an element to what makes two of them one key. */
-        public ElementProjection key() {
+        /** What makes two elements one key. */
+        public ElementKey key() {
             return key;
         }
 
@@ -1066,6 +1101,16 @@ public sealed interface NumericTerm
         }
 
         /**
+         * Which of the occurrences are gathered, or null where every one is: an occurrence the
+         * selection drops is filed under no key, and has no number of its own.
+         *
+         * <p>Held with the statement put to rows, as {@link OccurrencesOfItsValue#selection} is.
+         */
+        public KeptOccurrences selection() {
+            return selection;
+        }
+
+        /**
          * The number this one is always one of the values of, where there is one: what stands at
          * the place an end is taken of. Null for a total, which is none of its numbers, and for an
          * end of what each element computed, which stands at no place.
@@ -1076,12 +1121,11 @@ public sealed interface NumericTerm
                     ? new ValueOf(place.from(elements)) : null;
         }
 
-        /** Every way from an element to a value this number is read from: the key, and what the
-         *  value reads. */
+        /** Every way from an element to a value this number is read from: what the key reads, and
+         *  what the value reads. */
         public List<ElementProjection> fieldsRead() {
-            List<ElementProjection> read = new ArrayList<>();
-            read.add(key);
-            value.reads().stream().filter(each -> !each.equals(key)).forEach(read::add);
+            Set<ElementProjection> read = new LinkedHashSet<>(key.reads());
+            read.addAll(value.reads());
             return List.copyOf(read);
         }
 
@@ -1094,13 +1138,14 @@ public sealed interface NumericTerm
         }
 
         /** The same number of the elements standing where {@code moved} puts them, or null where
-         *  they are not in as many containers there. */
+         *  they are not in as many containers there, or the move takes a place the selection
+         *  reads elsewhere ({@link NumericTerm#selectionStays}). */
         @Override
-        public GatheredUnderItsKey movedTo(UnaryOperator<TermPath> moved) {
-            TermPath at = moved.apply(elements);
-            return at != null && at.containersHoldingIt().size()
-                    == elements.containersHoldingIt().size()
-                    ? underAnyKey(at, key, value, each, gathering) : null;
+        public GatheredUnderItsKey movedTo(PlacesMoved moved) {
+            TermPath at = moved.put(elements);
+            return NumericTerm.selectionStays(selection, moved)
+                    && at.containersHoldingIt().size() == elements.containersHoldingIt().size()
+                    ? underAnyKey(at, key, value, each, gathering, selection) : null;
         }
 
         @Override
@@ -1108,7 +1153,8 @@ public sealed interface NumericTerm
             return other instanceof GatheredUnderItsKey that && hash == that.hash
                     && elements.equals(that.elements) && key.equals(that.key)
                     && value.equals(that.value) && each.equals(that.each)
-                    && gathering.equals(that.gathering);
+                    && gathering.equals(that.gathering)
+                    && Objects.equals(selection, that.selection);
         }
 
         @Override
@@ -1119,15 +1165,15 @@ public sealed interface NumericTerm
         @Override
         public String toString() {
             ElementProjection place = value.asAPlace();
-            String of = place == null ? "{" + value + " | " + elements + "}"
-                    : place.from(elements).toString();
+            String of = (place == null ? "{" + value + " | " + elements + "}"
+                    : place.from(elements).toString())
+                    + (selection == null ? "" : " kept by " + selection.key());
             return switch (gathering) {
-                case Gathering.Total _ -> "total(" + of + " by "
-                        + NumberAt.OfWhatNumber.OfTheExtremeOfItsKey.keySpelled(key.fields())
-                        + ")";
-                case Gathering.End(Extreme extreme) ->
-                        new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, key.fields())
-                                .spelledAt(of);
+                case Gathering.Total _ -> "total(" + of + " by " + key.spelled() + ")";
+                case Gathering.End(Extreme extreme) -> switch (extreme) {
+                    case Extreme.Least _ -> "least";
+                    case Extreme.Greatest _ -> "greatest";
+                } + "(" + of + " by " + key.spelled() + ")";
             };
         }
     }
@@ -1162,17 +1208,25 @@ public sealed interface NumericTerm
          * {@link GatheredUnderItsKey} reads none of them. The end of the values of a place inside
          * one container is read: nothing else spells it for a key asked for.
          */
-        public static GatheredUnderAKey of(TermPath elements, ElementProjection key,
+        public static GatheredUnderAKey of(TermPath elements, ElementKey key,
                                            ElementValue value, Type each,
                                            GatheredUnderItsKey.Gathering gathering,
                                            TermPath asked) {
-            return over(GatheredUnderItsKey.underAnyKey(elements, key, value, each, gathering),
-                    asked);
+            return over(GatheredUnderItsKey.underAnyKey(elements, key, value, each, gathering,
+                    null), asked);
         }
 
+        /** Read only of a key every element holds at one place: what an input holds is compared
+         *  with that place. */
         private static GatheredUnderAKey over(GatheredUnderItsKey gathered, TermPath asked) {
-            return gathered == null || asked == null || asked.insideAContainer() ? null
+            return gathered == null || !(gathered.key() instanceof ElementKey.At)
+                    || asked == null || asked.insideAContainer() ? null
                     : new GatheredUnderAKey(gathered, asked);
+        }
+
+        /** Where every element holds the key. */
+        public ElementProjection key() {
+            return ((ElementKey.At) gathered.key()).path();
         }
 
         /** What is gathered, for the key of whichever element is under consideration. */
@@ -1191,7 +1245,7 @@ public sealed interface NumericTerm
          * elements' share of that one value.
          */
         public boolean keyIsWhatIsAdded() {
-            TermPath keyAt = gathered.key().from(gathered.elements());
+            TermPath keyAt = key().from(gathered.elements());
             for (ElementProjection read : gathered.value().reads()) {
                 TermPath readAt = read.from(gathered.elements());
                 if (readAt.isAtOrUnder(keyAt) || keyAt.isAtOrUnder(readAt)) {
@@ -1210,7 +1264,7 @@ public sealed interface NumericTerm
         public boolean keyIsEachElementsNumber() {
             ElementProjection place = gathered.value().asAPlace();
             return place != null && place.from(gathered.elements())
-                    .equals(gathered.key().from(gathered.elements()));
+                    .equals(key().from(gathered.elements()));
         }
 
         /** Where the elements stand, which is where a reader is sent and no place the number
@@ -1224,9 +1278,9 @@ public sealed interface NumericTerm
          *  or null where the elements are not in as many containers there, or the key stands
          *  inside one. */
         @Override
-        public GatheredUnderAKey movedTo(UnaryOperator<TermPath> moved) {
+        public GatheredUnderAKey movedTo(PlacesMoved moved) {
             GatheredUnderItsKey at = gathered.movedTo(moved);
-            return at == null ? null : over(at, moved.apply(asked));
+            return at == null ? null : over(at, moved.put(asked));
         }
 
         @Override
@@ -1348,7 +1402,7 @@ public sealed interface NumericTerm
          *  where what stands there is no one run, as a run inside an element of another container
          *  is not. */
         @Override
-        public TakenOver movedTo(UnaryOperator<TermPath> moved) {
+        public TakenOver movedTo(PlacesMoved moved) {
             RunSource at = source.movedTo(moved);
             return at == null ? null : new TakenOver(operation, at);
         }
@@ -1401,8 +1455,32 @@ public sealed interface NumericTerm
      * The same number, of the value standing where {@code moved} puts each place it is read from —
      * or null where that is no such number. What a behavior states of a number of its parameter is
      * what it states of the same number of whatever a call handed that parameter.
+     *
+     * <p>The move puts every place somewhere ({@link PlacesMoved}); that the number is none where
+     * they are put is this answer's to say, and only this one's.
      */
-    NumericTerm movedTo(UnaryOperator<TermPath> moved);
+    NumericTerm movedTo(PlacesMoved moved);
+
+    /**
+     * Whether {@code selection}, which keeps some of the occurrences a number is of, is the same
+     * selection where {@code moved} puts the places it reads — every one of them handed to the
+     * move, as every place a number is read off is ({@link #placesReadOff}), and each left where
+     * it is. A selection is null where every occurrence is kept, and is the same anywhere.
+     *
+     * <p>A statement names places of the input it was read in, and nothing moves one: the number
+     * is that number under a move leaving its places where they stand, and no number under one
+     * taking them elsewhere.
+     */
+    static boolean selectionStays(KeptOccurrences selection, PlacesMoved moved) {
+        if (selection == null) {
+            return true;
+        }
+        boolean stays = true;
+        for (TermPath read : selection.placesRead()) {
+            stays &= moved.leaves(read);
+        }
+        return stays;
+    }
 
     /**
      * Every place this number is read off: each place {@link #movedTo} hands the move, which is
@@ -1410,10 +1488,10 @@ public sealed interface NumericTerm
      */
     default List<TermPath> placesReadOff() {
         List<TermPath> places = new ArrayList<>();
-        if (movedTo(at -> {
+        if (movedTo(PlacesMoved.by(at -> {
             places.add(at);
             return at;
-        }) == null) {
+        })) == null) {
             throw new IllegalStateException(this + " moved nowhere is no number, and is one");
         }
         return List.copyOf(places);

@@ -486,16 +486,6 @@ public final class BoundOperationFacts {
         return one(BoundOperationFact.PutsAValueIn.class, operation);
     }
 
-    /** What an operation gathering a value into a set answers: exactly what {@code into} holds
-     *  and {@code value}, each once. */
-    public record Gathered(DeclaredArgument value, DeclaredArgument into) {}
-
-    /** What {@code operation} gathers into what, or null where nothing says it gathers. */
-    public Gathered gathersIn(ValueName operation) {
-        BoundOperationFact.GathersIn gathers = one(BoundOperationFact.GathersIn.class, operation);
-        return gathers == null ? null : new Gathered(gathers.value(), gathers.into());
-    }
-
     /** The map whose keys {@code operation} answers a map keyed by, or null where it keeps none. */
     public DeclaredArgument keepsTheKeysOf(ValueName operation) {
         BoundOperationFact.KeepsTheKeysOf held =
@@ -654,6 +644,52 @@ public final class BoundOperationFacts {
      *  words of a walk, for the proofs of the library's written operations. */
     List<LawProposition<Slot>> relationsOf(ValueName operation) {
         return operation == null ? List.of() : relations.getOrDefault(operation, List.of());
+    }
+
+    /**
+     * What {@code operation} adds to one of its arguments beside what that argument holds
+     * ({@link AddsWhatItDoesNotHold}), where both its law of how many it answers and what is
+     * known of what its answer holds say so — or null where either says something else.
+     *
+     * <p>What its answer holds is what is stated of it beside others: declared of a kernel, or a
+     * lemma of an operation the library writes, which is here only once its body has proved it.
+     */
+    public AddsWhatItDoesNotHold addsWhatItDoesNotHold(ValueName operation) {
+        if (!(settled(operation, OperationLaw.Observed.SIZE) instanceof Settled.ByALaw(
+                OperationLaw<DeclaredArgument> law, var _))) {
+            return null;
+        }
+        List<LawProposition<Slot>> beside = new ArrayList<>(relationsOf(operation));
+        several.getOrDefault(BoundOperationFact.HasARelatedLemma.class, Map.of())
+                .getOrDefault(operation, List.of())
+                .forEach(each -> beside.add(((BoundOperationFact.HasARelatedLemma) each).holds()));
+        return AddsWhatItDoesNotHold.of(operation, law, beside, this::askedWhetherItHolds);
+    }
+
+    /**
+     * How {@code operation} asks whether a container holds a value as {@code of} says: where its
+     * settled law of truth says its answer is true exactly where some element of the container it
+     * is handed, or some key of it, is the value it is handed beside — or null where it says
+     * anything else.
+     */
+    public AddsWhatItDoesNotHold.Asked askedWhetherItHolds(ValueName.Stdlib.Operation operation,
+                                                          AddsWhatItDoesNotHold.Of of) {
+        return settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw.Observation<DeclaredArgument>(AnswerAspect aspect,
+                        LawProposition.SomeElement<DeclaredArgument>(
+                                DeclaredArgument in,
+                                LawProposition.Same<DeclaredArgument>(
+                                        LawSubject<DeclaredArgument> named,
+                                        LawSubject.Argument<DeclaredArgument>(
+                                                DeclaredArgument value),
+                                        boolean alike), boolean some)), var _)
+                && aspect == AnswerAspect.TRUTH && alike && some
+                && named.equals(switch (of) {
+                    case ELEMENTS -> new LawSubject.ElementOf<>(in);
+                    case KEYS -> new LawSubject.KeyOf<>(in);
+                })
+                && value.position() != in.position() && in.of().arity() == 2
+                ? new AddsWhatItDoesNotHold.Asked(operation, value, in) : null;
     }
 
     /**

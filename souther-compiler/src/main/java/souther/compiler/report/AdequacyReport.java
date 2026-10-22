@@ -81,6 +81,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AuthoredOrder;
+import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputQuestion;
@@ -6495,8 +6496,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             };
                 });
                 into.put("elements", it.elements().discriminated());
-                into.put("key", it.key().from(it.elements()).discriminated());
+                into.put("key", it.key().spelledFrom(it.elements()));
+                if (it.key() instanceof ElementKey.ByCase chosen) {
+                    ObjectNode byCase = into.putObject("key_by_case");
+                    byCase.put("subject", chosen.subject().from(it.elements()).discriminated());
+                    ArrayNode arms = byCase.putArray("arms");
+                    for (ElementKey.ByCase.Arm arm : chosen.arms()) {
+                        ObjectNode each = arms.addObject();
+                        each.put("taken", chosen.subject().narrowedTo(arm.cases())
+                                .from(it.elements()).discriminated());
+                        each.put("key", arm.path().from(it.elements()).discriminated());
+                    }
+                }
                 elementComputation(into.putObject("computation"), it.value());
+                if (it.selection() != null) {
+                    into.put("kept_by", it.selection().key());
+                }
             }
             // The same number for the key an input holds, which is the number of the elements of
             // that key alone.
@@ -6512,7 +6527,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             };
                 });
                 into.put("elements", gathered.elements().discriminated());
-                into.put("key", gathered.key().from(gathered.elements()).discriminated());
+                into.put("key", it.key().from(gathered.elements()).discriminated());
                 into.put("asked", it.asked().discriminated());
                 elementComputation(into.putObject("computation"), gathered.value());
             }
