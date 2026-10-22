@@ -1,7 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ValueName;
 
@@ -39,9 +41,12 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
      * @param applied   how far the operation goes applying the closure
      * @param call      the call that applies it, which a reader of the closure's parameters asks
      *                  what else the operation hands the closure ({@link SeededWalk#of})
+     * @param position  the binding the closure is handed the element's position on, counted from
+     *                  nought in the order {@code container} holds its elements — or null where the
+     *                  operation is shown to hand it none ({@link Combinator#positionParam})
      */
     public record Application(ValueName operation, OccurrenceLineage lineage, Core container,
-                              HowAClosureIsApplied applied, Core call) {
+                              HowAClosureIsApplied applied, Core call, BindingId position) {
 
         public Application {
             Objects.requireNonNull(operation, "an application is some operation's");

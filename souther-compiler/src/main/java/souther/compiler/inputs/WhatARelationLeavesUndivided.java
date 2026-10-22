@@ -1025,6 +1025,141 @@ public final class WhatARelationLeavesUndivided {
         return false;
     }
 
+    /**
+     * That one term of a relation lies, at each value of another, at every whole number from
+     * {@code least} to that value less {@code belowTheWhole} and at no other — and takes each of
+     * them in some row beside that value: where a walk over every element hands its step stands
+     * beside how many the walk is over, from nought to one below.
+     *
+     * <p>The two are read off one container, so neither is apart from the other, and what one
+     * takes is not asked of it alone. A value of the whole at which the part lies nowhere — a
+     * container of none, which hands the step nothing — is one no row reaches the relation at.
+     *
+     * @param part          the index of the term that lies within the other
+     * @param whole         the index of the term it lies within
+     * @param least         the least value the part takes
+     * @param belowTheWhole how far below the whole's value the greatest value the part takes is
+     */
+    public record WithinTheWhole(int part, int whole, BigInteger least,
+                                 BigInteger belowTheWhole) {
+
+        public WithinTheWhole {
+            if (part == whole || part < 0 || whole < 0 || least == null
+                    || belowTheWhole == null) {
+                throw new IllegalArgumentException("a part lies within another term, between a"
+                        + " number and the other's value less a number: " + part + " in "
+                        + whole);
+            }
+        }
+    }
+
+    /**
+     * What a relation of a whole and a part lying within it ({@link WithinTheWhole}) leaves the
+     * values of the whole — or null where nothing is shown.
+     *
+     * <p>Fixing a value of the whole leaves the relation a run of the part, every value of which
+     * is taken there. Weighed by one either way, the part makes the form every whole number
+     * between two ends, and each end is the whole's value weighed and moved, so the whole's values
+     * at which every value of the form meets the relation, or none does, are where a statement of
+     * one form of the whole holds: those settle it, and at each other value the form reaches both
+     * sides. So nothing past what the two terms are is asked, and the relation is read only where
+     * they are all its terms.
+     *
+     * <p>Only at values of the whole every one of which some row takes, and at which the part lies
+     * somewhere. A run that settles the relation is a class only where some row of it computes:
+     * its value nearest nought, with the part's nearest nought there, as {@link #settlingOf} asks.
+     *
+     * @param greatest the greatest value the type the form is worked out in holds, or null where it
+     *                 holds no greatest
+     */
+    public static <P> Leaves leavesOfTheWhole(List<Term<P>> terms, WithinTheWhole within,
+                                              ExactRatio constant, Rel relation,
+                                              BigInteger greatest) {
+        if (terms.size() != 2 || within.part() >= 2 || within.whole() >= 2 || constant == null
+                || !constant.isWhole()) {
+            return null;
+        }
+        Term<P> part = terms.get(within.part());
+        Term<P> whole = terms.get(within.whole());
+        BigInteger weight = whole.weight().isWhole() ? whole.weight().floor().orNull() : null;
+        BigInteger offset = constant.floor().orNull();
+        if (weight == null || offset == null || whole.spacing() != Granularity.DISCRETE
+                || whole.realizes() == null || part.weight().abs().compareTo(ExactRatio.ONE) != 0) {
+            return null;
+        }
+        WholeRun held = WholeRun.ofTheValues(whole.holds());
+        WholeRun taken = WholeRun.ofTheValues(whole.realizes());
+        if (held == null || taken == null) {
+            return null;
+        }
+        WholeRun values = held.meet(new WholeRun(within.least().add(within.belowTheWhole()), null));
+        if (!values.holdsAWholeNumber() || !taken.covers(values)) {
+            return null;
+        }
+        // The form at a value v of the whole runs between two ends, each a number of v: the part at
+        // its least and at v less how far below, weighed by one or minus one.
+        boolean up = part.weight().signum() > 0;
+        BigInteger lowSlope = up ? weight : weight.subtract(BigInteger.ONE);
+        BigInteger lowOffset = up ? offset.add(within.least())
+                : offset.add(within.belowTheWhole());
+        BigInteger highSlope = up ? weight.add(BigInteger.ONE) : weight;
+        BigInteger highOffset = up ? offset.subtract(within.belowTheWhole())
+                : offset.subtract(within.least());
+        Arithmetic arithmetic = Arithmetic.upTo(greatest);
+        List<SettledRun> runs = new ArrayList<>();
+        for (boolean holds : List.of(true, false)) {
+            for (WholeRun each : whereEveryValueMeets(holds ? relation : relation.denied(),
+                    lowSlope, lowOffset, highSlope, highOffset)) {
+                WholeRun here = each.meet(values);
+                if (!here.holdsAWholeNumber()) {
+                    continue;
+                }
+                SettledRun run = SettledRun.whole(here.low, here.high, holds);
+                ExactRatio at = nearestValue(new Interval(run.from(), run.to()));
+                ExactRatio partAt = at == null ? null : nearestValue(new Interval(
+                        ExactCut.inclusive(ExactRatio.of(within.least())),
+                        at.minus(ExactRatio.of(within.belowTheWhole()))
+                                .map(ExactCut::inclusive).orNull()));
+                if (partAt == null || !arithmetic.computes(weighedAt(at, whole.weight()),
+                        weighedAt(partAt, part.weight()), constant)) {
+                    return null;
+                }
+                runs.add(run);
+            }
+        }
+        return runs.isEmpty() ? new Leaves.Undivided()
+                : Leaves.Settled.ofWhole(inOrder(runs, true), values.low, values.high);
+    }
+
+    /**
+     * The runs of whole numbers v at which every whole number between {@code lowSlope}·v +
+     * {@code lowOffset} and {@code highSlope}·v + {@code highOffset} stands to nought as
+     * {@code relation} — two runs where it is unequal, the one below nought and the one above.
+     */
+    private static List<WholeRun> whereEveryValueMeets(Rel relation, BigInteger lowSlope,
+                                                       BigInteger lowOffset, BigInteger highSlope,
+                                                       BigInteger highOffset) {
+        return switch (relation) {
+            case LT, LE -> List.of(whereALineStands(highSlope, highOffset, relation));
+            case GT, GE -> List.of(whereALineStands(lowSlope, lowOffset, relation));
+            case EQ -> List.of(whereALineStands(lowSlope, lowOffset, Rel.GE)
+                    .meet(whereALineStands(highSlope, highOffset, Rel.LE)));
+            case NE -> List.of(whereALineStands(lowSlope, lowOffset, Rel.GT),
+                    whereALineStands(highSlope, highOffset, Rel.LT));
+        };
+    }
+
+    /** The whole numbers v at which {@code slope}·v + {@code offset} stands to nought as
+     *  {@code relation}, an order: every one, none, or the run on one side of a value. */
+    private static WholeRun whereALineStands(BigInteger slope, BigInteger offset, Rel relation) {
+        if (slope.signum() == 0) {
+            return relation.holds(offset.signum()) ? new WholeRun(null, null)
+                    : new WholeRun(BigInteger.ONE, BigInteger.ZERO);
+        }
+        return WholeRun.where(new OnTheDifference(ExactRatio.of(slope), ExactRatio.of(offset),
+                relation));
+    }
+
     /** Where a type of whole numbers stops, either end null where it does not. */
     public record Ends(BigInteger least, BigInteger greatest) { }
 
@@ -2817,6 +2952,12 @@ public final class WhatARelationLeavesUndivided {
 
         boolean holdsAWholeNumber() {
             return low == null || high == null || low.compareTo(high) <= 0;
+        }
+
+        /** Whether every whole number of {@code other} is one of this run's. */
+        boolean covers(WholeRun other) {
+            return (low == null || (other.low != null && low.compareTo(other.low) <= 0))
+                    && (high == null || (other.high != null && high.compareTo(other.high) >= 0));
         }
 
         /** Whether some whole number of this run is a difference {@code line} comes out

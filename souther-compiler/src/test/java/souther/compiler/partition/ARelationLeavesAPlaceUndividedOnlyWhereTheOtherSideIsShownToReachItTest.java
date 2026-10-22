@@ -59,12 +59,19 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * with and the classes it is parted into, which no composed row moves.
      */
     private static Compilation measured(String inputs, String declarations, String body) {
+        return measured(inputs, declarations, "Bool", body);
+    }
+
+    /** The same, for a behavior answering {@code answers}. */
+    private static Compilation measured(String inputs, String declarations, String answers,
+                                        String body) {
         return MEASURED.computeIfAbsent("""
                 module w1
                 %s
-                behavior m : (%s) -> Bool
+                behavior m : (%s) -> %s
                 let m (%s) = %s
-                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
+                """.formatted(declarations, inputs, answers,
+                        inputs.replaceAll(": [A-Za-z<>]+", ""), body),
                 source -> {
                     Compilation compilation = Compilation.ofSource(source, "Main");
                     compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
@@ -80,7 +87,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     private static List<String> classesAt(String inputs, String declarations, String body,
                                           String path) {
-        Compilation compilation = measured(inputs, declarations, body);
+        return classesAt(inputs, declarations, "Bool", body, path);
+    }
+
+    /** The same, of a behavior answering {@code answers}. */
+    private static List<String> classesAt(String inputs, String declarations, String answers,
+                                          String body, String path) {
+        Compilation compilation = measured(inputs, declarations, answers, body);
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("w1")).value().get("m");
         return evidence.axes().stream().filter(axis -> axis.path().equals(path))
@@ -93,7 +106,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     private static Map<String, String> left(String inputs, String declarations, String body,
                                             String at) {
-        Compilation compilation = measured(inputs, declarations, body);
+        return left(inputs, declarations, "Bool", body, at);
+    }
+
+    /** The same, of a behavior answering {@code answers}. */
+    private static Map<String, String> left(String inputs, String declarations, String answers,
+                                            String body, String at) {
+        Compilation compilation = measured(inputs, declarations, answers, body);
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, String> out = new LinkedHashMap<>();
@@ -481,6 +500,70 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "gross >= List.length(List.filter(n -> n.value > 3, ns))", 27));
     }
 
+    private static final String UNUSED = "data Unused = Int";
+
+    /** Each element of {@code xs} answered one where {@code test} holds of where it stands. */
+    private static final String STANDING = "List.mapIndexed((i, x) -> if %s then 1 else 0, xs)";
+
+    /**
+     * Where an element stands in a walk over a list lies from nought to one below how many the
+     * list holds, and a row of so many hands the walk every one of those. So at a list of one the
+     * one element is the last, and every longer list has a last element and one before it: the
+     * comparison is parted on the length at one, and where the element stands is not asked apart
+     * from it. Moved by two, the line moves with it; held two below, the list of one is the one
+     * whose element is never there.
+     */
+    @Test
+    void whereAnElementStandsPartsHowManyItsListHoldsWhereEveryPositionComesOutOneWay() {
+        String inputs = "xs: List<Int>";
+        for (String test : List.of("i == List.length(xs) - 1", "i + 1 >= List.length(xs)",
+                "i == List.length(xs) - 2")) {
+            assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+                    classesAt(inputs, UNUSED, "List<Int>", STANDING.formatted(test),
+                            "List.length(xs)"), test);
+        }
+        assertEquals(List.of("List.length(xs)/0 <= x <= 2", "List.length(xs)/2 < x"),
+                classesAt(inputs, UNUSED, "List<Int>",
+                        STANDING.formatted("List.length(xs) - i <= 2"), "List.length(xs)"));
+        String body = STANDING.formatted("i == List.length(xs) - 1");
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
+     * Against another list's length, where an element of the walked list stands is no number
+     * of it, and nothing is shown. Nor where the way picks out some of the elements: the walk is
+     * handed every position, and the comparison is asked at those of the elements the way lets
+     * through, which may leave out the last.
+     */
+    @Test
+    void whereAnElementStandsIsReadOnlyAgainstItsOwnListAllOfWhichTheWayLeaves() {
+        String inputs = "xs: List<Int>, ys: List<Int>";
+        String another = STANDING.formatted("i == List.length(ys) - 1");
+        assertEquals(Map.of("List.length(ys)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                another, atThe("==", UNUSED, inputs, another)));
+        String picked = "if List.all(x -> x > 0, xs) then "
+                + STANDING.formatted("i == List.length(xs) - 1") + " else []";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left("xs: List<Int>", UNUSED,
+                "List<Int>", picked, atThe("== List", UNUSED, "xs: List<Int>", picked)));
+    }
+
+    /**
+     * A relation that comes out one way at every value a term may hold comes out that way in every
+     * row, so it divides none of its places, as one a way decides does not: every element of a
+     * list stands below its length, and two lengths of strings add up to nought or more.
+     */
+    @Test
+    void aRelationSettledOneWayAtEveryValueDividesNothing() {
+        String body = STANDING.formatted("i < List.length(xs)");
+        assertEquals(Map.of("List.length(xs)", RELATES), left("xs: List<Int>", UNUSED,
+                "List<Int>", body, atThe("<", UNUSED, "xs: List<Int>", body)));
+        String lengths = "String.length(s) + String.length(t) >= 0";
+        assertEquals(Map.of("String.length(s)", RELATES, "String.length(t)", RELATES),
+                left("s: String, t: String", UNUSED, lengths,
+                        atThe(">=", UNUSED, "s: String, t: String", lengths)));
+    }
+
     /** A total held against a number, or against another total, is about what the runs come to
      *  and divides none of their values. */
     @Test
@@ -842,16 +925,23 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * Two choices on places apart are proved along every way of taking them together, and not
-     * along each alternative once: {@code y} reaches every {@code x} along three of the four, and
-     * along the last — {@code x} from twenty, {@code y} up to ten — it reaches none.
+     * along each alternative once: {@code y} reaches every {@code x} along three of the four.
+     * Along the last — {@code x} from twenty, {@code y} up to twenty-five — the values of
+     * {@code x} past twenty-five come out false whatever {@code y} is, and those below come out
+     * either way, so {@code x} is parted there and not left undivided. With {@code y} up to ten
+     * instead, the last comes out false in every row along it, and divides no value of {@code x}
+     * any more than a way deciding it does.
      */
     @Test
     void choicesOnPlacesApartAreProvedAlongEveryWayOfTakingThemTogether() {
+        String body = "if (x >= 0 && x <= 10 || x >= 20 && x <= 30)"
+                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 25)"
+                + " then x == y else false";
         assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN),
+                left("x: Int, y: Int", "data Unused = Int", body, "4:112"));
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN),
                 left("x: Int, y: Int", "data Unused = Int",
-                        "if (x >= 0 && x <= 10 || x >= 20 && x <= 30)"
-                                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 10)"
-                                + " then x == y else false", "4:112"));
+                        body.replace("y <= 25", "y <= 10"), "4:112"));
     }
 
     /**

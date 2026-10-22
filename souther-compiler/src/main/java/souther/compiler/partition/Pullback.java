@@ -6464,6 +6464,47 @@ final class Pullback {
         return new LinearForm<>(added.seed(), coefs);
     }
 
+    /** What a walk hands its step as {@code name}: the end it kept of what it carried, or where the
+     *  element stands — or empty where it is neither. */
+    private Optional<Quantity.HandedToTheStep> handedToTheStep(Core.Read name, InputReads at) {
+        Optional<Quantity.KeptSoFar> kept = keptSoFar(name, at);
+        return kept.isPresent() ? Optional.of(kept.get()) : positionInTheWalk(name, at);
+    }
+
+    /**
+     * Where the element stands, where {@code name} is what a walk hands its step as the position
+     * of the element it is applied to ({@link ClosureUses.Application#position}) — or empty where
+     * it is anything else.
+     *
+     * <p>Only one operation may apply the step, to every element and from the first, and it has to
+     * walk a container of the input that no other container holds: the values the name takes in a
+     * run are then every position of that container, each once, which is what a reader of the
+     * name is told ({@link Quantity.PositionInTheWalk}). A walk that stops early, or starts past
+     * the first, hands some of them; a container inside another is one of many, and how many the
+     * one walked holds is no number of one place.
+     */
+    private Optional<Quantity.HandedToTheStep> positionInTheWalk(Core.Read name,
+                                                                 InputReads at) {
+        ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
+        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+            return Optional.empty();
+        }
+        ClosureUses.Application applied = uses.applications().getFirst();
+        if (!name.binding().equals(applied.position())
+                || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                || !(subjectOf(applied.container(), at) instanceof DecisionSubject.AnInput(
+                        TermPath container))
+                || container.insideAContainer()
+                || !(sizeOf(applied.container(), at) instanceof Sized.AsAForm(
+                        LinearForm<Quantity> size))
+                || !(soleQuantity(size) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition count))
+                || !Quantity.PositionInTheWalk.counts(count, container)) {
+            return Optional.empty();
+        }
+        return Optional.of(new Quantity.PositionInTheWalk(container, count));
+    }
+
     /**
      * The end a walk has kept by the element its step is applied to, where {@code name} is what the
      * walk carries into the step and the step keeps an end of it and a number of the element
@@ -6731,7 +6772,7 @@ final class Pullback {
                     Optional<Quantity.KeptSoFar> underAKey = keptUnderAKey(name, at);
                     if (underAKey.isPresent()) {
                         return LinearForm.atom(new Quantity.OfABinding(name.binding(), steps,
-                                node.type(), Optional.empty(), underAKey));
+                                node.type(), Optional.empty(), Optional.of(underAKey.get())));
                     }
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
@@ -6759,11 +6800,11 @@ final class Pullback {
                             name.binding(), steps, node.type(),
                             Optional.ofNullable(inside).map(Pullback.this::noFormOf),
                             Optional.empty()));
-                    // A name nothing is bound to here may still be what a walk carries into its
-                    // step, which says where its value lies.
+                    // A name nothing is bound to here may still be what a walk hands its step,
+                    // which says where its value lies.
                     case ReadMeaning.Unknown _ -> LinearForm.atom(new Quantity.OfABinding(
                             name.binding(), steps, node.type(), Optional.empty(),
-                            steps.isEmpty() ? keptSoFar(name, at) : Optional.empty()));
+                            steps.isEmpty() ? handedToTheStep(name, at) : Optional.empty()));
                 };
             }
 
