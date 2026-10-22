@@ -78,6 +78,16 @@ public final class PositionsAStatementReads {
                     .allMatch(one -> reads(one, out));
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject each) ->
                     reads(counted, out) && reads(each, out);
+            case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject each) ->
+                    reads(counted, out) && reads(each, out);
+            case Quantity.HowManyDifferentBelow below -> {
+                out.add(below.root());
+                out.add(below.keyOfTheRoot());
+                out.add(below.map());
+                out.add(below.map().key());
+                out.add(below.valueOfAnEntry());
+                yield true;
+            }
             case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
                     reads(summed, out) && reads(each, out);
             case Quantity.RemainderOfADividend(var _, var dividend, var _) ->

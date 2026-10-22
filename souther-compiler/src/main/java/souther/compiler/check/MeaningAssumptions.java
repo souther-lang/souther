@@ -481,7 +481,8 @@ final class MeaningAssumptions {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS);
             }
-            case Quantity.HowManyDifferent _, Quantity.SumOver _ -> {
+            case Quantity.HowManyDifferent _, Quantity.HowManyDifferentBelow _,
+                 Quantity.HowManyDifferentAcross _, Quantity.SumOver _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS);
             }

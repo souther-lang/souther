@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclarationAccess;
+import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
@@ -46,9 +47,9 @@ class WhatAKeysElementsComeToIsToldEachKeyApartTest {
     private static final Carrier WHOLE = Carrier.ofValue(Type.Prim.INT, DeclarationAccess.NONE);
 
     private static final NumericTerm.GatheredUnderItsKey TOTAL =
-            NumericTerm.GatheredUnderItsKey.of(POSTINGS.element(), ACCOUNT,
+            NumericTerm.GatheredUnderItsKey.of(POSTINGS.element(), new ElementKey.At(ACCOUNT),
                     new ElementValue.Affine(LinearForm.atom(AMOUNT)), Type.Prim.INT,
-                    NumericTerm.GatheredUnderItsKey.Gathering.TOTAL);
+                    NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, null);
 
     private static final TermOrders ON = TermOrdersFixtures.computed(TOTAL, WHOLE, WHOLE,
             Map.of(ACCOUNT, Carrier.TEXT, AMOUNT, WHOLE));

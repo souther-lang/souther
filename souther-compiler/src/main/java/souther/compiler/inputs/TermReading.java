@@ -627,6 +627,13 @@ final class TermReading {
      * one holding nothing at a field its number reads, or whose number is none, stops its own key
      * and no other. A key's numbers are read the first time an element of it is asked about.
      *
+     * <p>A key chosen by the case of a place ({@link ElementKey.ByCase}) is read along the way of
+     * the arm the element's case is taken by, and along no other, so an element is never asked
+     * for a field its case does not have. The value whose case is told is read whole, as a case
+     * is told everywhere ({@link OneElement#caseAt}); an element no arm takes is no element the
+     * key reads, which stops every key as a key that is no number does. Two elements holding one
+     * value are one key whichever arm each was read by.
+     *
      * <p>Asked of a key an input holds ({@link NumericTerm.GatheredUnderAKey}) it is read the same
      * way, and is no number where no element has the key.
      */
@@ -634,7 +641,6 @@ final class TermReading {
 
         private final TermOrders on;
         private final NumericTerm.GatheredUnderItsKey term;
-        private final Carrier keyedOn;
         private final List<Function<ElementProjection, Holding<G>>> each;
         /** What stops every key, the first element's in order that does; null where none. */
         private final Neighbouring<G> everyKey;
@@ -647,42 +653,86 @@ final class TermReading {
             this.on = on;
             this.term = on.term() instanceof NumericTerm.GatheredUnderAKey asked ? asked.gathered()
                     : (NumericTerm.GatheredUnderItsKey) on.term();
-            this.keyedOn = on.fieldCarrier(term.key());
             this.each = List.copyOf(each);
-            Neighbouring<G> stop = keyedOn == null
-                    ? new Neighbouring.Read<>(new Reading.NotNumber()) : null;
+            Neighbouring<G> stop = null;
             for (int at = 0; at < this.each.size() && stop == null; at++) {
-                switch (this.each.get(at).apply(term.key())) {
-                    case Holding.Nothing<G>(G why) -> stop = new Neighbouring.HeldNothing<>(why);
-                    case Holding.Value<G>(ObservedValue key) -> {
-                        switch (whereTheOrderPuts(keyedOn, key)) {
-                            case Where.At(Place place) -> ofEachKey.computeIfAbsent(
-                                    place.canonical(), _ -> new ArrayList<>()).add(at);
-                            case Where.Nowhere nowhere ->
-                                    stop = new Neighbouring.Read<>(nowhere.why());
-                        }
-                    }
+                Keyed<G> key = keyOf(this.each.get(at));
+                if (key.stopped() != null) {
+                    stop = key.stopped();
+                } else {
+                    ofEachKey.computeIfAbsent(key.place(), _ -> new ArrayList<>()).add(at);
                 }
             }
             this.everyKey = stop;
         }
 
-        @Override
-        public Neighbouring<G> numberOf(Function<ElementProjection, Holding<G>> own) {
-            ObservedValue ownKey;
-            switch (own.apply(term.key())) {
-                case Holding.Nothing<G>(G why) -> {
-                    return new Neighbouring.HeldNothing<>(why);
+        /** Where the order of an element's key puts it, in its one representation; or why it is
+         *  put nowhere. One of the two. */
+        private record Keyed<G>(Place place, Neighbouring<G> stopped) {}
+
+        /** The key of {@code element}, read along the one way its case is read along. */
+        private Keyed<G> keyOf(Function<ElementProjection, Holding<G>> element) {
+            ElementProjection way;
+            switch (term.key()) {
+                case ElementKey.At(ElementProjection path) -> way = path;
+                case ElementKey.ByCase chosen -> {
+                    ObservedValue subject;
+                    switch (element.apply(chosen.subject())) {
+                        case Holding.Nothing<G>(G why) -> {
+                            return new Keyed<>(null, new Neighbouring.HeldNothing<>(why));
+                        }
+                        case Holding.Value<G>(ObservedValue value) -> subject = value;
+                    }
+                    Membership.Incomplete cut = Membership.unread(subject);
+                    ObservedValue inner = cut != null ? null
+                            : ObservedValue.inside(on.wornAt(chosen.subject()), subject);
+                    Membership.Incomplete unread = cut != null ? cut : Membership.unread(inner);
+                    if (unread != null) {
+                        return new Keyed<>(null, new Neighbouring.Read<>(
+                                new Reading.Missing(unread.cause())));
+                    }
+                    way = chosen.readAlong(cases -> cases.leaves(inner));
                 }
-                case Holding.Value<G>(ObservedValue value) -> ownKey = value;
             }
-            return numberUnder(ownKey);
+            Carrier keyedOn = way == null ? null : on.fieldCarrier(way);
+            if (keyedOn == null) {
+                return new Keyed<>(null, new Neighbouring.Read<>(new Reading.NotNumber()));
+            }
+            return switch (element.apply(way)) {
+                case Holding.Nothing<G>(G why) -> new Keyed<>(null,
+                        new Neighbouring.HeldNothing<>(why));
+                case Holding.Value<G>(ObservedValue key) -> switch (whereTheOrderPuts(keyedOn, key)) {
+                    case Where.At(Place place) -> new Keyed<>(place.canonical(), null);
+                    case Where.Nowhere nowhere -> new Keyed<>(null,
+                            new Neighbouring.Read<>(nowhere.why()));
+                };
+            };
         }
 
+        @Override
+        public Neighbouring<G> numberOf(Function<ElementProjection, Holding<G>> own) {
+            Keyed<G> ownKey = keyOf(own);
+            if (ownKey.stopped() instanceof Neighbouring.HeldNothing<G> nothing) {
+                return nothing;
+            }
+            if (everyKey != null) {
+                return everyKey;
+            }
+            return ownKey.stopped() != null ? ownKey.stopped()
+                    : asked.computeIfAbsent(ownKey.place(), this::read);
+        }
+
+        /** Asked only of a key every element holds at one place ({@link
+         *  NumericTerm.GatheredUnderAKey}), which the value an input holds is compared with. */
         @Override
         public Neighbouring<G> numberUnder(ObservedValue key) {
             if (everyKey != null) {
                 return everyKey;
+            }
+            Carrier keyedOn = term.key() instanceof ElementKey.At(ElementProjection path)
+                    ? on.fieldCarrier(path) : null;
+            if (keyedOn == null) {
+                return new Neighbouring.Read<>(new Reading.NotNumber());
             }
             return switch (whereTheOrderPuts(keyedOn, key)) {
                 case Where.Nowhere nowhere -> new Neighbouring.Read<>(nowhere.why());

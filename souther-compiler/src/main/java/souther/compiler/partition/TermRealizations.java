@@ -646,10 +646,10 @@ final class TermRealizations {
      */
     private static boolean standsAtTheKeyOfTheTotals(RealizationTarget.OfANumber number,
                                                      List<RealizationTarget.OfANumber> totals) {
-        NumericTerm.GatheredUnderItsKey gathered =
-                ((NumericTerm.GatheredUnderAKey) totals.getFirst().term()).gathered();
+        NumericTerm.GatheredUnderAKey asked =
+                (NumericTerm.GatheredUnderAKey) totals.getFirst().term();
         return number.term() instanceof NumericTerm.ValueOf value
-                && value.position().equals(gathered.key().from(gathered.elements()));
+                && value.position().equals(asked.key().from(asked.gathered().elements()));
     }
 
     /**
@@ -659,8 +659,8 @@ final class TermRealizations {
      */
     private static boolean countsTheElementsOfAKeyOf(
             RealizationTarget.ACount count, List<RealizationTarget.OfANumber> numbers) {
-        return keyAskedOfTheCount(count, ((NumericTerm.GatheredUnderAKey)
-                numbers.getFirst().term()).gathered()) != null;
+        return keyAskedOfTheCount(count, (NumericTerm.GatheredUnderAKey)
+                numbers.getFirst().term()) != null;
     }
 
     /**
@@ -669,11 +669,11 @@ final class TermRealizations {
      * is the value of one input standing outside every container.
      */
     private static TermPath keyAskedOfTheCount(RealizationTarget.ACount count,
-                                               NumericTerm.GatheredUnderItsKey gathered) {
+                                               NumericTerm.GatheredUnderAKey gathered) {
         RealizationTarget.AskedKey key = count.askedKey();
-        return key != null && key.elements().equals(gathered.elements())
-                && key.keyAt().equals(gathered.key().from(gathered.elements())) ? key.asked()
-                : null;
+        TermPath elements = gathered.gathered().elements();
+        return key != null && key.elements().equals(elements)
+                && key.keyAt().equals(gathered.key().from(elements)) ? key.asked() : null;
     }
 
     /**
@@ -1454,8 +1454,8 @@ final class TermRealizations {
                 }
                 // How many elements a key has, asked of the key whose elements the count is of; two
                 // counts of one key's elements are one question, asked alike or not at all.
-                NumericTerm.GatheredUnderItsKey gathered =
-                        ((NumericTerm.GatheredUnderAKey) numbers.getFirst().term()).gathered();
+                NumericTerm.GatheredUnderAKey gathered =
+                        (NumericTerm.GatheredUnderAKey) numbers.getFirst().term();
                 for (RealizationTarget.ACount count : counts) {
                     TermPath askedOfTheKey = keyAskedOfTheCount(count, gathered);
                     Place key = within == null ? null : CardinalityComposer.settled(within,
@@ -2245,7 +2245,9 @@ final class TermRealizations {
         NumericTerm.GatheredUnderItsKey gathered =
                 orders.term() instanceof NumericTerm.GatheredUnderAKey ofAKey ? ofAKey.gathered()
                         : (NumericTerm.GatheredUnderItsKey) orders.term();
-        if (orders.answered() == null) {
+        // The elements written are written for their number alone, and a statement keeping some of
+        // them is one more thing each would have to be written to meet.
+        if (orders.answered() == null || gathered.selection() != null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
@@ -2307,12 +2309,12 @@ final class TermRealizations {
                     "`" + term.asked() + "` stands at no one value, so what is gathered for it is"
                             + " not known");
         }
-        Carrier keyedOn = orders.fieldCarrier(gathered.key());
+        Carrier keyedOn = orders.fieldCarrier(term.key());
         if (keyedOn == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        TermPath keyAt = gathered.key().from(gathered.elements());
+        TermPath keyAt = term.key().from(gathered.elements());
         // The key at a field the number is made of is the number there: every element holds the
         // key at it, so each contributes the same value and the elements come to that many of it.
         // Asked of the region, that is the run the elements are chosen in narrowed to the key; asked

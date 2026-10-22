@@ -313,8 +313,6 @@ public final class OperationFacts {
             // map holds it under the key, in place of what was there.
             about("Set", "insert", putsIn(at(0), at(1))),
             about("Map", "insert", putsIn(at(1), at(2))),
-            // And a set keeps what it held: inserting answers it and the value.
-            about("Set", "insert", gathersIn(at(0), at(1))),
             // Every value in the answer came from the map it was given: the one under the key is
             // what the closure made of it, and every other is the value that was there. Read as a
             // closure result alone, what is true of one value would be said of all of them.
@@ -1057,11 +1055,6 @@ public final class OperationFacts {
     /** The answer is {@code into} with {@code value} put in. */
     private static OperationFact putsIn(ArgumentRef value, ArgumentRef into) {
         return new OperationFact.PutsAValueIn(value, into);
-    }
-
-    /** The answer is a set holding exactly what {@code into} holds and {@code value}. */
-    private static OperationFact gathersIn(ArgumentRef value, ArgumentRef into) {
-        return new OperationFact.GathersIn(value, into);
     }
 
     /** The answer is keyed by keys {@code map} was keyed by. */

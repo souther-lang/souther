@@ -19,6 +19,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,8 @@ import java.util.function.Predicate;
  * and only the second leaves a comparison over it with nothing to say.
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
-        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
+        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent,
+        Quantity.HowManyDifferentBelow, Quantity.HowManyDifferentAcross, Quantity.SumOver,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
         Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
         Quantity.HowManyCarried, Quantity.APieceOf, Quantity.IsAmongThePieces {
@@ -72,7 +74,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                      DecisionAtom.ComputedOverAnAnswer _,
                      DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
                      RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
-                     HowManyDifferent _ -> false;
+                     HowManyDifferent _, HowManyDifferentBelow _, HowManyDifferentAcross _ -> false;
                 case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
                 case APieceOf piece -> isIn(piece.string());
                 case IsAmongThePieces among -> isIn(among.value()) || isIn(among.string());
@@ -518,6 +520,115 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         @Override
         public String spelled() {
             return "#(" + counted + ")(a piece " + within + " in)";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * How many different values stand at {@code ofTheOccurrence} over every container inside the
+     * elements of the container at {@code container}: each element holds a container of them, and
+     * two of them are one value where they are equal, whichever elements hold them.
+     *
+     * <p>Not a number of the elements: one element holds as many of them as its container does,
+     * so it may be more than there are elements, and it is nought where every inner container
+     * holds nothing, which a container holding elements may. That is why it is no
+     * {@link HowManyDifferent}, which is never more than the elements.
+     *
+     * @param container       where the elements stand
+     * @param ofTheOccurrence a value of each element of a container inside the elements, which is
+     *                        one container further in than the elements
+     */
+    record HowManyDifferentAcross(DecisionSubject container, DecisionSubject ofTheOccurrence)
+            implements Quantity {
+
+        public HowManyDifferentAcross {
+            if (container == null || ofTheOccurrence == null) {
+                throw new IllegalArgumentException("the values are of containers inside elements");
+            }
+            if (!ofTheOccurrence.isAtOrUnder(container.element())
+                    || ofTheOccurrence.howManyContainersHoldIt()
+                            != container.howManyContainersHoldIt() + 2) {
+                throw new IllegalArgumentException(ofTheOccurrence + " is no value of a container"
+                        + " inside the elements of " + container);
+            }
+        }
+
+        @Override
+        public String spelled() {
+            return "#different across " + container + " [" + ofTheOccurrence + "]";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * How many different values a search down the tree at {@code root} collects, where each node
+     * it reaches — the root, and the nodes in the lists at {@code through} of every node reached —
+     * adds the value at {@code valueAt} of the entry of the map at {@code map} that the key at
+     * {@code keyAt} of the node names, and adds nothing where the map holds no entry under it.
+     *
+     * <p>A number about the nodes the search reaches and the entries their keys pick, so it is no
+     * number of the map's entries: an entry no node's key names is not collected, whatever its
+     * value. Two nodes naming one entry collect one value, and two entries with one value are one
+     * value. Nought exactly where no node reached has an entry.
+     *
+     * @param root    where the node the search starts from stands
+     * @param through the fields of a node the search goes down, each once
+     * @param map     where the map the entries are looked up in stands
+     * @param keyAt   the fields from a node to the key it looks its entry up by
+     * @param valueAt the fields from an entry to the value collected, none for the entry itself
+     */
+    record HowManyDifferentBelow(TermPath root, List<String> through, TermPath map,
+                                 List<String> keyAt, List<String> valueAt) implements Quantity {
+
+        public HowManyDifferentBelow {
+            Objects.requireNonNull(root, "a search starts from some node");
+            Objects.requireNonNull(map, "entries are looked up in some map");
+            through = List.copyOf(through);
+            keyAt = List.copyOf(keyAt);
+            valueAt = List.copyOf(valueAt);
+            if (through.isEmpty()) {
+                throw new IllegalArgumentException("a search down a tree goes down some field");
+            }
+            if (new HashSet<>(through).size() != through.size()) {
+                throw new IllegalArgumentException(
+                        "a search goes down each field once: " + through);
+            }
+            if (map.isAtOrUnder(root) || root.isAtOrUnder(map)) {
+                throw new IllegalArgumentException(
+                        "the map is apart from the tree it is looked up for: " + map + ", " + root);
+            }
+        }
+
+        /** Where the key a node looks its entry up by stands, taken of the root. */
+        public TermPath keyOfTheRoot() {
+            TermPath at = root;
+            for (String field : keyAt) {
+                at = at.then(field);
+            }
+            return at;
+        }
+
+        /** Where the value collected of an entry stands, taken of the entries of the map. */
+        public TermPath valueOfAnEntry() {
+            TermPath at = map.element();
+            for (String field : valueAt) {
+                at = at.then(field);
+            }
+            return at;
+        }
+
+        @Override
+        public String spelled() {
+            return "#different below " + root + " through " + through + " [" + map + "["
+                    + keyAt + "]" + valueAt + "]";
         }
 
         @Override

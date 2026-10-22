@@ -262,10 +262,6 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)
             implements OneAboutAnOperation {}
 
-    /** The operation answers a set holding exactly what {@code into} holds and {@code value}. */
-    record GathersIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)
-            implements OneAboutAnOperation {}
-
     /** The operation answers a list of {@code part} of what {@code map} holds. */
     record ListsAPartOf(DeclaredOperation operation, DeclaredArgument map,
                         MapPart part)

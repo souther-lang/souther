@@ -376,7 +376,7 @@ public sealed interface RealizationTarget {
         @Override
         public AskedKey askedKey() {
             return new AskedKey(term.gathered().elements(),
-                    term.gathered().key().from(term.gathered().elements()), term.asked());
+                    term.key().from(term.gathered().elements()), term.asked());
         }
 
         @Override

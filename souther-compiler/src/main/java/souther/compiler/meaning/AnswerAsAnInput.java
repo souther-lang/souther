@@ -608,6 +608,15 @@ public final class AnswerAsAnInput {
                         || !Quantity.HowManyDifferent.oneOfEach(container, each) ? null
                         : new Quantity.HowManyDifferent(container, each);
             }
+            case Quantity.HowManyDifferentAcross across -> {
+                DecisionSubject container = subject(across.container());
+                DecisionSubject each = subject(across.ofTheOccurrence());
+                yield container == null || each == null
+                        || !each.isAtOrUnder(container.element())
+                        || each.howManyContainersHoldIt()
+                                != container.howManyContainersHoldIt() + 2 ? null
+                        : new Quantity.HowManyDifferentAcross(container, each);
+            }
             // What each element adds may be a number put at a value here, and a sum of a value is
             // that value times how many elements there are, which is no one quantity.
             case Quantity.SumOver sum -> {
@@ -624,7 +633,7 @@ public final class AnswerAsAnInput {
                  Quantity.CodePointsOfAPiece _, Quantity.APieceOf _,
                  Quantity.IsAmongThePieces _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
-                 Quantity.WhatAnOperationAnswers _ -> null;
+                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyDifferentBelow _ -> null;
         };
     }
 }

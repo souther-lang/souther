@@ -8184,10 +8184,27 @@ public final class Generator {
             }
             // A row stands at a point where some element's key comes to it, read among every
             // element of the run by the one law the elements beside an element are read by.
-            case NumericTerm.GatheredUnderItsKey _ -> {
+            case NumericTerm.GatheredUnderItsKey gathered -> {
                 boolean any = false;
+                List<ObservedValue> filed = values;
+                KeptOccurrences kept = gathered.selection();
+                if (kept != null) {
+                    // Only the elements the statement keeps are filed under a key, and one it
+                    // cannot be put to may be one of them: as for a count of the kept ones. Each
+                    // is read back whole, so the statement is put to what it holds.
+                    filed = new ArrayList<>();
+                    for (ObservedValue element : values) {
+                        switch (kept.perElement().at(new AWholeElement(kept.position(),
+                                gathered.elements(), element, on))) {
+                            case AStatementAtARow.Answer.Holds _ -> filed.add(element);
+                            case AStatementAtARow.Answer.Fails _ -> { }
+                            case AStatementAtARow.Answer.CouldNotTell(Set<ReadingGap> why) ->
+                                    keptNotTold.addAll(why);
+                        }
+                    }
+                }
                 for (TermOrders.Neighbouring<AnOccurrence.OfAnotherShape> each
-                        : readEachOf(on, values)) {
+                        : readEachOf(on, filed)) {
                     switch (each) {
                         case TermOrders.Neighbouring.HeldNothing<
                                 AnOccurrence.OfAnotherShape> _ -> ofAnotherShape = true;
@@ -8296,6 +8313,50 @@ public final class Generator {
             out.add(together.numberOf(one));
         }
         return out;
+    }
+
+    /**
+     * A row holding nothing but one element of {@code container}, read back whole: a place in it
+     * is walked to through the names {@code on} says are worn on the way, and anything else could
+     * not be walked to, which a statement reads as not being able to tell and never as failing.
+     *
+     * <p>A value of another case than a narrowing on the way leaves holds nothing below it, which
+     * is the element's own answer ({@link ElementProjection#in}). A field the element holds no
+     * value at is told as not walked to: nothing here says it was left unwritten.
+     */
+    private record AWholeElement(TermPath container, TermPath element, ObservedValue held,
+                                 TermOrders on) implements BorderQuantity.Observation {
+
+        @Override
+        public WalkResult<ObservationAtPoint> at(TermPath path) {
+            ElementProjection within = ElementProjection.below(element, path);
+            if (within == null) {
+                return WalkResult.couldNotWalk();
+            }
+            ObservedValue there = on.in(within, held);
+            if (there != null) {
+                return WalkResult.reached(new ObservationAtPoint.Value(there));
+            }
+            for (ElementProjection each : within.onTheWay()) {
+                if (each.narrowing() != null && on.in(each, held) == null
+                        && on.in(each.narrowedFrom(), held) != null) {
+                    return WalkResult.reached(ObservationAtPoint.WROTE_NOTHING);
+                }
+            }
+            return WalkResult.couldNotWalk();
+        }
+
+        @Override
+        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+            return path.equals(element) ? WalkResult.reached(List.of(held))
+                    : WalkResult.couldNotWalk();
+        }
+
+        @Override
+        public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
+            return of.equals(container) ? WalkResult.reached(List.of(this))
+                    : WalkResult.couldNotWalk();
+        }
     }
 
     /**

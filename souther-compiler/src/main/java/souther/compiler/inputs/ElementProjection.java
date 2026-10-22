@@ -197,7 +197,19 @@ public record ElementProjection(List<TermPath.Step> steps) {
      */
     static ReadOff readAsAKey(Core answer, ReadOff read, BindingId element,
                               Map<BindingId, Core> held, DeclarationNewtypes newtypes) {
-        return new Reading(Map.of(), held, newtypes, Licence.EQUAL_KEY)
+        return readAsAKey(answer, read, element, Map.of(), held, newtypes);
+    }
+
+    /**
+     * The same, inside arms of a {@code match} on the element: each name an arm bound stands for
+     * the value it matched, read as the case the arm took.
+     *
+     * @param standing where in the element each name an arm on the way bound stands
+     */
+    static ReadOff readAsAKey(Core answer, ReadOff read, BindingId element,
+                              Map<BindingId, ElementProjection> standing,
+                              Map<BindingId, Core> held, DeclarationNewtypes newtypes) {
+        return new Reading(standing, held, newtypes, Licence.EQUAL_KEY)
                 .takenApart(answer, read, element);
     }
 

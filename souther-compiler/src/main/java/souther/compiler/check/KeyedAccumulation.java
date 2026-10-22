@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.proof.KeyedUpdates;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BinOp;
@@ -11,6 +12,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -274,7 +276,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             if (WhatABodyReads.binding(firstRead, accumulator)) {
                 return null;
             }
-            Core added = addedTo(moved, found);
+            Core added = addedTo(moved, found, first, firstAt);
             if (added != null) {
                 return new Filed.Summed(first, added, found);
             }
@@ -306,33 +308,102 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         }
 
         /**
-         * What {@code moved} adds to the value {@code found} it is handed, as written, where it is
-         * that value and something read of no other: {@code n + v}, {@code v + n}, and an operation
-         * the library says computes the same addition, as {@code Decimal.add(n, v)} does — or null
-         * where it is anything else.
+         * What {@code moved} adds to the value {@code found} it is handed, where it is that value
+         * once and a sum of things read of no other — or null where it is anything else.
+         *
+         * <p>Read as the arithmetic reads it ({@link TheSignOfAnOrder.Sides#overTheCalls}), so
+         * how the sum is grouped and in which order it is written say nothing: {@code n + a + b},
+         * {@code n + (a + b)} and {@code a + n + b} add the same, and an operation the library says
+         * computes an addition adds as {@code +} does. What it adds is the one value it adds where
+         * it adds one, and {@code first} — what an element finding nothing files — where it adds
+         * the same sum of values as that is.
          */
-        Core addedTo(ValueStanding.ReadThrough<E> moved, BindingId found) {
-            Core written = Core.withoutStanding(moved.value());
-            List<Core> operands;
-            if (written instanceof Core.Binary(BinOp op, Core l, Core r, var _, var _, var _,
-                    var _, var _) && op == BinOp.ADD) {
-                operands = List.of(l, r);
-            } else if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
-                    && DischargeRules.operator(applied.operation()) == BinOp.ADD
-                    && applied.args().size() == 2) {
-                operands = applied.args();
-            } else {
+        Core addedTo(ValueStanding.ReadThrough<E> moved, BindingId found, Core first, E firstAt) {
+            LinearForm<AffineForms.ACall<E>> stepped =
+                    sides.overTheCalls(moved.value(), moved.at(), leaf -> true);
+            if (stepped == null) {
                 return null;
             }
-            for (int i = 0; i < 2; i++) {
-                Core other = operands.get(1 - i);
-                if (isThe(valueOf(operands.get(i), moved.at()), found)
-                        && !WhatABodyReads.binding(valueOf(other, moved.at()), found)
-                        && !WhatABodyReads.binding(valueOf(other, moved.at()), accumulator)) {
-                    return other;
+            List<Weighed> stepping = weighed(stepped);
+            if (stepping == null) {
+                return null;
+            }
+            List<Weighed> rest = new ArrayList<>();
+            boolean once = false;
+            for (Weighed each : stepping) {
+                if (isThe(each.value(), found)) {
+                    if (each.by().compareTo(ExactRatio.ONE) != 0) {
+                        return null;
+                    }
+                    once = true;
+                } else if (WhatABodyReads.binding(each.value(), found)
+                        || WhatABodyReads.binding(each.value(), accumulator)) {
+                    return null;
+                } else {
+                    rest.add(each);
                 }
             }
-            return null;
+            if (!once) {
+                return null;
+            }
+            if (stepped.constant().signum() == 0 && rest.size() == 1
+                    && rest.getFirst().by().compareTo(ExactRatio.ONE) == 0) {
+                return rest.getFirst().written();
+            }
+            LinearForm<AffineForms.ACall<E>> filed =
+                    sides.overTheCalls(first, firstAt, leaf -> true);
+            List<Weighed> filing = filed == null ? null : weighed(filed);
+            return filing != null && stepped.constant().compareTo(filed.constant()) == 0
+                    && sameSum(rest, filing) ? first : null;
+        }
+
+        /**
+         * One value a sum adds, as written and as what it is read as, and how many times it adds
+         * it in all.
+         */
+        private record Weighed(Core written, Core value, ExactRatio by) {}
+
+        /**
+         * The values {@code form} adds, each once with every weight it is written at added up —
+         * two places a sum writes one value at are that value added twice — or null where the
+         * weights cannot be held.
+         */
+        private List<Weighed> weighed(LinearForm<AffineForms.ACall<E>> form) {
+            List<Weighed> out = new ArrayList<>();
+            for (Map.Entry<AffineForms.ACall<E>, ExactRatio> each : form.coefs().entrySet()) {
+                Core value = valueOf(each.getKey().call(), each.getKey().at());
+                int at = -1;
+                for (int i = 0; i < out.size(); i++) {
+                    if (Core.sameValue(out.get(i).value(), value)) {
+                        at = i;
+                    }
+                }
+                if (at < 0) {
+                    out.add(new Weighed(each.getKey().call(), value, each.getValue()));
+                    continue;
+                }
+                ExactRatio summed = out.get(at).by().plus(each.getValue()).orNull();
+                if (summed == null) {
+                    return null;
+                }
+                out.set(at, new Weighed(out.get(at).written(), value, summed));
+            }
+            out.removeIf(each -> each.by().signum() == 0);
+            return out;
+        }
+
+        /** Whether {@code one} and {@code other} add the same values, each as many times. */
+        private static boolean sameSum(List<Weighed> one, List<Weighed> other) {
+            if (one.size() != other.size()) {
+                return false;
+            }
+            for (Weighed each : one) {
+                if (other.stream().noneMatch(there -> Core.sameValue(each.value(), there.value())
+                        && each.by().compareTo(there.by()) == 0)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /**

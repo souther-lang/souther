@@ -448,26 +448,6 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The operation answers a set holding exactly what {@code into} holds and {@code value}, each
-     * once.
-     *
-     * <p>Both ways, which is what {@link PutsAValueIn} does not say: every element of the answer
-     * is one of those, and every one of those is an element of the answer. A set put a value in
-     * keeps what it held, which a map put a value under a key it has does not, so this is said of
-     * sets alone. Read by the reading of how many different values a walk gathering one at each
-     * step ends with.
-     *
-     * <p>An axiom of a kernel, held to what the kernel computes.
-     */
-    record GathersIn(ArgumentRef value, ArgumentRef into) implements OperationFact {
-
-        public GathersIn {
-            Objects.requireNonNull(value, "this one names the value gathered");
-            Objects.requireNonNull(into, "and what it is gathered into");
-        }
-    }
-
-    /**
      * The operation answers a map every key of which is a key {@code map} was keyed by — the same
      * value, filed under in the answer as it was there.
      *

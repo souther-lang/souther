@@ -222,6 +222,7 @@ public final class Conclusion {
                  DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
                  Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,
+                 Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
                  Quantity.RemainderOfADividend _, Quantity.RemainderByAnInput _,
                  Quantity.ProductOfTwo _, Quantity.HowManyCarried _ -> 0;
         };

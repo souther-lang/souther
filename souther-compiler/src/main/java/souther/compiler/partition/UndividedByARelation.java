@@ -177,8 +177,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** The values at {@code at} held against other values at {@code at}. */
     static UndividedByARelation amongTheValuesAt(TermPath at) {
+        return amongTheValuesAt(List.of(at));
+    }
+
+    /**
+     * The values at each of {@code places} held against other values, only for whether they are
+     * the same: no order is asked of them, so no line is drawn on any of them.
+     */
+    static UndividedByARelation amongTheValuesAt(List<TermPath> places) {
         return new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ,
-                List.of(FilingCoordinate.at(at)), Kind.AFFINE, null);
+                places.stream().map(FilingCoordinate::at).toList(), Kind.AFFINE, null);
     }
 
     /** What {@code one} and {@code other} come to multiplied, held against {@code level} as

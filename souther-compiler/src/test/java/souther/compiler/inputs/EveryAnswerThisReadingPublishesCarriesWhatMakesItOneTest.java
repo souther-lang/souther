@@ -167,6 +167,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == List.class) {
             return List.of();
         }
+        if (type == Map.class) {
+            return Map.of();
+        }
         if (type == TermPath.class) {
             return TermPath.of("x");
         }
