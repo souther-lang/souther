@@ -261,7 +261,20 @@ public final class CasesOfALineAsked {
                 }
             }
             case DecidingCase.Cases.Together(var factors) -> {
-                List<DecidingCase.Cases> next = new ArrayList<>(factors);
+                // What holds whichever alternative is taken is chosen before any alternative:
+                // a prefix is walked further only while rows stand on both sides of the line in
+                // it, and what is certain to be chosen narrows it from the first alternative on.
+                List<DecidingCase.Cases> next = new ArrayList<>();
+                for (DecidingCase.Cases factor : factors) {
+                    if (factor instanceof DecidingCase.Cases.One) {
+                        next.add(factor);
+                    }
+                }
+                for (DecidingCase.Cases factor : factors) {
+                    if (!(factor instanceof DecidingCase.Cases.One)) {
+                        next.add(factor);
+                    }
+                }
                 next.addAll(rest);
                 chosen(chosen, next, goesOn, atEnd);
             }

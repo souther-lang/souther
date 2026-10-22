@@ -133,6 +133,50 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
                 new Asking(_ -> true).of(FOUR));
     }
 
+    /** Whether {@code condition} can hold: no part of it is the denial of another. */
+    private static boolean consistent(Proposition condition) {
+        if (condition instanceof Proposition.Always always) {
+            return always.holds();
+        }
+        List<Proposition> parts = condition instanceof Proposition.All all
+                ? all.parts() : List.of(condition);
+        return parts.stream().noneMatch(part -> parts.contains(part.denied()));
+    }
+
+    /**
+     * What every case a line is asked in holds is chosen before the alternatives are, so that an
+     * alternative contradicting it is given up where it is met. Chosen after them, the
+     * contradiction is met once every alternative of every choice has been walked to, and the
+     * asking is as long as all the ways of choosing and not as long as the ones that can hold.
+     *
+     * <p>Six choices of {@code c} or not {@code c}, with three of the six held beside them, are
+     * eight cases and not sixty-four: the three choices the held parts settle are not walked both
+     * ways to the end.
+     */
+    @Test
+    void whatEveryCaseHoldsIsChosenBeforeTheAlternativesAreWalked() {
+        int choices = 6;
+        int held = 3;
+        List<DecidingCase.Cases> factors = new ArrayList<>();
+        for (int at = 0; at < choices; at++) {
+            Proposition yes = truth("c" + at);
+            factors.add(new DecidingCase.Cases.EachOf(List.of(one(yes), one(yes.denied()))));
+        }
+        for (int at = 0; at < held; at++) {
+            factors.add(one(truth("c" + at)));
+        }
+        Asking asking = new Asking(WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest::consistent);
+
+        CasesOfALineAsked.Found found = asking.of(new DecidingCase.Cases.Together(factors));
+
+        assertEquals(1 << (choices - held), found.decidesIn().size(),
+                "a case for each way of choosing the three left open");
+        assertEquals(Set.of(), found.notWorkedOut());
+        assertEquals(24, asking.asked().size(),
+                "some one holding, the three held, each of the three they settle both ways, and"
+                        + " the tree of the three left open");
+    }
+
     /**
      * The cases kept are each a case of their own however many there are: how many a line is read
      * in one by one is counted over the line, and not over one case it held.
