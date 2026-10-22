@@ -54,15 +54,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * The behavior {@code m} taking {@code inputs} and answering {@code body}, read for the lines
+     * The behavior {@code m} taking {@code inputs} and answering {@code body}, of type
+     * {@code answers}, read for the lines
      * its rules draw and no row composed at them: what is asked here is the word a place is left
      * with and the classes it is parted into, which no composed row moves.
      */
-    private static Compilation measured(String inputs, String declarations, String body) {
-        return measured(inputs, declarations, "Bool", body);
-    }
-
-    /** The same, for a behavior answering {@code answers}. */
     private static Compilation measured(String inputs, String declarations, String answers,
                                         String body) {
         return MEASURED.computeIfAbsent("""
