@@ -194,7 +194,40 @@ final class Pullback {
      * @param meaning what holds where the condition does, and how it was read a rule at a time
      * @param leaves  every part met, in the order met — a part met twice is here twice
      */
-    record Pulled(Meaning meaning, List<Leaf> leaves) {
+    static final class Pulled {
+
+        private final Meaning meaning;
+        private final List<Leaf> leaves;
+        private volatile List<Leaf> turnsOn;
+
+        Pulled(Meaning meaning, List<Leaf> leaves) {
+            this.meaning = meaning;
+            this.leaves = leaves;
+        }
+
+        Meaning meaning() {
+            return meaning;
+        }
+
+        List<Leaf> leaves() {
+            return leaves;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Pulled pulled && meaning.equals(pulled.meaning)
+                    && leaves.equals(pulled.leaves);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(meaning, leaves);
+        }
+
+        @Override
+        public String toString() {
+            return "Pulled[meaning=" + meaning + ", leaves=" + leaves + "]";
+        }
 
         /** What holds where the condition does. */
         Proposition proposition() {
@@ -216,6 +249,16 @@ final class Pullback {
          * wrote it once.
          */
         List<Leaf> turnsOn() {
+            List<Leaf> had = turnsOn;
+            if (had != null) {
+                return had;
+            }
+            List<Leaf> made = turnsOnWorkedOut();
+            turnsOn = made;
+            return made;
+        }
+
+        private List<Leaf> turnsOnWorkedOut() {
             Set<String> parts = new HashSet<>();
             partsOf(proposition(), parts);
             List<Leaf> out = new ArrayList<>();
