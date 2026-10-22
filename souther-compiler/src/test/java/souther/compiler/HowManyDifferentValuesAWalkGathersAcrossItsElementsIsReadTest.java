@@ -7,9 +7,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -17,7 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * How many different values a walk ends with that adds to what it carried every element of a set
  * inside each element ({@link souther.compiler.meaning.Quantity.HowManyDifferentAcross}) is read
  * only where the step's operation has a law of how many its answer holds and a law of which
- * values those are, and is what the language computes.
+ * values those are. That the number read is what the language computes is held in {@code
+ * partition.ANumberReadOffABodyIsWhatTheBodyComputesTest}.
  *
  * <p>A union has both: its law of how many counts what the second set adds to the first, and its
  * law of membership says the answer holds exactly the values either set held.
@@ -94,52 +93,4 @@ class HowManyDifferentValuesAWalkGathersAcrossItsElementsIsReadTest {
                 """, "f"));
     }
 
-    private record Case(String says, List<Set<String>> meetings) {}
-
-    private static int counted(List<Set<String>> meetings) {
-        Set<String> all = new HashSet<>();
-        meetings.forEach(all::addAll);
-        return all.size();
-    }
-
-    private static final List<Case> CASES = List.of(
-            new Case("no meeting", List.of()),
-            new Case("one meeting of one", List.of(Set.of("a"))),
-            new Case("one meeting of two", List.of(Set.of("a", "b"))),
-            new Case("two meetings of the same one", List.of(Set.of("a"), Set.of("a"))),
-            new Case("two meetings sharing one", List.of(Set.of("a", "b"), Set.of("b", "c"))),
-            new Case("three meetings of different ones",
-                    List.of(Set.of("a"), Set.of("b"), Set.of("c"))));
-
-    /** The language answers, for each case, the number of values across every set. */
-    @Test
-    void theLanguageAnswersHowManyDifferAcrossEverySet() {
-        StringBuilder source = new StringBuilder(HEAD + """
-                behavior people : (meetings: List<Meeting>) -> Int
-                let people (meetings) = Set.size(List.fold(
-                    (acc, m) -> Set.union(acc, m.attendees.value), Set.empty, meetings))
-
-                example people
-                """);
-        for (Case each : CASES) {
-            List<String> written = new ArrayList<>();
-            for (Set<String> one : each.meetings()) {
-                written.add("Meeting { minutes = 30, attendees = Attendees(Set.fromList(["
-                        + String.join(", ", one.stream().sorted()
-                                .map(name -> "ContactId(\"" + name + "\")").toList())
-                        + "])) }");
-            }
-            source.append("    | \"").append(each.says()).append("\" : ([")
-                    .append(String.join(", ", written)).append("]) -> ")
-                    .append(counted(each.meetings())).append('\n');
-        }
-        Compilation compilation = Compilation.ofSource(source.toString(), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
-        assertEquals(List.of(0, 1, 2, 1, 3, 3),
-                CASES.stream().map(each -> counted(each.meetings())).toList());
-    }
 }

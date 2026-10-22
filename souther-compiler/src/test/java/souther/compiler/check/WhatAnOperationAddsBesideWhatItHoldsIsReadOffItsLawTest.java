@@ -9,6 +9,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.test.ClosedWorldContract;
 
@@ -16,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.BiFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -72,12 +74,67 @@ class WhatAnOperationAddsBesideWhatItHoldsIsReadOffItsLawTest {
         OperationLaw.Size<DeclaredArgument> size = sizeLawOf("Set", "union");
         List<LawProposition<Slot>> stated = DefaultBoundOperationFacts.get().relationsOf(union);
         assertEquals(AddsWhatItDoesNotHold.countedBy(size),
-                AddsWhatItDoesNotHold.of(union, size, stated));
-        assertEquals(null, AddsWhatItDoesNotHold.of(union, size, List.of()), "how many alone");
+                AddsWhatItDoesNotHold.of(union, size, stated, ASKING));
+        assertEquals(null, AddsWhatItDoesNotHold.of(union, size, List.of(), ASKING),
+                "how many alone");
         assertEquals(null, AddsWhatItDoesNotHold.of(union, size,
-                stated.stream().map(each -> swapped(each, 1, 2)).toList()),
+                stated.stream().map(each -> swapped(each, 1, 2)).toList(), ASKING),
                 "a set it was not handed");
     }
+
+    /**
+     * Whether a container holds a value is asked by the operation whose law of truth says so, one
+     * for each kind of container and each way of holding, and by no name: a membership law in the
+     * words of another operation is not what the count adds.
+     */
+    @Test
+    void whetherAContainerHoldsAValueIsAskedByTheOperationWhoseLawSaysSo() {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        DeclaredArgument set = sizeLawOf("Set", "insert").cases().getFirst().equalTo().coefs()
+                .keySet().stream().map(each -> ((LawSubject.Argument<DeclaredArgument>)
+                        ((LawNumber.SizeOf<DeclaredArgument>) each).of()).argument())
+                .findFirst().orElseThrow();
+        DeclaredArgument map = sizeLawOf("Map", "insert").cases().getFirst().equalTo().coefs()
+                .keySet().stream().map(each -> ((LawSubject.Argument<DeclaredArgument>)
+                        ((LawNumber.SizeOf<DeclaredArgument>) each).of()).argument())
+                .findFirst().orElseThrow();
+        Map<String, String> asked = new TreeMap<>();
+        for (DeclaredArgument container : List.of(set, map)) {
+            for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+                AddsWhatItDoesNotHold.Asked one =
+                        facts.askedWhetherItHolds(container.stands(), of);
+                asked.put(container.stands().getClass().getSimpleName() + " " + of,
+                        one == null ? "none" : name(one.operation()) + "(value "
+                                + one.value().position() + ", container "
+                                + one.container().position() + ")");
+            }
+        }
+        assertEquals(Map.of(
+                "MapOf ELEMENTS", "none",
+                "MapOf KEYS", "Map.containsKey(value 0, container 1)",
+                "SetOf ELEMENTS", "Set.contains(value 0, container 1)",
+                "SetOf KEYS", "none"), asked);
+
+        ValueName insert = ValueName.Stdlib.operation("Set", "insert");
+        OperationLaw.Size<DeclaredArgument> size = sizeLawOf("Set", "insert");
+        List<LawProposition<Slot>> stated = facts.relationsOf(insert);
+        AddsWhatItDoesNotHold.Asked contains = facts.askedWhetherItHolds(set.stands(),
+                AddsWhatItDoesNotHold.Of.ELEMENTS);
+        assertEquals(null, AddsWhatItDoesNotHold.of(insert, size, stated,
+                (container, of) -> new AddsWhatItDoesNotHold.Asked(
+                        ValueName.Stdlib.operation("Set", "isSubsetOf"), contains.value(),
+                        contains.container())), "asked by another operation");
+        assertEquals(AddsWhatItDoesNotHold.countedBy(size), AddsWhatItDoesNotHold.of(insert,
+                size, stated.stream().map(each -> each instanceof LawProposition.Any<Slot>(
+                        var halves) ? new LawProposition.Any<>(halves.reversed().stream()
+                        .map(half -> half instanceof LawProposition.All<Slot>(var parts)
+                                ? new LawProposition.All<>(parts.reversed()) : half)
+                        .toList()) : each).toList(), ASKING),
+                "an equivalence spelled the other way round is the same equivalence");
+    }
+
+    private static final BiFunction<Type, AddsWhatItDoesNotHold.Of, AddsWhatItDoesNotHold.Asked>
+            ASKING = DefaultBoundOperationFacts.get()::askedWhetherItHolds;
 
     private static String said(AddsWhatItDoesNotHold adds) {
         return switch (adds) {
@@ -100,16 +157,16 @@ class WhatAnOperationAddsBesideWhatItHoldsIsReadOffItsLawTest {
         OperationLaw.Size<DeclaredArgument> size = sizeLawOf("Set", "insert");
         List<LawProposition<Slot>> stated = DefaultBoundOperationFacts.get().relationsOf(insert);
         assertEquals(AddsWhatItDoesNotHold.countedBy(size),
-                AddsWhatItDoesNotHold.of(insert, size, stated));
-        assertEquals(null, AddsWhatItDoesNotHold.of(insert, size, List.of()),
+                AddsWhatItDoesNotHold.of(insert, size, stated, ASKING));
+        assertEquals(null, AddsWhatItDoesNotHold.of(insert, size, List.of(), ASKING),
                 "how many alone");
         assertEquals(null, AddsWhatItDoesNotHold.of(ValueName.Stdlib.operation("Set", "union"),
-                size, stated), "of another operation's answer");
+                size, stated, ASKING), "of another operation's answer");
         assertEquals(null, AddsWhatItDoesNotHold.of(insert, size,
-                stated.stream().map(each -> swapped(each, 0, 1)).toList()),
+                stated.stream().map(each -> swapped(each, 0, 1)).toList(), ASKING),
                 "the value and the holder the other way round");
         assertEquals(null, AddsWhatItDoesNotHold.of(insert, size,
-                stated.stream().map(each -> anotherValue(each, 7)).toList()),
+                stated.stream().map(each -> anotherValue(each, 7)).toList(), ASKING),
                 "what the holder held and another value than the one handed");
     }
 

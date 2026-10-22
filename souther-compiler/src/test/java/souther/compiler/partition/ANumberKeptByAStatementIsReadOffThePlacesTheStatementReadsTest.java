@@ -35,6 +35,7 @@ class ANumberKeptByAStatementIsReadOffThePlacesTheStatementReadsTest {
 
     private static final TermPath LINES = TermPath.of("orders").element().then("lines");
     private static final TermPath LINE = LINES.element();
+    private static final TermPath SKU = LINE.then("sku");
     private static final TermPath QTY = LINE.then("qty");
 
     /** The lines that hold some quantity. */
@@ -63,6 +64,8 @@ class ANumberKeptByAStatementIsReadOffThePlacesTheStatementReadsTest {
                     () -> kept + " is read off " + places);
             assertTrue(kept.sharesAPlaceWith(new NumericTerm.ValueOf(QTY)), kept::toString);
         }
+        // Read off the elements, so off the key each holds as well.
+        assertTrue(GATHERED.sharesAPlaceWith(new NumericTerm.ValueOf(SKU)), GATHERED::toString);
     }
 
     @Test
