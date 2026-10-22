@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.BiPredicate;
 
 /**
@@ -487,8 +488,8 @@ public final class WhatARelationLeavesUndivided {
         // none of the model's. The model's lines are those the free terms' settling runs draw,
         // whether or not the values between them were shown reached: that is a second question,
         // and one those ends may be all that kept from being shown.
-        List<Term<P>> withinTheirOrders = terms.stream()
-                .map(term -> withinItsOrder(term, arithmetic)).toList();
+        List<Term<P>> withinTheirOrders = withinTheRowsThatCompute(terms.stream()
+                .map(term -> withinItsOrder(term, arithmetic)).toList(), constant, arithmetic);
         Settling bounded = withinTheirOrders.equals(terms) ? null
                 : settlingOf(withinTheirOrders, at, constant, asking, granularity, arithmetic);
         List<Line> model = free.lines();
@@ -531,6 +532,91 @@ public final class WhatARelationLeavesUndivided {
         }
         return new Term<>(term.madeOf(), term.weight(), cut, term.realizes(), term.takes(),
                 term.itsPlace(), term.spacing(), term.runsTo());
+    }
+
+    /**
+     * {@code terms}, each holding only the values it takes in a row that computes
+     * ({@link Arithmetic}). The positive addends of a row come to the greatest {@code Int} at
+     * most, and so do the negative ones, so a term weighed cannot pass what the greatest leaves
+     * once the others and the constant are at their least on that side: in
+     * {@code a + b - s - 150000 >= 0}, {@code s + 150000} computes only for an {@code s} of the
+     * greatest less 150000, and an {@code a} at the greatest has no false row.
+     */
+    private static <P> List<Term<P>> withinTheRowsThatCompute(List<Term<P>> terms,
+                                                              ExactRatio constant,
+                                                              Arithmetic arithmetic) {
+        if (!arithmetic.stopsAtASize() || constant == null) {
+            return terms;
+        }
+        // What each term weighed comes to at least on each side of nought, and the sum of those and
+        // the constant's, so that what the others come to is the sum less the term's own. A term
+        // whose values are no run of numbers leaves every other term uncut, and is itself cut by
+        // what the rest come to.
+        int size = terms.size();
+        ExactRatio[] leastPositive = new ExactRatio[size];
+        ExactRatio[] leastNegative = new ExactRatio[size];
+        ExactRatio totalPositive = constant.signum() > 0 ? constant : ExactRatio.ZERO;
+        ExactRatio totalNegative = constant.signum() < 0 ? constant.negated() : ExactRatio.ZERO;
+        int unread = -1;
+        int unreadCount = 0;
+        for (int j = 0; j < size && totalPositive != null && totalNegative != null; j++) {
+            Interval holds = Interval.of(terms.get(j).holds());
+            Interval weighed = holds == null ? null : holds.times(terms.get(j).weight());
+            if (weighed == null) {
+                unread = j;
+                unreadCount++;
+                continue;
+            }
+            leastPositive[j] = weighed.low() != null && weighed.low().signum() > 0
+                    ? weighed.low() : ExactRatio.ZERO;
+            leastNegative[j] = weighed.high() != null && weighed.high().signum() < 0
+                    ? weighed.high().negated() : ExactRatio.ZERO;
+            totalPositive = totalPositive.plus(leastPositive[j]).orNull();
+            totalNegative = totalNegative == null ? null
+                    : totalNegative.plus(leastNegative[j]).orNull();
+        }
+        if (unreadCount > 1 || totalPositive == null || totalNegative == null) {
+            return terms;
+        }
+        ExactRatio greatest = ExactRatio.of(arithmetic.greatest());
+        List<Term<P>> cut = new ArrayList<>(terms);
+        for (int i = 0; i < size; i++) {
+            Term<P> term = terms.get(i);
+            if ((unreadCount == 1 && unread != i) || term.spacing() != Granularity.DISCRETE
+                    || !endsAtNumbers(term.holds())) {
+                continue;
+            }
+            ExactRatio positive = unreadCount == 1 ? totalPositive
+                    : totalPositive.minus(leastPositive[i]).orNull();
+            ExactRatio negative = unreadCount == 1 ? totalNegative
+                    : totalNegative.minus(leastNegative[i]).orNull();
+            if (positive == null || negative == null) {
+                continue;
+            }
+            ExactRatio most = greatest.minus(positive).orNull();
+            ExactRatio least = greatest.minus(negative).orNull();
+            ExactRatio high = most == null ? null : most.dividedBy(term.weight()).orNull();
+            ExactRatio low = least == null ? null
+                    : least.negated().dividedBy(term.weight()).orNull();
+            if (high == null || low == null) {
+                continue;
+            }
+            ExactRatio from = term.weight().signum() > 0 ? low : high;
+            ExactRatio to = term.weight().signum() > 0 ? high : low;
+            BigInteger lowest = from.ceiling().orNull();
+            BigInteger highest = to.floor().orNull();
+            if (lowest == null || highest == null) {
+                continue;
+            }
+            NumericDomain.Bounds held = term.holds().meet(new NumericDomain.Bounds(
+                    Endpoint.inclusive(Count.of(new BigDecimal(lowest))),
+                    Endpoint.inclusive(Count.of(new BigDecimal(highest)))));
+            if (!held.equals(term.holds()) && held.holdsAValue()) {
+                cut.set(i, new Term<>(term.madeOf(), term.weight(), held, term.realizes(),
+                        term.takes(), term.itsPlace(), term.spacing(), term.runsTo()));
+            }
+        }
+        return cut;
     }
 
     /** Whether {@code bounds} is there and each end it has is a number. */
@@ -1213,7 +1299,88 @@ public final class WhatARelationLeavesUndivided {
         }
         return reachedWithoutEnd(terms, relation, free)
                 || (within == null && reachedTogether(terms, at, constant, relation, free,
-                        jointly));
+                        jointly))
+                || (within == null && reachedPieceByPiece(terms, at, constant, relation, free,
+                        arithmetic));
+    }
+
+    /**
+     * Whether the whole run of the term at {@code at} is cut into pieces each of which some one
+     * term apart from it reaches. Which term reaches a value can change along the run: with
+     * {@code a + b - s - c >= 0}, {@code b} reaches both sides below {@code c} and {@code s}
+     * from there on. A piece is proved by {@link #reaches} asked of that piece alone, so the
+     * cuts only decide how much is proved, never whether what is proved holds.
+     *
+     * <p>The cuts are the values of the term at which a term apart from it stands at an end of
+     * its run, or at nought, with the rest of the row at nought, and the whole number after each:
+     * a strict relation, or a cut that falls between two whole numbers, moves where the sides
+     * change by one.
+     */
+    private static <P> boolean reachedPieceByPiece(List<Term<P>> terms, int at,
+                                                   ExactRatio constant, Rel relation,
+                                                   boolean[] free, Arithmetic arithmetic) {
+        Term<P> it = terms.get(at);
+        Interval run = Interval.of(it.holds());
+        if (constant == null || run == null || run.low() == null || run.high() == null
+                || it.spacing() != Granularity.DISCRETE || !run.low().isWhole()
+                || !run.high().isWhole()) {
+            return false;
+        }
+        BigInteger first = run.low().floor().orNull();
+        BigInteger last = run.high().floor().orNull();
+        if (first == null || last == null) {
+            return false;
+        }
+        TreeSet<BigInteger> starts = new TreeSet<>();
+        starts.add(first);
+        for (int other = 0; other < terms.size(); other++) {
+            if (!free[other] || terms.get(other).holds() == null) {
+                continue;
+            }
+            Interval held = Interval.of(terms.get(other).holds());
+            List<ExactRatio> standsAt = new ArrayList<>(List.of(ExactRatio.ZERO));
+            if (held != null && held.low() != null) {
+                standsAt.add(held.low());
+            }
+            if (held != null && held.high() != null) {
+                standsAt.add(held.high());
+            }
+            for (ExactRatio value : standsAt) {
+                ExactRatio weighed = weighedAt(value, terms.get(other).weight());
+                ExactRatio sum = weighed == null ? null : constant.plus(weighed).orNull();
+                ExactRatio cut = sum == null ? null
+                        : sum.negated().dividedBy(it.weight()).orNull();
+                BigInteger floor = cut == null ? null : cut.floor().orNull();
+                if (floor == null) {
+                    continue;
+                }
+                for (int beside = 0; beside <= 1; beside++) {
+                    BigInteger start = floor.add(BigInteger.valueOf(beside));
+                    if (start.compareTo(first) > 0 && start.compareTo(last) <= 0) {
+                        starts.add(start);
+                    }
+                }
+            }
+        }
+        if (starts.size() < 2) {
+            return false;
+        }
+        List<BigInteger> from = List.copyOf(starts);
+        for (int i = 0; i < from.size(); i++) {
+            BigInteger to = i + 1 < from.size() ? from.get(i + 1).subtract(BigInteger.ONE) : last;
+            Interval piece = new Interval(ExactRatio.of(from.get(i)), ExactRatio.of(to));
+            boolean reached = false;
+            for (int other = 0; other < terms.size() && !reached; other++) {
+                reached = free[other] && (reaches(terms, other, at, piece, constant, relation,
+                        List.of(), arithmetic)
+                        || reachesWithTheRestHeld(terms, other, at, piece, constant, relation,
+                                free, arithmetic));
+            }
+            if (!reached) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -1250,12 +1417,19 @@ public final class WhatARelationLeavesUndivided {
             if (held != null && takesTheValue(terms.get(last), held) && rest.stream()
                     .allMatch(i -> i == last || takesTheValue(terms.get(i), ExactRatio.ZERO))) {
                 ExactRatio beside = held.times(terms.get(last).weight()).orNull();
-                return beside != null && reaches(List.of(terms.get(of), terms.get(by)), 1, 0,
+                if (beside != null && reaches(List.of(terms.get(of), terms.get(by)), 1, 0,
                         within, ExactRatio.ZERO, relation, List.of(constant, beside),
-                        arithmetic);
+                        arithmetic)) {
+                    return true;
+                }
+                break;
             }
         }
-        return false;
+        // Every one of the rest at nought, the constant kept in the row: the row a witness of the
+        // two is computed in is then the two and the constant alone.
+        return rest.stream().allMatch(i -> takesTheValue(terms.get(i), ExactRatio.ZERO))
+                && reaches(List.of(terms.get(of), terms.get(by)), 1, 0, within, constant,
+                        relation, List.of(), arithmetic);
     }
 
     /**

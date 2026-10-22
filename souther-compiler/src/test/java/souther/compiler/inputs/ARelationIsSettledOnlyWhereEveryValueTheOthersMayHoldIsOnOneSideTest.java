@@ -22,8 +22,10 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which values of a term settle a relation, asked of where the other terms may lie, and whether
@@ -224,6 +226,238 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         assertEquals(new Leaves.Undivided(), leavesOf(List.of(takesNone, a, c), 0, 0, Rel.LT));
     }
 
+    /** {@code a + b + d - s - 150000 >= 0} for an {@code a} from {@code low} to {@code high}, with
+     *  as many of {@code b} and {@code d} as {@code positive} says. */
+    private static Leaves ofTheAmounts(Long low, Long high, int positive) {
+        return ofTheAmounts(low, high, positive, Rel.GE, 1);
+    }
+
+    /** The same relation held as {@code relation} where {@code sign} is one, and turned round
+     *  where it is minus one: every weight and the constant negated, and the relation reversed. */
+    private static Leaves ofTheAmounts(Long low, Long high, int positive, Rel relation, int sign) {
+        var amount = run(0L, Long.MAX_VALUE);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = new ArrayList<>();
+        terms.add(term("a", sign, run(low, high), run(low, high)));
+        for (String place : List.of("b", "d").subList(0, positive)) {
+            terms.add(term(place, sign, amount, amount));
+        }
+        terms.add(term("s", -sign, amount, amount));
+        Rel held = sign > 0 ? relation : switch (relation) {
+            case GE -> Rel.LE;
+            case GT -> Rel.LT;
+            case LE -> Rel.GE;
+            case LT -> Rel.GT;
+            default -> relation;
+        };
+        return leavesOf(terms, 0, -150000L * sign, held);
+    }
+
+    /**
+     * {@code a + b + d - s - 150000 >= 0} over amounts from nought to the greatest {@code Int}.
+     * Below 150000 only {@code b} reaches the true side, with the false side at nought. From
+     * 150000 on {@code b} reaches no false side, since {@code a} is the row's own, and
+     * only {@code s} does. Neither reaches both sides of the whole run, and the run is left either
+     * way where each piece of it is reached by one of them: at the join of the two pieces and at
+     * each end of the whole.
+     */
+    @Test
+    void aRunIsLeftEitherWayWhereEachPieceOfItIsReachedByOneTerm() {
+        long join = 150000L;
+        assertEquals(new Leaves.Undivided(), ofTheAmounts(0L, join - 1, 2));
+        assertEquals(new Leaves.Undivided(), ofTheAmounts(join, Long.MAX_VALUE - 1, 2));
+        assertEquals(new Leaves.Undivided(), ofTheAmounts(0L, Long.MAX_VALUE - 1, 2));
+        assertEquals(new Leaves.Undivided(), ofTheAmounts(join - 1, join, 2));
+        // With one of the two, d does what b did. With neither, an a below 150000 is false
+        // whatever s is, and the run is not left either way across.
+        assertEquals(new Leaves.Undivided(), ofTheAmounts(0L, Long.MAX_VALUE - 1, 1));
+        assertNotEquals(new Leaves.Undivided(), ofTheAmounts(0L, Long.MAX_VALUE - 1, 0));
+        assertEquals(new Leaves.Undivided(), ofTheAmounts(join, Long.MAX_VALUE - 1, 0));
+    }
+
+    /**
+     * Where one term's reach ends and the other's begins moves by one with the relation being
+     * strict and with the sign of the term asked of: {@code a + b - s > 150000} is false at
+     * 150000 by {@code b} and true at 150001 by {@code s}'s absence, and the same relation turned
+     * round has the join the other side of the cut. The pieces beside a cut are asked as pieces
+     * of their own for that, whichever way the relation is held.
+     */
+    @Test
+    void theJoinOfTwoPiecesMovesWithTheStrictnessOfTheRelationAndTheSignOfTheTerm() {
+        for (Rel relation : List.of(Rel.GE, Rel.GT)) {
+            for (int sign : List.of(1, -1)) {
+                assertEquals(new Leaves.Undivided(),
+                        ofTheAmounts(0L, Long.MAX_VALUE - 2, 1, relation, sign),
+                        relation + " held " + sign);
+            }
+        }
+    }
+
+    /**
+     * Where the run takes the greatest {@code Int}, the value is settled true by the arithmetic
+     * alone: the false side needs an {@code s} of 150000 or more past what a row computes, and no
+     * false row is there. It is a line of the type and not of the model, which draws none.
+     */
+    @Test
+    void aValueOnlyTheArithmeticSettlesIsALineOfTheTypeAlone() {
+        Leaves.Settled whole = (Leaves.Settled) ofTheAmounts(0L, Long.MAX_VALUE, 2);
+        assertEquals(List.of(settled(Long.MAX_VALUE, Long.MAX_VALUE, true)), whole.runs());
+        assertEquals(List.of(line(Rel.GE, Long.MAX_VALUE)), whole.ofTheTypeAlone());
+    }
+
+    private static final NumericDomain.Bounds[] SMALL_RUNS = {
+        run(0L, 4L), run(-2L, 2L), run(1L, 4L), run(0L, 1L)};
+
+    /**
+     * Whether a row of weighed addends and the constant is computed where the type stops at
+     * {@code greatest}: its positive addends together and its negative ones together are no
+     * further from nought than the greatest.
+     */
+    private static boolean computes(long greatest, List<Long> addends) {
+        long up = 0;
+        long down = 0;
+        for (long each : addends) {
+            if (each > 0) {
+                up += each;
+            } else {
+                down -= each;
+            }
+        }
+        return up <= greatest && down <= greatest;
+    }
+
+    private static long endOf(Endpoint end) {
+        return ((Count) end.at()).at().longValueExact();
+    }
+
+    private static boolean takes(long value, NumericDomain.Bounds bounds) {
+        return endOf(bounds.min()) <= value && value <= endOf(bounds.max());
+    }
+
+    /**
+     * Every answer a small relation is given is what its rows say. Over a type that stops at four,
+     * three terms of weight one or minus one, runs with and without nought, and
+     * constants either side of nought, every row there is is enumerated: what is said to be left
+     * either way has a computed row on each side, and what is said to be settled has no computed
+     * row on the other side. Nothing is said of a relation that is not read.
+     */
+    @Test
+    void whatIsSaidOfASmallRelationIsWhatItsComputedRowsSay() {
+        long greatest = 4;
+        int said = 0;
+        for (int terms : new int[] {3}) {
+            for (int signs = 0; signs < (1 << terms); signs++) {
+                for (int runs = 0; runs < Math.pow(SMALL_RUNS.length, terms); runs++) {
+                    List<WhatARelationLeavesUndivided.Term<String>> list = new ArrayList<>();
+                    int rest = runs;
+                    for (int i = 0; i < terms; i++) {
+                        NumericDomain.Bounds held = SMALL_RUNS[rest % SMALL_RUNS.length];
+                        rest /= SMALL_RUNS.length;
+                        list.add(new WhatARelationLeavesUndivided.Term<>(List.of("t" + i),
+                                ExactRatio.of((signs >> i & 1) == 0 ? 1 : -1), held, held, null,
+                                true, Granularity.DISCRETE, run(-greatest - 1, greatest)));
+                    }
+                    for (long constant : new long[] {-6, -3, 0, 3}) {
+                        for (Rel relation : new Rel[] {Rel.GE, Rel.LT}) {
+                            for (int at = 0; at < 2; at++) {
+                                said += checked(list, at, constant, relation, greatest);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(said > 100, "some relation is read, or this asks nothing: " + said);
+    }
+
+    /** 1 where something is said of the relation and it is what the rows say, 0 where not. */
+    private static int checked(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
+                               long constant, Rel relation, long greatest) {
+        Leaves leaves = WhatARelationLeavesUndivided.leavesOf(terms, at,
+                ExactRatio.of(constant), relation, String::equals, (one, other) -> true,
+                Granularity.DISCRETE, BigInteger.valueOf(greatest));
+        if (leaves == null) {
+            return 0;
+        }
+        NumericDomain.Bounds held = terms.get(at).holds();
+        String where = leaves + " for " + terms.stream().map(
+                each -> each.weight() + "*" + endOf(each.holds().min()) + ".."
+                        + endOf(each.holds().max())).toList() + " at " + at + " " + constant
+                + " " + relation;
+        for (long each = endOf(held.min()); each <= endOf(held.max()); each++) {
+            long value = each;
+            boolean[] sides = sidesOf(terms, at, value, constant, relation, greatest);
+            switch (leaves) {
+                case Leaves.Undivided _ -> assertTrue(sides[0] && sides[1],
+                        "left either way at " + value + ": " + where);
+                case Leaves.Settled settled -> {
+                    // A value no row computes is outside what is said of the term.
+                    if (value < settled.least().at().floor().orNull().longValueExact()
+                            || value > settled.greatest().at().floor().orNull().longValueExact()) {
+                        continue;
+                    }
+                    SettledRun inside = settled.runs().stream()
+                            .filter(run -> within(run, value)).findFirst().orElse(null);
+                    if (inside == null) {
+                        assertTrue(sides[0] && sides[1],
+                                "left either way at " + value + ": " + where);
+                    } else {
+                        // Settled is that no computed row is on the other side. A value no row
+                        // computes at all is settled both ways, and a run holding one is still a
+                        // class by its values that have a row.
+                        assertFalse(sides[inside.holds() ? 1 : 0],
+                                "settled " + inside.holds() + " at " + value + ": " + where);
+                    }
+                }
+            }
+        }
+        return 1;
+    }
+
+    private static boolean within(SettledRun run, long value) {
+        ExactRatio at = ExactRatio.of(value);
+        return (run.from() == null || at.compareTo(run.from().at()) > 0
+                || (run.from().inclusive() && at.compareTo(run.from().at()) == 0))
+                && (run.to() == null || at.compareTo(run.to().at()) < 0
+                || (run.to().inclusive() && at.compareTo(run.to().at()) == 0));
+    }
+
+    /** Whether some computed row holds the relation, and whether some computed row fails it. */
+    private static boolean[] sidesOf(List<WhatARelationLeavesUndivided.Term<String>> terms,
+                                     int at, long value, long constant, Rel relation,
+                                     long greatest) {
+        boolean[] sides = new boolean[2];
+        enumerate(terms, 0, at, value, new ArrayList<>(List.of(constant)), relation, greatest,
+                sides);
+        return sides;
+    }
+
+    private static void enumerate(List<WhatARelationLeavesUndivided.Term<String>> terms, int next,
+                                  int at, long value, List<Long> addends, Rel relation,
+                                  long greatest, boolean[] sides) {
+        if (next == terms.size()) {
+            if (computes(greatest, addends)) {
+                long sum = addends.stream().mapToLong(Long::longValue).sum();
+                sides[relation.holds(Long.signum(sum)) ? 0 : 1] = true;
+            }
+            return;
+        }
+        long weight = terms.get(next).weight().isWhole()
+                ? terms.get(next).weight().floor().orNull().longValue() : 0;
+        if (next == at) {
+            addends.add(weight * value);
+            enumerate(terms, next + 1, at, value, addends, relation, greatest, sides);
+            addends.removeLast();
+            return;
+        }
+        for (long each = -greatest - 1; each <= greatest; each++) {
+            if (takes(each, terms.get(next).holds())) {
+                addends.add(weight * each);
+                enumerate(terms, next + 1, at, value, addends, relation, greatest, sides);
+                addends.removeLast();
+            }
+        }
+    }
+
     /**
      * {@code a + c >= b} over the same runs is settled the other way, true from eleven on.
      */
@@ -240,7 +474,9 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
      * {@code a < b + 3 * c + 4 * d} with {@code a} at one below the greatest {@code Int}, {@code b}
      * at two below, and {@code c} and {@code d} nought or one: the sum of the others at its
      * greatest passes where the type stops, so it is no row that is computed, and the others
-     * together are not a witness for the true side.
+     * together are not a witness for the true side. The rows that are computed are the one with
+     * {@code c} and {@code d} at nought, where it fails, so the value is settled false by the
+     * arithmetic alone, a line the model draws none of.
      */
     @Test
     void theOthersAreNotAWitnessWhereTheirSumPassesWhereTheTypeStops() {
@@ -249,7 +485,8 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         var b = term("b", -1, run(max - 2, max - 2), run(max - 2, max - 2));
         var c = term("c", -3, run(0L, 1L), run(0L, 1L));
         var d = term("d", -4, run(0L, 1L), run(0L, 1L));
-        assertNull(leavesOf(List.of(a, b, c, d), 0, 0, Rel.LT));
+        assertEquals(settledIn(max - 1, max - 1, settled(max - 1, max - 1, false)),
+                leavesOf(List.of(a, b, c, d), 0, 0, Rel.LT));
     }
 
     /**
@@ -312,14 +549,18 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     /**
      * {@code x - y - 2 < 0}, both any {@code Int}: at the two greatest {@code y} the relation holds
      * whatever {@code x} is, but only as {@code y + 2}, which passes where the type stops. Cut where
-     * the type stops, the run is still one no row computes, and nothing is shown.
+     * the type stops, the run is still one no row computes, and it is not shown. At the least
+     * {@code y} but one the rows that compute have an {@code x} of two less the greatest or
+     * above, and every one of them fails: that value is settled by the arithmetic alone.
      */
     @Test
     void aRunCutWhereTheTypeStopsIsStillNoRowWhereItsSumPassesTheEnd() {
-        assertNull(leavesOf(List.of(
+        Leaves leaves = leavesOf(List.of(
                 answer("x", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
                 answer("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 1, -2,
-                Rel.LT));
+                Rel.LT);
+        Leaves.Settled settled = (Leaves.Settled) leaves;
+        assertEquals(List.of(settled(-Long.MAX_VALUE, -Long.MAX_VALUE, false)), settled.runs());
     }
 
     /**

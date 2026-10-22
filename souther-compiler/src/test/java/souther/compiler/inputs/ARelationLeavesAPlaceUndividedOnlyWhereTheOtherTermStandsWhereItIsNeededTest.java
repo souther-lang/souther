@@ -433,12 +433,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
      * {@code x - y + z - 1000 > 0}, {@code z} read as though its order ran on but counted on an
      * order stopping at a hundred: brought to nought by a {@code z} of a thousand, the rest would
      * leave {@code x} to {@code y}, and no {@code z} is there. Counted on an order reaching a
-     * thousand, it is.
+     * thousand, it is. {@code y} stops at ten: with no end it would reach both sides beside a
+     * {@code z} at nought, where the constant stays in the row.
      */
     @Test
     void aTermIsHeldOnlyAtAValueItsOrderHolds() {
         var x = term("x", 1, run(0, 10), run(0, 10), null, true);
-        var y = term("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, null, true);
+        var y = term("y", -1, run(0, 10), run(0, 10), null, true);
         var shortOrder = runningTo(run(0, 100), "z", 1, NumericDomain.Bounds.OPEN,
                 NumericDomain.Bounds.OPEN, null, true);
         var longOrder = runningTo(run(0, 1000), "z", 1, NumericDomain.Bounds.OPEN,
