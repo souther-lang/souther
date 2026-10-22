@@ -1,10 +1,13 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * How far a set of rules lets a whole form run — the one reading of that question there is.
@@ -183,15 +186,18 @@ final class FormReach<A> {
 
     /** The highest the form is proven to come to, or null where nothing bounds it above. */
     ExactCut most(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return highest(inOrder(coefs), constant, null);
+        return highest(inOrder(coefs), constant, null, null);
     }
 
     private Reach between(Map<A, ExactRatio> coefs, ExactRatio constant, AffineConstraint<A> without) {
-        ExactCut most = highest(coefs, constant, without);
+        // Which premises name none of the form's positions is one answer for the form and its
+        // negation, which name the same positions, so it is asked once for both.
+        Set<Premise<A>> apart = coefs.size() > 1 && weighed(coefs) >= 2 ? apartFrom(coefs) : null;
+        ExactCut most = highest(coefs, constant, without, apart);
         // The least a form comes to is the highest its negation comes to, on the other side of
         // nought. Asked that way rather than derived a second time, so the two ends are one reading
         // and cannot come apart.
-        ExactCut flipped = highest(negated(coefs), constant.negated(), without);
+        ExactCut flipped = highest(negated(coefs), constant.negated(), without, apart);
         ExactCut least = flipped == null ? null
                 : new ExactCut(flipped.at().negated(), flipped.inclusive());
         return new Reach(least, most);
@@ -203,8 +209,12 @@ final class FormReach<A> {
         return out;
     }
 
+    /**
+     * @param apart the premises that name none of {@code coefs}' positions ({@link #apartFrom}),
+     *              or null where that is asked here
+     */
     private ExactCut highest(Map<A, ExactRatio> coefs, ExactRatio constant,
-                                AffineConstraint<A> without) {
+                                AffineConstraint<A> without, Set<Premise<A>> apart) {
         if (coefs.size() <= 1) {
             // A form naming one position is answered by the ends and by nothing else, because the
             // ends *are* this step at one position, run until they stop moving or until the rounds
@@ -224,12 +234,15 @@ final class FormReach<A> {
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
+        Set<Premise<A>> namingNone = apart != null || !residualsAreRangedOnly ? apart
+                : apartFrom(coefs);
         for (Premise<A> each : premises()) {
             if (each.rule().equals(without)) {
                 continue;
             }
             AffineConstraint.HalfSpace<A> premise = each.half();
-            if (residualsAreRangedOnly && namesNoneOf(premise, coefs) && passesOver(each, ranges)) {
+            if (residualsAreRangedOnly && namingNone.contains(each)
+                    && passesOver(each, ranges)) {
                 continue;
             }
             if (ranges != null && heldAlready(each, coefs, weighs)) {
@@ -291,8 +304,11 @@ final class FormReach<A> {
             } else if (was.isZero() && left != 0) {
                 weighsAfter++;
             }
-            unboundedAfter += (runsWithoutEnd(each.getKey(), left) ? 1 : 0)
-                    - (runsWithoutEnd(each.getKey(), was.signum()) ? 1 : 0);
+            // The position's range is read once for both weights: it is two lookups of the ends,
+            // and this is asked of every position of every premise a form is held against.
+            Reach range = rangeOf(each.getKey());
+            unboundedAfter += (runsWithoutEnd(range, left) ? 1 : 0)
+                    - (runsWithoutEnd(range, was.signum()) ? 1 : 0);
         }
         return weighsAfter >= 3 && unboundedAfter > 0;
     }
@@ -302,17 +318,17 @@ final class FormReach<A> {
     private int unboundedIn(Map<A, ExactRatio> coefs) {
         int unbounded = 0;
         for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
-            if (runsWithoutEnd(each.getKey(), each.getValue().signum())) {
+            if (runsWithoutEnd(rangeOf(each.getKey()), each.getValue().signum())) {
                 unbounded++;
             }
         }
         return unbounded;
     }
 
-    /** Whether a position weighed with the sign {@code sign} has no end the way that weight runs it
-     *  up — never where it is weighed nought. */
-    private boolean runsWithoutEnd(A position, int sign) {
-        return sign != 0 && rangeOf(position).endWeighedBy(sign, true) == null;
+    /** Whether a position whose ends are {@code range}, weighed with the sign {@code sign}, has no
+     *  end the way that weight runs it up — never where it is weighed nought. */
+    private static boolean runsWithoutEnd(Reach range, int sign) {
+        return sign != 0 && range.endWeighedBy(sign, true) == null;
     }
 
     /** How many of {@code coefs}' positions carry a weight. */
@@ -324,6 +340,18 @@ final class FormReach<A> {
             }
         }
         return weighed;
+    }
+
+    /** The premises that name none of the positions {@code coefs} holds ({@link #namesNoneOf}),
+     *  each the one {@link #premises} holds. */
+    private Set<Premise<A>> apartFrom(Map<A, ExactRatio> coefs) {
+        Set<Premise<A>> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Premise<A> each : premises()) {
+            if (namesNoneOf(each.half(), coefs)) {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     /** Whether {@code premise}'s sum names none of the positions {@code coefs} holds, weighed or

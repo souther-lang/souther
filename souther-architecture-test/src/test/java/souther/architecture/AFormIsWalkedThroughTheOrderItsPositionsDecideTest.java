@@ -59,7 +59,11 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
                     + "(Lsouther/compiler/numeric/AffineConstraint$Disequality;"
                     + "Lsouther/compiler/numeric/FormReach;)Ljava/util/List;",
             "what it hands back holds at most one half-space, and which one is settled by which"
-                    + " side of the value the sum is proved to lie rather than by any walk");
+                    + " side of the value the sum is proved to lie rather than by any walk",
+            "souther/compiler/numeric/FormReach#apartFrom(Ljava/util/Map;)Ljava/util/Set;",
+            "what it hands back is a set of premises by identity, asked only whether a premise is"
+                    + " in it, and whether one is turns on whether it names any of the form's"
+                    + " positions, which no order of them changes");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
