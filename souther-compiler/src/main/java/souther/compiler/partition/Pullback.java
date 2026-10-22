@@ -191,8 +191,8 @@ final class Pullback {
     /**
      * What a condition states, how that was derived, and the parts it was read from.
      *
-     * @param meaning what holds where the condition does, and how it was read a rule at a time
-     * @param leaves  every part met, in the order met — a part met twice is here twice
+     * <p>Two pulls are equal where what they state and the parts they were read from are. What the
+     * statement turns on is worked out from those two alone, so it is kept after the first ask.
      */
     static final class Pulled {
 
@@ -200,6 +200,10 @@ final class Pullback {
         private final List<Leaf> leaves;
         private volatile List<Leaf> turnsOn;
 
+        /**
+         * @param meaning what holds where the condition does, and how it was read a rule at a time
+         * @param leaves  every part met, in the order met — a part met twice is here twice
+         */
         Pulled(Meaning meaning, List<Leaf> leaves) {
             this.meaning = meaning;
             this.leaves = leaves;
