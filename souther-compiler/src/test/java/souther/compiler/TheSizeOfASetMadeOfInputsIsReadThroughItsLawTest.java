@@ -213,6 +213,78 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
     }
 
     /**
+     * A walk adding each value it is handed to a set, or filing each under a key, ends with as many
+     * as there are different values among them, and those are read down the list it walks: a map
+     * taking a place out of each element, or the lists inside each element put end to end.
+     */
+    @Test
+    void howManyDifferentValuesAWalkGathersIsAskedOfWhatItsListIsTakenOf() {
+        String model = """
+                data Forecast = { currency: String, amount: Int }
+                data Desk = { forecasts: List<Forecast> }
+
+                let filed (cs: List<String>): Map<String, Int> =
+                    List.fold((acc, c) -> Map.updateOrInsert(c, 1, n -> n + 1, acc), Map.empty, cs)
+
+                behavior f : (fs: List<Forecast>, desks: List<Desk>) -> Int
+                let f (fs, desks) = if %s then 1 else 0
+                """;
+        for (String condition : List.of(
+                "Set.size(List.fold((acc, c) -> Set.insert(c, acc), Set.empty,"
+                        + " List.map(.currency, fs))) == 1",
+                "Map.size(filed(List.map(f -> f.currency, fs))) == 1")) {
+            relatesValues(of(model.formatted(condition), "f"), List.of("fs[*].currency"));
+        }
+        for (String condition : List.of(
+                "Set.size(List.fold((acc, c) -> Set.insert(c, acc), Set.empty,"
+                        + " List.flatMap(d -> List.map(.currency, d.forecasts), desks))) == 1",
+                "Map.size(filed(List.flatMap(d -> List.map(.currency, d.forecasts), desks))) == 1")) {
+            relatesValues(of(model.formatted(condition), "f"),
+                    List.of("desks[*].forecasts[*].currency"));
+        }
+    }
+
+    /**
+     * And only what is read is said to be read there too: a walk over the elements a filter kept
+     * gathers how many different values meet a statement, and one over a value worked out of each
+     * gathers no place's values.
+     */
+    @Test
+    void aWalkGatheringSomeElementsOrAValueWorkedOutOfEachIsStillARuleNobodyRead() {
+        String model = """
+                data Forecast = { currency: String, amount: Int }
+
+                let filed (cs: List<String>): Map<String, Int> =
+                    List.fold((acc, c) -> Map.updateOrInsert(c, 1, n -> n + 1, acc), Map.empty, cs)
+
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if %s then 1 else 0
+                """;
+        for (String condition : List.of(
+                "Set.size(List.fold((acc, f) -> Set.insert(f.currency, acc), Set.empty,"
+                        + " List.filter(f -> f.amount > 0, fs))) == 1",
+                "Map.size(filed(List.map(.currency, List.filter(f -> f.amount > 0, fs)))) == 1",
+                "Set.size(List.fold((acc, f) -> Set.insert(f.amount + 1, acc), Set.empty, fs))"
+                        + " == 1")) {
+            Said said = of(model.formatted(condition), "f");
+            assertEquals(List.of("rule_unread"), said.weakening(), condition);
+        }
+        // A walk over the lists inside one element of an outer list gathers some of the
+        // occurrences of the place, and no number of them all.
+        Said inEachFloor = of("""
+                data Forecast = { currency: String, amount: Int }
+                data Desk = { forecasts: List<Forecast> }
+                data Floor = { desks: List<Desk> }
+
+                behavior f : (floors: List<Floor>) -> List<Bool>
+                let f (floors) = List.map(l -> Set.size(List.fold((acc, c) -> Set.insert(c, acc),
+                    Set.empty, List.flatMap(d -> List.map(.currency, d.forecasts), l.desks))) == 1,
+                        floors)
+                """, "f");
+        assertEquals(List.of("rule_unread"), inEachFloor.weakening());
+    }
+
+    /**
      * What a call answering a truth inside the closure states is its own, and the emptiness check
      * around it does not state it a second time.
      */

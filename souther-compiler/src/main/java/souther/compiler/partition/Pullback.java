@@ -2225,11 +2225,9 @@ final class Pullback {
      */
     private Sized sizeOfAWalk(Core e, InputReads reads) {
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
-        if (walk == null || !(walkedContainer(walk.container(), reads)
-                instanceof DecisionSubject.AnInput held)) {
-            return null;
-        }
-        if (!(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(LinearForm<Quantity> seed))) {
+        if (walk == null
+                || !(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(
+                        LinearForm<Quantity> seed))) {
             return null;
         }
         // A step adding to what it carried each value it is handed that it does not hold yet adds
@@ -2243,7 +2241,10 @@ final class Pullback {
                 && DefaultBoundOperationFacts.get().addsWhatItDoesNotHold(applied.operation())
                         instanceof AddsWhatItDoesNotHold adds) {
             return seed.equals(LinearForm.constant(ExactRatio.ZERO))
-                    ? differentOverAWalk(walk, held, step, applied, adds) : null;
+                    ? differentOverAWalk(walk, reads, step, applied, adds) : null;
+        }
+        if (!(walkedContainer(walk.container(), reads) instanceof DecisionSubject.AnInput held)) {
+            return null;
         }
         Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
         return tentatively(soFar, () -> {
@@ -2313,44 +2314,70 @@ final class Pullback {
     }
 
     /**
-     * How many what {@code walk}, from nothing held over the elements of {@code held}, ends with
-     * holds, where its step {@code applied}, standing as {@code step}, adds to what it carried
-     * each value it is handed that what it carried does not hold yet ({@link
-     * AddsWhatItDoesNotHold}): how many different values it was handed over the elements — or
-     * null where it adds to anything else, or what it is handed is no place of each element.
+     * How many what {@code walk}, from nothing held, ends with holds, where its step
+     * {@code applied}, standing as {@code step}, adds to what it carried each value it is handed
+     * that what it carried does not hold yet ({@link AddsWhatItDoesNotHold}): how many different
+     * values it was handed over the occurrences the list it walks holds one value each of — or
+     * null where it adds to anything else, the list is no such run, or what it is handed is no
+     * place of each of them.
      *
      * <p>By induction over the walk, which hands every element to the step once: what it holds
      * after a step is what it held and the values that step handed it, each once, so what it ends
      * with holds every value handed it once, which is how many differ among them.
+     *
+     * <p>Where the values handed stand is read down the list the walk is handed as a fold filing
+     * under a key reads its keys ({@link InputReads#occurrencesOf}), so a list made by a map or put
+     * end to end out of the lists inside each element is one way to the same places. A list some
+     * of whose elements a statement kept is not crossed: how many different values meet a
+     * statement is no number this reads.
      */
-    private Sized differentOverAWalk(SeededWalk walk, DecisionSubject.AnInput held,
-                                     Denotation step, AnOperationApplied applied,
-                                     AddsWhatItDoesNotHold adds) {
+    private Sized differentOverAWalk(SeededWalk walk, InputReads reads, Denotation step,
+                                     AnOperationApplied applied, AddsWhatItDoesNotHold adds) {
         if (!(Core.withoutStanding(applied.args().get(adds.holder().position()))
                         instanceof Core.Read carried)
                 || !carried.binding().equals(walk.accumulator().binding())) {
             return null;
         }
-        return switch (adds) {
-            case AddsWhatItDoesNotHold.OneValue one ->
-                    step.at().pathOf(applied.args().get(one.value().position()),
-                            read.rules().newtypes()) instanceof PathResolution.At(TermPath value)
-                            && Quantity.HowManyDifferent.oneOfEach(held,
-                                    new DecisionSubject.AnInput(value))
-                            ? new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(
-                                    held, new DecisionSubject.AnInput(value))))
-                            : null;
+        Core handed = applied.args().get(switch (adds) {
+            case AddsWhatItDoesNotHold.OneValue one -> one.value().position();
+            case AddsWhatItDoesNotHold.TheElementsOf elements -> elements.from().position();
+        });
+        OnePerElement.ReadOff value = step.at().readOff(handed, walk.element().binding(),
+                read.rules().newtypes());
+        if (value == null
+                || !(reads.occurrencesOf(walk.container(), List.of(value), null,
+                        read.rules().symbols(), read.rules().newtypes())
+                        instanceof InputReads.Occurrences every)
+                || !(every.reads().getFirst() instanceof InputReads.Occurrences.Read.At(
+                        TermPath place, var _))) {
+            return null;
+        }
+        DecisionSubject.AnInput at = new DecisionSubject.AnInput(place);
+        Quantity different = switch (adds) {
+            case AddsWhatItDoesNotHold.OneValue _ -> switch (every) {
+                case InputReads.Occurrences.OfOneContainer(TermPath container, var _, var _) ->
+                        Quantity.HowManyDifferent.oneOfEach(
+                                new DecisionSubject.AnInput(container), at)
+                                ? new Quantity.HowManyDifferent(
+                                        new DecisionSubject.AnInput(container), at)
+                                : null;
+                // Every occurrence of the place, which stands in the lists inside the elements of
+                // a container standing inside no other: the values inside those elements.
+                case InputReads.Occurrences.AcrossContainers _ ->
+                        new Quantity.HowManyDifferentAcross(
+                                new DecisionSubject.AnInput(place.outermostContainer()), at);
+            };
             // Every value of a container inside the element, which is as many values as it holds.
-            case AddsWhatItDoesNotHold.TheElementsOf elements ->
-                    step.at().pathOf(applied.args().get(elements.from().position()),
-                            read.rules().newtypes()) instanceof PathResolution.At(TermPath inner)
-                            && inner.isAtOrUnder(held.at().element())
-                            && new DecisionSubject.AnInput(inner).howManyContainersHoldIt()
-                                    == held.howManyContainersHoldIt() + 1
-                            ? new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferentAcross(
-                                    held, new DecisionSubject.AnInput(inner.element()))))
+            case AddsWhatItDoesNotHold.TheElementsOf _ ->
+                    every instanceof InputReads.Occurrences.OfOneContainer(
+                            TermPath container, var _, var _)
+                            && Quantity.HowManyDifferentAcross.ofAContainerInside(
+                                    new DecisionSubject.AnInput(container), at.element())
+                            ? new Quantity.HowManyDifferentAcross(
+                                    new DecisionSubject.AnInput(container), at.element())
                             : null;
         };
+        return different == null ? null : new Sized.AsAForm(LinearForm.atom(different));
     }
 
     /**
