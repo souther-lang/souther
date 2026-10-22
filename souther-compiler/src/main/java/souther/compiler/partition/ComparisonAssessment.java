@@ -956,7 +956,7 @@ sealed interface ComparisonAssessment {
     static ComparisonAssessment narrowedByWhatArrives(
             ComparisonAssessment read,
             Reachability way,
-            Function<Proposition, Reachability> wayToACase,
+            WaysToACase wayToACase,
             List<ComparisonArrival> arrivals,
             boolean drawnByAnInvariant,
             InputReading reading) {
@@ -1143,7 +1143,7 @@ sealed interface ComparisonAssessment {
      * are any.
      */
     private static List<Several.Part> aPartNarrowed(Several.Part part, Reachability way,
-                                                    Function<Proposition, Reachability> wayToACase,
+                                                    WaysToACase wayToACase,
                                                     List<ComparisonArrival> arrivals,
                                                     boolean drawnByAnInvariant,
                                                     InputReading reading) {
@@ -1208,7 +1208,7 @@ sealed interface ComparisonAssessment {
      * decides nothing about another.
      */
     private static CasesReached casesTurnedOn(Cutting cutting, List<DecidingCase> cases,
-                                              Function<Proposition, Reachability> wayToACase,
+                                              WaysToACase wayToACase,
                                               List<ComparisonArrival> arrivals,
                                               InputReading reading) {
         List<DecidingCase> reached = new ArrayList<>();
@@ -1217,16 +1217,18 @@ sealed interface ComparisonAssessment {
         for (DecidingCase each : cases) {
             if (each.saidAlone()) {
                 Reachability toIt = wayToACase.apply(each.condition());
-                if (crossedAtSomePlace(cutting, toIt, arrivals,
-                        cutting.keptTo(each.condition(), reading))) {
+                if (wayToACase.crossed(cutting, each.condition(), () ->
+                        crossedAtSomePlace(cutting, toIt, arrivals,
+                                cutting.keptTo(each.condition(), reading)))) {
                     reached.add(each);
                     deciding.addAll(waysArrivedBy(toIt, arrivals));
                 }
                 continue;
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
-                    crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
-                            cutting.keptTo(condition, reading)));
+                    wayToACase.crossed(cutting, condition, () ->
+                            crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
+                                    cutting.keptTo(condition, reading))));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
@@ -1264,7 +1266,7 @@ sealed interface ComparisonAssessment {
      */
     private static List<Several.Part> aRelationPartNarrowed(
             Several.Part part, AgainstAnotherValue against,
-            Function<Proposition, Reachability> wayToACase, List<ComparisonArrival> arrivals,
+            WaysToACase wayToACase, List<ComparisonArrival> arrivals,
             InputReading reading) {
         // What a condition says of the way to it and of the lines it parts is the condition's
         // and not the case's, and a case said for several is asked of each condition in turn.

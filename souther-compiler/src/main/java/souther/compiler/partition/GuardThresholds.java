@@ -261,7 +261,6 @@ public final class GuardThresholds {
                     Map<Proposition, ReachingCuts.Stating> putOnTheWay = new HashMap<>();
                     Function<Proposition, ReachingCuts.Stating> aCase = decides -> putOnTheWay
                             .computeIfAbsent(decides, _ -> each.aCasePutOnTheWay(decides, read));
-                    Map<Proposition, Reachability> waysToACase = new HashMap<>();
                     switch (each.standing()) {
                         case BoundaryPolicy.Standing.Admitted admitted -> {
                             // The same reading on the narrower region a row at the line is in:
@@ -271,11 +270,10 @@ public final class GuardThresholds {
                             // statement of several is asked again with where it decides taken in.
                             List<ComparisonArrival> arrivals = at.observations().stream()
                                     .map(one -> one.arrival()).toList();
-                            Function<Proposition, Reachability> wayToACase = decides ->
-                                    waysToACase.computeIfAbsent(decides,
-                                            _ -> Reachability.of(new WayToTheBorder(
-                                                    each.wayToACase(aCase.apply(decides))),
-                                                    read.quantities().region()));
+                            WaysToACase wayToACase = new WaysToACase(decides ->
+                                    Reachability.of(new WayToTheBorder(
+                                            each.wayToACase(aCase.apply(decides))),
+                                            read.quantities().region()));
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                             Reachability.of(new WayToTheBorder(each.assumed()),

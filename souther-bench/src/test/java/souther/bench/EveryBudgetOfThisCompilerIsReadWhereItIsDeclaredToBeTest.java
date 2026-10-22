@@ -636,7 +636,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/Reachability;"
-                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WaysToACase;"
                             + "Ljava/util/List;ZLsouther/compiler/inputs/InputReading;)"
                             + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the line, as one where it decides"
