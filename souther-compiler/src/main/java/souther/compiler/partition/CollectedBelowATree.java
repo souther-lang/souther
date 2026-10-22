@@ -271,12 +271,13 @@ final class CollectedBelowATree {
                 return false;
             }
             Set<Core> operands = new LinkedHashSet<>();
-            for (Core each : args) {
-                operands.add(Core.withoutStanding(each));
-            }
             boolean carried = false;
             boolean descends = false;
-            for (Core each : operands) {
+            for (Core written : args) {
+                Core each = Core.withoutStanding(written);
+                if (!operands.add(each)) {
+                    continue;
+                }
                 if (each instanceof Core.Read read
                         && read.binding().equals(walk.accumulator().binding())) {
                     carried = true;

@@ -58,6 +58,7 @@ import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementComputation;
 import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
@@ -2078,11 +2079,12 @@ final class Pullback {
      * then the elements answering one, which is what keeps those elements.
      */
     private Sized sizedByTheArmsOfAnElement(Core e, InputReads at) {
-        if (quantifying.isEmpty() || !(e instanceof Core.Match || e instanceof Core.If)) {
+        Core chosen = Core.withoutStanding(e);
+        if (quantifying.isEmpty() || !(chosen instanceof Core.Match || chosen instanceof Core.If)) {
             return null;
         }
-        Choice choice = Choice.of(e);
-        List<Derivation> taken = entering(e, at);
+        Choice choice = Choice.of(chosen);
+        List<Derivation> taken = entering(chosen, at);
         List<LinearForm<Quantity>> parts = new ArrayList<>();
         Map<ExactRatio, List<Derivation>> byWhatTheyHold = new LinkedHashMap<>();
         for (int i = 0; i < choice.arms().size(); i++) {
@@ -4374,17 +4376,13 @@ final class Pullback {
 
         /**
          * The fields {@code value} takes of the element bound to {@code element}, in order from it
-         * — or null where it is anything but that element or a chain of fields of it.
+         * — or null where it is anything but that element or a way of fields of it
+         * ({@link ElementProjection#read}).
          */
-        private static List<String> fieldsTakenOf(Core value, BindingId element) {
-            List<String> fields = new ArrayList<>();
-            Core cursor = Core.withoutStanding(value);
-            while (cursor instanceof Core.FieldAccess access) {
-                fields.add(access.field());
-                cursor = Core.withoutStanding(access.target());
-            }
-            return cursor instanceof Core.Read bound && bound.binding().equals(element)
-                    ? List.copyOf(fields.reversed()) : null;
+        private List<String> fieldsTakenOf(Core value, BindingId element) {
+            ElementProjection taken = ElementProjection.read(value, element, Map.of(),
+                    read.rules().newtypes());
+            return taken == null ? null : taken.fields();
         }
 
         /**
