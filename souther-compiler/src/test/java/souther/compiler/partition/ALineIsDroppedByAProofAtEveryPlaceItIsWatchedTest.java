@@ -132,7 +132,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         ComparisonAssessment read = line();
 
         assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
-                        _ -> untouched(),
+                        new WaysToACase(_ -> untouched()),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.NoProjection()),
                         false, reading()),
@@ -143,7 +143,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void everyPlaceProvingItTakesTheLineAway() {
         assertInstanceOf(ComparisonAssessment.NothingArrivesAtItsLine.class,
                 ComparisonAssessment.narrowedByWhatArrives(line(), untouched(),
-                        _ -> untouched(), List.of(new ComparisonArrival.NothingArrives(), misses()), false,
+                        new WaysToACase(_ -> untouched()), List.of(new ComparisonArrival.NothingArrives(), misses()), false,
                         reading()),
                 "no run answers through the rule at any place it is watched");
     }
@@ -153,7 +153,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         ComparisonAssessment read = line();
 
         assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
-                        _ -> untouched(),
+                        new WaysToACase(_ -> untouched()),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.Values(N, NumericDomain.Bounds.OPEN)),
                         false, reading()),
@@ -174,7 +174,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     @Test
     void aRelationEveryPlaceProvesNothingArrivesAtIsDroppedAsALineIs() {
         ComparisonAssessment narrowed = ComparisonAssessment.narrowedByWhatArrives(relation(),
-                untouched(), _ -> untouched(), List.of(new ComparisonArrival.NothingArrives()),
+                untouched(), new WaysToACase(_ -> untouched()), List.of(new ComparisonArrival.NothingArrives()),
                 false, reading());
 
         assertEquals(new ComparisonAssessment.NothingArrivesAtItsRelation(
@@ -273,7 +273,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
             ComparisonAssessment.Several narrowed = assertInstanceOf(
                     ComparisonAssessment.Several.class,
                     ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
-                            _ -> toTheCase, List.of(misses()), false, reading()));
+                            new WaysToACase(_ -> toTheCase), List.of(misses()), false,
+                            reading()));
             // Rows arrive at the comparison in both. Where none is in the case the relation turns
             // nothing; where one is, it is a relation with no line read for it.
             assertEquals(toTheCase == NOT_TAKEN
@@ -312,7 +313,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         ComparisonAssessment.Several narrowed = assertInstanceOf(
                 ComparisonAssessment.Several.class,
                 ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
-                        _ -> untouched(), List.of(new ComparisonArrival.NoProjection()), false,
+                        new WaysToACase(_ -> untouched()), List.of(new ComparisonArrival.NoProjection()), false,
                         reading()));
         ComparisonAssessment.Unread unread = assertInstanceOf(ComparisonAssessment.Unread.class,
                 narrowed.parts().getFirst().line(), "the line whose cases nobody took apart");
@@ -357,7 +358,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
             ComparisonAssessment.Several narrowed = assertInstanceOf(
                     ComparisonAssessment.Several.class,
                     ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
-                            _ -> untouched(),
+                            new WaysToACase(_ -> untouched()),
                             List.of(new ComparisonArrival.NoProjection()), false, reading()));
             assertEquals(List.of(new ComparisonAssessment.Several.Part(both, line(),
                                     List.of(shown)),
@@ -403,9 +404,9 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         ComparisonAssessment.Several narrowed = assertInstanceOf(
                 ComparisonAssessment.Several.class,
                 ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
-                        condition -> reached.contains(condition) ? untouched()
+                        new WaysToACase(condition -> reached.contains(condition) ? untouched()
                                 : new Reachability.NothingReaches(
-                                        new Reachability.TwoAtOnce.Truths(N)),
+                                        new Reachability.TwoAtOnce.Truths(N))),
                         List.of(new ComparisonArrival.NoProjection()), false, reading()));
         BlockReason.WhereALineDecidesNotWorkedOut stopped =
                 new BlockReason.WhereALineDecidesNotWorkedOut(
@@ -469,7 +470,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
             ComparisonAssessment.Several narrowed = assertInstanceOf(
                     ComparisonAssessment.Several.class,
                     ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
-                            reachingOnlyEveryRow,
+                            new WaysToACase(reachingOnlyEveryRow),
                             List.of(new ComparisonArrival.NoProjection()), false, reading()));
             assertEquals(1, narrowed.parts().size(), () -> "one part: " + narrowed);
             ComparisonAssessment.Unread unread = assertInstanceOf(
@@ -557,7 +558,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     /** {@link #line()} as the one place it is watched at has {@code arrives} arriving there. */
     private static ComparisonAssessment assessedOn(ComparisonArrival arrives) {
         return ComparisonAssessment.narrowedByWhatArrives(line(), untouched(),
-                _ -> untouched(), List.of(arrives), false, reading());
+                new WaysToACase(_ -> untouched()), List.of(arrives), false, reading());
     }
 
     /**
