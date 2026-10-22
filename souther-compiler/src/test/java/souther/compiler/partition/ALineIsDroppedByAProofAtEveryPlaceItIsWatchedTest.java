@@ -57,6 +57,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -618,6 +619,40 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                                 "the emptiness check is an application: "
                                         + read.arrivals().recordedAt()));
         return new Applied(read, application.getKey(), application.getValue());
+    }
+
+    /**
+     * The way to a case is worked out once however many lines ask it, and whether rows cross a line
+     * in a case once however many lines cut at the same place: two lines reached along different
+     * arms are two lines with a cutting that is equal. A line cutting somewhere else, or a case
+     * that is another, is another question.
+     */
+    @Test
+    void aCaseIsWorkedOutOnceForEveryLineThatCutsWhereTheOthersDo() {
+        List<Proposition> asked = new ArrayList<>();
+        WaysToACase toCases = new WaysToACase(condition -> {
+            asked.add(condition);
+            return untouched();
+        });
+        Proposition one = new Proposition.Always(true);
+        Proposition other = new Proposition.Always(false);
+
+        assertEquals(toCases.apply(one), toCases.apply(one));
+        assertEquals(List.of(one), asked, "the way to a case is read once");
+        toCases.apply(other);
+        assertEquals(List.of(one, other), asked, "and once for another case");
+
+        List<String> crossings = new ArrayList<>();
+        assertTrue(toCases.crossed(line().cutting(), one, () -> crossings.add("first")),
+                "the answer is the one the first ask gave");
+        assertTrue(toCases.crossed(line().cutting(), one, () -> !crossings.add("again")),
+                "an equal cutting in the same case is the same question");
+        assertEquals(List.of("first"), crossings);
+        assertFalse(toCases.crossed(lineAt(BigDecimal.ONE).cutting(), one,
+                () -> !crossings.add("another cutting")), "a cutting somewhere else is asked");
+        assertFalse(toCases.crossed(line().cutting(), other,
+                () -> !crossings.add("another case")), "and so is the same cutting in another case");
+        assertEquals(List.of("first", "another cutting", "another case"), crossings);
     }
 
     private static InputReading reading() {
