@@ -2610,8 +2610,9 @@ public final class InputReads {
      * <p>A name an arm bound is read only at the walk the arm is in, the last one down: one bound
      * further up is a place of a value made of the element, which no place of the element is.
      *
-     * <p>Several arms answering a value are read where each is chosen by one case of one place of
-     * the element and by nothing else on its way ({@link AnArmAnswered#taken}): the case then says
+     * <p>Several arms answering a value, of a flattening or of a map's closure over the elements
+     * of a container, are read where each is chosen by one case of one place of the element and
+     * by nothing else on its way ({@link AnArmAnswered#taken}): the case then says
      * which arm made an element, and no two arms make one. An arm chosen otherwise, or two
      * choices on the way, leave which arm made an element to something no case says.
      */
@@ -2650,17 +2651,29 @@ public final class InputReads {
                 return null;
             }
             MapStep mapped = throughAMap(standing, List.of(), symbols, newtypes);
-            if (mapped != null) {
+            // A map of a container's elements whose closure answers by the case of a place of
+            // the element is made by the arm that case takes, as a flattening answering one value
+            // on each arm is.
+            List<AnArmAnswered> answered = new ArrayList<>();
+            boolean madeByArms = mapped != null
+                    && where.everyElementOf(mapped.from(), newtypes)
+                            instanceof PathResolution.At(TermPath outer)
+                    && armsAnswering(mapped.closure().body(), where, new LinkedHashMap<>(held),
+                            Map.of(), ChoicesOnTheWay.NONE, outer, ArmsEndIn.A_VALUE, answered,
+                            symbols, newtypes)
+                    && answered.size() > 1;
+            if (mapped != null && !madeByArms) {
                 held.put(current, mapped.closure().body());
                 current = mapped.closure().params().getFirst().binding();
                 standing = where.standing(mapped.from(), symbols, newtypes);
                 continue;
             }
-            AFlattening flattening = aFlattening(standing, symbols, newtypes);
-            List<AnArmAnswered> answered = new ArrayList<>();
-            if (flattening == null || !oneOrNoneAnswered(flattening.closure().body(), where,
-                    new LinkedHashMap<>(held), Map.of(), ChoicesOnTheWay.NONE, flattening.outer(),
-                    answered, symbols, newtypes)) {
+            AFlattening flattening = madeByArms ? null : aFlattening(standing, symbols, newtypes);
+            if (!madeByArms && (flattening == null
+                    || !armsAnswering(flattening.closure().body(), where,
+                            new LinkedHashMap<>(held), Map.of(), ChoicesOnTheWay.NONE,
+                            flattening.outer(), ArmsEndIn.A_LIST_OF_ONE_OR_NONE, answered,
+                            symbols, newtypes))) {
                 return null;
             }
             List<AnArmAnswered> values = answered.stream()
@@ -2691,8 +2704,10 @@ public final class InputReads {
                             each.standing()));
                 }
             }
-            current = flattening.element();
-            standing = where.standing(flattening.from(), symbols, newtypes);
+            current = madeByArms ? mapped.closure().params().getFirst().binding()
+                    : flattening.element();
+            standing = where.standing(madeByArms ? mapped.from() : flattening.from(),
+                    symbols, newtypes);
         }
     }
 
@@ -2748,21 +2763,52 @@ public final class InputReads {
      * far as which values are equal goes, read of each arm making the element and chosen by the
      * case that chooses the arm — or null where on some arm it is no way through what that
      * element is ({@link ElementProjection#readAsAKey}).
+     *
+     * <p>The answer may make the choice itself: where the element is made one way, an answer
+     * whose arms are chosen by the case of one place of the element, each answering a key, is
+     * read as a key chosen by that case ({@link ElementKey.ByCase}), as one made by the walks
+     * beneath is. Two choices, one beneath and one in the answer, leave which way an element is
+     * read to something no one case says.
      */
-    public ElementKey keyOf(Core answer, WalkedElement walked, DeclarationNewtypes newtypes) {
+    public ElementKey keyOf(Core answer, WalkedElement walked, Symbols symbols,
+                            DeclarationNewtypes newtypes) {
         List<ElementKey.ByCase.Arm> arms = new ArrayList<>();
+        ElementProjection subject = walked.subject();
         for (WalkedElement.Arm arm : walked.arms()) {
-            ReadOff read = ElementProjection.readAsAKey(answer, ReadOff.ITSELF, walked.element(),
-                    arm.standing(), arm.held(), newtypes);
-            if (read == null || read.placed() == null) {
+            List<AnArmAnswered> chosen = new ArrayList<>();
+            if (!armsAnswering(answer, this, new LinkedHashMap<>(arm.held()), arm.standing(),
+                    ChoicesOnTheWay.NONE, walked.elements(), ArmsEndIn.A_VALUE, chosen, symbols,
+                    newtypes)) {
                 return null;
             }
-            if (walked.subject() == null) {
-                return new ElementKey.At(read.placed().at());
+            if (chosen.size() > 1 && subject == null) {
+                subject = chosen.getFirst().taken() == null ? null
+                        : chosen.getFirst().taken().narrowedFrom();
+                if (subject == null) {
+                    return null;
+                }
+            } else if (chosen.size() > 1) {
+                return null;
             }
-            arms.add(new ElementKey.ByCase.Arm(arm.cases(), read.placed().at()));
+            for (AnArmAnswered each : chosen) {
+                ReadOff read = ElementProjection.readAsAKey(each.value(), ReadOff.ITSELF,
+                        walked.element(), each.standing(), each.held(), newtypes);
+                if (read == null || read.placed() == null) {
+                    return null;
+                }
+                if (subject == null) {
+                    return new ElementKey.At(read.placed().at());
+                }
+                CasesLeft cases = chosen.size() == 1 ? arm.cases()
+                        : each.taken() == null || !subject.equals(each.taken().narrowedFrom())
+                                ? null : each.taken().narrowing();
+                if (cases == null) {
+                    return null;
+                }
+                arms.add(new ElementKey.ByCase.Arm(cases, read.placed().at()));
+            }
         }
-        return ElementKey.byCase(walked.subject(), arms);
+        return ElementKey.byCase(subject, arms);
     }
 
     /** Each of {@code reads}, made of what stands at {@code at} in an element rather than of the
@@ -3034,9 +3080,10 @@ public final class InputReads {
         }
         BindingId element = flattening.element();
         List<AnArmAnswered> answered = new ArrayList<>();
-        if (!oneOrNoneAnswered(flattening.closure().body(), standing.at(),
+        if (!armsAnswering(flattening.closure().body(), standing.at(),
                 new LinkedHashMap<>(standing.at().heldByTheBody()), Map.of(),
-                ChoicesOnTheWay.NONE, flattening.outer(), answered, symbols, newtypes)) {
+                ChoicesOnTheWay.NONE, flattening.outer(), ArmsEndIn.A_LIST_OF_ONE_OR_NONE,
+                answered, symbols, newtypes)) {
             return null;
         }
         List<ReadOff> given = null;
@@ -3099,24 +3146,33 @@ public final class InputReads {
         }
     }
 
+    /** What an arm of a value read by {@link #armsAnswering} ends in. */
+    private enum ArmsEndIn {
+        /** A list written with one value or with none: the value, or no value. */
+        A_LIST_OF_ONE_OR_NONE,
+        /** Whatever the arm answers, which is the value. */
+        A_VALUE
+    }
+
     /**
-     * Whether {@code e}, read at {@code at}, answers on every arm it is chosen by a list written
-     * with one value or with none, each such arm added to {@code out} — through names, {@code
-     * let}s and the arms of a {@code match} or an {@code if}.
+     * Whether {@code e}, read at {@code at}, answers on every arm it is chosen by what
+     * {@code endsIn} says, each such arm added to {@code out} — through names, {@code let}s and
+     * the arms of a {@code match} or an {@code if}.
      *
      * @param outer   where every element the closure is handed stands, which a name an arm on the
      *                way bound stands inside
      * @param choices the choices made on the way to {@code e}
      */
-    private static boolean oneOrNoneAnswered(Core e, InputReads at, Map<BindingId, Core> held,
-                                             Map<BindingId, ElementProjection> standing,
-                                             ChoicesOnTheWay choices, TermPath outer,
-                                             List<AnArmAnswered> out, Symbols symbols,
-                                             DeclarationNewtypes newtypes) {
+    private static boolean armsAnswering(Core e, InputReads at, Map<BindingId, Core> held,
+                                         Map<BindingId, ElementProjection> standing,
+                                         ChoicesOnTheWay choices, TermPath outer, ArmsEndIn endsIn,
+                                         List<AnArmAnswered> out, Symbols symbols,
+                                         DeclarationNewtypes newtypes) {
         Denotation made = at.standing(e, symbols, newtypes);
         InputReads there = made.at();
         return switch (Core.withoutStanding(made.value())) {
-            case Core.ListLit written when written.elements().size() <= 1 -> {
+            case Core.ListLit written when endsIn == ArmsEndIn.A_LIST_OF_ONE_OR_NONE
+                    && written.elements().size() <= 1 -> {
                 out.add(new AnArmAnswered(written.elements().isEmpty() ? null
                         : written.elements().getFirst(), Map.copyOf(held), standing,
                         choices.onlyCase()));
@@ -3124,20 +3180,31 @@ public final class InputReads {
             }
             case Core.LetIn let when let.binder() != null && let.binder().binding() != null -> {
                 held.put(let.binder().binding(), let.value());
-                yield oneOrNoneAnswered(let.body(), there.and(let.binder(), let.value()), held,
-                        standing, choices, outer, out, symbols, newtypes);
+                yield armsAnswering(let.body(), there.and(let.binder(), let.value()), held,
+                        standing, choices, outer, endsIn, out, symbols, newtypes);
             }
-            case Core.Match match -> everyCaseAnswersOneOrNone(match, there, held, standing,
-                    choices, outer, out, symbols, newtypes);
+            // A name the body gave a choice is that choice: what stands for one value stands as
+            // the name, and the arms are read where it was written.
+            case Core.Read name when held.get(name.binding()) instanceof Core given
+                    && Core.withoutStanding(given) instanceof Core.Match ->
+                    armsAnswering(given, there, held, standing, choices, outer, endsIn, out,
+                            symbols, newtypes);
+            case Core.Match match -> everyCaseAnswers(match, there, held, standing, choices,
+                    outer, endsIn, out, symbols, newtypes);
             // A condition chooses by no case of the element and binds no name.
             case Core.If iff -> {
                 for (Choice.Arm arm : Choice.of(iff).arms()) {
-                    if (!oneOrNoneAnswered(arm.answers(),
+                    if (!armsAnswering(arm.answers(),
                             there.choosing(arm.decidedBy(), symbols, newtypes), held, standing,
-                            choices.then(null), outer, out, symbols, newtypes)) {
+                            choices.then(null), outer, endsIn, out, symbols, newtypes)) {
                         yield false;
                     }
                 }
+                yield true;
+            }
+            case Core value when endsIn == ArmsEndIn.A_VALUE -> {
+                out.add(new AnArmAnswered(value, Map.copyOf(held), standing,
+                        choices.onlyCase()));
                 yield true;
             }
             case Core value when AnOperationApplied.of(value) instanceof AnOperationApplied(
@@ -3148,16 +3215,16 @@ public final class InputReads {
     }
 
     /**
-     * Whether every arm of {@code match} answers a list of one value or of none, each arm read
-     * where choosing it puts the reading — which is this reading's own answer ({@link
-     * #choosing}) — and the name it binds standing at the place it narrowed, inside the element.
+     * Whether every arm of {@code match} answers what {@code endsIn} says, each arm read where
+     * choosing it puts the reading — which is this reading's own answer ({@link #choosing}) — and
+     * the name it binds standing at the place it narrowed, inside the element.
      */
-    private static boolean everyCaseAnswersOneOrNone(Core.Match match, InputReads there,
-                                                     Map<BindingId, Core> held,
-                                                     Map<BindingId, ElementProjection> standing,
-                                                     ChoicesOnTheWay choices, TermPath outer,
-                                                     List<AnArmAnswered> out, Symbols symbols,
-                                                     DeclarationNewtypes newtypes) {
+    private static boolean everyCaseAnswers(Core.Match match, InputReads there,
+                                            Map<BindingId, Core> held,
+                                            Map<BindingId, ElementProjection> standing,
+                                            ChoicesOnTheWay choices, TermPath outer,
+                                            ArmsEndIn endsIn, List<AnArmAnswered> out,
+                                            Symbols symbols, DeclarationNewtypes newtypes) {
         for (Core.Case taken : match.cases()) {
             InputReads inside = there.choosing(Choice.Decides.ofCase(match, taken), symbols,
                     newtypes);
@@ -3175,8 +3242,8 @@ public final class InputReads {
                 bound = Map.copyOf(wider);
                 narrowed = projection.narrowing() == null ? null : projection;
             }
-            if (!oneOrNoneAnswered(taken.body(), inside, held, bound, choices.then(narrowed),
-                    outer, out, symbols, newtypes)) {
+            if (!armsAnswering(taken.body(), inside, held, bound, choices.then(narrowed),
+                    outer, endsIn, out, symbols, newtypes)) {
                 return false;
             }
         }
@@ -3206,8 +3273,8 @@ public final class InputReads {
             return false;
         }
         List<AnArmAnswered> given = new ArrayList<>();
-        if (!oneOrNoneAnswered(args.get(mapped), there, held, standing, choices, outer, given,
-                symbols, newtypes)) {
+        if (!armsAnswering(args.get(mapped), there, held, standing, choices, outer,
+                ArmsEndIn.A_LIST_OF_ONE_OR_NONE, given, symbols, newtypes)) {
             return false;
         }
         for (AnArmAnswered each : given) {
@@ -3245,10 +3312,14 @@ public final class InputReads {
         ElementProjection listAt = ElementProjection.read(answer, element, where.heldByTheBody(),
                 newtypes);
         List<ReadOff> sought = new ArrayList<>(reads);
-        // A list is read down to a place of the element a step at a time, and a closure answers a
-        // few steps at most.
-        for (int steps = 0; listAt == null && steps < MOST_STEPS_A_CLOSURE_ANSWERS_THROUGH;
-                steps++) {
+        // A list is read down to a place of the element a step at a time. Each step goes to a part
+        // of what the answer stands as, and a name followed there to what it was bound to, so the
+        // walk stays inside one finite tree; a node come round to again is one already answered.
+        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (listAt == null) {
+            if (!met.add(answer)) {
+                return null;
+            }
             MapStep mapped = throughAMap(where.standing(answer, symbols, newtypes), sought,
                     symbols, newtypes);
             if (mapped != null) {
@@ -3284,8 +3355,6 @@ public final class InputReads {
         }
         return placed;
     }
-
-    private static final int MOST_STEPS_A_CLOSURE_ANSWERS_THROUGH = 16;
 
     private static Core.Block blockOf(InputReads at, Core closure, Symbols symbols,
                                       DeclarationNewtypes newtypes) {

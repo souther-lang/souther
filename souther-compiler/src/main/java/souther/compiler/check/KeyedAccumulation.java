@@ -181,9 +181,9 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         }
         AStep<E> step = new AStep<>(walk.accumulator().binding(), sides, blockOf);
         ValueStanding.ReadThrough<E> body = sides.standing(walk.step().body(), at);
-        Filing filing = step.byAnOperation(body);
+        Filing filing = step.filingOf(body);
         if (filing == null) {
-            filing = step.afterALookup(body);
+            filing = step.byTheArmsOfAChoice(body);
         }
         return filing == null ? null : new KeyedAccumulation(walk.container(), walk.element(),
                 filing.key(), filing.filed());
@@ -202,6 +202,69 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         /** What {@code e}, read in {@code at}, was given: past every name it was given. */
         Core valueOf(Core e, E at) {
             return sides.standing(e, at).value();
+        }
+
+        /** The filing {@code body} is: an operation that files under a key, or the same written
+         *  out as a lookup and a filing. */
+        Filing filingOf(ValueStanding.ReadThrough<E> body) {
+            Filing filing = byAnOperation(body);
+            return filing != null ? filing : afterALookup(body);
+        }
+
+        /**
+         * The filing {@code body} is, where it is a {@code match} each of whose arms files under a
+         * key of its own by one law: what the map holds under a key is what that law makes of the
+         * elements filed under it, each filing the key and the value its own arm says. So the key
+         * and what is filed are each that choice, a {@code match} with the same arms answering
+         * the key, or the value, its arm files ({@link Core.Case#answering}); a reader of the
+         * element reads which arm an element takes from its case.
+         *
+         * <p>A total on every arm, which is the law a reader of the elements reads a key chosen by
+         * their case under ({@link Filed.Summed}): a counter is read off where the key stands, of
+         * which a choice has none, and arms keeping an end compare what they find against values of
+         * their own, each its own name for what was found. A choice reading the answer so far
+         * chooses where an element is filed by what came before, as a key reading it would.
+         */
+        Filing byTheArmsOfAChoice(ValueStanding.ReadThrough<E> body) {
+            if (!(Core.withoutStanding(body.value()) instanceof Core.Match written)
+                    || written.cases().size() < 2) {
+                return null;
+            }
+            // Chosen by what the scrutinee stands for, which a reader of the element reads where
+            // the walk stands rather than inside the step.
+            Core chosenBy = valueOf(written.scrutinee(), body.at());
+            if (WhatABodyReads.binding(chosenBy, accumulator)) {
+                return null;
+            }
+            Core.Match match = new Core.Match(chosenBy, written.cases(), written.place(),
+                    written.type(), written.pos());
+            List<Core> keys = new ArrayList<>();
+            List<Core> values = new ArrayList<>();
+            List<Core> added = new ArrayList<>();
+            BindingId found = null;
+            for (Core.Case arm : match.cases()) {
+                if (!(filingOf(sides.standing(arm.body(), body.at())) instanceof Filing(
+                        Core key, Filed.Summed(Core value, Core adds, BindingId named)))) {
+                    return null;
+                }
+                keys.add(key);
+                values.add(value);
+                added.add(adds);
+                found = found == null ? named : found;
+            }
+            return new Filing(choosing(match, keys), new Filed.Summed(choosing(match, values),
+                    choosing(match, added), found));
+        }
+
+        /** {@code match} with each arm answering the value {@code answers} holds for it, in the
+         *  order of its arms. */
+        private static Core choosing(Core.Match match, List<Core> answers) {
+            List<Core.Case> arms = new ArrayList<>();
+            for (int i = 0; i < match.cases().size(); i++) {
+                arms.add(match.cases().get(i).answering(answers.get(i)));
+            }
+            return new Core.Match(match.scrutinee(), arms, match.place(),
+                    answers.getFirst().type(), match.pos());
         }
 
         /** The filing {@code body} is, where it applies an operation that files under a key. */

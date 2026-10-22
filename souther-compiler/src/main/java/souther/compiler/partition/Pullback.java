@@ -2333,8 +2333,9 @@ final class Pullback {
      */
     private Sized differentOverAWalk(SeededWalk walk, InputReads reads, Denotation step,
                                      AnOperationApplied applied, AddsWhatItDoesNotHold adds) {
-        if (!(Core.withoutStanding(applied.args().get(adds.holder().position()))
-                        instanceof Core.Read carried)
+        if (!(Core.withoutStanding(step.at().standing(
+                        applied.args().get(adds.holder().position()), read.rules().symbols(),
+                        read.rules().newtypes()).value()) instanceof Core.Read carried)
                 || !carried.binding().equals(walk.accumulator().binding())) {
             return null;
         }
@@ -2343,8 +2344,7 @@ final class Pullback {
             case AddsWhatItDoesNotHold.TheElementsOf elements -> elements.from().position();
         });
         OnePerElement.ReadOff value = step.at().readOff(handed, walk.element().binding(),
-                read.rules().newtypes());
-        if (value == null
+                read.rules().newtypes());        if (value == null
                 || !(reads.occurrencesOf(walk.container(), List.of(value), null,
                         read.rules().symbols(), read.rules().newtypes())
                         instanceof InputReads.Occurrences every)
@@ -5665,7 +5665,8 @@ final class Pullback {
         if (walked == null || walked.keptBy().size() > 1) {
             return null;
         }
-        ElementKey key = whole.at().keyOf(filed.key(), walked, read.rules().newtypes());
+        ElementKey key = whole.at().keyOf(filed.key(), walked, read.rules().symbols(),
+                read.rules().newtypes());
         if (key == null) {
             return null;
         }

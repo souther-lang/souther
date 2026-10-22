@@ -215,7 +215,9 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
     /**
      * A walk adding each value it is handed to a set, or filing each under a key, ends with as many
      * as there are different values among them, and those are read down the list it walks: a map
-     * taking a place out of each element, or the lists inside each element put end to end.
+     * taking a place out of each element, or the lists inside each element put end to end. A step
+     * written as a helper's call is the helper's body, its parameters standing for what it was
+     * handed.
      */
     @Test
     void howManyDifferentValuesAWalkGathersIsAskedOfWhatItsListIsTakenOf() {
@@ -226,19 +228,32 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                 let filed (cs: List<String>): Map<String, Int> =
                     List.fold((acc, c) -> Map.updateOrInsert(c, 1, n -> n + 1, acc), Map.empty, cs)
 
+                let added (acc: Set<String>, f: Forecast): Set<String> = Set.insert(f.currency, acc)
+
+                let bumped (acc: Map<String, Int>, f: Forecast): Map<String, Int> =
+                    Map.updateOrInsert(f.currency, 1, n -> n + 1, acc)
+
+                let byCurrency (fs: List<Forecast>): Map<String, Int> =
+                    List.fold((acc, f) -> bumped(acc, f), Map.empty, fs)
+
                 behavior f : (fs: List<Forecast>, desks: List<Desk>) -> Int
                 let f (fs, desks) = if %s then 1 else 0
                 """;
         for (String condition : List.of(
                 "Set.size(List.fold((acc, c) -> Set.insert(c, acc), Set.empty,"
                         + " List.map(.currency, fs))) == 1",
+                "Set.size(List.fold((acc, f) -> added(acc, f), Set.empty, fs)) == 1",
+                "Map.size(byCurrency(fs)) == 1",
                 "Map.size(filed(List.map(f -> f.currency, fs))) == 1")) {
             relatesValues(of(model.formatted(condition), "f"), List.of("fs[*].currency"));
         }
         for (String condition : List.of(
                 "Set.size(List.fold((acc, c) -> Set.insert(c, acc), Set.empty,"
                         + " List.flatMap(d -> List.map(.currency, d.forecasts), desks))) == 1",
-                "Map.size(filed(List.flatMap(d -> List.map(.currency, d.forecasts), desks))) == 1")) {
+                "Map.size(filed(List.flatMap(d -> List.map(.currency, d.forecasts), desks))) == 1",
+                // However many steps the closure's answer is read down to the list it stands for.
+                "Map.size(filed(List.flatMap(d -> " + "List.reverse(".repeat(16)
+                        + "List.map(.currency, d.forecasts)" + ")".repeat(16) + ", desks))) == 1")) {
             relatesValues(of(model.formatted(condition), "f"),
                     List.of("desks[*].forecasts[*].currency"));
         }
