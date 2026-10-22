@@ -5376,8 +5376,9 @@ public final class Generator {
         for (RealizationTarget each : fixing.keySet()) {
             itemAsks.put(each, asking);
         }
+        WhatTheWayLeaves leaves = new WhatTheWayLeaves(subject, reaching);
         Standing where = alsoOnTheWay(subject, fixing, itemAsks, check, reaching, byCounts,
-                alikeStoppedBy).with(stood.account());
+                alikeStoppedBy, leaves).with(stood.account());
         // A way the rules leave nothing standing on is a way no row arrives by, so there is no row
         // to compose for this point and the rest of this would be composing one. What comes back is
         // the model's word, which is the same word the realizer's proof comes back with and is
@@ -5396,8 +5397,7 @@ public final class Generator {
         }
         Map<RealizationTarget, Place> standing = where.at();
         Map<RealizationTarget, AskedAt> numbers = atThoseNumbers(standing,
-                whatEachOfThemIsANumberOf(subject, itemAsks, where.routed(), where.counted(),
-                        reaching));
+                whatEachOfThemIsANumberOf(itemAsks, where.routed(), where.counted(), leaves));
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
@@ -6197,12 +6197,14 @@ public final class Generator {
      *                       are composed at is held to
      * @param alikeStoppedBy the figure the ways of writing the elements alike were looked along
      *                       to, where one stopped them, or null
+     * @param leaves         what {@code reaching} leaves each number placed on it
      */
     private static Standing alsoOnTheWay(MeasuredInput subject, Map<RealizationTarget, Place> fixing,
                                          Map<RealizationTarget, NumbersAskedFor> itemAsks,
                                          CandidateCheck check, Reachability.Reaching reaching,
                                          boolean everyQuantifierCounted,
-                                         CompositionBudget alikeStoppedBy) {
+                                         CompositionBudget alikeStoppedBy,
+                                         WhatTheWayLeaves leaves) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>();
         Map<RealizationTarget, NumbersAskedFor> counted = new LinkedHashMap<>();
@@ -6390,7 +6392,7 @@ public final class Generator {
                     Map<NumericTerm, RealizationTarget> all = new LinkedHashMap<>(routed);
                     all.putAll(routes);
                     Map<RealizationTarget, NumbersAskedFor> asked =
-                            whatEachOfThemIsANumberOf(subject, itemAsks, all, counted, reaching);
+                            whatEachOfThemIsANumberOf(itemAsks, all, counted, leaves);
                     countsAsked.forEach(asked::putIfAbsent);
                     return asked;
                 }, bounds, countsToCome);
@@ -8758,11 +8760,12 @@ public final class Generator {
      * the value tested is the value written.
      *
      * @param itemAsks what the item asks of each number it fixes
+     * @param leaves   what the way leaves each number placed on it
      */
     private static Map<RealizationTarget, NumbersAskedFor> whatEachOfThemIsANumberOf(
-            MeasuredInput subject, Map<RealizationTarget, NumbersAskedFor> itemAsks,
+            Map<RealizationTarget, NumbersAskedFor> itemAsks,
             Map<NumericTerm, RealizationTarget> routed,
-            Map<RealizationTarget, NumbersAskedFor> counted, Reachability.Reaching reaching) {
+            Map<RealizationTarget, NumbersAskedFor> counted, WhatTheWayLeaves leaves) {
         Map<RealizationTarget, NumbersAskedFor> out = new LinkedHashMap<>(itemAsks);
         // Every count the row stands at, which is one of the counts the item and every condition
         // on the way leave it, and every statement its elements meet together.
@@ -8778,11 +8781,43 @@ public final class Generator {
         // ({@link Standing#routed}) — worked out again, a number read at a name every case of a sum
         // spreads would be filed under the sum's own name while the row stands at a position under
         // a case, and the search would be built for a number nothing had said what it was one of.
-        routed.forEach((at, target) -> out.merge(target,
-                NumbersAskedFor.askedOf(at, reaching.region(), carrierOf(at, subject.quantities()),
-                        reaching.boundedOnTheWay()),
-                NumbersAskedFor::meet));
+        routed.forEach((at, target) -> out.merge(target, leaves.of(at), NumbersAskedFor::meet));
         return out;
+    }
+
+    /**
+     * What the rules leave each number a row places on one way to a point, said once per number.
+     *
+     * <p>Asked every time a condition's numbers are tried against composing a row — once for each
+     * way of writing them, and again for the row — and the answer is about the number, the way's
+     * region and the cuts the way took in, none of which a try moves. So it is worked out the first
+     * time a number is asked about and read after that.
+     *
+     * <p>Made for one point's composing and gone with it. The region is the way's as it was handed
+     * over and nothing a condition chose since, so a number asked about after a choice still gets
+     * the answer about the way and not about the branch the search is in.
+     */
+    private static final class WhatTheWayLeaves {
+
+        private final MeasuredInput subject;
+        private final Reachability.Reaching reaching;
+        private final Map<NumericTerm, NumbersAskedFor> said = new HashMap<>();
+
+        WhatTheWayLeaves(MeasuredInput subject, Reachability.Reaching reaching) {
+            this.subject = subject;
+            this.reaching = reaching;
+        }
+
+        NumbersAskedFor of(NumericTerm at) {
+            NumbersAskedFor known = said.get(at);
+            if (known != null) {
+                return known;
+            }
+            NumbersAskedFor asked = NumbersAskedFor.askedOf(at, reaching.region(),
+                    carrierOf(at, subject.quantities()), reaching.boundedOnTheWay());
+            said.put(at, asked);
+            return asked;
+        }
     }
 
     /**
@@ -10191,7 +10226,9 @@ public final class Generator {
                                 + "` is written under a case the way to it does not take")));
             }
         }
-        Standing where = alsoOnTheWay(subject, fixing, itemAsks, check, reaching, false, null);
+        WhatTheWayLeaves leaves = new WhatTheWayLeaves(subject, reaching);
+        Standing where = alsoOnTheWay(subject, fixing, itemAsks, check, reaching, false, null,
+                leaves);
         for (ReachabilityGap gap : where.unrepresented().onTheWay()) {
             if (gap instanceof ReachabilityGap.ProvedImpossible) {
                 return new HeldTogether.Refused(new Attempt(null,
@@ -10203,8 +10240,7 @@ public final class Generator {
         // a row held to a condition's own demand alone stands at the numbers the way placed and at
         // no point. And each point's own numbers, asked of what the points ask.
         Map<RealizationTarget, AskedAt> numbers = atThoseNumbers(where.at(),
-                whatEachOfThemIsANumberOf(subject, itemAsks, where.routed(), where.counted(),
-                        reaching));
+                whatEachOfThemIsANumberOf(itemAsks, where.routed(), where.counted(), leaves));
         return new HeldTogether.Asked(new LinkedHashMap<>(numbers), where.at(), required, reaching,
                 ContentsAsked.of(reaching.boundedOnTheWay(), numbers), where.someElement(),
                 where.composed(), where.bounds());
