@@ -5951,13 +5951,15 @@ final class Pullback {
     /**
      * The elements of {@code total} that the ways decided keep, from the one at {@code from}, added
      * up and read in {@code again}: {@code forms} are what the elements before it came to, and
-     * {@code replacing} is what the element at {@code from} is read as where it was a choice and an
-     * arm of it is being read.
+     * {@code replacing} is the element at {@code from} read where a choice in it has an arm taken,
+     * or null.
      *
-     * <p>An element that is a choice by an {@code if} is read once for each arm of it, each arm
-     * where a run takes it: the closure that answers it is one node however many elements it is
-     * applied to, so the arm is taken in the application the element stands in, and not by the node
-     * ({@link InputReads#taking}), which would give every application the same arm.
+     * <p>An element with a choice by an {@code if} in it is read once for each arm of the choice,
+     * each arm where a run takes it. The arm is taken as the choice and nothing wider, so what
+     * stands around the choice in the element is read as it is written, and it is taken in the
+     * reading of the application the element stands in ({@link InputReads#taking}): the closure
+     * that answers the element is one node however many elements it is applied to, and an arm
+     * taken on the reading of the whole comparison would be every application's.
      */
     private Derivation sumOfKept(Inside.ATotalByKeeping total, WaysOfKeeping ways,
                                  Boolean[] decided, int from, Denotation replacing,
@@ -5986,10 +5988,12 @@ final class Pullback {
                         }
                         int next = i;
                         List<LinearForm<Quantity>> before = sofar;
+                        InputReads application = element.at();
                         return new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(iff,
                                 chosen.at(), condition, left, arm -> sumOfKept(total, ways,
-                                        decided, next, arm, before, metBefore, at, fixed,
-                                        again))));
+                                        decided, next, new Denotation(element.value(),
+                                                application.taking(chosen.value(), arm, 1)),
+                                        before, metBefore, at, fixed, again))));
                     }
                     elementsMet = metBefore;
                     return partOf(at, abortsAt(stopped) ? new Derivation.TheRunStopsHere()
