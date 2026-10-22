@@ -1066,8 +1066,19 @@ public final class WhatARelationLeavesUndivided {
      * they are all its terms.
      *
      * <p>Only at values of the whole every one of which some row takes, and at which the part lies
-     * somewhere. A run that settles the relation is a class only where some row of it computes:
-     * its value nearest nought, with the part's nearest nought there, as {@link #settlingOf} asks.
+     * somewhere.
+     *
+     * <p>And only of rows that compute. What is said of a value of the whole is said of every value
+     * of the part there, so every one of those rows is asked, and not one standing for them. The
+     * positive addends of a row, and the negative ones, come to a sum that is a straight function of
+     * the part at one value of the whole, so the rows at the part's two ends computing is every row
+     * there computing. And from the least value of the whole on, no addend shrinks as the whole
+     * grows, so the values whose rows all compute are a run from the least up, found by halving
+     * ({@link #computedUpTo}). Where that run is short of the whole's values, the relation is read
+     * over it as {@link #leavesOf} reads one cut to the rows that compute: the runs settling it
+     * there are kept, and a line only the cut draws is the arithmetic's and none of the model's
+     * ({@link Leaves.Settled#ofTheTypeAlone}). Where no run settles it there, nothing is shown of
+     * the values past the cut.
      *
      * @param greatest the greatest value the type the form is worked out in holds, or null where it
      *                 holds no greatest
@@ -1093,9 +1104,17 @@ public final class WhatARelationLeavesUndivided {
             return null;
         }
         WholeRun values = held.meet(new WholeRun(within.least().add(within.belowTheWhole()), null));
-        if (!values.holdsAWholeNumber() || !taken.covers(values)) {
+        if (!values.holdsAWholeNumber() || !taken.covers(values) || values.low == null
+                || within.least().signum() < 0 || within.belowTheWhole().signum() < 0) {
             return null;
         }
+        Arithmetic arithmetic = Arithmetic.upTo(greatest);
+        if (!rowsComputeAt(values.low, within, whole.weight(), part.weight(), constant,
+                arithmetic)) {
+            return null;
+        }
+        BigInteger computed = computedUpTo(values, within, whole.weight(), part.weight(),
+                constant, arithmetic);
         // The form at a value v of the whole runs between two ends, each a number of v: the part at
         // its least and at v less how far below, weighed by one or minus one.
         boolean up = part.weight().signum() > 0;
@@ -1105,30 +1124,85 @@ public final class WhatARelationLeavesUndivided {
         BigInteger highSlope = up ? weight.add(BigInteger.ONE) : weight;
         BigInteger highOffset = up ? offset.subtract(within.belowTheWhole())
                 : offset.subtract(within.least());
-        Arithmetic arithmetic = Arithmetic.upTo(greatest);
+        List<SettledRun> free = settledWithin(values, relation, lowSlope, lowOffset, highSlope,
+                highOffset);
+        if (computed == null || (values.high != null && computed.compareTo(values.high) >= 0)) {
+            return free.isEmpty() ? new Leaves.Undivided()
+                    : Leaves.Settled.ofWhole(free, values.low, values.high);
+        }
+        WholeRun cut = new WholeRun(values.low, computed);
+        List<SettledRun> runs = settledWithin(cut, relation, lowSlope, lowOffset, highSlope,
+                highOffset);
+        if (runs.isEmpty()) {
+            return null;
+        }
+        List<Line> model = free.isEmpty() ? List.of()
+                : Leaves.Settled.ofWhole(free, values.low, values.high).lines();
+        return Leaves.Settled.ofWhole(runs, cut.low, cut.high).besideWhatTheModelDraws(model);
+    }
+
+    /** The runs of {@code values} at which the form between its two ends settles
+     *  {@code relation}, either way, in order. */
+    private static List<SettledRun> settledWithin(WholeRun values, Rel relation,
+                                                  BigInteger lowSlope, BigInteger lowOffset,
+                                                  BigInteger highSlope, BigInteger highOffset) {
         List<SettledRun> runs = new ArrayList<>();
         for (boolean holds : List.of(true, false)) {
             for (WholeRun each : whereEveryValueMeets(holds ? relation : relation.denied(),
                     lowSlope, lowOffset, highSlope, highOffset)) {
                 WholeRun here = each.meet(values);
-                if (!here.holdsAWholeNumber()) {
-                    continue;
+                if (here.holdsAWholeNumber()) {
+                    runs.add(SettledRun.whole(here.low, here.high, holds));
                 }
-                SettledRun run = SettledRun.whole(here.low, here.high, holds);
-                ExactRatio at = nearestValue(new Interval(run.from(), run.to()));
-                ExactRatio partAt = at == null ? null : nearestValue(new Interval(
-                        ExactCut.inclusive(ExactRatio.of(within.least())),
-                        at.minus(ExactRatio.of(within.belowTheWhole()))
-                                .map(ExactCut::inclusive).orNull()));
-                if (partAt == null || !arithmetic.computes(weighedAt(at, whole.weight()),
-                        weighedAt(partAt, part.weight()), constant)) {
-                    return null;
-                }
-                runs.add(run);
             }
         }
-        return runs.isEmpty() ? new Leaves.Undivided()
-                : Leaves.Settled.ofWhole(inOrder(runs, true), values.low, values.high);
+        return inOrder(runs, true);
+    }
+
+    /**
+     * The greatest value of the whole up to which every row of {@code values} computes — the whole
+     * at each value and the part at each value it takes there — the rows at the least value
+     * computing. The greatest of {@code values}, null where it has none, where nothing stops the
+     * arithmetic.
+     *
+     * <p>At one value of the whole the rows are asked at the part's two ends: each addend is a
+     * straight function of the part, so the sum of the positive ones and that of the negative ones
+     * are greatest at an end. Past the least value no addend's size shrinks as the whole grows —
+     * the whole and the part's upper end grow with it, the part's least does not move, and none of
+     * them is below nought — so a value whose rows compute has every value below it computing too,
+     * and the greatest of them is found by halving.
+     */
+    private static BigInteger computedUpTo(WholeRun values, WithinTheWhole within,
+                                           ExactRatio wholeWeight, ExactRatio partWeight,
+                                           ExactRatio constant, Arithmetic arithmetic) {
+        if (!arithmetic.stopsAtASize()) {
+            return values.high;
+        }
+        // No whole value past the greatest the type holds is weighed inside it.
+        BigInteger high = values.high == null ? arithmetic.greatest()
+                : values.high.min(arithmetic.greatest());
+        BigInteger low = values.low;
+        while (low.compareTo(high) < 0) {
+            BigInteger middle = low.add(high).add(BigInteger.ONE).shiftRight(1);
+            if (rowsComputeAt(middle, within, wholeWeight, partWeight, constant, arithmetic)) {
+                low = middle;
+            } else {
+                high = middle.subtract(BigInteger.ONE);
+            }
+        }
+        return low;
+    }
+
+    /** Whether the rows with the whole at {@code at} compute, the part at either end of what it
+     *  takes there. */
+    private static boolean rowsComputeAt(BigInteger at, WithinTheWhole within,
+                                         ExactRatio wholeWeight, ExactRatio partWeight,
+                                         ExactRatio constant, Arithmetic arithmetic) {
+        ExactRatio whole = weighedAt(ExactRatio.of(at), wholeWeight);
+        return arithmetic.computes(whole, weighedAt(ExactRatio.of(within.least()), partWeight),
+                constant)
+                && arithmetic.computes(whole, weighedAt(ExactRatio.of(
+                        at.subtract(within.belowTheWhole())), partWeight), constant);
     }
 
     /**

@@ -87,7 +87,7 @@ final class ClosureEntries {
                         .add(new ClosureUses.Application(called.operation(), called.lineage(),
                                 handed.container(), handed.applied(), e,
                                 handed.position() == null ? null
-                                        : handed.position().binding()));
+                                        : handed.position().binding(), handed.step()));
                 Core.forEachChild(e, child -> visit(child,
                         Core.withoutStanding(child) == Core.withoutStanding(handed.closure())
                                 ? Standing.THE_CLOSURE_OF_AN_OPERATION : Standing.ELSEWHERE));

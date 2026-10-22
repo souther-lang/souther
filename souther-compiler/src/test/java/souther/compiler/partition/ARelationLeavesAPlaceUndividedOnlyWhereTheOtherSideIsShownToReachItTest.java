@@ -55,25 +55,17 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * The behavior {@code m} taking {@code inputs} and answering {@code body}, of type
-     * {@code answers}, read for the lines
-     * its rules draw and no row composed at them: what is asked here is the word a place is left
-     * with and the classes it is parted into, which no composed row moves.
+     * {@code answers}.
      */
     private static Compilation measured(String inputs, String declarations, String answers,
                                         String body) {
-        return MEASURED.computeIfAbsent("""
+        return measured("""
                 module w1
                 %s
                 behavior m : (%s) -> %s
                 let m (%s) = %s
                 """.formatted(declarations, inputs, answers,
-                        inputs.replaceAll(": [A-Za-z<>]+", ""), body),
-                source -> {
-                    Compilation compilation = Compilation.ofSource(source, "Main");
-                    compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-                    compilation.answerEverything();
-                    return compilation;
-                });
+                        inputs.replaceAll(": [A-Za-z<>]+", ""), body));
     }
 
     /**
@@ -108,7 +100,37 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /** The same, of a behavior answering {@code answers}. */
     private static Map<String, String> left(String inputs, String declarations, String answers,
                                             String body, String at) {
-        Compilation compilation = measured(inputs, declarations, answers, body);
+        return leftIn(measured(inputs, declarations, answers, body), at);
+    }
+
+    /** The same, of a model of module {@code w1} written out whole, whose behavior is {@code m}. */
+    private static Map<String, String> leftIn(String source, String at) {
+        return leftIn(measured(source), at);
+    }
+
+    /** The classes the axis at {@code path} of a model written out whole is divided into. */
+    private static List<String> classesIn(String source, String path) {
+        PartitionEvidence evidence = measured(source).db()
+                .ask(new Adequacy.Coverage("w1")).value().get("m");
+        return evidence.axes().stream().filter(axis -> axis.path().equals(path))
+                .flatMap(axis -> axis.classes().stream()).toList();
+    }
+
+    /**
+     * A model written out whole, read for the lines its rules draw and no row composed at them:
+     * what is asked here is the word a place is left with and the classes it is parted into, which
+     * no composed row moves.
+     */
+    private static Compilation measured(String source) {
+        return MEASURED.computeIfAbsent(source, written -> {
+            Compilation compilation = Compilation.ofSource(written, "Main");
+            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+            compilation.answerEverything();
+            return compilation;
+        });
+    }
+
+    private static Map<String, String> leftIn(Compilation compilation, String at) {
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, String> out = new LinkedHashMap<>();
@@ -527,6 +549,37 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * What is said of a length is said of every position at it, so it is said only of the lengths
+     * whose every row computes. {@code i - List.length(xs) + M - 1 <= 0}, M the greatest
+     * {@code Int}, fails at every position of a list shorter than M - 1, and only a list of one or
+     * two computes at all of its positions: past those, {@code i + M - 1} passes the type. Over the
+     * lengths that compute it fails at every position, which is every row, so no line is drawn on
+     * the length, and none at M - 2, where no row stands.
+     */
+    @Test
+    void whatALengthSettlesIsAskedOnlyOfTheLengthsWhoseEveryPositionComputes() {
+        String inputs = "xs: List<Int>";
+        String body = STANDING.formatted("i - List.length(xs) + 9223372036854775806 <= 0");
+        assertEquals(List.of(), classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
+        assertEquals(Map.of("List.length(xs)", RELATES), left(inputs, UNUSED, "List<Int>", body,
+                atThe("<=", UNUSED, inputs, body)));
+    }
+
+    /**
+     * A way stating something of where the element stands picks some positions out as a way
+     * stating something of the elements does: under {@code i > 0} a list of one never reaches the
+     * comparison, and a list of two reaches it at its last position only. Nothing is shown.
+     */
+    @Test
+    void aWayStatingWhereTheElementStandsLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> if i > 0 then (if i == List.length(xs) - 1"
+                + " then 1 else 0) else 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
      * Against another list's length, where an element of the walked list stands is no number
      * of it, and nothing is shown. Nor where the way picks out some of the elements: the walk is
      * handed every position, and the comparison is asked at those of the elements the way lets
@@ -542,6 +595,52 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 + STANDING.formatted("i == List.length(xs) - 1") + " else []";
         assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left("xs: List<Int>", UNUSED,
                 "List<Int>", picked, atThe("== List", UNUSED, "xs: List<Int>", picked)));
+    }
+
+    /** A rate a dependency keeps for each kind, and the one in force on a day. */
+    private static final String RATED = """
+            module w1
+            data Change = { from: Int, rate: Int }
+            behavior changesOf : (kind: Int) -> List<Change>
+            let rateAsOf (changes: List<Change>, on: Int): Option<Int> =
+                Option.map(c -> c.rate, List.find(c -> c.from <= on, changes))
+            behavior m : (xs: List<Int>, kind: Int, on: Int) -> List<Int>
+                depends on changesOf
+            let m (xs, kind, on, changesOf) =
+                match rateAsOf(changesOf(kind), %s) with
+                    | Some r -> List.mapIndexed((i, x) -> if i == List.length(xs) - 1 then r else 0, xs)
+                    | None -> []
+            """;
+
+    /**
+     * The arm a rate is found in is entered by what the dependency answered and the day asked
+     * about, which no row writes and nothing here takes in. That says nothing of the list the
+     * comparison inside it is about: the day is another parameter, and no declaration relates one
+     * parameter to another, so the list is parted at one as it is with no arm around it. Asked
+     * about the list's own length, the arm says something of the list nothing reads, and nothing
+     * is shown.
+     */
+    @Test
+    void anArmADependencysAnswerEntersLeavesTheParametersItNamesNothingOfAsTheyWere() {
+        String onADay = RATED.formatted("on");
+        assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+                classesIn(onADay, "List.length(xs)"));
+        assertEquals(Map.of(), leftIn(onADay, whereWritten(onADay, "== List")));
+        String onTheLength = RATED.formatted("List.length(xs)");
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN),
+                leftIn(onTheLength, whereWritten(onTheLength, "== List")));
+    }
+
+    /** Where {@code text} is first written in {@code source}, as a report names a place. */
+    private static String whereWritten(String source, String text) {
+        List<String> lines = source.lines().toList();
+        for (int i = 0; i < lines.size(); i++) {
+            int column = lines.get(i).indexOf(text);
+            if (column >= 0) {
+                return (i + 1) + ":" + (column + 1);
+            }
+        }
+        throw new IllegalArgumentException("`" + text + "` is not written in the model");
     }
 
     /**

@@ -6482,6 +6482,11 @@ final class Pullback {
      * name is told ({@link Quantity.PositionInTheWalk}). A walk that stops early, or starts past
      * the first, hands some of them; a container inside another is one of many, and how many the
      * one walked holds is no number of one place.
+     *
+     * <p>And the name has to be read wherever the step runs ({@link Evaluated#runsWhenever}). Read
+     * in a branch, an arm or a right operand, it is read at the positions of the applications that
+     * enter it — under {@code i > 0} at none of a list of one — which are some of the positions and
+     * not every one.
      */
     private Optional<Quantity.HandedToTheStep> positionInTheWalk(Core.Read name,
                                                                  InputReads at) {
@@ -6492,6 +6497,7 @@ final class Pullback {
         ClosureUses.Application applied = uses.applications().getFirst();
         if (!name.binding().equals(applied.position())
                 || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                || !Evaluated.runsWhenever(applied.step().body(), name)
                 || !(subjectOf(applied.container(), at) instanceof DecisionSubject.AnInput(
                         TermPath container))
                 || container.insideAContainer()

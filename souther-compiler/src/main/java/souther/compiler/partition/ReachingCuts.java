@@ -818,8 +818,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                             each.failing().stream().map(one -> onTheWay(condition, at, one, input,
                                     readOff, by, entered)).toList())).toList(),
                     counted.admitted(), counted.stated());
-            case DemandReading.Read.Unread(var whys, boolean alone) ->
-                    new OnTheWay.Declined(condition, at, whys, entered, alone);
+            case DemandReading.Read.Unread(var whys, var besideAnAnswer) ->
+                    new OnTheWay.Declined(condition, at, whys, entered, besideAnAnswer);
         };
         SaidOnTheWay.filedAlone(made, readOff.of(read), by);
         return made;

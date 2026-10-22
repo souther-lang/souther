@@ -15,6 +15,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -252,14 +253,16 @@ final class DemandReading {
         /**
          * None, and everything that stopped it, each once.
          *
-         * @param ofAnAnswerAlone whether the condition names nothing but what a dependency
-         *                        answered, so that what it asks of the answer relates no number of
-         *                        the input to anything
+         * @param besideAnAnswer where the condition is about what a dependency answered, the
+         *                       positions of the input it names beside the answer
+         *                       ({@link PositionsAStatementReads#besideAnAnswer}); empty where it
+         *                       is about no answer or names something else
          */
-        record Unread(List<WhyNotTaken> whys, boolean ofAnAnswerAlone) implements Read {
+        record Unread(List<WhyNotTaken> whys, Optional<List<TermPath>> besideAnAnswer)
+                implements Read {
 
             Unread(List<WhyNotTaken> whys) {
-                this(whys, false);
+                this(whys, Optional.empty());
             }
 
             Unread(WhyNotTaken why) {
@@ -267,6 +270,7 @@ final class DemandReading {
             }
 
             public Unread {
+                Objects.requireNonNull(besideAnAnswer, "the positions beside an answer, or none");
                 whys = List.copyOf(new LinkedHashSet<>(whys));
                 if (whys.isEmpty()) {
                     throw new IllegalArgumentException("what stopped a condition is something");
@@ -288,13 +292,13 @@ final class DemandReading {
 
     /**
      * What a dependency answered that {@code stated} asks, which a row stands in rather than
-     * writes. Told whether it names nothing of the input beside the answer
-     * ({@link Proposition#aboutAnAnswerAlone}).
+     * writes. Told what it names of the input beside the answer
+     * ({@link PositionsAStatementReads#besideAnAnswer}).
      */
     private static Read.Unread anAnswerARowStandsIn(Proposition stated) {
         return new Read.Unread(List.of(new WhyNotTaken.OutsideDomain(
                 WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN)),
-                Proposition.aboutAnAnswerAlone(stated));
+                PositionsAStatementReads.besideAnAnswer(stated));
     }
 
     /**

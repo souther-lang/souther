@@ -44,9 +44,11 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
      * @param position  the binding the closure is handed the element's position on, counted from
      *                  nought in the order {@code container} holds its elements — or null where the
      *                  operation is shown to hand it none ({@link Combinator#positionParam})
+     * @param step      the closure as the block it is, whose body runs on each application
      */
     public record Application(ValueName operation, OccurrenceLineage lineage, Core container,
-                              HowAClosureIsApplied applied, Core call, BindingId position) {
+                              HowAClosureIsApplied applied, Core call, BindingId position,
+                              Core.Block step) {
 
         public Application {
             Objects.requireNonNull(operation, "an application is some operation's");
@@ -54,6 +56,7 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
             Objects.requireNonNull(container, "an operation walks some container");
             Objects.requireNonNull(applied, "and applies the closure some way");
             Objects.requireNonNull(call, "by some call");
+            Objects.requireNonNull(step, "a closure an operation applies is a block it reads");
         }
     }
 

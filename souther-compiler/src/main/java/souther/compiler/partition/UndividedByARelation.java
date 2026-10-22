@@ -496,7 +496,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
             WhatItLeaves along = leftAlong(read, sources, carriers, each.region(),
-                    conditionsOf(each), declinedOnlyAKeyFound(each));
+                    conditionsOf(each), nothingUnreadBearsOnIt(each));
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
@@ -513,17 +513,51 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * values beside that, so it is explained here and left declined for every other reader of the
      * way. An arm of any other match, or of another lookup, is not.
      *
-     * <p>A condition on what a dependency answered alone is not declined for anything bearing on
-     * the relation either. The answer is a value nothing relates to the input, so the condition
-     * narrows which answer the row stands the dependency in with and no number of the input.
+     * <p>A condition on what a dependency answered is not declined for anything bearing on the
+     * relation either, where every position of the input it names beside the answer is under a
+     * parameter none of this relation's places is under. The answer is a value nothing relates to
+     * the input, and no declaration relates one parameter to another, so the condition narrows
+     * which answer the row stands the dependency in with and nothing this relation reads. Where
+     * some side is read off places this cannot name, the condition has to name none at all.
      */
-    private boolean declinedOnlyAKeyFound(Reachability.Reaching way) {
+    private boolean nothingUnreadBearsOnIt(Reachability.Reaching way) {
         if (way.declined().isEmpty()) {
             return true;
         }
-        return way.declined().stream().allMatch(declined -> declined.ofAnAnswerAlone()
+        Optional<Set<String>> parameters = parametersRead();
+        return way.declined().stream().allMatch(declined -> (parameters.isPresent()
+                        ? declined.namesNoneOf(parameters.get())
+                        : declined.namesNothingOfTheInput())
                 || sides.stream().anyMatch(side ->
                         side.kept() != null && findsTheEndOf(declined, side.kept().seed())));
+    }
+
+    /**
+     * The parameters this relation reads a place under: those of its places, and those of what a
+     * walk handing a side its value walks or starts from — or empty where some side is read off
+     * no place this names, as what an operation answered of something unnamed is, since that side
+     * may be read off any of them.
+     */
+    private Optional<Set<String>> parametersRead() {
+        Set<String> out = new HashSet<>();
+        places().forEach(place -> out.add(place.path().head()));
+        for (Side each : sides) {
+            switch (each.handed()) {
+                case null -> {
+                    if (each.madeOf().isEmpty() && each.number() == null) {
+                        return Optional.empty();
+                    }
+                }
+                case Quantity.KeptSoFar kept -> {
+                    out.add(kept.container().head());
+                    if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
+                        out.add(from.subjectPath().head());
+                    }
+                }
+                case Quantity.PositionInTheWalk position -> out.add(position.container().head());
+            }
+        }
+        return Optional.of(out);
     }
 
     /**
