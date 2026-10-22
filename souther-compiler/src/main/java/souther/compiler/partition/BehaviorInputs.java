@@ -122,7 +122,17 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * something an observation did, and no observation says why because nothing went wrong with one.
      */
     WalkResult<List<ObservedValue>> valuesAt(List<ObservedValue> inputs, TermPath path) {
-        return switch (occurrencesAt(inputs, path)) {
+        return valuesAt(inputs, path, new HashMap<>());
+    }
+
+    /**
+     * The same, reading what each type is out of {@code views} and adding to it, for a caller that
+     * reads many values back at the positions of one behavior ({@link #occurrencesAt(List,
+     * TermPath, Map)}).
+     */
+    WalkResult<List<ObservedValue>> valuesAt(List<ObservedValue> inputs, TermPath path,
+                                             Map<Type, TypeView> views) {
+        return switch (occurrencesAt(inputs, path, views)) {
             case WalkResult.Reached(List<Occurrence> found) ->
                     WalkResult.reached(found.stream().map(Occurrence::value).toList());
             case WalkResult.CouldNotWalk<List<Occurrence>> _ -> WalkResult.couldNotWalk();
