@@ -35,7 +35,6 @@ class ANumberKeptByAStatementIsReadOffThePlacesTheStatementReadsTest {
 
     private static final TermPath LINES = TermPath.of("orders").element().then("lines");
     private static final TermPath LINE = LINES.element();
-    private static final TermPath SKU = LINE.then("sku");
     private static final TermPath QTY = LINE.then("qty");
 
     /** The lines that hold some quantity. */

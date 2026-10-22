@@ -26,6 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * in the lists of every node reached, the entry of the map each one's key names where it holds
  * one, and the value taken of it — is asked in Java. They have to agree on every case, so that the
  * quantity read off a body means what the body computes, whatever composes a row toward it.
+ *
+ * <p>The reference takes every part from {@link #QUANTITY}, the quantity the same body is read as
+ * ({@code partition.ANumberOverTheElementsIsReadAsTheNumberItIsTest}), so a quantity naming
+ * another field, key or value counts some case otherwise than the language does.
  */
 class WhatASearchCollectsIsWhatItsQuantityCountsTest {
 
@@ -39,14 +43,20 @@ class WhatASearchCollectsIsWhatItsQuantityCountsTest {
             return "Node { owner = \"" + owner + "\", reports = ["
                     + String.join(", ", reports.stream().map(Tree::written).toList()) + "] }";
         }
+
+        /** What the node holds at each field, as the language's record does. */
+        Map<String, Object> fields() {
+            return Map.of("owner", owner, "reports", reports);
+        }
     }
 
     private record Case(String says, Tree root, Map<String, String> currencies) {
 
         String written() {
             List<String> entries = new ArrayList<>();
-            currencies.forEach((owner, currency) -> entries.add("(\"" + owner
-                    + "\", Forecast { currency = \"" + currency + "\", amount = 1 })"));
+            entries(currencies).forEach((owner, forecast) -> entries.add("(\"" + owner
+                    + "\", Forecast { currency = \"" + forecast.get("currency")
+                    + "\", amount = " + forecast.get("amount") + " })"));
             return entries.isEmpty() ? "(" + root.written() + ", noForecasts)"
                     : "(" + root.written() + ", Map.fromList([" + String.join(", ", entries)
                             + "]))";
@@ -57,19 +67,48 @@ class WhatASearchCollectsIsWhatItsQuantityCountsTest {
             new Quantity.HowManyDifferentBelow(TermPath.of("node"), List.of("reports"),
                     TermPath.of("byOwner"), List.of("owner"), List.of("currency"));
 
-    /** The number the definition of {@link #QUANTITY} gives for the tree and the map. */
+    /**
+     * The number the definition of {@link #QUANTITY} gives for the tree and the map, each part
+     * taken from the quantity: the root and the map at the inputs it names, the nodes in the
+     * fields it goes down, the key at the place of a node it names, and the value at the place of
+     * an entry it names.
+     */
     private static int counted(Tree root, Map<String, String> currencies) {
-        Set<String> different = new HashSet<>();
-        List<Tree> reached = new ArrayList<>(List.of(root));
+        Map<String, Object> inputs = Map.of("node", root, "byOwner", entries(currencies));
+        Map<?, ?> map = (Map<?, ?>) inputs.get(QUANTITY.map().head());
+        Set<Object> different = new HashSet<>();
+        List<Tree> reached = new ArrayList<>(List.of((Tree) inputs.get(QUANTITY.root().head())));
         for (int at = 0; at < reached.size(); at++) {
-            Tree node = reached.get(at);
-            String value = currencies.get(node.owner());
-            if (value != null) {
-                different.add(value);
+            Map<String, Object> node = reached.get(at).fields();
+            Object entry = map.get(at(node, QUANTITY.keyAt()));
+            if (entry != null) {
+                different.add(at(entry, QUANTITY.valueAt()));
             }
-            reached.addAll(node.reports());
+            for (String field : QUANTITY.through()) {
+                for (Object below : (List<?>) node.get(field)) {
+                    reached.add((Tree) below);
+                }
+            }
         }
         return different.size();
+    }
+
+    /** What {@code value} holds down {@code fields}, each a field of a record. */
+    private static Object at(Object value, List<String> fields) {
+        Object held = value;
+        for (String field : fields) {
+            held = ((Map<?, ?>) held).get(field);
+        }
+        return held;
+    }
+
+    /** The map the language is handed, each entry a forecast of its currency. No two entries
+     *  are the same forecast, so how many entries differ is not how many currencies do. */
+    private static Map<String, Map<String, Object>> entries(Map<String, String> currencies) {
+        Map<String, Map<String, Object>> out = new LinkedHashMap<>();
+        currencies.forEach((owner, currency) ->
+                out.put(owner, Map.of("currency", currency, "amount", out.size() + 1)));
+        return out;
     }
 
     private static Map<String, String> map(String... ownersAndCurrencies) {
