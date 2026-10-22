@@ -261,8 +261,9 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
 
     /**
      * And only what is read is said to be read there too: a walk over the elements a filter kept
-     * gathers how many different values meet a statement, and one over a value worked out of each
-     * gathers no place's values.
+     * gathers how many different values meet a statement, one over a value worked out of each
+     * gathers no place's values, and how many keys of a map a statement keeps is a count of those
+     * whose gathered value meets it, which is no statement about one element.
      */
     @Test
     void aWalkGatheringSomeElementsOrAValueWorkedOutOfEachIsStillARuleNobodyRead() {
@@ -280,7 +281,8 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                         + " List.filter(f -> f.amount > 0, fs))) == 1",
                 "Map.size(filed(List.map(.currency, List.filter(f -> f.amount > 0, fs)))) == 1",
                 "Set.size(List.fold((acc, f) -> Set.insert(f.amount + 1, acc), Set.empty, fs))"
-                        + " == 1")) {
+                        + " == 1",
+                "Map.size(Map.filterEntries((_, n) -> n > 0, filed(List.map(.currency, fs)))) >= 2")) {
             Said said = of(model.formatted(condition), "f");
             assertEquals(List.of("rule_unread"), said.weakening(), condition);
         }
