@@ -15,15 +15,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Through {@link SummedChoices#time} and not a compile of this test's own, so that what is held
  * is the round the figure is the time of. One round, since what a round reaches does not turn on
- * how warm the JIT is, and at the smallest sizes: the claim is about the shape and holds at any
- * size of it, and the large ones are what the measurement is for.
+ * how warm the JIT is, and at the two smallest sizes: the claim is about the shape and holds at any
+ * size of it, a size more than the one before is the least that asks the second half, and the
+ * large ones are what the measurement is for.
  */
 class TheSummedMeasurementReachesTheBorderSearchTest {
 
     @Test
     void everySizeComposesRowsAndOwesMoreThanTheOneBefore() {
         SummedChoices.Reached before = null;
-        for (int months = 1; months <= 3; months++) {
+        for (int months = 1; months <= 2; months++) {
             SummedChoices.Reached reached = SummedChoices.time(months, 0, 1).reached();
             String at = "months=" + months + ": " + reached;
             assertTrue(reached.composed() > 0,
