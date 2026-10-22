@@ -225,6 +225,29 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
+     * {@code a + b + d - s - 150000 >= 0} over amounts from nought to the greatest {@code Int}:
+     * with the rest held at nought and the constant kept, {@code a} against {@code b} alone
+     * reaches both sides at every {@code a} short of the greatest, where only the arithmetic
+     * settles it.
+     */
+    @Test
+    void aRelationOfManyAmountsIsReadWithTheRestHeldAtNoughtAndTheConstantKept() {
+        var amount = run(0L, Long.MAX_VALUE);
+        var oneShort = run(0L, Long.MAX_VALUE - 1);
+        var a = term("a", 1, oneShort, oneShort);
+        var b = term("b", 1, amount, amount);
+        var d = term("d", 1, amount, amount);
+        var s = term("s", -1, amount, amount);
+        assertEquals(new Leaves.Undivided(), leavesOf(List.of(a, b, d, s), 0, -150000, Rel.GE));
+
+        var full = term("a", 1, amount, amount);
+        Leaves.Settled whole = (Leaves.Settled) leavesOf(List.of(full, b, d, s), 0, -150000,
+                Rel.GE);
+        assertEquals(List.of(settled(Long.MAX_VALUE, Long.MAX_VALUE, true)), whole.runs());
+        assertEquals(List.of(line(Rel.GE, Long.MAX_VALUE)), whole.ofTheTypeAlone());
+    }
+
+    /**
      * {@code a + c >= b} over the same runs is settled the other way, true from eleven on.
      */
     @Test
@@ -240,7 +263,9 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
      * {@code a < b + 3 * c + 4 * d} with {@code a} at one below the greatest {@code Int}, {@code b}
      * at two below, and {@code c} and {@code d} nought or one: the sum of the others at its
      * greatest passes where the type stops, so it is no row that is computed, and the others
-     * together are not a witness for the true side.
+     * together are not a witness for the true side. The rows that are computed are the one with
+     * {@code c} and {@code d} at nought, where it fails, so the value is settled false by the
+     * arithmetic alone, a line the model draws none of.
      */
     @Test
     void theOthersAreNotAWitnessWhereTheirSumPassesWhereTheTypeStops() {
@@ -249,7 +274,8 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         var b = term("b", -1, run(max - 2, max - 2), run(max - 2, max - 2));
         var c = term("c", -3, run(0L, 1L), run(0L, 1L));
         var d = term("d", -4, run(0L, 1L), run(0L, 1L));
-        assertNull(leavesOf(List.of(a, b, c, d), 0, 0, Rel.LT));
+        assertEquals(settledIn(max - 1, max - 1, settled(max - 1, max - 1, false)),
+                leavesOf(List.of(a, b, c, d), 0, 0, Rel.LT));
     }
 
     /**
@@ -312,14 +338,18 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     /**
      * {@code x - y - 2 < 0}, both any {@code Int}: at the two greatest {@code y} the relation holds
      * whatever {@code x} is, but only as {@code y + 2}, which passes where the type stops. Cut where
-     * the type stops, the run is still one no row computes, and nothing is shown.
+     * the type stops, the run is still one no row computes, and it is not shown. At the least
+     * {@code y} but one the rows that compute have an {@code x} of two less the greatest or
+     * above, and every one of them fails: that value is settled by the arithmetic alone.
      */
     @Test
     void aRunCutWhereTheTypeStopsIsStillNoRowWhereItsSumPassesTheEnd() {
-        assertNull(leavesOf(List.of(
+        Leaves leaves = leavesOf(List.of(
                 answer("x", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
                 answer("y", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 1, -2,
-                Rel.LT));
+                Rel.LT);
+        Leaves.Settled settled = (Leaves.Settled) leaves;
+        assertEquals(List.of(settled(-Long.MAX_VALUE, -Long.MAX_VALUE, false)), settled.runs());
     }
 
     /**

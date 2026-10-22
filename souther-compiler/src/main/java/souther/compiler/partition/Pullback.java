@@ -5944,18 +5944,53 @@ final class Pullback {
             return readWithTheAggregate(total, LinearForm.constant(ExactRatio.of(there)),
                     elementsMet.copied(), again);
         }
-        ElementsMet metBefore = elementsMet.copied();
-        List<LinearForm<Quantity>> forms = new ArrayList<>();
-        for (int i = 0; i < total.occurrences().size(); i++) {
-            ReadMeaning.Occurrence occurrence = total.occurrences().get(i);
+        return sumOfKept(total, ways, decided, 0, null, List.of(), elementsMet.copied(), at, fixed,
+                again);
+    }
+
+    /**
+     * The elements of {@code total} that the ways decided keep, from the one at {@code from}, added
+     * up and read in {@code again}: {@code forms} are what the elements before it came to, and
+     * {@code replacing} is what the element at {@code from} is read as where it was a choice and an
+     * arm of it is being read.
+     *
+     * <p>An element that is a choice by an {@code if} is read once for each arm of it, each arm
+     * where a run takes it: the closure that answers it is one node however many elements it is
+     * applied to, so the arm is taken in the application the element stands in, and not by the node
+     * ({@link InputReads#taking}), which would give every application the same arm.
+     */
+    private Derivation sumOfKept(Inside.ATotalByKeeping total, WaysOfKeeping ways,
+                                 Boolean[] decided, int from, Denotation replacing,
+                                 List<LinearForm<Quantity>> forms, ElementsMet metBefore,
+                                 Denotation at, boolean fixed,
+                                 Function<UnaryOperator<InputReads>, Derivation> again) {
+        List<LinearForm<Quantity>> sofar = new ArrayList<>(forms);
+        for (int i = from; i < total.occurrences().size(); i++) {
             if (!ways.isThere(i, decided)) {
                 continue;
             }
-            Denotation element = occurrence.value();
+            Denotation element = i == from && replacing != null ? replacing
+                    : total.occurrences().get(i).value();
             switch (AffineForms.outcome(element.value(), element.at(), quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(
-                        LinearForm<Quantity> form) -> forms.add(form);
+                        LinearForm<Quantity> form) -> sofar.add(form);
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                    if (aWayInAt(stopped) instanceof Inside.AChoice(Denotation chosen)
+                            && Core.withoutStanding(chosen.value()) instanceof Core.If iff) {
+                        Derivation condition = observe(iff.cond(), AnswerAspect.TRUTH, chosen.at());
+                        ArmsLeft left = armsLeftBy(condition);
+                        WhyUnread past = made(left.read());
+                        if (past != null) {
+                            elementsMet = metBefore;
+                            return partOf(at, new Derivation.Stopped(past, fixed));
+                        }
+                        int next = i;
+                        List<LinearForm<Quantity>> before = sofar;
+                        return new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(iff,
+                                chosen.at(), condition, left, arm -> sumOfKept(total, ways,
+                                        decided, next, arm, before, metBefore, at, fixed,
+                                        again))));
+                    }
                     elementsMet = metBefore;
                     return partOf(at, abortsAt(stopped) ? new Derivation.TheRunStopsHere()
                             : new Derivation.Stopped(noFormOf(stopped), fixed));
@@ -5963,7 +5998,7 @@ final class Pullback {
             }
         }
         LinearForm<Quantity> sum;
-        switch (LinearForm.sum(forms)) {
+        switch (LinearForm.sum(sofar)) {
             case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> sum = held;
             case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) -> {
                 elementsMet = metBefore;
