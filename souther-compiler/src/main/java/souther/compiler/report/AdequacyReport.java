@@ -82,6 +82,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputQuestion;
@@ -6487,14 +6488,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // total or an end, of what each element is made to contribute.
             case NumericTerm.GatheredUnderItsKey it -> {
                 into.put("kind", "gathered_under_its_key");
-                into.put("gathering", switch (it.gathering()) {
-                    case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> "total";
-                    case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) ->
-                            switch (extreme) {
-                                case Extreme.Least _ -> "least";
-                                case Extreme.Greatest _ -> "greatest";
-                            };
-                });
+                gathering(into, it.gathering(), it.elements());
                 into.put("elements", it.elements().discriminated());
                 into.put("key", it.key().spelledFrom(it.elements()));
                 if (it.key() instanceof ElementKey.ByCase chosen) {
@@ -6518,14 +6512,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericTerm.GatheredUnderAKey it -> {
                 NumericTerm.GatheredUnderItsKey gathered = it.gathered();
                 into.put("kind", "gathered_under_a_key");
-                into.put("gathering", switch (gathered.gathering()) {
-                    case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> "total";
-                    case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) ->
-                            switch (extreme) {
-                                case Extreme.Least _ -> "least";
-                                case Extreme.Greatest _ -> "greatest";
-                            };
-                });
+                gathering(into, gathered.gathering(), gathered.elements());
                 into.put("elements", gathered.elements().discriminated());
                 into.put("key", it.key().from(gathered.elements()).discriminated());
                 into.put("asked", it.asked().discriminated());
@@ -6559,6 +6546,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     }
                 }
             }
+        }
+    }
+
+    /** How the numbers of a key are put together, written of the elements at {@code elements}:
+     *  the word, and where some elements put theirs in place of the ones before, which. */
+    private static void gathering(ObjectNode into,
+                                  NumericTerm.GatheredUnderItsKey.Gathering gathering,
+                                  TermPath elements) {
+        into.put("gathering", switch (gathering) {
+            case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> "total";
+            case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ ->
+                    "total_from_the_last_put";
+            case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) ->
+                    switch (extreme) {
+                        case Extreme.Least _ -> "least";
+                        case Extreme.Greatest _ -> "greatest";
+                    };
+        });
+        if (gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut(
+                ElementProjection subject, List<CasesLeft> puts)) {
+            ObjectNode put = into.putObject("put_by");
+            put.put("subject", subject.from(elements).discriminated());
+            ArrayNode taken = put.putArray("taken");
+            puts.forEach(cases -> taken.add(subject.narrowedTo(cases).from(elements)
+                    .discriminated()));
         }
     }
 

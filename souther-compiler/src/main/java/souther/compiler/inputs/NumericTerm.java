@@ -973,6 +973,27 @@ public sealed interface NumericTerm
                 }
             }
 
+            /**
+             * The numbers of the key added up from the last element, in the order of the run,
+             * whose case at {@code subject} is one of {@code puts}, that element's number
+             * included; every number of the key where none of them is.
+             *
+             * @param subject where in the element the case that says whether it puts stands
+             * @param puts    the cases of it whose elements put their number in place of the
+             *                ones before
+             */
+            record SinceAPut(ElementProjection subject, List<CasesLeft> puts)
+                    implements Gathering {
+
+                public SinceAPut {
+                    Objects.requireNonNull(subject, "a case is of some place of the element");
+                    puts = List.copyOf(puts);
+                    if (puts.isEmpty()) {
+                        throw new IllegalArgumentException("some case puts, or it is a total");
+                    }
+                }
+            }
+
             Gathering TOTAL = new Total();
         }
 
@@ -1126,6 +1147,9 @@ public sealed interface NumericTerm
         public List<ElementProjection> fieldsRead() {
             Set<ElementProjection> read = new LinkedHashSet<>(key.reads());
             read.addAll(value.reads());
+            if (gathering instanceof Gathering.SinceAPut(ElementProjection subject, var _)) {
+                read.add(subject);
+            }
             return List.copyOf(read);
         }
 
@@ -1170,6 +1194,10 @@ public sealed interface NumericTerm
                     + (selection == null ? "" : " kept by " + selection.key());
             return switch (gathering) {
                 case Gathering.Total _ -> "total(" + of + " by " + key.spelled() + ")";
+                case Gathering.SinceAPut(ElementProjection subject, List<CasesLeft> puts) ->
+                        "total(" + of + " from the last " + String.join(" or ", puts.stream()
+                                .map(cases -> subject.narrowedTo(cases).spelled()).toList())
+                                + " by " + key.spelled() + ")";
                 case Gathering.End(Extreme extreme) -> switch (extreme) {
                     case Extreme.Least _ -> "least";
                     case Extreme.Greatest _ -> "greatest";

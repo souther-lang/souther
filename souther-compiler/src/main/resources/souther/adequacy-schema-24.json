@@ -1203,7 +1203,7 @@
           }
         },
         {
-          "description": "What the elements standing at `elements` come to, among the elements holding at `key` what the element under consideration holds there: the total of what `computation` makes of each, or the least or the greatest of it. The elements are every occurrence of the place, in one container or in the containers inside another put end to end. No one position holds it.",
+          "description": "What the elements standing at `elements` come to, among the elements holding at `key` what the element under consideration holds there: the total of what `computation` makes of each, the same total from the last element that puts its number in place of the ones before (`put_by`), or the least or the greatest of it. The elements are every occurrence of the place, in one container or in the containers inside another put end to end. No one position holds it.",
           "required": [
             "gathering",
             "elements",
@@ -1219,8 +1219,12 @@
               "enum": [
                 "total",
                 "least",
-                "greatest"
+                "greatest",
+                "total_from_the_last_put"
               ]
+            },
+            "put_by": {
+              "$ref": "#/$defs/putBy"
             },
             "elements": {
               "type": "string"
@@ -1272,7 +1276,7 @@
           }
         },
         {
-          "description": "What the elements standing at `elements` come to, among those holding at `key` what the input holds at `asked`: the total of what `computation` makes of each, or the least or the greatest of it. The elements are every occurrence of the place, as for `gathered_under_its_key`. It is no number where no element holds the key, and no one position holds it.",
+          "description": "What the elements standing at `elements` come to, among those holding at `key` what the input holds at `asked`: the total of what `computation` makes of each, the same total from the last element that puts (`put_by`), or the least or the greatest of it. The elements are every occurrence of the place, as for `gathered_under_its_key`. It is no number where no element holds the key, and no one position holds it.",
           "required": [
             "gathering",
             "elements",
@@ -1289,8 +1293,12 @@
               "enum": [
                 "total",
                 "least",
-                "greatest"
+                "greatest",
+                "total_from_the_last_put"
               ]
+            },
+            "put_by": {
+              "$ref": "#/$defs/putBy"
             },
             "elements": {
               "type": "string"
@@ -1322,6 +1330,27 @@
           }
         }
       ]
+    },
+    "putBy": {
+      "type": "object",
+      "description": "Where `gathering` is `total_from_the_last_put`: an element whose value at `subject` is of one of the cases `taken` puts its number in place of the ones before, and what a key comes to is the total of its elements from the last such, in the order of the run. Absent for every other gathering.",
+      "required": [
+        "subject",
+        "taken"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "subject": {
+          "type": "string"
+        },
+        "taken": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "elementComputation": {
       "description": "What one element's number is made of: a sum of its fields each weighed by a number, the choice between two such by a flag the element holds, the choice among them by which case a value of the element is, the choice between two by where the element stands, or several such choices added up. A field is named by its steps from the element, joined by dots, with a narrowing to a case written `@` and the case, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
@@ -6115,6 +6144,7 @@
                           "keys_placed_at_the_number_their_elements_come_to",
                           "keys_of_one_fold_asked_together",
                           "ends_of_a_key_written_as_one_element",
+                          "totals_from_a_put_written_as_one_element",
                           "elements_a_computed_total_is_solved_for",
                           "mixes_of_cases_a_total_is_spread_over",
                           "trees_written_for_a_count",

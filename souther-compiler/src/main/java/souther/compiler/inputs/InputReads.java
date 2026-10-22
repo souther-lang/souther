@@ -2811,6 +2811,41 @@ public final class InputReads {
         return ElementKey.byCase(subject, arms);
     }
 
+    /**
+     * Where the elements of {@code walked} put their number in place of the ones before, where
+     * {@code answer}, made of the element, says so on arms chosen by the case of one place of it,
+     * each answering {@code true} or {@code false}: that place and the cases of the arms answering
+     * {@code true} — or null where the element is made otherwise than one way, the arms are
+     * chosen otherwise, or an arm answers anything else.
+     */
+    public NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut putsOf(
+            Core answer, WalkedElement walked, Symbols symbols, DeclarationNewtypes newtypes) {
+        if (walked.subject() != null) {
+            return null;
+        }
+        WalkedElement.Arm one = walked.arms().getFirst();
+        List<AnArmAnswered> chosen = new ArrayList<>();
+        if (!armsAnswering(answer, this, new LinkedHashMap<>(one.held()), one.standing(),
+                ChoicesOnTheWay.NONE, walked.elements(), ArmsEndIn.A_VALUE, chosen, symbols,
+                newtypes) || chosen.size() < 2 || chosen.getFirst().taken() == null) {
+            return null;
+        }
+        ElementProjection subject = chosen.getFirst().taken().narrowedFrom();
+        List<CasesLeft> puts = new ArrayList<>();
+        for (AnArmAnswered each : chosen) {
+            if (each.taken() == null || !subject.equals(each.taken().narrowedFrom())
+                    || !(Core.withoutStanding(each.value()) instanceof Core.Bool(
+                            boolean put, var _, var _))) {
+                return null;
+            }
+            if (put) {
+                puts.add(each.taken().narrowing());
+            }
+        }
+        return puts.isEmpty() ? null
+                : new NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut(subject, puts);
+    }
+
     /** Each of {@code reads}, made of what stands at {@code at} in an element rather than of the
      *  element itself; a read that came to nothing stays so. */
     private static List<ReadOff> after(List<ReadOff> reads, OnePerElement.Answered at) {

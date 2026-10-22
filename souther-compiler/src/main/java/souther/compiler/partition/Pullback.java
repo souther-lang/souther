@@ -5581,6 +5581,13 @@ final class Pullback {
             }
             case KeyedAccumulation.Filed.Summed summed -> gathered(whole, filed, summed.value(),
                     List.of(summed.added()), NumericTerm.GatheredUnderItsKey.Gathering.TOTAL);
+            case KeyedAccumulation.Filed.SummedSinceAPut since -> {
+                ElementsGathered gathered = elementsGathered(whole, filed, since.value(),
+                        List.of(since.added()));
+                NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut puts = gathered == null
+                        ? null : putsOf(whole, since, gathered);
+                yield puts == null ? null : gathered(gathered, puts);
+            }
         };
     }
 
@@ -5591,17 +5598,33 @@ final class Pullback {
                                           List<Core> alike,
                                           NumericTerm.GatheredUnderItsKey.Gathering gathering) {
         ElementsGathered read = elementsGathered(whole, filed, value, alike);
-        NumericTerm term = read == null ? null
-                : NumericTerm.GatheredUnderItsKey.spelled(read.elements(), read.key(),
-                        read.number(), read.each(), gathering, read.selection());
+        return read == null ? null : gathered(read, gathering);
+    }
+
+    /**
+     * What the elements {@code read} reads come to by {@code gathering}, as a number of the input
+     * read on an order — or null where the term is not read on an order.
+     *
+     * <p>A number of the input beside every element is put back as many times as there are
+     * elements for a total, and once for an end. Where an element may put its number in place of
+     * the ones before, how many are added after it is no number of the row, so none is.
+     */
+    private LinearForm<Quantity> gathered(ElementsGathered read,
+                                          NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        if (gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut
+                && !read.beside().equals(LinearForm.constant(ExactRatio.ZERO))) {
+            return null;
+        }
+        NumericTerm term = NumericTerm.GatheredUnderItsKey.spelled(read.elements(), read.key(),
+                read.number(), read.each(), gathering, read.selection());
         if (!readOnAnOrder(term)) {
             return null;
         }
         // What stands beside every element is put back as the gathering puts it back.
         LinearForm<NumericTerm> moved = new ElementComputation(read.number(), read.beside())
-                .gathered(gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.End
-                        ? ElementComputation.Gathering.AN_END
-                        : ElementComputation.Gathering.A_TOTAL, term);
+                .gathered(gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.Total
+                        ? ElementComputation.Gathering.A_TOTAL
+                        : ElementComputation.Gathering.AN_END, term);
         if (moved == null) {
             return null;
         }
@@ -5611,17 +5634,19 @@ final class Pullback {
     }
 
     /**
-     * The same elements gathered for the key an input holds at {@code asked}, which is the number
-     * the lookup of that key finds ({@link #valueLookedUpUnderAKey}) — or null where
-     * {@link #elementsGathered} reads none.
+     * The elements {@code read} reads gathered for the key an input holds at {@code asked}, which
+     * is the number the lookup of that key finds ({@link #valueLookedUpUnderAKey}) — or null where
+     * {@link #elementsGathered} read none.
      */
-    private NumericTerm.GatheredUnderAKey gatheredUnderAKey(
-            Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
-            NumericTerm.GatheredUnderItsKey.Gathering gathering, TermPath asked) {
-        ElementsGathered read = elementsGathered(whole, filed, value, alike);
+    private static NumericTerm.GatheredUnderAKey gatheredUnderAKey(
+            ElementsGathered read, NumericTerm.GatheredUnderItsKey.Gathering gathering,
+            TermPath asked) {
         // A key asked for is counted among every occurrence, and says nothing of which a
-        // statement kept.
+        // statement kept; and a number beside every element after a put is added as many times
+        // as there are elements after it, which is no number of the row.
         return read == null || !read.beside().coefs().isEmpty() || read.selection() != null
+                || (gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut
+                        && read.beside().constant().signum() != 0)
                 ? null : NumericTerm.GatheredUnderAKey.of(read.elements(), read.key(), read.number(),
                         read.each(), gathering, asked);
     }
@@ -5635,10 +5660,13 @@ final class Pullback {
      * @param each      what one element's number stands as
      * @param selection the occurrences filed where a statement keeps some of them, or null where
      *                  every one is
+     * @param walked    what each element the fold walks is made of, which every number of the
+     *                  element is read through
      */
     private record ElementsGathered(TermPath elements, ElementKey key,
                                     ElementValue number, LinearForm<NumericTerm> beside,
-                                    Type each, KeptOccurrences selection) {}
+                                    Type each, KeptOccurrences selection,
+                                    InputReads.WalkedElement walked) {}
 
     /**
      * Where the elements a fold files stand, and the key and the number of each — or null where
@@ -5692,7 +5720,7 @@ final class Pullback {
         }
         return new ElementsGathered(walked.elements(), key, number.relative(),
                 number.invariant(), TypeOps.base(value.type(), read.rules().inners()),
-                selection);
+                selection, walked);
     }
 
     /**
@@ -5751,11 +5779,23 @@ final class Pullback {
                             : counterLookedUp(lookup, applied, whole, filed, counted, at);
             case KeyedAccumulation.Filed.Kept kept -> gatheredLookedUp(applied, whole, filed,
                     kept.value(), kept.compared(),
-                    new NumericTerm.GatheredUnderItsKey.Gathering.End(kept.extreme()), at);
+                    _ -> new NumericTerm.GatheredUnderItsKey.Gathering.End(kept.extreme()), at);
             case KeyedAccumulation.Filed.Summed summed -> gatheredLookedUp(applied, whole, filed,
                     summed.value(), List.of(summed.added()),
-                    NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, at);
+                    _ -> NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, at);
+            case KeyedAccumulation.Filed.SummedSinceAPut since -> gatheredLookedUp(applied,
+                    whole, filed, since.value(), List.of(since.added()),
+                    each -> putsOf(whole, since, each), at);
         };
+    }
+
+    /** Where the elements {@code gathered} reads put their number in place of the ones before,
+     *  as {@code since} says ({@link InputReads#putsOf}). */
+    private NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut putsOf(
+            Denotation whole, KeyedAccumulation.Filed.SummedSinceAPut since,
+            ElementsGathered gathered) {
+        return whole.at().putsOf(since.puts(), gathered.walked(), read.rules().symbols(),
+                read.rules().newtypes());
     }
 
     /**
@@ -5770,14 +5810,19 @@ final class Pullback {
      */
     private LinearForm<Quantity> gatheredLookedUp(
             AnOperationApplied applied, Denotation whole, KeyedAccumulation filed, Core value,
-            List<Core> alike, NumericTerm.GatheredUnderItsKey.Gathering gathering, InputReads at) {
+            List<Core> alike,
+            Function<ElementsGathered, NumericTerm.GatheredUnderItsKey.Gathering> gathering,
+            InputReads at) {
         if (applied.args().size() != 2
                 || !(at.pathOf(applied.args().getFirst(), read.rules().newtypes())
                         instanceof PathResolution.At(TermPath asked))) {
             return null;
         }
-        NumericTerm.GatheredUnderAKey term =
-                gatheredUnderAKey(whole, filed, value, alike, gathering, asked);
+        ElementsGathered gathered = elementsGathered(whole, filed, value, alike);
+        NumericTerm.GatheredUnderItsKey.Gathering by = gathered == null ? null
+                : gathering.apply(gathered);
+        NumericTerm.GatheredUnderAKey term = by == null ? null
+                : gatheredUnderAKey(gathered, by, asked);
         return term != null && readOnAnOrder(term)
                 ? LinearForm.atom(new DecisionAtom.OfTheInput(term)) : null;
     }
