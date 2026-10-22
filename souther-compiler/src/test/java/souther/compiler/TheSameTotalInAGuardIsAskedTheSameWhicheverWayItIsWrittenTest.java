@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -10,9 +11,14 @@ import souther.compiler.query.InteractionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -136,5 +142,39 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
         }
         assertTrue(made > 0 && unmade > 0,
                 "the rows make some combinations and leave some unmade: " + made + " / " + unmade);
+    }
+
+    /** The lines of a report that say which values a total draws its borders at. */
+    private static Set<String> bordersRead(String total) {
+        Compilation compilation = Compilation.ofSource(
+                model(total, FIRST_ONLY + SECOND_ONLY), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertFalse(report.contains("not read"), report);
+        return report.lines().map(String::strip).filter(line -> line.startsWith("· read as"))
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
+    /**
+     * What stands around the choice in the closure's body is read as it is written: the choice
+     * alone is what an arm stands for. With a hundred added to the choice or twice the choice, the
+     * borders are those of the same two months written out, a hundred and two hundred lower than
+     * the threshold or half of it — and the same closure applied to the second month takes its own
+     * arm.
+     */
+    @Test
+    void aChoiceInAClosureIsReadWithWhatStandsAroundIt() {
+        for (String body : List.of("(if R.days >= 17 then R.pay else 0) + 100",
+                "2 * (if R.days >= 17 then R.pay else 0)")) {
+            String closure = "List.sum(List.map(r -> " + body.replace("R", "r")
+                    + ", [ w.first, w.second ]))";
+            String written = "(" + body.replace("R", "w.first") + ") + ("
+                    + body.replace("R", "w.second") + ")";
+            Set<String> borders = bordersRead(written);
+            assertTrue(borders.size() > 4, "the written form is read: " + borders);
+            assertEquals(borders, bordersRead(closure), body);
+        }
     }
 }
