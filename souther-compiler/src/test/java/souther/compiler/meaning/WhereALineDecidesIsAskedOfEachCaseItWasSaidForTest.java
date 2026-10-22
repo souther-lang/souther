@@ -236,6 +236,64 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     }
 
     /**
+     * What every case holds is chosen first however deep in the choices it is written, since
+     * choosing together is associative: the parts every case holds are the same whether they were
+     * written beside the choices or as a group of their own.
+     *
+     * <p>Seven choices and six parts every case holds: written as a group, the walk is as long as
+     * it is written flat, and short of the steps it is allowed. Chosen after the choices, each of
+     * the hundred and twenty-eight ways would choose six more and the steps would run out.
+     */
+    @Test
+    void whatEveryCaseHoldsIsChosenFirstWhetherItIsWrittenBesideTheChoicesOrAsAGroup() {
+        int choices = 7;
+        int held = 6;
+        List<DecidingCase.Cases> flat = new ArrayList<>();
+        List<DecidingCase.Cases> group = new ArrayList<>();
+        for (int at = 0; at < choices; at++) {
+            Proposition yes = truth("c" + at);
+            flat.add(new DecidingCase.Cases.EachOf(List.of(one(yes), one(yes.denied()))));
+        }
+        List<DecidingCase.Cases> grouped = new ArrayList<>(flat);
+        for (int at = 0; at < held; at++) {
+            flat.add(one(truth("u" + at)));
+            group.add(one(truth("u" + at)));
+        }
+        grouped.add(new DecidingCase.Cases.Together(group));
+        Asking beside = new Asking(_ -> true);
+        Asking asGroup = new Asking(_ -> true);
+
+        CasesOfALineAsked.Found written = beside.of(new DecidingCase.Cases.Together(flat));
+        CasesOfALineAsked.Found nested = asGroup.of(new DecidingCase.Cases.Together(grouped));
+
+        assertEquals(Set.of(), written.notWorkedOut(), "written beside the choices");
+        assertEquals(Set.of(), nested.notWorkedOut(), "written as a group of their own");
+        assertEquals(beside.asked().size(), asGroup.asked().size(),
+                "the same questions however the parts every case holds are written");
+    }
+
+    /**
+     * What holds only in one alternative stays in it: a part written under a choice is chosen when
+     * the choice is, and is not what every case holds.
+     */
+    @Test
+    void whatOneAlternativeHoldsIsNotChosenForTheOthers() {
+        Proposition x = truth("x");
+        Proposition y = truth("y");
+        Proposition z = truth("z");
+        DecidingCase.Cases cases = new DecidingCase.Cases.EachOf(List.of(
+                new DecidingCase.Cases.Together(List.of(one(x), one(y))), one(z)));
+
+        CasesOfALineAsked.Found found = new Asking(_ -> true).of(cases);
+
+        assertEquals(new CasesOfALineAsked.Found(List.of(new DecidingCase(SAID, cases)), Set.of()),
+                found, "every case divides rows, and they are the two that were said");
+        CasesOfALineAsked.Found withoutZ = new Asking(each -> !partsOf(each).contains(z)).of(cases);
+        assertEquals(List.of(DecidingCase.alone(both(x, y))), withoutZ.decidesIn(),
+                "x and y together, which z being refuted does not take away");
+    }
+
+    /**
      * Where the steps run out, the cases kept are among the ones that hold and the figure the
      * asking stopped at is said: a case not reached is not taken for one that does not hold.
      *

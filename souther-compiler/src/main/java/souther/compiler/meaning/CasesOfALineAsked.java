@@ -177,7 +177,7 @@ public final class CasesOfALineAsked {
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
-        chosen(new ArrayList<>(), List.of(said.standsFor()), _ -> true,
+        chosen(new ArrayList<>(), List.of(heldFirst(said.standsFor())), _ -> true,
                 chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
         return new Atoms<>(out, stopped);
     }
@@ -204,7 +204,7 @@ public final class CasesOfALineAsked {
             notTakenApartAt(said.standsFor(), stopped);
             return new Found(List.of(), stopped);
         }
-        chosen(new ArrayList<>(), List.of(said.standsFor()), crossedIn,
+        chosen(new ArrayList<>(), List.of(heldFirst(said.standsFor())), crossedIn,
                 chosen -> dividing.add(chosen));
         // Every case divides rows and every one was worked out: the case is what it was said as,
         // and saying it again would read the line under another condition for nothing.
@@ -212,6 +212,49 @@ public final class CasesOfALineAsked {
             return new Found(List.of(said), Set.of());
         }
         return new Found(dividing.stream().map(DecidingCase::alone).toList(), stopped);
+    }
+
+    /**
+     * {@code cases} with what every case of them holds written before the choices, at every depth
+     * choosing together is written to.
+     *
+     * <p>A prefix is walked further only while rows stand on both sides of the line in it, and what
+     * is certain to be chosen narrows it from the first alternative on. Chosen last, the parts
+     * every case holds are asked once for each way of choosing, and the ones that contradict them
+     * are found only at the end of each.
+     *
+     * <p>Choosing together is associative, so a group written inside a group is the parts of both.
+     * What is written under an alternative is held only where the alternative is taken, and stays
+     * in it: each alternative is put in this order on its own. The choices keep the order they
+     * were written in, since a choice nobody took apart ends the walk there.
+     */
+    private static DecidingCase.Cases heldFirst(DecidingCase.Cases cases) {
+        return switch (cases) {
+            case DecidingCase.Cases.One _, DecidingCase.Cases.NotTakenApart _ -> cases;
+            case DecidingCase.Cases.EachOf(var alternatives) -> new DecidingCase.Cases.EachOf(
+                    alternatives.stream().map(CasesOfALineAsked::heldFirst).toList());
+            case DecidingCase.Cases.Together(var factors) -> {
+                List<DecidingCase.Cases> held = new ArrayList<>();
+                List<DecidingCase.Cases> choices = new ArrayList<>();
+                gatherHeldFirst(factors, held, choices);
+                held.addAll(choices);
+                yield new DecidingCase.Cases.Together(held);
+            }
+        };
+    }
+
+    private static void gatherHeldFirst(List<DecidingCase.Cases> factors,
+                                        List<DecidingCase.Cases> held,
+                                        List<DecidingCase.Cases> choices) {
+        for (DecidingCase.Cases factor : factors) {
+            switch (factor) {
+                case DecidingCase.Cases.One _ -> held.add(factor);
+                case DecidingCase.Cases.Together(var inner) ->
+                        gatherHeldFirst(inner, held, choices);
+                case DecidingCase.Cases.EachOf _, DecidingCase.Cases.NotTakenApart _ ->
+                        choices.add(heldFirst(factor));
+            }
+        }
     }
 
     /**
@@ -261,20 +304,7 @@ public final class CasesOfALineAsked {
                 }
             }
             case DecidingCase.Cases.Together(var factors) -> {
-                // What holds whichever alternative is taken is chosen before any alternative:
-                // a prefix is walked further only while rows stand on both sides of the line in
-                // it, and what is certain to be chosen narrows it from the first alternative on.
-                List<DecidingCase.Cases> next = new ArrayList<>();
-                for (DecidingCase.Cases factor : factors) {
-                    if (factor instanceof DecidingCase.Cases.One) {
-                        next.add(factor);
-                    }
-                }
-                for (DecidingCase.Cases factor : factors) {
-                    if (!(factor instanceof DecidingCase.Cases.One)) {
-                        next.add(factor);
-                    }
-                }
+                List<DecidingCase.Cases> next = new ArrayList<>(factors);
                 next.addAll(rest);
                 chosen(chosen, next, goesOn, atEnd);
             }
