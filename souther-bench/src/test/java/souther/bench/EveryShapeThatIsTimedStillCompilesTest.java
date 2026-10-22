@@ -101,6 +101,16 @@ class EveryShapeThatIsTimedStillCompilesTest {
         }
     }
 
+    /** Every total of choices the per-point figure is taken over, at the sizes it is taken at: they
+     *  are small, and what a size declares is fields and terms of a total, which a smaller one would
+     *  not stand for. */
+    @Test
+    void everyTotalOfChoicesCompiles() {
+        for (int months : SummedChoices.MONTHS) {
+            compiles("summed months=" + months, List.of(SummedChoices.source(months)));
+        }
+    }
+
     @Test
     void everyModuleShapeCompiles() {
         compiles("doubling chain", List.of(Values.doublingChain(VALUES)));
