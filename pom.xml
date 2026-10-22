@@ -156,7 +156,7 @@
              release and of a snapshot alike. -->
         <souther.publish.skip>false</souther.publish.skip>
         <!-- The Enforcer the release and snapshot profiles check with. -->
-        <enforcer.version>3.5.0</enforcer.version>
+        <enforcer.version>3.6.3</enforcer.version>
         <!-- What the build copies into an artifact from outside every module's own src, as paths
              from the root. A publication refuses an ignored file in any of them, as each module
              refuses one in its src (bin/require-clean-checkout.sh), because a copy would carry it
@@ -378,7 +378,7 @@
                 <plugin>
                     <groupId>org.sonatype.central</groupId>
                     <artifactId>central-publishing-maven-plugin</artifactId>
-                    <version>0.11.0</version>
+                    <version>0.12.0</version>
                     <configuration>
                         <publishingServerId>central</publishingServerId>
                         <autoPublish>true</autoPublish>
@@ -436,7 +436,7 @@
             <plugin>
                 <groupId>io.github.git-commit-id</groupId>
                 <artifactId>git-commit-id-maven-plugin</artifactId>
-                <version>9.0.1</version>
+                <version>10.0.1</version>
                 <executions>
                     <execution>
                         <id>read-revision</id>
@@ -775,7 +775,7 @@
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
-                        <version>3.5.1</version>
+                        <version>3.6.4</version>
                         <executions>
                             <execution>
                                 <id>require-clean-checkout</id>
@@ -935,7 +935,7 @@
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
-                        <version>3.5.1</version>
+                        <version>3.6.4</version>
                         <executions>
                             <execution>
                                 <id>require-clean-checkout</id>
