@@ -5511,7 +5511,8 @@ final class Pullback {
     }
 
     /** What the elements of each key come to by {@code gathering}, as a number of the input
-     *  read on an order — or null where it is not read ({@link #gatheredUnderItsKey}). */
+     *  read on an order — or null where {@link #elementsGathered} reads none, or the term is
+     *  not read on an order. */
     private LinearForm<Quantity> gathered(Denotation whole, KeyedAccumulation filed, Core value,
                                           List<Core> alike,
                                           NumericTerm.GatheredUnderItsKey.Gathering gathering) {
@@ -5533,20 +5534,6 @@ final class Pullback {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         moved.coefs().forEach((each, by) -> coefs.put(new DecisionAtom.OfTheInput(each), by));
         return new LinearForm<>(moved.constant(), coefs);
-    }
-
-    /**
-     * What the elements a fold files under each key come to by {@code gathering}, each as what
-     * {@code value} computes of it — or null where {@link #elementsGathered} reads none, or where
-     * it reads a number beside the element, which no one term of the elements is.
-     */
-    private NumericTerm.GatheredUnderItsKey gatheredUnderItsKey(
-            Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
-            NumericTerm.GatheredUnderItsKey.Gathering gathering) {
-        ElementsGathered read = elementsGathered(whole, filed, value, alike);
-        return read == null || !read.beside().coefs().isEmpty() ? null
-                : NumericTerm.GatheredUnderItsKey.of(read.elements(), read.key(), read.number(),
-                        read.each(), gathering, read.selection());
     }
 
     /**

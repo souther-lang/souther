@@ -34,7 +34,9 @@ class WhatAnOperationAddsBesideWhatItHoldsIsReadOffItsLawTest {
     /**
      * Read where a law of how many says so and a law of what the answer holds says the same
      * values: an insert, of a value or under a key, whether the library declares it or proves it
-     * of a body that inserts on either arm.
+     * of a body that inserts on either arm, and a union, whose law of how many counts the
+     * elements of its second argument the first does not hold, with the first as the holder.
+     * Every operation counted so is read.
      */
     @Test
     void theOperationsReadAsAddingWhatTheyDoNotHoldAreTheOnesWhoseLawsSaySo() {
@@ -55,14 +57,26 @@ class WhatAnOperationAddsBesideWhatItHoldsIsReadOffItsLawTest {
         assertEquals(Map.of(
                 "Map.insert", "holder 2, value 0 among its KEYS",
                 "Map.updateOrInsert", "holder 3, value 0 among its KEYS",
-                "Set.insert", "holder 1, value 0 among its ELEMENTS"), read);
-        // A union's law of how many counts the elements of its second argument the first does not
-        // hold, with the first as the holder and not the other way round. Nothing says which
-        // values its answer holds, so it is counted and not read: an answer of that many values
-        // need not be those.
-        Map<String, String> countedAlone = new TreeMap<>(counted);
-        countedAlone.keySet().removeAll(read.keySet());
-        assertEquals(Map.of("Set.union", "holder 0, the elements of 1"), countedAlone);
+                "Set.insert", "holder 1, value 0 among its ELEMENTS",
+                "Set.union", "holder 0, the elements of 1"), read);
+        assertEquals(counted, read);
+    }
+
+    /**
+     * A union's law of membership says a value is in its answer where either set holds it; one
+     * saying so of the first alone, or of a set it was not handed, is not what the count adds.
+     */
+    @Test
+    void aUnionsMembershipLawIsReadWithBothItsSets() {
+        ValueName union = ValueName.Stdlib.operation("Set", "union");
+        OperationLaw.Size<DeclaredArgument> size = sizeLawOf("Set", "union");
+        List<LawProposition<Slot>> stated = DefaultBoundOperationFacts.get().relationsOf(union);
+        assertEquals(AddsWhatItDoesNotHold.countedBy(size),
+                AddsWhatItDoesNotHold.of(union, size, stated));
+        assertEquals(null, AddsWhatItDoesNotHold.of(union, size, List.of()), "how many alone");
+        assertEquals(null, AddsWhatItDoesNotHold.of(union, size,
+                stated.stream().map(each -> swapped(each, 1, 2)).toList()),
+                "a set it was not handed");
     }
 
     private static String said(AddsWhatItDoesNotHold adds) {

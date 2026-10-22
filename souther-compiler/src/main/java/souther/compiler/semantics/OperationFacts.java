@@ -789,6 +789,12 @@ public final class OperationFacts {
                             answerOf("Set", "insert", the(at(0)), the(at(1))))),
                     any(alike(the(ANY), the(at(0))),
                             isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
+            // A union holds exactly what either set held.
+            about("Set", "union", related(iff(
+                    isTrue(answerOf("Set", "contains", the(ANY),
+                            answerOf("Set", "union", the(at(0)), the(at(1))))),
+                    any(isTrue(answerOf("Set", "contains", the(ANY), the(at(0)))),
+                            isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
 
             // Which values of a set are left: some other than the one taken out, some of one also
             // in the other, some of one in no element of the other.
