@@ -58,9 +58,11 @@ public sealed interface RunSource {
                     && at.containersHoldingIt().size() == flat.subjectPath().containersHoldingIt().size()
                     ? new FlattenedOccurrences(at) : null;
             // What was shown of the order was shown of the elements where they stood, and nothing
-            // says those moved to stand in it, so a run that needs the order does not move.
-            case ComputedOccurrences computed -> computed.order() != null ? null
-                    : computedOverTheElementsAt(at, computed.computation(), computed.each(), null);
+            // says those moved to stand in it, so a run that needs the order is the same run
+            // where the move leaves them, and none anywhere else.
+            case ComputedOccurrences computed -> computed.order() == null
+                    ? computedOverTheElementsAt(at, computed.computation(), computed.each(), null)
+                    : computed.subjectPath().equals(at) ? computed : null;
             // The nodes below a node are the same fields of it wherever it stands, and moved
             // inside a container it is one tree of many.
             case ReachableNodes nodes ->

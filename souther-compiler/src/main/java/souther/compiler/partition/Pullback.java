@@ -2187,15 +2187,14 @@ final class Pullback {
         }
         // A step adding to what it carried each value it is handed that it does not hold yet adds
         // no number of its own; how many the walk ends with is how many different values it was
-        // handed. Which a step is, is what the law of how many its operation answers says.
+        // handed. Which a step is, is what the laws of how many its operation answers and of what
+        // its answer holds say.
         Denotation step = reads.standing(walk.step().body(), read.rules().symbols(),
                 read.rules().newtypes());
         if (AnOperationApplied.of(Core.withoutStanding(step.value()))
                 instanceof AnOperationApplied applied
-                && DefaultBoundOperationFacts.get().settled(applied.operation(),
-                        OperationLaw.Observed.SIZE) instanceof BoundOperationFacts.Settled.ByALaw(
-                                OperationLaw<DeclaredArgument> law, var _)
-                && AddsWhatItDoesNotHold.of(law) instanceof AddsWhatItDoesNotHold adds) {
+                && DefaultBoundOperationFacts.get().addsWhatItDoesNotHold(applied.operation())
+                        instanceof AddsWhatItDoesNotHold adds) {
             return seed.equals(LinearForm.constant(ExactRatio.ZERO))
                     ? differentOverAWalk(walk, held, step, applied, adds) : null;
         }
@@ -5988,7 +5987,7 @@ final class Pullback {
         }
         // Put to rows under no behavior's name: the name labels the quantities a statement is
         // read as, and nothing about a row turns on it.
-        return new KeptOccurrences(meeting.container(), meeting.ofTheElement(),
+        return KeptOccurrences.of(meeting.container(), meeting.ofTheElement(),
                 AStatementAtARow.of(meeting.ofTheElement(), "", read.quantities()));
     }
 

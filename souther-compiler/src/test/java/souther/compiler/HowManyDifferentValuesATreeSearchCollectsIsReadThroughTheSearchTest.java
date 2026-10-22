@@ -105,6 +105,50 @@ class HowManyDifferentValuesATreeSearchCollectsIsReadThroughTheSearchTest {
                 "node.owner RULE_RELATING_TWO_VALUES"), said);
     }
 
+    /**
+     * The arms of a match on what a lookup found are one or the other, never both: a search that
+     * stops at a node whose key has an entry collects that entry and nothing below it, which is no
+     * number of the entries of every node. Where both arms go down the same fields, the arm with
+     * the entry collects it and the other does not, which is.
+     */
+    @Test
+    void armsOfAMatchAreOneOrTheOtherAndNotBothPutEndToEnd() {
+        String stopsAtAnEntry = """
+                let firstFound (node: Node, byOwner: Map<String, Forecast>): List<Forecast> =
+                    match Option.map(one -> [ one ], Map.get(node.owner, byOwner)) with
+                        | Some found -> found
+                        | None -> List.fold((acc, r) -> acc ++ firstFound(r, byOwner), [],
+                                            node.reports)
+
+                behavior f : (node: Node, byOwner: Map<String, Forecast>) -> Bool
+                let f (node, byOwner) =
+                    Set.size(Set.fromList(List.map(.currency, firstFound(node, byOwner)))) == 1
+                """;
+        assertEquals(List.of("byOwner RULE_ABOUT_A_DERIVED_VALUE",
+                "node RULE_ABOUT_A_DERIVED_VALUE"), notRead(stopsAtAnEntry, "f"));
+        relatesValuesNotADerivedOneWith("""
+                let everyFound (node: Node, byOwner: Map<String, Forecast>): List<Forecast> =
+                    match Option.map(one -> [ one ], Map.get(node.owner, byOwner)) with
+                        | Some found -> List.fold((acc, r) -> acc ++ everyFound(r, byOwner),
+                                                  found, node.reports)
+                        | None -> List.fold((acc, r) -> acc ++ everyFound(r, byOwner), [],
+                                            node.reports)
+                """, "everyFound");
+    }
+
+    private static void relatesValuesNotADerivedOneWith(String helper, String name) {
+        List<String> said = notRead(helper + """
+
+                behavior f : (node: Node, byOwner: Map<String, Forecast>) -> Bool
+                let f (node, byOwner) =
+                    Set.size(Set.fromList(List.map(.currency, %s(node, byOwner)))) == 1
+                """.formatted(name), "f");
+        assertEquals(List.of(
+                "byOwner[*].currency RULE_RELATING_TWO_VALUES",
+                "byOwner[key] RULE_RELATING_TWO_VALUES",
+                "node.owner RULE_RELATING_TWO_VALUES"), said);
+    }
+
     @Test
     void theSameNumberIsReadThroughALet() {
         relatesValuesNotADerivedOne("""

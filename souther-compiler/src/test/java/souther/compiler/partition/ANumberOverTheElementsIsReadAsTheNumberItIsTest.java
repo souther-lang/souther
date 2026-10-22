@@ -315,16 +315,16 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
 
     /**
      * A walk gathering into a set the value at a place of each element ends with as many as there
-     * are different values there. One gathering every element of a set at each holds as many as
-     * differ among all of theirs, which may be more than there are elements — {@code [{1, 2}]}
-     * holds two of them in one — so it is no number of how many differ among the elements, and
-     * is read as how many differ across the sets inside them.
+     * are different values there: an insert's laws say how many its answer holds and which. One
+     * gathering every element of a set at each by a union is not read so — a union's law says how
+     * many and nothing says which.
      */
     @Test
     void whatAWalkGathersIntoASetIsHowManyDifferentValuesItGathers() {
         assertEquals(theOnlyNumber("variedItems"), theOnlyNumber("gatheredItems"));
-        assertEquals(new Quantity.HowManyDifferentAcross(new DecisionSubject.AnInput(TAGS),
-                new DecisionSubject.AnInput(TAGS.element().element())), theOnlyNumber("joined"));
+        List<OnTheWay> joined = statedAll("joined");
+        assertEquals(1, joined.size(), joined::toString);
+        assertInstanceOf(OnTheWay.Declined.class, joined.getFirst());
     }
 
     /**

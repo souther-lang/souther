@@ -2,25 +2,33 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.proof.Slot;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.SideAnswered;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
- * What an operation's law of how many it answers says it adds to one of its arguments: as many as
- * that argument holds, and one for each value it is handed that the argument does not hold yet.
+ * What an operation adds to one of its arguments: its answer holds exactly what that argument
+ * holds and the values it was handed, so it holds as many as the argument and one for each value
+ * handed that the argument did not hold yet.
  *
- * <p>Read off the law and not off which operation it is, so every operation whose law says so is
- * read alike. A set given a value ({@code Set.insert}) and a map given a value under a key
- * ({@code Map.insert}, {@code Map.updateOrInsert}) say it in two cases, holding the value already
- * and not; a union ({@code Set.union}) says it as a count of the elements of the other argument
- * that no element of the first is. Either is what lets a walk whose step is the operation over
- * what it carried be counted by induction: what it ends with holds every value it was handed once.
+ * <p>Read off the operation's laws and not off which operation it is, so every operation whose
+ * laws say so is read alike. Two laws, each saying half: the law of how many its answer holds —
+ * a set given a value and a map given a value under a key say it in two cases, holding the value
+ * already and not; a union says it as a count of the elements of the other argument no element
+ * of the first is — and a law of which values its answer holds, a value being in it exactly where
+ * it is one handed or one the argument held. Both are what lets a walk whose step is the
+ * operation over what it carried be counted by induction: what it ends with holds every value it
+ * was handed, once each.
  */
 public sealed interface AddsWhatItDoesNotHold {
 
@@ -54,13 +62,116 @@ public sealed interface AddsWhatItDoesNotHold {
     /** Where in the holder a value added is looked for. */
     enum Of { ELEMENTS, KEYS }
 
-    /** What {@code law} says the operation adds, or null where it says something else. */
-    static AddsWhatItDoesNotHold of(OperationLaw<DeclaredArgument> law) {
+    /**
+     * What {@code operation} adds beside what the holder holds — or null where its law of how many
+     * it answers, {@code law}, says something else, or nothing stated of its answer beside
+     * others, {@code statedBeside}, says the answer holds exactly what was added and what the
+     * holder held.
+     *
+     * <p>Both, and neither alone. How many the answer holds is not which values it holds: an
+     * answer one larger for each value not held yet could hold other values than the holder's,
+     * and a walk counted by it would count values it was never handed. What the answer holds is
+     * said by the law of membership in it — a value is in it exactly where it is one added or one
+     * the holder held — and the count is then the count of those, which the law of how many says
+     * in the same words.
+     */
+    static AddsWhatItDoesNotHold of(ValueName operation, OperationLaw<DeclaredArgument> law,
+                                    List<LawProposition<Slot>> statedBeside) {
+        AddsWhatItDoesNotHold counted = countedBy(law);
+        if (counted == null) {
+            return null;
+        }
+        for (LawProposition<Slot> each : statedBeside) {
+            if (holdsExactly(counted, operation, each)) {
+                return counted;
+            }
+        }
+        return null;
+    }
+
+    /** What {@code law} counts the operation as adding, or null where it counts something
+     *  else: the half of {@link #of} said by how many the answer holds. */
+    static AddsWhatItDoesNotHold countedBy(OperationLaw<DeclaredArgument> law) {
         if (!(law instanceof OperationLaw.Size<DeclaredArgument> size)) {
             return null;
         }
         LinearForm<LawNumber<DeclaredArgument>> always = size.unconditional();
         return always != null ? theElementsOf(always) : oneValue(size.cases());
+    }
+
+    /**
+     * Whether {@code stated} says a value is in {@code operation}'s answer exactly where it is one
+     * {@code adds} adds or one its holder holds: {@code in(y, answer) ⇔ in(y, added) ∨ in(y,
+     * holder)}, as an equivalence is written ({@code any(all(a, b), all(¬a, ¬b))}).
+     */
+    private static boolean holdsExactly(AddsWhatItDoesNotHold adds, ValueName operation,
+                                        LawProposition<Slot> stated) {
+        if (!(stated instanceof LawProposition.Any<Slot>(List<LawProposition<Slot>> either))
+                || either.size() != 2
+                || !(either.getFirst() instanceof LawProposition.All<Slot>(
+                        List<LawProposition<Slot>> both)) || both.size() != 2
+                || !either.getLast().equals(new LawProposition.All<>(List.of(
+                        both.getFirst().denied(), both.getLast().denied())))) {
+            return false;
+        }
+        ValueName.Stdlib.Operation in = switch (adds) {
+            case OneValue one -> switch (one.of()) {
+                case ELEMENTS -> ValueName.Stdlib.operation("Set", "contains");
+                case KEYS -> ValueName.Stdlib.operation("Map", "containsKey");
+            };
+            case TheElementsOf _ -> ValueName.Stdlib.operation("Set", "contains");
+        };
+        List<LawSubject<Slot>> asked = membershipIn(in, both.getFirst());
+        if (asked == null
+                || !(asked.getLast() instanceof LawSubject.AnswerOf<Slot>(
+                        ValueName.Stdlib.Operation answered, List<LawSubject<Slot>> args))
+                || !answered.equals(operation) || !handedItsOwn(args)
+                || !(both.getLast() instanceof LawProposition.Any<Slot>(
+                        List<LawProposition<Slot>> parts)) || parts.size() != 2) {
+            return false;
+        }
+        LawSubject<Slot> any = asked.getFirst();
+        LawProposition<Slot> inTheHolder = membership(in, any,
+                new LawSubject.Argument<>(new Slot.Place(adds.holder().position())));
+        LawProposition<Slot> inWhatIsAdded = switch (adds) {
+            case OneValue one -> new LawProposition.Same<>(any,
+                    new LawSubject.Argument<>(new Slot.Place(one.value().position())), true);
+            case TheElementsOf elements -> membership(in, any,
+                    new LawSubject.Argument<>(new Slot.Place(elements.from().position())));
+        };
+        return Set.copyOf(parts).equals(Set.of(inTheHolder, inWhatIsAdded));
+    }
+
+    /** That {@code value} is in {@code container}, as a law says it: {@code in}'s answer of the
+     *  two holding. */
+    private static LawProposition<Slot> membership(ValueName.Stdlib.Operation in,
+                                                   LawSubject<Slot> value,
+                                                   LawSubject<Slot> container) {
+        return new LawProposition.Observed<>(new LawSubject.AnswerOf<>(in,
+                List.of(value, container)), new SideAnswered(AnswerAspect.TRUTH, true));
+    }
+
+    /** The value and the container {@code stated} says the one is in, by {@code in}'s answer
+     *  holding, the value being any value at all — or null where it says something else. */
+    private static List<LawSubject<Slot>> membershipIn(ValueName.Stdlib.Operation in,
+                                                       LawProposition<Slot> stated) {
+        return stated instanceof LawProposition.Observed<Slot>(
+                LawSubject.AnswerOf<Slot>(ValueName.Stdlib.Operation asked,
+                        List<LawSubject<Slot>> args), SideAnswered side)
+                && asked.equals(in) && side.equals(new SideAnswered(AnswerAspect.TRUTH, true))
+                && args.size() == 2
+                && args.getFirst() instanceof LawSubject.Argument<Slot>(Slot.Every _)
+                ? args : null;
+    }
+
+    /** Whether {@code args} are an operation's own arguments, each where it was handed. */
+    private static boolean handedItsOwn(List<LawSubject<Slot>> args) {
+        for (int at = 0; at < args.size(); at++) {
+            if (!args.get(at).equals(new LawSubject.Argument<>(new Slot.Place(at)))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** {@code size(h) + howManyMeet(f, no element of h is the element of f)}. */

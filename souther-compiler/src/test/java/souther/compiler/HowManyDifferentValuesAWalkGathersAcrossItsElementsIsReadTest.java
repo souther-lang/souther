@@ -16,7 +16,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * How many different values a walk ends with that adds to what it carried every element of a set
  * inside each element ({@link souther.compiler.meaning.Quantity.HowManyDifferentAcross}) is read
- * off the law of how many the step's operation answers, and is what the language computes.
+ * only where the step's operation has a law of how many its answer holds and a law of which
+ * values those are, and is what the language computes.
+ *
+ * <p>A union has the first and not the second: its law of how many counts what the second set
+ * adds to the first, and nothing says the answer holds those values and the first's. An answer
+ * of that many values need not be them, so a walk of unions is not read as counting them.
  */
 class HowManyDifferentValuesAWalkGathersAcrossItsElementsIsReadTest {
 
@@ -46,11 +51,12 @@ class HowManyDifferentValuesAWalkGathersAcrossItsElementsIsReadTest {
         return said.stream().sorted().toList();
     }
 
-    /** The values the sets hold are related among themselves, and nothing is left of a value
-     *  worked out of them. */
+    /** How many a union holds is not which values: the walk is a value worked out of the
+     *  meetings, and is left so. */
     @Test
-    void howManyPeopleTheMeetingsHadIsReadAsTheValuesTheirSetsHold() {
-        assertEquals(List.of("meetings[*].attendees[*] RULE_RELATING_TWO_VALUES"), notRead("""
+    void aWalkOfUnionsIsNotReadAsTheValuesTheSetsHold() {
+        assertEquals(List.of("meetings RULE_ABOUT_A_DERIVED_VALUE",
+                "meetings[*].attendees RULE_ABOUT_A_DERIVED_VALUE"), notRead("""
                 behavior f : (meetings: List<Meeting>) -> Int | Mixed
                 let f (meetings) = {
                     let everyone: Set<ContactId> =

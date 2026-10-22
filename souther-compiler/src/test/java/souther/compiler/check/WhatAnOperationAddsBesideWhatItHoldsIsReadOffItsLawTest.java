@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.proof.Slot;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.types.ValueName;
 import souther.test.ClosedWorldContract;
@@ -29,31 +31,120 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @ClosedWorldContract
 class WhatAnOperationAddsBesideWhatItHoldsIsReadOffItsLawTest {
 
+    /**
+     * Read where a law of how many says so and a law of what the answer holds says the same
+     * values: an insert, of a value or under a key, whether the library declares it or proves it
+     * of a body that inserts on either arm.
+     */
     @Test
-    void theOperationsReadAsAddingWhatTheyDoNotHoldAreTheOnesWhoseLawSaysSo() {
+    void theOperationsReadAsAddingWhatTheyDoNotHoldAreTheOnesWhoseLawsSaySo() {
         Map<String, String> read = new TreeMap<>();
-        DefaultBoundOperationFacts.get().settled().forEach((operation, settled) -> {
+        Map<String, String> counted = new TreeMap<>();
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        facts.settled().forEach((operation, settled) -> {
             if (settled.get(OperationLaw.Observed.SIZE) instanceof BoundOperationFacts.Settled.ByALaw(
                     OperationLaw<DeclaredArgument> law, var _)
-                    && AddsWhatItDoesNotHold.of(law) instanceof AddsWhatItDoesNotHold adds) {
-                read.put(name(operation), switch (adds) {
-                    case AddsWhatItDoesNotHold.OneValue one -> "holder " + one.holder().position()
-                            + ", value " + one.value().position() + " among its " + one.of();
-                    case AddsWhatItDoesNotHold.TheElementsOf elements -> "holder "
-                            + elements.holder().position() + ", the elements of "
-                            + elements.from().position();
-                });
+                    && AddsWhatItDoesNotHold.countedBy(law) instanceof AddsWhatItDoesNotHold adds) {
+                counted.put(name(operation), said(adds));
+            }
+            if (facts.addsWhatItDoesNotHold(operation) instanceof AddsWhatItDoesNotHold adds) {
+                read.put(name(operation), said(adds));
             }
         });
 
-        // A union's law counts the elements of its second argument the first does not hold, so it
-        // is read with the first as the holder and not the other way round: that the two may be
-        // swapped is no law stated here.
         assertEquals(Map.of(
                 "Map.insert", "holder 2, value 0 among its KEYS",
                 "Map.updateOrInsert", "holder 3, value 0 among its KEYS",
-                "Set.insert", "holder 1, value 0 among its ELEMENTS",
-                "Set.union", "holder 0, the elements of 1"), read);
+                "Set.insert", "holder 1, value 0 among its ELEMENTS"), read);
+        // A union's law of how many counts the elements of its second argument the first does not
+        // hold, with the first as the holder and not the other way round. Nothing says which
+        // values its answer holds, so it is counted and not read: an answer of that many values
+        // need not be those.
+        Map<String, String> countedAlone = new TreeMap<>(counted);
+        countedAlone.keySet().removeAll(read.keySet());
+        assertEquals(Map.of("Set.union", "holder 0, the elements of 1"), countedAlone);
+    }
+
+    private static String said(AddsWhatItDoesNotHold adds) {
+        return switch (adds) {
+            case AddsWhatItDoesNotHold.OneValue one -> "holder " + one.holder().position()
+                    + ", value " + one.value().position() + " among its " + one.of();
+            case AddsWhatItDoesNotHold.TheElementsOf elements -> "holder "
+                    + elements.holder().position() + ", the elements of "
+                    + elements.from().position();
+        };
+    }
+
+    /**
+     * What the answer holds is read off the law of membership in the same words as the law of how
+     * many: a membership law about the holder at another argument, or about another value, is not
+     * what the count adds.
+     */
+    @Test
+    void aMembershipLawOfOtherValuesIsNotWhatTheCountAdds() {
+        ValueName insert = ValueName.Stdlib.operation("Set", "insert");
+        OperationLaw.Size<DeclaredArgument> size = sizeLawOf("Set", "insert");
+        List<LawProposition<Slot>> stated = DefaultBoundOperationFacts.get().relationsOf(insert);
+        assertEquals(AddsWhatItDoesNotHold.countedBy(size),
+                AddsWhatItDoesNotHold.of(insert, size, stated));
+        assertEquals(null, AddsWhatItDoesNotHold.of(insert, size, List.of()),
+                "how many alone");
+        assertEquals(null, AddsWhatItDoesNotHold.of(ValueName.Stdlib.operation("Set", "union"),
+                size, stated), "of another operation's answer");
+        assertEquals(null, AddsWhatItDoesNotHold.of(insert, size,
+                stated.stream().map(each -> swapped(each, 0, 1)).toList()),
+                "the value and the holder the other way round");
+        assertEquals(null, AddsWhatItDoesNotHold.of(insert, size,
+                stated.stream().map(each -> anotherValue(each, 7)).toList()),
+                "what the holder held and another value than the one handed");
+    }
+
+    /** {@code stated} with every value said to be the same as another said to be the same as the
+     *  argument at {@code at} instead. */
+    private static LawProposition<Slot> anotherValue(LawProposition<Slot> stated, int at) {
+        return switch (stated) {
+            case LawProposition.Any<Slot>(var parts) ->
+                    new LawProposition.Any<>(parts.stream().map(p -> anotherValue(p, at))
+                            .toList());
+            case LawProposition.All<Slot>(var parts) ->
+                    new LawProposition.All<>(parts.stream().map(p -> anotherValue(p, at))
+                            .toList());
+            case LawProposition.Same<Slot>(var a, var b, boolean holds) ->
+                    new LawProposition.Same<>(a,
+                            new LawSubject.Argument<>(new Slot.Place(at)), holds);
+            default -> stated;
+        };
+    }
+
+    /** {@code stated} with the arguments at {@code one} and {@code other} trading places
+     *  wherever it names them by place. */
+    private static LawProposition<Slot> swapped(LawProposition<Slot> stated, int one, int other) {
+        return switch (stated) {
+            case LawProposition.Any<Slot>(var parts) ->
+                    new LawProposition.Any<>(parts.stream().map(p -> swapped(p, one, other))
+                            .toList());
+            case LawProposition.All<Slot>(var parts) ->
+                    new LawProposition.All<>(parts.stream().map(p -> swapped(p, one, other))
+                            .toList());
+            case LawProposition.Same<Slot>(var a, var b, boolean holds) ->
+                    new LawProposition.Same<>(swapped(a, one, other), swapped(b, one, other),
+                            holds);
+            case LawProposition.Observed<Slot>(var of, var side) ->
+                    new LawProposition.Observed<>(swapped(of, one, other), side);
+            default -> stated;
+        };
+    }
+
+    private static LawSubject<Slot> swapped(LawSubject<Slot> subject, int one, int other) {
+        return switch (subject) {
+            case LawSubject.Argument<Slot>(Slot.Place(int at)) -> new LawSubject.Argument<>(
+                    new Slot.Place(at == one ? other : at == other ? one : at));
+            // The answer named is the operation's handed its own arguments, which stays so.
+            case LawSubject.AnswerOf<Slot>(var operation, var args)
+                    when operation.name().equals("contains") -> new LawSubject.AnswerOf<>(
+                    operation, args.stream().map(each -> swapped(each, one, other)).toList());
+            default -> subject;
+        };
     }
 
     private static OperationLaw.Size<DeclaredArgument> sizeLawOf(String alias, String name) {
@@ -83,14 +174,14 @@ class WhatAnOperationAddsBesideWhatItHoldsIsReadOffItsLawTest {
         LawProposition.Same<DeclaredArgument> same =
                 (LawProposition.Same<DeclaredArgument>) none.ofTheElement();
 
-        assertEquals(null, AddsWhatItDoesNotHold.of(new OperationLaw.Size<>(replaced(union, added,
+        assertEquals(null, AddsWhatItDoesNotHold.countedBy(new OperationLaw.Size<>(replaced(union, added,
                 new LawNumber.HowManyMeet<>(added.container(), none.denied())))),
                 "the elements some element of the holder is");
-        assertEquals(null, AddsWhatItDoesNotHold.of(new OperationLaw.Size<>(replaced(union, added,
+        assertEquals(null, AddsWhatItDoesNotHold.countedBy(new OperationLaw.Size<>(replaced(union, added,
                 new LawNumber.HowManyMeet<>(added.container(), new LawProposition.SomeElement<>(
                         none.container(), new LawProposition.Same<>(same.one(), same.one(), true),
                         false))))), "an element of the holder against itself");
-        assertEquals(null, AddsWhatItDoesNotHold.of(new OperationLaw.Size<>(replaced(union, added,
+        assertEquals(null, AddsWhatItDoesNotHold.countedBy(new OperationLaw.Size<>(replaced(union, added,
                 new LawNumber.HowManyMeet<>(added.container(), new LawProposition.SomeElement<>(
                         none.container(), same.denied(), false))))),
                 "an element of the holder no element of the other is");
@@ -107,7 +198,7 @@ class WhatAnOperationAddsBesideWhatItHoldsIsReadOffItsLawTest {
                 new OperationLaw.Size.Case<>(insert.cases().get(1).where(),
                         insert.cases().get(0).equalTo()));
 
-        assertEquals(null, AddsWhatItDoesNotHold.of(new OperationLaw.Size<>(swapped)));
+        assertEquals(null, AddsWhatItDoesNotHold.countedBy(new OperationLaw.Size<>(swapped)));
     }
 
     private static LinearForm<LawNumber<DeclaredArgument>> replaced(

@@ -2,8 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -14,6 +17,11 @@ import java.util.Objects;
  * ({@link CountedElements}), about an element of the container and nothing else: whether an
  * occurrence is counted turns on that occurrence alone, so the same value kept at one occurrence
  * and dropped at another is counted where it is kept.
+ *
+ * <p>A statement that reads nothing but positions of the input, so that which places a number of
+ * the kept occurrences is read off is said in full ({@link #placesRead}). One that reads
+ * something no position is — an answer, a value a body bound — is kept by nothing here
+ * ({@link #of}).
  *
  * @param container  where the elements are
  * @param meeting    what an element is kept for meeting
@@ -26,11 +34,32 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
         Objects.requireNonNull(container, "kept among the elements of a container");
         Objects.requireNonNull(meeting, "by a statement about an element");
         Objects.requireNonNull(perElement, "put to rows as an element is");
+        if (PositionsAStatementReads.of(meeting).isEmpty()) {
+            throw new IllegalArgumentException("what keeps the elements of " + container
+                    + " reads something no position is: " + meeting.key());
+        }
+    }
+
+    /** The occurrences of {@code container}'s elements meeting {@code meeting}, or null where it
+     *  reads something no position of the input is. */
+    static KeptOccurrences of(DecisionSubject container, Proposition meeting,
+                              AStatementAtARow perElement) {
+        return PositionsAStatementReads.of(meeting).isEmpty() ? null
+                : new KeptOccurrences(container, meeting, perElement);
     }
 
     /** The container the elements are of. */
     TermPath position() {
         return container.inputPosition();
+    }
+
+    /** Every place of the input this reads: where the elements are, and each position the
+     *  statement reads. */
+    public List<TermPath> placesRead() {
+        List<TermPath> out = new ArrayList<>();
+        out.add(position());
+        PositionsAStatementReads.of(meeting).orElseThrow().forEach(out::add);
+        return List.copyOf(out);
     }
 
     /** What this selects, spelled for a reader and for a coordinate; no identity. The position is

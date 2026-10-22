@@ -773,6 +773,14 @@ public final class OperationFacts {
                             answerOf("Map", "insert", the(at(0)), the(at(1)), the(at(2))))),
                     any(alike(the(ANY), the(at(0))),
                             isTrue(answerOf("Map", "containsKey", the(ANY), the(at(2)))))))),
+            // Either way the key is looked up, its value is inserted under it: what the answer
+            // holds a key of is the key and what the map held one of, proved against the body.
+            about("Map", "updateOrInsert", lemma(related(iff(
+                    isTrue(answerOf("Map", "containsKey", the(ANY),
+                            answerOf("Map", "updateOrInsert", the(at(0)), the(at(1)), the(at(2)),
+                                    the(at(3))))),
+                    any(alike(the(ANY), the(at(0))),
+                            isTrue(answerOf("Map", "containsKey", the(ANY), the(at(3))))))))),
             about("Map", "empty", related(
                     isTrue(answerOf("Map", "containsKey", the(ANY), answerOf("Map", "empty")))
                             .denied())),

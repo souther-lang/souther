@@ -647,6 +647,26 @@ public final class BoundOperationFacts {
     }
 
     /**
+     * What {@code operation} adds to one of its arguments beside what that argument holds
+     * ({@link AddsWhatItDoesNotHold}), where both its law of how many it answers and what is
+     * known of what its answer holds say so — or null where either says something else.
+     *
+     * <p>What its answer holds is what is stated of it beside others: declared of a kernel, or a
+     * lemma of an operation the library writes, which is here only once its body has proved it.
+     */
+    public AddsWhatItDoesNotHold addsWhatItDoesNotHold(ValueName operation) {
+        if (!(settled(operation, OperationLaw.Observed.SIZE) instanceof Settled.ByALaw(
+                OperationLaw<DeclaredArgument> law, var _))) {
+            return null;
+        }
+        List<LawProposition<Slot>> beside = new ArrayList<>(relationsOf(operation));
+        several.getOrDefault(BoundOperationFact.HasARelatedLemma.class, Map.of())
+                .getOrDefault(operation, List.of())
+                .forEach(each -> beside.add(((BoundOperationFact.HasARelatedLemma) each).holds()));
+        return AddsWhatItDoesNotHold.of(operation, law, beside);
+    }
+
+    /**
      * The laws {@code fact} says by being declared: an answer as many as one source holds
      * something where that source does and is as many as it, and an emptiness check comes out
      * true where its argument holds nothing.

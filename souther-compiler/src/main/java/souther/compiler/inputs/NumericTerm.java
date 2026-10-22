@@ -826,16 +826,13 @@ public sealed interface NumericTerm
         }
 
         /** The same number of the run read from where {@code moved} puts this one's — or null
-         *  where that is no run of every occurrence. */
+         *  where that is no run this counts among ({@link #of(RunSource, KeptOccurrences)}), or
+         *  the move takes a place the selection reads elsewhere
+         *  ({@link NumericTerm#selectionStays}). */
         @Override
         public OccurrencesOfItsValue movedTo(UnaryOperator<TermPath> moved) {
-            // A selection names places of the input it was read in, and moves with none of them.
-            if (selection != null) {
-                return null;
-            }
             RunSource at = run.movedTo(moved);
-            return at instanceof RunSource.FlattenedOccurrences flat
-                    ? new OccurrencesOfItsValue(flat, null) : null;
+            return NumericTerm.selectionStays(selection, moved) ? of(at, selection) : null;
         }
 
         @Override
@@ -1142,17 +1139,14 @@ public sealed interface NumericTerm
         }
 
         /** The same number of the elements standing where {@code moved} puts them, or null where
-         *  they are not in as many containers there. */
+         *  they are not in as many containers there, or the move takes a place the selection
+         *  reads elsewhere ({@link NumericTerm#selectionStays}). */
         @Override
         public GatheredUnderItsKey movedTo(UnaryOperator<TermPath> moved) {
-            // A selection names places of the input it was read in, and moves with none of them.
-            if (selection != null) {
-                return null;
-            }
             TermPath at = moved.apply(elements);
-            return at != null && at.containersHoldingIt().size()
-                    == elements.containersHoldingIt().size()
-                    ? underAnyKey(at, key, value, each, gathering, null) : null;
+            return NumericTerm.selectionStays(selection, moved) && at != null
+                    && at.containersHoldingIt().size() == elements.containersHoldingIt().size()
+                    ? underAnyKey(at, key, value, each, gathering, selection) : null;
         }
 
         @Override
@@ -1464,6 +1458,27 @@ public sealed interface NumericTerm
      * what it states of the same number of whatever a call handed that parameter.
      */
     NumericTerm movedTo(UnaryOperator<TermPath> moved);
+
+    /**
+     * Whether {@code selection}, which keeps some of the occurrences a number is of, is the same
+     * selection where {@code moved} puts the places it reads — every one of them handed to the
+     * move, as every place a number is read off is ({@link #placesReadOff}), and each left where
+     * it is. A selection is null where every occurrence is kept, and is the same anywhere.
+     *
+     * <p>A statement names places of the input it was read in, and nothing moves one: the number
+     * is that number under a move leaving its places where they stand, and no number under one
+     * taking them elsewhere.
+     */
+    static boolean selectionStays(KeptOccurrences selection, UnaryOperator<TermPath> moved) {
+        if (selection == null) {
+            return true;
+        }
+        boolean stays = true;
+        for (TermPath read : selection.placesRead()) {
+            stays &= moved.apply(read).equals(read);
+        }
+        return stays;
+    }
 
     /**
      * Every place this number is read off: each place {@link #movedTo} hands the move, which is

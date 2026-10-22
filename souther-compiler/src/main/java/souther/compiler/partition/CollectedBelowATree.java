@@ -221,8 +221,17 @@ final class CollectedBelowATree {
             return true;
         }
 
-        /** A match on what a lookup answered: what it holds where there is something, and the
-         *  other arm's list where there is not. */
+        /**
+         * A match on what a lookup answered, whose arms are one or the other and never both: the
+         * arm with what it holds where there is something, the other where there is not.
+         *
+         * <p>So it is no two lists put end to end. Each arm is read on its own — the first with its
+         * name standing for what the lookup's optional holds — and the match answers one value
+         * either way only where both go down the same fields of the node and only the first holds
+         * the entry: it is then the entry where the node has one, and the same lists below
+         * whichever. An arm going down fields the other does not would collect below some nodes
+         * and not others, which no one value of every node is, and is not read.
+         */
         private Abs evalMatch(Core.Match match, InputReads here, Map<BindingId, Abs> env) {
             if (!(eval(match.scrutinee(), here, env) instanceof Abs.MaybeList maybe)
                     || match.cases().size() != 2) {
@@ -232,12 +241,16 @@ final class CollectedBelowATree {
             Abs.Elems absent = null;
             for (Core.Case arm : match.cases()) {
                 if (arm.binding() instanceof Core.ArmBinding.Payload payload) {
-                    if (present != null || !(Core.withoutStanding(arm.body())
-                            instanceof Core.Read held)
-                            || !held.binding().equals(payload.binder().binding())) {
+                    if (present != null || payload.binder() == null
+                            || payload.binder().binding() == null) {
                         return null;
                     }
-                    present = maybe.of();
+                    Map<BindingId, Abs> holding = new HashMap<>(env);
+                    holding.put(payload.binder().binding(), maybe.of());
+                    if (!(eval(arm.body(), here, holding) instanceof Abs.Elems some)) {
+                        return null;
+                    }
+                    present = some;
                 } else {
                     if (absent != null || !(eval(arm.body(), here, env) instanceof Abs.Elems none)) {
                         return null;
@@ -245,7 +258,8 @@ final class CollectedBelowATree {
                     absent = none;
                 }
             }
-            return present == null || absent == null ? null : present.with(absent);
+            return present == null || absent == null || absent.entries()
+                    || !present.children().equals(absent.children()) ? null : present;
         }
 
         /** A walk from a seed over a field of the node whose step puts the search from each
