@@ -1312,7 +1312,9 @@ public final class WhatARelationLeavesUndivided {
      * cuts only decide how much is proved, never whether what is proved holds.
      *
      * <p>The cuts are the values of the term at which a term apart from it stands at an end of
-     * its run, or at nought, with the rest of the row at nought, and the values beside them.
+     * its run, or at nought, with the rest of the row at nought, and the whole number after each:
+     * a strict relation, or a cut that falls between two whole numbers, moves where the sides
+     * change by one.
      */
     private static <P> boolean reachedPieceByPiece(List<Term<P>> terms, int at,
                                                    ExactRatio constant, Rel relation,
@@ -1352,7 +1354,7 @@ public final class WhatARelationLeavesUndivided {
                 if (floor == null) {
                     continue;
                 }
-                for (int beside = -1; beside <= 2; beside++) {
+                for (int beside = 0; beside <= 1; beside++) {
                     BigInteger start = floor.add(BigInteger.valueOf(beside));
                     if (start.compareTo(first) > 0 && start.compareTo(last) <= 0) {
                         starts.add(start);

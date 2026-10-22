@@ -5954,12 +5954,13 @@ final class Pullback {
      * {@code replacing} is the element at {@code from} read where a choice in it has an arm taken,
      * or null.
      *
-     * <p>An element with a choice by an {@code if} in it is read once for each arm of the choice,
-     * each arm where a run takes it. The arm is taken as the choice and nothing wider, so what
-     * stands around the choice in the element is read as it is written, and it is taken in the
-     * reading of the application the element stands in ({@link InputReads#taking}): the closure
-     * that answers the element is one node however many elements it is applied to, and an arm
-     * taken on the reading of the whole comparison would be every application's.
+     * <p>An element with a choice in it is read once for each arm of the choice, each arm where a
+     * run takes it, as a choice stood at anywhere else is ({@link #goingIn}). The arm is taken as
+     * the choice and nothing wider, so what stands around the choice in the element is read as it
+     * is written, and it is taken in the reading of the application the element stands in
+     * ({@link InputReads#taking}): the closure that answers the element is one node however many
+     * elements it is applied to, and an arm taken on the reading of the whole comparison would be
+     * every application's.
      */
     private Derivation sumOfKept(Inside.ATotalByKeeping total, WaysOfKeeping ways,
                                  Boolean[] decided, int from, Denotation replacing,
@@ -5977,11 +5978,9 @@ final class Pullback {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(
                         LinearForm<Quantity> form) -> sofar.add(form);
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
-                    if (aWayInAt(stopped) instanceof Inside.AChoice(Denotation chosen)
-                            && Core.withoutStanding(chosen.value()) instanceof Core.If iff) {
-                        Derivation condition = observe(iff.cond(), AnswerAspect.TRUTH, chosen.at());
-                        ArmsLeft left = armsLeftBy(condition);
-                        WhyUnread past = made(left.read());
+                    if (aWayInAt(stopped) instanceof Inside.AChoice(Denotation chosen)) {
+                        int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
+                        WhyUnread past = splitInto(element.at(), arms);
                         if (past != null) {
                             elementsMet = metBefore;
                             return partOf(at, new Derivation.Stopped(past, fixed));
@@ -5989,11 +5988,13 @@ final class Pullback {
                         int next = i;
                         List<LinearForm<Quantity>> before = sofar;
                         InputReads application = element.at();
-                        return new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(iff,
-                                chosen.at(), condition, left, arm -> sumOfKept(total, ways,
-                                        decided, next, new Denotation(element.value(),
-                                                application.taking(chosen.value(), arm, 1)),
-                                        before, metBefore, at, fixed, again))));
+                        Derivation byArm = byItsCases(chosen, at, arm -> sumOfKept(total, ways,
+                                decided, next, new Denotation(element.value(),
+                                        application.taking(chosen.value(), arm, arms)),
+                                before, metBefore, at, fixed, again));
+                        if (byArm != null) {
+                            return new Derivation.AComparisonOfAChoice(byArm);
+                        }
                     }
                     elementsMet = metBefore;
                     return partOf(at, abortsAt(stopped) ? new Derivation.TheRunStopsHere()

@@ -22,6 +22,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -228,14 +229,27 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     /** {@code a + b + d - s - 150000 >= 0} for an {@code a} from {@code low} to {@code high}, with
      *  as many of {@code b} and {@code d} as {@code positive} says. */
     private static Leaves ofTheAmounts(Long low, Long high, int positive) {
+        return ofTheAmounts(low, high, positive, Rel.GE, 1);
+    }
+
+    /** The same relation held as {@code relation} where {@code sign} is one, and turned round
+     *  where it is minus one: every weight and the constant negated, and the relation reversed. */
+    private static Leaves ofTheAmounts(Long low, Long high, int positive, Rel relation, int sign) {
         var amount = run(0L, Long.MAX_VALUE);
         List<WhatARelationLeavesUndivided.Term<String>> terms = new ArrayList<>();
-        terms.add(term("a", 1, run(low, high), run(low, high)));
+        terms.add(term("a", sign, run(low, high), run(low, high)));
         for (String place : List.of("b", "d").subList(0, positive)) {
-            terms.add(term(place, 1, amount, amount));
+            terms.add(term(place, sign, amount, amount));
         }
-        terms.add(term("s", -1, amount, amount));
-        return leavesOf(terms, 0, -150000, Rel.GE);
+        terms.add(term("s", -sign, amount, amount));
+        Rel held = sign > 0 ? relation : switch (relation) {
+            case GE -> Rel.LE;
+            case GT -> Rel.LT;
+            case LE -> Rel.GE;
+            case LT -> Rel.GT;
+            default -> relation;
+        };
+        return leavesOf(terms, 0, -150000L * sign, held);
     }
 
     /**
@@ -253,11 +267,29 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         assertEquals(new Leaves.Undivided(), ofTheAmounts(join, Long.MAX_VALUE - 1, 2));
         assertEquals(new Leaves.Undivided(), ofTheAmounts(0L, Long.MAX_VALUE - 1, 2));
         assertEquals(new Leaves.Undivided(), ofTheAmounts(join - 1, join, 2));
-        // With one of the two, {@code d} does what {@code b} did. With neither, an {@code a}
-        // below 150000 is false whatever {@code s} is, and the run is not left either way across.
+        // With one of the two, d does what b did. With neither, an a below 150000 is false
+        // whatever s is, and the run is not left either way across.
         assertEquals(new Leaves.Undivided(), ofTheAmounts(0L, Long.MAX_VALUE - 1, 1));
-        assertFalse(new Leaves.Undivided().equals(ofTheAmounts(0L, Long.MAX_VALUE - 1, 0)));
+        assertNotEquals(new Leaves.Undivided(), ofTheAmounts(0L, Long.MAX_VALUE - 1, 0));
         assertEquals(new Leaves.Undivided(), ofTheAmounts(join, Long.MAX_VALUE - 1, 0));
+    }
+
+    /**
+     * Where one term's reach ends and the other's begins moves by one with the relation being
+     * strict and with the sign of the term asked of: {@code a + b - s > 150000} is false at
+     * 150000 by {@code b} and true at 150001 by {@code s}'s absence, and the same relation turned
+     * round has the join the other side of the cut. The pieces beside a cut are asked as pieces
+     * of their own for that, whichever way the relation is held.
+     */
+    @Test
+    void theJoinOfTwoPiecesMovesWithTheStrictnessOfTheRelationAndTheSignOfTheTerm() {
+        for (Rel relation : List.of(Rel.GE, Rel.GT)) {
+            for (int sign : List.of(1, -1)) {
+                assertEquals(new Leaves.Undivided(),
+                        ofTheAmounts(0L, Long.MAX_VALUE - 2, 1, relation, sign),
+                        relation + " held " + sign);
+            }
+        }
     }
 
     /**
