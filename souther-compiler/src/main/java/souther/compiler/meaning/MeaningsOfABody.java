@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import souther.compiler.check.ClauseName;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -126,6 +127,70 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
         /** The derivation it was concluded from. */
         public Derivation how() {
             return how;
+        }
+
+        /**
+         * The rows on which a run stops in what this states ({@link Derivation.TheRunStopsHere}),
+         * or null where none does: for each place the derivation stops a run at, the conditions of
+         * the {@code if}s it is down an arm of.
+         *
+         * <p>Only what stands between the statement and the stop is a condition of it. Any other
+         * step on the way is left out, so the rows are the rows the way to the stop admits and may
+         * be more than the rows that reach it; a stop is dropped only where the conditions kept
+         * rule every row out.
+         */
+        public Proposition whereARunStops() {
+            List<Proposition> stops = new ArrayList<>();
+            whereARunStopsIn(how, List.of(), stops);
+            return stops.isEmpty() ? null : Proposition.any(stops);
+        }
+
+        private static void whereARunStopsIn(Derivation step, List<Proposition> down,
+                                             List<Proposition> stops) {
+            if (step instanceof Derivation.TheRunStopsHere) {
+                stops.add(Proposition.all(down));
+                return;
+            }
+            if (step instanceof Derivation.IfThenElse(Derivation condition, Derivation then,
+                                                      Derivation otherwise)) {
+                Proposition decides = condition.concludes(Optional.empty());
+                whereARunStopsIn(condition, down, stops);
+                whereARunStopsIn(then, with(down, decides), stops);
+                whereARunStopsIn(otherwise, with(down, decides.denied()), stops);
+                return;
+            }
+            // An arm is down where it selects the value and, for arms taken in order, no arm
+            // before it does; what selects is worked out before any arm.
+            switch (step) {
+                case Derivation.MatchArms(var arms) -> whereARunStopsInArms(arms, true, down, stops);
+                case Derivation.AnOperationsCases(var _, var cases) ->
+                        whereARunStopsInArms(cases, true, down, stops);
+                case Derivation.ASizeInCases(var _, var cases) ->
+                        whereARunStopsInArms(cases, true, down, stops);
+                case Derivation.OneOfItsArms(var arms) ->
+                        whereARunStopsInArms(arms, false, down, stops);
+                default -> WrittenLines.premisesOf(step)
+                        .forEach(each -> whereARunStopsIn(each, down, stops));
+            }
+        }
+
+        private static void whereARunStopsInArms(List<Derivation.MatchArms.Arm> arms,
+                                                 boolean inOrder, List<Proposition> down,
+                                                 List<Proposition> stops) {
+            List<Proposition> before = new ArrayList<>();
+            for (Derivation.MatchArms.Arm arm : arms) {
+                Proposition selects = arm.selects().concludes(Optional.empty());
+                whereARunStopsIn(arm.selects(), down, stops);
+                Proposition reached = inOrder ? Derivation.taken(before, selects) : selects;
+                whereARunStopsIn(arm.states(), with(down, reached), stops);
+                before.add(selects);
+            }
+        }
+
+        private static List<Proposition> with(List<Proposition> down, Proposition more) {
+            List<Proposition> out = new ArrayList<>(down);
+            out.add(more);
+            return out;
         }
 
         @Override

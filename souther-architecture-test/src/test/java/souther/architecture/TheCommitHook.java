@@ -71,8 +71,12 @@ final class TheCommitHook {
 
                 @Override
                 public void addError(AuditEvent event) {
-                    found.add(new Finding(Path.of(event.getFileName()), event.getLine(),
-                            event.getSourceName().substring(event.getSourceName().lastIndexOf('.') + 1),
+                    // A rule that asks one of Error Prone's questions through a general check is
+                    // named for that question, since two of them may run the same check.
+                    String rule = event.getModuleId() != null ? event.getModuleId()
+                            : event.getSourceName().substring(
+                                    event.getSourceName().lastIndexOf('.') + 1);
+                    found.add(new Finding(Path.of(event.getFileName()), event.getLine(), rule,
                             event.getMessage()));
                 }
 

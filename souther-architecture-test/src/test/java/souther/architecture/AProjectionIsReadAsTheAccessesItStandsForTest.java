@@ -281,7 +281,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "abort/AbortSites", "walkGuarded", "(L" + CORE + "$Construct;L" + c
                 + "core/KernelContracts;Ljava/util/Map;Ljava/util/IdentityHashMap;)V",
                 Reading.STRUCTURE, EVALUATION);
-        row(out, c + "check/AdmissibleReading", "gather", "(" + core + "Ljava/util/Set;" + at + ")V",
+        row(out, c + "check/AdmissibleReading", "gather",
+                "(" + core + "Ljava/util/Set;" + at + "Ljava/util/Set;)V",
                 Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
         row(out, c + "check/AffineForms", "composed", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;L" + c
@@ -290,11 +291,15 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "check/ElementsApart", "readOffABinding", "(" + core + ")Ljava/util/List;",
+        row(out, c + "check/ElementsApart", "readOffABinding", "(" + core + "L" + c
+                + "check/DeclarationNewtypes;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/ElementsApart", "bindingUnder",
                 "(" + core + ")L" + c + "types/BindingId;", Reading.STRUCTURE,
                 "asks which binding a run of fields is read off, which is the base");
+        row(out, c + "check/FieldDomains", "readOffAsItStands", "(" + core + ")Z",
+                Reading.STRUCTURE, "asks whether a value is a name or a run of fields read off"
+                        + " one, which the base answers");
         row(out, c + "check/AnalysisBody", "visit", "(" + core + "L" + c
                 + "check/ValueTemplates;Ljava/util/Set;Ljava/util/List;)V",
                 Reading.STRUCTURE, "finds the builds of values, which no name read is");
@@ -321,6 +326,24 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ClosureEntries", "visit", "(" + core + "L" + c
                 + "check/ClosureEntries$Standing;)V", Reading.STRUCTURE,
                 "finds the places a closure is used, which no field read is");
+        row(out, c + "reading/KeptElements", "callWritten",
+                "(" + core + "L" + c + "inputs/InputReads;L" + CORE + "$Call;)L" + c
+                        + "reading/KeptElements$Written;", Reading.STRUCTURE,
+                "finds the call of an operation that an expansion stands for, by the occurrence it"
+                        + " applies, entering each scope on the way, which no field read is");
+        row(out, c + "reading/ValueChoices", "forksInParts", "(" + core + "L" + c
+                + "inputs/InputReads;L" + c + "check/ElementsWrittenOut$Reading;L" + c
+                + "check/DeclarationNewtypes;I"
+                + "Ljava/util/Set;Ljava/util/List;)V", Reading.STRUCTURE,
+                "looks for a fork in a value and in what its names stand for, which no field read is:"
+                        + " a projection is its base, and the base is a name followed the same way");
+        row(out, c + "reading/ElementEvaluations", "writes", "(" + core + core + ")Z",
+                Reading.STRUCTURE,
+                "asks whether an expression is written anywhere in another, which no field read"
+                        + " is: a projection is its base, and what is written in the base is"
+                        + " written in it");
+        row(out, c + "reading/KeptElements", "collect", "(" + core + "L" + CORE
+                + "$Binary;Ljava/util/List;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/EmittedClassReferences", "visit", "(" + core + "L" + c + "types/Type;)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/EmittedClassReferences", "visitChildren",
@@ -354,21 +377,20 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "coverage/CoverageSites$Plan;Ljava/util/Map;Ljava/util/Map;)Ljava/util/Optional;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/PathReachability", "unreached",
-                "(" + core + "L" + c + "check/Known;" + at + reads + "Ljava/util/List;)V",
+                "(" + core + "L" + c + "check/PathReachability$Walked;" + at + reads + ")V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/PathReachability", "appliedToNothing",
                 "(" + core + "L" + c + "reach/Proof;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "check/PathReachability", "walk",
-                "(" + core + "L" + c + "check/Known;" + at + reads + "Ljava/util/List;Z)V",
-                Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "check/Predicates", "chosenCalls",
-                "(" + core + at + "Ljava/util/Map;Ljava/util/Set;)V",
-                Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/Predicates", "names", "(" + core + "L" + c + "check/Term$Chains;" + at
                 + ")Z",
                 Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
         row(out, c + "check/Predicates$Reads", "chain", "(" + core + ")Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "check/Extreme", "comparedAs",
+                "(" + core + "Ljava/lang/Object;L" + c + "check/TheSignOfAnOrder$Sides;)L" + c
+                        + "check/ValueStanding$ReadThrough;", Reading.NAMES,
+                "asks whether the last name read is the value a newtype wears, which goes"
+                        + " nowhere, and answers what it is read off");
         row(out, c + "check/StatedByClauses$Reading", "gather",
                 "(" + core + "Ljava/util/Set;" + at + ")V", Reading.FIRST_HELD,
                 FINDS_THE_FIRST_HELD);
@@ -384,6 +406,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + " is a place exactly where its base is (Location.of): the projections"
                         + " between them answer what the base answers");
         row(out, c + "check/Terms", "rootBinding", "(" + core + ")L" + c + "types/BindingId;",
+                Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "check/Terms", "stepsAlong", "(" + core + ")L" + c + "check/Terms$Steps;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/Terms", "subjectKey", "(" + core + at + ")L" + c + "check/Term;",
                 Reading.NAMES, READS_THE_NAMES);
@@ -408,6 +432,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, EVALUATION);
         row(out, c + "core/WhatABodyReads", "binding",
                 "(" + core + "Lsouther/compiler/types/BindingId;)Z",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "core/WhatABodyReads", "anyBinding", "(" + core + ")Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
@@ -458,7 +484,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "Ljava/util/function/Function;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/ElementProjection$Reading", "steps", "(" + core + "L" + c
-                + "types/BindingId;L" + c + "inputs/BindingTrail;)Ljava/util/List;",
+                + "types/BindingId;L" + c + "inputs/BindingTrail;)L" + c
+                + "inputs/OnePerElement$ReadOff;", Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "inputs/ElementProjection$Reading", "given", "(" + core + "L" + c
+                + "inputs/OnePerElement$ReadOff$Taken;L" + c + "inputs/BindingTrail;)" + core,
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputUses$Walk", "whole", "(" + core + reads + ")V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
@@ -467,11 +496,14 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core,
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputPath", "introducing", "(" + core + "L" + c
-                + "inputs/BindingEnvironment;L" + c + "inputs/InputPath$OfAConstruction;)"
-                + "Ljava/lang/Object;", Reading.NAMES, READS_THE_NAMES);
+                + "inputs/BindingEnvironment;L" + c + "inputs/InputPath$OfAConstruction;)L" + c
+                + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputPath", "named", "(" + core + "L" + c
                 + "inputs/BindingEnvironment;)L" + c + "inputs/PathResolution;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "inputs/InputPath", "through", "(" + core + "L" + c
+                + "inputs/InputPath$Wanted;L" + c + "inputs/BindingEnvironment;)L" + c
+                + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/AffineReading$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/ComparisonAssessment", "readsAnswer", "(" + core + "L" + c
@@ -486,6 +518,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + reads + "L" + c
                 + "partition/ComparisonReadings$Body;)L" + c + "partition/ComparisonReadings$Way;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonReadings", "collectWritten", "(" + core + "L" + c
+                + "partition/ComparisonReadings$Body;Ljava/util/Set;)V", Reading.STRUCTURE,
+                "which comparisons of the model are written in a condition, which no name read is");
         row(out, c + "partition/ComparisonReadings", "holds", "(" + core + core + ")Z",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/ComparisonReadings", "buildsAValue", "(" + core + ")Z",
@@ -511,6 +546,15 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/Pullback", "aWayInto", "(L" + c + "inputs/Denotation;"
                 + "Ljava/util/Set;)L" + c + "partition/Pullback$Inside;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
+        row(out, c + "partition/Pullback", "readOnceForEveryValue", "(" + core + reads
+                + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "check/OrderOfElements", "walk", "(" + core + "Ljava/util/Map;[Z[I)V",
+                Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "check/WhatARunMayEndFor", "of", "(" + core + ")L" + c
+                        + "check/WhatARunMayEndFor$Endings;", Reading.STRUCTURE,
+                "asks each node what it ends a run for, an operator or a call: a name read off a"
+                        + " value ends none, so what a projection may end one for is what its base"
+                        + " may");
         row(out, c + "partition/Pullback", "measuredByCases", "(L" + c + "inputs/Denotation;"
                 + "Ljava/util/Map;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);

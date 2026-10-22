@@ -12,6 +12,7 @@ import souther.compiler.reach.Reachability;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -238,10 +239,11 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             }
             """;
 
+    /** The rows offered for {@code source}, which ask what they read of its measurement; its
+     *  classes, examples and warnings are not read. */
     private static String rowsAskedOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "d");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         return souther.compiler.report.GeneratedRows.of(compilation, "d", "charge",
                 SourceRendering.namedByIdentity(compilation.texts())).text();
     }
@@ -502,16 +504,313 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     /**
-     * A remainder of a place moved by a number keeps what the guards say of it.
+     * A remainder of a place moved by a number keeps what the guards say of it, written in the
+     * guard or named first.
      *
      * <p>Read as the remainder of the place over two stretches, what a guard over the moved
-     * remainder says is one of two things, and a path holds facts that all hold and not one of
-     * several. The guards still rule the same departure out, since they are about one value, and
-     * what they say of it is taken in as the value they are about.
+     * remainder says is one of two things: {@code x < 5} is the place's remainder below four or at
+     * six. Both are about one number, so a path holds them as the values of it they leave, and the
+     * guards rule the same departure out however the remainder was spelled.
      */
     @Test
     void aGuardOverARemainderOfAMovedPlaceStillRulesOutWhatItRulesOut() {
+        String named = """
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x < 5 else Free
+                guard x < 6 else Free
+                """;
+        String inline = """
+                guard Int.floorMod(a.value + 1, 7) < 5 else Free
+                guard Int.floorMod(a.value + 1, 7) < 6 else Free
+                """;
+        for (String guards : List.of(named, inline)) {
+            assertEquals(1, provenIn(charging(guards), "charge").size(),
+                    () -> "nothing under five is six or more, whatever `x` is:\n" + guards);
+        }
+        // A control: under four is no less under five, and nothing above settles the second.
+        assertEquals(List.of(), provenIn(charging("""
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x < 5 else Free
+                guard x < 4 else Free
+                """), "charge"));
+    }
+
+    /**
+     * And what they say of the place's own remainder: a remainder of six moved by one is nought,
+     * whichever of the two the guards name and however the moved one is spelled.
+     */
+    @Test
+    void aGuardOverTheRemainderOfAPlaceRulesOutWhatItLeavesTheMovedRemainder() {
+        List<String> eachWay = List.of("""
+                guard Int.floorMod(a.value, 7) == 6 else Free
+                guard Int.floorMod(a.value + 1, 7) /= 0 else Free
+                """, """
+                guard Int.floorMod(a.value, 7) == 6 else Free
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x /= 0 else Free
+                """, """
+                guard Int.floorMod(a.value, 7) < 3 else Free
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x == 0 else Free
+                """);
+        for (String guards : eachWay) {
+            assertEquals(1, provenIn(charging(guards), "charge").size(),
+                    () -> "the remainder the first leaves is one the second refuses:\n" + guards);
+        }
+    }
+
+    /**
+     * A remainder of a moved place compared with another value is the same stretches of the
+     * place's remainder, each with the moved remainder there against the value — so what a guard
+     * against a number left it reaches the guard against the value, named or written out.
+     */
+    @Test
+    void aGuardOverAMovedRemainderAgainstAnotherValueKeepsWhatTheGuardsAboveSay() {
+        for (String guards : List.of("""
+                guard b.value >= 5 else Free
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x < 5 else Free
+                guard x < b.value else Free
+                """, """
+                guard b.value >= 5 else Free
+                guard Int.floorMod(a.value + 1, 7) < 5 else Free
+                guard Int.floorMod(a.value + 1, 7) < b.value else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard Int.floorMod(a.value + 3, 7) /= b.value else Free
+                """)) {
+            String source = """
+                    module d
+
+                    data Amount = Int invariant value >= 0 && value <= 1000
+                    data Free
+                    data Charged = { yen: Int }
+
+                    behavior charge : (a: Amount, b: Amount) -> Free | Charged
+                        constructs Charged
+                    let charge (a, b) = {
+                    %s    Charged { yen = 1 }
+                    }
+                    """.formatted(guards.indent(4));
+            assertEquals(1, provenIn(source, "charge").size(),
+                    () -> "under five and at least five, or at least seven, is apart:\n" + guards);
+        }
+    }
+
+    /**
+     * A choice between comparisons of two numbers is no set of values of either: one being small
+     * says nothing of the other, so the second guard's departure is taken by a value the first let
+     * through on the other number.
+     */
+    @Test
+    void aChoiceOverTwoNumbersIsNotHeldAsTheValuesOfOne() {
         String source = """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount, b: Amount) -> Free | Charged
+                    constructs Charged
+                let charge (a, b) = {
+                    guard a.value < 3 || b.value < 3 else Free
+                    guard a.value < 3 || a.value > 10 else Free
+                    Charged { yen = 1 }
+                }
+                """;
+
+        assertEquals(List.of(), provenIn(source, "charge"),
+                "a value of five and b of nought takes the second departure");
+    }
+
+    /**
+     * A remainder by a divisor so large that what a guard leaves it, and what it leaves out, are
+     * each hundreds of millions of numbers: what a path holds is the runs, so the same departures
+     * are ruled out as by seven.
+     */
+    @Test
+    void aRemainderByALargeDivisorRulesOutWhatItRulesOutBySeven() {
+        for (String guards : List.of("""
+                let x = Int.floorMod(a.value + 1, 1000000007)
+                guard x < 500000000 else Free
+                guard x < 600000000 else Free
+                """, """
+                let x = Int.floorMod(a.value + 1, 1000000007)
+                guard x < 1000000005 else Free
+                guard x < 1000000006 else Free
+                """, """
+                guard Int.floorMod(a.value, 1000000007) == 1000000006 else Free
+                guard Int.floorMod(a.value + 1, 1000000007) /= 0 else Free
+                """)) {
+            assertEquals(1, provenIn(charging(guards), "charge").size(),
+                    () -> "what the first leaves is what the second refuses:\n" + guards);
+        }
+        assertEquals(List.of(), provenIn(charging("""
+                let x = Int.floorMod(a.value + 1, 1000000007)
+                guard x < 600000000 else Free
+                guard x < 500000000 else Free
+                """), "charge"), "under six hundred million is not all under five hundred million");
+    }
+
+    /**
+     * What a path rules out does not turn on the order its choices are written in, nor on whether
+     * they are written as one condition: with {@code b} at seven or more, the last guard leaves
+     * {@code a > 3}, and then neither part of the choice before it holds.
+     */
+    @Test
+    void whatTheChoicesOfAPathRuleOutDoesNotTurnOnTheirOrder() {
+        List<String> spellings = List.of("""
+                guard b.value >= 7 else Free
+                guard a.value < 4 || a.value + b.value == 10 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                guard a.value < 4 || a.value + b.value == 10 else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard (a.value + b.value == 3 || a.value > 3) && (a.value < 4 || a.value + b.value == 10) else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard (a.value < 4 || a.value + b.value == 10) && (a.value + b.value == 3 || a.value > 3) else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard Int.floorMod(3 - a.value, 7) /= b.value else Free
+                """);
+        for (String guards : spellings) {
+            assertEquals(1, provenIn(charging2(guards), "charge").size(),
+                    () -> "the charge is the one arm nothing reaches:\n" + guards);
+        }
+        assertEquals(List.of(), provenIn(charging2("""
+                guard b.value >= 6 else Free
+                guard a.value < 4 || a.value + b.value == 10 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                """), "charge"), "a of four and b of six reaches the charge");
+    }
+
+    /**
+     * How many choices a path has left undecided does not decide what the ones further on rule out:
+     * the first of them is still taken apart once the guards that single out its part come, however
+     * many stand between.
+     */
+    @Test
+    void aChoiceIsTakenApartWhateverNumberOfChoicesStandBetween() {
+        // Each stronger than the one before, and none ruled out by the choice that opens the path.
+        String between = IntStream.range(0, 20)
+                .mapToObj(i -> "guard a.value > %d || b.value > %d else Free\n".formatted(i, i))
+                .collect(Collectors.joining());
+        assertEquals(1, provenIn(charging2("""
+                guard b.value >= 7 else Free
+                guard a.value < 4 || a.value + b.value == 10 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                """), "charge").size(), "the reference spelling");
+        String closing = """
+                guard b.value >= 7 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                """;
+        String opening = "guard a.value < 4 || a.value + b.value == 10 else Free\n";
+        int first = provenIn(charging2(opening + between + closing), "charge").size();
+        int last = provenIn(charging2(between + opening + closing), "charge").size();
+        assertTrue(first > 0, "the choice opening the path is taken apart at the end");
+        assertEquals(last, first, "and so is it where it stands last");
+    }
+
+    /** A choice the later guards single out the part of, and a guard whose departure it then rules
+     *  out; the guard that settles it comes after, before, or in the same condition. */
+    @Test
+    void aGuardsDepartureIsRuledOutByChoicesWhateverOrderTheyAreWrittenIn() {
+        for (String guards : List.of("""
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                guard b.value >= 7 else Free
+                guard a.value > 3 else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                guard a.value > 3 else Free
+                """, """
+                guard (a.value + b.value == 3 || a.value > 3) && b.value >= 7 else Free
+                guard a.value > 3 else Free
+                """)) {
+            assertEquals(1, provenIn(charging2(guards), "charge").size(),
+                    () -> "the departure of the last guard is one nothing takes:\n" + guards);
+        }
+        assertEquals(List.of(), provenIn(charging2("""
+                guard a.value + b.value == 3 || a.value > 3 else Free
+                guard b.value >= 2 else Free
+                guard a.value > 3 else Free
+                """), "charge"), "a of one and b of two takes it");
+    }
+
+    /** Two choices, the second of which is settled only once the first is. */
+    @Test
+    void choicesSettledOneAfterAnotherRuleOutWhatTheyLeaveNothingOf() {
+        assertEquals(1, provenIn(charging2("""
+                guard a.value < 4 || b.value < 4 else Free
+                guard b.value >= 4 || a.value < 2 else Free
+                guard a.value >= 4 else Free
+                """), "charge").size(), "a of four or more leaves b under four and then a under two");
+    }
+
+    /**
+     * A choice between cases of a value is settled by the arm of a {@code match} on the value, which
+     * is a fact the walk takes in on entering the arm and not a condition: the arm for the third
+     * case is one nothing reaches, and the proof names the guard and the arm.
+     */
+    @Test
+    void aChoiceBetweenCasesIsSettledByTheArmOfAMatchOnTheValue() {
+        String guard = "(match x with | A -> true | B -> false | C -> false) "
+                + "|| (match x with | A -> false | B -> true | C -> false)";
+        List<Proof> proven = provenIn(onFlag(guard), "charge");
+        assertEquals(1, proven.size(), "the arm for C");
+        assertEquals(2, WhatAnAnswerSays.conditionsIn(proven.get(0)).size(),
+                "the guard that sent the path to A or B, and the arm for C");
+        assertEquals(List.of(), provenIn(onFlag(guard + " || (match x with | A -> false | B -> false | C -> true)"),
+                "charge"), "a guard that lets C through leaves the arm for C reached");
+    }
+
+    private static String onFlag(String guard) {
+        return """
+                module d
+
+                data A
+                data B
+                data C
+                data Flag = A | B | C
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (x: Flag) -> Free | Charged
+                    constructs Charged
+                let charge (x) = {
+                    guard %s else Free
+                    match x with
+                    | C -> Charged { yen = 1 }
+                    | A -> Free
+                    | B -> Free
+                }
+                """.formatted(guard);
+    }
+
+    private static String charging2(String guards) {
+        return """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount, b: Amount) -> Free | Charged
+                    constructs Charged
+                let charge (a, b) = {
+                %s    Charged { yen = 1 }
+                }
+                """.formatted(guards.indent(4));
+    }
+
+    /** A behavior charging an amount past {@code guards}, which may name {@code a}. */
+    private static String charging(String guards) {
+        return """
                 module d
 
                 data Amount = Int invariant value >= 0 && value <= 1000
@@ -521,15 +820,9 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 behavior charge : (a: Amount) -> Free | Charged
                     constructs Charged
                 let charge (a) = {
-                    let x = Int.floorMod(a.value + 1, 7)
-                    guard x < 5 else Free
-                    guard x < 6 else Free
-                    Charged { yen = 1 }
+                %s    Charged { yen = 1 }
                 }
-                """;
-
-        assertEquals(1, provenIn(source, "charge").size(),
-                "nothing under five is six or more, whatever `x` is");
+                """.formatted(guards.indent(4));
     }
 
     /**

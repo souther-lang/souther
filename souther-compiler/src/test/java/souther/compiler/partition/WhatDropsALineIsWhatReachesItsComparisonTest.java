@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,7 +54,12 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
      * each of them, and it is one line.
      */
     private static long droppedForNothingArriving(String source) {
-        return reportOf(source).lines().filter(each -> each.contains(NOTHING_ARRIVES))
+        return droppedIn(reportOf(source));
+    }
+
+    /** The same, of a report already written. */
+    private static long droppedIn(String report) {
+        return report.lines().filter(each -> each.contains(NOTHING_ARRIVES))
                 .map(each -> {
                     Matcher at = COMPARISON.matcher(each);
                     return at.find() ? at.group() : each;
@@ -196,6 +202,152 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
                 let below (n) =
                     if n /= 5 then (if n == 5 then "never" else "other") else "five"
                 """));
+    }
+
+    /**
+     * A line between the runs a guard above it chooses between is a line nothing arrives at.
+     *
+     * <p>Past the first guard an amount is below three or above eight, so the line at five and the
+     * values either side of it up to the first guard's lines hold no row that gets there. What the
+     * two runs span together runs straight through five; what each of them holds does not. A line
+     * inside one of the runs is reached from both sides and stands.
+     */
+    @Test
+    void aLineBetweenTheRunsAGuardAboveItChoosesIsDropped() {
+        String report = reportOf(AMOUNT + """
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+
+                let charge (a) = {
+                    guard a.value < 3 || a.value > 8 else Free
+                    guard a.value < 5 else Free
+                    Charged { yen = 500 }
+                }
+                """);
+
+        assertEquals(1, droppedIn(report), () -> "the line at five: " + report);
+        assertFalse(report.contains("nothing could show"),
+                () -> "and none of its points is left owed for want of a row: " + report);
+        assertEquals(0, droppedForNothingArriving(AMOUNT + """
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+
+                let charge (a) = {
+                    guard a.value < 3 || a.value > 8 else Free
+                    guard a.value < 2 else Free
+                    Charged { yen = 500 }
+                }
+                """));
+    }
+
+    /**
+     * A line one run of a choice reaches stands, and its points no run reaches are owed no row.
+     *
+     * <p>Past the first guard an amount is five or below, or above ten. Doubled, the first is at or
+     * below ten and the second past it, so the second guard turns between a row in one run and a
+     * row in the other, and its line between five and six stands.
+     * Six and the values up to ten are in neither run: no value past the first guard stands there,
+     * which is what the rules say of them, as they would where the guard above were one run.
+     */
+    @Test
+    void thePointsOfALineThatNoRunAGuardChoosesReachesAreOwedNoRow() {
+        String report = reportOf(AMOUNT + """
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+
+                let charge (a) = {
+                    guard a.value <= 5 || a.value > 10 else Free
+                    guard a.value * 2 <= 10 else Free
+                    Charged { yen = 500 }
+                }
+                """);
+
+        assertEquals(0, droppedIn(report), () -> "the line stands: " + report);
+        assertTrue(report.contains("no row can stand at the OFF point"),
+                () -> "six is in neither run: " + report);
+        assertFalse(report.contains("nothing could show"),
+                () -> "and no point of the line is left owed for want of a row: " + report);
+    }
+
+    /**
+     * Past the figure for the ways a row is looked along, a choice proves nothing about a line.
+     *
+     * <p>Each flag guard is a choice of its own, so the way to the line at five is split into two
+     * ways for each of them and two more for the amount's. Sixteen of them are every way a row
+     * takes, each holding the amount below three or above eight, and the line goes. One more flag
+     * guard is past the figure: the ways looked along are not every way a row takes, and only the
+     * way whole is a statement about every row — and it runs through five.
+     */
+    @Test
+    void aChoicePastTheFigureForTheWaysLookedAlongDropsNoLine() {
+        assertEquals(1, droppedForNothingArriving(behindFlagGuards(3)));
+        String past = reportOf(behindFlagGuards(4));
+        assertEquals(0, droppedIn(past), () -> "past the figure the line stands: " + past);
+        assertTrue(past.contains("how many ways a row is looked for along"),
+                () -> "and the figure is what it is said to stand for: " + past);
+    }
+
+    /** The guards of the line between two runs, behind {@code flags} choices of their own. */
+    private static String behindFlagGuards(int flags) {
+        StringJoiner fields = new StringJoiner(", ");
+        StringBuilder guards = new StringBuilder();
+        for (int each = 1; each <= flags; each++) {
+            fields.add("p" + each + ": Bool").add("q" + each + ": Bool");
+            guards.append("    guard f.p%d || f.q%d else Free\n".formatted(each, each));
+        }
+        return AMOUNT + """
+                data Flags = { %s }
+
+                behavior charge : (a: Amount, f: Flags) -> Free | Charged
+                    constructs Charged
+
+                let charge (a, f) = {
+                %s    guard a.value < 3 || a.value > 8 else Free
+                    guard a.value < 5 else Free
+                    Charged { yen = 500 }
+                }
+                """.formatted(fields, guards);
+    }
+
+    /**
+     * The same of a remainder, where the runs are runs of what the remainder can be.
+     *
+     * <p>Past the first guard the remainder by seven is below three or is six, and the line at five
+     * lies between. A remainder of the value moved by one is read as the remainder of the value, so
+     * {@code floorMod(a + 1, 7) < 5} is that remainder below four or at six — and the second guard,
+     * read the same way, draws one line between four and five, which neither run reaches, and one
+     * between five and six, which the run at six reaches from one side and nothing reaches from the
+     * other. What the two runs span holds five, and the statement would turn there; the rows that
+     * arrive do not.
+     */
+    @Test
+    void aLineBetweenTheRunsOfARemainderAGuardChoosesIsDropped() {
+        assertEquals(1, droppedForNothingArriving(AMOUNT + """
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+
+                let charge (a) = {
+                    guard Int.floorMod(a.value, 7) < 3 || Int.floorMod(a.value, 7) == 6 else Free
+                    guard Int.floorMod(a.value, 7) < 5 else Free
+                    Charged { yen = 500 }
+                }
+                """));
+        String moved = reportOf(AMOUNT + """
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+
+                let charge (a) = {
+                    guard Int.floorMod(a.value + 1, 7) < 5 else Free
+                    guard Int.floorMod(a.value + 1, 7) < 6 else Free
+                    Charged { yen = 500 }
+                }
+                """);
+        assertEquals(1, droppedIn(moved), () -> "the line nothing reaches: " + moved);
+        assertTrue(moved.contains("wherever a row reaches its line here the rest of it already"
+                        + " decides the outcome"),
+                () -> "and the line the rows arriving reach from one side only: " + moved);
+        assertFalse(moved.contains("nothing could show"),
+                () -> "and no point of the second guard is left owed for want of a row: " + moved);
     }
 
     /**

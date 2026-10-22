@@ -46,7 +46,6 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
 
     private static Map<RuleRef.Invariant, RuleAccounting> accountingOf(String source, String type) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
@@ -130,7 +129,6 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     private static String floorOfAFieldOf(String clause) {
         String source = beside(clause) + "\ndata Holder = { len: Length }\n";
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
         return FieldDomains.of(holder, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
@@ -374,7 +372,6 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     @Test
     void aClauseCanBeAnsweredWithoutTheBoundsStatingIt() {
         Compilation compilation = Compilation.ofSource(beside("value == 3 || value == 5"), "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         FieldDomains read = FieldDomains.of(named,

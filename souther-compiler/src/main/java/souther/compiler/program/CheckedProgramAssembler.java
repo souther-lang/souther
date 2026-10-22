@@ -41,6 +41,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
+import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Compositions;
@@ -72,7 +73,7 @@ import java.util.Set;
  * of a checked program that had to name a query would be reading a compiler rather than a program.
  *
  * <p>Nothing read here is carried into what is made. The compilation, its {@link Db}, and every
- * answer object still tied to one are gone by the time this returns; what is left is values. A
+ * answer object still tied to one are held by nothing this returns; what is left is values. A
  * snapshot holding the session it was taken from would answer differently after the session was
  * edited, which is the one thing a snapshot may not do.
  */
@@ -86,7 +87,32 @@ final class CheckedProgramAssembler {
         // that disagrees, and building the compilation apart from it would make this the one that
         // names a lone file differently — and an output built on either would ship an artifact for
         // what another output refuses to build.
-        Compilation compilation = Compiler.compiled(sources, path, new ArrayList<>());
+        return assembled(Compiler.compiled(sources, path, new ArrayList<>()));
+    }
+
+    /**
+     * Takes what a compilation the caller already holds came to.
+     *
+     * <p>For a reader inside this compiler that has the compilation in hand and its questions
+     * answered, and would otherwise pay for compiling the same sources a second time to be handed
+     * the same program. Not on {@link CheckedProgram}: a compilation is how this compiler answers,
+     * and an output outside it hands over sources.
+     *
+     * <p>The language's verdict is asked here, of {@link Acceptance} as the batch compile asks it, so
+     * a program this answers is one {@link #of(CompilationSources, ModulePath)} answers too, and one
+     * it refuses is refused there. What a refusal lists is what the compilation has found, which for
+     * one whose every question was asked can be more than a batch compile finds before it stops.
+     * What the sources are named by is the caller's: the compilation was built by whoever holds it.
+     *
+     * @throws souther.compiler.diag.CompileException where the program is refused
+     */
+    static CheckedProgram of(Compilation compilation) {
+        Acceptance.of(compilation);
+        return assembled(compilation);
+    }
+
+    /** The snapshot of {@code compilation}, which the language's verdict was asked of. */
+    private static CheckedProgram assembled(Compilation compilation) {
         Db db = compilation.db();
         List<CheckedData> language = languageDataOf(db);
         List<CheckedData> onThePath = declaredOnThePath(db);
@@ -679,10 +705,12 @@ final class CheckedProgramAssembler {
                                 suppliesOf(ran, stated, targets, rowValues), types);
                 case RowStatement.Stated stated -> stated.standIns().isEmpty()
                         ? new CheckedRow.SelfContained(stated,
-                                suppliesOf(ran, stated, targets, rowValues), types,
+                                suppliesOf(ran, stated, targets, rowValues),
+                                assertionOf(ran, stated, rowValues), types,
                                 Position.at(signature.answers()))
                         : new CheckedRow.WithStandIns(stated,
-                                suppliesOf(ran, stated, targets, rowValues), types,
+                                suppliesOf(ran, stated, targets, rowValues),
+                                assertionOf(ran, stated, rowValues), types,
                                 Position.at(signature.answers()));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
                 // What acceptance guarantees, asserted where the guarantee is relied on. A row an
@@ -714,6 +742,46 @@ final class CheckedProgramAssembler {
                                                   Map<String, CheckedHelper> rowValues) {
         return new CheckedRow.Supplies(computing(ran, stated, rowValues),
                 whereArgumentsStand(stated, targets), computingStandIns(ran, stated, rowValues));
+    }
+
+    /**
+     * What {@code ran}'s row states of the answer, as an output holds an answer to it: the definition
+     * computing the value it states, looked up as {@link #computing} looks up the inputs, or the case
+     * it states.
+     *
+     * <p>Over both sums, so a row stating a value that its reading named nothing to compute, and one
+     * stating a case that its reading named a computation for, are each refused by name rather than
+     * handed over with a grain the row was not compared at.
+     */
+    private static CheckedAssertion assertionOf(Output.RowsRead.ReadRow.Ran ran,
+                                                RowStatement.Stated stated,
+                                                Map<String, CheckedHelper> rowValues) {
+        RowOutcome outcome = ran.outcome();
+        Output.RowsRead.ExpectedDefinition named = ran.expectedDefinition();
+        return switch (stated.expects()) {
+            case Expectation.TheValue _ -> switch (named) {
+                case Output.RowsRead.ExpectedDefinition.Computed(String method) ->
+                        new CheckedAssertion.Value(definitionNamed(method, rowValues,
+                                "the value the row states of the answer", outcome));
+                case Output.RowsRead.ExpectedDefinition.NothingComputed _ ->
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row stating a value of the answer whose reading names nothing"
+                                + " as computing it: " + outcome.target() + " "
+                                + outcome.identity().shown() + " at " + outcome.at());
+            };
+            case Expectation.TheCase(TypeSymbol name) -> switch (named) {
+                case Output.RowsRead.ExpectedDefinition.NothingComputed _ ->
+                        new CheckedAssertion.Case(name);
+                case Output.RowsRead.ExpectedDefinition.Computed(String method) ->
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row stating the case `" + name + "` whose reading names `"
+                                + method + "` as computing a value: " + outcome.target() + " "
+                                + outcome.identity().shown() + " at " + outcome.at());
+            };
+            case Expectation.Owed _ -> throw new IllegalStateException("a row whose answer is owed"
+                    + " states nothing an answer is held to: " + outcome.target() + " "
+                    + outcome.identity().shown() + " at " + outcome.at());
+        };
     }
 
     /**

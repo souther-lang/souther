@@ -2,11 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.RowsOfABlock;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
@@ -14,6 +17,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -107,8 +112,8 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
      *
      * <p>A container filled to one total is filled by spreading that total over as many elements as
      * it holds, and there is one spreading. Two totals of one container are two spreadings of one
-     * list of elements at once — which is neither the composing below nor a number read off what it
-     * composed, and is the group this still writes none of.
+     * list of elements at once. Totals of fields of their own are composed together; a total of
+     * the two fields together beside the total of one of them is a group this writes none of.
      */
     private static final String TWO_TOTALS_OF_ONE_CONTAINER = """
             module example.totals
@@ -278,7 +283,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         Model model = new Model(TWO_TOTALS_OF_ONE_CONTAINER);
 
         TermRealizations.JointRealization way = TermRealizations.jointRealizationOf(
-                List.of(model.aTotalOver("a"), model.aTotalOver("b")));
+                List.of(model.aTotalOver("a"), model.aTotalOverBothFields()));
 
         TermRealizations.JointRealization.Missing missing = assertInstanceOf(
                 TermRealizations.JointRealization.Missing.class, way,
@@ -421,8 +426,8 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         assertFalse(rows.contains("would have to hold two values at once"), rows);
         assertFalse(rows.contains("no row for"), rows);
-        assertTrue(rows.contains("// fills c== 2"), rows);
-        assertTrue(rows.contains("// fills c=/= 2"), rows);
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("c== 2")), rows);
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("c=/= 2")), rows);
     }
 
     /** A whole number held to three values, divided by what it leaves by two, three and five. */
@@ -696,6 +701,25 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     subject.ruleReading().source().inners(),
                     subject.ruleReading().source().symbols());
             assertNotNull(over, "a total over the occurrences of a path is a number of the run");
+            return RealizationTarget.of(over);
+        }
+
+        /**
+         * What the elements come to when each is counted as its two fields together, which is a
+         * total of no one field of them.
+         */
+        private RealizationTarget aTotalOverBothFields() {
+            TermPath elements = TermPath.of("slot").then("held").element();
+            NumericTerm.TakenOver over = NumericTerm.TakenOver.of(
+                    ValueName.Stdlib.operation("List", "sum"),
+                    new RunSource.ComputedOccurrences(elements, new ElementValue.Affine(
+                            new LinearForm<>(ExactRatio.ZERO, Map.of(
+                                    ElementProjection.ofFields(List.of("a")), ExactRatio.ONE,
+                                    ElementProjection.ofFields(List.of("b")), ExactRatio.ONE))),
+                            Type.INT, null),
+                    Type.INT, subject.ruleReading().source().inners(),
+                    subject.ruleReading().source().symbols());
+            assertNotNull(over, "a total over what is computed of each element is a number of a run");
             return RealizationTarget.of(over);
         }
 

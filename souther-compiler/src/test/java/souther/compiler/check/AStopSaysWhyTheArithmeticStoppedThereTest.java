@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -111,6 +112,27 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
         assertInstanceOf(AffineForms.Halt.NotLinear.class, stopped.why());
     }
 
+    /**
+     * A call the library states no form of is still where the reading stops, and a product handed to
+     * it is still what its argument stopped for. Handed nothing of the kind, it has no reason of
+     * its own to give.
+     */
+    @Test
+    void aCallWithNoStatedFormSaysWhatItsArgumentStoppedFor() {
+        Core product = binary(BinOp.MUL, X, Y, Type.INT);
+        Core around = call(product);
+        AffineForms.Outcome.StoppedAt<String, String> stopped = stopOf(around);
+        assertSame(around, stopped.node());
+        assertSame(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES,
+                stopped.why().nonAffineOperation().orElseThrow());
+        assertInstanceOf(AffineForms.Halt.NoRule.class, stopOf(call(X)).why());
+    }
+
+    private static Core call(Core argument) {
+        return new Core.Call(Core.Emitted.BUILD_LIST, List.of(argument),
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE, Type.INT, POS);
+    }
+
     /** Which arithmetic no form says is the rule's to name, a product or a quotient. */
     @Test
     void theOperationIsTheOneTheRuleMet() {
@@ -122,13 +144,39 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
     }
 
     /**
+     * What a product or a quotient that is no form stops over is each atom that, were it a
+     * constant, would make it one: the one atom of either factor, and the one atom of the divisor.
+     * An atom beside another in its factor is not one of them, since a constant there leaves the
+     * other multiplied.
+     */
+    @Test
+    void aProductOrAQuotientStopsOverTheAtomsThatWouldMakeItAForm() {
+        LinearForm<String> x = LinearForm.atom("x");
+        LinearForm<String> y = LinearForm.atom("y");
+        LinearForm<String> xAndY = LinearForm.sumOfAtoms("x", "y");
+        assertEquals(Set.of("x", "y"), over(Terms.product(x, y)));
+        assertEquals(Set.of("y"), over(Terms.quotient(x, y)));
+        assertEquals(Set.of("y"), over(Terms.product(xAndY, y)));
+        assertEquals(Set.of(), over(Terms.product(xAndY, xAndY)));
+        assertEquals(Set.of(), over(Terms.quotient(y, xAndY)));
+    }
+
+    private static Set<String> over(Terms.Operated<String> operated) {
+        if (!(operated instanceof Terms.Operated.NotLinear<String>(var _, Set<String> over))) {
+            throw new AssertionError("no form: " + operated);
+        }
+        return over;
+    }
+
+    /**
      * A stop under calls the library states the form of is the stop of what the call was handed, at
      * whatever depth, and it is the one place that says so.
      */
     @Test
     void theOperationIsFoundThroughTheCallsAnArgumentStoppedUnder() {
         AffineForms.Halt<String, String> product =
-                new AffineForms.Halt.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
+                new AffineForms.Halt.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES,
+                        Set.of());
         AffineForms.Halt<String, String> once = new AffineForms.Halt.AnArgumentStopped<>(
                 new AffineForms.Outcome.StoppedAt<>(X, "at", product));
         AffineForms.Halt<String, String> twice = new AffineForms.Halt.AnArgumentStopped<>(

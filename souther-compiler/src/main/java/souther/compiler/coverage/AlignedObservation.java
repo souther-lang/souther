@@ -37,8 +37,10 @@ public final class AlignedObservation {
 
     private final Set<SeenConditionOutcome> outcomes;
 
+    private final Set<SeenVisit> visits;
+
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
-                       Set<SeenConditionOutcome> outcomes) {
+                       Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits) {
         if (numbering == null) {
             throw new IllegalArgumentException(
                     "a run read as places is read as places of some numbering");
@@ -46,8 +48,10 @@ public final class AlignedObservation {
         this.numbering = numbering;
         this.arms = Set.copyOf(arms);
         this.outcomes = Set.copyOf(outcomes);
+        this.visits = Set.copyOf(visits);
         this.arms.forEach(each -> requireOurs(each.numbering(), each));
         this.outcomes.forEach(each -> requireOurs(each.at().numbering(), each));
+        this.visits.forEach(each -> requireOurs(each.at().numbering(), each));
     }
 
     /** What this run is read under, which is what a place put to it has to be a place of. */
@@ -79,6 +83,17 @@ public final class AlignedObservation {
         return outcomes.contains(new SeenConditionOutcome(at, held));
     }
 
+    /**
+     * Whether the run had the condition at {@code at} come out {@code held} on its {@code nth}
+     * visit, counting from none. Refused for a visit the recording does not keep
+     * ({@link RecordedVisit#MOST}): that is not a visit the run did not make, and answering no
+     * would say so.
+     */
+    public boolean sawOnVisit(ConditionOutcomeSite at, int nth, boolean held) {
+        requireOurs(at.numbering(), at);
+        return visits.contains(new SeenVisit(at, nth, held));
+    }
+
     /** Whether the run reached {@code at} at all, whichever way the condition there came out. */
     public boolean reached(ConditionOutcomeSite at) {
         return saw(at, true) || saw(at, false);
@@ -99,12 +114,13 @@ public final class AlignedObservation {
                 || (other instanceof AlignedObservation that
                         && numbering.equals(that.numbering)
                         && arms.equals(that.arms)
-                        && outcomes.equals(that.outcomes));
+                        && outcomes.equals(that.outcomes)
+                        && visits.equals(that.visits));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(numbering, arms, outcomes);
+        return Objects.hash(numbering, arms, outcomes, visits);
     }
 
     @Override

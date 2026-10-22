@@ -11,6 +11,7 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RequiredDependencies;
 import souther.compiler.types.ValueName;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -38,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * be the shapes somebody remembered.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryRowOfferedStandsInWhatItsTargetRequiresTest {
 
     @Test
@@ -45,7 +47,7 @@ class EveryRowOfferedStandsInWhatItsTargetRequiresTest {
         List<String> short_ = new ArrayList<>();
         int rows = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Compilation compilation = corpus.analyse().compilation();
+            Compilation compilation = RepositoryModels.analysed(corpus).compilation();
             for (String module : compilation.modules()) {
                 Offering offering = Adequacy.offeredFor(compilation.db(),
                         new OfferingRequest(module, new GenerationScope.Module()));

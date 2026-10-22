@@ -95,7 +95,8 @@ public sealed interface Weakening {
                  BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
                  ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
                  DecisionOfRowUnreadable _, DecisionRunNotWatched _, DecisionRuleReadShort _,
-                 KeyedOverwriteCasesUnmeasured _, MeetingsNotPlaced _ -> List.of();
+                 KeyedOverwriteCasesUnmeasured _, ReachableNodeCasesUnmeasured _,
+                 MeetingsNotPlaced _, MeetingsNotJoined _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
             case BorderReadingsNotExhausted it -> it.limits();
             case ModelReadingIncomplete it -> it.cause().figures();
@@ -619,6 +620,40 @@ public sealed interface Weakening {
     }
 
     /**
+     * A sum of the elements a comparison keeps whose decisions this reading met and could not join
+     * to the evaluations a run records.
+     *
+     * <p>The sum is a meeting: each element is in it or not, and it is a function of all of them.
+     * What is missing is which evaluation of the comparison a recording holds is which element's,
+     * and without that no row can be held to a combination of them — an element kept by two
+     * comparisons, for one, is evaluated by the second only if the first kept it. So none is asked
+     * for, and which of them the rows make is not measured. Nothing is owed at any of them, because
+     * nothing established that a row is missing; and a behavior is not said to have had every
+     * combination of its decisions made when some of them were never asked about.
+     *
+     * <p>Beside {@link MeetingsNotPlaced}, which is the classes of the input not placing a group
+     * this reading did form. Here there is no group: the decisions were not joined into one. The
+     * reasons are {@code WhyNotJoined}'s, kept by the reading and not published.
+     */
+    record MeetingsNotJoined(String behavior, int groups) implements Weakening {
+
+        public MeetingsNotJoined {
+            Objects.requireNonNull(behavior, "a meeting is a meeting of some behavior");
+            if (groups < 1) {
+                throw new IllegalArgumentException(
+                        "a measure that joined every sum went without nothing here: " + groups);
+            }
+        }
+
+        /** What was joined is a matter of how the body is read, and allowing more reads it the
+         *  same way. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
      * A meeting of the body's decisions the measure would not walk the combinations of.
      *
      * <p>The group is read and its combinations are not enumerated, so which of them the rows make
@@ -739,6 +774,29 @@ public sealed interface Weakening {
          * What is missing is a capacity: this compiler writes no row holding a key twice, and a
          * run allowed more of everything writes none either.
          */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A decision of a body turns on a search from a node for some node below it, and what that
+     * decides was not measured.
+     *
+     * <p>The search is read as it is: what it asks of the node it starts at, and of that node having
+     * nothing below. What is not established is what a node further down meeting what it asks does
+     * to the answer, because a value holding values of its own kind is written so deep and no
+     * deeper, so no row is written toward such a node. About the behavior and not about a rule:
+     * every decision downstream of the search rests on it.
+     */
+    record ReachableNodeCasesUnmeasured(String behavior) implements Weakening {
+
+        public ReachableNodeCasesUnmeasured {
+            Objects.requireNonNull(behavior, "a search is that of some body");
+        }
+
+        /** What is missing is a capacity to write rows, which a run allowed more of does not add. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;

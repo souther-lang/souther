@@ -290,7 +290,7 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
 
                 data Suspect = Alice | Bob | Carol
 
-                let either = if List.fold((t, x) -> t + x, 0, [1, 2]) > 2 then Bob else Carol
+                let either = if List.fold((t, x) -> if x > t then x else t, 0, [1, 2]) > 1 then Bob else Carol
 
                 behavior f : (s: Suspect) -> Bool
                 let f (s) = s == either

@@ -184,9 +184,10 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
     @Test
     void aProductOfTwoFieldsStaysUnread() {
         assertTrue(reasonsOf("overAProductOfFields")
-                        .contains(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                        .contains(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                 "what the closure answers is a product of two fields, which is no form of them, so"
-                        + " the rule is one this could not follow rather than one about a run");
+                        + " the rule is one this could not follow rather than one about a run, and"
+                        + " what it could not follow is that product");
         assertTrue(axesOf("overAProductOfFields").stream()
                         .noneMatch(each -> each.contains("List.sum")),
                 "and no total is measured");

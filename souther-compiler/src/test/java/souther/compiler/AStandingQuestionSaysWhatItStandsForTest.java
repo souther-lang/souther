@@ -233,6 +233,169 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 "invariant Checked #1"), throughAHelper);
     }
 
+    /** What the report says of a rule about a value an operation made of the position. */
+    private static final String MADE_FROM_IT =
+            "it is about a value made from this one, and what it says about the values here is not"
+                    + " worked out";
+
+    /** What the report says of a rule comparing a product of two values neither of which is a
+     *  constant. */
+    private static final String A_PRODUCT =
+            "it compares a product of two values that are not constants, which no line on the values"
+                    + " here says";
+
+    /** Every line of the report saying a question of the rule {@code named} stands. */
+    private static List<String> allAbout(String report, String named) {
+        return report.lines()
+                .filter(line -> line.contains("not accounted for: " + named))
+                .toList();
+    }
+
+    /**
+     * A single value with one invariant, and a behavior that reads it — which is what makes the
+     * question of which values may stand there one the report is asked.
+     */
+    private static String aValueRuledBy(String type, String clause) {
+        return """
+                module probe.derived
+
+                data V = %s
+                    invariant %s
+
+                data Held = { v: V }
+
+                behavior read : (h: Held) -> Ok
+                """.formatted(type, clause);
+    }
+
+    /**
+     * An equality the arithmetic stopped on says where it stopped, as a bound stopped there does.
+     *
+     * <p>A magnitude, a total of the elements: each is a value an operation made of the position,
+     * and nothing here follows that operation back to the values the position may hold. That is
+     * what an author is owed — what would have to be read is the operation — and not that the rule
+     * is a form this compiler has no word for, which sends them to rewrite a clause every reading
+     * recognised.
+     */
+    @Test
+    void anEqualityOnAValueMadeFromThePositionSaysSo() {
+        for (String[] each : List.of(
+                new String[] {"Int", "Int.abs(value) == 3"},
+                new String[] {"List<Int>", "List.sum(value) == 0"})) {
+            assertEquals(List.of("      · not accounted for: invariant V #1"
+                            + " — which values may stand at h.v: " + MADE_FROM_IT),
+                    allAbout(reportOf(aValueRuledBy(each[0], each[1])), "invariant V #1"),
+                    each[1]);
+        }
+    }
+
+    /**
+     * And an equality over a product of two values says that, at each of them.
+     *
+     * <p>{@code net} is the other side of a relation and is not asked here; {@code qty} and
+     * {@code price} are each a factor of a product nothing turns into a line or a set, and the word
+     * for that is the one a bound over the same product is told.
+     */
+    @Test
+    void anEqualityOverAProductOfTwoValuesSaysSoAtEach() {
+        assertEquals(List.of(
+                        "      · not accounted for: invariant Line #1 — which values may stand at"
+                                + " l.qty: " + A_PRODUCT,
+                        "      · not accounted for: invariant Line #1 — which values may stand at"
+                                + " l.price: " + A_PRODUCT),
+                allAbout(reportOf("""
+                        module probe.product
+
+                        data Line = { qty: Int, price: Int, net: Int }
+                            invariant net == qty * price
+
+                        behavior read : (l: Line) -> Ok
+                        """), "invariant Line #1"));
+    }
+
+    /**
+     * A bound over a product says the same of which values may stand there as of where they stop.
+     *
+     * <p>One rule, one arithmetic, one place it stopped: the two questions it raises stand on it
+     * alike.
+     */
+    @Test
+    void aBoundOverAProductSaysTheSameOfBothQuestions() {
+        assertEquals(List.of(
+                        "      · not accounted for: invariant V #1 — which values may stand at h.v: "
+                                + A_PRODUCT,
+                        "      · not accounted for: invariant V #1 — whether the values stop on h.v: "
+                                + A_PRODUCT),
+                allAbout(reportOf(aValueRuledBy("Int", "value * value >= 4")),
+                        "invariant V #1"));
+    }
+
+    /**
+     * A conjunct some reading took in is no part of what the question beside it stands on.
+     *
+     * <p>{@code value >= 0} is taken in by the reading of ends and placed as a line; the magnitude
+     * beside it is what nothing took in. The reading of values has no word for an ordering, and
+     * that is true and is no account of the magnitude — said beside it, an author rewrites a bound
+     * that was read in full.
+     */
+    @Test
+    void aConjunctTakenInIsNoPartOfTheAccountOfTheOneBesideIt() {
+        assertEquals(List.of("      · not accounted for: invariant V #1"
+                        + " — which values may stand at h.v: " + MADE_FROM_IT),
+                allAbout(reportOf(aValueRuledBy("Int",
+                                "value >= 0 && Int.abs(value) == 3")),
+                        "invariant V #1"));
+    }
+
+    /**
+     * And a statement taken in is no part of the account of the statement beside it in one conjunct.
+     *
+     * <p>A helper's body joining two rules is one conjunct stating both, and so is a denied choice.
+     * The first statement is taken in by the reading of values; the second is a form nothing takes
+     * apart, and that is what the question stands on — however the two were put into one conjunct.
+     */
+    @Test
+    void aStatementTakenInIsNoPartOfTheAccountOfTheOneBesideItInOneConjunct() {
+        String formNotRead = "      · not accounted for: invariant V #1"
+                + " — which values may stand at h.v: written in a form this compiler does not read";
+        assertEquals(List.of(formNotRead), allAbout(reportOf("""
+                        module probe.joined
+                        data V = String
+                            invariant ok(value)
+                        data Held = { v: V }
+                        behavior read : (h: Held) -> Ok
+                        let ok (s: String) : Bool = s /= "abc" && UNREAD_S
+                        """.replace("UNREAD_S", ARuleNoReadingTakesIn.about("s"))),
+                        "invariant V #1"),
+                "a helper's body joining two rules");
+        assertEquals(List.of(formNotRead), allAbout(reportOf(aValueRuledBy("String",
+                        "Bool.not(value == \"abc\" || Bool.not(UNREAD_VALUE))")),
+                        "invariant V #1"),
+                "a denied choice");
+    }
+
+    /**
+     * The control on the ones above: an equality something reads leaves no question standing.
+     *
+     * <p>A value written out, a count, a value an operation made that the arithmetic reads to the
+     * end, and a part of a date and a remainder the values are read back out of. Each is taken in by
+     * some reading, and nothing above may have taken that away.
+     */
+    @Test
+    void anEqualitySomethingReadsLeavesNothingStanding() {
+        for (String[] each : List.of(
+                new String[] {"Int", "value == 7"},
+                new String[] {"String", "String.length(value) == 3"},
+                new String[] {"Int", "value * 2 == 4"},
+                new String[] {"Date", "Date.day(value) == 1"},
+                new String[] {"Int", "Int.floorMod(value, 1000) == 0"},
+                new String[] {"Int", "value >= 0 && Int.floorMod(value, 1000) == 0"})) {
+            assertEquals(List.of(),
+                    allAbout(reportOf(aValueRuledBy(each[0], each[1])), "invariant V #1"),
+                    each[1]);
+        }
+    }
+
     /**
      * The document says what the report says, from the same projection.
      *
@@ -276,5 +439,11 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         behavior read : (p: Pair) -> Ok
                         """),
                 "and the order is the author's here too");
+
+        assertEquals(List.of("rule_about_a_derived_value"),
+                stoppedInDocument(aValueRuledBy("Int", "Int.abs(value) == 3")),
+                "and where the arithmetic stopped, its word");
+        assertEquals(List.of("non_affine_product"),
+                stoppedInDocument(aValueRuledBy("Int", "value * value == 4")));
     }
 }

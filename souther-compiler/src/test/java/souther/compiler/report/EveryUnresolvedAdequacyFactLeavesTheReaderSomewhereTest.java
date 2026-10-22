@@ -4,6 +4,7 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * expected. Those are two claims and only the second can go wrong quietly.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
 
     /**

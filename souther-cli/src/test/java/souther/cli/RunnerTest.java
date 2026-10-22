@@ -71,8 +71,9 @@ class RunnerTest {
                     Adult { name = "adult" }
                 }
                 """);
-        assertEquals("{\"name\":\"adult\",\"type\":\"Adult\"}", Runner.run(file, "classify", "20"));
-        assertEquals("{\"age\":10,\"type\":\"Minor\"}", Runner.run(file, "classify", "10"));
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"name\":\"adult\",\"type\":\"Adult\"}", program.run("classify", "20"));
+        assertEquals("{\"age\":10,\"type\":\"Minor\"}", program.run("classify", "10"));
     }
 
     @Test
@@ -113,8 +114,9 @@ class RunnerTest {
                     String.length(key)
                 }
                 """);
-        assertEquals("{\"type\":\"Int\",\"value\":4}", Runner.run(file, "lengthOf", "\"abcd\""));
-        assertEquals("{\"type\":\"NotFound\"}", Runner.run(file, "lengthOf", "\"\""));
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"type\":\"Int\",\"value\":4}", program.run("lengthOf", "\"abcd\""));
+        assertEquals("{\"type\":\"NotFound\"}", program.run("lengthOf", "\"\""));
     }
 
     @Test
@@ -125,8 +127,9 @@ class RunnerTest {
                 behavior decide : (n: Int) -> Approved | Rejected
                 let decide (n) = if n > 0 then Approved else Rejected
                 """);
-        assertEquals("\"Approved\"", Runner.run(file, "decide", "1"));
-        assertEquals("\"Rejected\"", Runner.run(file, "decide", "0"));
+        Runner.Program program = Runner.compile(file);
+        assertEquals("\"Approved\"", program.run("decide", "1"));
+        assertEquals("\"Rejected\"", program.run("decide", "0"));
     }
 
     @Test
@@ -489,9 +492,10 @@ class RunnerTest {
                 behavior g : (n: Int) -> A | B constructs A
                 let g (n) = A { a = n }
                 """);
-        assertEquals("{\"u1\":1}", Runner.run(file, "f", "1"));
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"u1\":1}", program.run("f", "1"));
         // the union's own encoder writes the case, so the answer carries the discriminator
-        assertEquals("{\"a\":1,\"type\":\"A\"}", Runner.run(file, "g", "1"));
+        assertEquals("{\"a\":1,\"type\":\"A\"}", program.run("g", "1"));
     }
 
     /** That a parameter of this type never reaches the runner's decoder: the compile refuses it,
@@ -654,10 +658,11 @@ class RunnerTest {
                 behavior top : (t: Node) -> Out constructs Out
                 let top (t) = Out { n = t.n }
                 """);
-        assertEquals("{\"n\":1}", Runner.run(file, "top", nestedTree(250)));
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"n\":1}", program.run("top", nestedTree(250)));
 
         Runner.RunException e = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "top", nestedTree(251)));
+                () -> program.run("top", nestedTree(251)));
         assertEquals(1, e.exitCode);
         assertTrue(e.getMessage().contains("/kids/0/kids"), e.getMessage());
         assertTrue(e.getMessage().contains("past 500 levels"), e.getMessage());
@@ -685,8 +690,9 @@ class RunnerTest {
         // context's depth, or reading the depth as `at the limit` rather than `past it`, calls this
         // one too deeply nested.
         String longNumber = "[".repeat(500) + "1".repeat(1001) + "]".repeat(500);
+        Runner.Program program = Runner.compile(file);
         Runner.RunException tooLongANumber = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "top", longNumber));
+                () -> program.run("top", longNumber));
         assertTrue(tooLongANumber.getMessage().contains("is not valid JSON"),
                 tooLongANumber.getMessage());
         assertFalse(tooLongANumber.getMessage().contains("nests deeper"),
@@ -695,7 +701,7 @@ class RunnerTest {
         // longer than StreamReadConstraints.getMaxNameLength()
         String longName = "{\"" + "n".repeat(50001) + "\":1}";
         Runner.RunException tooLongAName = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "top", longName));
+                () -> program.run("top", longName));
         assertTrue(tooLongAName.getMessage().contains("is not valid JSON"),
                 tooLongAName.getMessage());
         assertFalse(tooLongAName.getMessage().contains("nests deeper"), tooLongAName.getMessage());
@@ -712,10 +718,11 @@ class RunnerTest {
                 behavior nest : (xs: List<Int>) -> Node constructs Node
                 let nest (xs) = List.fold((acc, x) -> Node { kids = [acc] }, Node { kids = [] }, xs)
                 """);
-        assertEquals("{\"kids\":[{\"kids\":[]}]}", Runner.run(file, "nest", "[1]"));
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"kids\":[{\"kids\":[]}]}", program.run("nest", "[1]"));
 
         Runner.RunException e = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "nest", counting(600)));
+                () -> program.run("nest", counting(600)));
         assertEquals(1, e.exitCode);
         assertTrue(e.getMessage().contains("/kids/0/kids"), e.getMessage());
         assertFalse(e.getMessage().contains("StreamWriteConstraints"), e.getMessage());

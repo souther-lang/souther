@@ -26,6 +26,17 @@ public final class WhatABodyReads {
         return found[0];
     }
 
+    /** Whether {@code e} reads any binding anywhere inside it: a value that reads none is made of
+     *  what is written in it alone. */
+    public static boolean anyBinding(Core e) {
+        if (e instanceof Core.Read) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || anyBinding(child));
+        return found[0];
+    }
+
     /**
      * That {@code e} reads {@code binding} nowhere inside it, as the walk {@link #binding} found
      * it — or empty where it reads it somewhere.

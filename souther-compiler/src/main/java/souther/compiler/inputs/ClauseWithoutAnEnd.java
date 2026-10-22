@@ -21,6 +21,13 @@ import souther.compiler.types.TypeSymbol;
  * why it placed none is no part of the question: the two read one clause with different atoms, and a
  * clause over a number one of them has no atom for is one the other names two positions in.
  *
+ * <p>Save whether the arithmetic named an operation no form says. Where it stopped at one — a
+ * product of two values that are not constants, a quotient by one — every place the comparison
+ * names is told that no line on its values says it, and that sentence is about the arithmetic and
+ * not about the reading's atoms: a line drawn of it beside that would say of one comparison that a
+ * line says it and that none does. So such a clause draws no line, and stays a rule nothing read —
+ * not a rule that draws none.
+ *
  * @param statement which statement of which conjunct this is, as the reading that arrived at it
  *                 named it. What tells one authored line from another is this name, and a reader
  *                 holding the expression alone cannot tell two identical statements apart
@@ -40,10 +47,20 @@ import souther.compiler.types.TypeSymbol;
  *                 clause under a name names no position at all. Nor is it always the name the
  *                 value was written as: a name that writes nothing over another that writes nothing
  *                 is read as that one, and its reads are bound to that one's value
+ * @param noFormSaysIt whether the reading of ends' arithmetic stopped at an operation it names as
+ *                 one no form says
+ * @param ofACopyNothingListed whether the value the clause is written about is a copy of its type
+ *                 the listing of positions does not reach, read only because a path was named. Such
+ *                 a copy answers for what that naming reaches and for no more, so a line its clause
+ *                 draws between places the naming does not reach is a line nobody can be owed a
+ *                 row at — which is for whoever draws the line to see, and not for this to decide
+ *                 from the conjunct, since a conjunct holds several statements and each names its
+ *                 own places
  */
 public record ClauseWithoutAnEnd(InvariantStatementId statement, StatedComparison states,
                                  SourcePos wrote, souther.compiler.core.Core readOutOf,
-                                 TermPath at, TypeSymbol.AtModule readUnder) {
+                                 TermPath at, TypeSymbol.AtModule readUnder,
+                                 boolean noFormSaysIt, boolean ofACopyNothingListed) {
 
     public ClauseWithoutAnEnd {
         if (statement == null || states == null || wrote == null || readOutOf == null
@@ -51,6 +68,12 @@ public record ClauseWithoutAnEnd(InvariantStatementId statement, StatedCompariso
             throw new IllegalArgumentException("a clause is one of a declaration's, is written, is"
                     + " read out of a clause, and is about a value somewhere");
         }
+    }
+
+    /** The same clause, of a copy of its type the listing does not reach. */
+    public ClauseWithoutAnEnd readOnlyThroughANaming() {
+        return new ClauseWithoutAnEnd(statement, states, wrote, readOutOf, at, readUnder,
+                noFormSaysIt, true);
     }
 
     /** Which conjunct of the clause this statement is of. */

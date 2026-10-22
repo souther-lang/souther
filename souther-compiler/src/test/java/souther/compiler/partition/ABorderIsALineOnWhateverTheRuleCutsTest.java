@@ -1,12 +1,16 @@
 package souther.compiler.partition;
 
 import souther.compiler.diag.SourceRendering;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -187,15 +191,20 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         assertTrue(report.contains("read as f/3 * a + 6 * b: = 48"), report);
         assertTrue(report.contains("read as f/3 * a + 6 * b: = 51"), report);
         // And what it leaves the positions is said in the same words as well, whoever wrote it. The
-        // positions are held to their declared runs, so neither reaches every value of the other:
-        // which values of a settle the rule on their own is not worked out.
-        String relating = "it relates the value here to another value not shown to reach every"
-                + " value here, so which values here settle it on their own is not worked out,"
-                + " about `a`";
+        // positions are held to their declared runs, which are all their rules say: every a has a b
+        // of nought, under which the rule holds, and one of ten, under which it fails. A b of three
+        // or less holds it whatever a is and one of nine or more fails it, so those are classes of
+        // b's own, and between them a reaches either side.
+        String relating = "it relates the value here to another value rather than dividing the"
+                + " values here, about `a`";
+        String settledAbove = "`b/9 <= x <= 10`";
+        String between = "`b/3 < x < 9`";
         assertTrue(report.contains(relating), report);
-        assertTrue(report(guarded(
-                        "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"))
-                        .contains(relating),
+        assertTrue(report.contains(settledAbove) && report.contains(between), report);
+        String again = report(guarded(
+                "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"));
+        assertTrue(again.contains(relating) && again.contains(settledAbove)
+                        && again.contains(between),
                 "a body's conditions say it the same way");
     }
 
@@ -476,9 +485,11 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(rows.contains("D(0m), D(2.25m)"),
                 "the point where the form comes to nine:\n" + rows);
-        assertTrue(rows.contains("D(0m), D(2m)"),
-                "and a pair past it, which is what stands for the side the rows leave open:\n"
+        assertTrue(rows.contains("D(0m), D(0m)"),
+                "a pair inside it, which is what stands for the side the rows leave open:\n"
                         + rows);
+        assertTrue(rows.contains("D(52.25m), D(51.125m)"),
+                "and a pair past it, on the other side:\n" + rows);
     }
 
     /**
@@ -762,17 +773,33 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     }
 
     private static String report(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured(model);
         return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String generated(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measured(model);
         return GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).text();
+    }
+
+    /** Each model measured once for the class: a test reads one model's report and the rows it is
+     *  offered, and only reads them. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
+    private static Compilation measured(String model) {
+        return MEASURED.computeIfAbsent(model, source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
     }
 
     /**

@@ -2,8 +2,8 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.NonAffineOperation;
-import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
@@ -71,14 +71,15 @@ public sealed interface WhyUnread {
             case MorePartsThanAreConcluded _ ->
                     Optional.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
             case MoreElementsThanAreWrittenOut _ -> Optional.of(
-                    WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
+                    WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(ElementsWrittenOut.MOST_WALKED));
             case AtNoPosition _, NoMeasureOfItsSize _, OutsideTheLinearFragment _,
                  NotArithmetic _, ANumberNotHeld _, NoNumberOnARun _,
                  TwoElementsOfOneContainer _, NoLawFor _, NoWordsFor _, NotProvedOfItsBody _,
                  NoFormOfWhatItAnswers _, ANumberOfWhatAnOperationAnswers _,
-                 AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
+                 CodePointsOfWhatAnOperationAnswers _, AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
                  WhatARecursiveHelperAnswers _, SeveralValuesNotGoneInto _,
-                 CopiesStateDifferentThings _, NotMetByTheReading _ -> Optional.empty();
+                 CopiesStateDifferentThings _, NotMetByTheReading _,
+                 WhichElementARunStopsAt _ -> Optional.empty();
         };
     }
 
@@ -222,6 +223,18 @@ public sealed interface WhyUnread {
     }
 
     /**
+     * How many of the code points of what {@code madeBy} answers are in a class, where that string
+     * stands at no position: no law of {@code madeBy} says that count in terms of what it was
+     * handed.
+     */
+    record CodePointsOfWhatAnOperationAnswers(ValueName.Stdlib madeBy) implements WhyUnread {
+
+        public CodePointsOfWhatAnOperationAnswers {
+            Objects.requireNonNull(madeBy, "the string was answered by an operation");
+        }
+    }
+
+    /**
      * A clause of the invariant an attempt checks, which could not be read where the attempt
      * builds its value: whether it holds there is what decides between the attempt's arms.
      */
@@ -337,4 +350,17 @@ public sealed interface WhyUnread {
 
     /** A construct the reading of what a body's conditions mean did not meet. */
     record NotMetByTheReading() implements WhyUnread {}
+
+    /**
+     * A statement about the elements of a container, or the steps of a walk, where what is stated
+     * of one answers nothing on some rows — a quotient by what the element holds divides by nought
+     * there — and which element a run stops at turns what the whole comes to, in an order nothing
+     * here says.
+     *
+     * <p>The statement about each element is read. What the operation answers is not: where it
+     * stops at the first element meeting the statement, a run reaching an element that answers
+     * nothing before that one stops there, and where the row's order is not one the row writes
+     * freely, nothing says which comes first.
+     */
+    record WhichElementARunStopsAt() implements WhyUnread {}
 }

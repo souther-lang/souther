@@ -13,6 +13,7 @@ import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -38,8 +39,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Each rule concludes what its own semantics says of what its premises conclude, and the parts
@@ -49,9 +53,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * reading of a model happens to hand it.
  */
 class WhatADerivationConcludesIsWhatItsRuleComputesTest {
-
-    /** How many choices of which statements hold a comparison here is written out as. */
-    private static final long CHOICES = 256;
 
     private static final TermPath A = TermPath.of("a");
     private static final TermPath B = TermPath.of("b");
@@ -91,6 +92,57 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 concluded(new Derivation.Joined(ConditionJoin.BOTH, truthAt(A), truthAt(B))));
         assertEquals(Proposition.any(List.of(truth(A), truth(B))),
                 concluded(new Derivation.Joined(ConditionJoin.EITHER, truthAt(A), truthAt(B))));
+    }
+
+    /**
+     * A part worked out first that answers only where {@code a} holds stops what it is part of
+     * wherever {@code a} fails: there neither the conclusion nor its denial holds, whatever the
+     * rest would decide. Of an if's condition, whether its arms differ or not, of a join's left
+     * half, and of what a match selects by, whichever arm follows and whichever is entered.
+     */
+    @Test
+    void wherePartWorkedOutFirstStopsTheWholeComesOutNoWay() {
+        Derivation stopping = new Derivation.WhereItAnswers(truthAt(A), truthAt(B));
+        List<Derivation> each = List.of(
+                new Derivation.IfThenElse(stopping, truthAt(C), truthAt(S)),
+                new Derivation.IfThenElse(stopping, truthAt(C), truthAt(C)),
+                new Derivation.Joined(ConditionJoin.BOTH, stopping, truthAt(C)),
+                new Derivation.Joined(ConditionJoin.EITHER, stopping, truthAt(C)),
+                new Derivation.MatchArms(List.of(
+                        new Derivation.MatchArms.Arm(stopping, truthAt(C)),
+                        new Derivation.MatchArms.Arm(new Derivation.UnderADenial(stopping, true),
+                                truthAt(S)))),
+                new Derivation.MatchArms(List.of(
+                        new Derivation.MatchArms.Arm(stopping, truthAt(C)),
+                        new Derivation.MatchArms.Arm(new Derivation.CasesWrittenOut(true),
+                                truthAt(S)))),
+                new Derivation.AnArmTaken(List.of(stopping),
+                        new Derivation.CasesWrittenOut(true)));
+        for (Derivation whole : each) {
+            Proposition stated = concluded(whole);
+            for (Proposition way : List.of(stated, stated.denied())) {
+                assertTrue(TruthTable.failsWhateverItsPartsAre(
+                        Proposition.all(List.of(way, truth(A).denied()))),
+                        () -> whole + " comes out " + way + " where it stopped");
+            }
+        }
+    }
+
+    /**
+     * The control: a join's right half is worked out only where the left leaves the join open, so
+     * where the left decides it, the join comes out that way whether the right would have stopped.
+     */
+    @Test
+    void aPartWorkedOutOnlyWhereItIsReachedStopsNothingTheRestDecides() {
+        Derivation stopping = new Derivation.WhereItAnswers(truthAt(A), truthAt(B));
+        Proposition both = concluded(new Derivation.Joined(ConditionJoin.BOTH, truthAt(C),
+                stopping));
+        assertFalse(TruthTable.failsWhateverItsPartsAre(Proposition.all(List.of(
+                both.denied(), truth(A).denied(), truth(C).denied()))), both::toString);
+        Proposition either = concluded(new Derivation.Joined(ConditionJoin.EITHER, truthAt(C),
+                stopping));
+        assertFalse(TruthTable.failsWhateverItsPartsAre(Proposition.all(List.of(
+                either, truth(A).denied(), truth(C)))), either::toString);
     }
 
     @Test
@@ -156,7 +208,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 (LawProposition.SomeElement<?>) lawOf(LIST_ANY, AnswerAspect.TRUTH);
         Derivation meeting = new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.OnTheSideALawNames(
                 (LawProposition.Observed<?>) some.ofTheElement(), truthAt(XS.element())), true,
-                Optional.empty());
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         Proposition someElement = new Proposition.Some(new DecisionSubject.AnInput(XS), truth(XS.element()), true);
         assertEquals(some.holds() ? someElement : someElement.denied(),
                 concluded(new Derivation.ByALaw(callOf(LIST_ANY, some.container(), XS),
@@ -177,15 +229,56 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Derivation.TheCall call = callOf(LIST_ANY, some.container(), XS);
         Derivation overOtherElements = new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(YS),
                 new Derivation.OnTheSideALawNames(observed, truthAt(YS.element())), true,
-                Optional.empty());
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
                 AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some, overOtherElements)));
         // The call's own container, and an argument that stands at no position, are readings.
         new Derivation.ByALaw(call, AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some,
                 new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.OnTheSideALawNames(observed,
-                        truthAt(XS.element())), true, Optional.empty())));
+                        truthAt(XS.element())), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         new Derivation.ByALaw(new Derivation.TheCall(LIST_ANY, Map.of()), AnswerAspect.TRUTH,
                 new Derivation.ALawQuantifies(some, overOtherElements));
+    }
+
+    /**
+     * A lookup finding something across the lists of an outer list is a reading of the key the call
+     * was handed: how often another key occurs is no reading of what {@code Map.get} states of
+     * this one, though the two are counted the same way over the same lists.
+     */
+    @Test
+    void aCountOfAnotherKeyThanTheCallsIsNoReadingOfItsLookup() {
+        LawProposition.SomeElement<?> some =
+                (LawProposition.SomeElement<?>) lawOf(MAP_GET, AnswerAspect.PRESENCE);
+        DeclaredArgument asked = (DeclaredArgument) ((LawSubject.Argument<?>)
+                ((LawProposition.Same<?>) some.ofTheElement()).other()).argument();
+        Derivation.TheCall call = callOf(MAP_GET, asked, A);
+        RunSource.FlattenedOccurrences lists =
+                new RunSource.FlattenedOccurrences(XS.element().element());
+        Derivation ofTheKeyAsked = new Derivation.SomeElementEqualToAKey(
+                NumericTerm.OccurrencesOfAKey.of(lists, A));
+        Derivation ofAnotherKey = new Derivation.SomeElementEqualToAKey(
+                NumericTerm.OccurrencesOfAKey.of(lists, B));
+        assertDoesNotThrow(() -> new Derivation.ByALaw(call, AnswerAspect.PRESENCE,
+                new Derivation.ALawQuantifies(some, ofTheKeyAsked)));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                AnswerAspect.PRESENCE, new Derivation.ALawQuantifies(some, ofAnotherKey)));
+    }
+
+    /**
+     * A lookup finding something concludes the count of its key at least one, whatever a reading
+     * says besides: the derivation holds the count and no statement of its own to conclude.
+     */
+    @Test
+    void aKeyBeingAmongTheElementsConcludesItsCountAtLeastOneAndNothingElse() {
+        NumericTerm.OccurrencesOfAKey count = NumericTerm.OccurrencesOfAKey.of(
+                new RunSource.FlattenedOccurrences(XS.element().element()), A);
+        Relation.OneWay<Quantity> atLeastOne = Relation.OneWay.of(new LinearForm<>(
+                ExactRatio.of(-1), Map.of(new DecisionAtom.OfTheInput(count), ExactRatio.ONE)),
+                Rel.GE);
+        assertEquals(new Proposition.Compared(
+                        new Relation.Affine(atLeastOne.form(), atLeastOne.proposition()),
+                        atLeastOne.holds()),
+                concluded(new Derivation.SomeElementEqualToAKey(count)));
     }
 
     /**
@@ -271,7 +364,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
                     AnswerAspect.TRUTH, new Derivation.ALawQuantifies(contains,
                             new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.TheSameValue(same,
-                                    read[0], read[1]), true, Optional.empty()))));
+                                    read[0], read[1]), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID))));
         }
     }
 
@@ -307,7 +400,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Derivation ofTheSecond = comparison(second, INDEX, LENGTH);
         Derivation aSourceRelation = new Derivation.AComparisonRead(
                 Derivation.ComparisonReading.BY_A_LAW, new Relation.Affine(
-                        LinearForm.atom(LENGTH), Rel.GT), false, CHOICES,
+                        LinearForm.atom(LENGTH), Rel.GT), false,
                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
         Derivation ofAnother = comparison(another, INDEX, LENGTH);
         Derivation aChoiceOfAnotherCase = new Derivation.AComparisonOfAChoice(
@@ -324,7 +417,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         second.form().coefs().keySet().forEach(number -> keyedByTheOther.put(number,
                 LinearForm.atom(INDEX)));
         assertThrows(IllegalArgumentException.class, () -> Derivation.ALawComparison.of(first,
-                keyedByTheOther, Map.of(), List.of(), CHOICES));
+                keyedByTheOther, Map.of(), List.of()));
         // And a choice each of whose cases is the law's comparison, or stopped, is a reading.
         Derivation aChoiceOfTheLaws = new Derivation.AComparisonOfAChoice(
                 new Derivation.IfThenElse(truthAt(A), comparison(first, INDEX, LENGTH),
@@ -351,10 +444,10 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                         !closureTrue.side().holds()));
         Derivation readAsTheOtherSide = new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS),
                 new Derivation.OnTheSideALawNames(closureFalse, truthAt(XS.element())), true,
-                Optional.empty());
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         Derivation readAsTheLawsSide = new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS),
                 new Derivation.OnTheSideALawNames(closureTrue, truthAt(XS.element())), true,
-                Optional.empty());
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
         for (Derivation notOfIt : List.of(
                 new Derivation.ALawQuantifies(theOtherWay(any), readAsTheLawsSide),
                 new Derivation.ALawQuantifies(contains, readAsTheOtherSide),
@@ -373,11 +466,11 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 AnswerAspect.TRUTH, new Derivation.ALawQuantifies(contains,
                         new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.TheSameValue(notSame,
                                 new DecisionSubject.AnInput(XS.element()),
-                                new DecisionSubject.AnInput(A)), true, Optional.empty()))));
+                                new DecisionSubject.AnInput(A)), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID))));
         new Derivation.ByALaw(containsXs, AnswerAspect.TRUTH, new Derivation.ALawQuantifies(
                 contains, new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), new Derivation.TheSameValue(same,
                         new DecisionSubject.AnInput(XS.element()), new DecisionSubject.AnInput(A)),
-                        true, Optional.empty())));
+                        true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         new Derivation.ByALaw(callOf(LIST_ANY, any.container(), XS), AnswerAspect.TRUTH,
                 new Derivation.ALawQuantifies(any,
                         new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
@@ -441,7 +534,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 relationOf(NUMBER_AT_A, NUMBER_AT_B, Rel.GE),
                 relationOf(NUMBER_AT_B, NUMBER_AT_A, Rel.GT),
                 new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
-                        new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true, CHOICES,
+                        new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true,
                         Derivation.AComparisonRead.Facing.NOTHING_WRITTEN),
                 relationOf(NUMBER_AT_A, LENGTH, Rel.GT),
                 truthAt(A))) {
@@ -476,7 +569,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         for (Derivation notTheOrder : List.of(truthAt(A), new Derivation.WrittenOut(true),
                 new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
                         new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true,
-                        CHOICES, Derivation.AComparisonRead.Facing.NOTHING_WRITTEN))) {
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN))) {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.AnOrderOfItsArguments(
                     compareWithItself, aboveNought, notTheOrder), () -> "refused: " + notTheOrder);
         }
@@ -540,8 +633,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             Map<LawNumber<?>, LinearForm<Quantity>> numbers = Map.of(
                     countingByTheClosure.form().coefs().keySet().iterator().next(), stated.count());
             Derivation read = Derivation.ALawComparison.of(countingByTheClosure, numbers, Map.of(),
-                    List.of(new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), stated.settled())),
-                    CHOICES);
+                    List.of(new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), stated.settled())));
             assertEquals(stated.reads(), Derivation.ByALaw.readsTheLaw(countingByTheClosure, read,
                     call), () -> "a count read as " + stated);
         }
@@ -586,8 +678,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static boolean readsTheSum(LawProposition.Compared<DeclaredArgument> law,
                                        LinearForm<Quantity> read, Derivation.TheCall call) {
         return Derivation.ByALaw.readsTheLaw(law, Derivation.ALawComparison.of(law,
-                Map.of(law.form().coefs().keySet().iterator().next(), read), Map.of(), List.of(),
-                CHOICES), call);
+                Map.of(law.form().coefs().keySet().iterator().next(), read), Map.of(), List.of()),
+                call);
     }
 
     /** A count read as {@code count} where every element settled the statement as
@@ -600,7 +692,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                                         Quantity count, Derivation.AComparisonRead.Counted how) {
         return Derivation.ALawComparison.of(law, Map.of(law.form().coefs().keySet().iterator()
                 .next(), LinearForm.atom(count)), Map.of((Quantity.HowManyMeet) count, how),
-                List.of(), CHOICES);
+                List.of());
     }
 
     /** {@code first - second states 0}, read as a comparison of the numbers it is over. */
@@ -608,12 +700,13 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(new LinearForm<>(ExactRatio.ZERO,
                 Map.of(first, ExactRatio.ONE, second, ExactRatio.of(-1))), states);
         return new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
-                new Relation.Affine(one.form(), one.proposition()), one.holds(), CHOICES,
+                new Relation.Affine(one.form(), one.proposition()), one.holds(),
                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
     }
 
     private static final ValueName.Stdlib LIST_ANY = new ValueName.Stdlib.Operation("List", "any");
     private static final ValueName.Stdlib LIST_GET = new ValueName.Stdlib.Operation("List", "get");
+    private static final ValueName.Stdlib MAP_GET = new ValueName.Stdlib.Operation("Map", "get");
     private static final ValueName.Stdlib OPTION_MAP =
             new ValueName.Stdlib.Operation("Option", "map");
     private static final ValueName.Stdlib SET_CONTAINS =
@@ -696,7 +789,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Map<LawNumber<?>, LinearForm<Quantity>> numbers = new LinkedHashMap<>();
         part.form().coefs().keySet().forEach(number -> numbers.put(number, LinearForm.atom(
                 number instanceof LawNumber.SizeOf<?> ? length : index)));
-        return Derivation.ALawComparison.of(part, numbers, Map.of(), List.of(), CHOICES);
+        return Derivation.ALawComparison.of(part, numbers, Map.of(), List.of());
     }
 
     /** The sameness {@code same} states, said the other way. */
@@ -729,19 +822,145 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 truthAt(A));
         assertEquals(Proposition.all(List.of(truth(A),
                         new Proposition.Some(new DecisionSubject.AnInput(XS), truth(XS.element()), true))),
-                concluded(new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), both, true, Optional.empty())));
+                concluded(new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), both, true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         assertEquals(truth(A), concluded(new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), truthAt(A), true,
-                Optional.of(size))));
+                Optional.of(size), HowTheElementsAreAsked.NOT_SAID)));
         assertEquals(true, Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(new DecisionSubject.AnInput(XS), truth(A)));
         assertEquals(false, Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(new DecisionSubject.AnInput(XS),
                 Proposition.all(List.of(truth(A), truth(XS.element())))));
+    }
+
+    /**
+     * An arm about the entry it picked out, whose statement picks out another entry of the same
+     * container, is about two entries: inside one quantifier they would be one subject. It
+     * concludes what was not read, for two elements of one container. The same arm about an
+     * entry of another container is read inside the quantifier, beside the other.
+     */
+    @Test
+    void anArmAboutTwoEntriesOfOneContainerIsReadOfNeither() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Derivation filed = new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("k")),
+                true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        Derivation another = new Derivation.SomeElementMeeting(xs,
+                truthAt(XS.element().then("j")), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        Proposition stated = concluded(new Derivation.MatchArms(List.of(
+                new Derivation.MatchArms.Arm(filed, another, true),
+                new Derivation.MatchArms.Arm(new Derivation.WrittenOut(true), truthAt(A)))));
+        Proposition unread = new Proposition.Unread(Optional.empty(), 0,
+                new WhyUnread.TwoElementsOfOneContainer(), false, true);
+        Proposition some = new Proposition.Some(xs, truth(XS.element().then("k")), true);
+        assertEquals(Proposition.any(List.of(unread,
+                Proposition.all(List.of(some.denied(), truth(A))))), stated);
+
+        Derivation ofAnother = new Derivation.SomeElementMeeting(
+                new DecisionSubject.AnInput(YS), truthAt(YS.element()), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        Proposition read = concluded(new Derivation.MatchArms(List.of(
+                new Derivation.MatchArms.Arm(filed, ofAnother, true),
+                new Derivation.MatchArms.Arm(new Derivation.WrittenOut(true), truthAt(A)))));
+        assertEquals(Proposition.any(List.of(
+                new Proposition.Some(xs, Proposition.all(List.of(truth(XS.element().then("k")),
+                        new Proposition.Some(new DecisionSubject.AnInput(YS), truth(YS.element()),
+                                true))), true),
+                Proposition.all(List.of(some.denied(), truth(A))))), read);
+    }
+
+    /**
+     * A statement about the entry a lookup picked out, which quantifies the same container, is
+     * about two entries: the entry picked out stands at the container's element with no quantifier
+     * around it, and the quantifier inside would take it for its own. It concludes what was not
+     * read, for two elements of one container. The same statement quantifying another container is
+     * read beside what picked the entry out.
+     */
+    @Test
+    void aStatementAboutAnEntryPickedOutThatQuantifiesItsContainerIsReadOfNeither() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Derivation picked = new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("k")),
+                true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        Proposition stated = concluded(new Derivation.OfTheEntryUnderTheKey(picked,
+                new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("j")), true,
+                        Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
+        assertEquals(new Proposition.Unread(Optional.empty(), 0,
+                new WhyUnread.TwoElementsOfOneContainer(), false, true), stated);
+
+        DecisionSubject ys = new DecisionSubject.AnInput(YS);
+        Proposition read = concluded(new Derivation.OfTheEntryUnderTheKey(picked,
+                new Derivation.SomeElementMeeting(ys, truthAt(YS.element()), true,
+                        Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
+        assertEquals(Proposition.all(List.of(new Proposition.Some(ys, truth(YS.element()), true),
+                truth(XS.element().then("k")))), read);
+    }
+
+    /** A quantifier over a container cannot be made to say another over it of its element. */
+    @Test
+    void aQuantifierOverAContainerHoldsNoOtherOverIt() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition inner = new Proposition.Some(xs, truth(XS.element()), true);
+        assertThrows(IllegalArgumentException.class, () -> new Proposition.Some(xs,
+                Proposition.all(List.of(truth(A), inner)), true));
+    }
+
+    /**
+     * What a search asks of each node it reaches names the places under the node it was written
+     * of, and those are the places under the node reached. A quantifier there over the nodes below
+     * is over the nodes below another node, so a quantifier over the nodes below holds that
+     * search, and the search unfolds one step down; a quantifier there over a container outside
+     * the node is over that container, and is refused as any other.
+     */
+    @Test
+    void aSearchNamesThePlacesUnderTheNodeItReachesAndNoOther() {
+        TermPath node = TermPath.of("n");
+        DecisionSubject below = new DecisionSubject.AnInput(node.then("below"));
+        Proposition belowAsked = new Proposition.Some(below,
+                truth(node.then("below").element().then("v")), true);
+        Proposition.SomeReachable reached = new Proposition.SomeReachable(
+                node.then("below").element(), node, List.of("below"), belowAsked,
+                Optional.empty(), true);
+        assertDoesNotThrow(() -> new Proposition.Some(below, reached, true));
+        assertDoesNotThrow(() -> Derivation.ATreeSearched.unfoldsOnce(reached, belowAsked, node,
+                List.of("below"), ConditionJoin.EITHER));
+
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition.SomeReachable outside = new Proposition.SomeReachable(
+                node.then("below").element(), node, List.of("below"),
+                new Proposition.Some(xs, truth(XS.element()), true), Optional.empty(), true);
+        assertThrows(IllegalArgumentException.class, () -> new Proposition.Some(xs, outside, true));
+    }
+
+    /**
+     * A search that starts at the node it was written of reaches that node, where the places it
+     * names under the node are the ones spelled: a quantifier over the nodes below in what it asks
+     * is, at that node, over the nodes below the start. And what it says of the start having none
+     * below is said of the start as it stands. Each inside a quantifier over the nodes below the
+     * start is two quantifiers over one container, and is refused; inside one over another
+     * container it is not.
+     */
+    @Test
+    void aSearchFromTheNodeItWasWrittenOfNamesThePlacesUnderThatNode() {
+        TermPath node = TermPath.of("n");
+        DecisionSubject below = new DecisionSubject.AnInput(node.then("below"));
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition.SomeReachable fromTheNode = new Proposition.SomeReachable(node, node,
+                List.of("below"), new Proposition.Some(below,
+                        truth(node.then("below").element().then("v")), true),
+                Optional.empty(), true);
+        assertThrows(IllegalArgumentException.class,
+                () -> new Proposition.Some(below, fromTheNode, true));
+
+        Proposition.SomeReachable noneBelow = new Proposition.SomeReachable(node, node,
+                List.of("below"), truth(node.then("v")),
+                Optional.of(new Proposition.Some(below, new Proposition.Always(true), false)),
+                true);
+        assertThrows(IllegalArgumentException.class,
+                () -> new Proposition.Some(below, noneBelow, true));
+        assertDoesNotThrow(() -> new Proposition.Some(xs, noneBelow, true));
+        assertDoesNotThrow(() -> new Proposition.Some(xs, fromTheNode, true));
     }
 
     /** A conclusion that has the container's holding anything as a part cannot be made without it. */
     @Test
     void aPartTheConclusionHasMustHaveBeenRead() {
         assertThrows(IllegalStateException.class, () -> concluded(
-                new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), truthAt(A), true, Optional.empty())));
+                new Derivation.SomeElementMeeting(new DecisionSubject.AnInput(XS), truthAt(A), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
     }
 
     /**

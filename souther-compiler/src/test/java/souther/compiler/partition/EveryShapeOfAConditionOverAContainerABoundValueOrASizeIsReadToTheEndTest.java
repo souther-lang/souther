@@ -169,6 +169,8 @@ class EveryShapeOfAConditionOverAContainerABoundValueOrASizeIsReadToTheEndTest {
             case OnTheWay.Declined declined -> into.add(what + " was declined: " + declined.whys());
             case OnTheWay.OneOf oneOf -> oneOf.alternatives()
                     .forEach(each -> each.forEach(one -> declined(one, what, into)));
+            case OnTheWay.Counted counted -> counted.parts()
+                    .forEach(one -> declined(one, what, into));
             case OnTheWay.TakenIn _, OnTheWay.Narrowed _, OnTheWay.Settled _ -> { }
         }
     }

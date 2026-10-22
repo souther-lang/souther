@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -68,6 +69,9 @@ final class Term {
         /** Any other operator, over its two operands in the order written. */
         OP(Payload.of(BinOp.class)),
         LIST(Payload.none()),
+        /** A list written with no elements, at its type: two empty lists of two element types are
+         *  two values, as two empty optionals are. */
+        EMPTY_LIST(Payload.of(Type.class)),
         TUPLE(Payload.none()),
         /** One element of a tuple, by index. */
         PART(Payload.of(Integer.class)),
@@ -676,6 +680,21 @@ final class Term {
         return shape == Shape.CALLED ? (ValueName) of : null;
     }
 
+    /** The text this term is written as, or null where it is no written text. */
+    String writtenText() {
+        return shape == Shape.STRING ? (String) of : null;
+    }
+
+    /** What this construction gave {@code field}, or null where it is no construction or gave no
+     *  field of that name. */
+    Term givenTo(String field) {
+        if (shape != Shape.BUILT) {
+            return null;
+        }
+        int at = ((Built) of).fields().indexOf(field);
+        return at < 0 ? null : parts.get(at);
+    }
+
     /**
      * The whole number this term comes to where it is written whole numbers added, subtracted,
      * multiplied or negated — or null where it is anything else, or the number is out of what an
@@ -795,6 +814,7 @@ final class Term {
             case OP -> sb.append('(').append(parts.get(0).rendered()).append(' ').append(of)
                     .append(' ').append(parts.get(1).rendered()).append(')');
             case LIST -> joined(sb.append('['), ", ").append(']');
+            case EMPTY_LIST -> sb.append("[]");
             case TUPLE -> joined(sb.append('('), ", ").append(')');
             case PART -> sb.append(parts.get(0).rendered()).append('.').append(of);
             case CHOICE -> joined(sb.append("if("), ", ").append(')');
@@ -1023,6 +1043,13 @@ final class Term {
 
         Term list(List<Term> elements) {
             return of(Shape.LIST, null, elements);
+        }
+
+        /** A list written with no elements, held at its type as {@link #none} is: an empty list
+         *  of whole numbers and one of decimals are two values, and what is worked out over them —
+         *  the sum of none of them — is a whole number for one and a decimal for the other. */
+        Term emptyList(Type type) {
+            return of(Shape.EMPTY_LIST, type, List.of());
         }
 
         Term tuple(List<Term> elements) {

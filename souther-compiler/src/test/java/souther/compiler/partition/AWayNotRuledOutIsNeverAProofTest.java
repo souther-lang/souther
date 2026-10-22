@@ -107,7 +107,6 @@ class AWayNotRuledOutIsNeverAProofTest {
                 behavior f : (xs: List<Int>) -> Yes
                 let f (xs) = Yes
                 """, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().getFirst();
         var inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
         assertNotNull(inputs, "the model under test compiles");

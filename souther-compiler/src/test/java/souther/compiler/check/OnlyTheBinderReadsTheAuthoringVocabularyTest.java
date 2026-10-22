@@ -296,11 +296,17 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                             + " that only operations apply"),
             new Reader("souther.compiler.check.Reductions",
                     "what a call hands its closure, for a walk from a seed"),
+            new Reader("souther.compiler.check.OrderOfElements",
+                    "which argument is the closure an operation goes through a list with until it"
+                            + " answers one way, for what that closure may end a run for"),
             new Reader("souther.compiler.check.Predicates",
                     "what a call hands its closure, for what a predicate over the elements"
                             + " establishes"),
             new Reader("souther.compiler.check.UniversalElementFacts",
                     "what a call hands its closure, for what holds of what the closure answered"),
+            new Reader("souther.compiler.check.DefaultBoundOperationFacts",
+                    "which argument's every element a call lists once, for the walk that follows a"
+                            + " list down to the input its elements came from"),
             new Reader("souther.compiler.check.TotalityChecker",
                     "what a call hands its closure, for crediting an element as a sub-term of its"
                             + " container"),

@@ -4,9 +4,11 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.ConstraintState;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Congruences;
@@ -20,7 +22,6 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.ProjectionCertification;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
@@ -36,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -181,15 +183,67 @@ final class ReadQuantities implements Quantities {
      * many times: where a form runs, whether anything is left, and where the next form runs are
      * three questions under one context.
      *
-     * <p>Per value, since what was taken in is this value's. The part no caller said anything to is
-     * {@link #contexts}, and is not kept twice.
+     * <p>Per what was taken in, since that is what the rules are said with. Every reading made from
+     * this one by fixing terms took in the same and holds this same memo, and what is kept in it is
+     * worked out by a reading holding what was taken in and nothing fixed ({@link #unfixed}), so
+     * that no candidate a search fixes can reach what the others are answered from. The part no
+     * caller said anything to is {@link #contexts}, and is not kept twice.
      */
-    private final Map<StructuralContext, ConstraintState<InputAtom>> answered =
-            new ConcurrentHashMap<>();
+    private final Map<StructuralContext, ConstraintState<InputAtom>> answered;
     /** The same, of those rules with this value's fixings standing in them. Beside the one above
      *  and not in place of it: a form a caller takes in is spaced by what the declarations say,
      *  and not by what a fixing happened to settle. */
     private final Map<StructuralContext, ConstraintState<InputAtom>> withTheFixings =
+            new ConcurrentHashMap<>();
+
+    /**
+     * The term this reading fixed one more of than the reading it was made from, with what that
+     * one had worked out of its fixings — or null where it was not made that way.
+     *
+     * <p>Carried so that the rules with the fixings in them can be the ones that reading held with
+     * the one term put on, rather than every fixing put on again ({@link #effectiveConstraints}).
+     * What this reading answers is settled by what it was told and never by this.
+     */
+    private final OneMoreFixed oneMoreFixed;
+
+    /**
+     * The condition what this reading took in has one more of than another reading's, with the
+     * rules that one had worked out — or null where what it took in was not made that way.
+     *
+     * <p>Carried through every fixing, since a fixing changes nothing taken in, so that the rules
+     * this reading's conditions make can be the ones before with one condition put on
+     * ({@link #constraints}). What this reading answers is settled by what it was told and never
+     * by this.
+     */
+    private final OneMoreTaken oneMoreTaken;
+
+    /**
+     * {@code term} fixed at the end of the fixings of a reading that held {@code rulesBefore} and
+     * {@code runsBefore} as its own {@link #withTheFixings} and {@link #whereEachTermRuns} — and not
+     * that reading, which holds what it spends its answers out of and is no part of this one.
+     */
+    private record OneMoreFixed(
+            NumericTerm term,
+            Map<StructuralContext, ConstraintState<InputAtom>> rulesBefore,
+            Map<NumericTerm, Optional<NumericDomain.Bounds>> runsBefore) {}
+
+    /**
+     * {@code taken} at the end of what a reading had taken in, which held {@code takenBefore} as its
+     * own {@link #answered} — and not that reading.
+     */
+    private record OneMoreTaken(
+            Assumed taken,
+            Map<StructuralContext, ConstraintState<InputAtom>> takenBefore) {}
+
+    /**
+     * Where each term this reading has been asked about runs, without what the declarations hold
+     * it to besides ({@link #whereOneTermRuns}), and empty where nothing here bounds it.
+     *
+     * <p>Kept because a fixing is put on by where its term runs, and a reading made by fixing one
+     * more term asks where each fixing of this one runs here — so every reading made from this one
+     * asks the same of it.
+     */
+    private final Map<NumericTerm, Optional<NumericDomain.Bounds>> whereEachTermRuns =
             new ConcurrentHashMap<>();
 
     /**
@@ -312,8 +366,13 @@ final class ReadQuantities implements Quantities {
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
                            RuleReadingContext ruleReading, List<Assumed> assumed,
-                           List<HeldAgainst> heldAgainst, Contexts contexts) {
+                           List<HeldAgainst> heldAgainst, Contexts contexts,
+                           OneMoreFixed oneMoreFixed, OneMoreTaken oneMoreTaken,
+                           Map<StructuralContext, ConstraintState<InputAtom>> answered) {
         this.contexts = contexts;
+        this.answered = answered;
+        this.oneMoreFixed = oneMoreFixed;
+        this.oneMoreTaken = oneMoreTaken;
         this.cases = List.copyOf(cases);
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
@@ -338,7 +397,8 @@ final class ReadQuantities implements Quantities {
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading) {
         return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
-                ruleReading, List.of(), List.of(), new Contexts());
+                ruleReading, List.of(), List.of(), new Contexts(), null, null,
+                new ConcurrentHashMap<>());
     }
 
     /**
@@ -352,7 +412,21 @@ final class ReadQuantities implements Quantities {
     private ReadQuantities unrefined() {
         return fixed.isEmpty() && assumed.isEmpty() ? this
                 : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                        List.of(), List.of(), contexts);
+                        List.of(), List.of(), contexts, null, null, new ConcurrentHashMap<>());
+    }
+
+    /**
+     * This reading with what it took in and nothing fixed, which is the one {@link #answered} is
+     * worked out by.
+     *
+     * <p>Made rather than remembered, and only where a context is first asked about, as
+     * {@link #unrefined} is: what every reading fixing terms of the same conditions is answered
+     * from is then worked out by a value that holds no fixing, whichever of them asked first.
+     */
+    private ReadQuantities unfixed() {
+        return fixed.isEmpty() ? this
+                : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
+                        assumed, heldAgainst, contexts, null, oneMoreTaken, answered);
     }
 
     /**
@@ -378,10 +452,72 @@ final class ReadQuantities implements Quantities {
                 fieldTypes.put(field, typeAt.apply(field.from(computed.elements())));
             }
             return TermOrdering.of(term, computed.each(), fieldTypes,
+                    onTheWay(computed.computation().reads(), computed.elements()),
+                    ruleReading.source().symbols(), ruleReading.source().declarations());
+        }
+        NumericTerm.GatheredUnderItsKey gathered = term instanceof NumericTerm.GatheredUnderAKey asked
+                ? asked.gathered()
+                : term instanceof NumericTerm.GatheredUnderItsKey own ? own : null;
+        if (gathered != null) {
+            // As a computed run is: what a key's numbers come to stands as what each of them
+            // does, and the key and the fields each number reads are read on their own types.
+            Map<ElementProjection, Type> fieldTypes = new LinkedHashMap<>();
+            for (ElementProjection field : gathered.fieldsRead()) {
+                fieldTypes.put(field, typeAt.apply(field.from(gathered.elements())));
+            }
+            // An element is put to the statement keeping some of them as it stands, so what is
+            // written on the way to each place the statement reads is said there too.
+            Set<ElementProjection> walked = new LinkedHashSet<>(gathered.fieldsRead());
+            if (gathered.selection() != null) {
+                for (TermPath read : PositionsAStatementReads.of(gathered.selection().meeting())
+                        .orElse(List.of())) {
+                    ElementProjection within = ElementProjection.below(gathered.elements(), read);
+                    if (within != null) {
+                        walked.add(within);
+                    }
+                }
+            }
+            return TermOrdering.of(term, gathered.each(), fieldTypes,
+                    onTheWay(walked, gathered.elements()),
+                    ruleReading.source().symbols(), ruleReading.source().declarations());
+        }
+        if (term instanceof NumericTerm.OfAnElementsNeighbours among) {
+            Map<ElementProjection, Type> onTheWay =
+                    onTheWay(among.fieldsRead(), among.container().element());
+            // The values are read on their own place's order, and which elements are of one key on
+            // the key's.
+            Map<ElementProjection, Type> keyType = new LinkedHashMap<>();
+            if (among instanceof NumericTerm.ExtremeOfItsKey extreme) {
+                Type keyedOn = typeAt.apply(extreme.key());
+                if (keyedOn != null) {
+                    keyType.put(extreme.keyField(), keyedOn);
+                }
+            }
+            return TermOrdering.of(term, typeAt.apply(term.subjectPath()), keyType, onTheWay,
                     ruleReading.source().symbols(), ruleReading.source().declarations());
         }
         return TermOrdering.of(term, typeAt.apply(term.subjectPath()),
                 ruleReading.source().symbols(), ruleReading.source().declarations());
+    }
+
+    /**
+     * What stands at every place on the way to each of {@code read}, from the element at
+     * {@code element}: what a value there is written inside of is the declaration's to say there.
+     */
+    private Map<ElementProjection, Type> onTheWay(Collection<ElementProjection> read,
+                                                  TermPath element) {
+        Map<ElementProjection, Type> out = new LinkedHashMap<>();
+        for (ElementProjection each : read) {
+            for (ElementProjection place : each.onTheWay()) {
+                if (!out.containsKey(place)) {
+                    Type there = typeAt.apply(place.from(element));
+                    if (there != null) {
+                        out.put(place, there);
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     @Override
@@ -544,6 +680,28 @@ final class ReadQuantities implements Quantities {
          */
         private final CanonicalOrder<InputAtom> order = InputAtom.inOneOrder();
 
+        /**
+         * Where each number taken over a run runs ({@link RunReach}), and empty where nothing
+         * bounds it.
+         *
+         * <p>Kept here and not on a reading, because it is no reading's: what the values a run
+         * walks guarantee is the declarations', and fixing a position or taking a condition in
+         * says nothing of it. Every refinement is a new reading and would walk the run again.
+         */
+        private final Map<NumericTerm.TakenOver, Optional<NumericDomain.Bounds>> runs =
+                new ConcurrentHashMap<>();
+
+        NumericDomain.Bounds runOf(NumericTerm.TakenOver over, ReadQuantities asking) {
+            Optional<NumericDomain.Bounds> had = runs.get(over);
+            if (had != null) {
+                return had.orElse(null);
+            }
+            NumericDomain.Bounds made = RunReach.of(over, asking.ordersOf(over), asking.typeAt,
+                    asking.ruleReading);
+            runs.put(over, Optional.ofNullable(made));
+            return made;
+        }
+
         UnderAContext under(StructuralContext context, ReadQuantities asking) {
             UnderAContext had = read.get(context);
             if (had != null) {
@@ -583,6 +741,19 @@ final class ReadQuantities implements Quantities {
     }
 
     private static final AtomicLong CONTEXTS_READ = new AtomicLong();
+
+    /**
+     * How many fixings and conditions have been put onto rules, for a test holding a reading
+     * narrowed by one step to putting that one step on rather than every step again.
+     *
+     * <p>Counted for the reason {@link #contextsRead} is: the readings would answer the same either
+     * way, and what is held is the work.
+     */
+    static long stepsPutOn() {
+        return STEPS_PUT_ON.get();
+    }
+
+    private static final AtomicLong STEPS_PUT_ON = new AtomicLong();
 
     /**
      * How many times the numbers of this reading, and of every reading sharing its contexts, have
@@ -817,8 +988,11 @@ final class ReadQuantities implements Quantities {
             pairs = new ArrayList<>(heldAgainst);
             pairs.add(pair);
         }
+        // Carried on from only where this one had taken something in: otherwise the rules before it
+        // are the declarations' own, and taking one condition in is all there is to do.
+        OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(taking, answered);
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both, pairs, contexts);
+                both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>());
     }
 
     /**
@@ -870,44 +1044,62 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        ConstraintState<InputAtom> made = declared;
-        // And what the caller took in, onto the same rules rather than met against the answer
-        // afterwards. A condition relating two positions says nothing about either of them alone,
-        // so met afterwards it would be gone.
-        //
-        // Read under this context like everything else. A condition is about the positions it
-        // names, so one taken in about a case says nothing where the value is another — left in, it
-        // would be a rule about a row that is not the row being asked about.
-        // The arithmetic's alone. What was taken in on an order that counts nothing has no form to
-        // solve with the relations and is read back where a term is asked as itself; brought in
-        // here, it would be a rule over a number nothing can space.
-        for (Assumed taken : assumed) {
-            if (!(taken instanceof Assumed.OverAForm each)) {
-                continue;
-            }
-            if (!stands(each.form().coefs().keySet(), under)) {
-                continue;
-            }
-            Map<InputAtom, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
-            for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
-                souther.compiler.numeric.Granularity spaced =
-                        spacingOf(made.numbers(), term, called(term, under));
-                if (spaced == null) {
-                    spacing = null;
-                    break;
-                }
-                spacing.put(called(term, under), spaced);
-            }
-            // Where the caller's own form cannot be carried into this input's terms, this rule is one
-            // the state is not narrowed by — an unheld sum is a step short, and the sound answer
-            // with less is not to take a step at all.
-            LinearForm<InputAtom> over = spacing == null ? null : over(each.form(), under);
-            if (over != null) {
-                made = made.taking(over, each.rel(), spacing);
+        if (!fixed.isEmpty()) {
+            return unfixed().constraints(under);
+        }
+        // The rules the reading this one took one condition more than holds, with that condition
+        // taken in: what taking one in puts on reads the rules said before it and nothing else
+        // taken, so these are the rules taking every condition in again would say, in that order.
+        OneMoreTaken one = oneMoreTaken;
+        ConstraintState<InputAtom> before = one == null ? null : one.takenBefore().get(under);
+        ConstraintState<InputAtom> made;
+        if (before != null) {
+            made = takingIn(before, one.taken(), under);
+        } else {
+            made = declared;
+            for (Assumed taken : assumed) {
+                made = takingIn(made, taken, under);
             }
         }
         answered.put(under, made);
         return made;
+    }
+
+    /**
+     * {@code made} with what the caller took in as {@code taken} put on, where it is a form this
+     * input's arithmetic can carry under {@code under}.
+     *
+     * <p>Onto the same rules rather than met against the answer afterwards. A condition relating two
+     * positions says nothing about either of them alone, so met afterwards it would be gone.
+     *
+     * <p>Read under this context like everything else. A condition is about the positions it names,
+     * so one taken in about a case says nothing where the value is another — left in, it would be a
+     * rule about a row that is not the row being asked about.
+     *
+     * <p>The arithmetic's alone. What was taken in on an order that counts nothing has no form to
+     * solve with the relations and is read back where a term is asked as itself; brought in here, it
+     * would be a rule over a number nothing can space.
+     */
+    private ConstraintState<InputAtom> takingIn(ConstraintState<InputAtom> made, Assumed taken,
+                                                StructuralContext under) {
+        STEPS_PUT_ON.incrementAndGet();
+        if (!(taken instanceof Assumed.OverAForm each)
+                || !stands(each.form().coefs().keySet(), under)) {
+            return made;
+        }
+        Map<InputAtom, Granularity> spacing = new LinkedHashMap<>();
+        for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
+            Granularity spaced = spacingOf(made.numbers(), term, called(term, under));
+            if (spaced == null) {
+                return made;
+            }
+            spacing.put(called(term, under), spaced);
+        }
+        // Where the caller's own form cannot be carried into this input's terms, this rule is one
+        // the state is not narrowed by — an unheld sum is a step short, and the sound answer with
+        // less is not to take a step at all.
+        LinearForm<InputAtom> over = over(each.form(), under);
+        return over == null ? made : made.taking(over, each.rel(), spacing);
     }
 
     /**
@@ -954,14 +1146,61 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        ConstraintState<InputAtom> made = constraints(under);
-        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
-            if (each.getValue().isOne() && stands(Set.of(each.getKey()), under)) {
-                made = holding(made, each.getKey(), under);
+        ConstraintState<InputAtom> made = carriedOn(under);
+        if (made == null) {
+            made = constraints(under);
+            for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+                if (each.getValue().isOne() && stands(Set.of(each.getKey()), under)) {
+                    made = holding(made, each.getKey(), under);
+                }
             }
         }
         withTheFixings.put(under, made);
         return made;
+    }
+
+    /**
+     * {@link #effectiveConstraints} as the reading with one term fewer fixed holds them, with that
+     * term put on — or null where that reading has not worked them out under {@code under}, or where
+     * putting the term on there would not say the same rules in the same order as putting every
+     * fixing on here.
+     *
+     * <p>The same order is what it takes. The rules are said in the order the fixings are put on,
+     * and the term is the last of them, so the reading before holds every rule here said before it,
+     * in that order. What a fixing puts on is read off where the term runs, and that can turn on
+     * another fixing — a remainder fixed beside the value it is a remainder of, one position held
+     * against another that now stands somewhere — so each fixing the reading before put on is asked
+     * again here, and where one of them runs anywhere else the rules are put on afresh. Where the
+     * reading before it ran is read off what it put on, which is there wherever its rules are.
+     *
+     * <p>Not worked out in the reading before for the asking. A search asks a reading whether
+     * anything is left before it fixes the next term in it, so what is there to carry on from is
+     * already there.
+     */
+    private ConstraintState<InputAtom> carriedOn(StructuralContext under) {
+        // A condition taken in moves the rules every fixing is put onto, so a reading made by
+        // taking one in has no fixing to carry on from.
+        if (oneMoreFixed == null) {
+            return null;
+        }
+        ConstraintState<InputAtom> had = oneMoreFixed.rulesBefore().get(under);
+        if (had == null) {
+            return null;
+        }
+        NumericTerm term = oneMoreFixed.term();
+        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+            if (each.getKey().equals(term) || !each.getValue().isOne()
+                    || !stands(Set.of(each.getKey()), under)) {
+                continue;
+            }
+            Optional<NumericDomain.Bounds> ran = oneMoreFixed.runsBefore().get(each.getKey());
+            if (ran == null
+                    || !Objects.equals(whereOneTermRuns(each.getKey(), false), ran.orElse(null))) {
+                return null;
+            }
+        }
+        return fixed.get(term).isOne() && stands(Set.of(term), under)
+                ? holding(had, term, under) : had;
     }
 
     /**
@@ -1160,16 +1399,15 @@ final class ReadQuantities implements Quantities {
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
     private InputAtom called(NumericTerm term, StructuralContext under) {
-        // A number computed of each element is no number at a place, so what names it is the term,
-        // under the value whose rules the elements stand under.
-        if (term instanceof NumericTerm.TakenOver over
-                && over.source() instanceof RunSource.ComputedOccurrences) {
+        // A number no place names is named by the term, under the value whose rules what it is
+        // read from stands under ({@link NumericTerm#atItsPlace}).
+        NumberAt.OfWhatNumber which = term.atItsPlace();
+        if (which == null) {
             return new InputAtom.Computed(
-                    rootOf(standingUnder(term.subjectPath(), under)).root().toString(), over);
+                    rootOf(standingUnder(term.subjectPath(), under)).root().toString(), term);
         }
         UnderARoot at = rootOf(term.subjectPath());
-        NumberAt<RuleKey> where = coordinateOf(at, term);
-        return atomAt(standingUnder(pathOf(at.root(), where.position()), under), where.of());
+        return atomAt(standingUnder(pathOf(at.root(), at.named()), under), which);
     }
 
     /** Where a value's own rules put a coordinate, as a place of this input. */
@@ -1248,6 +1486,7 @@ final class ReadQuantities implements Quantities {
      */
     private ConstraintState<InputAtom> holding(ConstraintState<InputAtom> rules, NumericTerm term,
                                                StructuralContext under) {
+        STEPS_PUT_ON.incrementAndGet();
         NumericDomain.Bounds runs = whereOneTermRuns(term, false);
         if (runs == null || (asCut(runs.min()) == null && asCut(runs.max()) == null)) {
             return rules;
@@ -1311,7 +1550,7 @@ final class ReadQuantities implements Quantities {
         // owed, which a range cannot say, so a reader drawing lines asks
         // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
         // region face. Both keep the difference ({@link #projectionOf}).
-        return switch (projectionOf(form, false)) {
+        return switch (projectionOf(form, false, List.of())) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
             case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
         };
@@ -1319,7 +1558,7 @@ final class ReadQuantities implements Quantities {
 
     @Override
     public NumericDomain.FormProjection projectionOfTheDeclarations(NumericTerm term) {
-        return projectionOf(LinearForm.atom(term), false);
+        return projectionOf(LinearForm.atom(term), false, List.of());
     }
 
     /**
@@ -1329,13 +1568,41 @@ final class ReadQuantities implements Quantities {
      * about a form.
      */
     public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
-        return projectionOf(form, true);
+        return projectionOf(form, true, List.of());
+    }
+
+    /**
+     * Where {@code term} runs, with what each of {@code alongside} is on its own taken in as well.
+     *
+     * <p>A relation between two terms bounds one by the other's ends, and an end the other has only
+     * by its type is on the rules only if that term is put on them. Asked of the term alone, the
+     * range comes back as wide as its own type while the terms still to be chosen leave it far less.
+     *
+     * <p>Beside and not instead: {@code alongside} only adds what is known of {@code term}. Terms
+     * that cannot stand under one context together, or with {@code term}, are terms no row has
+     * together, and a row is what the answer is about — so it is the answer of {@code term} on its
+     * own, and not the answer of whichever of them were met first. The set is taken whole or not at
+     * all, which is what makes the answer the same whatever order {@code alongside} is in.
+     */
+    public NumericDomain.FormProjection projectionOf(NumericTerm term,
+                                                     Collection<? extends NumericTerm> alongside) {
+        held(term);
+        alongside.forEach(this::held);
+        List<NumericTerm> asked = new ArrayList<>(alongside.size() + 1);
+        asked.add(term);
+        asked.addAll(alongside);
+        if (asking(asked) instanceof StructuralContext.Merge.Together(StructuralContext under)) {
+            return runsIn(under, LinearForm.atom(term), true, List.copyOf(alongside));
+        }
+        return projectionOf(LinearForm.atom(term), true, List.of());
     }
 
     /** The same, where the class the declarations hold a value to is or is not what its ends are
-     *  held to ({@link #residuesFixedAt}). */
+     *  held to ({@link #classFixedAt}), and {@code alongside} are terms taken in beside the form's
+     *  own. */
     private NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form,
-                                                      boolean andTheDeclared) {
+                                                      boolean andTheDeclared,
+                                                      List<NumericTerm> alongside) {
         if (form.coefs().isEmpty()) {
             return null;
         }
@@ -1348,9 +1615,11 @@ final class ReadQuantities implements Quantities {
         // Under the context this question is asked in, which is what says which of those rules are
         // about the row being asked about at all. Where no one value has these numbers together
         // with what was taken in, no row gives the form a value, and it runs nowhere.
-        return switch (asking(form.coefs().keySet())) {
+        Collection<NumericTerm> asked = new ArrayList<>(form.coefs().keySet());
+        asked.addAll(alongside);
+        return switch (asking(asked)) {
             case StructuralContext.Merge.Together(StructuralContext under) ->
-                    runsIn(under, form, andTheDeclared);
+                    runsIn(under, form, andTheDeclared, alongside);
             case StructuralContext.Merge.Disagreeing _ ->
                     new NumericDomain.FormProjection.NothingIsLeft();
         };
@@ -1358,18 +1627,9 @@ final class ReadQuantities implements Quantities {
 
     /**
      * A run of {@code term} every value of which, at the term's own spacing, the rules leave it —
-     * or null where that is not shown.
+     * or null where that is not shown ({@link NumericDomain#wholeRunOf}).
      *
-     * <p>Not what {@link #projectionOf} answers, which is where the values lie and may be wider:
-     * three things are shown of it together, and the run is answered with them rather than beside
-     * them so that a caller cannot take one answer for another. The rules are shown to leave each
-     * number they relate the whole of its run ({@link NumericDomain#projectionCertification}). Its
-     * ends are the rules' own and not rounded past them: an end at a third is handed over as a
-     * decimal a hair below, which no value of the term is ({@link
-     * NumericDomain#endsAreWrittenExactly}). And each end is one the term takes: a whole number at
-     * or inside a strict end where the values step by one, and an end that is not taken only where
-     * they are dense, so that some value lies as near it as any other value asked of. A term whose
-     * spacing nothing recorded is a value the arithmetic does not count, and no run of it is shown.
+     * <p>Not what {@link #projectionOf} answers, which is where the values lie and may be wider.
      *
      * <p>About the run and nothing else. A value taken out of it, or a class of whole numbers it is
      * held to, are asked of the region beside this. Where no one value has the term together with
@@ -1381,50 +1641,7 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         ConstraintState<InputAtom> rules = holding(effectiveConstraints(under), term, under);
-        NumericDomain<InputAtom> numbers = rules.numbers();
-        InputAtom atom = called(term, under);
-        if (!(numbers.projectionCertification() instanceof ProjectionCertification.Certified)
-                || !numbers.endsAreWrittenExactly(atom)
-                || !(numbers.projectionOf(LinearForm.atom(atom))
-                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds run))) {
-            return null;
-        }
-        return switch (numbers.spacingOf(atom)) {
-            case null -> null;
-            case DENSE -> run;
-            case DISCRETE -> onWholeNumbers(run);
-        };
-    }
-
-    /** {@code run} with each end the whole number nearest it that the run takes — or null where an
-     *  end is no number this can step from. An absent end, which runs to the end of the type, is
-     *  kept absent. */
-    private static NumericDomain.Bounds onWholeNumbers(NumericDomain.Bounds run) {
-        Endpoint low = run.min() == null ? null : wholeAt(run.min(), true);
-        Endpoint high = run.max() == null ? null : wholeAt(run.max(), false);
-        if ((run.min() != null && low == null) || (run.max() != null && high == null)) {
-            return null;
-        }
-        return new NumericDomain.Bounds(low, high);
-    }
-
-    /**
-     * The whole number nearest {@code end} on the run's side of it that the run takes.
-     *
-     * @return null where the end is no number this can step from
-     */
-    private static Endpoint wholeAt(Endpoint end, boolean least) {
-        if (!(end.at() instanceof Count count)) {
-            return null;
-        }
-        ExactRatio at = count.exactly();
-        ExactAnswer<BigInteger> stepped = least ? at.ceiling() : at.floor();
-        if (!(stepped instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))) {
-            return null;
-        }
-        BigInteger taken = end.inclusive() || !ExactRatio.of(whole).equals(at) ? whole
-                : least ? whole.add(BigInteger.ONE) : whole.subtract(BigInteger.ONE);
-        return Endpoint.inclusive(Count.of(new BigDecimal(taken)));
+        return rules.numbers().wholeRunOf(called(term, under));
     }
 
     /**
@@ -1436,11 +1653,14 @@ final class ReadQuantities implements Quantities {
      */
     private NumericDomain.FormProjection runsIn(StructuralContext under,
                                                 LinearForm<NumericTerm> form,
-                                                boolean andTheDeclared) {
+                                                boolean andTheDeclared,
+                                                List<NumericTerm> alongside) {
         ConstraintState<InputAtom> rules = effectiveConstraints(under);
         // Walked by the terms: what each one brings in is taken onto the state the one before it
         // left, and a form says which terms it weighs without saying which was written first.
-        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
+        Set<NumericTerm> brought = new LinkedHashSet<>(form.coefs().keySet());
+        brought.addAll(alongside);
+        for (NumericTerm term : NumericTerms.inOrder(brought)) {
             rules = holding(rules, term, under);
         }
         // What the rules leave, carried as what it is. A reading that admits no assignment says so
@@ -1474,7 +1694,7 @@ final class ReadQuantities implements Quantities {
         // class — so the ends are cut inward to the members, the same as the ends of the term's own
         // run are, and a search that names an end names a number of the class. Where the class has
         // no member in what is left there is nothing left.
-        NumericDomain.Bounds held = withinTheResiduesFixedOf(only,
+        NumericDomain.Bounds held = withinTheClassOf(only,
                 meeting(projected, whereOneTermRuns(only, andTheDeclared)), andTheDeclared);
         return held.holdsAValue() ? new NumericDomain.FormProjection.Within(held)
                 : new NumericDomain.FormProjection.NothingIsLeft();
@@ -1540,7 +1760,29 @@ final class ReadQuantities implements Quantities {
             return this;
         }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed, heldAgainst, contexts);
+                assumed, heldAgainst, contexts, oneMoreThan(both), oneMoreTaken, answered);
+    }
+
+    /**
+     * {@code both} as these fixings with one term more, where it is that: every term fixed here
+     * fixed there where it is here, and one other — which a map that keeps the order its entries
+     * arrived in has at the end, the shape the rules with the fixings in them can be carried on
+     * from. Null where it is anything else.
+     */
+    private OneMoreFixed oneMoreThan(Map<NumericTerm, Fixed> both) {
+        if (both.size() != fixed.size() + 1) {
+            return null;
+        }
+        NumericTerm added = null;
+        for (Map.Entry<NumericTerm, Fixed> each : both.entrySet()) {
+            Fixed had = fixed.get(each.getKey());
+            if (had == null) {
+                added = each.getKey();
+            } else if (!had.equals(each.getValue())) {
+                return null;
+            }
+        }
+        return new OneMoreFixed(added, withTheFixings, whereEachTermRuns);
     }
 
     /**
@@ -1582,15 +1824,26 @@ final class ReadQuantities implements Quantities {
                 && runs.min().at().sameAs(at) && runs.max().at().sameAs(at);
     }
 
+    /**
+     * Whether {@code at} is of the class the value at {@code value} is held to ({@link #classAt}). A
+     * place that is no whole number is no member of a class and is not asked.
+     */
+    private boolean ofItsClass(NumericTerm.ValueOf value, Place at) {
+        return !(at instanceof Count count) || !count.exactly().isWhole()
+                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole)
+                || classAt(value).holds(whole.value());
+    }
+
     /** {@link #emptiness}, worked out. */
     private Optional<EmptyInput> whyNothingIsLeft() {
-        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+        List<Map.Entry<NumericTerm, Fixed>> inOrder = inOrder();
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
             if (!each.getValue().isOne()) {
                 return Optional.of(new EmptyInput.TwoValuesAtOnePosition(each.getKey(),
                         each.getValue().least(), each.getValue().most()));
             }
         }
-        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
             NumericDomain.Bounds own = each.getKey().intrinsicBounds();
             if (!own.admits(each.getValue().least())) {
                 return Optional.of(new EmptyInput.OutsideWhereThePositionRuns(each.getKey(),
@@ -1601,7 +1854,7 @@ final class ReadQuantities implements Quantities {
         // their reason: what contradicts is the value against what was taken in about it, and the
         // declarations were never asked. A hole is no part of the arithmetic, so nothing further
         // down would find this.
-        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
             if (each.getValue().isOne()
                     && apartAt(each.getKey()).has(each.getValue().least())) {
                 return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(each.getKey(),
@@ -1637,6 +1890,18 @@ final class ReadQuantities implements Quantities {
                     it.why().at(), it.why().one(), it.why().other()));
         }
         StructuralContext under = ((StructuralContext.Merge.Together) merged).context();
+        // And a value fixed outside the class its position is held to, which is a place a rule on
+        // the way holds it away from as a hole is. The class is read beside the arithmetic and not
+        // in it — a remainder and a part of a date are numbers of their own there, and nothing ties
+        // them back to the value — so the rules said together below would leave the fifteenth of a
+        // month to a value held to the first of each.
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
+            if (each.getKey() instanceof NumericTerm.ValueOf value && each.getValue().isOne()
+                    && !ofItsClass(value, each.getValue().least())) {
+                return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(value,
+                        each.getValue().least()));
+            }
+        }
         // And what the rules leave once they are all said together, which is the one thing that
         // answers it. Every parameter's reading is in here, renamed, so there is nothing a
         // per-parameter reading could add — and a contradiction between two parameters, or between a
@@ -1757,7 +2022,7 @@ final class ReadQuantities implements Quantities {
         // asked whether they hold anything — said here, this would be a container proved non-empty
         // out of a reading that proves nothing at all.
         NumericDomain.Bounds many =
-                runsIn(under, LinearForm.atom(counted), false)
+                runsIn(under, LinearForm.atom(counted), false, List.of())
                         instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
                         ? bounds : null;
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
@@ -1814,9 +2079,7 @@ final class ReadQuantities implements Quantities {
      * fixings arrived in, which is the caller's business and not the model's.
      */
     private List<Map.Entry<NumericTerm, Fixed>> inOrder() {
-        List<Map.Entry<NumericTerm, Fixed>> out = new ArrayList<>(fixed.entrySet());
-        out.sort(java.util.Comparator.comparing(each -> each.getKey().toString()));
-        return out;
+        return NumericTerms.entriesInOrder(fixed);
     }
 
     /**
@@ -1849,34 +2112,6 @@ final class ReadQuantities implements Quantities {
         return term;
     }
 
-    /**
-     * The coordinate of one term, in the words the rules of the value it is a position of are read
-     * in.
-     *
-     * <p>Total, because the name arrives with the root that answers by it ({@link #rootOf}). Which
-     * steps of a place are names a rule writes is settled once, where the root is chosen, so
-     * nothing here decides it again and there is no place a term could arrive at that this cannot
-     * name.
-     *
-     * <p>Named by the operation and not by "something was taken here". A count of a string and the
-     * magnitude of a number at the same place are two quantities, and a flag brought them to one
-     * name — so a guard bounding one would have been read against the clauses written about the
-     * other (#1027).
-     */
-    private static NumberAt<RuleKey> coordinateOf(UnderARoot at, NumericTerm term) {
-        return switch (term) {
-            case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
-            case NumericTerm.TakenOf taken ->
-                    NumberAt.takenOf(at.named(), taken.operation(), taken.arguments(),
-                            taken.transformation());
-            case NumericTerm.CodePointClassCount count ->
-                    NumberAt.countOf(at.named(), count.counted());
-            case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
-            case NumericTerm.TakenOver over ->
-                    NumberAt.takenAsItStands(at.named(), over.operation());
-        };
-    }
-
     /** The term a form is, where it is one term taken as itself, or null where it is arithmetic. */
     private static NumericTerm onlyTermOf(LinearForm<NumericTerm> form) {
         if (form.coefs().size() != 1 || form.constant().signum() != 0) {
@@ -1902,6 +2137,21 @@ final class ReadQuantities implements Quantities {
      * together has no word for one.
      */
     private NumericDomain.Bounds whereOneTermRuns(NumericTerm term, boolean andTheDeclared) {
+        if (andTheDeclared) {
+            return workedOutWhereOneTermRuns(term, true);
+        }
+        Optional<NumericDomain.Bounds> had = whereEachTermRuns.get(term);
+        if (had != null) {
+            return had.orElse(null);
+        }
+        NumericDomain.Bounds made = workedOutWhereOneTermRuns(term, false);
+        whereEachTermRuns.put(term, Optional.ofNullable(made));
+        return made;
+    }
+
+    /** {@link #whereOneTermRuns}, worked out. */
+    private NumericDomain.Bounds workedOutWhereOneTermRuns(NumericTerm term,
+                                                           boolean andTheDeclared) {
         NumericDomain.Bounds runs = meeting(whereItsValuesAre(term), term.intrinsicBounds());
         // And what was taken in about this position's own order. Here rather than with the
         // relations, because this is the one shape such a rule has: a bound on a carrier that counts
@@ -1912,46 +2162,40 @@ final class ReadQuantities implements Quantities {
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a
         // caller that has not asked.
-        return withinTheResiduesFixedOf(term, fixedAt == null ? runs
+        return withinTheClassOf(term, fixedAt == null ? runs
                 : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt.least()),
                         Endpoint.inclusive(fixedAt.most()))), andTheDeclared);
     }
 
     /**
-     * {@code runs}, of a number of a position, once a remainder of the value there has been fixed.
+     * {@code runs}, of a number of a position, once the class the number is held to is met with it.
      *
      * <p>A remainder fixed at a residue leaves the value the numbers of that class and no others,
      * which is no run — so what is said of the value is the run between the first of them and the
-     * last the rules leave it ({@link ResidueHull}). A search that names a place at either end names
-     * a number of the class, and one that named an end of the run itself would name a number the
-     * remainder it was fixing refuses.
+     * last the rules leave it ({@link HeldClass#hull}). A search that names a place at either end
+     * names a member of the class, and one that named an end of the run itself would name a number
+     * the remainder it was fixing refuses. A date held to the first of each month is the same.
      *
      * <p>The same holds of a remainder of the value by another divisor, which is the value's own
      * class by that divisor and so is held to the residue the two divisors can agree on: one number
      * leaves one remainder by each, and a remainder chosen without asking is one no value leaves
      * beside the first.
-     *
-     * <p>Only a remainder held at one number, whether fixed there or taken in as equal to it, and
-     * only of a value counted by whole numbers. A remainder asked for as one of several, or left to
-     * the rules, says nothing of where a number of the place runs.
      */
-    private NumericDomain.Bounds withinTheResiduesFixedOf(NumericTerm term,
-                                                          NumericDomain.Bounds runs,
-                                                          boolean andTheDeclared) {
-        Congruences together = residuesFixedAt(term, andTheDeclared);
-        return together == null ? runs : ResidueHull.of(runs, together);
+    private NumericDomain.Bounds withinTheClassOf(NumericTerm term, NumericDomain.Bounds runs,
+                                                  boolean andTheDeclared) {
+        return classFixedAt(term, andTheDeclared).hull(runs);
     }
 
     /**
-     * The class of whole numbers the remainders fixed beside the value at {@code place} leave it in
-     * together — or null where none is fixed, or no number leaves them all.
+     * The class the value at {@code place} is held to: what the declarations hold it to, met with
+     * the remainders fixed beside it.
      *
      * <p>What a search that chooses the value is held to besides the run it is chosen in: the
      * run's ends are of the class, and a number of the run is of it only where it is looked for in
      * it.
      */
-    public Congruences valueClassAt(NumericTerm.ValueOf place) {
-        return residuesFixedAt(place, true);
+    public HeldClass classAt(NumericTerm.ValueOf place) {
+        return classFixedAt(place, true);
     }
 
     /**
@@ -2016,9 +2260,9 @@ final class ReadQuantities implements Quantities {
      * face a value is chosen from does, since a value named at an end is a value the rules refuse
      * where it is outside the class.
      */
-    private Congruences residuesFixedAt(NumericTerm term, boolean andTheDeclared) {
+    private HeldClass classFixedAt(NumericTerm term, boolean andTheDeclared) {
         if (!(term instanceof NumericTerm.FromOnePosition here)) {
-            return null;
+            return HeldClass.NONE;
         }
         // The divisor this term is a remainder by, or null where it is the value itself or any
         // other number of the place: the two are told apart because what each is held to is not the
@@ -2028,21 +2272,23 @@ final class ReadQuantities implements Quantities {
         if (term instanceof NumericTerm.TakenOf taken) {
             own = divisorOfARemainder(taken);
             if (own == null) {
-                return null;
+                return HeldClass.NONE;
             }
         } else if (!(term instanceof NumericTerm.ValueOf)) {
-            return null;
+            return HeldClass.NONE;
         }
         // The class every fixed remainder leaves the value in together: narrowing by each in turn
         // would name an end of the run that is of one class and not of the other.
-        Congruences together = null;
-        Congruences declared = andTheDeclared ? classDeclaredAt(here) : null;
-        if (declared != null) {
+        HeldClass together = HeldClass.NONE;
+        HeldClass declared = andTheDeclared ? classDeclaredAt(here) : HeldClass.NONE;
+        if (own == null || declared instanceof HeldClass.NoValue) {
+            together = declared;
+        } else if (declared instanceof HeldClass.OfResidues(Congruences ofTheValue)) {
             // The declared class is of the value, so a remainder by `own` is held to the class of it
             // the two divisors share.
-            BigInteger shared = own == null ? declared.modulus() : own.gcd(declared.modulus());
+            BigInteger shared = own.gcd(ofTheValue.modulus());
             if (shared.compareTo(BigInteger.ONE) > 0) {
-                together = new Congruences(declared.residue(), shared);
+                together = new HeldClass.OfResidues(new Congruences(ofTheValue.residue(), shared));
             }
         }
         for (Map.Entry<NumericTerm.TakenOf, BigInteger> each : remaindersPinned().entrySet()) {
@@ -2060,13 +2306,9 @@ final class ReadQuantities implements Quantities {
             // remainder theorem. Two divisors with nothing in common say nothing of each other.
             BigInteger shared = own == null ? size : own.gcd(size);
             if (shared.compareTo(BigInteger.ONE) > 0) {
-                Congruences leaves = new Congruences(left, shared);
-                together = together == null ? leaves : together.meet(leaves);
-                // Remainders that no number leaves together are a contradiction `emptiness` says,
-                // and nothing is claimed of the class here.
-                if (together == null) {
-                    return null;
-                }
+                // Remainders that no number leaves together leave the class no member, which is
+                // what the class says: the hull of it holds nothing, and so does the region.
+                together = together.and(new HeldClass.OfResidues(new Congruences(left, shared)));
             }
         }
         return together;
@@ -2107,23 +2349,24 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The class the declarations of the value at {@code here} hold it to, from the remainders they
-     * leave at one number each — or null where they hold none.
+     * The class the declarations of the value at {@code here} hold it to ({@link FieldDomains#classAt})
+     * — read under the context the term is asked in, so the clause that says it may be spelled any
+     * way the rules read, and none where no declarations reach the place or the term is asked in a
+     * context that does not hold where they were opened.
      *
-     * <p>Read off the value's own rules ({@link FieldDomains#valueClassAt}) under the context the
-     * term is asked in, so the clause that says it may be spelled any way the rules read.
+     * <p>The declarations' answer first, which is kept under the place and is none for almost every
+     * place there is: the context the term is asked in is put together only where there is a class
+     * for it to hold or not.
      */
-    private Congruences classDeclaredAt(NumericTerm.FromOnePosition here) {
+    private HeldClass classDeclaredAt(NumericTerm.FromOnePosition here) {
         UnderARoot at = rootOf(here.subjectPath());
-        if (at == null) {
-            return null;
-        }
-        OpenedRules opened = byRoot.get(at.root());
-        return opened == null
-                || !(asking(Set.of(here)) instanceof StructuralContext.Merge.Together(
-                        StructuralContext under))
-                || !under.holds(opened.opening()) ? null
-                : opened.rules().bounds().valueClassAt(at.named());
+        OpenedRules opened = at == null ? null : byRoot.get(at.root());
+        HeldClass declared = opened == null ? HeldClass.NONE
+                : opened.rules().bounds().classAt(at.named());
+        return !(declared instanceof HeldClass.None)
+                && asking(Set.of(here)) instanceof StructuralContext.Merge.Together(
+                        StructuralContext under)
+                && under.holds(opened.opening()) ? declared : HeldClass.NONE;
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no
@@ -2204,11 +2447,24 @@ final class ReadQuantities implements Quantities {
     private NumericDomain.Bounds whereItsValuesAre(NumericTerm term) {
         return switch (term) {
             case NumericTerm.FromOnePosition one -> ownOf(one);
-            case NumericTerm.TakenOver over ->
-                    RunReach.of(over, ordersOf(over), typeAt, ruleReading);
+            case NumericTerm.TakenOver over -> contexts.runOf(over, this);
             // Nothing the rules of the elements say bounds how often one of them occurs besides
             // the term's own floor, which every term is read with.
-            case NumericTerm.Multiplicity _ -> null;
+            case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
+                 NumericTerm.OccurrencesOfAKey _ -> null;
+            // The end of a key's values is one of the values the place holds, so it is wherever
+            // what the place was read to hold is.
+            case NumericTerm.ExtremeOfItsKey extreme ->
+                    ownOf(extreme.valuesTakenFrom());
+            // An end of the values of a place is one of them, and is where they are. A total, and
+            // an end of what each element computed, is bounded by what the rules guarantee each
+            // number, which nothing here adds up.
+            case NumericTerm.GatheredUnderItsKey gathered ->
+                    gathered.valuesTakenFrom() instanceof NumericTerm.ValueOf each
+                            ? ownOf(each) : null;
+            // Of the elements of one key, which are some of the run's: where they are bounded.
+            case NumericTerm.GatheredUnderAKey asked ->
+                    whereItsValuesAre(asked.gathered());
         };
     }
 

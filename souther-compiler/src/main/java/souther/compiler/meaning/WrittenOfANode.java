@@ -61,8 +61,12 @@ public final class WrittenOfANode {
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.All all -> all.parts().stream().allMatch(this::reads);
             case Proposition.Any any -> any.parts().stream().allMatch(this::reads);
+            case Proposition.WhereItAnswers where ->
+                    reads(where.answers()) && reads(where.states());
             case Proposition.OnAnApplication applications ->
                     applications.each().stream().allMatch(this::reads);
+            case Proposition.SoManyHold counted -> counted.statements().stream()
+                    .allMatch(this::reads);
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }
@@ -70,18 +74,27 @@ public final class WrittenOfANode {
     private boolean reads(Quantity quantity) {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(NumericTerm term) -> reads(term);
-            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _ -> false;
+            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
+                 DecisionAtom.ComputedOverAnAnswer _, Quantity.OfABinding _,
+                 Quantity.CodePointsOfAPiece _, Quantity.HowManyCarried _ -> false;
             case Quantity.HowManyMeet count -> reads(count.container())
                     && reads(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream().allMatch(this::reads);
             case Quantity.HowManyDifferent different -> reads(different.container())
                     && reads(different.ofTheElement());
+            case Quantity.HowManyDifferentAcross across -> reads(across.container())
+                    && reads(across.ofTheOccurrence());
+            case Quantity.HowManyDifferentBelow below -> reads(below.root()) && reads(below.map());
             case Quantity.SumOver sum -> reads(sum.container()) && reads(sum.ofTheElement());
             case Quantity.RemainderOfADividend remainder -> remainder.dividend().coefs().keySet()
                     .stream().allMatch(this::reads);
+            case Quantity.RemainderByAnInput remainder -> remainder.operands().stream()
+                    .allMatch(this::reads);
+            case Quantity.ProductOfTwo product -> product.factors().stream().allMatch(this::reads);
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(this::reads);
+            case Quantity.APieceOf piece -> reads(piece.string());
+            case Quantity.IsAmongThePieces among -> reads(among.value()) && reads(among.string());
         };
     }
 

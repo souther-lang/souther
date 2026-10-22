@@ -78,6 +78,35 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
                         + " one that may: " + MAY_WALK);
     }
 
+    /**
+     * Who asks which application answers at a node, and what makes it the one that may.
+     *
+     * <p>A node an application answers at is often a comparison too — the one the library's code
+     * for the operation is written as — and a run through it is the application's answer. Two
+     * readers choosing between the two apart can name two constructs for one node, and a claim
+     * made at one is then looked up under the other. So the choice is the
+     * plan's ({@link CoverageSites.Plan#outcomeAt}), and a reader asking the question on its own
+     * is one that may choose again.
+     */
+    private static final Map<String, String> MAY_ASK_WHAT_ANSWERS = Map.of(
+            "souther.compiler.coverage.CoverageSites.Plan.outcomeAt", "where a run is seen at a"
+                    + " node, which is the application answering there before the comparison it"
+                    + " is written as",
+            "souther.compiler.check.PathReachability.answeredAt", "what arrives where an"
+                    + " application answers, filed under the application as a comparison's is"
+                    + " under the comparison; it asks nothing of the comparison there",
+            "souther.compiler.check.PathReachability.mayStopBefore", "where a run arriving where"
+                    + " an application answers may have stopped on the way, filed under the"
+                    + " application as what arrives there is");
+
+    @Test
+    void onlyThePlanChoosesBetweenAnApplicationAndTheComparisonItAnswersAt() {
+        assertEquals(once(MAY_ASK_WHAT_ANSWERS), calling(A_PLAN, "applicationAnsweringAt"),
+                () -> "a reader that asks which application answers at a node chooses between"
+                        + " it and the comparison there on its own. What asks today, and what"
+                        + " makes it the one that may: " + MAY_ASK_WHAT_ANSWERS);
+    }
+
     @Test
     void andOnlyTheEndOfThatWalkPutsOneTogether() {
         assertEquals(once(MAY_CONSTRUCT), calling(A_PLAN, "<init>"),
@@ -175,6 +204,9 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
                     + " java.util.Optional<souther.compiler.coverage.ConditionOutcomeSite>",
             "method applicationAnsweringAt(souther.compiler.core.Core) :"
                     + " java.util.Optional<souther.compiler.types.ConstructOccurrence>",
+            "method outcomeAt(souther.compiler.core.Core,boolean) :"
+                    + " java.util.Optional<"
+                    + "souther.compiler.coverage.ControlPlace$Outcome>",
             // Where the fork of each place this plan reached is written.
             "method whereEachArmsForkIsWritten() :"
                     + " java.util.Map<java.lang.Integer, souther.compiler.diag.Citation>");
@@ -257,5 +289,6 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
     }
 
     /** The two ways to a plan, as an invocation names them. */
-    private static final Set<String> DOORS = Set.of(SITES + ".of", A_PLAN + ".<init>");
+    private static final Set<String> DOORS = Set.of(SITES + ".of", A_PLAN + ".<init>",
+            A_PLAN + ".applicationAnsweringAt");
 }

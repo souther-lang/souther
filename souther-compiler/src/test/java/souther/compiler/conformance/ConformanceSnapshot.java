@@ -108,15 +108,10 @@ final class ConformanceSnapshot {
 
     /** Each part of {@code stated} nothing read, to {@code into}. */
     private static void unreadIn(Proposition stated, Consumer<Proposition.Unread> into) {
-        switch (stated) {
-            case Proposition.Unread unread -> into.accept(unread);
-            case Proposition.All all -> all.parts().forEach(part -> unreadIn(part, into));
-            case Proposition.Any any -> any.parts().forEach(part -> unreadIn(part, into));
-            case Proposition.OnAnApplication applications ->
-                    applications.each().forEach(each -> unreadIn(each, into));
-            case Proposition.Some some -> unreadIn(some.ofTheElement(), into);
-            default -> { }
+        if (stated instanceof Proposition.Unread unread) {
+            into.accept(unread);
         }
+        stated.partsHeld().forEach(part -> unreadIn(part, into));
     }
 
     /**

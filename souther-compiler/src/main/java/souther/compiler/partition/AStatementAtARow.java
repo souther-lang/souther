@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.NumericTerm;
@@ -13,6 +14,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -30,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -94,9 +97,10 @@ final class AStatementAtARow {
 
     /**
      * Whether a row's own values say whether {@code stated} holds at it: relations over the
-     * input's own numbers, whether a position of the input is true, holds a value or is one of
-     * some cases of a sum, joined, statements about the elements of a container the input holds —
-     * some element meeting something, or how many do, against a number — or nothing asked at all.
+     * input's own numbers or over what two of them come to multiplied, whether a position of the
+     * input is true, holds a value or is one of some cases of a sum, joined, statements about the
+     * elements of a container the input holds — some element meeting something, or how many do,
+     * against a number — or nothing asked at all.
      *
      * <p>Anything else is no statement a row can be asked about. Something nobody read, a truth of
      * what a dependency answered, or a count against another of the input's numbers is not settled
@@ -104,6 +108,18 @@ final class AStatementAtARow {
      * it says nothing about.
      */
     static boolean askable(Proposition stated) {
+        return askable(stated, false);
+    }
+
+    /**
+     * The same of every part of {@code stated} that is no relation, its relations left to be asked
+     * one at a time — for a line, or for what else each relates.
+     */
+    static boolean askableBesideItsRelations(Proposition stated) {
+        return askable(stated, true);
+    }
+
+    private static boolean askable(Proposition stated, boolean besideItsRelations) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
@@ -116,12 +132,22 @@ final class AStatementAtARow {
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
                                        boolean _, String _) -> true;
             case Proposition.LastToHold _ -> true;
-            case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::askable);
-            case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
-            case Proposition.Some some -> askable(some.ofTheElement());
-            case Proposition.Compared compared -> switch (compared.relation()) {
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(each -> askable(each, besideItsRelations));
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(each -> askable(each, besideItsRelations));
+            case Proposition.WhereItAnswers where -> askable(where.answers(), besideItsRelations)
+                    && askable(where.states(), besideItsRelations);
+            case Proposition.SoManyHold counted -> counted.statements().stream()
+                    .allMatch(each -> askable(each, besideItsRelations));
+            case Proposition.Some some -> askable(some.ofTheElement(), besideItsRelations);
+            case Proposition.Compared compared -> besideItsRelations
+                    || switch (compared.relation()) {
                 case Relation.Affine affine ->
                         WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null
+                        || productIn(affine) != null
+                        || remainderByAnInputIn(affine) != null
+                        || remainderOfADividendIn(affine) != null
                         || (countIn(affine) instanceof Quantity.HowManyMeet count
                                 && askable(count.ofTheElement()));
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
@@ -140,6 +166,64 @@ final class AStatementAtARow {
         return affine.form().coefs().size() == 1
                 && affine.form().coefs().keySet().iterator().next()
                         instanceof Quantity.HowManyMeet count ? count : null;
+    }
+
+    /** The one remainder by an input's number {@code affine} weighs where it weighs one and
+     *  nothing else, or null. */
+    static Quantity.RemainderByAnInput remainderByAnInputIn(Relation.Affine affine) {
+        return affine.form().coefs().size() == 1
+                && affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.RemainderByAnInput remainder ? remainder : null;
+    }
+
+    /**
+     * The one remainder of a form of the input's numbers {@code affine} weighs where it weighs
+     * one, and beside it only numbers of the input that are no number of the form — or null.
+     *
+     * <p>The one place that says which relations are over a remainder, so that the line a rule
+     * draws on it and the row it is asked at are of the same relations.
+     */
+    static Quantity.RemainderOfADividend remainderOfADividendIn(Relation.Affine affine) {
+        Quantity.RemainderOfADividend remainder = null;
+        for (Quantity atom : affine.form().coefs().keySet()) {
+            if (atom instanceof Quantity.RemainderOfADividend found && remainder == null) {
+                remainder = found;
+            } else if (!(atom instanceof DecisionAtom.OfTheInput)) {
+                return null;
+            }
+        }
+        if (remainder == null) {
+            return null;
+        }
+        // A number beside the remainder is apart from the form it is the remainder of, and not
+        // merely another number: one read off a place the form reads moves with it.
+        for (NumericTerm term : otherNumbersWithTheRemainder(affine.form()).coefs().keySet()) {
+            for (NumericTerm of : remainder.dividend().coefs().keySet()) {
+                if (term.sharesAPlaceWith(of)) {
+                    return null;
+                }
+            }
+        }
+        return remainder;
+    }
+
+    /** The numbers of the input {@code form} weighs beside its remainder, each with its weight
+     *  and with no constant. */
+    static LinearForm<NumericTerm> otherNumbersWithTheRemainder(LinearForm<Quantity> form) {
+        Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
+        form.coefs().forEach((atom, weight) -> {
+            if (atom instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                out.put(term, weight);
+            }
+        });
+        return new LinearForm<>(ExactRatio.ZERO, out);
+    }
+
+    /** The one product {@code affine} weighs where it weighs one and nothing else, or null. */
+    static Quantity.ProductOfTwo productIn(Relation.Affine affine) {
+        return affine.form().coefs().size() == 1
+                && affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.ProductOfTwo product ? product : null;
     }
 
     /**
@@ -182,6 +266,12 @@ final class AStatementAtARow {
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
                     gather(part, behavior, quantities, into, elements, positions));
+            case Proposition.WhereItAnswers where -> {
+                gather(where.answers(), behavior, quantities, into, elements, positions);
+                gather(where.states(), behavior, quantities, into, elements, positions);
+            }
+            case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
+                    gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
                             of(some.ofTheElement(), behavior, quantities)));
@@ -216,6 +306,12 @@ final class AStatementAtARow {
         switch (stated) {
             case Proposition.All all -> all.parts().forEach(part -> gatherNumbers(part, into));
             case Proposition.Any any -> any.parts().forEach(part -> gatherNumbers(part, into));
+            case Proposition.WhereItAnswers where -> {
+                gatherNumbers(where.answers(), into);
+                gatherNumbers(where.states(), into);
+            }
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(part -> gatherNumbers(part, into));
             case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
@@ -228,6 +324,16 @@ final class AStatementAtARow {
                                 WhatTheDeclarationsLeave.ofTheInput(affine.form());
                         if (form != null) {
                             into.addAll(form.coefs().keySet());
+                        } else if (productIn(affine) instanceof Quantity.ProductOfTwo product) {
+                            into.addAll(product.factors());
+                        } else if (remainderByAnInputIn(affine)
+                                instanceof Quantity.RemainderByAnInput remainder) {
+                            into.addAll(remainder.operands());
+                        } else if (remainderOfADividendIn(affine)
+                                instanceof Quantity.RemainderOfADividend remainder) {
+                            into.addAll(remainder.dividend().coefs().keySet());
+                            into.addAll(
+                                    otherNumbersWithTheRemainder(affine.form()).coefs().keySet());
                         }
                     }
                     case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _,
@@ -235,7 +341,10 @@ final class AStatementAtARow {
                     case Relation.Ordered _ -> { }
                 }
             }
-            default -> { }
+            case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> { }
         }
     }
 
@@ -279,6 +388,23 @@ final class AStatementAtARow {
                     .noneMatch(term -> under(term.subjectPath(), taken))) {
                 read.over().lookAt(row);
             }
+            if (each instanceof OneRelation.OnAProduct product && product.terms().stream()
+                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                product.factors().lookAt(row);
+            }
+            if (each instanceof OneRelation.OnARemainderByAnInput remainder
+                    && remainder.terms().stream()
+                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                remainder.numbers().lookAt(row);
+            }
+            if (each instanceof OneRelation.OnARemainderOfAForm remainder
+                    && remainder.terms().stream()
+                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                remainder.numbers().lookAt(row);
+                if (remainder.addedNumbers() != null) {
+                    remainder.addedNumbers().lookAt(row);
+                }
+            }
         }
         for (TermPath each : positions) {
             if (!under(each, taken)) {
@@ -317,28 +443,41 @@ final class AStatementAtARow {
      * How many of the elements of {@code container} the row wrote meet this statement: the least
      * it can be, and how many more it may be where an element could not be read.
      *
+     * <p>Counted once for every reading of the row that chose alike where counting asked: the
+     * elements counted are all of them whichever a reading chose, and a row read once per
+     * element of another container would otherwise count them once per reading.
+     *
      * @return null where the walk could not reach the container
      */
     HowManyAtARow howManyMeetIn(TermPath container, BorderQuantity.Observation row) {
-        if (!(row.eachElementOf(container)
-                instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
-            return null;
-        }
-        List<BorderQuantity.Observation> each = reached.value();
-        int meet = 0;
-        int unread = 0;
-        Set<ReadingGap> why = new LinkedHashSet<>();
-        for (BorderQuantity.Observation element : each) {
-            switch (at(element)) {
-                case Answer.Holds _ -> meet++;
-                case Answer.Fails _ -> { }
-                case Answer.CouldNotTell(var stopped) -> {
-                    unread++;
-                    why.addAll(stopped);
+        return row.keptOf(new MeetingIn(this, container));
+    }
+
+    /** How many elements of a container meet one statement, by the statement and the container. */
+    private record MeetingIn(AStatementAtARow statement, TermPath container)
+            implements BorderQuantity.ReadAlike<HowManyAtARow> {
+
+        @Override
+        public HowManyAtARow readAt(BorderQuantity.Observation row) {
+            if (!(row.eachElementOf(container)
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+                return null;
+            }
+            int meet = 0;
+            int unread = 0;
+            Set<ReadingGap> why = new LinkedHashSet<>();
+            for (BorderQuantity.Observation element : reached.value()) {
+                switch (statement.at(element)) {
+                    case Answer.Holds _ -> meet++;
+                    case Answer.Fails _ -> { }
+                    case Answer.CouldNotTell(var stopped) -> {
+                        unread++;
+                        why.addAll(stopped);
+                    }
                 }
             }
+            return new HowManyAtARow(meet, unread, why);
         }
-        return new HowManyAtARow(meet, unread, why);
     }
 
     /**
@@ -400,13 +539,14 @@ final class AStatementAtARow {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
             // holds at the position.
-            case Proposition.LastToHold(TermPath container, TermPath position, boolean holds,
+            case Proposition.LastToHold(DecisionSubject.AnInput(TermPath container),
+                                        DecisionSubject.AnInput(TermPath position), boolean holds,
                                         String _) -> heldAs(holds, switch (
                     row.lastToHold(container, position)) {
-                case BorderQuantity.Lastness.Last _ -> Answer.HOLDS;
-                case BorderQuantity.Lastness.NotLast _ -> Answer.FAILS;
+                case BorderQuantity.Lastness.Last _ -> Said.TRUE;
+                case BorderQuantity.Lastness.NotLast _ -> Said.FALSE;
                 case BorderQuantity.Lastness.CouldNotTell(ReadingGap why) ->
-                        new Answer.CouldNotTell(Set.of(why));
+                        new Said.NotRead(Set.of(why));
             });
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds,
                                    String _) -> heldAs(holds, ofItsValue(at, row,
@@ -424,6 +564,12 @@ final class AStatementAtARow {
                     .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
                     .map(each -> at(each, row, answered)).toList(), false);
+            // At a row it answered at, what it states; at one it did not, nothing holds — and its
+            // denial is asked as its own proposition, so a row that stopped holds neither.
+            case Proposition.WhereItAnswers where -> joined(List.of(
+                    at(where.answers(), row, answered), at(where.states(), row, answered)), true);
+            case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
+                    .stream().map(each -> at(each, row, answered)).toList());
             case Proposition.Some some -> {
                 OverTheElements over = elements.get(keyOf(some));
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
@@ -442,17 +588,18 @@ final class AStatementAtARow {
                 }
                 yield countedAgainst(compared, affine, counted);
             }
-            case Proposition.Compared compared when askable(compared) -> {
-                Answer held = switch (relations.get(compared.relation())) {
-                    case OneRelation.OnAQuantity read -> heldAt(read, row);
-                    case OneRelation.NoQuantity unread -> unread.at();
-                };
-                yield compared.holds() || held instanceof Answer.CouldNotTell ? held
-                        : held instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
-            }
+            case Proposition.Compared compared when askable(compared) ->
+                    heldAs(compared.holds(), switch (relations.get(compared.relation())) {
+                        case OneRelation.OnAQuantity read -> heldAt(read, row);
+                        case OneRelation.OnAProduct product -> product.at(row);
+                        case OneRelation.OnARemainderByAnInput remainder -> remainder.at(row);
+                        case OneRelation.OnARemainderOfAForm remainder -> remainder.at(row);
+                        case OneRelation.NoQuantity unread -> unread.at();
+                    });
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.SameValue _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> notAsked(part);
+                 Proposition.OnAnApplication _, Proposition.SomeReachable _,
+                 Proposition.LastToHold _ -> notAsked(part);
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
@@ -504,6 +651,10 @@ final class AStatementAtARow {
                     all.parts().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Any any ->
                     any.parts().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.WhereItAnswers where -> readsOf(where.answers(), about, read)
+                    && readsOf(where.states(), about, read);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
                     read) && readsOf(some.ofTheElement(), about, read);
             case Proposition.Compared compared
@@ -736,6 +887,9 @@ final class AStatementAtARow {
                     case Proposition.Any any -> add(Kind.ANY, any.parts().stream()
                             .mapToInt(each -> node(each, of, container, index)).toArray(), 0,
                             EITHER, null);
+                    case Proposition.WhereItAnswers where -> add(Kind.ALL, new int[] {
+                            node(where.answers(), of, container, index),
+                            node(where.states(), of, container, index)}, 0, EITHER, null);
                     case Proposition.Some some
                             when of.elements.get(keyOf(some)) instanceof OverTheElements over
                             && over.container().equals(container)
@@ -750,7 +904,13 @@ final class AStatementAtARow {
                             && index.containsKey(keyOf(count)) ->
                             add(Kind.COUNTED, null, index.get(keyOf(count)), EITHER,
                                     byNumber(compared, affine));
-                    default -> add(Kind.SETTLED, null, 0, EITHER, null);
+                    // A count of statements comes to either here: that claims nothing of it.
+                    case Proposition.Some _, Proposition.Compared _, Proposition.Truth _,
+                         Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                         Proposition.LastToHold _, Proposition.Carried _,
+                         Proposition.SomeReachable _, Proposition.Unread _,
+                         Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
+                            add(Kind.SETTLED, null, 0, EITHER, null);
                 };
                 read.put(part.key(), out);
                 return out;
@@ -790,44 +950,42 @@ final class AStatementAtARow {
                 Proposition.firstStopIn(part))));
     }
 
-    private static Answer heldAt(OneRelation.OnAQuantity relation,
-                                 BorderQuantity.Observation row) {
+    private static Said heldAt(OneRelation.OnAQuantity relation, BorderQuantity.Observation row) {
         LinearQuantity over = relation.over();
         return switch (over.valuesOf(over.read(row))) {
             case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
                     switch (relation.holdsAt(values)) {
-                        case ExactAnswer.Held<Boolean>(Boolean holds) ->
-                                holds ? Answer.HOLDS : Answer.FAILS;
+                        case ExactAnswer.Held<Boolean>(Boolean holds) -> new Said.Is(holds);
                         case ExactAnswer.Unheld<Boolean> unheld ->
-                                new Answer.CouldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                                new Said.NotRead(Set.of(ReadingGap.of(unheld.why())));
                     };
-            case ValuesAtARow.CouldNotTell(var why) -> new Answer.CouldNotTell(why);
-            case ValuesAtARow.NoneHere _ -> Answer.FAILS;
+            case ValuesAtARow.CouldNotTell(var why) -> new Said.NotRead(why);
+            case ValuesAtARow.NoneHere _ -> Said.NOTHING_THERE;
         };
     }
 
     /**
-     * What a row put at {@code at}, asked {@code asked}: holding where it answers true, failing
-     * where it answers false or where the row put nothing there, and not read where the walk did
-     * not get there or what stands there is no value it answers of.
+     * What a row put at {@code at}, asked {@code asked}: what it answers, nothing where the row put
+     * nothing there, and not read where the walk did not get there or what stands there is no value
+     * it answers of.
      */
-    private static Answer ofItsValue(TermPath at, BorderQuantity.Observation row,
-                                     Function<ObservedValue, Boolean> asked) {
+    private static Said ofItsValue(TermPath at, BorderQuantity.Observation row,
+                                   Function<ObservedValue, Boolean> asked) {
         return switch (row.at(at)) {
             case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
-                    new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+                    new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
                 case ObservationAtPoint.Value(ObservedValue value) -> {
                     Boolean answer = value.unread() != null ? null : asked.apply(value);
                     if (answer == null) {
-                        yield new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+                        yield new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
                     }
-                    yield answer ? Answer.HOLDS : Answer.FAILS;
+                    yield new Said.Is(answer);
                 }
-                // The row put nothing here under this reading, as a relation over a position a row
-                // left empty fails: another reading of the row is where its values here are.
+                // The row put nothing here under this reading: another reading of the row is where
+                // its values here are.
                 case ObservationAtPoint.WroteNothing _,
-                     ObservationAtPoint.BelongsToAnotherReading _ -> Answer.FAILS;
+                     ObservationAtPoint.BelongsToAnotherReading _ -> Said.NOTHING_THERE;
             };
         };
     }
@@ -838,16 +996,15 @@ final class AStatementAtARow {
      *
      * <p>Asked of the walk and not of the value. What a row wrote at a position arrives wearing the
      * names the position is declared under, and the walk is what takes them off before it asks
-     * which case a value is ({@link Classifier#inside}): the value at a position declared
+     * which case a value is ({@link ObservedValue#inside}): the value at a position declared
      * {@code Open = Flag} is in the case it wraps, and a record whose own field is called
-     * {@code value} is the case it is. Holding where a value is there and the narrowed walk reaches
-     * it, failing where it does not or where the row put nothing there, and not read where the
-     * walk did not get there.
+     * {@code value} is the case it is. True where a value is there and the narrowed walk reaches
+     * it, false where a value is there and it does not, nothing where the row put nothing there,
+     * and not read where the walk did not get there.
      */
-    private static Answer amongCases(TermPath at, CasesLeft cases,
-                                     BorderQuantity.Observation row) {
-        Answer there = ofItsValue(at, row, _ -> true);
-        if (!(there instanceof Answer.Holds)) {
+    private static Said amongCases(TermPath at, CasesLeft cases, BorderQuantity.Observation row) {
+        Said there = ofItsValue(at, row, _ -> true);
+        if (!Said.TRUE.equals(there)) {
             return there;
         }
         // The value this reading holds at the position is there, so nothing of it standing under
@@ -855,31 +1012,31 @@ final class AStatementAtARow {
         // all, or only the other elements of a container this reading did not choose did.
         return switch (row.at(DeclaredInput.narrowedTo(at, cases))) {
             case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
-                    new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+                    new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
-                case ObservationAtPoint.Value _ -> Answer.HOLDS;
+                case ObservationAtPoint.Value _ -> Said.TRUE;
                 case ObservationAtPoint.WroteNothing _,
-                     ObservationAtPoint.BelongsToAnotherReading _ -> Answer.FAILS;
+                     ObservationAtPoint.BelongsToAnotherReading _ -> Said.FALSE;
             };
         };
     }
 
     /**
-     * Whether a row put one value at both {@code one} and {@code other}: holding where it is the
-     * same value, failing where it is two or where the row put nothing at either under this
+     * Whether a row put one value at both {@code one} and {@code other}: true where it is the same
+     * value, false where it is two, nothing where the row put nothing at one of them under this
      * reading, and not read where the walk did not get to one of them or what stands there is no
      * value to compare.
      */
-    private static Answer theSame(TermPath one, TermPath other, BorderQuantity.Observation row) {
+    private static Said theSame(TermPath one, TermPath other, BorderQuantity.Observation row) {
         if (!(row.at(one) instanceof WalkResult.Reached<ObservationAtPoint>(
                 ObservationAtPoint first))
                 || !(row.at(other) instanceof WalkResult.Reached<ObservationAtPoint>(
                 ObservationAtPoint second))) {
-            return new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+            return new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
         }
         if (!(first instanceof ObservationAtPoint.Value(ObservedValue left))
                 || !(second instanceof ObservationAtPoint.Value(ObservedValue right))) {
-            return Answer.FAILS;
+            return Said.NOTHING_THERE;
         }
         // A value any part of which could not be read is no value to be equal or unequal to
         // another.
@@ -888,15 +1045,72 @@ final class AStatementAtARow {
             notRead = ReadingGap.ofAComparisonOf(right);
         }
         if (notRead != null) {
-            return new Answer.CouldNotTell(Set.of(notRead));
+            return new Said.NotRead(Set.of(notRead));
         }
-        return left.equals(right) ? Answer.HOLDS : Answer.FAILS;
+        return new Said.Is(left.equals(right));
     }
 
-    /** {@code answered} where the part is held, and the other way round where it is denied. */
-    private static Answer heldAs(boolean holds, Answer answered) {
-        return holds || answered instanceof Answer.CouldNotTell ? answered
-                : answered instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
+    /**
+     * What a row says of one part, before which way round the part is stated is applied: the part
+     * true or false there, nothing there for it to be either, or not read.
+     *
+     * <p>Apart from {@link Answer} because a denial is read off this and not off an answer. A row
+     * holding no value a part is about is on neither side of it, so the part and its denial both
+     * fail there — read off a failing answer, the denial would hold.
+     */
+    private sealed interface Said {
+
+        /** The part is {@code truth} at the row. */
+        record Is(boolean truth) implements Said {}
+
+        /** The row holds no value the part is about. */
+        record NothingThere() implements Said {}
+
+        /** What the part is about could not be read at the row, for these reasons. */
+        record NotRead(Set<ReadingGap> why) implements Said {}
+
+        Said TRUE = new Is(true);
+
+        Said FALSE = new Is(false);
+
+        Said NOTHING_THERE = new NothingThere();
+    }
+
+    /**
+     * {@code said} as an answer where the part is held, and the other way round where it is denied
+     * — failing both ways where there is nothing there.
+     */
+    private static Answer heldAs(boolean holds, Said said) {
+        return switch (said) {
+            case Said.Is(boolean truth) -> truth == holds ? Answer.HOLDS : Answer.FAILS;
+            case Said.NothingThere _ -> Answer.FAILS;
+            case Said.NotRead(Set<ReadingGap> why) -> new Answer.CouldNotTell(why);
+        };
+    }
+
+    /**
+     * Whether as many of {@code counted}'s statements hold as it admits, each answered at the row
+     * as {@code each} says.
+     *
+     * <p>One that could not be told may hold or fail ({@link Proposition.SoManyHold#comesOut}),
+     * and it is settled only where every way those come out says the same.
+     */
+    private static Answer howManyHold(Proposition.SoManyHold counted, List<Answer> each) {
+        Set<ReadingGap> unread = new LinkedHashSet<>();
+        List<Boolean> mayHold = new ArrayList<>();
+        List<Boolean> mayFail = new ArrayList<>();
+        for (Answer one : each) {
+            if (one instanceof Answer.CouldNotTell(Set<ReadingGap> why)) {
+                unread.addAll(why);
+            }
+            mayHold.add(!(one instanceof Answer.Fails));
+            mayFail.add(!(one instanceof Answer.Holds));
+        }
+        return switch (counted.comesOut(mayHold, mayFail)) {
+            case HOLDING -> Answer.HOLDS;
+            case FAILING -> Answer.FAILS;
+            case EITHER_WAY -> new Answer.CouldNotTell(unread);
+        };
     }
 
     /**
@@ -970,6 +1184,51 @@ final class AStatementAtARow {
                         out.add(Count.number(at).exactly());
                     }
                 }
+                // Over one factor, a product is the other factor's multiple of it: it turns at the
+                // level over what the other holds, and where the product passes an end of its type
+                // and holds no value at all. Where the other holds nought it is nought, and turns
+                // nowhere.
+                case OneRelation.OnAProduct product -> {
+                    int at = product.terms().indexOf(term);
+                    if (at < 0) {
+                        continue;
+                    }
+                    Place other = beside.get(product.terms().get(1 - at));
+                    if (other == null) {
+                        return null;
+                    }
+                    ExactRatio by = Count.number(other).exactly();
+                    if (by.signum() == 0) {
+                        continue;
+                    }
+                    if (!(product.weight().times(by).flatMap(weighed -> product.constant()
+                            .negated().dividedBy(weighed))
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+                        return null;
+                    }
+                    out.add(level);
+                    for (Endpoint end : List.of(Carrier.WHOLE.extent().low(),
+                            Carrier.WHOLE.extent().high())) {
+                        if (!(end.at() instanceof Count count) || !(count.exactly().dividedBy(by)
+                                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio past))) {
+                            return null;
+                        }
+                        out.add(past);
+                    }
+                }
+                // What one number leaves of another turns at no place of either: the values it
+                // holds of come round at a distance the other sets.
+                case OneRelation.OnARemainderByAnInput remainder -> {
+                    if (remainder.terms().contains(term)) {
+                        return null;
+                    }
+                }
+                // What a form leaves of a divisor comes round at every divisor along it.
+                case OneRelation.OnARemainderOfAForm remainder -> {
+                    if (remainder.terms().contains(term)) {
+                        return null;
+                    }
+                }
                 // A relation no row is read at turns wherever it does, which is not known.
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
                     if (form.coefs().containsKey(term)) {
@@ -1012,6 +1271,21 @@ final class AStatementAtARow {
                 case OneRelation.OnAnOrder(LinearQuantity _, NumericTerm on, Place at, Rel _) -> {
                     if (on.equals(term)) {
                         out.add(at);
+                    }
+                }
+                case OneRelation.OnAProduct product -> {
+                    if (product.terms().contains(term)) {
+                        return null;
+                    }
+                }
+                case OneRelation.OnARemainderByAnInput remainder -> {
+                    if (remainder.terms().contains(term)) {
+                        return null;
+                    }
+                }
+                case OneRelation.OnARemainderOfAForm remainder -> {
+                    if (remainder.terms().contains(term)) {
+                        return null;
                     }
                 }
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
@@ -1063,8 +1337,8 @@ final class AStatementAtARow {
             }
 
             /** What every row comes to: a sum of what has no number has none to come to. */
-            Answer at() {
-                return new Answer.CouldNotTell(Set.of(
+            Said at() {
+                return new Said.NotRead(Set.of(
                         ReadingGap.of(UnheldNumber.NO_REPRESENTATION_EXISTS)));
             }
         }
@@ -1089,8 +1363,200 @@ final class AStatementAtARow {
             }
         }
 
+        /**
+         * What one whole number of the input leaves of another divided by it, weighed and with a
+         * constant added, against nought.
+         *
+         * <p>The two numbers are read as a form of them, each weighed by one, which is what reads a
+         * row's numbers; the remainder is worked out of them the way a line on it reads a row
+         * ({@link OrderedAffineBoundary#remainderByAnInputAt}).
+         *
+         * @param numbers  the two numbers, read at a row
+         * @param weight   what the remainder is weighed by
+         * @param constant what is added to it
+         */
+        record OnARemainderByAnInput(LinearQuantity numbers, NumericTerm dividend,
+                                     NumericTerm divisor, ExactRatio weight, ExactRatio constant,
+                                     Rel rel) implements OneRelation {
+
+            @Override
+            public List<NumericTerm> terms() {
+                return numbers.terms();
+            }
+
+            /**
+             * What the relation is at {@code row}: nothing there where the row holds no value at a
+             * number, and where the divisor is nought — the run stops before it divides anything,
+             * and the row is on neither side.
+             */
+            Said at(BorderQuantity.Observation row) {
+                return switch (numbers.valuesOf(numbers.read(row))) {
+                    case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                            switch (OrderedAffineBoundary.remainderByAnInputAt(dividend, divisor,
+                                    values)) {
+                                case ExactAnswer.Held<Optional<ExactRatio>>(var left)
+                                        when left.isEmpty() -> Said.NOTHING_THERE;
+                                case ExactAnswer.Held<Optional<ExactRatio>>(var left) ->
+                                        switch (weight.times(left.get())
+                                                .flatMap(weighed -> weighed.plus(constant))) {
+                                            case ExactAnswer.Held<ExactRatio>(ExactRatio sum) ->
+                                                    new Said.Is(rel.holds(sum.signum()));
+                                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                                                    new Said.NotRead(Set.of(
+                                                            ReadingGap.of(unheld.why())));
+                                        };
+                                case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
+                                        new Said.NotRead(Set.of(ReadingGap.of(unheld.why())));
+                            };
+                    case ValuesAtARow.CouldNotTell(var why) -> new Said.NotRead(why);
+                    case ValuesAtARow.NoneHere _ -> Said.NOTHING_THERE;
+                };
+            }
+        }
+
+        /**
+         * What a division by a written number leaves of a form of the input's numbers, weighed and
+         * with a constant added, against nought.
+         *
+         * <p>The form is the one a line on the remainder is drawn on, so a row is read at the same
+         * numbers and the remainder is worked out of them the way that line reads a row
+         * ({@link OrderedAffineBoundary#remainderAt}).
+         *
+         * <p>With other numbers of the input in the relation, they are weighed and added to the
+         * remainder, and read at the row beside the form's own.
+         *
+         * @param of       the form the division is of, and the number it is divided by
+         * @param weight   what the remainder is weighed by
+         * @param constant what is added to it
+         * @param added    the other numbers of the relation, each with its weight
+         * @param addedNumbers the other numbers, read at a row; null where there are none
+         */
+        record OnARemainderOfAForm(DividedForm of, ExactRatio weight, ExactRatio constant,
+                                   LinearForm<NumericTerm> added, LinearQuantity addedNumbers,
+                                   Rel rel) implements OneRelation {
+
+            /** The form's numbers, read at a row. */
+            LinearQuantity numbers() {
+                return of.numbers();
+            }
+
+            @Override
+            public List<NumericTerm> terms() {
+                List<NumericTerm> out = new ArrayList<>(numbers().terms());
+                if (addedNumbers != null) {
+                    out.addAll(addedNumbers.terms());
+                }
+                return List.copyOf(out);
+            }
+
+            /**
+             * What the relation is at {@code row}: nothing there where the row holds no value at a
+             * number the form weighs, and where the form does not come to a whole number.
+             */
+            Said at(BorderQuantity.Observation row) {
+                ValuesAtARow dividend = numbers().valuesOf(numbers().read(row));
+                ValuesAtARow rest = addedNumbers == null ? null
+                        : addedNumbers.valuesOf(addedNumbers.read(row));
+                if (dividend instanceof ValuesAtARow.NoneHere
+                        || rest instanceof ValuesAtARow.NoneHere) {
+                    return Said.NOTHING_THERE;
+                }
+                // Whatever stopped either, since a row is not read for the stopping of any one of
+                // them and a reader is told all that did.
+                Set<ReadingGap> stopped = new LinkedHashSet<>();
+                if (dividend instanceof ValuesAtARow.CouldNotTell(var why)) {
+                    stopped.addAll(why);
+                }
+                if (rest instanceof ValuesAtARow.CouldNotTell(var why)) {
+                    stopped.addAll(why);
+                }
+                if (!stopped.isEmpty()) {
+                    return new Said.NotRead(stopped);
+                }
+                Map<NumericTerm, Place> values = new LinkedHashMap<>(
+                        ((ValuesAtARow.Read) dividend).values());
+                if (rest != null) {
+                    values.putAll(((ValuesAtARow.Read) rest).values());
+                }
+                return switch (OrderedAffineBoundary.remainderAt(of.whole(), of.divisor(),
+                        values)) {
+                    case ExactAnswer.Held<Optional<ExactRatio>>(var left)
+                            when left.isEmpty() -> Said.NOTHING_THERE;
+                    case ExactAnswer.Held<Optional<ExactRatio>>(var left) ->
+                            switch (weight.times(left.get())
+                                    .flatMap(weighed -> weighed.plus(constant))
+                                    .flatMap(weighed -> OrderedAffineBoundary.at(added, values)
+                                            .flatMap(weighed::plus))) {
+                                case ExactAnswer.Held<ExactRatio>(ExactRatio sum) ->
+                                        new Said.Is(rel.holds(sum.signum()));
+                                case ExactAnswer.Unheld<ExactRatio> unheld ->
+                                        new Said.NotRead(Set.of(ReadingGap.of(unheld.why())));
+                            };
+                    case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
+                            new Said.NotRead(Set.of(ReadingGap.of(unheld.why())));
+                };
+            }
+        }
+
+        /**
+         * What two whole numbers of the input come to multiplied, weighed and with a constant
+         * added, against nought.
+         *
+         * <p>The factors are read as a form of the two, each weighed by one, which is what reads a
+         * row's numbers; the product is worked out of them the way a line on it reads a row
+         * ({@link OrderedAffineBoundary#productAt}).
+         *
+         * @param factors  the two factors, read at a row
+         * @param weight   what the product is weighed by
+         * @param constant what is added to it
+         */
+        record OnAProduct(LinearQuantity factors, ExactRatio weight, ExactRatio constant, Rel rel)
+                implements OneRelation {
+
+            @Override
+            public List<NumericTerm> terms() {
+                return factors.terms();
+            }
+
+            /**
+             * What the relation is at {@code row}: nothing there where the row holds no value at a
+             * factor, and where the product passes where the type stops — the run stops before it
+             * compares anything, and the row is on neither side.
+             */
+            Said at(BorderQuantity.Observation row) {
+                return switch (factors.valuesOf(factors.read(row))) {
+                    case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                            switch (OrderedAffineBoundary.productAt(terms(), values)) {
+                                case ExactAnswer.Held<Optional<ExactRatio>>(var product)
+                                        when product.isEmpty() -> Said.NOTHING_THERE;
+                                case ExactAnswer.Held<Optional<ExactRatio>>(var product) ->
+                                        switch (weight.times(product.get())
+                                                .flatMap(weighed -> weighed.plus(constant))) {
+                                            case ExactAnswer.Held<ExactRatio>(ExactRatio sum) ->
+                                                    new Said.Is(rel.holds(sum.signum()));
+                                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                                                    new Said.NotRead(Set.of(
+                                                            ReadingGap.of(unheld.why())));
+                                        };
+                                case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
+                                        new Said.NotRead(Set.of(ReadingGap.of(unheld.why())));
+                            };
+                    case ValuesAtARow.CouldNotTell(var why) -> new Said.NotRead(why);
+                    case ValuesAtARow.NoneHere _ -> Said.NOTHING_THERE;
+                };
+            }
+        }
+
         static OneRelation of(Relation relation, String behavior, Quantities quantities) {
             return switch (relation) {
+                case Relation.Affine affine when productIn(affine) != null ->
+                        ofAProduct(affine, productIn(affine), behavior, quantities);
+                case Relation.Affine affine when remainderByAnInputIn(affine) != null ->
+                        ofARemainderByAnInput(affine, remainderByAnInputIn(affine), behavior,
+                                quantities);
+                case Relation.Affine affine when remainderOfADividendIn(affine) != null ->
+                        ofARemainderOfAForm(affine, remainderOfADividendIn(affine), behavior,
+                                quantities);
                 case Relation.Affine affine -> {
                     LinearForm<NumericTerm> form =
                             WhatTheDeclarationsLeave.ofTheInput(affine.form());
@@ -1109,6 +1575,45 @@ final class AStatementAtARow {
                 case Relation.Ordered ordered -> throw new IllegalStateException("a relation put"
                         + " to rows is over the input's own numbers: " + ordered);
             };
+        }
+
+        /** A relation over {@code remainder}, read at the numbers of its form. */
+        private static OneRelation ofARemainderOfAForm(Relation.Affine affine,
+                Quantity.RemainderOfADividend remainder, String behavior, Quantities quantities) {
+            DividedForm of = Cutting.remainderAtARow(behavior, remainder, quantities);
+            LinearForm<NumericTerm> added = otherNumbersWithTheRemainder(affine.form());
+            LinearQuantity addedNumbers = added.coefs().isEmpty() ? null
+                    : Cutting.readAt(behavior, added, quantities);
+            if (of == null || (addedNumbers == null && !added.coefs().isEmpty())) {
+                Map<NumericTerm, ExactRatio> every = new LinkedHashMap<>(
+                        remainder.dividend().coefs());
+                every.putAll(added.coefs());
+                return new NoQuantity(new LinearForm<>(ExactRatio.ZERO, every));
+            }
+            return new OnARemainderOfAForm(of, affine.form().coefs().get(remainder),
+                    affine.form().constant(), added, addedNumbers, affine.proposition());
+        }
+
+        /** A relation over {@code remainder}, read at the two numbers. */
+        private static OneRelation ofARemainderByAnInput(Relation.Affine affine,
+                Quantity.RemainderByAnInput remainder, String behavior, Quantities quantities) {
+            Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
+            remainder.operands().forEach(number -> each.put(number, ExactRatio.ONE));
+            return new OnARemainderByAnInput(Cutting.readAt(behavior,
+                    new LinearForm<>(ExactRatio.ZERO, each), quantities), remainder.dividend(),
+                    remainder.divisor(), affine.form().coefs().get(remainder),
+                    affine.form().constant(), affine.proposition());
+        }
+
+        /** A relation over {@code product}, read at the two factors. */
+        private static OneRelation ofAProduct(Relation.Affine affine,
+                                              Quantity.ProductOfTwo product, String behavior,
+                                              Quantities quantities) {
+            Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
+            product.factors().forEach(factor -> each.put(factor, ExactRatio.ONE));
+            return new OnAProduct(Cutting.readAt(behavior, new LinearForm<>(ExactRatio.ZERO, each),
+                    quantities), affine.form().coefs().get(product), affine.form().constant(),
+                    affine.proposition());
         }
     }
 
@@ -1135,6 +1640,18 @@ final class AStatementAtARow {
         for (OneRelation each : relations.values()) {
             if (each instanceof OneRelation.OnAQuantity read) {
                 out.add(read.over());
+            }
+            if (each instanceof OneRelation.OnAProduct product) {
+                out.add(product.factors());
+            }
+            if (each instanceof OneRelation.OnARemainderByAnInput remainder) {
+                out.add(remainder.numbers());
+            }
+            if (each instanceof OneRelation.OnARemainderOfAForm remainder) {
+                out.add(remainder.numbers());
+                if (remainder.addedNumbers() != null) {
+                    out.add(remainder.addedNumbers());
+                }
             }
         }
         return List.copyOf(out);

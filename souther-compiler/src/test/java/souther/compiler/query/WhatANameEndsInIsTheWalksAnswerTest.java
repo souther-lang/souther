@@ -241,8 +241,6 @@ class WhatANameEndsInIsTheWalksAnswerTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("beneath.sou", BENEATH);
         byId.put("above.sou", ABOVE);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 }

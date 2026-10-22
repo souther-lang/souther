@@ -17,8 +17,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -111,8 +111,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
         TermPath element = TermPath.of("x").then("kids").element();
 
         assertNotNull(read.at(element), () -> spelled(read));
-        assertEquals("x", returnedAt(read, element).openedAt().toString(),
-                "which is where the path opened `Node`");
+        assertNotStopped(read, element);
         assertTrue(read.positions().stream()
                         .noneMatch(each -> each.path().isAtOrUnder(element)
                                 && !each.path().equals(element)),
@@ -126,7 +125,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
         TermPath held = pathOf(read, "x.next@Some");
 
         assertNotNull(read.at(held), () -> spelled(read));
-        assertEquals("x", returnedAt(read, held).openedAt().toString());
+        assertNotStopped(read, held);
     }
 
     /** And an expression stops at the operands of its first operator. */
@@ -136,8 +135,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
         TermPath left = TermPath.of("x").refine(toLeaf(named("Add"))).then("l");
 
         assertNotNull(read.at(left), () -> spelled(read));
-        assertEquals("x", returnedAt(read, left).openedAt().toString(),
-                "which is where the path opened `Expr`");
+        assertNotStopped(read, left);
     }
 
     /**
@@ -153,8 +151,37 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
         TermPath again = pathOf(read, "x.b.a@Some");
 
         assertNotNull(read.at(again), () -> spelled(read));
-        assertEquals("x", returnedAt(read, again).openedAt().toString(),
-                "which is where the path opened `A`");
+        assertNotStopped(read, again);
+    }
+
+    /** Through a case of a sum that carries a rule of its own. */
+    private static final String WITH_A_RULE_OWED = """
+            module g
+
+            data End
+            data Link = { size: Int, rest: Chain }
+                invariant size >= 0
+            data Chain = End | Link
+
+            data Ok
+
+            behavior read : (c: Chain) -> Ok
+            """;
+
+    /**
+     * A return is the end of the listing whether or not the declaration states a rule.
+     *
+     * <p>What the declaration states was handed on where it was first opened, and the value that
+     * comes back is read like any other: its sum still divides into its cases, and nothing is owed
+     * under it that the position above it was not owed.
+     */
+    @Test
+    void aReturnIsNotAStopWhateverTheDeclarationStates() {
+        InputDomain read = reading(WITH_A_RULE_OWED, "read");
+        TermPath back = pathOf(read, "c@Link.rest");
+
+        assertNull(BlockedDescent.of(read.at(back).structure()), () -> spelled(read));
+        assertEquals(2, read.at(back).obligationCases().size());
     }
 
     /**
@@ -174,11 +201,10 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
                 "the sum there divides into its cases whichever time round it is");
     }
 
-    /** Why the walk stopped at {@code path}, which has to be the return and nothing else. */
-    private static BlockReason.RecursiveExpansion returnedAt(InputDomain read, TermPath path) {
-        BlockedDescent stopped = BlockedDescent.of(read.at(path).structure());
-        assertNotNull(stopped, () -> path + " is where the path returns, and it says so");
-        return assertInstanceOf(BlockReason.RecursiveExpansion.class, stopped.why());
+    /** The return closes the listing and leaves nothing unread: it is a position like the rest. */
+    private static void assertNotStopped(InputDomain read, TermPath path) {
+        assertNull(BlockedDescent.of(read.at(path).structure()),
+                () -> path + " is where the path returns, and nothing is owed under it");
     }
 
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
@@ -210,7 +236,6 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
     private static InputDomain reading(String source, String behavior) {
         Compilation compilation =
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

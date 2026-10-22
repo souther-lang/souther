@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.RowsOfABlock;
 import souther.compiler.diag.SourceRendering;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -11,7 +13,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -449,9 +450,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      */
     @Test
     void aClassOpenAtBothEndsOffersAValueOfItsOwnOrNone() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = model();
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "openOnBothSidesDense",
@@ -472,42 +471,24 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     }
 
     /**
-     * The classes a block offers a row for, whether as a row's name or over an unnamed row. A row
-     * composed for a class and for the decision rule the class is reached by, or handed for a point
-     * of a line besides, is for several things and is named for none. A class is said as the
+     * The classes a block offers a row for, as a row's name or over it. A class is said as the
      * position and its label joined by {@code =}, which no rule, combination or point is.
      */
     private static List<String> classesOffered(String block) {
         List<String> out = new ArrayList<>();
-        Matcher named = Pattern.compile("\\|\\s*\"([^\"]*)\"\\s*:").matcher(block);
-        while (named.find()) {
-            out.add(named.group(1));
+        for (RowsOfABlock.Row row : RowsOfABlock.of(block)) {
+            row.name().ifPresent(out::add);
+            row.fills().stream().filter(said -> A_CLASS.matcher(said).lookingAt())
+                    .forEach(out::add);
         }
-        block.lines().filter(line -> line.startsWith("// fills "))
-                .map(line -> line.substring("// fills ".length()))
-                .filter(said -> A_CLASS.matcher(said).lookingAt())
-                .forEach(out::add);
         return out;
     }
 
     private static final Pattern A_CLASS = Pattern.compile("[^\\s=]+=");
 
-    /** The row offered for {@code label}: named by it, or with it said over an unnamed row. */
+    /** The row offered for {@code label}, as it is written. */
     private static String rowFor(String block, String label) {
-        List<String> lines = block.lines().toList();
-        for (int at = 0; at < lines.size(); at++) {
-            if (lines.get(at).startsWith("    | \"" + label + "\"")) {
-                return lines.get(at);
-            }
-            if (lines.get(at).equals("// fills " + label)) {
-                for (int row = at; row < lines.size(); row++) {
-                    if (lines.get(row).startsWith("    | ")) {
-                        return lines.get(row);
-                    }
-                }
-            }
-        }
-        throw new AssertionError("no row is offered for " + label + " in " + block);
+        return RowsOfABlock.forThe(block, label).written();
     }
 
     /**
@@ -531,9 +512,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      */
     @Test
     void theClassOfEverythingElseIsOfferedAValueThatIsNoneOfThem() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = model();
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledDense", SourceRendering.namedByIdentity(compilation.texts())).text();
@@ -547,11 +526,29 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                         + " a class: " + moment);
     }
 
+    /** The model measured once for the class: every test here reads it, and only reads it. */
+    private static Compilation measuredModel;
+
+    private static synchronized Compilation model() {
+        if (measuredModel == null) {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            measuredModel = compilation;
+        }
+        return measuredModel;
+    }
+
+    /** And given back when the class is done with it: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static synchronized void released() {
+        measuredModel = null;
+    }
+
     /** What the measures answered for each named behavior. */
     private static Map<String, Measured> measured(Iterable<String> behaviors) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = model();
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("example.matrix")).value();
         assertNotNull(coverage, "the model under test compiles");
@@ -593,9 +590,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     @Test
     void howTheValuesStepIsAskedOfTheCarrier() {
         for (String behavior : List.of("twoLinesDense", "twoLinesMoment")) {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = model();
             String block = souther.compiler.report.GeneratedRows.of(
                     compilation, "example.matrix", behavior, SourceRendering.namedByIdentity(compilation.texts())).text();
 

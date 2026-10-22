@@ -78,6 +78,7 @@ final class Subjects {
             // meetings.
             case Weakening.MeetingsNotWalked it -> new Subject.OfABehavior(it.behavior());
             case Weakening.MeetingsNotPlaced it -> new Subject.OfABehavior(it.behavior());
+            case Weakening.MeetingsNotJoined it -> new Subject.OfABehavior(it.behavior());
             // The arm as the source wrote it, which is what the fact now carries: the number a run
             // through it was recorded at is resolved where the sites are, and nothing this far
             // along has them.
@@ -101,6 +102,10 @@ final class Subjects {
             // The behavior whose body looks values up in a map filed from a list. Which decisions
             // rest on the order of its repeated keys is not said: none was measured.
             case Weakening.KeyedOverwriteCasesUnmeasured it ->
+                    new Subject.OfABehavior(it.behavior());
+            // The behavior whose body searches from a node for one below it. Which decisions rest
+            // on that search is not said: no node further down was measured.
+            case Weakening.ReachableNodeCasesUnmeasured it ->
                     new Subject.OfABehavior(it.behavior());
             // The behavior whose body the rewrite is of. Which rewrite, and why it was left open,
             // is the rewrite's own entry under the replacement measure.

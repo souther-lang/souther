@@ -6,12 +6,15 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
+import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Place;
@@ -109,7 +112,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     @Test
     void aCutNamingNumbersNothingComposesOneValueForIsSaidAsThat() {
         Generator.BoundaryAttempt attempt = composing(axisAt("r.lines"), Count.of(2),
-                cut(aTotalOver("a")), cut(aTotalOver("b")));
+                cut(aTotalOver("a")), cut(aTotalOverBothFields()));
 
         assertFalse(attempt.unrepresented().onTheWay().isEmpty(),
                 "the cuts it was handed and could not place: " + attempt.unrepresented());
@@ -153,7 +156,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     void aCutNamingTwoTotalsOfOneContainerIsSaidAsThatAndTheRowIsComposedWithoutIt() {
         OnTheWay.TakenIn both = new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
                 new TakenConstraint.Affine(LinearForm.<NumericTerm>sumOfAtoms(aTotalOver("a"),
-                        aTotalOver("b")), Rel.GE)));
+                        aTotalOverBothFields()), Rel.GE)));
 
         Generator.BoundaryAttempt attempt = composing(costAxis(), Count.of(100), both);
 
@@ -173,6 +176,22 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                         TermPath.of("r").then("lines").element().then(field)),
                 Type.INT, rules().inners(), rules().symbols());
         assertNotNull(over, "a total over the occurrences of a path is a number of the run");
+        return over;
+    }
+
+    /** The total of the two fields of each of the container's elements together. */
+    private static NumericTerm aTotalOverBothFields() {
+        NumericTerm.TakenOver over = NumericTerm.TakenOver.of(
+                ValueName.Stdlib.operation("List", "sum"),
+                new RunSource.ComputedOccurrences(
+                        TermPath.of("r").then("lines").element(), new ElementValue.Affine(
+                                new LinearForm<>(ExactRatio.ZERO, Map.of(
+                                        ElementProjection.ofFields(List.of("a")), ExactRatio.ONE,
+                                        ElementProjection.ofFields(List.of("b")),
+                                        ExactRatio.ONE))),
+                        Type.INT, null),
+                Type.INT, rules().inners(), rules().symbols());
+        assertNotNull(over, "a total over what is computed of each element is a number of a run");
         return over;
     }
 
@@ -253,9 +272,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     private static final Compilation COMPILATION = compiled();
 
     private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(BOUNDED, "Main");
-        made.answerEverything();
-        return made;
+        return Compilation.ofSource(BOUNDED, "Main");
     }
 
     private static String module() {

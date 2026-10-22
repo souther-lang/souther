@@ -59,10 +59,11 @@ public record ObligationAssessment(Optional<Criterion> criterion, ObligationCove
      * candidate, and one whose measurement never happened is not a piece of work to hand to anybody
      * — offered anyway, both put a specific row in front of an author that may already be written.
      * And a point every row at which reaches an {@code unreachable} is not either: a row built there
-     * is one the compiler refuses.
+     * is one the compiler refuses. A point the way to which may stop a run is: what is open there is
+     * whether a run gets there, and a row composed and run there is what answers it.
      */
     public boolean worthSearching() {
-        if (!open.isEmpty()) {
+        if (!ObligationDisposition.premisesIn(open).isEmpty()) {
             return false;
         }
         return switch (coverage) {

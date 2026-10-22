@@ -5,14 +5,21 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.Evaluations;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.TraversalDirection;
+import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSettlement;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -26,6 +33,8 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -162,6 +171,142 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                 () -> "one way holds two or more: " + values);
         assertEquals(1, values.stream().filter(elements -> elements.size() < 2).count(),
                 () -> "and the other holds fewer: " + values);
+    }
+
+    /**
+     * A total weighed by where each element stands is one number of the answer, named by the
+     * computation and by the direction the elements are handed in: {@code [2, 5]} comes to five
+     * and {@code [5, 2]} to two, so the answer reversed ahead of the weighing is another number,
+     * and reversed twice it is the first again.
+     */
+    @Test
+    void aTotalWeighedByPositionIsANumberOfTheAnswerInTheDirectionItIsHandedIn() {
+        String weighed = "List.sum(List.mapIndexed((i, x) -> i * x, %s)) >= 5";
+        TraversalDirection forward = directionOfTheTotalIn(
+                weighed.formatted("sched1(c).value"));
+        TraversalDirection reversed = directionOfTheTotalIn(
+                weighed.formatted("List.reverse(sched1(c).value)"));
+        TraversalDirection twice = directionOfTheTotalIn(
+                weighed.formatted("List.reverse(List.reverse(sched1(c).value))"));
+
+        assertEquals(TraversalDirection.FORWARD, forward);
+        assertEquals(TraversalDirection.REVERSE, reversed);
+        assertEquals(TraversalDirection.FORWARD, twice);
+    }
+
+    /** The direction of the one total weighed by position that every way of {@code body} states. */
+    private static TraversalDirection directionOfTheTotalIn(String body) {
+        List<AnswersDemanded> ways = waysOf(body);
+        assertEquals(2, ways.size(), () -> body);
+        Set<TraversalDirection> directions = new HashSet<>();
+        for (AnswersDemanded each : ways) {
+            assertTrue(each.declined().isEmpty(), () -> body + " left unstated: " + each);
+            AnswerDemand.AComparison comparison = assertInstanceOf(
+                    AnswerDemand.AComparison.class, each.stated().getFirst());
+            DecisionAtom.ComputedOverAnAnswer total = assertInstanceOf(
+                    DecisionAtom.ComputedOverAnAnswer.class,
+                    comparison.form().coefs().keySet().iterator().next(), body);
+            directions.add(total.direction());
+        }
+        assertEquals(1, directions.size(), () -> body + " is one number: " + directions);
+        return directions.iterator().next();
+    }
+
+    /**
+     * Two totals weighed by position, one over each of two calls of a dependency, are a form over
+     * what two calls answered, which is one value held against itself and not two answers: the
+     * same refusal a count of each is given.
+     */
+    @Test
+    void twoCallsOfATotalWeighedByPositionAreNotTwoAnswers() {
+        String total = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value))";
+        for (AnswersDemanded each : waysOf(total + " >= " + total + " + 1")) {
+            assertEquals(List.of(new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer()),
+                    each.declined().stream().map(DemandGap.Unstated::why).toList(),
+                    () -> "a form over what two calls answered is one value held against itself: "
+                            + each);
+            assertTrue(each.stated().isEmpty(), () -> "and nothing is composed to it: " + each);
+        }
+    }
+
+    /**
+     * The same list weighed in two directions is two numbers of the one value a row writes for the
+     * dependency, as a count and a total of it are, and they may stand in one form.
+     */
+    @Test
+    void twoTotalsOfOneCallWeighedDifferentlyAreTwoNumbers() {
+        String forward = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value))";
+        String reversed =
+                "List.sum(List.mapIndexed((i, x) -> i * x, List.reverse(sched1(c).value)))";
+        for (AnswersDemanded each : waysOf(forward + " >= " + reversed)) {
+            assertTrue(each.declined().stream().noneMatch(unstated -> unstated.why()
+                            instanceof DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer),
+                    () -> "two numbers of one answer are not two answers: " + each);
+        }
+    }
+
+    /**
+     * A total weighed by position beside a number of the input is a statement about the pair, which
+     * is remade as one about an input ({@link AnswerAsAnInput}) by the same term the total alone
+     * is composed to.
+     */
+    @Test
+    void aTotalWeighedByPositionBesideANumberOfTheInputIsAStatement() {
+        String body = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value)) >= on";
+        for (AnswersDemanded each : waysOf(body)) {
+            assertTrue(each.declined().isEmpty(), () -> "nothing was left unstated: " + each);
+            AnswerDemand.AStatement statement = assertInstanceOf(
+                    AnswerDemand.AStatement.class, each.stated().getFirst());
+            // Asked only which answer and which numbers of the input it is about, with no reading
+            // to take a number by.
+            assertNotNull(AnswerAsAnInput.onlyAnswerIn(statement.statement()),
+                    () -> "it is about one answer: " + statement.statement());
+            assertFalse(AnswerAsAnInput.inputNumbersIn(statement.statement()).isEmpty(),
+                    () -> "and a number of the input: " + statement.statement());
+        }
+        // Remade as a statement about an input it is composed along, and a value is never offered
+        // that misses a demand.
+        for (Tried tried : attemptedForEachWay(body)) {
+            if (tried.attempt().outcome() instanceof AnAnswerComposed.Outcome.Composed) {
+                assertTrue(tried.attempt().unaccounted().isEmpty(), () ->
+                        "a value offered meets every demand: " + tried.attempt().unaccounted());
+            }
+        }
+    }
+
+    /**
+     * What a statement is about is asked with no reading to take a number by, whichever way the
+     * total weighed by position stands in it: beside a number of the input, under a conjunction,
+     * under a disjunction, nested in both, or added to one.
+     */
+    @Test
+    void aTotalWeighedByPositionInACompoundStatementIsAskedWhatItIsAbout() {
+        String total = "List.sum(List.mapIndexed((i, x) -> i * x, sched1(c).value))";
+        for (String body : List.of(total + " >= on && on > 0", total + " >= on || on > 100",
+                "(" + total + " >= on && on > 0) || on > 100", "(" + total + " + on) >= 7")) {
+            int asked = 0;
+            for (AnswersDemanded each : waysOf(body)) {
+                for (AnswerDemand stated : each.stated()) {
+                    if (stated instanceof AnswerDemand.AStatement statement) {
+                        asked++;
+                        assertNotNull(AnswerAsAnInput.onlyAnswerIn(statement.statement()),
+                                () -> body + ": " + statement.statement());
+                        assertFalse(AnswerAsAnInput.inputNumbersIn(statement.statement())
+                                .isEmpty(), () -> body + ": " + statement.statement());
+                    }
+                }
+            }
+            assertTrue(asked > 0, () -> body + " is stated as a statement in some way");
+        }
+    }
+
+    /** A reordering that shows no order leaves no position to weigh by. */
+    @Test
+    void aTotalWeighedByPositionOverAnAnswerSortedIsNotStated() {
+        for (AnswersDemanded each : waysOf("List.sum(List.mapIndexed((i, x) -> i * x,"
+                + " List.sortBy(y -> y, sched1(c).value))) >= 5")) {
+            assertTrue(each.stated().isEmpty(), () -> "nothing is stated of it: " + each);
+        }
     }
 
     /**
@@ -468,12 +613,11 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     /**
-     * A count of statements about the answer held against a number of the input is two numbers,
-     * and the reading of what the comparison means has nothing to hold to a figure; put at the
-     * value the way leaves the input's number at, it is a count alone against a constant, which is
-     * as many choices of which statements hold as there are ways of picking that many. Past the
-     * readings of one condition the statement is said to be one a figure stopped the composing
-     * of — and not one nothing composes for, or one about something other than the answer.
+     * A count of statements about the answer held against a number of the input is read once for
+     * each way the statements come out, and eighteen of them are more ways than one condition is
+     * read in. The comparison is said to be one that figure stopped the reading of — and no
+     * composing says of the statement that nothing composes for it, or that it is about something
+     * other than the answer.
      */
     @Test
     void aCountLeftAloneByANumberPutAtAValueIsHeldToTheFigure() {
@@ -516,12 +660,14 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
             }
         }
 
-        assertTrue(said.stream().anyMatch(why ->
-                        why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(
-                                var figures)
-                                && figures.written().contains(
-                                        CompositionBudget.READINGS_OF_ONE_CONDITION)),
-                () -> "the statement is said to be one the figure stopped: " + said);
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.lines().anyMatch(line -> line.contains("not read")
+                        && line.contains(CompositionBudget.READINGS_OF_ONE_CONDITION.name())
+                        && line.contains("about `on`")),
+                () -> "the comparison is said to be one the figure stopped: " + report);
+        assertEquals(List.of(), said,
+                "a statement the reading of what it means stopped on is no statement composed for");
     }
 
     /** What the dependency answers is a list of elements of two numbers. */
@@ -616,6 +762,28 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     /**
+     * Every answer is said under one name for a composer, so a statement about some element of
+     * one answer and some element of another is two answers under that name, and is no statement
+     * about one: a composer is handed neither it nor a quantifier over the name holding another.
+     * About one answer, it is that answer's.
+     */
+    @Test
+    void aStatementAboutTwoAnswersIsNoneAboutOneUnderTheNameTheyAreSaidBy() {
+        InjectedAnswer one = new InjectedAnswer(
+                Evaluations.of(new ValueName.Behavior("demo", "sched1"), 0), List.of());
+        InjectedAnswer other = new InjectedAnswer(
+                Evaluations.of(new ValueName.Behavior("demo", "sched2"), 0), List.of());
+        Proposition aboutOther = new Proposition.Some(
+                new DecisionSubject.AnAnswer(other, List.of()), new Proposition.Always(true), true);
+        Proposition aboutBoth = new Proposition.Some(
+                new DecisionSubject.AnAnswer(one, List.of()), aboutOther, true);
+
+        assertNull(AnswerAsAnInput.inputNumbersIn(aboutBoth), aboutBoth::toString);
+        assertNull(AnswerAsAnInput.onlyAnswerIn(aboutBoth), aboutBoth::toString);
+        assertEquals(Set.of(), AnswerAsAnInput.inputNumbersIn(aboutOther), aboutOther::toString);
+    }
+
+    /**
      * What the issue wrote, as it wrote it: a count over a filter handed back as the answer, with no
      * decision in the body at all, and a count held against a number beside it.
      */
@@ -696,6 +864,21 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
     /** The elements of the value composed for each way of {@code body}, in the order of the ways. */
     private static List<List<Long>> composedForEachWay(String body) {
+        List<List<Long>> out = new ArrayList<>();
+        for (Tried each : attemptedForEachWay(body)) {
+            AnAnswerComposed.Attempt attempt = each.attempt();
+            AnAnswerComposed.Outcome.Composed composed = assertInstanceOf(
+                    AnAnswerComposed.Outcome.Composed.class, attempt.outcome(),
+                    () -> "a value is composed for " + each.way() + ": " + attempt);
+            assertTrue(attempt.unaccounted().isEmpty(),
+                    () -> "and it meets every demand: " + attempt.unaccounted());
+            out.add(elementsOf(composed.value().text()));
+        }
+        return out;
+    }
+
+    /** What composing a value for each way of {@code body} came to, whatever it came to. */
+    private static List<Tried> attemptedForEachWay(String body) {
         String source = MODEL.replace("BODY", body);
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -706,19 +889,16 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                 compilation.db().ask(new Adequacy.Divided(module, "holds")).value();
         InputReading reading = domain.reading(RuleReadings.of(compilation, module));
         MeasuredInput subject = MeasuredInput.of("holds", reading, divided);
-        List<List<Long>> out = new ArrayList<>();
+        List<Tried> out = new ArrayList<>();
         for (AnswersDemanded each : waysOf(body)) {
-            AnAnswerComposed.Attempt attempt = AnAnswerComposed.of(subject,
-                    StatementsOfAnInput.of(reading), each.stated());
-            AnAnswerComposed.Outcome.Composed composed = assertInstanceOf(
-                    AnAnswerComposed.Outcome.Composed.class, attempt.outcome(),
-                    () -> "a value is composed for " + each + ": " + attempt);
-            assertTrue(attempt.unaccounted().isEmpty(),
-                    () -> "and it meets every demand: " + attempt.unaccounted());
-            out.add(elementsOf(composed.value().text()));
+            out.add(new Tried(each, AnAnswerComposed.of(subject, StatementsOfAnInput.of(reading),
+                    each.stated())));
         }
         return out;
     }
+
+    /** One way, and what composing a value for it came to. */
+    private record Tried(AnswersDemanded way, AnAnswerComposed.Attempt attempt) {}
 
     private static List<Long> elementsOf(String written) {
         List<Long> out = new ArrayList<>();

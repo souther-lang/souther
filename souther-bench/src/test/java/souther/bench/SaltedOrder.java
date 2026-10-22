@@ -47,6 +47,20 @@ final class SaltedOrder {
         /** An iterator or a stream over one of those. */
         TRAVERSAL,
 
+        /**
+         * A container, or a view or an iterator over one, that holds one of those whole, as an
+         * element, a key or a value, at the depth the tag's site says. The container's own order is
+         * not the copy's, so it is no answer and no walk of it is a walk of the copy; what is taken
+         * out of it at that depth is the copy.
+         */
+        HELD,
+
+        /**
+         * An object that writes through to the container it is a view of. It holds no copy and is
+         * no order; it says that a put to it is a put to something else.
+         */
+        VIEW,
+
         /** A list, an array or a text put together in the order a traversal gave. */
         SEQUENCE,
 
@@ -169,6 +183,86 @@ final class SaltedOrder {
         boolean cameOutOfACopy() {
             return kind == Kind.COLLECTION || kind == Kind.TRAVERSAL || isPositional();
         }
+
+        private static final String OF_TEXTS = "of texts";
+
+        /**
+         * A walk over one of those whose every element is a {@link String}, which a function says by
+         * returning one. It is a tag of its own rather than a mark on the walk, so that where two
+         * ways of reaching a place meet and only one of them was of texts, the place holds both and
+         * is not taken for a walk of texts.
+         */
+        static Tag traversalOfTexts(String origin) {
+            return new Tag(Kind.TRAVERSAL, origin, OF_TEXTS);
+        }
+
+        /** Whether this is a walk whose every element is a text. */
+        boolean isATraversalOfTexts() {
+            return kind == Kind.TRAVERSAL && site.equals(OF_TEXTS);
+        }
+
+        /**
+         * A copy held whole in what carries the tag, {@code path} slots down: each {@code e} an
+         * element or a value, each {@code k} a key, outermost first.
+         */
+        static Tag held(String origin, String path) {
+            return new Tag(Kind.HELD, origin, path);
+        }
+
+        /** Whether this says a copy is held whole somewhere inside what carries it. */
+        boolean isHeld() {
+            return kind == Kind.HELD;
+        }
+
+        /**
+         * Whether this is carried from method to method, to fields and into containers: what came
+         * out of a copy, and what holds one whole. Only the first is an order to be read; the
+         * second is what the first is taken out of.
+         */
+        boolean travels() {
+            return cameOutOfACopy() || isHeld() || kind == Kind.VIEW;
+        }
+
+        private static final String ENTRIES_OF_A_MAP = "entries";
+
+        /**
+         * Something that writes through to the container it is of: the cursor of a list, a sublist,
+         * a key set, an entry of a map. It is a tag, and not a mark on the value, so that it is
+         * known wherever the object goes: into a method that is handed it, into a field, out of a
+         * call. Where two ways of reaching a place meet and only one of them is a view, the place
+         * may be one, which is what holding both tags says.
+         */
+        static Tag view() {
+            return new Tag(Kind.VIEW, "");
+        }
+
+        /** The entries of a map, or a walk over them: each is a view of the map. */
+        static Tag entriesOfAMap() {
+            return new Tag(Kind.VIEW, "", ENTRIES_OF_A_MAP);
+        }
+
+        boolean isAView() {
+            return kind == Kind.VIEW && !site.equals(WINDOW);
+        }
+
+        private static final String WINDOW = "window";
+
+        /**
+         * Something that writes what it is told to where it was made to write: a formatter or a
+         * writer made over another, a stream made over a file. What is said into it is said where
+         * that is read, which is not followed back from here.
+         */
+        static Tag window() {
+            return new Tag(Kind.VIEW, "", WINDOW);
+        }
+
+        boolean isAWindow() {
+            return kind == Kind.VIEW && site.equals(WINDOW);
+        }
+
+        boolean isEntriesOfAMap() {
+            return kind == Kind.VIEW && site.equals(ENTRIES_OF_A_MAP);
+        }
     }
 
     /**
@@ -178,9 +272,15 @@ final class SaltedOrder {
      * is seen by every place the same object is held. {@code home} says where it was last read
      * from, a local or a field, which is how a call on a value taken out of a field is written back
      * to it. {@code made} is the class it was made from, since a call that only names an interface
-     * cannot say whether {@code add} on it keeps an order.
+     * cannot say whether {@code add} on it keeps an order. {@code types} are the classes the code
+     * may hold it as, of those the program declares, each named by an instruction that put it
+     * there: what it was made as, cast to, or read through a field, a parameter or a return, and
+     * what a caller handed a parameter as. Where two ways of reaching a place meet, it may be what
+     * either way held. A call that makes text of any object it is handed says what the fields of
+     * each of them hold, and the call itself names only {@code Object}.
      */
-    record Val(Set<Tag> tags, boolean wide, int alloc, String made, String home) {
+    record Val(Set<Tag> tags, boolean wide, int alloc, String made, String home,
+               Set<String> types) {
 
         /**
          * What {@code made} says of a value taken out of a map: the object it was held in, so that
@@ -188,9 +288,9 @@ final class SaltedOrder {
          */
         static final String HELD_IN_A_MAP = "held in a map";
 
-        static final Val CLEAN = new Val(Set.of(), false, -1, null, null);
+        static final Val CLEAN = new Val(Set.of(), false, -1, null, null, Set.of());
 
-        static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null);
+        static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null, Set.of());
 
         Val {
             // Held in the order they were put in, so that walking them says the same twice: a copy
@@ -199,7 +299,7 @@ final class SaltedOrder {
         }
 
         static Val of(Set<Tag> tags) {
-            return new Val(tags, false, -1, null, null);
+            return new Val(tags, false, -1, null, null, Set.of());
         }
 
         static Val of(Tag... tags) {
@@ -220,27 +320,58 @@ final class SaltedOrder {
 
         /** The same, as an object of no place in particular. */
         Val apartFromAnyPlace() {
-            return new Val(tags, wide, -1, null, null);
+            return new Val(tags, wide, -1, null, null, types);
         }
 
         Val withTags(Set<Tag> other) {
-            return new Val(other, wide, alloc, made, home);
+            return new Val(other, wide, alloc, made, home, types);
         }
 
         Val withHome(String at) {
-            return new Val(tags, wide, alloc, made, at);
+            return new Val(tags, wide, alloc, made, at, types);
         }
 
-        Val withMade(String type) {
-            return new Val(tags, wide, alloc, type, home);
+        Val withMade(String madeAs) {
+            return new Val(tags, wide, alloc, madeAs, home, types);
         }
 
         Val withAlloc(int id) {
-            return new Val(tags, wide, id, made, home);
+            return new Val(tags, wide, id, made, home, types);
         }
 
         Val asWide(boolean isWide) {
-            return new Val(tags, isWide, alloc, made, home);
+            return new Val(tags, isWide, alloc, made, home, types);
+        }
+
+        /**
+         * The same, which may also be held as the class a descriptor names, if it names one the
+         * program declares. A class of the library has no fields of the program's to say, so it is
+         * not carried.
+         */
+        Val alsoHeldAs(String descriptor) {
+            if (!descriptor.startsWith("L") || descriptor.startsWith("Ljava/")
+                    || descriptor.startsWith("Ljavax/") || descriptor.startsWith("Ljdk/")) {
+                return this;
+            }
+            return alsoHeldAs(Set.of(descriptor.substring(1, descriptor.length() - 1)));
+        }
+
+        /** The same, which may also be held as any of these classes. */
+        Val alsoHeldAs(Set<String> classes) {
+            if (types.containsAll(classes)) {
+                return this;
+            }
+            return new Val(tags, wide, alloc, made, home, union(types, classes));
+        }
+
+        /** Both sets of classes, as one that nothing changes afterwards. */
+        private static Set<String> union(Set<String> one, Set<String> other) {
+            if (one.isEmpty()) {
+                return Set.copyOf(other);
+            }
+            Set<String> all = new TreeSet<>(one);
+            all.addAll(other);
+            return Collections.unmodifiableSet(all);
         }
 
         Val plus(Collection<Tag> more) {
@@ -259,9 +390,11 @@ final class SaltedOrder {
             }
             Set<Tag> all = new LinkedHashSet<>(tags);
             all.addAll(other.tags);
+            Set<String> eitherType = types.containsAll(other.types) ? types
+                    : union(types, other.types);
             return new Val(all, wide || other.wide, alloc == other.alloc ? alloc : -1,
                     made != null && made.equals(other.made) ? made : null,
-                    home != null && home.equals(other.home) ? home : null);
+                    home != null && home.equals(other.home) ? home : null, eitherType);
         }
 
         /** The copies any of what is here came out of. */
@@ -383,8 +516,21 @@ final class SaltedOrder {
      * @param reader the method that did, with the class it is in
      * @param what   the step that made it an answer, in words
      * @param origins the copies the order came out of
+     * @param followed whether the order was followed to where it is taken into an answer, as against
+     *                 a call that is handed a copy and nothing here says what it does with it
      */
-    record Finding(String reader, String what, Set<String> origins) {}
+    record Finding(String reader, String what, Set<String> origins, boolean followed) {}
+
+    /**
+     * How big the reading was, which a reading that follows too much shows before it fails.
+     *
+     * @param reads           how many times a method was read, again where a fact it read grew
+     * @param methods         how many methods there were to read
+     * @param facts           how many places held anything
+     * @param tags            how many tags those places held between them
+     * @param longestHeldPath how many slots the longest path of a held copy names
+     */
+    record Measures(int reads, int methods, int facts, long tags, int longestHeldPath) {}
 
     /**
      * What the whole reading came to.
@@ -393,8 +539,10 @@ final class SaltedOrder {
      * @param findings every place an order became an answer
      * @param reached for each copy, where what came out of it went in the end: to a crossing that
      *                puts it in an order, or into a value that holds it and is asked, in turn
+     * @param measured how big the reading was
      */
-    record Reading(Set<String> roots, List<Finding> findings, Map<String, Set<String>> reached) {
+    record Reading(Set<String> roots, List<Finding> findings, Map<String, Set<String>> reached,
+                   Measures measured) {
 
         Reading {
             roots = Collections.unmodifiableSet(new LinkedHashSet<>(roots));

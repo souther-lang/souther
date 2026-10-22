@@ -1,12 +1,15 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -19,9 +22,11 @@ import java.util.function.Function;
  * closure that returns its parameter says nothing of how many answers there are — handed to a
  * {@code Set.map} it would leave the values and lose their count.
  *
- * <p>The closure's body is its parameter itself and not the parameter standing as a wider type: a
- * value widened is another value of another type, and what is said of the answer would be said of
- * values the container does not hold.
+ * <p>The closure's body is its parameter itself, through whatever names and {@code let}s stand
+ * between ({@link ElementProjection#isTheElementItself}), and not the parameter standing as a wider
+ * type, a newtype wearing it, or a field of it — a newtype's {@code value} among them: each is
+ * another value, and what is said of the answer would be said of values the container does not
+ * hold.
  */
 public final class AnIdentityMap {
 
@@ -30,9 +35,12 @@ public final class AnIdentityMap {
      * answers anything else.
      *
      * @param blockOf the block a closure argument stands for, or null where it stands for none
+     * @param held    what each binding of the body holds, for the names between the closure's
+     *                answer and its parameter
      */
     public static DeclaredArgument of(ValueName operation, List<Core> args,
-                                      Function<Core, Core.Block> blockOf) {
+                                      Function<Core, Core.Block> blockOf,
+                                      Map<BindingId, Core> held, DeclarationNewtypes newtypes) {
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
         DeclaredArgument mapped = built == null ? null : built.mapsEachElementOf();
@@ -40,7 +48,7 @@ public final class AnIdentityMap {
             return null;
         }
         Core.Block closure = closureBeside(args, mapped.position(), blockOf);
-        return closure != null && answersItsParameter(closure) ? mapped : null;
+        return closure != null && answersItsParameter(closure, held, newtypes) ? mapped : null;
     }
 
     /**
@@ -63,16 +71,11 @@ public final class AnIdentityMap {
     }
 
     /** Whether {@code closure} takes one value and answers that value. */
-    private static boolean answersItsParameter(Core.Block closure) {
-        if (closure.params().size() != 1 || closure.params().getFirst().binding() == null) {
-            return false;
-        }
-        return switch (closure.body()) {
-            case Core.Read read -> read.binding().equals(closure.params().getFirst().binding());
-            // The parameter standing as a wider type is another value of another type.
-            case Core.Widen _ -> false;
-            default -> false;
-        };
+    private static boolean answersItsParameter(Core.Block closure, Map<BindingId, Core> held,
+                                               DeclarationNewtypes newtypes) {
+        return closure.params().size() == 1 && closure.params().getFirst().binding() != null
+                && ElementProjection.isTheElementItself(closure.body(),
+                        closure.params().getFirst().binding(), held, newtypes);
     }
 
     private AnIdentityMap() {}

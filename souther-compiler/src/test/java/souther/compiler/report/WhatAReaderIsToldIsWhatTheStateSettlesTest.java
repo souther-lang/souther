@@ -3,7 +3,11 @@ package souther.compiler.report;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.Generator;
@@ -11,6 +15,7 @@ import souther.compiler.partition.NotOwedReason;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.Reachability;
 import souther.compiler.partition.RepairShortfall;
+import souther.compiler.partition.TakenConstraint;
 import souther.compiler.query.ClaimAnnotations;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.types.ExpansionLineage;
@@ -22,6 +27,7 @@ import souther.compiler.types.WrittenOwner;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -185,6 +191,9 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
                 case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                         "its way goes past a condition that comes out the other way for every row,"
                                 + " so no value can go that way";
+                case RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone _ ->
+                        "the statements of numbers on its way leave no value, so no value can go"
+                                + " that way";
                 case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
                         throw new AssertionError("said in the words the composings came back with");
             }, AdequacyReport.readOff(each), each.getClass().getSimpleName());
@@ -204,7 +213,16 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
                                 ExpansionLineage.ORIGINAL), true),
                 new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(new OnTheWay.Settled(
                         new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0),
-                        null, false)));
+                        null, false)),
+                new RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone(
+                        new Reachability.NumbersLeaveNone(List.of(
+                                onX(-71, Rel.GE), onX(-70, Rel.LT)))));
+    }
+
+    /** {@code x + constant} against nought. */
+    private static TakenConstraint.Affine onX(long constant, Rel rel) {
+        return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant),
+                Map.of(new NumericTerm.ValueOf(TermPath.of("x")), ExactRatio.ONE)), rel);
     }
 
     private static void assertSays(Claim claim, String said, Object of) {

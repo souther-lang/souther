@@ -117,7 +117,7 @@ final class ProvingTheLibrary implements LibraryProofs {
         Set<ValueName.Stdlib.Operation> walks = new LinkedHashSet<>(WalksFromASeed.of(stdlib,
                 AppliedClosures.of(stdlib, Combinators.kernelsIn(stdlib),
                         operation -> Combinators.listing(stdlib, facts, operation),
-                        Combinators::positionsOf)).keySet());
+                        Combinators.signaturesOf(stdlib))).keySet());
         walks.remove(stdlib.walk().operation());
         this.prover = new LibraryProver(library, walks);
         this.elements = new WhereTheElementsCameFrom(library, walks);
@@ -152,9 +152,10 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.assemblesPieces(operation, assembles.source().position(),
                             assembles.closure().position(), assembles.piece())
                             instanceof LibraryProver.Outcome.Proved;
-            case BoundOperationFact.HoldsTheElementsFrom from ->
-                    elements.fromAnIndexOn(operation, from.count().position(),
-                            from.list().position()) instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.HoldsTheElementsByIndex byIndex ->
+                    elements.byAnIndex(operation, byIndex.count().position(),
+                            byIndex.list().position(), byIndex.kept())
+                            instanceof LibraryProver.Outcome.Proved;
             // What these state is settled where it is proved, and read from there; filed, they
             // are read by nothing.
             case BoundOperationFact.HasALemma _ -> true;
@@ -179,6 +180,7 @@ final class ProvingTheLibrary implements LibraryProofs {
             // a statement no body here is proved to make.
             case BoundOperationFact.HasALaw _ -> false;
             case BoundOperationFact.HoldsThePiecesOf _ -> false;
+            case BoundOperationFact.ListsTheCodePointsOf _ -> false;
             case BoundOperationFact.EveryElementOfItsAnswerIs _ -> false;
             case BoundOperationFact.AnswersTheClosureOnWhatItHolds _ -> false;
             case BoundOperationFact.KeepsWhetherItHoldsACodePointOf _ -> false;
@@ -189,8 +191,10 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.StatesTheOrderOfItsArguments _ -> false;
             case BoundOperationFact.ShiftsBy _ -> false;
             case BoundOperationFact.CountsWholeUnitsBetween _ -> false;
+            case BoundOperationFact.RoundsToAWholeNumber _ -> false;
             case BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven _ -> false;
             case BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> false;
+            case BoundOperationFact.EndsAreWhereTheRepresentationStops _ -> false;
             case BoundOperationFact.ComputesANumber _ -> false;
         };
     }

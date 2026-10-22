@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
@@ -54,6 +55,8 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -131,6 +134,7 @@ public final class Partitions {
                                List<StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
                                List<RuleWithoutALine> rulesWithoutALine,
+                               List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                java.util.Map<AxisId, List<Border>> along,
@@ -144,6 +148,7 @@ public final class Partitions {
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
             rulesWithoutALine = List.copyOf(rulesWithoutALine);
+            rulesWhereARunMayStop = List.copyOf(rulesWhereARunMayStop);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
             java.util.Map<AxisId, List<Border>> lines = new LinkedHashMap<>();
@@ -302,10 +307,28 @@ public final class Partitions {
                 case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                         .everyAnswerItCanGiveHasASourceValue(taken.operation());
                 // A string holding any number of the code points of a class is written by
-                // repeating one of them, as a string of any length is.
-                case NumericTerm.CodePointClassCount _ -> true;
-                // An element holding a value as often as asked is written by repeating the value.
-                case NumericTerm.Multiplicity _ -> true;
+                // repeating one of them, as a string of any length is — and, counted in what a
+                // conversion makes of it, by repeating one the conversion leaves as it is.
+                case NumericTerm.CodePointClassCount count ->
+                        TermRealizations.writesEveryCountOf(count.counted(), count.through());
+                // Every whole number from nought up is what the code points of some string come
+                // to: none for nought, and for any larger number code points that are no
+                // surrogates, chosen to add up to it.
+                case NumericTerm.CodePointValueSum _ -> true;
+                // A number of an element read off the elements beside it is written by a container
+                // holding elements beside it, and which containers there are is the type's and its
+                // rules': a set never holds one value twice, and rules may keep elements apart or
+                // bound how many there are. What the number's values can be (the place's, for the
+                // end of a key's values) says nothing of whether such a container exists, and
+                // nothing here shows one does, so no edge is known writable until a row stands at
+                // it — which is not the edge being unwritable.
+                case NumericTerm.OfAnElementsNeighbours _ -> false;
+                // How often a value occurs among every occurrence is written by containers inside
+                // the elements of another, which is no more shown to exist than the above.
+                case NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> false;
+                // Nor is what the elements of a key come to: elements holding it are written by a
+                // container that holds them.
+                case NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> false;
                 // A run has as many values as a row wrote and each of them is chosen, so whether
                 // some run adds up to a given total is a question about what the elements may hold
                 // and how many there may be — not one the operation answers about itself. Nothing
@@ -463,7 +486,7 @@ public final class Partitions {
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         MeasureClosure.Both closed = MeasureClosure.of(positions, standing, read);
         return new Partitioning(List.copyOf(settled), standing, uncertain,
-                refused,
+                refused, cameToHere.stopping(),
                 List.copyOf(notSeparated),
                 List.of(), lines, ReachingCuts.NONE,
                 closed.partition(), closed.border(),
@@ -1055,7 +1078,7 @@ public final class Partitions {
                 // Read after every position was measured, so that what a position's classes would
                 // not compose is in it. Taken before, the list is what the producers handed over and
                 // nothing this stage found out.
-                List.copyOf(found.found().reported()),
+                List.copyOf(found.found().reported()), found.found().stopping(),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
                 // it was read from the relation the rules admit.
@@ -1979,8 +2002,8 @@ public final class Partitions {
                 // values nothing here takes.
                 Proposals stands = Witnesses.firstWhatThePlaceAdmits(
                         field.getValue(), limits, reading, inside,
-                        () -> representativesHolding(field.getValue(), reading, limits.values(),
-                                limits.held(), inside)).firstOf(1);
+                        () -> representativesHolding(field.getValue(), reading, limits, inside))
+                        .firstOf(1);
                 met = met.and(stands.met());
                 if (stands.isEmpty()) {
                     return new FieldsChosen(null, met);
@@ -2145,26 +2168,36 @@ public final class Partitions {
      * with are what runs out.
      */
     static Proposals representativesHolding(Type type, RuleReadingContext reading,
-                                            NumericDomain.Bounds within, FieldDomains.Held held) {
-        return representativesHolding(type, reading, within, held, Set.of());
+                                            FieldDomains.ConstructionLimits limits) {
+        return representativesHolding(type, reading, limits, Set.of());
     }
 
     /** The same, of a position nothing here has read yet. */
     static Proposals representativesHolding(Type type, RuleReadingContext reading,
-                                            NumericDomain.Bounds within, FieldDomains.Held held,
+                                            FieldDomains.ConstructionLimits limits,
                                             Set<TypeSymbol> expanding) {
         return representativesHolding(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums()), reading,
-                within, held, expanding);
+                limits, expanding);
     }
 
     /** The same, with the names this is already inside the value of, for the same reason
      *  {@link #representativesOf} carries them. */
     static Proposals representativesHolding(TypeView view, RuleReadingContext reading,
-                                            NumericDomain.Bounds within, FieldDomains.Held held,
+                                            FieldDomains.ConstructionLimits limits,
                                             Set<TypeSymbol> expanding) {
+        NumericDomain.Bounds within = limits.values();
+        FieldDomains.Held held = limits.held();
         RuleReadingSource ruleSource = reading.source();
         Proposals.Gathering candidates = Proposals.Gathering.distinct();
+        // A member of the class the value is held to, first: the values offered below are read off
+        // where the value stops, and a value between the ends is of the class only by luck — the
+        // first of a month offered for a position held to the first of each, and not whatever date
+        // the order happens to start from.
+        FixtureTemplate member = aMemberOf(view, reading, limits);
+        if (member != null) {
+            candidates.add(member);
+        }
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
         // inside that newtype's own name.
@@ -2198,15 +2231,14 @@ public final class Partitions {
      * <p>With what building the ordinary offer met, which the second value does nothing to change.
      */
     static Proposals displacedRepresentativesOf(Type type, RuleReadingContext reading,
-                                                NumericDomain.Bounds within,
-                                                FieldDomains.Held held) {
+                                                FieldDomains.ConstructionLimits limits) {
         // The position, read once and handed to everything below: what it ordinarily offers, what it
         // holds back, where its rules leave a number, and the names any of those go under.
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
-        Proposals ordinarily = representativesHolding(view, reading, within, held,
-                Set.of());
+        NumericDomain.Bounds within = limits.values();
+        Proposals ordinarily = representativesHolding(view, reading, limits, Set.of());
         Proposals.Gathering base = Proposals.Gathering.distinct();
         base.addAll(ordinarily);
         // What a position holds back for the product search's second pass is on offer here from the
@@ -2233,6 +2265,37 @@ public final class Partitions {
             base.add(value);
         }
         return base.done();
+    }
+
+    /**
+     * The member of the class {@code limits} holds the position to nearest the lower end of where
+     * it stops — or, with no lower end, nearest the order's own start — that the values the rules
+     * admit there take in, written as the position writes it; or null where it is held to no class,
+     * its order counts none, or the run holds no such member.
+     *
+     * <p>The members looked at are as many as can all be values the admitted set keeps out, and one
+     * more: a set naming finitely many values it refuses refuses at most that many members, so one
+     * past them is a member it takes. Any other set refuses no member by a value it names, and the
+     * first member is the one.
+     */
+    private static FixtureTemplate aMemberOf(TypeView view, RuleReadingContext reading,
+                                             FieldDomains.ConstructionLimits limits) {
+        HeldClass held = limits.heldTo();
+        DeclaredBounds.Range declared = held instanceof HeldClass.None ? null
+                : countedOrder(view, reading);
+        if (declared == null || !held.countsOn(declared.carrier())) {
+            return null;
+        }
+        FieldDomains.ConstructionLimits.ValuesNamed named = limits.valuesNamed();
+        ValueSet admits = named.asASet();
+        for (BigInteger each : held.within(TypeBounds.admissible(declared, limits.values()),
+                null, named.keptOut() + 1).values()) {
+            Place at = new Count(new BigDecimal(each));
+            if (declared.carrier().admitted(admits, at)) {
+                return standing(view, declared.carrier(), at, reading.source());
+            }
+        }
+        return null;
     }
 
     /** A second count of a range, or null where the carrier has none to give. */
@@ -2469,6 +2532,116 @@ public final class Partitions {
                 out.add(some);
                 // The strings left only where one more is wanted: taking one out is a machine of
                 // its own, and the last one taken needs nothing after it.
+                if (out.size() < many) {
+                    left = left.without(List.of(some), meter);
+                }
+            }
+            return List.copyOf(out);
+        }
+    }
+
+    /**
+     * What the rules on {@code view} leave its strings, so far as this compiler read them: what
+     * they say of the strings, and how many characters one holds. Null where they leave every
+     * string, where the type is no string, and where what they leave could not be worked out — a
+     * rule not read refuses nothing here and is the decoder's to refuse by.
+     *
+     * <p>For a caller naming values along the strings' own order, which knows nothing of the type:
+     * the least string there is comes first along it, and a rule on the characters is written to
+     * refuse it.
+     */
+    static StringsTheRulesLeave stringsTheRulesLeave(TypeView view, RuleReadingContext reading) {
+        if (!(view.shape() instanceof Shape.Scalar scalar) || scalar.prim() != Type.Prim.STRING) {
+            return null;
+        }
+        // Each vocabulary read whether or not the other says anything: a run along the order is
+        // a question about where a string lies, which stepping a character onto the last does not
+        // answer, so the count is read here even where no pattern is stated.
+        RulesRead rules = new RulesRead(patternsStatedOn(view, reading.source()),
+                DeclaredBounds.countsHeld(view, reading, null));
+        if (rules.stated().read().isEmpty() && !countsTheCharacters(rules.characters())) {
+            return null;
+        }
+        Language leaves = reading.revision().settled(new StringsLeft(rules)).orElse(null);
+        return leaves == null ? null : new StringsTheRulesLeave(rules, leaves, reading.revision());
+    }
+
+    /**
+     * The strings the rules on a type leave, read once and asked of a string or of a run.
+     *
+     * @param rules    what the rules say of the strings and of how many characters they hold
+     * @param leaves   the strings those leave
+     * @param revision where what a run leaves is settled
+     */
+    record StringsTheRulesLeave(RulesRead rules, Language leaves, RevisionKnowledge revision) {
+
+        /** Whether {@code text} is one of them. */
+        boolean admits(String text) {
+            return leaves.has(text);
+        }
+
+        /**
+         * Up to {@code many} of them inside the run of the strings' own order from {@code low} to
+         * {@code high}, each one somebody can write, shortest first; none where no such string
+         * lies there or this compiler could not work out which do. A missing end is none.
+         */
+        List<String> inside(Endpoint low, Endpoint high, int many) {
+            return many <= 0 ? List.of() : revision.settled(new StringsInsideARun(rules,
+                    low == null ? null : low.at().key(), low != null && low.inclusive(),
+                    high == null ? null : high.at().key(), high != null && high.inclusive(),
+                    many));
+        }
+    }
+
+    /**
+     * The strings the rules read at a position leave, the count met with what the patterns say,
+     * as work settled by those rules; empty where building them ran past the allowance.
+     */
+    record StringsLeft(RulesRead rules) implements RevisionWork<Optional<Language>> {
+
+        @Override
+        public Optional<Language> workedOut(RevisionKnowledge revision) {
+            Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
+            CandidateStrings left = rules.stated().read().isEmpty()
+                    ? withinTheCount(Language.EVERY_STRING, rules.characters(), meter,
+                            rules.stated().unread())
+                    : admittedBy(rules.stated(), rules.characters(), meter, revision);
+            return Optional.ofNullable(left.language());
+        }
+    }
+
+    /**
+     * Up to {@code many} of the strings the rules read at a position leave inside one run of the
+     * strings' own order, each somebody can write, as work settled by those rules and the run.
+     *
+     * @param low  the lower end of the run, or null where it has none
+     * @param high the upper end of the run, or null where it has none
+     */
+    record StringsInsideARun(RulesRead rules, String low, boolean lowIn, String high,
+                             boolean highIn, int many) implements RevisionWork<List<String>> {
+
+        @Override
+        public List<String> workedOut(RevisionKnowledge revision) {
+            Language left = revision.settled(new StringsLeft(rules)).orElse(null);
+            Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
+            if (left != null && high != null) {
+                Language below = Language.before(high, meter);
+                below = below == null || !highIn ? below : below.with(List.of(high), meter);
+                left = below == null ? null : left.and(below, meter);
+            }
+            if (left != null && low != null) {
+                Language below = Language.before(low, meter);
+                Language from = below == null ? null : below.not(meter);
+                from = from == null || lowIn ? from : from.without(List.of(low), meter);
+                left = from == null ? null : left.and(from, meter);
+            }
+            List<String> out = new ArrayList<>();
+            while (left != null && out.size() < many) {
+                String some = left.someWritten();
+                if (some == null) {
+                    break;
+                }
+                out.add(some);
                 if (out.size() < many) {
                     left = left.without(List.of(some), meter);
                 }

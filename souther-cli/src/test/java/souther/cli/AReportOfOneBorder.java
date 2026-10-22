@@ -140,7 +140,7 @@ final class AReportOfOneBorder {
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE), ElementsMetOn.EVERY),
+                        List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
@@ -250,7 +250,7 @@ final class AReportOfOneBorder {
         return new PartitionEvidence(
                 new Measurement.Complete<>(List.of()),
                 PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of());
     }
 
@@ -269,7 +269,7 @@ final class AReportOfOneBorder {
                                         new souther.compiler.inputs.PositionId(
                                                 souther.compiler.inputs.TermPath.of("t")))))),
                 PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of());
     }
 

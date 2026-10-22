@@ -104,9 +104,10 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * reader that asks for a second one has a second meter at every position without ever naming a
      * budget. So the askers are counted too. One answer is one allowance, and the place a reading
      * is made is the place that asks — {@code InvariantChecker} where a declaration's positions are
-     * read, the two input readers that read a declaration's rules for a behavior's inputs, and the
+     * read, the two input readers that read a declaration's rules for a behavior's inputs, the
      * seeding of a value a walk enters, which takes in what that value's declaration leaves its
-     * names.
+     * names, and the taking in of what a condition on the path leaves one number of it, which is
+     * a reading of that condition's values made where the path takes the condition.
      *
      * <p><b>How many times each of them asks, and not just that it does.</b> Two calls in one class
      * reach the constant pool once, so a walk over the names it mentions sees the same row for one
@@ -116,6 +117,7 @@ class WhoMayBuildALanguageAboutAPositionTest {
     private static final List<String> ASKING_FOR_AN_ALLOWANCE = List.of(
             "souther/compiler/check/InvariantChecker allowanceForAdmittedValues x1",
             "souther/compiler/check/InvariantChecker allowanceForWhatARuleLeaves x1",
+            "souther/compiler/check/MeaningAssumptions allowanceForAdmittedValues x1",
             "souther/compiler/check/PathEngine allowanceForAdmittedValues x1",
             "souther/compiler/inputs/PlacedRules allowanceForAdmittedValues x1",
             "souther/compiler/inputs/ReadQuantities allowanceForAdmittedValues x1");
@@ -168,10 +170,14 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * so each is a piece of work of its own that mints this allowance for itself
      * ({@code RevisionWork}): minted at the call instead, the work would be done again at every
      * visit of a search. What it pays for is what those questions make, and not the machines of the
-     * patterns they borrow ({@link #OF_A_PATTERN_FOR_A_WITNESS}).
+     * patterns they borrow ({@link #OF_A_PATTERN_FOR_A_WITNESS}). The strings a row's value is
+     * chosen among along an order are the same offer, asked of a run: what the rules leave, met
+     * with the count, and what of that lies inside the run.
      */
     private static final List<String> OF_A_WITNESS = List.of(
             "souther/compiler/partition/Partitions",
+            "souther/compiler/partition/Partitions$StringsInsideARun",
+            "souther/compiler/partition/Partitions$StringsLeft",
             "souther/compiler/partition/Partitions$StringsTheRulesAdmit",
             "souther/compiler/partition/Partitions$WhatTheOfferIsShortOf");
 

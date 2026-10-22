@@ -65,10 +65,10 @@ class HowManyNamesAClosuresAnswerStandsUnderDoesNotDecideItsProjectionTest {
             read.put(names, projectionUnder(names));
         }
 
-        assertEquals(Map.of(1, new ElementProjection(List.of("金額")),
-                        4, new ElementProjection(List.of("金額")),
-                        8, new ElementProjection(List.of("金額")),
-                        16, new ElementProjection(List.of("金額"))),
+        assertEquals(Map.of(1, ElementProjection.ofFields(List.of("金額")),
+                        4, ElementProjection.ofFields(List.of("金額")),
+                        8, ElementProjection.ofFields(List.of("金額")),
+                        16, ElementProjection.ofFields(List.of("金額"))),
                 read, () -> "one way inside the element however many names stand between: " + read);
     }
 

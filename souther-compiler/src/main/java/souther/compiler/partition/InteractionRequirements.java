@@ -1,7 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.ControlClaim;
+import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Interaction;
+import souther.compiler.reading.WhyNotJoined;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,14 +33,18 @@ import java.util.SequencedMap;
  *
  * <p>And the meetings this asks nothing of though they were read: the ones the limit kept back
  * ({@code notMeasured}), which a wider run walks, and the ones the classes do not place
- * ({@code notPlaced}), which none does. Neither is a meeting with nothing owed at it, and both are
- * said where what this asks for is measured.
+ * ({@code notPlaced}), which none does. And the sums of kept elements whose decisions could not be
+ * joined to the evaluations a run records, which have no group to hold back and are counted
+ * ({@code notJoined}); why each was not is the reading's ({@link CoverageRead.Read#notJoined}) and
+ * is not a part of what is asked of the rows. None is a meeting with nothing owed at it, and all
+ * are said where what this asks for is measured.
  */
 public record InteractionRequirements(
         int read,
         SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<Way>> ways,
         List<InteractionCells.NotOffered> notMeasured,
-        List<InteractionCells.NotPlaced> notPlaced) {
+        List<InteractionCells.NotPlaced> notPlaced,
+        int notJoined) {
 
     /**
      * One way to a requirement: the rows that take it, and what a run that took it is seen doing.
@@ -70,18 +76,20 @@ public record InteractionRequirements(
         ways = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(ways));
         notMeasured = List.copyOf(notMeasured);
         notPlaced = List.copyOf(notPlaced);
-        if (read < 0) {
-            throw new IllegalArgumentException("meetings are counted from none: " + read);
+        if (read < 0 || notJoined < 0) {
+            throw new IllegalArgumentException("meetings are counted from none: " + read
+                    + " read, " + notJoined + " not joined");
         }
-        if (read < notMeasured.size() + notPlaced.size()) {
+        int heldBack = notMeasured.size() + notPlaced.size() + notJoined;
+        if (read < heldBack) {
             throw new IllegalArgumentException("more meetings were held back than were read: "
-                    + (notMeasured.size() + notPlaced.size()) + " of " + read);
+                    + heldBack + " of " + read);
         }
     }
 
     /** Nothing asked of a behavior whose decisions meet nowhere, which is not a group of none. */
     public static final InteractionRequirements NONE =
-            new InteractionRequirements(0, new LinkedHashMap<>(), List.of(), List.of());
+            new InteractionRequirements(0, new LinkedHashMap<>(), List.of(), List.of(), 0);
 
     /**
      * Whether the body has meetings at all, which is what says the criterion this behavior is held
@@ -105,6 +113,7 @@ public record InteractionRequirements(
      * about a requirement — whether it exists — and they decide nothing about whether it is met.
      */
     public static InteractionRequirements of(String behavior, List<Interaction> groups,
+                                             List<WhyNotJoined> notJoined,
                                              MeasuredInput.MeasuredAxes axes,
                                              int mostCellsPerGroup) {
         InteractionCells.Offered offered = InteractionCells.of(groups, axes, mostCellsPerGroup);
@@ -127,8 +136,8 @@ public record InteractionRequirements(
                 }
             }
         }
-        return new InteractionRequirements(groups.size(), ways, offered.notOffered(),
-                offered.notPlaced());
+        return new InteractionRequirements(groups.size() + notJoined.size(), ways,
+                offered.notOffered(), offered.notPlaced(), notJoined.size());
     }
 
     /**

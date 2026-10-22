@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.test.ClosedWorldContract;
@@ -41,8 +42,7 @@ class EveryDeclarationACorpusImportsStatesOneThingWhoeverAsksTest {
         int stated = 0;
         List<String> stopped = new ArrayList<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Compilation compilation = corpus.analyse().compilation();
-            compilation.answerEverything();
+            Compilation compilation = Compilation.ofSources(corpus.sources(), ModulePath.EMPTY);
             Db db = compilation.db();
             for (ClauseReadings.Edge edge
                     : ClauseReadings.importsOf(db, compilation.modules())) {

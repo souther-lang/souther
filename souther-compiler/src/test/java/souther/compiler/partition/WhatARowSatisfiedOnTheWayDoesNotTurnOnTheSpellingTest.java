@@ -67,7 +67,6 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
     /** What each comparison of {@code behavior} stands under, in no order and named by no site. */
     private static List<String> standingUnder(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
@@ -112,6 +111,10 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
             case OnTheWay.OneOf several -> "one of "
                     + several.alternatives().stream()
                             .map(WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest::said)
+                            .toList();
+            case OnTheWay.Counted counted -> "count " + counted.admitted() + " of "
+                    + counted.statements().stream()
+                            .map(one -> said(one.holding()) + "/" + said(one.failing()))
                             .toList();
         }).toList().toString();
     }

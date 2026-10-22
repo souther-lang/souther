@@ -10,6 +10,7 @@ import souther.compiler.observe.RowStatement;
 import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.observe.Verdict;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -31,6 +32,12 @@ import java.util.Map;
  * differ when their types differ as much as when their contents do. An output free to answer it for
  * itself would be a second reading of what a row means, and two outputs of one program would then
  * agree about it only as far as whoever wrote the second one agreed with the first.
+ *
+ * <p>An output whose answer never comes back — an implementation run by a host's own test runner,
+ * with nothing of this compiler in the process — holds it where it is instead, by
+ * {@link SelfContained#assertion}: what computes the stated value, compared by the language's
+ * equality, or the case stated. That is the same question handed over as a computation, as a row's
+ * inputs are, and not a reading of the output's own.
  */
 public final class CheckedRow {
 
@@ -105,9 +112,9 @@ public final class CheckedRow {
         private final Asking asking;
         private final Handover handover;
 
-        SelfContained(RowStatement.Stated stated, Supplies supplies, ValueTypes types,
-                      Position answers) {
-            this.asking = new Asking(stated, types, answers);
+        SelfContained(RowStatement.Stated stated, Supplies supplies, CheckedAssertion assertion,
+                      ValueTypes types, Position answers) {
+            this.asking = new Asking(stated, assertion, types, answers);
             this.handover = Handover.of(stated, supplies, types);
             if (!handover.standIns().isEmpty()) {
                 // What the behavior takes injected is the rest of what makes the row runnable, so a
@@ -125,6 +132,11 @@ public final class CheckedRow {
         /** What computes each value it hands over ({@link Handover#inputDefinitions}). */
         public List<CheckedHelper> inputDefinitions() {
             return handover.inputDefinitions();
+        }
+
+        /** What it states of the answer, for an output holding the answer where it was answered. */
+        public CheckedAssertion assertion() {
+            return asking.assertion();
         }
 
         /** Whether {@code answered} is what this row states the behavior answers. */
@@ -152,9 +164,9 @@ public final class CheckedRow {
         private final Asking asking;
         private final Handover handover;
 
-        WithStandIns(RowStatement.Stated stated, Supplies supplies, ValueTypes types,
-                     Position answers) {
-            this.asking = new Asking(stated, types, answers);
+        WithStandIns(RowStatement.Stated stated, Supplies supplies, CheckedAssertion assertion,
+                     ValueTypes types, Position answers) {
+            this.asking = new Asking(stated, assertion, types, answers);
             this.handover = Handover.of(stated, supplies, types);
             if (handover.standIns().isEmpty()) {
                 throw new IllegalArgumentException("a row with nothing stood in for is one an"
@@ -182,6 +194,11 @@ public final class CheckedRow {
             return handover.standIns();
         }
 
+        /** What it states of the answer, for an output holding the answer where it was answered. */
+        public CheckedAssertion assertion() {
+            return asking.assertion();
+        }
+
         /** Whether {@code answered} is what this row states the behavior answers. */
         public Verdict holds(ObservedValue answered) {
             return asking.holds(answered);
@@ -200,18 +217,39 @@ public final class CheckedRow {
      * question however the row is run, and two arms answering it apart would be two readings of one
      * row — which is the thing {@link SelfContained#holds} exists to prevent a reader from being.
      */
-    private record Asking(RowStatement.Stated stated, Expectation.Asserts asserts, ValueTypes types,
-                          Position answers) {
+    private record Asking(RowStatement.Stated stated, Expectation.Asserts asserts,
+                          CheckedAssertion assertion, ValueTypes types, Position answers) {
 
-        private Asking(RowStatement.Stated stated, ValueTypes types, Position answers) {
-            this(stated, asserted(stated), types, answers);
+        private Asking(RowStatement.Stated stated, CheckedAssertion assertion, ValueTypes types,
+                       Position answers) {
+            this(stated, asserted(stated), assertion, types, answers);
         }
 
         private Asking {
-            if (stated == null || types == null || answers == null) {
-                throw new IllegalArgumentException("a row that can be asked states values, and is"
-                        + " read with what the declarations say and where its answer stands");
+            if (stated == null || assertion == null || types == null || answers == null) {
+                throw new IllegalArgumentException("a row that can be asked states values and what"
+                        + " computes its answer, and is read with what the declarations say and"
+                        + " where its answer stands");
             }
+            if (!statesTheSameGrain(asserts, assertion)) {
+                // What an output holds an answer to and what holds asks are one statement, so a
+                // row handed a computation for a grain it was not compared at would be held to one
+                // thing where its answer comes back and another where it does not.
+                throw new IllegalArgumentException("the row states " + asserts + " and is handed "
+                        + assertion + " to hold an answer to it by");
+            }
+        }
+
+        /** Whether {@code assertion} states what {@code asserts} states: a value for a value, and
+         *  the same case for a case. */
+        private static boolean statesTheSameGrain(Expectation.Asserts asserts,
+                                                  CheckedAssertion assertion) {
+            return switch (asserts) {
+                case Expectation.TheValue _ -> assertion instanceof CheckedAssertion.Value;
+                case Expectation.TheCase(TypeSymbol name) ->
+                        assertion instanceof CheckedAssertion.Case(TypeSymbol expected)
+                                && expected.equals(name);
+            };
         }
 
         /** What the row states of the answer, where it is a row an answer can be held to. A row

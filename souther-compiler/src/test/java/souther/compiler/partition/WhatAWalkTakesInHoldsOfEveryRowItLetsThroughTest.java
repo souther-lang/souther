@@ -72,10 +72,10 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             let withAnUnreadCall (p) = p.x > 0 && Int.floorMod(p.y, p.x) > 1
 
             behavior product : (p: Pair) -> Bool
-            let product (p) = p.x * p.y > 4
+            let product (p) = 2 * p.x * p.y > 8
 
             behavior productThroughACall : (p: Pair) -> Bool
-            let productThroughACall (p) = Decimal.fromInt(p.x * p.y) > Decimal.fromInt(4)
+            let productThroughACall (p) = Decimal.fromInt(2 * p.x * p.y) > Decimal.fromInt(8)
 
             behavior nested : (p: Pair) -> Bool
             let nested (p) = (p.x > 0 || p.y > 1) && p.y < 5
@@ -89,8 +89,8 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             "affineSum", (x, y) -> x + 2 * y <= 7,
             "withACall", (x, y) -> x > 0 && Math.max(y, 3) > 10,
             "withAnUnreadCall", (x, y) -> x > 0 && Math.floorMod(y, x) > 1,
-            "product", (x, y) -> x * y > 4,
-            "productThroughACall", (x, y) -> x * y > 4,
+            "product", (x, y) -> 2 * x * y > 8,
+            "productThroughACall", (x, y) -> 2 * x * y > 8,
             "nested", (x, y) -> (x > 0 || y > 1) && y < 5);
 
     /**
@@ -101,7 +101,6 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     private static List<OnTheWay> stating(String behavior, boolean holding) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -156,10 +155,12 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             for (boolean holding : List.of(true, false)) {
                 // The arithmetic's, which is the vocabulary this model's conditions land in: every
                 // position of it counts to a number. What a bound on an order that counts nothing
-                // holds of is asked where such a model is written.
+                // holds of is asked where such a model is written. A condition taken in for the run
+                // to decide is no cut and narrows no region, so it is nothing to hold here.
                 List<TakenConstraint.Affine> cuts = stating(behavior, holding).stream()
                         .filter(each -> each instanceof OnTheWay.TakenIn)
                         .map(each -> ((OnTheWay.TakenIn) each).demand())
+                        .filter(RowDemand.Relational.class::isInstance)
                         .map(each -> ((RowDemand.Relational) each).constraint())
                         .map(TakenConstraint.Affine.class::cast)
                         .toList();

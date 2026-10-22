@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -106,6 +107,49 @@ class WhatARuleIsAnswerableForIsToldApartByThePartItsAuthorWroteTest {
                         + " other");
         assertEquals(2, positions.size(),
                 "one part leaving two positions short is two facts, and a reader is owed both");
+    }
+
+    /**
+     * And where the arithmetic stopped stands in for a form the reading of values had no word for
+     * only in the statements it stopped on.
+     *
+     * <p>The statement is what says which comparison it was. A comparison nobody wrote is written
+     * as what every such comparison is written as, and a conjunct holds as many comparisons as it
+     * states — so matched by the construct, or by the construct and the place, the arithmetic
+     * stopping on one comparison would take another comparison's word away.
+     */
+    @Test
+    void andTheArithmeticsWordStandsInOnlyWhereItStopped() {
+        RuleShortfall nobodyWroteIt = new RuleShortfall(ConstructOccurrence.unwritten(),
+                RuleSite.at(FIRST), RuleShortfall.Kind.LEAF,
+                StoppedReading.of(UnreadReason.FORM_NOT_READ), POSITION);
+        InvariantStatementId one = new InvariantStatementId(FIRST, 0);
+        InvariantStatementId another = new InvariantStatementId(FIRST, 1);
+        InvariantStatementId elsewhere = new InvariantStatementId(SECOND, 0);
+
+        assertEquals(Set.of(nobodyWroteIt), toldByTheForm(nobodyWroteIt, List.of(one), one),
+                "in the statement the arithmetic stopped on, its word is the one said");
+        assertEquals(Set.of(), toldByTheForm(nobodyWroteIt, List.of(one), elsewhere),
+                "a comparison nobody wrote in another conjunct is another comparison");
+        assertEquals(Set.of(), toldByTheForm(nobodyWroteIt, List.of(one), another),
+                "and so is one in another statement of the same conjunct, at the same place");
+        assertEquals(Set.of(), toldByTheForm(nobodyWroteIt, List.of(one, another), another),
+                "and one fact decided in two statements is true of the one it did not stop on");
+    }
+
+    /**
+     * Which of the value reading's facts the arithmetic's word stands in for, with {@code fact}
+     * decided in {@code decidedIn} and the arithmetic stopped on {@code stoppedOn}, nothing taken in.
+     */
+    private static Set<RuleShortfall> toldByTheForm(RuleShortfall fact,
+                                                    List<InvariantStatementId> decidedIn,
+                                                    InvariantStatementId stoppedOn) {
+        RuleRef.Invariant rule = FIRST.rule();
+        ReadingEvidence took = new ReadingEvidence();
+        decidedIn.forEach(each -> took.stoppedBy(rule, fact, each));
+        took.stoppedOnTheForm(rule, new FormShortfall(RuleSite.at(stoppedOn.part()),
+                new BlockReason.RuleAboutADerivedValue(), POSITION), stoppedOn);
+        return took.decidedWhereTheArithmeticStopped(rule, Set.of(fact));
     }
 
     /** What crosses out of a reading, as the set that files it holds them. */

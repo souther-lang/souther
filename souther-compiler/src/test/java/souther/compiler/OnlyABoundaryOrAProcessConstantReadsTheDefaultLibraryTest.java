@@ -50,6 +50,8 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
             "check/Combinators.java",
             // Which library operations file one value under one key, read off their bodies.
             "check/KeyedAccumulation.java",
+            // What each library operation ends a run for, read off its kernel or its body.
+            "check/LibraryEndings.java",
             "check/LibraryReadThrough.java",
             "check/Preserved.java",
             "check/Reductions.java",
@@ -60,7 +62,8 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
     private static final List<String> WHAT_THE_LOADER_MAY_NOT_READ = List.of(
             "DefaultStdlib", "Combinators", "LibraryReadThrough", "Preserved", "Accumulations",
             "Reductions", "KeyedAccumulation", "AnIndexedMap",
-            "DischargeRules", "DefaultBoundOperationFacts", "OperationFactBinder");
+            "DischargeRules", "DefaultBoundOperationFacts", "OperationFactBinder",
+            "WhatARunMayEndFor", "LibraryEndings");
 
     @Test
     void theseAreTheOnlyReadersOfTheProcessLibrary() throws IOException {

@@ -29,13 +29,17 @@ import java.util.OptionalInt;
  * ({@link ConstantComparison}), and the reading that holds those is the reading of any remainder of
  * a place. Nothing here is a second account of a remainder: a number taken of a place is still taken
  * of the place, and what moved it is arithmetic round the call that is peeled off before the call is
- * asked.
+ * asked. A name given the call is read through to the call, so a comparison of the name is this
+ * same comparison; a path holds the stretches as the values of the place's remainder they leave.
+ * Against another value the stretches are the same two, and on each the moved remainder is the
+ * place's moved by a number, compared with the value ({@link Read.AgainstAValue}).
  *
  * <p>What it reads is the arithmetic that leaves a place a place: a sum or a difference with a
  * written number, however it is spelled and however many deep, which is arithmetic the library
  * states of its operations ({@link DischargeRules#operator}). A divisor below nought is not read —
- * it answers the other side of nought and the stretches above are not its — and neither is a value
- * scaled or made of two places.
+ * it answers the other side of nought and the stretches above are not its. Whether the place is one
+ * whose remainder is a number of the place is the caller's to ask: the remainder of a form of several
+ * places is a number of its own, its moving part of its dividend, and no stretch of another.
  */
 public final class RemainderOfAShiftedValue {
 
@@ -45,24 +49,88 @@ public final class RemainderOfAShiftedValue {
      * What a comparison states of the remainder of the place a value is moved from.
      *
      * @param <E> the environment the call is read in
-     * @param remainder the call of the same operation over the place itself and the same divisor
-     * @param at where the call was applied, which is where its arguments are read
-     * @param statement what holds of {@code remainder} exactly where the comparison holds
      */
-    public record Read<E>(Core.PreservedCall remainder, E at, ConstantComparison statement) {
+    public sealed interface Read<E> {
 
-        public Read {
-            Objects.requireNonNull(remainder, "a remainder is of something");
-            Objects.requireNonNull(at, "read somewhere");
-            Objects.requireNonNull(statement, "and the comparison states something of it");
+        /** The call of the same operation over the place itself and the same divisor. */
+        Core.PreservedCall remainder();
+
+        /** Where the call was applied, which is where its arguments are read. */
+        E at();
+
+        /**
+         * Against a whole number the same on every run.
+         *
+         * @param statement what holds of {@code remainder} exactly where the comparison holds
+         */
+        record AgainstANumber<E>(Core.PreservedCall remainder, E at, ConstantComparison statement)
+                implements Read<E> {
+
+            public AgainstANumber {
+                Objects.requireNonNull(remainder, "a remainder is of something");
+                Objects.requireNonNull(at, "read somewhere");
+                Objects.requireNonNull(statement, "and the comparison states something of it");
+            }
+        }
+
+        /**
+         * Against another value: on each stretch of the place's remainder, the moved remainder is
+         * the place's moved by a number, and the comparison is of that against the value.
+         *
+         * @param written how the moved remainder stands to {@code other}
+         * @param other   the other side, read where the call is, which is where the comparison
+         *                stands
+         * @param stretches the stretches, each with what the moved remainder is on it
+         */
+        record AgainstAValue<E>(Core.PreservedCall remainder, E at, Rel written, Core other,
+                                List<Stretch> stretches) implements Read<E> {
+
+            public AgainstAValue {
+                Objects.requireNonNull(remainder, "a remainder is of something");
+                Objects.requireNonNull(at, "read somewhere");
+                Objects.requireNonNull(written, "stands some way");
+                Objects.requireNonNull(other, "to something");
+                stretches = List.copyOf(stretches);
+                if (stretches.isEmpty()) {
+                    throw new IllegalArgumentException("a remainder lies on some stretch");
+                }
+            }
+        }
+    }
+
+    /**
+     * The remainder {@code r} of the place from {@code from} to {@code to}, of the remainders
+     * nought to {@code most}, where the moved remainder is {@code r + by}, or {@code by - r} where
+     * {@code negated}.
+     */
+    public record Stretch(BigInteger from, BigInteger to, BigInteger most, BigInteger by,
+                          boolean negated) {
+
+        /** That {@code r} is on this stretch, said as little as says it. */
+        public ConstantComparison within() {
+            return ConstantComparison.both(ConstantComparison.of(Rel.GE, from, BigInteger.ZERO, most),
+                    ConstantComparison.of(Rel.LE, to, BigInteger.ZERO, most));
+        }
+
+        /**
+         * That the moved remainder stands {@code rel} to {@code against} on this stretch, as what
+         * it says of {@code r} there.
+         */
+        ConstantComparison standing(Rel rel, BigInteger against) {
+            return negated ? inStretch(turned(rel), by.subtract(against), from, to, most)
+                    : inStretch(rel, against.subtract(by), from, to, most);
         }
     }
 
     /**
      * What {@code comparison}, read in {@code at}, states of the remainder of the place one of its
      * sides is the remainder of a moved value of — or null where neither side is such a remainder,
-     * the other side is no whole number the same on every run, or the divisor is no number above
-     * nought.
+     * the divisor is no number above nought, or the other side is a value read somewhere else than
+     * the call.
+     *
+     * <p>A value on the other side is read with the call in one comparison, so where a name read
+     * the call through to where it was given, the two are read together only where that is where
+     * the comparison stands.
      */
     public static <E> Read<E> read(StatedComparison comparison, E at,
                                    TheSignOfAnOrder.Sides<E> sides) {
@@ -71,90 +139,113 @@ public final class RemainderOfAShiftedValue {
             if (found == null) {
                 continue;
             }
-            Moved moved = Moved.of(found.call().args().getFirst(), found.at(), sides);
+            Moved moved = Moved.of(found.division().dividend(), found.at(), sides);
             if (moved == null) {
                 continue;
             }
-            if (found.divisor() == null || found.against() == null
-                    || found.divisor().signum() <= 0) {
-                return null;
+            Core.PreservedCall remainder = found.division().over(moved.place());
+            List<Stretch> stretches = stretchesOf(found.divisor(), moved);
+            if (found.against() == null) {
+                // The moving is written into the comparison as a number, so it has to be one the
+                // language writes.
+                return found.at().equals(at) && stretches.stream()
+                        .allMatch(each -> each.by().bitLength() < Long.SIZE)
+                        ? new Read.AgainstAValue<>(remainder, found.at(), found.written(),
+                                found.other(), stretches)
+                        : null;
             }
-            ConstantComparison statement =
-                    statementOf(found.written(), found.against(), found.divisor(), moved);
+            ConstantComparison statement = statementOf(found.written(), found.against(), stretches);
             if (statement == null) {
                 return null;
             }
-            List<Core> over = new ArrayList<>(found.call().args());
-            over.set(0, moved.place());
-            Core.PreservedCall call = found.call();
-            return new Read<>(new Core.PreservedCall(call.declared(), over, call.place(),
-                    call.settled(), call.type(), call.pos()), found.at(), statement);
+            return new Read.AgainstANumber<>(remainder, found.at(), statement);
         }
         return null;
     }
 
     /**
-     * What a comparison states of the remainder of a dividend taken whole, read as the remainder of
-     * a form of the input's numbers where the dividend is no place moved by a number — or null where
-     * neither side is such a remainder, the other side is no whole number the same on every run, or
-     * the divisor is no number above nought.
-     *
-     * <p>The statement is of the remainder the call answers, between nought and one below the
-     * divisor: nothing of the dividend is peeled, because what a form is moved by is the form's own
-     * constant.
+     * The stretches of the remainder of the place by {@code divisor}, each with what the remainder
+     * moved by {@code moved} is there: below the turn the place's moved by the number, and from it
+     * moved by the number less the divisor — or, taken from a number, the number less the place's,
+     * and a divisor more above it. The one account of the stretches: a comparison against a number
+     * is read over them ({@link #statementOf}) and a comparison against a value is written on them.
+     */
+    static List<Stretch> stretchesOf(BigInteger divisor, Moved moved) {
+        BigInteger most = divisor.subtract(BigInteger.ONE);
+        BigInteger by = moved.by().mod(divisor);
+        List<Stretch> out = new ArrayList<>();
+        if (!moved.negated()) {
+            BigInteger turn = divisor.subtract(by);
+            out.add(new Stretch(BigInteger.ZERO, turn.subtract(BigInteger.ONE), most, by, false));
+            if (by.signum() != 0) {
+                out.add(new Stretch(turn, most, most, by.subtract(divisor), false));
+            }
+        } else {
+            out.add(new Stretch(BigInteger.ZERO, by, most, by, true));
+            if (by.compareTo(most) < 0) {
+                out.add(new Stretch(by.add(BigInteger.ONE), most, most, by.add(divisor), true));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What a division by a whole number above nought leaves of a dividend, as the call of the
+     * library's floor remainder that says it.
      *
      * @param <E> the environment the call is read in
-     * @param dividend the first argument of the call, which is the form the division is of
+     * @param call the call, its dividend as it was written
      * @param at where the call was applied, which is where its arguments are read
      * @param divisor the number the dividend is divided by
-     * @param statement what holds of the remainder exactly where the comparison holds
      */
-    public record OfAForm<E>(Core dividend, E at, BigInteger divisor,
-                             ConstantComparison statement) {
+    public record OfADivision<E>(Core.PreservedCall call, E at, BigInteger divisor) {
 
-        public OfAForm {
-            Objects.requireNonNull(dividend, "a remainder is of something");
+        public OfADivision {
+            Objects.requireNonNull(call, "a remainder is of something");
             Objects.requireNonNull(at, "read somewhere");
-            Objects.requireNonNull(divisor, "by something");
-            Objects.requireNonNull(statement, "and the comparison states something of it");
+            if (divisor == null || divisor.signum() <= 0) {
+                throw new IllegalArgumentException("a remainder by a number above nought: "
+                        + divisor);
+            }
         }
-    }
 
-    /** The same, of the dividend as the call has it: no moving is peeled off it. */
-    public static <E> OfAForm<E> readOverAForm(StatedComparison comparison, E at,
-                                                TheSignOfAnOrder.Sides<E> sides) {
-        for (boolean remainderFirst : List.of(true, false)) {
-            Located<E> found = locate(comparison, at, sides, remainderFirst);
-            if (found == null) {
-                continue;
-            }
-            if (found.divisor() == null || found.against() == null
-                    || found.divisor().signum() <= 0) {
-                return null;
-            }
-            ConstantComparison statement = ConstantComparison.of(found.written(), found.against(),
-                    BigInteger.ZERO, found.divisor().subtract(BigInteger.ONE));
-            return statement == null ? null : new OfAForm<>(found.call().args().getFirst(),
-                    found.at(), found.divisor(), statement);
+        /** The value the division is of. */
+        public Core dividend() {
+            return call.args().getFirst();
         }
-        return null;
+
+        /**
+         * The same division of the place the dividend is moved from by a number — or null where the
+         * dividend is no place moved by a number.
+         *
+         * <p>Whether a comparison of this remainder is one of that remainder over a stretch
+         * ({@link RemainderOfAShiftedValue#read}) is the caller's: it turns on whether the place's
+         * remainder is a number of the place, which is no question of the arithmetic here.
+         */
+        public Core.PreservedCall unmoved(TheSignOfAnOrder.Sides<E> sides) {
+            Moved moved = Moved.of(dividend(), at, sides);
+            return moved == null ? null : over(moved.place());
+        }
+
+        /** The same call with {@code dividend} in place of its own. */
+        Core.PreservedCall over(Core dividend) {
+            List<Core> args = new ArrayList<>(call.args());
+            args.set(0, dividend);
+            return new Core.PreservedCall(call.declared(), args, call.place(), call.settled(),
+                    call.type(), call.pos());
+        }
     }
 
     /**
-     * The call of a floor remainder that one side of {@code comparison} is, and what the other side
-     * and the divisor are as whole numbers — or null where this side is no such call.
+     * The floor remainder {@code value}, read in {@code at}, is — or null where it is no call of
+     * one, or its divisor is no whole number above nought the same on every run.
+     *
+     * <p>Nothing of what the remainder is compared with is asked: which number a call is does not
+     * turn on the comparison it is met in, nor on whether it is met in one at all.
      */
-    private static <E> Located<E> locate(StatedComparison comparison, E at,
-                                         TheSignOfAnOrder.Sides<E> sides,
-                                         boolean remainderFirst) {
-        Core spelled = remainderFirst ? comparison.left() : comparison.right();
-        // The call itself and not a name given it: a guard over a bound value is a fact about
-        // that value, which a path holds as the number it is, and a disjunction of stretches
-        // of the place's remainder is a fact it cannot take in its place.
-        if (Core.withoutStanding(spelled) instanceof Core.Read) {
-            return null;
-        }
-        ValueStanding.ReadThrough<E> side = sides.standing(spelled, at);
+    public static <E> OfADivision<E> ofADivision(Core value, E at,
+                                                 TheSignOfAnOrder.Sides<E> sides) {
+        ValueStanding.ReadThrough<E> side = sides.standing(value, at);
         if (!(Core.withoutStanding(side.value()) instanceof Core.PreservedCall call)) {
             return null;
         }
@@ -165,45 +256,61 @@ public final class RemainderOfAShiftedValue {
         }
         BigInteger divisor =
                 wholeNumberOf(sides.constant(call.args().get(divides.getAsInt()), side.at()));
-        BigInteger against = wholeNumberOf(
-                sides.constant(remainderFirst ? comparison.right() : comparison.left(), at));
-        Rel written = (remainderFirst ? comparison.claim() : comparison.claim().turned())
-                .statedRelation();
-        return new Located<>(call, side.at(), divisor, against, written);
+        return divisor == null || divisor.signum() <= 0
+                ? null : new OfADivision<>(call, side.at(), divisor);
     }
 
-    /** A floor remainder one side of a comparison is, with the numbers it is read against. */
-    private record Located<E>(Core.PreservedCall call, E at, BigInteger divisor,
-                              BigInteger against, Rel written) {}
+    /**
+     * The floor remainder that one side of {@code comparison} is, and what the other side is as a
+     * whole number — or null where this side is no such remainder ({@link #ofADivision}).
+     */
+    private static <E> Located<E> locate(StatedComparison comparison, E at,
+                                         TheSignOfAnOrder.Sides<E> sides,
+                                         boolean remainderFirst) {
+        Core spelled = remainderFirst ? comparison.left() : comparison.right();
+        OfADivision<E> division = ofADivision(spelled, at, sides);
+        if (division == null) {
+            return null;
+        }
+        Core other = remainderFirst ? comparison.right() : comparison.left();
+        BigInteger against = wholeNumberOf(sides.constant(other, at));
+        Rel written = (remainderFirst ? comparison.claim() : comparison.claim().turned())
+                .statedRelation();
+        return new Located<>(division, other, against, written);
+    }
 
     /**
-     * What holds of the remainder {@code r} of the place, by {@code divisor}, where the remainder of
-     * the moved value stands {@code rel} to {@code against}.
+     * A floor remainder one side of a comparison is, with the other side, and the number that side
+     * is where it is a whole one the same on every run.
      */
-    static ConstantComparison statementOf(Rel rel, BigInteger against, BigInteger divisor,
-                                          Moved moved) {
-        BigInteger most = divisor.subtract(BigInteger.ONE);
-        BigInteger by = moved.by().mod(divisor);
-        if (!moved.negated()) {
-            if (by.signum() == 0) {
-                return ConstantComparison.of(rel, against, BigInteger.ZERO, most);
-            }
-            // The remainder of the place plus `by`, which falls back round the divisor once the
-            // sum reaches it: below the turn the moved remainder is `r + by`, and from it
-            // `r + by - divisor`.
-            BigInteger turn = divisor.subtract(by);
-            return ConstantComparison.either(
-                    inStretch(rel, against.subtract(by), BigInteger.ZERO,
-                            turn.subtract(BigInteger.ONE), most),
-                    inStretch(rel, against.subtract(by).add(divisor), turn, most, most));
+    private record Located<E>(OfADivision<E> division, Core other, BigInteger against,
+                              Rel written) {
+
+        E at() {
+            return division.at();
         }
-        // `by` less the remainder, which is no more than `by` while the remainder is, and a
-        // divisor more above it. A comparison of what is taken from a number is the comparison the
-        // other way round of the number it is taken from.
-        return ConstantComparison.either(
-                inStretch(turned(rel), by.subtract(against), BigInteger.ZERO, by, most),
-                inStretch(turned(rel), by.add(divisor).subtract(against),
-                        by.add(BigInteger.ONE), most, most));
+
+        BigInteger divisor() {
+            return division.divisor();
+        }
+    }
+
+    /**
+     * What holds of the remainder {@code r} of the place, where the remainder of the moved value
+     * stands {@code rel} to {@code against}: on each of {@code stretches}, what the comparison says
+     * of {@code r} there, the one stretch or the other.
+     *
+     * <p>On a stretch the moved remainder is {@code r + by}, so the comparison is of {@code r}
+     * against the number less {@code by}; taken from a number, it is {@code by - r}, and the
+     * comparison is the other way round, of {@code r} against {@code by} less the number.
+     */
+    static ConstantComparison statementOf(Rel rel, BigInteger against, List<Stretch> stretches) {
+        ConstantComparison out = null;
+        for (Stretch each : stretches) {
+            ConstantComparison here = each.standing(rel, against);
+            out = out == null ? here : ConstantComparison.either(out, here);
+        }
+        return out;
     }
 
     /**

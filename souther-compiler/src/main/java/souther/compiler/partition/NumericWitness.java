@@ -1,14 +1,18 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ClassMembers;
+import souther.compiler.check.HeldClass;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -389,7 +393,7 @@ final class NumericWitness {
         // that was handed over — read back as a range there, it would be the widest answer there is
         // out of the narrowest region there is.
         NumericDomain.Bounds runs;
-        switch (within.projectionOf(term)) {
+        switch (within.projectionOf(term, terms.subList(at + 1, terms.size()))) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) -> runs = held;
             case NumericDomain.FormProjection.NothingIsLeft _ -> {
                 return false;
@@ -414,18 +418,34 @@ final class NumericWitness {
             met.leftUnwalked = true;
             return false;
         }
+        // A value held to a class is a value of the class, so its members are what is walked, in
+        // the order a walk outward from the same place takes: a step of one reaches a member only by
+        // luck, and every value between two members is one the rules refuse.
+        HeldClass held = term instanceof NumericTerm.ValueOf value
+                ? within.classAt(value) : HeldClass.NONE;
+        if (!(held instanceof HeldClass.None) && held.countsOn(carrier)
+                && Count.number(first).exactly().floor()
+                        instanceof ExactAnswer.Held<BigInteger> from) {
+            ClassMembers inside = held.nearest(from.value(), runs, VALUES_A_POSITION_IS_TRIED_AT);
+            for (Place tried : inside.notApart(apart)) {
+                if (carrier.admitted(admits, tried)
+                        && tryingAt(within, term, tried, terms, at, on, looking, composing,
+                                standing, met)) {
+                    return true;
+                }
+            }
+            if (inside.stoppedShort()) {
+                met.leftUnwalked = true;
+                met.figures.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+            }
+            return false;
+        }
         Outwards.Walked walked = Outwards.from(first, Count.of(1), carrier, runs,
                 VALUES_A_POSITION_IS_TRIED_AT, PLACES_A_POSITION_IS_LOOKED_AT, admits, apart);
         for (Place tried : walked) {
-            SearchRegion next = within.given(term, tried);
-            if (next.emptiness().isPresent()) {
-                continue;
-            }
-            standing.put(term, tried);
-            if (walk(next, terms, at + 1, on, looking, composing, standing, met)) {
+            if (tryingAt(within, term, tried, terms, at, on, looking, composing, standing, met)) {
                 return true;
             }
-            standing.remove(term);
         }
         // What the walk of this position came to, read over the ways it can end rather than off one
         // of them. Each says something different about an empty hand, and a reading that asked only
@@ -461,19 +481,51 @@ final class NumericWitness {
     }
 
     /**
+     * The term {@code at} held at {@code tried} and the walk of every term after it, or nothing
+     * where the rules leave nothing there — which steps on, as a value the rules refuse does.
+     */
+    private static boolean tryingAt(SearchRegion within, NumericTerm term, Place tried,
+                                    List<? extends NumericTerm> terms, int at,
+                                    Function<NumericTerm, Carrier> on, WitnessSearch looking,
+                                    Composing composing,
+                                    SequencedMap<NumericTerm, Place> standing, Met met) {
+        SearchRegion next = within.given(term, tried);
+        if (next.emptiness().isPresent()) {
+            return false;
+        }
+        standing.put(term, tried);
+        if (walk(next, terms, at + 1, on, looking, composing, standing, met)) {
+            return true;
+        }
+        standing.remove(term);
+        return false;
+    }
+
+    /**
      * What the declarations leave the position {@code term} is read at, or nothing narrowed where
      * it is read at none.
      *
      * <p>A number over a run, or how often a value occurs among a container's elements, is a
      * number of the values standing there and not one of them: a set a position admits says which
      * values may be written at it, and no value is written at such a number. What the rules leave
-     * it is the region's, which the walk is held to already.
+     * it is the region's, which the walk is held to already. The end of the values of a key is one
+     * of the values at its place, so it is admitted no value the place is not.
      */
     private static ValueSet admittedAt(NumericTerm term, WitnessSearch looking,
                                        SearchRegion within) {
         return switch (term) {
             case NumericTerm.FromOnePosition one -> looking.toNarrowBy(one, within);
-            case NumericTerm.TakenOver _, NumericTerm.Multiplicity _ -> ValueSet.ANY;
+            // One of the values at its place, so none the place does not admit.
+            case NumericTerm.ExtremeOfItsKey extreme ->
+                    looking.toNarrowBy(extreme.valuesTakenFrom(), within);
+            case NumericTerm.GatheredUnderItsKey gathered -> gathered.valuesTakenFrom() == null
+                    ? ValueSet.ANY : looking.toNarrowBy(gathered.valuesTakenFrom(), within);
+            // The same for the elements of the one key an input holds, which are some of them.
+            case NumericTerm.GatheredUnderAKey asked ->
+                    admittedAt(asked.gathered(), looking, within);
+            case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
+                    ValueSet.ANY;
         };
     }
 
@@ -482,7 +534,10 @@ final class NumericWitness {
     private static PlacesApart apartAt(NumericTerm term, SearchRegion within) {
         return switch (term) {
             case NumericTerm.FromOnePosition one -> within.apartAt(one);
-            case NumericTerm.TakenOver _, NumericTerm.Multiplicity _ -> PlacesApart.NONE;
+            case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
+                 NumericTerm.GatheredUnderAKey _ -> PlacesApart.NONE;
         };
     }
 

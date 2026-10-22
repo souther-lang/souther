@@ -78,13 +78,15 @@ public sealed interface Position permits ReadPosition {
     boolean nothingExists();
 
     /**
-     * How much of what the rules say the bounds of the value this position sits in are able to
-     * state.
+     * How much of what the rules say the bounds of this position are able to state, as a promise
+     * that each value they leave it is part of some whole value.
      *
-     * <p>Asked of the whole value and not of this position, because that is what it is about: a rule
-     * the bounds cannot express is a way the value can be refused wherever in it the rule is
-     * written, so an edge at one of its positions is only as certain as the projection of all of
-     * them.
+     * <p>Every rule of the value this position sits in is asked, and not only the ones naming it: a
+     * rule the bounds cannot express is a way the value can be refused wherever in it the rule is
+     * written, so an edge at this position is only as certain as the projection of all of them.
+     * Except a rule shown to stand apart from it — one naming only places no rule relates to this
+     * one, which it leaves some value — since a value it refuses is replaced by one it does not
+     * without moving anything here.
      *
      * <p>Not whether a rule was answered, which is the wider question and is not this one:
      * {@code invariant nonzero = value /= 0} is read whole by the reading that turns clauses into
@@ -205,10 +207,10 @@ public sealed interface Position permits ReadPosition {
      * governs, one position down, and a row meets it there. Said here, the measure was short of
      * something nobody could supply, because the walk had already gone to it (#1072).
      *
-     * <p><b>The reasons and not a boolean.</b> Both can hold at once, and one of them is the same
-     * stop {@link BlockedDescent} reports from the other end — so a reader deciding whether what it
-     * holds is already said elsewhere has to be able to ask which this is. Answered {@code true},
-     * that reader could not ask, and reported one stop as two (issue #1084).
+     * <p><b>The reasons and not a boolean.</b> Both can hold at once, and they are different causes
+     * an author acts on differently — a clause the reading lost, and a recipient nothing opened —
+     * so a reader has to be able to ask which this is. Answered {@code true}, that reader could not
+     * ask (issue #1084).
      *
      * <p>Empty where the rules this position was owed were all reached. In the order they were
      * found, so that two runs over one model produce the same value.

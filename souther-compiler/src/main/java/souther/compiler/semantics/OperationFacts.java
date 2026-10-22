@@ -199,9 +199,11 @@ public final class OperationFacts {
             // whichever side the divisor decides. Its `0` is not a case at all: the operation
             // aborts.
             //
-            // `Decimal.toInt` is within one of what it rounds, whichever mode it is handed. What a
-            // single mode does more narrowly — `HALF_UP` rounds to within a half — is a second
-            // statement and is not made here, since the mode is an argument nothing reads.
+            // Both narrowings to a whole number are within one of what they round, whichever mode
+            // they are handed. What a single mode does more narrowly — `HALF_UP` rounds to within
+            // a half — is not a bound on the result: it is read from the mode where a comparison
+            // of the result is, and only where the mode is one case there (`roundsToAWholeNumber`
+            // below).
             about("Int", "abs", bounded(Rel.GE, 0)),
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),
@@ -210,6 +212,13 @@ public final class OperationFacts {
             about("Int", "floorMod", bounded(Rel.GT, at(1), 0, belowZero(at(1)))),
             about("Decimal", "toInt", bounded(Rel.GT, at(1), -1, always())),
             about("Decimal", "toInt", bounded(Rel.LT, at(1), 1, always())),
+            about("Rational", "toInt", bounded(Rel.GT, at(1), -1, always())),
+            about("Rational", "toInt", bounded(Rel.LT, at(1), 1, always())),
+            // Both narrowings to a whole number take the policy first and the number last. What
+            // they answer is a step of the number, so a comparison of it is read as a comparison
+            // of the number at the step's edge.
+            about("Decimal", "toInt", roundsToAWholeNumber(at(0), at(1))),
+            about("Rational", "toInt", roundsToAWholeNumber(at(0), at(1))),
 
             // A comparison answers a sign and answers it as one of three numbers. That it is one of
             // three is not what {@code StatesTheOrderOfItsArguments} says: that one says which
@@ -246,6 +255,7 @@ public final class OperationFacts {
             // read from, and by {@link souther.compiler.numeric.DateTimes} for a date-time.
             about("Date", "year", bounded(Rel.GE, java.time.LocalDate.MIN.getYear())),
             about("Date", "year", bounded(Rel.LE, java.time.LocalDate.MAX.getYear())),
+            about("Date", "year", new OperationFact.EndsAreWhereTheRepresentationStops()),
             about("DateTime", "minutesBetween", bounded(Rel.GE, -minutesAcrossEveryDateTime())),
             about("DateTime", "minutesBetween", bounded(Rel.LE, minutesAcrossEveryDateTime())),
             // A date-time counts seconds and a minute is sixty of them. The answer drops what is
@@ -281,8 +291,10 @@ public final class OperationFacts {
             about("List", "reverse", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sort", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sortBy", keeps(CONTAINER, SizeAgainstItsSource.SAME)),
-            // Which elements of its list a drop keeps: the ones from the count on.
-            about("List", "drop", new OperationFact.HoldsTheElementsFrom(at(0), at(1))),
+            // Which elements of its list a take and a drop keep: the ones before the count, and the
+            // ones from it on.
+            about("List", "take", new OperationFact.HoldsTheElementsByIndex(at(0), at(1), Rel.LT)),
+            about("List", "drop", new OperationFact.HoldsTheElementsByIndex(at(0), at(1), Rel.GE)),
             about("List", "mapIndexed", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("Map", "mapValues", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "distinct", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
@@ -347,6 +359,8 @@ public final class OperationFacts {
                     at(1))),
             about("String", "characters", new OperationFact.HoldsThePiecesOf(Optional.empty(),
                     at(0))),
+            // And the code points of one, each the number it is.
+            about("String", "codePoints", new OperationFact.ListsTheCodePointsOf(at(0))),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the
@@ -759,6 +773,14 @@ public final class OperationFacts {
                             answerOf("Map", "insert", the(at(0)), the(at(1)), the(at(2))))),
                     any(alike(the(ANY), the(at(0))),
                             isTrue(answerOf("Map", "containsKey", the(ANY), the(at(2)))))))),
+            // Either way the key is looked up, its value is inserted under it: what the answer
+            // holds a key of is the key and what the map held one of, proved against the body.
+            about("Map", "updateOrInsert", lemma(related(iff(
+                    isTrue(answerOf("Map", "containsKey", the(ANY),
+                            answerOf("Map", "updateOrInsert", the(at(0)), the(at(1)), the(at(2)),
+                                    the(at(3))))),
+                    any(alike(the(ANY), the(at(0))),
+                            isTrue(answerOf("Map", "containsKey", the(ANY), the(at(3))))))))),
             about("Map", "empty", related(
                     isTrue(answerOf("Map", "containsKey", the(ANY), answerOf("Map", "empty")))
                             .denied())),
@@ -766,6 +788,12 @@ public final class OperationFacts {
                     isTrue(answerOf("Set", "contains", the(ANY),
                             answerOf("Set", "insert", the(at(0)), the(at(1))))),
                     any(alike(the(ANY), the(at(0))),
+                            isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
+            // A union holds exactly what either set held.
+            about("Set", "union", related(iff(
+                    isTrue(answerOf("Set", "contains", the(ANY),
+                            answerOf("Set", "union", the(at(0)), the(at(1))))),
+                    any(isTrue(answerOf("Set", "contains", the(ANY), the(at(0)))),
                             isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
 
             // Which values of a set are left: some other than the one taken out, some of one also
@@ -956,7 +984,17 @@ public final class OperationFacts {
             about("Decimal", "abs", answers(LinearForm.weighing(at(0), ExactRatio.of(-1)),
                     standsAgainst(at(0), Rel.LT, 0))),
             about("Decimal", "abs", answers(LinearForm.atom(at(0)),
-                    standsAgainst(at(0), Rel.GE, 0))));
+                    standsAgainst(at(0), Rel.GE, 0))),
+            // And a comparison, which answers one of its three numbers by how the two stand. It is
+            // the bounds and the order stated above, read together: a whole number from one below
+            // nought to one above it, positive where the first is the greater. Not of a rational,
+            // which is no number a case of a definition is written over.
+            about("Int", "compare", answersTheNumber(-1, stands(at(0), Rel.LT, at(1)))),
+            about("Int", "compare", answersTheNumber(0, stands(at(0), Rel.EQ, at(1)))),
+            about("Int", "compare", answersTheNumber(1, stands(at(0), Rel.GT, at(1)))),
+            about("Decimal", "compare", answersTheNumber(-1, stands(at(0), Rel.LT, at(1)))),
+            about("Decimal", "compare", answersTheNumber(0, stands(at(0), Rel.EQ, at(1)))),
+            about("Decimal", "compare", answersTheNumber(1, stands(at(0), Rel.GT, at(1)))));
     }
 
     /** How many whole minutes the first date-time and the last stand apart, which is as far apart as
@@ -1003,6 +1041,13 @@ public final class OperationFacts {
             reached.add(stands);
         }
         return new OperationFact.IsDefinedByCases(new DefinitionCase<>(form, reached));
+    }
+
+    /** The case answering {@code constant} where every one of {@code given} holds. */
+    @SafeVarargs
+    private static OperationFact answersTheNumber(long constant,
+                                                  ArgumentsStand<ArgumentRef>... given) {
+        return answers(LinearForm.constant(ExactRatio.of(constant)), given);
     }
 
     private static ArgumentsStand<ArgumentRef> stands(ArgumentRef left, Rel rel,
@@ -1421,6 +1466,10 @@ public final class OperationFacts {
     private static OperationFact countsWholeUnitsBetween(ArgumentRef from, ArgumentRef to,
                                                          long perUnit) {
         return new OperationFact.CountsWholeUnitsBetween(from, to, perUnit);
+    }
+
+    private static OperationFact roundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) {
+        return new OperationFact.RoundsToAWholeNumber(mode, value);
     }
 
     private static OperationFact shifts(String module, String measure, ArgumentRef of,

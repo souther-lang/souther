@@ -16,6 +16,7 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ReplacementEvidence;
+import souther.compiler.reach.WhatMayStopARun;
 
 import tools.jackson.databind.node.ObjectNode;
 
@@ -305,6 +306,7 @@ public final class PublicationOrders {
                     CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                     CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED,
                     CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT,
+                    CompositionBudget.COUNTS_OF_KEYS_TRIED,
                     CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
@@ -326,10 +328,18 @@ public final class PublicationOrders {
                     // the thing a reader asked about is tried, where the ones before them bound
                     // what building one value is worth.
                     CompositionBudget.NUMBERS_OF_A_SET_TRIED,
+                    // Beside it: the choices of those numbers for several totals at once.
+                    CompositionBudget.COMBINATIONS_OF_TOTALS_TRIED,
                     CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                     CompositionBudget.CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                     CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT,
+                    // Beside it, as what one level is then tried at.
+                    CompositionBudget.DIVISORS_OF_A_PRODUCT_TRIED,
+                    CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED,
+                    CompositionBudget.REMAINDERS_A_SUM_IS_TRIED_AT,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
+                    // Beside it: the rows that walk composes, as the choice of one is handed them.
+                    CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
                     CompositionBudget.STEPS_A_SEARCH_MAY_TAKE,
                     // After every figure a search for the value stops at, because what this one
@@ -342,6 +352,9 @@ public final class PublicationOrders {
                     // them, then what a path takes in of what the reading made.
                     CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
                     CompositionBudget.PARTS_A_DERIVATION_CONCLUDES,
+                    // After what a step states, as what a reader that takes a count of statements
+                    // apart walks of it.
+                    CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                     CompositionBudget.ALTERNATIVES_A_PATH_TRIES,
                     // After the reading of a condition, as the reading of where one line of a
                     // statement it made decides: the statement read, the cases taken apart, then
@@ -366,7 +379,13 @@ public final class PublicationOrders {
                             // of a range, a line or a group of numbers this compiler names at all.
                             CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
                             CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT,
+                            CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
+                            CompositionRepertoire.KEYS_OF_ONE_FOLD_ASKED_TOGETHER,
+                            CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
                             CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
+                            CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                            CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT,
+                            CompositionRepertoire.STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 
@@ -395,6 +414,17 @@ public final class PublicationOrders {
             CanonicalSelection.Order.overFamilies(List.<Class<? extends EstablishmentGap>>of(
                     EstablishmentGap.Observation.class,
                     EstablishmentGap.Composition.class));
+
+    /**
+     * What may stop a run on the way to a point, in the order a reader looking up the body for it
+     * meets the kinds: an operator inside an expression, a call around one, a construction of a
+     * value out of them.
+     */
+    public static final CanonicalSelection.Order<WhatMayStopARun> WHAT_MAY_STOP_A_RUN =
+            CanonicalSelection.Order.overFamilies(List.<Class<? extends WhatMayStopARun>>of(
+                    WhatMayStopARun.AnOperator.class,
+                    WhatMayStopARun.ACall.class,
+                    WhatMayStopARun.AConstruction.class));
 
     /**
      * What is open about an obligation nobody can decide.
@@ -458,11 +488,13 @@ public final class PublicationOrders {
                 WeakeningWord.PAIR_SPACE_TRUNCATED,
                 WeakeningWord.MEETINGS_NOT_WALKED,
                 WeakeningWord.MEETINGS_NOT_PLACED,
+                WeakeningWord.MEETINGS_NOT_JOINED,
                 WeakeningWord.PROOF_CONTRADICTED,
                 WeakeningWord.ARMS_UNSETTLED,
                 WeakeningWord.DECISION_NOT_FULLY_READ,
                 WeakeningWord.DECISION_RULE_READ_SHORT,
                 WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED,
+                WeakeningWord.REACHABLE_NODE_CASES_UNMEASURED,
                 WeakeningWord.DECISION_OF_ROW_UNREADABLE,
                 WeakeningWord.DECISION_RUN_NOT_WATCHED,
                 WeakeningWord.REWRITE_UNDECIDED)) {
@@ -486,6 +518,7 @@ public final class PublicationOrders {
                     AdequacyOpeningWord.SHOWING_STOPPED,
                     AdequacyOpeningWord.NOTHING_WAS_COMPOSED,
                     AdequacyOpeningWord.NOTHING_SHOWED_IT,
+                    AdequacyOpeningWord.THE_WAY_THERE_MAY_STOP,
                     AdequacyOpeningWord.EVERY_ROW_REACHES_AN_UNREACHABLE));
 
     /**

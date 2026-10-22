@@ -126,14 +126,26 @@ public sealed interface LinearQuantity extends BorderQuantity
         for (NumericTerm term : terms()) {
             TermOrders orders = ordersOf(term);
             WhatATermRead read = switch (term) {
-                case NumericTerm.Multiplicity among ->
-                        WhatATermRead.among(orders, observation, among.place());
+                case NumericTerm.OfAnElementsNeighbours _ ->
+                        WhatATermRead.inItsOccurrence(orders, observation);
                 case NumericTerm.FromOnePosition one ->
                         WhatATermRead.at(orders, observation.at(one.position()));
+                case NumericTerm.OccurrencesOfItsValue among ->
+                        WhatATermRead.amongEveryOccurrence(orders, observation,
+                                among.subjectPath());
+                case NumericTerm.OccurrencesOfAKey asked ->
+                        WhatATermRead.ofAKey(orders, observation, asked.subjectPath(),
+                                asked.key());
+                case NumericTerm.GatheredUnderItsKey _ ->
+                        WhatATermRead.underItsKey(orders, observation);
+                case NumericTerm.GatheredUnderAKey asked ->
+                        WhatATermRead.underAKey(orders, observation, asked.asked());
                 case NumericTerm.TakenOver over -> switch (over.source()) {
-                    case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _ ->
-                            WhatATermRead.over(orders,
-                                    observation.everyValueAt(over.subjectPath()));
+                    // The nodes of a tree are found below its root, which is where they are read
+                    // from ({@code TermReading}).
+                    case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _,
+                         RunSource.ReachableNodes _ ->
+                            WhatATermRead.over(orders, observation, over.subjectPath());
                     case RunSource.ComputedOccurrences computed ->
                             WhatATermRead.overElements(orders, computed, observation);
                 };

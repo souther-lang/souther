@@ -174,7 +174,14 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     }
 
     public Rational minus(Rational other) {
-        return plus(other.negated());
+        // The negation as parts and not as a rational: a canonical form negated is canonical, and
+        // the sum is put in canonical form once.
+        try {
+            return from(ExactArithmetic.plus(parts(), new ExactParts(other.numerator.negate(),
+                    other.denominator, other.twos, other.fives)));
+        } catch (ExactFailure failure) {
+            throw translated(failure);
+        }
     }
 
     /** Where this stands against {@code other} by exact mathematical value, for every pair this type

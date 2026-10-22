@@ -82,7 +82,7 @@ public final class ElementsApart {
         for (DeclaredClauses.OnAName written : DeclaredClauses.of(List.of(named), source)) {
             for (DeclaredClauses.Conjunct each : written.conjuncts()) {
                 if (statements == null) {
-                    statements = InvariantStatements.of(source);
+                    statements = InvariantStatements.ofTheCalls(source);
                 }
                 List<InvariantStatement> states = statements.of(each.part());
                 if (states == null) {
@@ -150,6 +150,55 @@ public final class ElementsApart {
     }
 
     /**
+     * What the builders of the value at {@code path} of a value of {@code named} keep its elements
+     * apart at: the rules of {@code named} and of every value on the way there ({@link #heldAt}),
+     * and the rules of each name the value at the end wears.
+     *
+     * <p>The answer a reading of the rules is held to. What a reader may say was taken in about how
+     * a container's elements stand to each other is what the containers composed for it keep, so
+     * it is asked here, of the builders' own reading, and not worked out again over the clause:
+     * worked out again, a rule written under a choice whose other side is dead would be taken in
+     * while the builders, which read conjuncts only, are never told of it.
+     *
+     * @param there   the type standing at {@code path}, whose names are the position's own
+     * @param written what the rules written on a name keep apart ({@link #writtenOn}), handed in
+     *                so that a caller asking about many paths reads each name once
+     */
+    public static List<List<String>> keptAt(TypeSymbol.AtModule named, RuleKey path, Type there,
+                                            Function<TypeSymbol.AtModule,
+                                                    Map<RuleKey, List<List<String>>>> written,
+                                            RuleReadingSource source) {
+        TypeView view = TypeView.of(there, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        // Only a container has elements to keep apart, and no name's rules are read for the rest.
+        if (!(view.shape() instanceof Shape.Sequence)) {
+            return List.of();
+        }
+        List<List<String>> rules = new ArrayList<>(
+                heldAt(new Type.Ref(named), path, written, source));
+        if (path.isTheValueItself()) {
+            rules.addAll(written.apply(named).getOrDefault(RuleKey.THE_VALUE, List.of()));
+        }
+        for (TypeSymbol wears : view.wrappers()) {
+            if (wears instanceof TypeSymbol.AtModule worn) {
+                rules.addAll(written.apply(worn).getOrDefault(RuleKey.THE_VALUE, List.of()));
+            }
+        }
+        return of(view.shape(), rules);
+    }
+
+    /**
+     * Whether elements kept apart at every run of {@code kept} are apart at {@code run}.
+     *
+     * <p>Apart at a longer run is apart at every run it starts with — two records apart at
+     * {@code a.b} are apart at {@code a} — which is why {@link #of} keeps the longest alone.
+     */
+    public static boolean covers(List<List<String>> kept, List<String> run) {
+        return kept.stream().anyMatch(each -> each.size() >= run.size()
+                && each.subList(0, run.size()).equals(run));
+    }
+
+    /**
      * Where {@code container} is among the values of a declaration whose fields are bound at
      * {@code fields}, or null where it is no value of it or no run of fields read off one.
      *
@@ -189,6 +238,12 @@ public final class ElementsApart {
     /** The fields read off a binding to reach {@code e}, outermost first, or null where it is not
      *  reached that way. */
     private static List<String> readOffABinding(Core e) {
+        return readOffABinding(e, null);
+    }
+
+    /** {@link #readOffABinding(Core)}, leaving out a newtype's own {@code value} where
+     *  {@code newtypes} is given. */
+    private static List<String> readOffABinding(Core e, DeclarationNewtypes newtypes) {
         List<String> run = new ArrayList<>();
         Core at = Core.withoutStanding(e);
         while (true) {
@@ -197,12 +252,22 @@ public final class ElementsApart {
                     return run.reversed();
                 }
                 case Core.FieldAccess access -> {
-                    run.add(access.field());
+                    if (newtypes == null
+                            || Location.isStep(access.target().type(), access.field(), newtypes)) {
+                        run.add(access.field());
+                    }
                     at = Core.withoutStanding(access.target());
                 }
                 case Core.FieldProjection projection -> {
-                    run.addAll(projection.steps().inOrder().reversed().stream()
-                            .map(Core.FieldProjection.Step::field).toList());
+                    Type from = projection.base().type();
+                    List<String> steps = new ArrayList<>();
+                    for (Core.FieldProjection.Step each : projection.steps().inOrder()) {
+                        if (newtypes == null || Location.isStep(from, each.field(), newtypes)) {
+                            steps.add(each.field());
+                        }
+                        from = each.type();
+                    }
+                    run.addAll(steps.reversed());
                     at = Core.withoutStanding(projection.base());
                 }
                 default -> {
@@ -252,12 +317,21 @@ public final class ElementsApart {
      * of the same call, and each makes of the answer what its own reading can hold.
      */
     public static Stated stated(Core.PreservedCall call) {
+        return stated(call, null);
+    }
+
+    /**
+     * {@link #stated(Core.PreservedCall)}, with the run named as a place of a value names its
+     * fields: a newtype's own {@code value} is the value itself and no step of it
+     * ({@link Location#isStep}). Where {@code newtypes} is null the run is as the closure wrote it.
+     */
+    public static Stated stated(Core.PreservedCall call, DeclarationNewtypes newtypes) {
         BoundOperationFacts.NoTwoAlike alike =
                 DefaultBoundOperationFacts.get().statesNoTwoAlike(call.operation());
         if (alike == null) {
             return null;
         }
-        List<String> run = runTaken(call.args().get(alike.by().position()));
+        List<String> run = runTaken(call.args().get(alike.by().position()), newtypes);
         return run == null ? null
                 : new Stated(call.args().get(alike.container().position()), run);
     }
@@ -275,14 +349,14 @@ public final class ElementsApart {
 
     /** The fields {@code closure} reads off its one parameter in order, or null where it does
      *  anything else with it. */
-    private static List<String> runTaken(Core closure) {
+    private static List<String> runTaken(Core closure, DeclarationNewtypes newtypes) {
         if (!(Core.withoutStanding(closure) instanceof Core.Block block)
                 || block.params().size() != 1) {
             return null;
         }
         Core body = block.body();
         return block.params().getFirst().binding().equals(bindingUnder(body))
-                ? readOffABinding(body) : null;
+                ? readOffABinding(body, newtypes) : null;
     }
 
     /** Elements apart at every run of {@code one} and every run of {@code other}, as one answer of

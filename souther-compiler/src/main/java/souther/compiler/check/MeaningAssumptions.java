@@ -4,9 +4,11 @@ import souther.compiler.inputs.AnEvaluation;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -17,12 +19,14 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.ConstantArguments;
@@ -32,12 +36,18 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.AdmittedPlan;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.PlannedValues;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,7 +68,8 @@ import java.util.function.Function;
  * of a container at one — as the relation it states. A value of the input against a written place
  * on its order, as the range it leaves the value. A truth at a position. Both halves of a
  * conjunction, since both hold. Of a disjunction, the one part what is known leaves, or nothing
- * reached where it leaves none. That some element meets something, as the container holding one.
+ * reached where it leaves none; and of one between comparisons of one whole number, the values of
+ * it the comparisons leave. That some element meets something, as the container holding one.
  * Which cases a value may be, and whether an optional holds one. Nothing at all where the
  * condition is never met, since nothing reaches there.
  *
@@ -130,7 +141,11 @@ final class MeaningAssumptions {
      *  bound is found. */
     private final Denotations at;
     private Known known;
+    /** What was known when this reading began. */
+    private final Known entry;
     private boolean taken;
+    /** Whether the choice this was last asked to take in was left between several parts. */
+    private boolean leftUndecided;
     /** Why each part of what was stated that a path does not hold was not taken in; empty where
      *  every part is one a path holds. */
     private final List<WhyNotTaken> notTaken = new ArrayList<>();
@@ -144,6 +159,7 @@ final class MeaningAssumptions {
         this.places = places;
         this.at = at;
         this.known = known;
+        this.entry = known;
         this.tries = tries;
     }
 
@@ -158,7 +174,19 @@ final class MeaningAssumptions {
      */
     private static final class Tries {
 
-        private int left = CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum();
+        private int left;
+
+        Tries() {
+            this(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum());
+        }
+
+        Tries(int left) {
+            this.left = left;
+        }
+
+        int left() {
+            return left;
+        }
 
         /** Whether another part may be taken alone, counting it where it may. */
         boolean another() {
@@ -176,11 +204,93 @@ final class MeaningAssumptions {
                                       InputPlaces places, Denotations at) {
         Proposition asked = positive ? stated : stated.denied();
         MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k, new Tries());
-        taking.take(asked);
+        // A count of statements is taken as the choices of which of them hold, every count in
+        // the statement written out together and held to one figure.
+        switch (CountsWrittenOut.of(asked)) {
+            case CountsWrittenOut.Written(Proposition written) -> taking.take(written);
+            case CountsWrittenOut.PastAFigure(var figure) ->
+                    taking.notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure));
+        }
+        taking.settleWhatWasLeftUndecided();
+        taking.sayWhatIsStillUndecided();
         // Read to the end only where every part was taken in: a part a path cannot hold leaves an
         // arm under it unsettled for this reader's reach, which is not a fact about the model.
         return new Predicates.Assumed(taking.known, taking.taken, taking.notTaken.isEmpty(),
                 taking.notTaken);
+    }
+
+    /**
+     * Each choice a path left undecided, taken again over what is known now, until none of them
+     * comes to a part: what a later condition makes known may leave a choice one part, or none.
+     *
+     * <p>A choice still between several parts stays as it was, and nothing it was read as is kept.
+     * Every pass that goes on settles one choice, so the passes end.
+     *
+     * <p>Read only if something has been taken in since they were last read
+     * ({@link Known#awaitsSettling}), whichever way it was taken in: asked of the state, so the
+     * conditions a reading takes in and the facts the walk adds on entering an arm or a built
+     * value are followed alike ({@link #settled}).
+     *
+     * <p>A choice is read over the state it is kept in, and taken out of it only once a part is
+     * taken in for it. The parts read are counted for the path ({@link Known.Choices#PARTS_A_PATH_SETTLES});
+     * where the count runs out the choices left stay undecided, as they were when they were kept.
+     * That is no fact about the condition being read, so it is said of none.
+     */
+    private void settleWhatWasLeftUndecided() {
+        Tries settling = new Tries(known.settlingLeft());
+        boolean settled = true;
+        while (settled && !known.reachesNothing() && known.awaitsSettling()
+                && settling.left() > 0) {
+            settled = false;
+            for (Known.Declined choice : known.declinedChoices()) {
+                MeaningAssumptions again = new MeaningAssumptions(terms, choice.places(),
+                        choice.at(), known, settling);
+                again.takingOneOf(choice.any());
+                if (again.leftUndecided) {
+                    if (again.notTaken.contains(new WhyNotTaken.MoreAlternativesThanAreTried())) {
+                        break;
+                    }
+                    continue;
+                }
+                known = again.known.withoutDeclined(choice);
+                taken |= again.taken;
+                again.notTaken.forEach(this::notTaken);
+                settled = true;
+                break;
+            }
+        }
+        known = known.settledOverWhatIsKnown(settling.left());
+    }
+
+    /**
+     * {@code k} with the choices it leaves undecided taken again over what it knows, where a fact
+     * has been taken in since they were last read.
+     */
+    static Known settled(Known k, Terms terms) {
+        if (!k.awaitsSettling()) {
+            return k;
+        }
+        MeaningAssumptions settling = new MeaningAssumptions(terms, InputPlaces.NONE, null, k,
+                new Tries());
+        settling.settleWhatWasLeftUndecided();
+        return settling.known;
+    }
+
+    /** Why each choice this reading leaves undecided, and no earlier one, was not taken in — none
+     *  where nothing is reached, since no part of a choice is then left unread. */
+    private void sayWhatIsStillUndecided() {
+        if (known.reachesNothing()) {
+            return;
+        }
+        Set<Known.Declined> before = Collections.newSetFromMap(new IdentityHashMap<>());
+        before.addAll(entry.declinedChoices());
+        for (Known.Declined choice : known.declinedChoices()) {
+            if (!before.contains(choice)) {
+                WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
+                        WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), choice.any())
+                        .forEach(this::notTaken);
+            }
+        }
     }
 
     private void notTaken(WhyNotTaken why) {
@@ -198,6 +308,11 @@ final class MeaningAssumptions {
                 taken = true;
             }
             case Proposition.All all -> all.parts().forEach(this::take);
+            // A path past the statement is one where it answered, and where it came out this way.
+            case Proposition.WhereItAnswers where -> {
+                take(where.answers());
+                take(where.states());
+            }
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
                                       boolean holds, var _) -> {
                 switch (formAt(form)) {
@@ -221,6 +336,8 @@ final class MeaningAssumptions {
             }
             case Proposition.Always _ -> { }
             case Proposition.Any any -> takingOneOf(any);
+            case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
+                    "a count reaches a path written out as its choices: " + asked);
             // Which application is no fact of a path.
             case Proposition.OnAnApplication _ ->
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
@@ -364,18 +481,23 @@ final class MeaningAssumptions {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS);
             }
-            case Quantity.HowManyDifferent _, Quantity.SumOver _ -> {
+            case Quantity.HowManyDifferent _, Quantity.HowManyDifferentBelow _,
+                 Quantity.HowManyDifferentAcross _, Quantity.SumOver _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS);
             }
-            // Taken of a form of several places, which is a fact about none of them: a path would
-            // have to know the remainder of a sum it holds no name for — or what an operation
-            // answered of a place, which it names only by what it was made of.
-            case Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
-                 DecisionAtom.TakenOfAnAnswer _, Quantity.WhatAnOperationAnswers _ -> {
+            case Quantity.RemainderOfADividend remainder -> named = remainderOfAForm(remainder);
+            // Taken of a form of several places, which is a fact about none of them — or what an
+            // operation answered of a place, which a path names only by what it was made of.
+            case Quantity.CodePointsOfAPiece _, DecisionAtom.TakenOfAnAnswer _,
+                 DecisionAtom.ComputedOverAnAnswer _,
+                 Quantity.WhatAnOperationAnswers _, Quantity.ProductOfTwo _,
+                 Quantity.RemainderByAnInput _, Quantity.APieceOf _,
+                 Quantity.IsAmongThePieces _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
             }
+            case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
         }
         return named != null ? new AtomAt.Named(named)
                 : new AtomAt.AtTheEdge(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
@@ -418,6 +540,39 @@ final class MeaningAssumptions {
             }
             default -> null;
         };
+    }
+
+    /**
+     * What a division leaves of a form of places, named by the form's places and the divisor, so a
+     * guard on it here and one in the next condition are about one number however each was
+     * written; it carries both ends its operation bounds it to by this divisor, the account a
+     * remainder of one place carries. Null where a place of the form is none this names.
+     *
+     * <p>A fact about the remainder and none about its places: a path that knows it holds no more
+     * of what the places are than that their form leaves it.
+     */
+    private FactSubject remainderOfAForm(Quantity.RemainderOfADividend remainder) {
+        if (remainder.divisor().bitLength() >= Long.SIZE
+                || !(remainder.dividend().constant().floor()
+                        instanceof ExactAnswer.Held<BigInteger>(BigInteger constant))) {
+            return null;
+        }
+        List<Map.Entry<FactSubject, BigDecimal>> weighed = new ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each
+                : NumericTerms.entriesInOrder(remainder.dividend().coefs())) {
+            FactSubject place = atomOf(each.getKey());
+            if (place == null || !(each.getValue().floor()
+                    instanceof ExactAnswer.Held<BigInteger>(BigInteger weight))) {
+                return null;
+            }
+            weighed.add(Map.entry(place, new BigDecimal(weight)));
+        }
+        FactSubject left = terms.remainderOfAForm(remainder.operation(), weighed,
+                new BigDecimal(constant), remainder.divisor().longValue());
+        if (left != null) {
+            carryingBothEnds(left, remainder.operation(), remainder.arguments());
+        }
+        return left;
     }
 
     /** Whether {@code number} is a whole number other than nought that a signed 64-bit number holds,
@@ -550,7 +705,9 @@ final class MeaningAssumptions {
      * <p>Which part holds is no fact of a path, but a part that cannot hold under what is known is
      * one the others are left to: each part is taken alone, from what is known here, and one that
      * leaves nothing is dropped. None left is nothing reached; one left is that one holding, taken
-     * as it would be on its own. Two or more left is which of them holds, and is declined.
+     * as it would be on its own. Two or more left is which of them holds: no part is taken, and the
+     * choice is kept undecided on the path ({@link Known.Declined}) for the conditions after it to
+     * single out a part of ({@link #settleWhatWasLeftUndecided}).
      *
      * <p>A part taken only in part and still leaving nothing is dropped all the same: what it left
      * out would only have narrowed further.
@@ -564,13 +721,33 @@ final class MeaningAssumptions {
      * and the whole is declined for the count rather than for what a path knows. So is a choice
      * between two left where one of them declined a disjunction for the count: that part may
      * leave nothing, and which of them holds may be no choice at all.
+     *
+     * <p>Except a choice between comparisons of one whole number, which is no choice for a path to
+     * make: it is the runs of the number it leaves ({@link #holdingTheValues}), and those are a
+     * fact a path holds however many numbers are in them. Whether the number is a whole one is the
+     * order it was named on ({@link Terms#carrierOf}): a date is counted in days and its values
+     * are dates.
      */
     private void takingOneOf(Proposition.Any any) {
+        // Which number the parts compare is asked of the statement before anything is named, so
+        // a choice over several numbers costs nothing here, and the one number of a choice over
+        // one is named once and not once for each comparison.
+        Set<Quantity> numbers = new LinkedHashSet<>();
+        if (comparesOnlyNumbers(any, numbers) && numbers.size() == 1
+                && atomAt(numbers.iterator().next()) instanceof AtomAt.Named(FactSubject number)
+                && terms.carrierOf(number) instanceof Carrier.Whole) {
+            WholeNumberRuns values = leftOf(any);
+            if (values != null) {
+                holdingTheValues(number, values);
+                return;
+            }
+        }
         List<MeaningAssumptions> left = new ArrayList<>();
         for (Proposition part : any.parts()) {
             if (!tries.another()) {
                 WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
                         .forEach(this::notTaken);
+                leftUndecided = true;
                 return;
             }
             MeaningAssumptions alone = new MeaningAssumptions(terms, places, at, known, tries);
@@ -596,12 +773,143 @@ final class MeaningAssumptions {
             default -> {
                 boolean cutShort = left.stream().anyMatch(each -> each.notTaken.contains(
                         new WhyNotTaken.MoreAlternativesThanAreTried()));
-                WhyNotTaken.declinedWhole(cutShort ? new WhyNotTaken.MoreAlternativesThanAreTried()
-                        : new WhyNotTaken.OutsideDomain(
-                                WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), any)
-                        .forEach(this::notTaken);
+                leftUndecided = true;
+                if (cutShort) {
+                    WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
+                            .forEach(this::notTaken);
+                } else {
+                    // Said when the reading ends, and only if no later condition has settled it.
+                    Known.Declined declined = new Known.Declined(any, at, places);
+                    known = known.leavingUndecided(declined);
+                }
             }
         }
+    }
+
+    /**
+     * Whether every part of {@code stated} is a comparison of one number weighed by something other
+     * than nought, or settled whatever the numbers are — with each number compared added to
+     * {@code numbers}. Asked of the statement alone, so nothing is named.
+     */
+    private static boolean comparesOnlyNumbers(Proposition stated, Set<Quantity> numbers) {
+        return switch (stated) {
+            case Proposition.Always _ -> true;
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(part -> comparesOnlyNumbers(part, numbers));
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(part -> comparesOnlyNumbers(part, numbers));
+            case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel _),
+                                      boolean _, var _)
+                    when form.coefs().size() == 1
+                    && form.coefs().values().iterator().next().signum() != 0 -> {
+                numbers.add(form.coefs().keySet().iterator().next());
+                yield true;
+            }
+            default -> false;
+        };
+    }
+
+    /**
+     * The whole numbers {@code stated} leaves the one number it compares, which
+     * {@link #comparesOnlyNumbers} has said it is over — or null where a threshold is one the exact
+     * arithmetic cannot step from.
+     *
+     * <p>Every part is read, and each exactly: a part this cannot say exactly leaves the whole to be
+     * taken some other way, since runs that left out values a part lets through would be a path
+     * refusing them.
+     */
+    private static WholeNumberRuns leftOf(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Always(boolean holds) ->
+                    holds ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;
+            case Proposition.All all -> {
+                WholeNumberRuns out = WholeNumberRuns.EVERY;
+                for (Proposition part : all.parts()) {
+                    WholeNumberRuns each = leftOf(part);
+                    if (each == null) {
+                        yield null;
+                    }
+                    out = out.and(each);
+                }
+                yield out;
+            }
+            case Proposition.Any any -> {
+                WholeNumberRuns out = WholeNumberRuns.NONE;
+                for (Proposition part : any.parts()) {
+                    WholeNumberRuns each = leftOf(part);
+                    if (each == null) {
+                        yield null;
+                    }
+                    out = out.or(each);
+                }
+                yield out;
+            }
+            case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
+                                      boolean holds, var _) -> leftBy(form, holds ? p : p.denied());
+            default -> throw new IllegalStateException(
+                    "a part that compares no number was let through: " + stated);
+        };
+    }
+
+    /** The whole numbers {@code form rel 0} leaves the one number it is over. */
+    private static WholeNumberRuns leftBy(LinearForm<Quantity> form, Rel rel) {
+        ExactRatio weight = form.coefs().values().iterator().next();
+        if (!(form.constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
+            return null;
+        }
+        // Weighed below nought, the number stands the other way round to where the form does.
+        return WholeNumberRuns.standing(weight.signum() < 0 ? rel.turned() : rel, threshold);
+    }
+
+    /**
+     * {@code values} of {@code number}, met with where what is known here leaves it, taken in: as
+     * nothing reached where none are left, as the range they are where they are one run, and as
+     * the runs of them where they are several ({@link ValueSet#wholeNumbers}).
+     *
+     * <p>The range on its own where it is one, because the numbers relate the number to others and
+     * a set relates it to nothing. Several runs are what the numbers have no word for, and the
+     * values beside them are met with where the numbers leave the number, which is where a
+     * contradiction between the two is found ({@link ConstraintState#isBottom}).
+     *
+     * <p>On the path only: a condition says it, and it is no fact of the value wherever the value
+     * is named ({@link Known#holdingOnThePath}).
+     */
+    private void holdingTheValues(FactSubject number, WholeNumberRuns values) {
+        WholeNumberRuns held = values.and(rangeOf(number));
+        taken = true;
+        if (held.isNone()) {
+            known = known.reachingNothing();
+            return;
+        }
+        if (held.runs().size() == 1) {
+            Map<FactSubject, Granularity> kinds = terms.kindsOf(LinearForm.atom(number));
+            WholeNumberRuns.Run run = held.runs().getFirst();
+            if (run.from() != null) {
+                known = known.taking(LinearForm.atomMinusConstant(number, ExactRatio.of(run.from())),
+                        Rel.GE, Known.Held.ON_THE_PATH, kinds);
+            }
+            if (run.to() != null) {
+                known = known.taking(LinearForm.atomMinusConstant(number, ExactRatio.of(run.to())),
+                        Rel.LE, Known.Held.ON_THE_PATH, kinds);
+            }
+            return;
+        }
+        Allowance<FactSubject> sets = terms.policy().allowanceForAdmittedValues();
+        Confinement.Planned<FactSubject> said = new Confinement.Planned<>(
+                PlannedValues.at(number, AdmittedPlan.of(ValueSet.wholeNumbers(held))),
+                OrderedIntervals.top(), Map.of(number, terms.carrierOf(number)));
+        known = known.holdingOnThePath(said.resolve(sets), sets);
+    }
+
+    /** What is known here of where {@code number} lies, as the whole numbers between its ends. */
+    private WholeNumberRuns rangeOf(FactSubject number) {
+        return switch (known.numbers().projectionOf(number)) {
+            case NumericDomain.Projection.NotSpokenOf _ -> WholeNumberRuns.EVERY;
+            case NumericDomain.Projection.NothingIsLeft _ -> WholeNumberRuns.NONE;
+            case NumericDomain.Projection.Within(NumericDomain.Bounds bounds) ->
+                    WholeNumberRuns.between(bounds.min(), bounds.max());
+        };
     }
 
     /**

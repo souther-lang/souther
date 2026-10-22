@@ -16,7 +16,8 @@ public enum FailurePhase {
     /** An input fixture could not be built — a wrong arity, an unsupported form, a broken invariant. */
     INPUT_FIXTURE,
 
-    /** The expectation could not be built, or names a case the behavior cannot produce. */
+    /** The expectation could not be built, or states a case or a value the behavior cannot
+     *  produce — found before anything is applied, so no answer was compared. */
     EXPECTED_FIXTURE,
 
     /** A dependency had no fake, or a fake had no answer for the input it was given. */

@@ -4,6 +4,7 @@ import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleReasons;
 import souther.compiler.inputs.RuleSite;
+import souther.compiler.observe.Figure;
 import souther.compiler.publish.SourceOrdered;
 
 import java.util.ArrayList;
@@ -38,15 +39,21 @@ public final class ReportedReason {
      * may not be able to point at, so two of these that differ are not thereby two entries. What
      * is compared for a repeat is what the document writes.
      *
-     * @param reason what kind of thing stopped the derivation, at the coarseness promised
-     * @param sentTo where inside the rule a reader goes about it — the rule itself for a reason
-     *               about the whole of it
+     * @param reason  what kind of thing stopped the derivation, at the coarseness promised
+     * @param sentTo  where inside the rule a reader goes about it — the rule itself for a reason
+     *                about the whole of it
+     * @param figures every figure of this compiler's the reason was compared against and stopped
+     *                at, which the word does not say: several figures stop a reading under one
+     *                word, and a reader told only the word cannot tell which one to raise. Empty
+     *                where it stopped at none
      */
-    public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo) {
+    public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo,
+                       List<Figure> figures) {
 
         /**
          * These in a steady order, which two of them are equal in only where they are equal: the
-         * word in the vocabulary's own order, then what it is about, then where it sends a reader.
+         * word in the vocabulary's own order, then what it is about, then where it sends a reader,
+         * then the figures it stopped at.
          *
          * <p>The vocabulary's order is a set of words and says nothing about a model. What an author
          * wrote is asked of the places.
@@ -54,18 +61,20 @@ public final class ReportedReason {
         public static final Comparator<Stop> IN_A_STEADY_ORDER =
                 Comparator.comparing(Stop::reason)
                         .thenComparing(Stop::about, RuleSite.IN_A_STEADY_ORDER)
-                        .thenComparing(Stop::sentTo, RuleSite.IN_A_STEADY_ORDER);
+                        .thenComparing(Stop::sentTo, RuleSite.IN_A_STEADY_ORDER)
+                        .thenComparing(Stop::figures, Figure::compare);
 
         public Stop {
-            if (reason == null || about == null || sentTo == null) {
+            if (reason == null || about == null || sentTo == null || figures == null) {
                 throw new IllegalArgumentException(
                         "a question stands on some reason, about something, somewhere in its rule");
             }
+            figures = Figure.inOrder(figures);
         }
     }
 
     private static Stop stop(RuleReasons.Said said) {
-        return new Stop(of(said.reason()), said.about(), said.sentTo());
+        return new Stop(of(said.reason()), said.about(), said.sentTo(), said.reason().figures());
     }
 
     /**
@@ -117,11 +126,11 @@ public final class ReportedReason {
     /**
      * Each of them once, keeping where it first stood, which is what a coarsening leaves.
      *
-     * <p>Told apart by the word, what it is about and where it sends a reader. Two producers a
-     * document offers one word for are one thing to lift where they are about the same part of the
-     * rule, and two where they are not — folded on the word alone, a clause with two choices in it
-     * came out as one. Whether two of these are one entry of a document is a later question, asked
-     * of what the document writes.
+     * <p>Told apart by the word, what it is about, where it sends a reader and the figures it
+     * stopped at. Two producers a document offers one word for are one thing to lift where they are
+     * about the same part of the rule, and two where they are not — folded on the word alone, a
+     * clause with two choices in it came out as one. Whether two of these are one entry of a
+     * document is a later question, asked of what the document writes.
      *
      * <p>Kept in a set, because how many of these there are is how many parts of the rule a reader
      * is sent to and not how many words the vocabulary has. A scan of what is already held was
@@ -223,8 +232,6 @@ public final class ReportedReason {
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
-            case BlockReason.RecursiveExpansion _ ->
-                    UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ;
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
             case BlockReason.UnreadValueRule _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
@@ -334,6 +341,10 @@ public final class ReportedReason {
             // class about two positions, and the other has nothing to wait for.
             case BlockReason.ComparisonCuttingNothing _ ->
                     UndividedPosition.Reason.RULE_CUTS_NOTHING;
+            // Its own word beside that one: a run gets past a rule that cuts nothing, and none gets
+            // past this.
+            case BlockReason.ComparisonAnswersNowhere _ ->
+                    UndividedPosition.Reason.RULE_ANSWERS_NOWHERE;
             // Its own word beside that one, because what a reader looks at differs. There the rule
             // is about a quantity this position is not in, and an author looks at what it compares;
             // here it is about this position and everything the position holds comes out one side
@@ -362,6 +373,10 @@ public final class ReportedReason {
             // a reader of this one looks at the guards above it.
             case BlockReason.ComparisonNothingArrivesAtItsLine _ ->
                     UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RULES_LINE;
+            // And its own word beside that one, for a relation, which has no line for rows to
+            // miss: what refuses them is the same, and the rule is not left without a line.
+            case BlockReason.ComparisonRelationNothingArrivesAt _ ->
+                    UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RELATION;
             // And its own word beside that one. Rows arrive at this line; it is the rest of the
             // statement that leaves it nothing to turn, and a reader of the word above would look
             // at the guards above the rule for what is inside it.

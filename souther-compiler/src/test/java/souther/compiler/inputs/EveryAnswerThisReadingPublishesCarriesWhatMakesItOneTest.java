@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
+import souther.compiler.core.EnteredArm;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -166,8 +167,14 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == List.class) {
             return List.of();
         }
+        if (type == Map.class) {
+            return Map.of();
+        }
         if (type == TermPath.class) {
             return TermPath.of("x");
+        }
+        if (type == ElementProjection.class) {
+            return new ElementProjection(List.of());
         }
         if (type == AnEvaluation.class) {
             return Evaluations.of(new ValueName.Behavior("example", "f"), 0);
@@ -184,11 +191,18 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == BindingId.class) {
             return new BindingId(new BindingOwner.OfValue("example", "f"), 0);
         }
+        if (type == EnteredArm.class) {
+            return new EnteredArm(new BindingId(new BindingOwner.OfValue("example", "f"), 0));
+        }
         if (type == InputReads.ContainerOf.class) {
             return new InputReads.ContainerOf.AtAPosition(TermPath.of("x"));
         }
         if (type == InputReads.EntryLookedUp.class) {
             return new InputReads.EntryLookedUp(TermPath.of("x"), SOMETHING);
+        }
+        if (type == InputReads.AnAnswerAt.class) {
+            return new InputReads.AnAnswerAt(Evaluations.of(new ValueName.Behavior("example", "f"),
+                    0), List.of(), NOWHERE, List.of());
         }
         if (type == InputReads.WhatItHolds.class) {
             return new InputReads.WhatItHolds.Unsaid();

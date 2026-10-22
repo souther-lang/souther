@@ -30,7 +30,6 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
     private static FieldDomains domainsIn(String source, String type) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
@@ -311,7 +310,6 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
                 data Forecast = { total: Amount }
                 """), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
@@ -411,7 +409,6 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation,"example.pair"),
@@ -513,7 +510,6 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation,"example.report"),

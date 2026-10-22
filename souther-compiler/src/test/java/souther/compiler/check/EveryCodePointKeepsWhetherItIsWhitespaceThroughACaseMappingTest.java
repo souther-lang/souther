@@ -79,13 +79,16 @@ class EveryCodePointKeepsWhetherItIsWhitespaceThroughACaseMappingTest {
             String one = Character.toString(cp);
             boolean holds = !Strings.words(one).isEmpty();
             int at = cp;
+            // A string an operation hands back unchanged holds what it held, so only a code point
+            // the operation changes is scanned again.
             RUN.forEach((name, run) -> {
-                if (Strings.words(run.apply(one)).isEmpty() == holds) {
+                String ran = run.apply(one);
+                if (!ran.equals(one) && Strings.words(ran).isEmpty() == holds) {
                     wrong.add(name + " of U+" + Integer.toHexString(at));
                 }
             });
-            if (Strings.words(Normalization.normalize(Normalization.Form.NFD, one)).isEmpty()
-                    == holds) {
+            String decomposed = Normalization.normalize(Normalization.Form.NFD, one);
+            if (!decomposed.equals(one) && Strings.words(decomposed).isEmpty() == holds) {
                 wrong.add("the canonical decomposition of U+" + Integer.toHexString(at));
             }
         }

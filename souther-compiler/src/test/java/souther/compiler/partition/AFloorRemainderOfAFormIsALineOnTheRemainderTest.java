@@ -1,21 +1,28 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -87,18 +94,18 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     /**
-     * What the form is scaled by is part of the form, and what it is moved by moves the remainder:
-     * a form moved by five leaves two by four exactly where the form itself leaves one, so the line
-     * is on the remainder of the form and at one.
+     * What the form is scaled and moved by is part of the form: the remainder is of the whole
+     * dividend, its moving taken by the divisor's own remainder, so a form moved by five is the
+     * form moved by one and the line is at two on that remainder.
      */
     @Test
     void aScaledAndMovedFormIsTheDividend() {
         String condition = "Int.floorMod(3 * a + d + 5, 4) == 2";
-        assertEquals(List.of("1"), bordersOf("a: Int, d: Int", condition));
+        assertEquals(List.of("2"), bordersOf("a: Int, d: Int", condition));
         boolean met = false;
         for (Row row : certifiedRows("a: Int, d: Int", condition)) {
             for (String label : row.labels()) {
-                if (label.endsWith(" = 1") && label.contains("floorMod")) {
+                if (label.endsWith(" = 2") && label.contains("floorMod")) {
                     long a = Long.parseLong(row.inputs().get(0));
                     long d = Long.parseLong(row.inputs().get(1));
                     assertEquals(2, Math.floorMod(3 * a + d + 5, 4L), row.inputs().toString());
@@ -107,6 +114,45 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
             }
         }
         assertTrue(met, "the line itself is owed a row");
+    }
+
+    /**
+     * A dividend moved by a number is one dividend however the moving is spelled and wherever the
+     * remainder is compared — in the comparison, behind a name, with arithmetic round it — so it is
+     * one line, owed the same rows.
+     */
+    @Test
+    void aMovedDividendIsOneLineHoweverItIsSpeltOrNamed() {
+        Map<String, List<List<String>>> spellings = new LinkedHashMap<>();
+        spellings.put("a: Int, d: Int", List.of(
+                List.of("guard Int.floorMod(d - a + 1, 7) >= 1 else No", "Ok"),
+                List.of("guard Int.floorMod(d + 1 - a, 7) >= 1 else No", "Ok"),
+                List.of("let w = Int.floorMod(d - a + 1, 7)", "guard w >= 1 else No", "Ok"),
+                List.of("let w = Int.floorMod(d - a + 1, 7)", "guard w + 1 >= 2 else No", "Ok")));
+        spellings.put("a: Int, b: Int", List.of(
+                List.of("guard Int.floorMod(3 * a + b + 5, 4) == 2 else No", "Ok"),
+                List.of("guard Int.floorMod(5 + b + 3 * a, 4) == 2 else No", "Ok"),
+                List.of("let w = Int.floorMod(3 * a + b + 5, 4)", "guard w == 2 else No", "Ok"),
+                List.of("let w = Int.floorMod(3 * a + b + 5, 4)", "guard w - 2 == 0 else No",
+                        "Ok")));
+        spellings.put("xs: List<Int>", List.of(
+                List.of("guard Int.floorMod(List.sum(xs) + 1, 11) <= 1 else No", "Ok"),
+                List.of("let r = Int.floorMod(List.sum(xs) + 1, 11)", "guard r <= 1 else No",
+                        "Ok"),
+                List.of("let r = Int.floorMod(List.sum(xs) + 1, 11)", "guard 2 * r <= 3 else No",
+                        "Ok")));
+        spellings.forEach((parameters, bodies) -> {
+            List<BorderAssessment> first = linesOf(parameters, bodies.getFirst());
+            assertEquals(1, bordersOf(first).size(), () -> bodies.getFirst() + ": " + first);
+            assertFalse(labelsOf(first).isEmpty(), "the line is owed rows");
+            // The rows each is owed, which is what one line is; where a weighed remainder puts the
+            // line between two remainders is a level of the same rows.
+            for (List<String> body : bodies) {
+                List<BorderAssessment> lines = linesOf(parameters, body);
+                assertEquals(1, bordersOf(lines).size(), body.toString());
+                assertEquals(labelsOf(first), labelsOf(lines), body.toString());
+            }
+        });
     }
 
     /**
@@ -144,6 +190,122 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         assertTrue(met, "the line itself is owed a row");
     }
 
+    /**
+     * The remainder is one number however the comparison that meets it is written — in it, behind
+     * a name, or with arithmetic round it — so it is one line, owed the same rows.
+     */
+    @Test
+    void theRemainderIsOneLineHoweverTheComparisonMeetingItIsWritten() {
+        List<BorderAssessment> inline = linesOf("a: Int, d: Int",
+                List.of("guard Int.floorMod(a - d, 7) >= 1 else No", "Ok"));
+        assertEquals(List.of("1"), bordersOf(inline));
+        assertFalse(labelsOf(inline).isEmpty(), "the line is owed rows");
+        for (List<String> body : List.of(
+                List.of("let w = Int.floorMod(a - d, 7)", "guard w >= 1 else No", "Ok"),
+                List.of("guard Int.floorMod(a - d, 7) + 1 >= 2 else No", "Ok"),
+                List.of("let w = Int.floorMod(a - d, 7)", "guard 2 * w - 2 >= 0 else No", "Ok"))) {
+            List<BorderAssessment> lines = linesOf("a: Int, d: Int", body);
+            assertEquals(List.of("1"), bordersOf(lines), body.toString());
+            assertEquals(labelsOf(inline), labelsOf(lines), body.toString());
+        }
+    }
+
+    /**
+     * A remainder weighed by two against five is the remainder against the whole number below
+     * half of it: the remainder is whole, so the rows owed are the rows the whole level owes.
+     */
+    @Test
+    void aWeighedRemainderOwesTheRowsOfTheWholeLevelItComesTo() {
+        List<BorderAssessment> whole = linesOf("a: Int, d: Int",
+                List.of("guard Int.floorMod(a - d, 7) <= 2 else No", "Ok"));
+        List<BorderAssessment> weighed = linesOf("a: Int, d: Int", List.of(
+                "let w = Int.floorMod(a - d, 7)", "guard 2 * w <= 5 else No", "Ok"));
+        assertFalse(labelsOf(whole).isEmpty(), "the line is owed rows");
+        assertEquals(labelsOf(whole), labelsOf(weighed));
+    }
+
+    /**
+     * A remainder the divisor cannot leave is a line no row is owed at or past, and a way that
+     * needs it is one nothing reaches: the remainder runs to one below the divisor whatever is
+     * written of it. The same in the comparison, behind a name and with arithmetic round it, and
+     * the same as for the remainder of one place.
+     */
+    @Test
+    void aRemainderPastTheDivisorIsOwedNoRowAndNothingReachesTheWayPastIt() {
+        for (List<String> body : List.of(
+                List.of("guard Int.floorMod(a - d, 7) >= 7 else No", "Ok"),
+                List.of("let w = Int.floorMod(a - d, 7)", "guard w >= 7 else No", "Ok"),
+                List.of("guard Int.floorMod(a - d, 7) - 7 >= 0 else No", "Ok"),
+                List.of("guard Int.floorMod(a, 7) >= 7 else No", "Ok"))) {
+            Compilation compilation = compiled("a: Int, d: Int", body, "");
+            List<BorderAssessment> lines = linesOf(compilation);
+            assertEquals(List.of("7"), bordersOf(lines), body.toString());
+            for (BorderAssessment border : lines) {
+                border.items().forEach((point, assessed) -> {
+                    boolean atOrPast = point instanceof DomainPoint.AtTheLine
+                            || (point instanceof DomainPoint.BesideTheLine(var side)
+                                    && side == Towards.ABOVE)
+                            || (point instanceof DomainPoint.InTheRegion(var side)
+                                    && side == Towards.ABOVE);
+                    if (atOrPast) {
+                        assertInstanceOf(ItemAssessment.NotOwed.class, assessed,
+                                () -> body + ": " + point + " is past what the remainder runs to");
+                    }
+                });
+            }
+            assertEquals(List.of("a_comparison_outcome_nothing_reaches"),
+                    excludedBecause(compilation), body.toString());
+        }
+    }
+
+    /** Why each rule of {@code f}'s decision that is excluded is, as the report writes it. */
+    private static List<String> excludedBecause(Compilation compilation) {
+        JsonNode rules = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                        .json(SourceRendering.namedByIdentity(compilation.texts())))
+                .get("modules").get(0).get("behaviors").get(0)
+                .get("decision").get("obligations");
+        List<String> out = new ArrayList<>();
+        rules.forEach(rule -> {
+            if (rule.get("requirement") != null
+                    && "excluded".equals(rule.get("requirement").stringValue())) {
+                out.add(rule.get("because").get(0).stringValue());
+            }
+        });
+        return out;
+    }
+
+    /** And so is a remainder of a number that is no place of the input, given a name. */
+    @Test
+    void aRemainderOfASumGivenANameIsTheLineItIsWrittenInline() {
+        List<BorderAssessment> inline = linesOf("xs: List<Int>",
+                List.of("guard Int.floorMod(List.sum(xs), 11) <= 1 else No", "Ok"));
+        List<BorderAssessment> named = linesOf("xs: List<Int>", List.of(
+                "let r = Int.floorMod(List.sum(xs), 11)", "guard r <= 1 else No", "Ok"));
+        assertEquals(List.of("1"), bordersOf(inline));
+        assertEquals(List.of("1"), bordersOf(named));
+        assertEquals(labelsOf(inline), labelsOf(named));
+    }
+
+    /**
+     * The day a difference falls on, worked out once and given a name, is measured by the rows
+     * that reach each of its three stretches and the two lines between them.
+     */
+    @Test
+    void aWeekdayOfADifferenceGivenANameIsMeasuredByItsRows() {
+        Compilation compilation = compiled("a: Int, b: Int", List.of(
+                        "let w = Int.floorMod(b - a, 7)",
+                        "if w >= 1 && w <= 5 then Ok else No"), """
+                example f
+                    | (0, 1) -> Ok
+                    | (0, 5) -> Ok
+                    | (0, 6) -> No
+                    | (0, 7) -> No
+                """);
+        assertEquals(List.of("1", "5"), bordersOf(linesOf(compilation)));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                AdequacyReport.of(compilation).adequacy());
+    }
+
     /** A date written as a fixture is {@code Date("2026-01-01")}; this is what is inside. */
     private static String dateOf(String written) {
         return written.replaceAll(".*(\\d{4}-\\d{2}-\\d{2}).*", "$1");
@@ -169,31 +331,204 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         }
     }
 
-    /** A remainder the divisor cannot leave settles the comparison and draws no line. */
-    @Test
-    void aRemainderPastTheDivisorDrawsNoLine() {
-        assertEquals(List.of(), bordersOf("a: Int, d: Int", "Int.floorMod(a - d, 7) >= 7"));
-    }
-
     /**
      * A divisor a row writes is no period, so there is no remainder to draw a line on, and the
      * report says that of the divisor.
      */
     @Test
     void aDivisorARowWritesIsNamedAsSuch() {
-        assertEquals(List.of(), bordersOf("e: Int, p: Int", "Int.floorMod(e, p) == 0"));
-        assertTrue(reasonsOf("e: Int, p: Int", "Int.floorMod(e, p) == 0").stream()
+        assertEquals(List.of(), bordersOf("e: Int, p: Int", "Int.floorMod(e + 1, p) == 0"));
+        assertTrue(reasonsOf("e: Int, p: Int", "Int.floorMod(e + 1, p) == 0").stream()
                         .allMatch(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR::equals),
-                reasonsOf("e: Int, p: Int", "Int.floorMod(e, p) == 0").toString());
-        assertFalse(reasonsOf("e: Int, p: Int", "Int.floorMod(e, p) == 0").isEmpty());
+                reasonsOf("e: Int, p: Int", "Int.floorMod(e + 1, p) == 0").toString());
+        assertFalse(reasonsOf("e: Int, p: Int", "Int.floorMod(e + 1, p) == 0").isEmpty());
+    }
+
+    /**
+     * A divisor given a name is the number it was given, to the partition as to the border: the
+     * remainder is a line at the same place, and nothing about it is left unread that the written
+     * divisor does not leave.
+     */
+    @Test
+    void aDivisorGivenANameIsTheNumberItWasGiven() {
+        for (String dividend : List.of("a", "a - d")) {
+            String written = "Int.floorMod(" + dividend + ", 7) >= 1";
+            String named = "Int.floorMod(" + dividend + ", seven) >= 1";
+            assertEquals(List.of("1"),
+                    linesOf("let seven = 7", "a: Int, d: Int", named).stream()
+                            .map(BorderAssessment::value).toList(), named);
+            assertEquals(measured("", "a: Int, d: Int", written).notRead().stream()
+                            .map(PartitionEvidence.NotRead::reason).distinct().toList(),
+                    measured("let seven = 7", "a: Int, d: Int", named).notRead().stream()
+                            .map(PartitionEvidence.NotRead::reason).distinct().toList(),
+                    named + " leaves the partition what " + written + " leaves it");
+        }
+    }
+
+    /**
+     * A remainder against another number of the input is read as a line on the two added, and the
+     * comparison is no longer one nothing read. However it is written, the weighed remainder and
+     * number are one quantity and so one line.
+     */
+    @Test
+    void aRemainderAgainstAnotherNumberIsALineOnTheTwo() {
+        String parameters = "a: Int, b: Int, c: Int";
+        Compilation compilation = compiled(parameters, "c == Int.floorMod(a + b, 11)");
+        // The remainder takes every value from nought to ten with either of the numbers moved, so
+        // neither is divided by it; and the number beside it is divided, by the lines at the ends
+        // outside which the relation never holds.
+        assertEquals(List.of("-1", "11", "0"), bordersOf(linesOf(compilation)));
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+                        UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
+                reasonsEach("a: Int, b: Int, c: Int", "c == Int.floorMod(a + b, 11)"));
+        // Read, and no longer reported as written in a form nothing reads or as about a value made
+        // from the position.
+        assertEquals(List.of(), compilation.db().ask(new Adequacy.Coverage("demo")).value()
+                .get("f").notRead().stream()
+                .map(PartitionEvidence.NotRead::reason)
+                .filter(reason -> reason == UndividedPosition.Reason.UNSUPPORTED_SYNTAX
+                        || reason == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
+                .toList());
+        for (String spelled : List.of("Int.floorMod(a + b, 11) == c",
+                "2 * c == 2 * Int.floorMod(a + b, 11)")) {
+            assertEquals(List.of("-1", "11", "0"), bordersOf(parameters, spelled), spelled);
+        }
+    }
+
+    /**
+     * A remainder that cannot take every value is not said to be left undivided by the number
+     * beside it: {@code 2 * a + 2 * b} leaves only even remainders by 4, so which values of
+     * {@code a} reach a given one is a question the relation does answer.
+     */
+    @Test
+    void aRemainderTheFormCannotTakeEveryValueOfIsNotSaidToLeaveItsNumbersUndivided() {
+        assertEquals(List.of(), reasonsEach("a: Int, b: Int, c: Int",
+                "c == Int.floorMod(2 * a + 2 * b, 4)").stream()
+                .filter(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES::equals).toList());
+    }
+
+    /**
+     * A number the form is moved by that is read off the same place moves with it, so the place is
+     * not taken through every remainder by being moved: {@code x + Int.floorMod(x, 3)} is a
+     * function of {@code x}, which stays divided by the relation however the weight of {@code x}
+     * leaves the remainders.
+     */
+    @Test
+    void aNumberReadOffTheSamePlaceIsNotWhatTakesTheFormThroughEveryRemainder() {
+        assertEquals(List.of(), reasonsEach("x: Int, c: Int",
+                "c == Int.floorMod(x + Int.floorMod(x, 3), 4)").stream()
+                .filter(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES::equals).toList());
+    }
+
+    /**
+     * A check digit held against a remainder that a branch moves — the digit against nought where
+     * the remainder is one at most, and against eleven less the remainder past it — is read
+     * through to the end: the line on the digit and the remainder added to it are drawn, no
+     * comparison of it is left as unread or as several lines held together, and a row at a line is
+     * what its label says.
+     */
+    @Test
+    void aCheckDigitAgainstABranchOnTheRemainderIsReadThroughToTheEnd() {
+        Compilation compilation = compiled("a: Int, b: Int, c: Int", List.of(
+                "let r = Int.floorMod(a + b, 11)",
+                "guard c == (if r <= 1 then 0 else 11 - r) else No", "Ok"), "");
+
+        assertTrue(bordersOf(linesOf(compilation)).containsAll(List.of("0", "11", "12")),
+                bordersOf(linesOf(compilation)).toString());
+        List<UndividedPosition.Reason> unread = compilation.db()
+                .ask(new Adequacy.Coverage("demo")).value().get("f").notRead().stream()
+                .map(PartitionEvidence.NotRead::reason).toList();
+        assertEquals(List.of(), unread.stream().filter(reason -> reason
+                == UndividedPosition.Reason.UNSUPPORTED_SYNTAX
+                || reason == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE
+                || reason == UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE).toList());
+        int ofTheDigit = 0;
+        int ofTheRemainder = 0;
+        for (Row row : certifiedRows(linesOf(compilation))) {
+            long a = Long.parseLong(row.inputs().get(0));
+            long b = Long.parseLong(row.inputs().get(1));
+            long c = Long.parseLong(row.inputs().get(2));
+            for (String label : row.labels()) {
+                if (label.startsWith("c = ")) {
+                    assertEquals(c, Long.parseLong(label.substring("c = ".length())), label);
+                    ofTheDigit++;
+                } else if (label.startsWith("Int.floorMod(a + b, 11) = ")) {
+                    assertEquals(Math.floorMod(a + b, 11L), Long.parseLong(
+                            label.substring(label.lastIndexOf(' ') + 1)), label);
+                    ofTheRemainder++;
+                }
+            }
+        }
+        // The loop above checks the rows there are; that there are some of each is checked here.
+        assertTrue(ofTheDigit > 0 && ofTheRemainder > 0,
+                ofTheDigit + " rows at the digit, " + ofTheRemainder + " at the remainder");
+    }
+
+    /**
+     * A remainder is taken to leave every value only where the form is computed at the values that
+     * leave them: the run stops where {@code Int} arithmetic overflows, and it does at every
+     * {@code x} but three for {@code 9223372036854775807 * x}. So the number beside the
+     * remainder is not said to be left either way at the values between nought and ten, and no
+     * line is drawn at its ends on that account.
+     */
+    @Test
+    void aFormTheRunCannotComputeAtTheValuesThatLeaveEveryRemainderIsNotSaidToLeaveThem() {
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(9223372036854775807 * x, 11)"));
+        // And where it is computed at them, the same form is: three times the number is.
+        assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x + 5, 11)"));
+    }
+
+
+    /**
+     * A number beside the remainder that is read off a place the form is read at is not apart from
+     * it, and the relation is not read as a remainder beside a number.
+     */
+    @Test
+    void aNumberBesideTheRemainderReadOffAPlaceOfItsFormIsNotApartFromIt() {
+        assertEquals(List.of(), bordersOf("a: Int, b: Int",
+                "Int.floorMod(a + b, 11) == Int.floorMod(a, 3)"));
+    }
+
+    /** And one read off another place does, which is what the case above is told apart from. */
+    @Test
+    void aNumberReadOffAnotherPlaceIsWhatTakesTheFormThroughEveryRemainder() {
+        assertEquals(1, reasonsEach("x: Int, xs: List<Int>, c: Int",
+                "c == Int.floorMod(x + List.length(xs), 4)").stream()
+                .filter(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES::equals).count());
+    }
+
+    /**
+     * And a number the remainder is of alone is divided by it: with {@code a} put at a value the
+     * remainder is that value's, so the number is not said to leave the relation either way.
+     */
+    @Test
+    void theOnlyNumberOfTheFormIsNotSaidToBeLeftUndivided() {
+        assertEquals(List.of(), reasonsEach("a: Int, c: Int",
+                "c == Int.floorMod(2 * a, 11)").stream()
+                .filter(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES::equals).toList());
+    }
+
+    /**
+     * The numbers a remainder shares with the form it is added to are not read, and are said not
+     * to be, rather than read as a relation they are not.
+     */
+    @Test
+    void aRemainderAddedToANumberOfItsOwnFormIsNotRead() {
+        assertEquals(List.of(), bordersOf("a: Int, b: Int", "a == Int.floorMod(a + b, 11)"));
     }
 
     /** One row of a measurement: what each input was written as and what each point is for. */
     private record Row(List<String> inputs, List<String> labels) {}
 
     private static List<Row> certifiedRows(String parameters, String condition) {
+        return certifiedRows(linesOf(parameters, condition));
+    }
+
+    private static List<Row> certifiedRows(List<BorderAssessment> lines) {
         List<Row> rows = new ArrayList<>();
-        for (BorderAssessment border : linesOf(parameters, condition)) {
+        for (BorderAssessment border : lines) {
             for (ItemAssessment item : border.items().values()) {
                 if (!(item instanceof ItemAssessment.Owed owed)) {
                     continue;
@@ -212,7 +547,15 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     private static List<BorderAssessment> linesOf(String parameters, String condition) {
-        Compilation compilation = compiled(parameters, condition);
+        return linesOf(compiled(parameters, condition));
+    }
+
+    private static List<BorderAssessment> linesOf(String prelude, String parameters,
+                                                  String condition) {
+        return linesOf(compiled(prelude, parameters, condition));
+    }
+
+    private static List<BorderAssessment> linesOf(Compilation compilation) {
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, "the model under test compiles");
         List<BorderAssessment> lines = read.get("f");
@@ -221,7 +564,12 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     private static PartitionEvidence measured(String parameters, String condition) {
-        Compilation compilation = compiled(parameters, condition);
+        return measured("", parameters, condition);
+    }
+
+    private static PartitionEvidence measured(String prelude, String parameters,
+                                              String condition) {
+        Compilation compilation = compiled(prelude, parameters, condition);
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();
         assertNotNull(coverage, "the model under test compiles");
@@ -231,19 +579,37 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     private static Compilation compiled(String parameters, String condition) {
+        return compiled("", parameters, condition);
+    }
+
+    private static Compilation compiled(String prelude, String parameters, String condition) {
+        return compiled(prelude, parameters, List.of("guard " + condition + " else No", "Ok"), "");
+    }
+
+    /** {@code f} over {@code parameters}, its body the lines given, with the examples after it. */
+    private static Compilation compiled(String parameters, List<String> body, String examples) {
+        return compiled("", parameters, body, examples);
+    }
+
+    /** The same, after the declarations {@code prelude} writes. */
+    private static Compilation compiled(String prelude, String parameters, List<String> body,
+                                        String examples) {
         String model = """
                 module demo
 
                 data Ok
                 data No
 
+                %s
+
                 behavior f : (%s) -> Ok | No
                 let f (%s) = {
-                    guard %s else No
-                    Ok
+                    %s
                 }
-                """.formatted(parameters,
-                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
+                %s
+                """.formatted(prelude, parameters,
+                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), String.join("\n    ", body),
+                examples);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -252,6 +618,31 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
 
     private static List<String> bordersOf(String parameters, String condition) {
         return linesOf(parameters, condition).stream().map(BorderAssessment::value).toList();
+    }
+
+    /** The lines of {@code f}, its body the lines given. */
+    private static List<BorderAssessment> linesOf(String parameters, List<String> body) {
+        return linesOf(compiled(parameters, body, ""));
+    }
+
+    private static List<String> bordersOf(List<BorderAssessment> lines) {
+        return lines.stream().map(BorderAssessment::value).toList();
+    }
+
+    /** What each certified row of {@code lines} is labelled with, in order. */
+    private static List<String> labelsOf(List<BorderAssessment> lines) {
+        List<String> labels = new ArrayList<>();
+        for (Row row : certifiedRows(lines)) {
+            labels.addAll(row.labels());
+        }
+        return labels.stream().sorted().toList();
+    }
+
+    /** The reason of each place left unread, each once and in the order they were read. */
+    private static List<UndividedPosition.Reason> reasonsEach(String parameters,
+                                                              String condition) {
+        return measured(parameters, condition).notRead().stream()
+                .map(PartitionEvidence.NotRead::reason).toList();
     }
 
     private static List<UndividedPosition.Reason> reasonsOf(String parameters, String condition) {

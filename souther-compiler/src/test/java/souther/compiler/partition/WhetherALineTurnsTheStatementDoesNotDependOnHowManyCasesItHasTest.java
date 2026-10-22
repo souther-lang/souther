@@ -83,42 +83,53 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
     }
 
     /**
-     * And a line that turns the statement in some of its cases is kept, said one by one or as
-     * one: {@code x} compared with nought where an even number of truths hold, and nought
-     * compared with it where they do not, is one statement whose line on {@code x} decides wherever
-     * an even number of them hold — sixteen cases of five truths and thirty-two of six.
+     * And a line that turns the statement in some of its cases is kept: {@code x} compared with
+     * nought where an even number of truths hold, and nought compared with it where they do not,
+     * is one statement whose line on {@code x} decides wherever an even number of them hold —
+     * sixteen cases of five truths, as many as are said one by one. One truth more is past them,
+     * and the line kept there is {@link ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest}'s.
      */
     @Test
-    void aLineSomeCaseOfItTurnsIsKeptWhereverItsCasesAreSaidAsOne() {
-        for (int truths = 5; truths <= 6; truths++) {
-            JsonNode report = reportOf(even(truths));
-            int of = truths;
-            assertFalse(bordersOn(report, "e/x").isEmpty(),
-                    () -> "the line on x is a border, of " + of + " truths: " + report);
-            assertFalse(reasonsAt(report, "x").contains("rule_never_turns_on_this_line"),
-                    () -> "and not one the statement never turns on: " + reasonsAt(report, "x"));
-        }
+    void aLineSomeCaseOfItTurnsIsKeptAtAsManyCasesAsAreSaidOneByOne() {
+        JsonNode report = reportOf(even(5));
+        assertFalse(bordersOn(report, "e/x").isEmpty(),
+                () -> "the line on x is a border: " + report);
+        assertFalse(reasonsAt(report, "x").contains("rule_never_turns_on_this_line"),
+                () -> "and not one the statement never turns on: " + reasonsAt(report, "x"));
     }
 
     /**
      * What is asked one case at a time is where the statement turns, and not the rows reaching the
      * line: those are one set however many ways they come by. {@code Int.min(x, y) <= 5} turns on
-     * the line through {@code x} where {@code y} is above five, and the rows come to it either
-     * below nought or above ten — one side of the line along each way, and both sides together,
+     * the line through {@code x} where {@code y} is above five, and the rows come to it either at
+     * five or below or above ten — one side of the line along each way, and both sides together,
      * and a row on each differs from the other in the line alone.
+     *
+     * <p>Together and not spanned. With the rows coming either below nought or above ten, the line
+     * at five is between the two ways and no row holds a value at it, though the values the two
+     * ways span run straight through it.
      */
     @Test
     void rowsReachingALineAlongTwoWaysAreAskedTogether() {
         JsonNode report = reportOf("""
                 module probe
                 behavior g : (x: Int, y: Int) -> Int
-                let g (x, y) = if x < 0 || x > 10 then (if Int.min(x, y) <= 5 then 1 else 2) else 3
+                let g (x, y) = if x <= 5 || x > 10 then (if Int.min(x, y) <= 5 then 1 else 2) else 3
                 """);
         assertFalse(reasonsAt(report, "x").contains("rule_never_turns_on_this_line"),
-                () -> "the statement turns between a row below nought and one above ten: "
+                () -> "the statement turns between a row at five and one above ten: "
                         + reasonsAt(report, "x"));
         assertFalse(bordersOn(report, "g/x").isEmpty(),
                 () -> "the line through x is a border: " + report);
+
+        JsonNode between = reportOf("""
+                module probe
+                behavior g : (x: Int, y: Int) -> Int
+                let g (x, y) = if x < 0 || x > 10 then (if Int.min(x, y) <= 5 then 1 else 2) else 3
+                """);
+        assertTrue(reasonsAt(between, "x").contains("nothing_arrives_at_the_rules_line"),
+                () -> "no row holds a value at a line between the ways: "
+                        + reasonsAt(between, "x"));
     }
 
     /** A helper called {@code calls} times, each on what the last left. */

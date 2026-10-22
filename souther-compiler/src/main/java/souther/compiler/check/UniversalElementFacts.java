@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What holds of every element a container expression holds, wherever the container came from.
@@ -73,7 +74,6 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
      * stop, seen inside it.
      */
     static UniversalElementFacts of(Core written, Denotations at, Terms terms) {
-        Symbols symbols = terms.symbols();
         if (written == null) {
             return NONE;
         }
@@ -83,7 +83,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
         Type element = Terms.elementType(container.type());
         ValueGuarantees.of(element, terms.ruleReading())
                 .forEach((path, bounds) -> holds(held, path, bounds));
-        writtenOut(container, element, symbols, held);
+        writtenOut(container, given.at(), element, terms, held);
         transferred(container, given.at(), terms, held);
         return held.isEmpty() ? NONE : new UniversalElementFacts(held);
     }
@@ -113,22 +113,27 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
      * element says nothing here — the least of what is written is not the least of what is held once
      * one of them is decided at run time — and saying nothing is what leaves a reader unbounded
      * rather than wrongly bounded.
+     *
+     * <p>Which elements those are is the walk every reader writes a container out with
+     * ({@link Terms#writtenElements}), and each is folded where it was written.
      */
-    private static void writtenOut(Core container, Type element, Symbols symbols,
+    private static void writtenOut(Core container, Denotations at, Type element, Terms terms,
                                    Map<RuleKey, Bounds> held) {
-        if (element == null || !(Core.withoutStanding(container) instanceof Core.ListLit list)
-                || list.elements().isEmpty()) {
+        List<ElementsWrittenOut.Stood<Denotations>> written =
+                element == null ? null : terms.writtenElements(container, at);
+        if (written == null || written.isEmpty()) {
             return;
         }
         BigDecimal low = null;
         BigDecimal high = null;
-        for (Core each : list.elements()) {
-            BigDecimal written = Terms.constantNumber(each, symbols);
-            if (written == null) {
+        for (ElementsWrittenOut.Stood<Denotations> each : written) {
+            BigDecimal number = FoldedValue.number(Optional.ofNullable(
+                    terms.folded(each.value(), each.at())));
+            if (number == null) {
                 return;
             }
-            low = low == null || written.compareTo(low) < 0 ? written : low;
-            high = high == null || written.compareTo(high) > 0 ? written : high;
+            low = low == null || number.compareTo(low) < 0 ? number : low;
+            high = high == null || number.compareTo(high) > 0 ? number : high;
         }
         holds(held, RuleKey.THE_VALUE,
                 new Bounds(Endpoint.inclusive(Count.of(low)), Endpoint.inclusive(Count.of(high))));
@@ -313,7 +318,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
     private static NumericDomain<FactSubject> assuming(Map<FactSubject, Bounds> facts, Terms terms) {
         NumericDomain<FactSubject> given = NumericDomain.top(FactSubject.inOneOrder());
         for (Map.Entry<FactSubject, Bounds> one : facts.entrySet()) {
-            Map<FactSubject, Granularity> spacing = terms.kindsOf(LinearForm.atom(one.getKey()));
+            Map<FactSubject, Granularity> spacing = terms.kindsOfIfNamed(one.getKey());
             if (!spacing.isEmpty()) {
                 given = given.assuming(one.getKey(), one.getValue(), spacing);
             }

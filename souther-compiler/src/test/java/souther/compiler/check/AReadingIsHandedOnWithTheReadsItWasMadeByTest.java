@@ -58,7 +58,6 @@ class AReadingIsHandedOnWithTheReadsItWasMadeByTest {
     @Test
     void theSecondReaderIsHandedTheReadingAndTheReadsItWasMadeBy() {
         Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
-        compilation.answerEverything();
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
         TypeSymbol.AtModule amount = TypeSymbols.declared(new TypeKey("demo", "Amount"));
         Watched store = new Watched();

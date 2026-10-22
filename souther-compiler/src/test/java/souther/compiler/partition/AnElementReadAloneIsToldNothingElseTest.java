@@ -64,10 +64,9 @@ class AnElementReadAloneIsToldNothingElseTest {
 
     private static BorderQuantity.Observation aloneOf(ObservedValue value) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, "p"), ReadAs.THE_COMPILATION_DOES);
-        ElementValues values = ElementValues.of(ITEMS, Type.ref(FLAGS), reading, _ -> null);
+        ElementValues values = ElementValues.of(ITEMS, Type.ref(FLAGS), reading, (_, _) -> null);
         assertNotNull(values, "every part of the element is listed");
         return values.alone(value);
     }

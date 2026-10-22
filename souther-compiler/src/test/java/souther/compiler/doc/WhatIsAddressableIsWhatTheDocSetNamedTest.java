@@ -311,8 +311,8 @@ class WhatIsAddressableIsWhatTheDocSetNamedTest {
             }
         }
         boolean[] declares = new boolean[text.length()];
-        for (int at = 0, i = 0; i < text.split("\n", -1).length; i++) {
-            String line = text.split("\n", -1)[i];
+        int at = 0;
+        for (String line : text.split("\n", -1)) {
             if (line.strip().matches("<!--\\s*souther-section:.*-->")) {
                 for (int c = at; c < Math.min(at + line.length() + 1, text.length()); c++) {
                     declares[c] = true;
@@ -320,11 +320,13 @@ class WhatIsAddressableIsWhatTheDocSetNamedTest {
             }
             at += line.length() + 1;
         }
-        for (int at = 0; at < text.length(); at++) {
-            assertEquals(declares[at] ? 0 : 1, claims[at],
-                    "character " + at + " of " + ofOneFile.getFirst().name() + " is searched "
-                            + claims[at] + " times: " + text.substring(Math.max(0, at - 30),
-                            Math.min(text.length(), at + 30)).replace("\n", "\\n"));
+        for (int each = 0; each < text.length(); each++) {
+            int character = each;
+            assertEquals(declares[character] ? 0 : 1, claims[character],
+                    () -> "character " + character + " of " + ofOneFile.getFirst().name()
+                            + " is searched " + claims[character] + " times: "
+                            + text.substring(Math.max(0, character - 30),
+                            Math.min(text.length(), character + 30)).replace("\n", "\\n"));
         }
     }
 

@@ -964,9 +964,10 @@ public final class TypeOps {
      * The cases a position of this type can be, when it can be more than one thing: the atoms of
      * a union or of a named sum, and nothing otherwise.
      *
-     * <p>What a row's expected arm is held against, and what an adequacy report counts as declared. The
-     * two have to agree — a report that read a wider set than the rows are checked against would name a
-     * case no row is allowed to write — so the rule is here rather than stated twice.
+     * <p>What an adequacy report counts as declared, and what a row naming a case the answer cannot be
+     * is told it could have named. Whether a row may name a case is asked of what a value at the
+     * position can be, which for a type this answers about is exactly these cases — so a report never
+     * names a case no row is allowed to write — and for any other type is none a row can name.
      *
      * <p>An admission and not a second descent: what a type is made of is {@link AtomSpace}'s, and
      * what is left here is which types this reader will take an answer about. A primitive output

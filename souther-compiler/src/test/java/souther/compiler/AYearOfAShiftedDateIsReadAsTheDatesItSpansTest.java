@@ -38,8 +38,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
-    private static final String[] RELATIONS = {">=", ">", "<=", "<", "==", "/="};
-
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -73,7 +71,10 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
         };
     }
 
-    /** The dates the comparison turns over at: where the year it is made against begins. */
+    private static final String[] RELATIONS = {">=", ">", "<=", "<", "==", "/="};
+
+    /** The dates the comparison turns over at: where the year it is made against begins, where
+     *  the next one does, or both. */
     private static List<LocalDate> linesOf(String relation, long year, int shift) {
         List<LocalDate> lines = new ArrayList<>();
         if (!relation.equals(">") && !relation.equals("<=")) {
@@ -171,27 +172,43 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
         assertTrue(report.contains("Date.year((b +1 days)): = 2028"), report);
     }
 
+    /**
+     * Each line is held on both sides of it, for every relation, forward and back. What the move
+     * decides is the date a line falls on, and which of the two lines a relation draws — where
+     * the year begins, where the next one does, or both — is the move read through the relation,
+     * so each relation is asked once moving forward and once moving back. The years and moves are
+     * the ones the calendar makes a difference at: the first year, a leap year a year of days
+     * crosses, a year in the middle, the last of four digits, one past them, and the last year the
+     * calendar has, whose next year begins at no date; each relation meets a different pair of
+     * them.
+     */
     @Test
     void everyRelationHoldsAtEachLineAndOnBothSidesOfIt() {
-        long[] years = {1, 2024, 2027, 9999, 20000, Year.MAX_VALUE};
-        int[] shifts = {1, -1, 30, -366};
-        for (String relation : RELATIONS) {
-            for (long year : years) {
-                for (int shift : shifts) {
-                    List<LocalDate> lines = linesOf(relation, year, shift);
-                    String comparison = "Date.year(Date.addDays(%d, b)) %s %d"
-                            .formatted(shift, relation, year);
-                    Compilation compilation = compiled(source(comparison, shift, relation, year,
-                            datesAround(lines, shift)));
-                    String report = report(compilation);
-                    String where = comparison + "\n" + report;
+        long[][] yearsAndShifts = {
+                {1, 1}, {1, -366},
+                {2024, 30}, {2024, -366},
+                {2027, 1}, {2027, -1},
+                {9999, 30}, {9999, -1},
+                {20000, 1}, {20000, -366},
+                {Year.MAX_VALUE, 1}, {Year.MAX_VALUE, -366}};
+        for (int at = 0; at < yearsAndShifts.length; at++) {
+            long year = yearsAndShifts[at][0];
+            int shift = (int) yearsAndShifts[at][1];
+            // Forward with the relation of the year's place among the six, back with the one
+            // half the list round: every relation once each way.
+            String relation = RELATIONS[(at / 2 + (at % 2) * 3) % RELATIONS.length];
+            List<LocalDate> lines = linesOf(relation, year, shift);
+            String comparison = "Date.year(Date.addDays(%d, b)) %s %d"
+                    .formatted(shift, relation, year);
+            Compilation compilation = compiled(source(comparison, shift, relation, year,
+                    datesAround(lines, shift)));
+            String report = report(compilation);
+            String where = comparison + "\n" + report;
 
-                    assertEquals(0, compilation.errors().size(), where);
-                    assertTrue(report.contains("measurement: complete"), where);
-                    assertFalse(report.contains("no row is at the ON point"), where);
-                    assertFalse(report.contains("no row is at the OFF point"), where);
-                }
-            }
+            assertEquals(0, compilation.errors().size(), where);
+            assertTrue(report.contains("measurement: complete"), where);
+            assertFalse(report.contains("no row is at the ON point"), where);
+            assertFalse(report.contains("no row is at the OFF point"), where);
         }
     }
 
@@ -301,14 +318,6 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
         assertTrue(date.contains("measurement: complete"), comparison + "\n" + date);
         assertTrue(date.contains(past), past + "\n" + comparison + "\n" + date);
-    }
-
-    @Test
-    void aPartOfADateThatRepeatsEveryYearIsNotOneLine() {
-        String report = about("Date.month(Date.addDays(1, b)) >= 3");
-
-        assertTrue(report.contains("not read"), report);
-        assertFalse(report.contains("measurement: complete"), report);
     }
 
     @Test

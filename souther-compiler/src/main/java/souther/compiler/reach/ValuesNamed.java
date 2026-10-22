@@ -42,14 +42,15 @@ public sealed interface ValuesNamed {
     }
 
     /** What {@code admitted} names, or null where it names nothing a proof can say — every value,
-     *  none, or a pattern. */
+     *  none, a pattern, or runs of whole numbers. */
     static ValuesNamed of(ValueSet admitted) {
         return switch (admitted) {
             case ValueSet.Finite finite when !finite.values().isEmpty() ->
                     new Held(finite.values());
             case ValueSet.Cofinite cofinite when !cofinite.excluded().isEmpty() ->
                     new Refused(cofinite.excluded());
-            case ValueSet.Finite _, ValueSet.Cofinite _, ValueSet.Matching _ -> null;
+            case ValueSet.Finite _, ValueSet.Cofinite _, ValueSet.Matching _,
+                 ValueSet.WholeRuns _ -> null;
         };
     }
 }

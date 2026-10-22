@@ -124,7 +124,15 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
         /** How many elements of a container meet a statement, at a number of them. */
         COUNT_OF_ELEMENTS,
         /** What a division by a written number leaves of a form of several positions, at one of the
-         *  remainders it can leave. */
-        REMAINDER_OF_A_FORM
+         *  remainders it can leave; or, where a rule holds it against another number of the
+         *  input, that remainder with a form of those numbers added to it, at a value of the sum.
+         *  Named for the remainder, as {@link #COUNT_OF_ELEMENTS} is for the count it adds
+         *  numbers to. */
+        REMAINDER_OF_A_FORM,
+        /** What a number of one position leaves of another divided by a number of another
+         *  position, at one of the remainders it can leave. */
+        REMAINDER_BY_AN_INPUT,
+        /** What two numbers of two positions come to multiplied, at a value of the product. */
+        PRODUCT_OF_TWO
     }
 }

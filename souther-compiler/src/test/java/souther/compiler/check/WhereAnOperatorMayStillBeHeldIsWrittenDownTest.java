@@ -8,6 +8,8 @@ import java.lang.classfile.CodeElement;
 import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.Instruction;
+import java.lang.classfile.constantpool.PoolEntry;
+import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.classfile.instruction.ArrayLoadInstruction;
 import java.lang.classfile.instruction.ArrayStoreInstruction;
 import java.lang.classfile.instruction.BranchInstruction;
@@ -130,6 +132,32 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " alone answers for + - * and needs the answered type for too for /"),
             new Held("souther.compiler.abort.AbortSites.arithmeticType",
                     "the same, for the answered type / dispatches on before it asks the operator"),
+            new Held("souther.compiler.abort.AbortSites.whateverItsTypes",
+                    "the same, for an operator whose answer turns on no type"),
+            new Held("souther.compiler.abort.AbortSites.ofAnOperatorOfAnyType",
+                    "the same, of the sites every typing the operator is admitted at is written"
+                            + " as, for a tree whose operands carry no type"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.operator",
+                    "hands the operator a library operation's body writes to AbortSites, which"
+                            + " answers what it ends a run for"),
+            new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
+                    "on which operands an operator answers a value, which the operator and the"
+                            + " types it answers and takes alone say"),
+            new Held("souther.compiler.check.PathCompletion.operated",
+                    "hands the operator to WhereAnOperatorAnswers, which says on which operands it"
+                            + " answers a value, once for every question asked of the evaluation"),
+            new Held("souther.compiler.check.PathCompletion.readsWhereItAnswers",
+                    "the same, to say whether what was taken in is all of where it answers, and"
+                            + " which operand of a product or a quotient that is asked of"),
+            new Held("souther.compiler.check.PathCompletion.operationAt",
+                    "whether the operator is one a recipe is recorded against, which a product and"
+                            + " a quotient are and a sum and a difference are not"),
+            new Held("souther.compiler.partition.Pullback.whereEachOperatorAnswers",
+                    "hands each operator a closure's body was worked out through to"
+                            + " WhereAnOperatorAnswers, for where an application of it answers"),
+            new Held("souther.compiler.partition.Pullback.operatorsIn",
+                    "which operators a body works out, which a sum, a difference and a product"
+                            + " are and a comparison is not"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "what the operator asks of one operand, given the one beside it"),
             new Held("souther.compiler.check.HelperParams.BodyTyping.visitOperand",
@@ -227,6 +255,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.operatorTerm",
                     "hands it to the interner, for a binary the recognition beside it found to be"
                             + " no comparison"),
+            new Held("souther.compiler.check.Terms.joinedText",
+                    "asks whether it joins two texts, so that a fact about a text written joined is"
+                            + " filed under the text it comes to"),
             new Held("souther.compiler.check.Term.foldedWhole",
                     "does the sum, the difference or the product of two written whole numbers, so"
                             + " that a divisor is read as the number it comes to and not as it was"
@@ -293,6 +324,29 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes the steps from one value to another as the difference of the two, so"
                             + " that a comparison of a count of whole units is read where any"
                             + " comparison of a difference is"),
+            new Held("souther.compiler.partition.Pullback.onEachStretch",
+                    "writes what a moved remainder is on a stretch of the place's remainder as the"
+                            + " place's moved by a number, so that its comparison with another"
+                            + " value is read where any comparison of a sum is"),
+            new Held("souther.compiler.partition.Pullback.productAt",
+                    "asks whether the expression the arithmetic stopped at is the product it"
+                            + " stopped for, so the two numbers multiplied are read as one"),
+            new Held("souther.compiler.check.QuotientByAValue.operated",
+                    "writes the number times the divisor as the source would, through the rule"
+                            + " for the operator, so that the comparison is read where any"
+                            + " comparison of a product is"),
+            new Held("souther.compiler.check.OrderOfElements.walk",
+                    "asks whether two values compared for sameness hold something whose"
+                            + " sameness turns on the order a list holds its elements in"),
+            new Held("souther.compiler.check.QuotientByAValue.timesTheDivisor",
+                    "names the two operators the number times the divisor is written with"),
+            new Held("souther.compiler.check.QuotientByAValue.ofAQuotient",
+                    "asks whether a side is a quotient moved and weighed by numbers, so that its"
+                            + " comparison with a number is read as the dividend's with a number"
+                            + " times the divisor"),
+            new Held("souther.compiler.check.Terms.aWholeNumberOfAQuotient",
+                    "asks whether what a narrowing to a whole number rounds is a quotient, which"
+                            + " is then a quotient rounded to the scale nought"),
             new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),
@@ -324,9 +378,25 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.reading.CoverageRead.rightOf", "and which way it runs under"),
             new Held("souther.compiler.reading.Meetings.meetingAt",
                     "asks the enum whether the operator stops early"),
+            new Held("souther.compiler.reading.Meetings.at",
+                    "asks the enum whether the operator compares, which is what a count handed to"
+                            + " it is made into a statement by"),
+            new Held("souther.compiler.reading.ValueChoices.of",
+                    "asks the enum whether the operator stops early, which a conjunction does and"
+                            + " a comparison does not: what an if decides by is one comparison only"
+                            + " if it is not one"),
+            new Held("souther.compiler.reading.ElementEvaluations.of",
+                    "asks the enum whether the operator stops early, which a conjunction does and"
+                            + " a comparison does not: what keeps an element is one comparison"
+                            + " only if it is not one"),
             new Held("souther.compiler.check.PathReachability.walk",
                     "asks the enum whether there is a right side that runs on some runs and not"
-                            + " others, and which way the left has to come out for it to"),
+                            + " others"),
+            new Held("souther.compiler.check.PathReachability.exitsOf",
+                    "asks the enum whether there is a right side that runs on some runs and not"
+                            + " others, since only such an operator has exits of its own"),
+            new Held("souther.compiler.check.PathReachability.shortCircuitOperands",
+                    "asks the enum which way the left has to come out for the right side to run"),
 
             // What the operator computes, is typed as, or is emitted as.
             new Held("souther.compiler.check.AffineForms.composed",
@@ -344,9 +414,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands the operator of a written binary to the algebra that folds it — twice,"
                             + " once to ask whether the left operand settles it and once for what"
                             + " the two come to. Nothing here asks what the operator means"),
-            new Held("souther.compiler.check.CoreConstantEval.binary",
-                    "the same, on the tree the rules are discharged over: the operator is carried"
-                            + " to the one algebra that folds it, and this reads nothing of it"),
+            new Held("souther.compiler.check.FoldedValue.binary",
+                    "the same, on the tree the rules are discharged over and the one an input is"
+                            + " read on: the operator is carried to the one algebra that folds it,"
+                            + " and this reads nothing of it"),
             new Held("souther.compiler.check.ConstantAlgebra.settledByTheLeft",
                     "which operators answer from their left operand alone, which is what says"
                             + " whether the one beside it is read at all"),
@@ -381,6 +452,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.proof.AppliedClosures.Walking.stopping",
                     "asks which of the two joins a step answers, which is where a walk from a"
                             + " truth stops applying its closure"),
+            new Held("souther.compiler.proof.AppliedClosures.answersOneMore",
+                    "asks whether a step answers a part of what it carries with one added, which"
+                            + " is what makes that part count the elements walked"),
             new Held("souther.compiler.check.NumericMeaning.Operator.op",
                     "hands back the operator an arithmetic meaning is keyed by"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared.op",
@@ -472,7 +546,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.proof.WhatItAccumulates.combined",
                     "names the operator a body writes the step of an accumulation with, which is"
                             + " what the accumulation it is stated to be says the step is"),
-            new Held("souther.compiler.check.KeyedAccumulation.stepOf",
+            new Held("souther.compiler.check.KeyedAccumulation.AStep.stepOf",
                     "names the addition and the subtraction a step that moves a counter by a"
                             + " constant is written with, and the counter is no other step"),
             new Held("souther.compiler.partition.DecisionSubjects.what",
@@ -517,6 +591,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
     private static List<String> hasAnOperator() {
         List<String> out = new ArrayList<>();
         forEachClass((owner, model) -> {
+            // Every way a class names a type is written in its constant pool, so a class whose pool
+            // never spells the operator names it nowhere — in no signature, no field and no
+            // instruction — and its code is not read.
+            if (!spellsTheOperator(model)) {
+                return;
+            }
             for (MethodModel method : model.methods()) {
                 boolean has = method.methodType().stringValue().contains(BIN_OP);
                 for (CodeElement element
@@ -608,6 +688,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     private interface EachClass {
         void read(String owner, ClassModel model);
+    }
+
+    private static boolean spellsTheOperator(ClassModel model) {
+        for (PoolEntry entry : model.constantPool()) {
+            if (entry instanceof Utf8Entry text && text.stringValue().contains(OPERATOR)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void forEachClass(EachClass each) {

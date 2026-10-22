@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmittedPlan;
@@ -16,11 +17,13 @@ import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The clauses reaching a value, read for which values each of its positions may hold.
@@ -140,12 +143,12 @@ final class AdmissibleReading {
     PlannedValues<FactSubject> leaf(ClauseExpr.Part part, Denotations at) {
         Core e = part.of();
         boolean positive = part.positive();
-        if (Core.withoutStanding(e) instanceof Core.Binary b
-                && Comparison.of(b).map(Comparison::claim).orElse(null)
-                        instanceof ComparisonClaim.Singled singled) {
-            // Which of the two it states, once the denials above have been counted: what the
-            // comparison holds at the value it names, turned over by each denial it stands under.
-            return comparison(part, b, singled.holdsAtTheValue() == positive, at);
+        // The comparison the clause states, with the denials above it counted and a sign of an
+        // order read as the order: the same one every other reader of the clause is handed.
+        StatedComparison stated = Conditions.statedBy(terms, part, at);
+        if (stated != null && stated.claim() instanceof ComparisonClaim.Singled singled) {
+            // Which of the two it states: what the comparison holds at the value it names.
+            return comparison(part, stated, singled.holdsAtTheValue(), at);
         }
         PlannedValues<FactSubject> truth = truthValued(e, positive, at);
         if (truth != null) {
@@ -217,15 +220,15 @@ final class AdmissibleReading {
      * Given up on instead, the two stayed two answers with a rule between them that reached
      * neither, and a declaration whose positions cannot hold one value together was admitted.
      */
-    private PlannedValues<FactSubject> comparison(ClauseExpr.Part part, Core.Binary b,
+    private PlannedValues<FactSubject> comparison(ClauseExpr.Part part, StatedComparison stated,
                                                   boolean states, Denotations at) {
-        PlannedValues<FactSubject> read = sided(b.left(), b.right(), states, at);
+        PlannedValues<FactSubject> read = sided(stated.left(), stated.right(), states, at);
         if (read == null) {
             // `"A" == value` says what `value == "A"` says.
-            read = sided(b.right(), b.left(), states, at);
+            read = sided(stated.right(), stated.left(), states, at);
         }
         if (read == null) {
-            read = relating(b, states, at);
+            read = relating(stated, states, at);
         }
         return read != null ? read : unreadable(part, at);
     }
@@ -247,9 +250,10 @@ final class AdmissibleReading {
      * position and is left where every rule this does not read is left, and a comparison naming one
      * position and something this could not read is not a rule about a pair either.
      */
-    private PlannedValues<FactSubject> relating(Core.Binary b, boolean states, Denotations at) {
-        FactSubject here = positionIn(b.left(), at);
-        FactSubject there = positionIn(b.right(), at);
+    private PlannedValues<FactSubject> relating(StatedComparison stated, boolean states,
+                                                Denotations at) {
+        FactSubject here = positionIn(stated.left(), at);
+        FactSubject there = positionIn(stated.right(), at);
         if (here == null || there == null || here.equals(there)) {
             return null;
         }
@@ -276,7 +280,7 @@ final class AdmissibleReading {
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
         Core e = part.of();
         UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER
-                : relatesTwoPositions(e, at) ? UnreadReason.RELATES_TWO_POSITIONS
+                : relatesTwoPositions(part, at) ? UnreadReason.RELATES_TWO_POSITIONS
                 : UnreadReason.FORM_NOT_READ;
         return shortOf(part, names(e, at), why);
     }
@@ -293,14 +297,30 @@ final class AdmissibleReading {
      * for the position keeps.
      */
     private boolean relatesElements(ClauseExpr.Part part, Denotations at) {
+        return keptApartAt(part, at) != null;
+    }
+
+    /**
+     * The position whose elements {@code part} keeps apart and the run they are apart at, or null
+     * where it states nothing of the kind this compiler builds for.
+     *
+     * <p>The one recognition of the leaf, asked by two readings. This one makes of it a reason its
+     * set of values is short of the rule; the reading of how elements stand to each other holds it
+     * against what the builders of the position keep ({@link ReadingLanguage.Elements}).
+     */
+    KeptApart keptApartAt(ClauseExpr.Part part, Denotations at) {
         if (!part.positive()
                 || !(Core.withoutStanding(part.of()) instanceof Core.PreservedCall call)) {
-            return false;
+            return null;
         }
         ElementsApart.Stated stated = ElementsApart.stated(call);
-        return stated != null && ElementsApart.readsAPlace(stated.container())
-                && positionIn(stated.container(), at) != null;
+        FactSubject container = stated != null && ElementsApart.readsAPlace(stated.container())
+                ? positionIn(stated.container(), at) : null;
+        return container == null ? null : new KeptApart(container, stated.run());
     }
+
+    /** A leaf saying no two elements of {@code container} share what {@code run} reads off one. */
+    record KeptApart(FactSubject container, List<String> run) {}
 
     /**
      * What {@code e} leaves the positions it names, said twice: to the places, and about the clause.
@@ -363,11 +383,15 @@ final class AdmissibleReading {
     /**
      * What the author wrote at {@code e}, where they wrote anything.
      *
-     * <p>The construct and not the copy an expansion made of it: what an author rewrites is the one
-     * they wrote, and rewriting it answers every copy. Nothing for a shape no author wrote, which a
-     * substitution puts in the tree when it gives a field an expression of its own.
+     * <p>The construct and the copy an expansion made of it. What an author rewrites is the one they
+     * wrote ({@link ConstructOccurrence#origin}), and rewriting it answers every copy; which copy
+     * this is says which call's arguments it was read with. Nothing for a shape no author wrote,
+     * which a substitution puts in the tree when it gives a field an expression of its own.
+     *
+     * <p>Asked by every reader that files something about a part, so that two facts about one
+     * copy of one part are told to be one.
      */
-    private static ConstructOccurrence wroteIt(Core e) {
+    static ConstructOccurrence wroteIt(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary it -> it.occurrence();
             case Core.Call it -> it.occurrence();
@@ -437,8 +461,11 @@ final class AdmissibleReading {
      * there tells an author two different things about one clause. What stays here is how this
      * reading looks a position up.
      */
-    private boolean relatesTwoPositions(Core e, Denotations at) {
-        return Relates.twoPositions(e, part -> positionIn(part, at));
+    private boolean relatesTwoPositions(ClauseExpr.Part part, Denotations at) {
+        Function<Core, Object> position = side -> positionIn(side, at);
+        StatedComparison stated = Conditions.statedBy(terms, part, at);
+        return stated == null ? Relates.twoPositions(part.of(), position)
+                : Relates.twoPositions(stated, position);
     }
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
@@ -550,7 +577,7 @@ final class AdmissibleReading {
         if (Core.withoutStanding(written != null ? written : e) instanceof Core.UnitValue unit) {
             return Value.of(unit.data());
         }
-        Object folded = Terms.folded(e, symbols, at);
+        Object folded = terms.folded(e, at);
         if (folded instanceof String text) {
             return Value.text(text);
         }
@@ -572,16 +599,24 @@ final class AdmissibleReading {
      */
     private Set<FactSubject> names(Core e, Denotations at) {
         Set<FactSubject> found = new LinkedHashSet<>();
-        gather(e, found, at);
+        gather(e, found, at, new HashSet<>());
         return found;
     }
 
-    private void gather(Core e, Set<FactSubject> found, Denotations at) {
+    /**
+     * The positions {@code e} names, read in {@code at}, into {@code found}.
+     *
+     * @param followed the names already followed to what they were given, each once: what a name
+     *                 was given and where it is read are the binding's, so a name read again names
+     *                 what it named the first time, and a chain of names each reading the one
+     *                 before it twice is walked once and not once for every way down it
+     */
+    private void gather(Core e, Set<FactSubject> found, Denotations at, Set<BindingId> followed) {
         // A binding is crossed as a binding: its body is what the clause states, read inside it,
         // and what it was given is not a part of the clause on its own. Walked as an ordinary node,
         // an argument a helper never reads was counted among the positions the rule names.
         if (e instanceof Core.LetIn li) {
-            gather(li.body(), found, terms.inside(li, at));
+            gather(li.body(), found, terms.inside(li, at), followed);
             return;
         }
         // Every subexpression standing here, and not only the node: a projection's shorter
@@ -591,6 +626,18 @@ final class AdmissibleReading {
             found.add(here);
             return;   // a position names itself, and nothing under it is a position of its own
         }
-        Core.forEachChild(e, child -> gather(child, found, at));
+        // A name that stands for what it was given names what that names, read where it was
+        // given: a library call written in the clause binds its parameters to what the clause
+        // handed it, and the positions handed over are the clause's.
+        if (Core.withoutStanding(e) instanceof Core.Read read) {
+            ValueStanding.ReadThrough<Denotations> given = at.givenTo(read.binding());
+            if (given != null) {
+                if (followed.add(read.binding())) {
+                    gather(given.value(), found, given.at(), followed);
+                }
+                return;
+            }
+        }
+        Core.forEachChild(e, child -> gather(child, found, at, followed));
     }
 }

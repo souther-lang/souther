@@ -169,7 +169,6 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
 
     private static List<List<OnTheWay>> ways(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

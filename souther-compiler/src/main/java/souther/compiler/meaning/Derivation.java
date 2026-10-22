@@ -11,12 +11,14 @@ import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.AnswerAspect;
@@ -33,6 +35,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -274,6 +277,86 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * A comparison read as another one that holds exactly where it does, and what that one states:
+     * a comparison of a rounded number as one of the number before rounding, of a quotient as one
+     * of the dividend and the divisor.
+     *
+     * <p>Concludes what the other comparison does. The sides that comparison is read off are no
+     * sides the source wrote, and its line can stand where the written comparison has a point
+     * beside its own: {@code Rational.toInt(DOWN, x / 2) > 100} is {@code x / 2 >= 101}, whose
+     * value holds where the written line's value does not. So its relations face nothing written,
+     * and each claims what it draws ({@link WrittenLines}).
+     */
+    record Restated(Derivation read) implements Derivation {
+
+        public Restated {
+            Objects.requireNonNull(read, "a comparison is read as another");
+        }
+
+        /** What {@code how} was read by, past every comparison it was read as. */
+        public static Derivation through(Derivation how) {
+            Derivation out = how;
+            while (out instanceof Restated(var inner)) {
+                out = inner;
+            }
+            return out;
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(read);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(read);
+        }
+    }
+
+    /**
+     * A comparison read through an operation that answers nothing on some rows, and what it states
+     * where the operation answers ({@link Proposition.WhereItAnswers}): a quotient's comparison
+     * states something only where the divisor is not nought, since a run divides by nought
+     * nowhere and stops there.
+     *
+     * @param answers where the operation answers
+     * @param read    what the comparison states there
+     */
+    record WhereItAnswers(Derivation answers, Derivation read) implements Derivation {
+
+        public WhereItAnswers {
+            Objects.requireNonNull(answers, "an operation answers somewhere");
+            Objects.requireNonNull(read, "and the comparison states something there");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.whereItAnswers(numbering.of(answers), numbering.of(read));
+        }
+    }
+
+    /**
+     * Where what {@code of} states answers at all, which every row answers: where each operation
+     * it is read through answers ({@link Proposition#whereItAnswersAtAll}), and everywhere where none of
+     * them may answer nothing.
+     *
+     * <p>For a number made of statements — how many of them hold — which is a number only where
+     * every one of them answered, and is compared where that is said of the comparison.
+     */
+    record WhereItIsAnswered(Derivation of) implements Derivation {
+
+        public WhereItIsAnswered {
+            Objects.requireNonNull(of, "something is answered somewhere");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition answers = Proposition.whereItAnswersAtAll(numbering.of(of));
+            return answers == null ? new Proposition.Always(true) : answers;
+        }
+    }
+
     /** An {@code if}: its arm under its condition, and its other arm under the denial of it — or
      *  what both state, where they state one thing. */
     record IfThenElse(Derivation condition, Derivation then, Derivation otherwise)
@@ -290,11 +373,13 @@ public sealed interface Derivation {
             Proposition cond = numbering.of(condition);
             Proposition yes = numbering.of(then);
             Proposition no = numbering.of(otherwise);
+            // The condition is worked out before either arm, so where it stops the if does.
             if (yes.key().equals(no.key()) && Proposition.firstStopIn(yes) == null) {
-                return yes;
+                return Proposition.afterIt(cond, yes);
             }
-            return Proposition.any(List.of(Proposition.all(List.of(cond, yes)),
-                    Proposition.all(List.of(cond.denied(), no))));
+            return Proposition.afterIt(cond, Proposition.any(List.of(
+                    Proposition.all(List.of(cond, yes)),
+                    Proposition.all(List.of(cond.denied(), no)))));
         }
 
         @Override
@@ -354,7 +439,7 @@ public sealed interface Derivation {
             if (stating.stream().allMatch(each -> each.key().equals(first.key()))
                     && arms.stream().noneMatch(Arm::aboutTheEntry)
                     && Proposition.firstStopIn(first) == null) {
-                return first;
+                return afterWhatIsSelected(selecting, first);
             }
             List<Proposition> taken = new ArrayList<>();
             List<Proposition> before = new ArrayList<>();
@@ -365,12 +450,14 @@ public sealed interface Derivation {
                 Proposition states = stating.get(i);
                 // The entry an arm picks out is the one its statement is about: the statement
                 // sits inside the quantifier that selected it, where its subjects under the
-                // container's elements are that entry's.
+                // container's elements are that entry's. A statement that picks out another entry
+                // of the same container is about two of them, which inside one quantifier would
+                // be one subject; it is read of neither, as the two written in one comparison are.
                 if (arm.aboutTheEntry() && selects instanceof Proposition.Some(
                         DecisionSubject container, Proposition ofTheEntry, boolean holds, var _)
                         && holds) {
-                    arrives.add(new Proposition.Some(container,
-                            Proposition.all(List.of(ofTheEntry, states)), true));
+                    arrives.add(numbering.theEntryMeeting(container,
+                            Proposition.all(List.of(ofTheEntry, states))));
                 } else {
                     arrives.add(selects);
                     arrives.add(states);
@@ -378,7 +465,7 @@ public sealed interface Derivation {
                 taken.add(Proposition.all(arrives));
                 before.add(selects);
             }
-            return Proposition.any(taken);
+            return afterWhatIsSelected(selecting, Proposition.any(taken));
         }
 
         @Override
@@ -421,7 +508,23 @@ public sealed interface Derivation {
     static Proposition taken(List<Proposition> before, Proposition selects) {
         List<Proposition> arrives = new ArrayList<>(noArmBefore(before, selects));
         arrives.add(selects);
-        return Proposition.all(arrives);
+        List<Proposition> selecting = new ArrayList<>(before);
+        selecting.add(selects);
+        return afterWhatIsSelected(selecting, Proposition.all(arrives));
+    }
+
+    /**
+     * {@code stated}, read only where what each of {@code selecting} selects off answers. The value
+     * a match selects by is worked out before any arm, so where it stops the match does — whichever
+     * arm would have been taken, and whether or not an arm before it is apart from it.
+     */
+    private static Proposition afterWhatIsSelected(List<Proposition> selecting,
+                                                   Proposition stated) {
+        Proposition out = stated;
+        for (Proposition each : selecting) {
+            out = Proposition.afterIt(each, out);
+        }
+        return out;
     }
 
     /**
@@ -443,15 +546,45 @@ public sealed interface Derivation {
         return out;
     }
 
-    /** Whether no value both {@code one} and {@code other} select can be, by the cases of one
-     *  subject each holds it to. */
+    /**
+     * Whether no value both {@code one} and {@code other} select can be: by the cases of one
+     * subject each holds it to, or by where each puts one number against nought — {@code x < 0}
+     * and {@code x == 0} are never both met, as the cases of a comparison the library writes are
+     * not. The arm before is then no arm the second could have been taken in place of, and its
+     * denial says nothing the second does not.
+     */
     private static boolean apart(Proposition one, Proposition other) {
-        return one instanceof Proposition.InCases(
-                DecisionSubject of, CasesLeft cases, boolean holds, String _)
-                && holds
-                && other instanceof Proposition.InCases(
-                        DecisionSubject same, CasesLeft chosen, boolean chosenHolds, String _)
-                && chosenHolds && of.equals(same) && cases.meet(chosen) == null;
+        if (one instanceof Proposition.InCases(
+                DecisionSubject of, CasesLeft cases, boolean holds, String _)) {
+            return holds && other instanceof Proposition.InCases(
+                    DecisionSubject same, CasesLeft chosen, boolean chosenHolds, String _)
+                    && chosenHolds && of.equals(same) && cases.meet(chosen) == null;
+        }
+        return one instanceof Proposition.Compared(
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, String _)
+                && other instanceof Proposition.Compared(
+                        Relation.Affine(LinearForm<Quantity> otherForm, Rel otherRel),
+                        boolean otherHolds, String _)
+                && apart(form, holds ? rel : rel.denied(), otherForm,
+                        otherHolds ? otherRel : otherRel.denied());
+    }
+
+    /** Whether {@code form rel 0} and {@code otherForm otherRel 0} are met on no sign the one
+     *  number they are both of may have, where they are of one number at any scale, either way
+     *  round. */
+    private static boolean apart(LinearForm<Quantity> form, Rel rel, LinearForm<Quantity> otherForm,
+                                 Rel otherRel) {
+        ExactRatio scale = otherForm.multipleOf(form);
+        if (scale == null) {
+            return false;
+        }
+        Rel against = scale.signum() > 0 ? otherRel : otherRel.turned();
+        for (int sign = -1; sign <= 1; sign++) {
+            if (rel.holds(sign) && against.holds(sign)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -690,8 +823,12 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            List<Proposition> parts = List.of(numbering.of(left), numbering.of(right));
-            return how == ConditionJoin.BOTH ? Proposition.all(parts) : Proposition.any(parts);
+            Proposition first = numbering.of(left);
+            List<Proposition> parts = List.of(first, numbering.of(right));
+            // The left half is worked out first, so where it stops the join does; the right is
+            // worked out only where the left leaves it open, which is where its own stops count.
+            return Proposition.afterIt(first,
+                    how == ConditionJoin.BOTH ? Proposition.all(parts) : Proposition.any(parts));
         }
     }
 
@@ -800,6 +937,18 @@ public sealed interface Derivation {
          */
         private record Standing(TheCall call, Set<DeclaredArgument> writtenOut) {
 
+            /** Whether {@code answers} says only where counts are numbers: each statement counted
+             *  answering, and those together. */
+            private static boolean onlyWhereCountsAnswer(Derivation answers) {
+                return switch (answers) {
+                    case WhereItIsAnswered _ -> true;
+                    case Joined(ConditionJoin how, Derivation left, Derivation right) ->
+                            how == ConditionJoin.BOTH && onlyWhereCountsAnswer(left)
+                                    && onlyWhereCountsAnswer(right);
+                    default -> false;
+                };
+            }
+
             boolean reads(LawProposition<DeclaredArgument> law, Derivation read) {
                 if (read instanceof Stopped) {
                     return true;
@@ -812,6 +961,12 @@ public sealed interface Derivation {
                 if (read instanceof OfTheLastToHoldItsValue(Derivation ofTheElement, var _,
                         var _)) {
                     return reads(law, ofTheElement);
+                }
+                // And where each count it compares is a number: that every statement counted
+                // answers is said of the elements counted, and is no part of the law.
+                if (read instanceof WhereItAnswers(Derivation answers, Derivation stated)
+                        && onlyWhereCountsAnswer(answers)) {
+                    return reads(law, stated);
                 }
                 return switch (law) {
                     case LawProposition.Always<DeclaredArgument> _ ->
@@ -883,21 +1038,40 @@ public sealed interface Derivation {
                     case EveryElementMeetsIt(var part, Derivation ofTheElement, var _, var _) ->
                             part.equals(some) && reads(some.ofTheElement(), ofTheElement);
                     case SomeElementMeeting(DecisionSubject container, Derivation ofTheElement,
-                                            boolean holds, var _) ->
+                                            boolean holds, var _, var _) ->
                             holds && standsAt(some.container(), container)
                                     && reads(some.ofTheElement(), ofTheElement);
+                    // The elements of the lists of an outer list put end to end, which stand at no
+                    // one position: what is read is that the key occurs among them.
+                    // Counted for the value the call has at the argument the key is asked to be.
+                    case SomeElementEqualToAKey(var occurrences) -> some.holds()
+                            && some.ofTheElement() instanceof LawProposition.Same<
+                                    DeclaredArgument>(var one, var asked, var alike)
+                            && alike && one instanceof LawSubject.KeyOf<DeclaredArgument>(
+                                    DeclaredArgument entries)
+                            && entries.equals(some.container())
+                            && asked instanceof LawSubject.Argument<DeclaredArgument>(
+                                    DeclaredArgument argument)
+                            && occurrences.key().equals(call.standingAt().get(argument));
                     // The pieces of a string are the elements of a container an operation made,
                     // which stands at no position.
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
-                    case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) -> {
+                    case SomePieceEqualling(Derivation ofThePiece, var _) ->
+                            positionOf(some.container()) == null
+                                    && reads(some.ofTheElement(), ofThePiece);
+                    case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds, var _) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
                         inside.add(some.container());
                         Standing within = new Standing(call, inside);
                         yield holds && ofEach.stream()
                                 .allMatch(each -> within.reads(some.ofTheElement(), each));
                     }
+                    // Settled by the elements written out, the same on every run (LawAtACall): a
+                    // container written out stands at no position, so there is none to hold the
+                    // reading to.
+                    case WrittenOut _ -> positionOf(some.container()) == null;
                     default -> {
                         List<Derivation> oneOf = read.oneOf();
                         yield oneOf != null && !oneOf.isEmpty()
@@ -1033,14 +1207,19 @@ public sealed interface Derivation {
                                 NumericTerm term)
                                 && term instanceof NumericTerm.CodePointClassCount count
                                 && count.position().equals(at)
+                                && count.through().equals(CaseMapping.NONE)
                                 && count.counted().equals(counted));
                     }
                     case LawNumber.HowManyDifferent<DeclaredArgument>(var container, var each) -> {
                         TermPath at = positionOf(container);
                         TermPath element = positionOf(each);
+                        DecisionSubject.AnInput over = at == null ? null
+                                : new DecisionSubject.AnInput(at);
                         yield at == null || element == null
-                                || new Quantity.HowManyDifferent(new DecisionSubject.AnInput(at),
-                                new DecisionSubject.AnInput(element)).equals(atom);
+                                || (Quantity.HowManyDifferent.oneOfEach(over,
+                                        new DecisionSubject.AnInput(element))
+                                && new Quantity.HowManyDifferent(over,
+                                        new DecisionSubject.AnInput(element)).equals(atom));
                     }
                     // A sum is held spread over the numbers of each element and how many elements
                     // there are ({@link Quantity.SumOver#over}), so what each element adds is
@@ -1049,6 +1228,27 @@ public sealed interface Derivation {
                         TermPath at = positionOf(container);
                         if (at == null) {
                             yield true;
+                        }
+                        // How many a container inside each element holds, added up, is held as
+                        // the count of every occurrence of that container's element, and is the
+                        // law's number where what each element adds is that container's size.
+                        Map<TermPath, ExactRatio> counted = new LinkedHashMap<>();
+                        Map<Quantity, ExactRatio> rest = new LinkedHashMap<>();
+                        form.coefs().forEach((part, by) -> {
+                            TermPath inside = containerCountedInside(part, at);
+                            if (inside != null) {
+                                counted.put(inside, by);
+                            } else {
+                                rest.put(part, by);
+                            }
+                        });
+                        if (!counted.isEmpty()) {
+                            TermPath sized = each instanceof LawNumber.SizeOf<DeclaredArgument>(
+                                    var of) ? positionOf(of) : null;
+                            yield each instanceof LawNumber.SizeOf<DeclaredArgument>
+                                    && (sized == null || (rest.isEmpty()
+                                            && form.constant().signum() == 0
+                                            && counted.equals(Map.of(sized, ExactRatio.ONE))));
                         }
                         LinearForm<Quantity> added = Quantity.SumOver.addedByEach(
                                 new DecisionSubject.AnInput(at), form,
@@ -1095,12 +1295,28 @@ public sealed interface Derivation {
                 return ExactRatio.ONE.equals(only.getValue()) ? only.getKey() : null;
             }
 
+            /**
+             * The container inside each element of the container at {@code at} whose element
+             * {@code atom} counts every occurrence of — or null where it is no such count, or the
+             * container at {@code at} stands inside another, whose every occurrence the count is
+             * of.
+             */
+            private static TermPath containerCountedInside(Quantity atom, TermPath at) {
+                if (!(atom instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over))
+                        || !(over.takenAs() instanceof TakenAs.HowManyItHolds)
+                        || !(over.source() instanceof RunSource.FlattenedOccurrences(
+                                TermPath every))) {
+                    return null;
+                }
+                TermPath inside = every.containersHoldingIt().getLast();
+                return !at.insideAContainer() && inside.isAtOrUnder(at.element()) ? inside : null;
+            }
+
             /** Whether {@code atom} is how many what stands at {@code at} holds. */
             private static boolean howManyAt(Quantity atom, TermPath at) {
                 return atom instanceof DecisionAtom.OfTheInput(
                         NumericTerm.TakenOf taken) && taken.position().equals(at)
-                        && DefaultBoundOperationFacts.get().takenAs(taken.operation())
-                        instanceof TakenAs.HowManyItHolds;
+                        && taken.takenAs() instanceof TakenAs.HowManyItHolds;
             }
         }
     }
@@ -1225,14 +1441,11 @@ public sealed interface Derivation {
      *               it there; a count on both sides comes to nought and names none
      * @param alike  how each count every element settles alike was read: the statement came out
      *               the same for each, so the count is all of the container or none of it
-     * @param mostChoices how many choices of which statements hold the reading writes the
-     *                    comparison out as ({@link AComparisonRead})
      */
     record ALawComparison(LawProposition.Compared<?> part,
                           Map<LawNumber<?>, LinearForm<Quantity>> numbers,
                           List<AComparisonRead.Counted> counts,
-                          List<AComparisonRead.Counted> alike,
-                          long mostChoices)
+                          List<AComparisonRead.Counted> alike)
             implements ALawPart {
 
         /**
@@ -1243,10 +1456,8 @@ public sealed interface Derivation {
                                         Map<LawNumber<?>, LinearForm<Quantity>> numbers,
                                         Map<Quantity.HowManyMeet, AComparisonRead.Counted>
                                                 counting,
-                                        List<AComparisonRead.Counted> alike,
-                                        long mostChoices) {
-            return new ALawComparison(part, numbers, List.copyOf(counting.values()), alike,
-                    mostChoices);
+                                        List<AComparisonRead.Counted> alike) {
+            return new ALawComparison(part, numbers, List.copyOf(counting.values()), alike);
         }
 
         /**
@@ -1273,12 +1484,6 @@ public sealed interface Derivation {
             if (!numbers.keySet().equals(part.form().coefs().keySet())) {
                 throw new IllegalArgumentException("a comparison over " + part.form().coefs()
                         .keySet() + " is read with " + numbers.keySet());
-            }
-            Relation.OneWay<Quantity> one = relationOf(part, numbers);
-            if (one != null && AComparisonRead.pastTheChoicesRead(
-                    new Relation.Affine(one.form(), one.proposition()), mostChoices)) {
-                throw new IllegalArgumentException("a comparison written out as more choices than"
-                        + " are read is stopped at, and not read: " + part);
             }
         }
 
@@ -1319,7 +1524,7 @@ public sealed interface Derivation {
                     .toList();
             return new AComparisonRead(ComparisonReading.BY_A_LAW,
                     new Relation.Affine(one.form(), one.proposition()), one.holds(), named,
-                    mostChoices, AComparisonRead.Facing.NOTHING_WRITTEN).conclusion(numbering);
+                    AComparisonRead.Facing.NOTHING_WRITTEN).conclusion(numbering);
         }
     }
 
@@ -1417,11 +1622,22 @@ public sealed interface Derivation {
      * Some element of a container written out making a closure answer some way: some one of what
      * the closure's body states of each element, read on the application that hands it that
      * element — and nothing where none is written.
+     *
+     * <p>Where what is stated of one may answer nothing on some rows, what the operation answers is
+     * read as {@code asked} says it goes through them ({@link HowTheElementsAreAsked}). Asking every
+     * one, it answers where each does. Asking each in turn until one meets the statement, it is the
+     * statement of the first, and past it, where that answered and failed, the statement of the
+     * rest: the order they were written in is the one a run goes in, so this is what every run
+     * comes to, and not a reading of one order among others.
+     *
+     * @param ofEach what is stated of each, in the order the elements were written
      */
-    record OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) implements Derivation {
+    record OverElementsWrittenOut(List<Derivation> ofEach, boolean holds,
+                                  HowTheElementsAreAsked asked) implements Derivation {
 
         public OverElementsWrittenOut {
             ofEach = List.copyOf(ofEach);
+            Objects.requireNonNull(asked, "the elements are gone through some way, or an unsaid one");
         }
 
         @Override
@@ -1431,7 +1647,31 @@ public sealed interface Derivation {
                 Proposition answered = numbering.of(one);
                 each.add(holds ? answered : answered.denied());
             }
-            return Proposition.any(each);
+            if (each.stream().noneMatch(Proposition::mayAnswerNothing)) {
+                return Proposition.any(each);
+            }
+            return switch (asked) {
+                case EVERY_ONE -> {
+                    List<Proposition> answering = new ArrayList<>();
+                    for (Proposition one : each) {
+                        Proposition answers = Proposition.whereItAnswersAtAll(one);
+                        if (answers != null) {
+                            answering.add(answers);
+                        }
+                    }
+                    yield Proposition.whereItAnswers(Proposition.all(answering), Proposition.any(
+                            each.stream().map(Proposition::whereItHolds).toList()));
+                }
+                case UNTIL_ONE_MEETS_IT, UNTIL_ONE_MEETS_IT_IN_AN_ORDER_OF_THE_ROWS -> {
+                    Proposition rest = each.getLast();
+                    for (int at = each.size() - 2; at >= 0; at--) {
+                        Proposition first = each.get(at);
+                        rest = Proposition.afterIt(first, Proposition.any(List.of(first, rest)));
+                    }
+                    yield rest;
+                }
+                case NOT_SAID -> numbering.whichElementARunStopsAt();
+            };
         }
     }
 
@@ -1460,6 +1700,47 @@ public sealed interface Derivation {
     }
 
     /**
+     * Some element of a container no position holds being the key a lookup asks for, read as how
+     * often that key occurs among the elements being at least one.
+     *
+     * <p>The elements are the lists of an outer list put end to end, so there is no one container
+     * for {@link SomeElementMeeting} to be of: the elements are counted across the containers they
+     * stand in ({@link NumericTerm.OccurrencesOfAKey}), and a number that counts is what the
+     * statement about them is a comparison of. The same count is the one the counter an entry holds
+     * is read of, so the lookup finding something and what it finds are of one number.
+     *
+     * <p>It holds the count and nothing else: what it concludes is the count at least one, worked
+     * out from the count here, so no reading can hand it another statement to conclude.
+     * {@link ByALaw} holds it to the key the call was handed. That the elements counted are the
+     * ones the map the call was handed was filed from is the reading's, which makes this only of
+     * the fold that built that map ({@code Pullback.acrossTheListsOfAFold}).
+     *
+     * @param occurrences how often the key occurs among the elements
+     */
+    record SomeElementEqualToAKey(NumericTerm.OccurrencesOfAKey occurrences)
+            implements Derivation {
+
+        public SomeElementEqualToAKey {
+            Objects.requireNonNull(occurrences, "a key occurs as often as it does");
+        }
+
+        /** The count compared with one, which is all an element's being the key comes to. */
+        public Derivation atLeastOne() {
+            Relation.OneWay<Quantity> one = Relation.OneWay.of(new LinearForm<>(
+                    ExactRatio.of(-1), Map.of(new DecisionAtom.OfTheInput(occurrences),
+                            ExactRatio.ONE)), Rel.GE);
+            return new AComparisonRead(ComparisonReading.AS_A_CUT,
+                    new Relation.Affine(one.form(), one.proposition()), one.holds(),
+                    AComparisonRead.Facing.NOTHING_WRITTEN);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(atLeastOne());
+        }
+    }
+
+    /**
      * Some element of the container at {@code container} meeting what the closure's body states of
      * it, with what no element decides taken out of the quantifier.
      *
@@ -1470,24 +1751,39 @@ public sealed interface Derivation {
      * inside, whether the container holds anything would be something the proposition turns on that
      * none of its parts names, and a reader of the parts would hand nobody the container.
      *
+     * <p>Where what is stated of one element answers nothing on some rows, some element meeting it
+     * is what the operation answers only as far as {@code asked} says, and on the rows it says the
+     * operation answers on ({@link HowTheElementsAreAsked}). The quantifier itself is of where the
+     * statement holds, and of where it answers, which every row answers.
+     *
      * @param holdsSomething that the container holds something, held only where the conclusion
      *                       has it as a part ({@link #asksWhetherItHoldsAnything})
+     * @param asked          how the operation goes through the elements, as far as that decides
+     *                       what it answers where what is stated of one may answer nothing
      */
     record SomeElementMeeting(DecisionSubject container, Derivation ofTheElement, boolean holds,
-                              Optional<Derivation> holdsSomething) implements Derivation {
+                              Optional<Derivation> holdsSomething, HowTheElementsAreAsked asked)
+            implements Derivation {
 
         public SomeElementMeeting {
             Objects.requireNonNull(container, "an element is of a container");
             Objects.requireNonNull(ofTheElement, "an element meets something");
             Objects.requireNonNull(holdsSomething, "whether it holds anything is read or not asked");
+            Objects.requireNonNull(asked, "the elements are gone through some way, or an unsaid one");
         }
 
         /**
          * Whether some element meeting {@code ofTheElement} has the container's holding anything as
-         * a part.
+         * a part — of where it holds or of where it answers, where it answers nothing on some rows.
          */
         public static boolean asksWhetherItHoldsAnything(DecisionSubject container,
                                                          Proposition ofTheElement) {
+            Proposition answers = Proposition.whereItAnswersAtAll(ofTheElement);
+            if (answers != null) {
+                return asksWhetherItHoldsAnything(container,
+                        Proposition.whereItHolds(ofTheElement))
+                        || asksWhetherItHoldsAnything(container, answers.denied());
+            }
             if (!ofTheElement.mayTurnOnAnElementOf(container)) {
                 return !(ofTheElement instanceof Proposition.Always(boolean holds) && !holds);
             }
@@ -1504,7 +1800,24 @@ public sealed interface Derivation {
         public Proposition conclusion(Conclusion numbering) {
             Proposition answered = numbering.of(ofTheElement);
             Proposition element = holds ? answered : answered.denied();
-            return meeting(element, numbering);
+            Proposition answers = Proposition.whereItAnswersAtAll(element);
+            if (answers == null) {
+                return meeting(element, numbering);
+            }
+            // Some element meeting it, and every element answering, each of them a statement every
+            // row answers; what the operation answers is the first, on the rows asked says.
+            Proposition some = meeting(Proposition.whereItHolds(element), numbering);
+            Proposition every = meeting(answers.denied(), numbering).denied();
+            boolean alike = !answers.mayTurnOnAnElementOf(container);
+            return switch (asked) {
+                case EVERY_ONE -> Proposition.whereItAnswers(every, some);
+                case UNTIL_ONE_MEETS_IT -> alike ? Proposition.whereItAnswers(every, some)
+                        : numbering.whichElementARunStopsAt();
+                case UNTIL_ONE_MEETS_IT_IN_AN_ORDER_OF_THE_ROWS -> alike
+                        ? Proposition.whereItAnswers(every, some)
+                        : Proposition.whereItAnswers(Proposition.any(List.of(some, every)), some);
+                case NOT_SAID -> numbering.whichElementARunStopsAt();
+            };
         }
 
         private Proposition meeting(Proposition element, Conclusion numbering) {
@@ -1519,20 +1832,26 @@ public sealed interface Derivation {
             List<Proposition> parts = switch (element) {
                 case Proposition.All all -> all.parts();
                 case Proposition.Any any -> any.parts();
-                default -> List.of(element);
+                // A count turning on the element is met by some element as one statement.
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _, Proposition.SoManyHold _,
+                     Proposition.WhereItAnswers _ -> List.of(element);
             };
             List<Proposition> decided = parts.stream()
                     .filter(part -> !part.mayTurnOnAnElementOf(container)).toList();
             if (decided.isEmpty()) {
-                return new Proposition.Some(container, element, true);
+                return numbering.someElement(container, element);
             }
             List<Proposition> undecided = parts.stream()
                     .filter(part -> part.mayTurnOnAnElementOf(container)).toList();
             return element instanceof Proposition.Any
                     ? Proposition.any(List.of(meeting(Proposition.any(decided), numbering),
-                            new Proposition.Some(container, Proposition.any(undecided), true)))
+                            numbering.someElement(container, Proposition.any(undecided))))
                     : Proposition.all(List.of(Proposition.all(decided),
-                            new Proposition.Some(container, Proposition.all(undecided), true)));
+                            numbering.someElement(container, Proposition.all(undecided))));
         }
     }
 
@@ -1631,6 +1950,13 @@ public sealed interface Derivation {
             Proposition read = numbering.of(atANode);
             Optional<Proposition> noneBelow = below.map(each -> Proposition.all(each.stream()
                     .map(one -> numbering.of(one).denied()).toList()));
+            // A node whose statement answers nothing on some rows stops the search where it is
+            // reached, and a node is reached after every node above it: which nodes those are is
+            // the tree's, and no order a row chooses.
+            if (Proposition.mayAnswerNothing(read)
+                    || noneBelow.filter(Proposition::mayAnswerNothing).isPresent()) {
+                return numbering.whichElementARunStopsAt();
+            }
             return searchFrom(node, node, through, read, noneBelow, how);
         }
 
@@ -1646,6 +1972,10 @@ public sealed interface Derivation {
          */
         public static boolean unfoldsOnce(Proposition unfolded, Proposition atANode, TermPath node,
                                           List<String> through, ConditionJoin how) {
+            // A search is of a statement answering on every node ({@link #conclusion}).
+            if (Proposition.mayAnswerNothing(atANode)) {
+                return false;
+            }
             List<Proposition> parts = new ArrayList<>();
             parts.add(atANode);
             for (String field : through) {
@@ -1661,9 +1991,51 @@ public sealed interface Derivation {
                 case EITHER -> Proposition.any(parts);
                 case BOTH -> Proposition.all(parts);
             };
+            return sameWhateverItsPartsAre(unfolded, expected)
+                    || sameWhateverItsPartsAre(distributed(unfolded), distributed(expected));
+        }
+
+        /** Whether {@code actual} and {@code required} come out alike whichever way their parts do. */
+        private static boolean sameWhateverItsPartsAre(Proposition actual, Proposition required) {
             return TruthTable.holdsWhateverItsPartsAre(Proposition.any(List.of(
-                    Proposition.all(List.of(unfolded, expected)),
-                    Proposition.all(List.of(unfolded.denied(), expected.denied())))));
+                    Proposition.all(List.of(actual, required)),
+                    Proposition.all(List.of(actual.denied(), required.denied())))));
+        }
+
+        /**
+         * {@code stated} with some element meeting either of two things written as some element
+         * meeting the one or some element meeting the other, and no element meeting either as no
+         * element meeting the one and none the other, under the joins it is made of. A truth table
+         * takes each quantified part for a part of its own, so without this it cannot see that one
+         * node-wide quantifier over a join is the join of the quantifiers. It is tried only after
+         * the comparison as stated fails, since each join it splits adds a part for the table to
+         * work through, and a table past {@link TruthTable#PARTS_TRIED} parts answers no. The
+         * inside of a search
+         * ({@link Proposition.SomeReachable}) is left as it is: its parts are of the node it was
+         * written at.
+         */
+        private static Proposition distributed(Proposition stated) {
+            return switch (stated) {
+                case Proposition.All all -> {
+                    List<Proposition> each = all.parts().stream()
+                            .map(ATreeSearched::distributed).toList();
+                    yield each.equals(all.parts()) ? stated : Proposition.all(each);
+                }
+                case Proposition.Any any -> {
+                    List<Proposition> each = any.parts().stream()
+                            .map(ATreeSearched::distributed).toList();
+                    yield each.equals(any.parts()) ? stated : Proposition.any(each);
+                }
+                case Proposition.Some some
+                        when some.ofTheElement() instanceof Proposition.Any either -> {
+                    List<Proposition> each = either.parts().stream()
+                            .map(part -> distributed(new Proposition.Some(some.container(), part,
+                                    some.holds())))
+                            .toList();
+                    yield some.holds() ? Proposition.any(each) : Proposition.all(each);
+                }
+                default -> stated;
+            };
         }
     }
 
@@ -1691,7 +2063,11 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return searchFrom(at, from, through, numbering.of(atANode), Optional.empty(), how);
+            Proposition read = numbering.of(atANode);
+            // As where the search is read from ({@link ATreeSearched#conclusion}).
+            return Proposition.mayAnswerNothing(read)
+                    ? numbering.whichElementARunStopsAt()
+                    : searchFrom(at, from, through, read, Optional.empty(), how);
         }
     }
 
@@ -1720,6 +2096,19 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.Always(false);
+        }
+    }
+
+    /**
+     * A comparison read through an operation that stops every run that reaches it, such as a
+     * division by nought: the run arrives and the operation aborts it, so the comparison states
+     * nothing on either side. Not {@link NoRunTakesIt}, where no run arrives.
+     */
+    record TheRunStopsHere() implements Derivation {
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.answersNowhere();
         }
     }
 
@@ -1805,6 +2194,18 @@ public sealed interface Derivation {
     }
 
     /**
+     * A lookup in a map under a key read off that same map, which answers a value on every run:
+     * the key is one the map holds an entry under.
+     */
+    record UnderOneOfItsOwnKeys() implements Derivation {
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Always(true);
+        }
+    }
+
+    /**
      * What is stated of the value of an entry a lookup answered, and with it what picked the entry
      * out: that the element stated of is the one under the key asked for.
      *
@@ -1827,8 +2228,11 @@ public sealed interface Derivation {
         public Proposition conclusion(Conclusion numbering) {
             Proposition stated = numbering.of(about);
             return numbering.of(selection) instanceof Proposition.Some(
-                    DecisionSubject _, Proposition ofTheEntry, boolean holds, var _) && holds
-                    ? Proposition.all(List.of(stated, ofTheEntry)) : stated;
+                    DecisionSubject container, Proposition ofTheEntry, boolean holds, var _)
+                    && holds
+                    ? numbering.ofOneElement(container,
+                            Proposition.all(List.of(stated, ofTheEntry)))
+                    : stated;
         }
     }
 
@@ -1838,8 +2242,8 @@ public sealed interface Derivation {
      * element that came last of those the key was made of, so what is said of an entry is said
      * of that one.
      */
-    record OfTheLastToHoldItsValue(Derivation ofTheElement, TermPath container,
-                                   TermPath position) implements Derivation {
+    record OfTheLastToHoldItsValue(Derivation ofTheElement, DecisionSubject container,
+                                   DecisionSubject position) implements Derivation {
 
         public OfTheLastToHoldItsValue {
             Objects.requireNonNull(ofTheElement, "something is stated of the element");
@@ -2070,8 +2474,8 @@ public sealed interface Derivation {
         }
 
         /** Whether {@code element} is made of nothing but settled truths and relations over the
-         *  counts of the one character {@code within} statements about some piece, gathering the
-         *  classes those count into {@code named}. */
+         *  counts of the one character {@code within} statements about some piece, joined or
+         *  counted, gathering the classes those count into {@code named}. */
         private static boolean onlyOfACharacter(int within, Proposition element,
                                                 Set<CodePointClass> named) {
             return switch (element) {
@@ -2091,7 +2495,13 @@ public sealed interface Derivation {
                     }
                     yield true;
                 }
-                default -> false;
+                case Proposition.SoManyHold counted -> counted.statements().stream()
+                        .allMatch(part -> onlyOfACharacter(within, part, named));
+                case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.Unread _, Proposition.OnAnApplication _,
+                     Proposition.WhereItAnswers _ -> false;
             };
         }
 
@@ -2120,9 +2530,58 @@ public sealed interface Derivation {
                     }
                     yield rel.holds(value.signum()) == holds;
                 }
-                default -> throw new IllegalStateException(element
-                        + " is not made of the counts of one character");
+                case Proposition.SoManyHold counted -> {
+                    int holding = 0;
+                    for (int one = 0; one < counted.statements().size(); one++) {
+                        if (holds(counted.statements().get(one), countOf)) {
+                            holding += counted.weights().get(one);
+                        }
+                    }
+                    yield counted.admitted().contains(holding);
+                }
+                case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.Unread _, Proposition.OnAnApplication _,
+                     Proposition.WhereItAnswers _ ->
+                        throw new IllegalStateException(element
+                                + " is not made of the counts of one character");
             };
+        }
+    }
+
+    /**
+     * That some piece of a string is the same value as a value of the input, as {@code ofThePiece}
+     * reads one piece compared with it ({@link Quantity.APieceOf}).
+     *
+     * <p>What it concludes is that the value is one of the pieces ({@code among}), and its denial is
+     * that it is none of them. It is not what was read of the one piece: that piece is bound by the
+     * statement and stands for whichever one the value is, so held outside it, "the piece is the
+     * value" and "the piece is another value" would be each other's denial, where a string of two
+     * pieces has one of each. It relates that value to the string and divides neither, since the
+     * string has a piece for every value to be or not to be, and says nothing of which code points
+     * the string holds ({@link SomePieceMeeting}).
+     *
+     * @param ofThePiece what was read of the piece, inside the statement
+     * @param among      the value being one of the pieces, which is what leaves the statement
+     */
+    record SomePieceEqualling(Derivation ofThePiece, Quantity.IsAmongThePieces among)
+            implements Derivation {
+
+        public SomePieceEqualling {
+            Objects.requireNonNull(ofThePiece, "a piece is read as the same as something");
+            Objects.requireNonNull(among, "and the value is one of the pieces");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.compared(new Relation.Affine(
+                    LinearForm.atomMinusConstant(among, ExactRatio.ONE), Rel.EQ), true);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(ofThePiece);
         }
     }
 
@@ -2518,22 +2977,18 @@ public sealed interface Derivation {
      * meet, and a count the relation names that none of these reads is refused where it is
      * concluded.
      *
-     * <p>Every comparison a reading concludes enters here, so this is where a count of statements
-     * about values written out is held to how many choices of which hold one condition is read in
-     * ({@link WhichOfThemHold}). One that would be written out as more is stopped at by the reading
-     * and never made.
+     * <p>A count of statements about values written out is concluded as which of them hold, written
+     * out as choices or held as the count where those are too many ({@link Proposition#compared}).
      *
-     * @param mostChoices how many choices of which statements hold the reading writes one
-     *                    comparison out as
-     * @param facing      which way the relation faces the sides the comparison was written with
+     * @param facing which way the relation faces the sides the comparison was written with
      */
     record AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
-                           List<Counted> counts, long mostChoices, Facing facing)
+                           List<Counted> counts, Facing facing)
             implements Derivation {
 
         public AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
-                               long mostChoices, Facing facing) {
-            this(by, relation, holds, List.of(), mostChoices, facing);
+                               Facing facing) {
+            this(by, relation, holds, List.of(), facing);
         }
 
         /**
@@ -2569,16 +3024,6 @@ public sealed interface Derivation {
             Objects.requireNonNull(relation, "a comparison states a relation");
             Objects.requireNonNull(facing, "a relation faces its comparison some way, or none");
             counts = List.copyOf(counts);
-            if (pastTheChoicesRead(relation, mostChoices)) {
-                throw new IllegalArgumentException("a comparison written out as more choices than"
-                        + " are read is stopped at, and not read: " + relation);
-            }
-        }
-
-        /** Whether {@code relation} is a count of statements written out as more than
-         *  {@code mostChoices} choices of which of them hold. */
-        public static boolean pastTheChoicesRead(Relation relation, long mostChoices) {
-            return Proposition.choicesIn(relation, mostChoices) > mostChoices;
         }
 
         @Override
@@ -2594,7 +3039,7 @@ public sealed interface Derivation {
                 throw new IllegalStateException("a relation over " + named
                         + " is read from counts of " + read);
             }
-            return Proposition.compared(relation, holds, mostChoices);
+            return Proposition.compared(relation, holds);
         }
 
         /**
@@ -2608,9 +3053,11 @@ public sealed interface Derivation {
                 Objects.requireNonNull(ofTheElement, "of the elements meeting something");
             }
 
-            /** The count this reads. */
+            /** The count this reads: of the elements it holds on, which on a row every element
+             *  answers on is how many meet it ({@link Derivation.WhereItIsAnswered}). */
             public Quantity.HowManyMeet counted(Conclusion numbering) {
-                return new Quantity.HowManyMeet(container, numbering.of(ofTheElement));
+                return new Quantity.HowManyMeet(container,
+                        Proposition.whereItHolds(numbering.of(ofTheElement)));
             }
         }
     }

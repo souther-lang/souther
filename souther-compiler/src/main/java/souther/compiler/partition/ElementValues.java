@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
@@ -8,7 +9,7 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * The values an element of a container is listed at, and the two ways each is read: as part of a
@@ -53,11 +54,11 @@ final class ElementValues {
      * {@link ValuesOfAnElement#of} lists them — or null where some part of the element is one
      * nothing here lists values of.
      *
-     * @param numbersAt the values a number standing at a position is read at, or null where none
-     *                  are chosen there
+     * @param numbersAt the values a number standing at a position, of the type read there, is
+     *                  read at, or null where none are chosen there
      */
     static ElementValues of(TermPath container, Type element, RuleReadingContext reading,
-                            Function<TermPath, List<ObservedValue>> numbersAt) {
+                            BiFunction<TermPath, TypeView, List<ObservedValue>> numbersAt) {
         ValuesOfAnElement.Listed listed = ValuesOfAnElement.of(element, container.element(),
                 reading, MOST_VALUES, numbersAt);
         return listed == null ? null : new ElementValues(container, element, reading, listed);
@@ -85,20 +86,21 @@ final class ElementValues {
             throw new IllegalStateException("a row holding `" + container + "` alone holds the"
                     + " parameter it is, and it is inside one");
         }
-        return new StandingAtAPoint.DiscoveringRow(
+        return new StandingAtAPoint.DiscoveringRow(new StandingAtAPoint.RowWalk(
                 new BehaviorInputs(List.of(container.head()), List.of(type), reading.source(),
                         reading.policy()),
                 new ObservedInputs(List.of(new ObservedValue.Sequence(values)),
-                        new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered()));
+                        new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
     }
 
     /** The element alone, holding {@code value}. */
     BorderQuantity.Observation alone(ObservedValue value) {
         return new Alone(container.element(), new StandingAtAPoint.DiscoveringRow(
-                new BehaviorInputs(List.of(ALONE), List.of(element), reading.source(),
-                        reading.policy()),
-                new ObservedInputs(List.of(value), new Generator.Watched.NoAccount(),
-                        new AnswerObservation.NotAnswered())));
+                new StandingAtAPoint.RowWalk(
+                        new BehaviorInputs(List.of(ALONE), List.of(element), reading.source(),
+                                reading.policy()),
+                        new ObservedInputs(List.of(value), new Generator.Watched.NotRun(),
+                                new AnswerObservation.NotAnswered()))));
     }
 
     /**

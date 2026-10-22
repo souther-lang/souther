@@ -62,8 +62,9 @@ sealed interface NumericMeaning {
     record TruncatingRemainder(Core dividend, Core divisor) implements NumericMeaning {}
 
     /**
-     * A division of decimals rounded to a scale and a mode the call states
-     * (spec §stdlib-decimal).
+     * A division rounded to a scale and a mode the call states: a division of decimals
+     * (spec §stdlib-decimal), or the exact quotient {@code /} answers rounded to a whole number,
+     * which is that rounding at the scale nought.
      *
      * @param scale how many places the answer is rounded to. The expression, not a number: whether
      *              it reads as one is a question about a reading, and this is not one

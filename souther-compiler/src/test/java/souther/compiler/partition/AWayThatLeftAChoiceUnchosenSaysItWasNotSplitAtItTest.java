@@ -87,7 +87,6 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
                 behavior f : (r: R) -> Yes
                 let f (r) = Yes
                 """.formatted(fields), "Main");
-        compilation.answerEverything();
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

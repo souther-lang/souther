@@ -138,15 +138,7 @@ class AComparisonOfAChosenValueIsTheChoiceOfItsComparisonsTest {
     }
 
     private static boolean unreadIn(Proposition stated) {
-        return switch (stated) {
-            case Proposition.Unread _ -> true;
-            case Proposition.All all -> all.parts().stream()
-                    .anyMatch(AComparisonOfAChosenValueIsTheChoiceOfItsComparisonsTest::unreadIn);
-            case Proposition.Any any -> any.parts().stream()
-                    .anyMatch(AComparisonOfAChosenValueIsTheChoiceOfItsComparisonsTest::unreadIn);
-            case Proposition.Some some -> unreadIn(some.ofTheElement());
-            default -> false;
-        };
+        return Proposition.leavesSomethingUnread(stated);
     }
 
     /** What the condition of the one fork of a body written {@code body} states. */

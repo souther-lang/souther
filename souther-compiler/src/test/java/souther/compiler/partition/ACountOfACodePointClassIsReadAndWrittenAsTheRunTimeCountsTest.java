@@ -13,12 +13,14 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
 import souther.runtime.Strings;
@@ -26,7 +28,6 @@ import souther.compiler.values.AsACompilationAllows;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -60,7 +61,8 @@ class ACountOfACodePointClassIsReadAndWrittenAsTheRunTimeCountsTest {
 
     private static NumericTerm.CodePointClassCount counting(CodePointClass counted) {
         NumericTerm.CodePointClassCount made =
-                NumericTerm.CodePointClassCount.of(AT, counted, Type.STRING, INNERS);
+                NumericTerm.CodePointClassCount.of(AT, counted, CaseMapping.NONE, Type.STRING,
+                        INNERS);
         assertNotNull(made, "a string's code points are counted");
         return made;
     }
@@ -72,8 +74,9 @@ class ACountOfACodePointClassIsReadAndWrittenAsTheRunTimeCountsTest {
     /** Only a string has code points to count. */
     @Test
     void onlyAStringHasCodePointsToCount() {
-        assertNull(NumericTerm.CodePointClassCount.of(AT, NOT_WHITESPACE, Type.INT, INNERS));
-        assertNull(NumericTerm.CodePointClassCount.of(AT, NOT_WHITESPACE,
+        assertNull(NumericTerm.CodePointClassCount.of(AT, NOT_WHITESPACE, CaseMapping.NONE,
+                Type.INT, INNERS));
+        assertNull(NumericTerm.CodePointClassCount.of(AT, NOT_WHITESPACE, CaseMapping.NONE,
                 new Type.ListOf(Type.STRING), INNERS));
     }
 
@@ -84,7 +87,7 @@ class ACountOfACodePointClassIsReadAndWrittenAsTheRunTimeCountsTest {
         assertNotEquals(counting(NOT_WHITESPACE), counting(NOT_WHITESPACE_NOR_COMMA));
         assertNotEquals(counting(NOT_WHITESPACE_NOR_COMMA),
                 counting(new CodePointClass.NotWhitespaceNorEqualTo(';')));
-        UnaryOperator<TermPath> there = path -> path.then("name");
+        PlacesMoved there = PlacesMoved.by(path -> path.then("name"));
         assertEquals(TermPath.of("t").then("name"),
                 counting(NOT_WHITESPACE).movedTo(there).position());
         assertEquals(counting(NOT_WHITESPACE_NOR_COMMA).counted(),

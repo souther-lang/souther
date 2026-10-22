@@ -12,6 +12,7 @@ import souther.compiler.diag.SourceProvenance;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.Adequacy;
@@ -28,6 +29,7 @@ import souther.compiler.query.ReplacementEvidence;
 import souther.compiler.query.RowDisposition;
 import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
@@ -316,6 +318,8 @@ class EverySchemaWordIsAccountedForTest {
         spelling.put("AComparisonOutcomeNothingReaches", "a_comparison_outcome_nothing_reaches");
         spelling.put("AConditionNeverComesOutThatWay", "a_condition_never_comes_out_that_way");
         spelling.put("NoValueCanTakeIt", "no_value_can_take_it");
+        // The document says what the model settles and not which reading showed it.
+        spelling.put("TheNumbersOfTheWayLeaveNone", "no_value_can_take_it");
         spelling.put("AComposedRowWentElsewhere", "a_composed_row_went_elsewhere");
         spelling.put("AComposedRowWasShortOfTheWay", "a_composed_row_was_short_of_the_way");
         spelling.put("CouldNotTellWhereTheRowWent", "the_rule_the_row_took_could_not_be_told");
@@ -551,6 +555,9 @@ class EverySchemaWordIsAccountedForTest {
             // compiler is one the document admits without anybody editing the schema by hand.
             new Vocabulary("$defs.compositionBudget", List.of("$defs", "compositionBudget"),
                     CompositionBudget.class),
+            // And the rest of this compiler's figures, which a reading that stopped names beside
+            // the composing's own under `figure`. Held against the type for the reason above.
+            new Vocabulary("$defs.workFigure", List.of("$defs", "workFigure"), WorkFigure.class),
             new Vocabulary("decision.obligations[].synthesisShortfalls[].figures[]",
                     List.of("$defs", "decision", "properties", "obligations", "items",
                             "properties", "synthesisShortfalls", "items", "properties", "figures",
@@ -1120,6 +1127,25 @@ class EverySchemaWordIsAccountedForTest {
                 allowedAt(schema(), List.of("$defs", "behavior", "properties", "implementation")));
     }
 
+    /** Where a choice by position is said in a document, the way it compares the position. */
+    private static final List<String> A_POSITION_RELATION = List.of("$defs", "elementComputation",
+            "oneOf", "2", "properties", "relation");
+
+    /**
+     * How a choice by an element's position compares it, which the schema and the relations spell
+     * alike: the operator the language writes each with.
+     *
+     * <p>Read off {@link Rel#values()} for the reason the states of a body are read off theirs.
+     */
+    @Test
+    void theWordsAPositionIsComparedByAreTheRelationsThereAre() {
+        assertEquals(Arrays.stream(Rel.values()).map(Rel::written).collect(Collectors.toSet()),
+                allowedAt(schema(), A_POSITION_RELATION));
+        assertEquals("position", schema().at("/" + String.join("/", A_POSITION_RELATION)
+                .replace("/relation", "/kind")).get("const").asString(),
+                "the branch read is the one a choice by position is written in");
+    }
+
     /**
      * And the other field with no enum behind it: whether anything this measure reads about a
      * position is left standing, which is derived from two things rather than enumerated.
@@ -1538,6 +1564,16 @@ class EverySchemaWordIsAccountedForTest {
         // about it for the same reason.
         held.add("/$defs/partition/properties/boundaries/items/properties/besides/items"
                 + "/properties/standing");
+        // Which code points a count of a string is of, which end of a key's values a number
+        // takes, and how the numbers of a key are gathered: each written by a switch over a
+        // sealed type's arms for the same reason.
+        held.add("/$defs/termId/oneOf/3/properties/class");
+        held.add("/$defs/termId/oneOf/5/properties/extreme");
+        held.add("/$defs/termId/oneOf/6/properties/gathering");
+        held.add("/$defs/termId/oneOf/7/properties/gathering");
+        // How a choice by position compares it, held to the relations by
+        // `theWordsAPositionIsComparedByAreTheRelationsThereAre`.
+        held.add("/" + String.join("/", A_POSITION_RELATION));
         // Why a condition nothing read was not, by kind and by the word within it. Written by a
         // switch over the sealed reasons and the enums under them, for the reason the two above
         // are, and held to the schema by the same validation of the corpus documents.

@@ -170,7 +170,8 @@ public sealed interface ReaderDisposition {
             case AdequacyUncertainty.NotMeasured it ->
                     new LookAtWhyNothingWasMeasured(subject, it.why());
             case AdequacyUncertainty.ShowingStopped _,
-                 AdequacyUncertainty.NothingShowedARowCanBeWritten _ ->
+                 AdequacyUncertainty.NothingShowedARowCanBeWritten _,
+                 AdequacyUncertainty.TheWayThereMayStop _ ->
                     new LookAtWhatShowedNoRow(subject);
             // What shows no row is the body itself: the premise it states is what to prove or
             // answer, and it is at the behavior that states it.

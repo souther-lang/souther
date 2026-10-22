@@ -83,6 +83,12 @@ public enum CompositionBudget {
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
+    /** How many combinations of how often each of several keys occurs are tried for the lists of
+     *  an outer list. They multiply with the keys, and each is a container composed whole, so a
+     *  walk over them is held to this and not to the containers it offers, which count only the
+     *  ones that were built. */
+    COUNTS_OF_KEYS_TRIED(4096),
+
     /** How many values of an element of a type that has only so many are read for the counts its
      *  container is composed for, each read for every statement the counts are of. Past it the
      *  values left are not offered, and the container is composed of the ones read. The same
@@ -169,6 +175,21 @@ public enum CompositionBudget {
 
     /** How many levels past the one a side starts from are asked for. */
     LEVELS_A_SIDE_IS_ASKED_AT(8),
+
+    /** How many numbers, from one up, are tried as a divisor of a level a product is asked at.
+     *  The pairs of the divisors not tried are not asked, and the walk is carried out with the
+     *  figure. */
+    DIVISORS_OF_A_PRODUCT_TRIED(4096),
+
+    /** How many values of the divisor are tried for a remainder an input's number leaves of
+     *  another's, nearest nought first. The dividends of the divisors not tried are not asked, and
+     *  the walk is carried out with the figure. */
+    DIVISORS_OF_A_REMAINDER_TRIED(1024),
+
+    /** How many remainders, from nought up, are tried as the part of a level that a remainder of a
+     *  form takes beside the numbers added to it. The remainders not tried are not asked, and the
+     *  walk is carried out with the figure. */
+    REMAINDERS_A_SUM_IS_TRIED_AT(64),
 
     /**
      * How often a walk re-reads the rules with the positions it has fixed.
@@ -335,14 +356,18 @@ public enum CompositionBudget {
     TOTAL_READINGS_OF_ONE_CONDITION(512),
 
     /**
-     * How many parts the statement one step of a reading concludes comes to, written out: every
+     * How many parts the statement one step of a reading concludes comes to, as it is held: every
      * part it holds counted as many times as it holds it, however many of them are one value.
      *
      * <p>Beside the readings and not in place of them. A reading stated more than once — a
      * condition where it holds and denied where it does not, the arms of a match each beside the
      * denial of every arm before it — makes a statement that grows with how deep such steps stand
-     * inside one another, so a few readings can come to more parts than any figure; and every
-     * reader of a statement walks it written out.
+     * inside one another, so a few readings can come to more parts than any figure.
+     *
+     * <p>What is held and not what a reader of it does. A reader walks a statement as it is held,
+     * and so walks no more of it than this; except a count of statements, which is held as the
+     * statements and the counts it admits, each statement once, and which a reader that takes it
+     * apart into its choices walks as {@link #PARTS_THE_CHOICES_OF_A_COUNT_COME_TO} bounds.
      *
      * <p><b>Reaching it gives the step up and says so.</b> The step is concluded as a part nothing
      * read, naming this as why ({@link souther.compiler.meaning.WhyUnread.MorePartsThanAreConcluded}).
@@ -350,6 +375,24 @@ public enum CompositionBudget {
      * what the step itself builds before it is counted is not bounded by this.
      */
     PARTS_A_DERIVATION_CONCLUDES(4096),
+
+    /**
+     * How many parts the choices of which of some statements hold come to written out, every count
+     * one reader is handed together, for a reader that takes counts apart into those choices
+     * ({@link souther.compiler.meaning.CountsWrittenOut}).
+     *
+     * <p>Beside {@link #PARTS_A_DERIVATION_CONCLUDES} and not in place of it. That one bounds what
+     * a step states, and a count of statements is stated as the statements and the counts it
+     * admits, each statement once. Written out as choices, every choice names every statement it
+     * needs, so exactly one of {@code n} is {@code n} choices of {@code n} statements — and what a
+     * reader that needs the choices walks grows with that and not with what is stated. This bounds
+     * that walk: what every count one reader is handed comes to together, and not each count on
+     * its own, so a statement holding several counts is held to it once.
+     *
+     * <p><b>Reaching it gives the choices up and says so.</b> The reader is handed none, and takes
+     * the count as it takes a part it could not see into, naming this as why.
+     */
+    PARTS_THE_CHOICES_OF_A_COUNT_COME_TO(1 << 16),
 
     /**
      * How many parts of a disjunction one reading of a condition takes alone, to know which of them
@@ -481,6 +524,21 @@ public enum CompositionBudget {
     NUMBERS_OF_A_SET_TRIED(8),
 
     /**
+     * How many choices of one number for each of several totals are tried before one of them is
+     * built for.
+     *
+     * <p>Several totals of one container are answered by one container, so what is tried is a
+     * number for each of them at once, and the choices are the products of what each total's
+     * numbers are: two totals with four numbers each are sixteen choices. That is another amount
+     * of work than the numbers of one set, which {@link #NUMBERS_OF_A_SET_TRIED} bounds, and each
+     * is bounded by its own figure so that raising one changes only the work it counts.
+     *
+     * <p>Spent only where a choice was left out. Choices that fit are every choice there is, and a
+     * figure named there is a number an author raises to be told the same thing.
+     */
+    COMBINATIONS_OF_TOTALS_TRIED(8),
+
+    /**
      * The most code points of a class a string is asked to hold up to which every way of writing a
      * string holding that many is tried.
      *
@@ -527,7 +585,19 @@ public enum CompositionBudget {
      * by itself: a row run already costs nothing to look at again, so a search with none left goes
      * on as far as rows run before take it.
      */
-    RUNS_REPAIRING_A_ROW(16);
+    RUNS_REPAIRING_A_ROW(16),
+
+    /**
+     * How many rows a walk composing a row for a point may hand the choice among the rows that
+     * answer, each once: the ones that were run and answered, the ones that were run and did not,
+     * and the ones that did not meet what they were composed for.
+     *
+     * <p>Counted in rows composed and not in runs, because a row that is composed again or does not
+     * meet the requirement costs composing and no run, and a walk over every assignment of every
+     * parameter multiplies. It stops the walk before a row that answers was found, so the point is
+     * one this compiler stopped looking for a row at, and never one no row answers at.
+     */
+    ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64);
 
     private final int maximum;
 
@@ -565,6 +635,8 @@ public enum CompositionBudget {
             case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
             case SHARES_A_COUNT_IS_TRIED_AT ->
                     "how many ways of sharing out a container's elements are tried for a count";
+            case COUNTS_OF_KEYS_TRIED ->
+                    "how many combinations of how often each key occurs are tried";
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
                     "how many values of an element are read for a count";
             case WAYS_DOWN_TO_A_TOTAL_TRIED -> "how many ways down to what a total adds up are tried";
@@ -588,6 +660,12 @@ public enum CompositionBudget {
             case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
                     "how many values of an unbounded progression are tried";
             case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
+            case DIVISORS_OF_A_PRODUCT_TRIED ->
+                    "how many numbers are tried as a divisor of a level of a product";
+            case DIVISORS_OF_A_REMAINDER_TRIED ->
+                    "how many values are tried as the divisor of a remainder an input leaves";
+            case REMAINDERS_A_SUM_IS_TRIED_AT ->
+                    "how many remainders are tried beside the numbers added to them";
             case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
             case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
                     "how many values a position on the way is tried at";
@@ -607,6 +685,9 @@ public enum CompositionBudget {
                     "how many times one condition is read in all, along every case and value";
             case PARTS_A_DERIVATION_CONCLUDES ->
                     "how many parts what one step of a reading states comes to, written out";
+            case PARTS_THE_CHOICES_OF_A_COUNT_COME_TO ->
+                    "how many parts the choices of which of some statements hold come to, written"
+                            + " out for a reader that takes a count of them apart";
             case ALTERNATIVES_A_PATH_TRIES ->
                     "how many parts of one of several things a path takes alone, to know which of"
                             + " them it leaves";
@@ -619,11 +700,16 @@ public enum CompositionBudget {
                     "how many steps the cases where a line of a statement decides are taken"
                             + " through, asking whether a row stands on each side of it";
             case NUMBERS_OF_A_SET_TRIED -> "how many of the numbers a class admits are tried";
+            case COMBINATIONS_OF_TOTALS_TRIED ->
+                    "how many choices of a number for each of several totals of one container are"
+                            + " tried";
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
                     "how many code points of a class a string is searched for in full";
             case CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
                     "how many code points past a count a string is looked for";
             case RUNS_REPAIRING_A_ROW -> "how many runs looking for a row that goes further may make";
+            case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
+                    "how many rows a walk composing a row for a point hands the choice of a row";
         };
     }
 
@@ -666,23 +752,28 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
+                 SHARES_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
+                 VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
-                 LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
+                 LEVELS_A_SIDE_IS_ASKED_AT, DIVISORS_OF_A_PRODUCT_TRIED,
+                 DIVISORS_OF_A_REMAINDER_TRIED, REMAINDERS_A_SUM_IS_TRIED_AT,
+                 TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
+                 PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
                  WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
+                 COMBINATIONS_OF_TOTALS_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
-                 RUNS_REPAIRING_A_ROW -> null;
+                 RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW -> null;
         };
     }
 }

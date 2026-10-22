@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
@@ -47,6 +48,16 @@ public sealed interface Refinement {
      * an author is told when the compiler is the one that is confused.
      */
     String discriminated();
+
+    /**
+     * Whether a value observed at a position this narrows is one it leaves standing there.
+     *
+     * <p>The one test, read by whatever walks a row through a narrowing and by whatever picks the
+     * arm an observed element is taken by, so that the two cannot disagree about which case a value
+     * turned out to be. A value read short says nothing of its case and is no value this leaves;
+     * which is why a caller asks whether the observation was read whole first.
+     */
+    boolean leaves(ObservedValue here);
 
     /**
      * The narrowing {@code one} is, or null where sitting in that distinction narrows no position.
@@ -154,6 +165,15 @@ public sealed interface Refinement {
         }
 
         @Override
+        public boolean leaves(ObservedValue here) {
+            return switch (here) {
+                case ObservedValue.Unit unit -> leaf.equals(unit.type());
+                case ObservedValue.Constructed made -> leaf.equals(made.type());
+                default -> false;
+            };
+        }
+
+        @Override
         public boolean equals(Object other) {
             return other instanceof SumCase that && leaf.equals(that.leaf);
         }
@@ -200,6 +220,11 @@ public sealed interface Refinement {
         @Override
         public String discriminated() {
             return spelled() + "[presence]";
+        }
+
+        @Override
+        public boolean leaves(ObservedValue here) {
+            return present != (here instanceof ObservedValue.Absent);
         }
 
         @Override

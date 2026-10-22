@@ -1,8 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -358,7 +361,10 @@ final class DecisionPath {
                 case OnTheWay.TakenIn taken -> out.add(taken);
                 case OnTheWay.OneOf several ->
                         several.alternatives().forEach(way -> out.addAll(takenIn(way)));
-                case OnTheWay.Narrowed _, OnTheWay.Settled _, OnTheWay.Declined _ -> { }
+                // Which of the statements counted hold is no entry a search of one alternative
+                // holds the row to.
+                case OnTheWay.Narrowed _, OnTheWay.Settled _, OnTheWay.Declined _,
+                     OnTheWay.Counted _ -> { }
             }
         }
         return out;
@@ -372,12 +378,25 @@ final class DecisionPath {
      * so two calls reading one place read the value held against itself.
      */
     private record Place(ValueName.Stdlib operation, TakenArguments arguments,
-                         List<TermPath.Step> steps) {}
+                         List<TermPath.Step> steps, Computed computed) {}
+
+    /** What a total that turns on where each element stands is a total of, beside the place of
+     *  the list: the computation, what it stands as, and the direction the elements are handed
+     *  in. Two such totals of one list are two numbers. The answer itself is not part of it, since
+     *  which call of the dependency it is has no part in which value a row writes. */
+    private record Computed(ElementValue computation, Type each, TraversalDirection direction) {}
 
     private static Place placeOf(DecisionAtom atom, DecisionSubject.AnAnswer at) {
-        return atom instanceof DecisionAtom.TakenOfAnAnswer taken
-                ? new Place(taken.operation(), taken.arguments(), at.steps())
-                : new Place(null, null, at.steps());
+        return switch (atom) {
+            case DecisionAtom.TakenOfAnAnswer taken ->
+                    new Place(taken.operation(), taken.arguments(), at.steps(), null);
+            case DecisionAtom.ComputedOverAnAnswer computed ->
+                    new Place(computed.operation(), TakenArguments.NONE, at.steps(),
+                            new Computed(computed.computation(), computed.each(),
+                                    computed.direction()));
+            case DecisionAtom.OfAnAnswer _, DecisionAtom.OfTheInput _ ->
+                    new Place(null, null, at.steps(), null);
+        };
     }
 
     /**

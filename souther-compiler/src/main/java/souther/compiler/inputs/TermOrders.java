@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 
 import java.util.List;
@@ -40,6 +41,7 @@ public final class TermOrders {
     private final Carrier observed;
     private final Carrier answered;
     private final Map<ElementProjection, Carrier> fields;
+    private final Map<ElementProjection, List<TypeSymbol>> worn;
 
     /**
      * @param term     the number these are the orders of. Carried, because an answer that leaves
@@ -52,16 +54,21 @@ public final class TermOrders {
      *                 is drawn and written back on
      */
     TermOrders(NumericTerm term, Carrier observed, Carrier answered) {
-        this(term, observed, answered, Map.of());
+        this(term, observed, answered, Map.of(), Map.of());
     }
 
     /**
      * @param fields   for a term over what a walk computed of each element: what each field the
      *                 computation reads is decoded on. Nothing for any other term, which reads no
      *                 field of an element
+     * @param worn     for a term read off the places of an element: the names the declaration puts
+     *                 at each place on the way to them, the element itself among them, where it
+     *                 puts any. A newtype is no step, so a value there may be written inside them,
+     *                 and only the declaration says which they are
      */
     TermOrders(NumericTerm term, Carrier observed, Carrier answered,
-               Map<ElementProjection, Carrier> fields) {
+               Map<ElementProjection, Carrier> fields,
+               Map<ElementProjection, List<TypeSymbol>> worn) {
         if (term == null) {
             throw new IllegalArgumentException("orders of no term, which is an answer to nothing");
         }
@@ -69,6 +76,7 @@ public final class TermOrders {
         this.observed = observed;
         this.answered = answered;
         this.fields = Map.copyOf(fields);
+        this.worn = Map.copyOf(worn);
     }
 
     /** The number these are the orders of. */
@@ -120,15 +128,102 @@ public final class TermOrders {
         return at == null ? null : read(observed.valueOf(at));
     }
 
-    /**
-     * The number of times the value {@code own} an element holds occurs among {@code every} value
-     * the elements of its container hold there, for a term that counts them.
-     */
-    public NumericTerm.Reading readAmong(ObservedValue own, List<ObservedValue> every) {
-        if (!(term instanceof NumericTerm.Multiplicity)) {
-            throw new IllegalArgumentException(term + " is not a count of an element's equals");
+    /** The term, for a reader of a number of an element read off the elements beside it. */
+    public NumericTerm.OfAnElementsNeighbours amongItsNeighbours() {
+        if (!(term instanceof NumericTerm.OfAnElementsNeighbours among)) {
+            throw new IllegalArgumentException(term + " is a number of no element's neighbours");
         }
-        return TermReading.among(this, own, every);
+        return among;
+    }
+
+    /**
+     * The elements of one occurrence of the container a term read off an element's neighbours is
+     * taken over, put together once for the number of any of them — or every element of the run a
+     * term gathers under keys ({@link NumericTerm.GatheredUnderItsKey}), every occurrence's.
+     *
+     * <p>Each element is handed as what it holds at each way into it. Whatever is asked of it is
+     * what the number of an element asks and no more, and an element is asked only when some
+     * number needs it: how often a value occurs reads every element's value, and the end of a
+     * key's values, or what they come to, reads every element's key and the values of that key's
+     * elements alone, the first time that key is asked about.
+     *
+     * @param each every element of the occurrence, or of the run, in the order they are held
+     */
+    public <G> ElementsTogether<G> together(List<Function<ElementProjection, Holding<G>>> each) {
+        return TermReading.together(this, each);
+    }
+
+    /**
+     * The elements of the run a term gathers under a key an input holds ({@link
+     * NumericTerm.GatheredUnderAKey}), every occurrence's, put together once for the number of
+     * any key asked.
+     *
+     * @param each every element of the run, in the order they are held
+     */
+    public <G> ElementsUnderAKey<G> togetherUnderAKey(
+            List<Function<ElementProjection, Holding<G>>> each) {
+        return TermReading.togetherUnderAKey(this, each);
+    }
+
+    /**
+     * What an element holds at a way into it: a value, or nothing, for a reason in the words of
+     * whoever handed the element over.
+     *
+     * <p>Nothing is an answer the caller has and this does not. A row that wrote nothing there and
+     * a walk that could not reach the place are two things to a row, and a value of another shape
+     * is a third to a read-back; the number only says which nothing it came to first.
+     */
+    public sealed interface Holding<G> {
+
+        record Value<G>(ObservedValue value) implements Holding<G> {
+
+            public Value {
+                Objects.requireNonNull(value, "a value held is a value");
+            }
+        }
+
+        record Nothing<G>(G why) implements Holding<G> {
+
+            public Nothing {
+                Objects.requireNonNull(why, "holding nothing says why");
+            }
+        }
+    }
+
+    /** The elements of one occurrence, put together ({@link #together}). */
+    public interface ElementsTogether<G> {
+
+        /**
+         * The number {@code own}, one of the elements, reads among them.
+         *
+         * <p>What stops it is the first thing its reading asks that holds nothing — its own value
+         * and then every element's, or its own key and then each key and each value of its key
+         * in the order the elements stand, up to the first of those values that was not read —
+         * and failing that, what the number's own reading of the values says.
+         */
+        Neighbouring<G> numberOf(Function<ElementProjection, Holding<G>> own);
+    }
+
+    /** The elements of a run put together ({@link #togetherUnderAKey}). */
+    public interface ElementsUnderAKey<G> {
+
+        /**
+         * What the elements of the key {@code asked}, a value an input holds, come to.
+         *
+         * <p>What stops it is the first element in order whose key holds nothing or is read as no
+         * number, as it stops every key; then the first of the key's own elements, in order, that
+         * stops its number. A key no element has comes to no number, which is a reading and not a
+         * stop.
+         */
+        Neighbouring<G> numberUnder(ObservedValue asked);
+    }
+
+    /** A number read among an element's neighbours, or the nothing its reading came to first. */
+    public sealed interface Neighbouring<G> {
+
+        record Read<G>(NumericTerm.Reading reading) implements Neighbouring<G> {}
+
+        record HeldNothing<G>(G why) implements Neighbouring<G> {}
     }
 
     /**
@@ -148,6 +243,32 @@ public final class TermOrders {
         return TermReading.over(this, values);
     }
 
+    /** How often {@code own}, one of the values of a run, occurs among {@code values}, all of
+     *  them ({@link #readEachAmong}). */
+    public NumericTerm.Reading readAmong(ObservedValue own, List<ObservedValue> values) {
+        if (!(term instanceof NumericTerm.OccurrencesOfItsValue
+                || term instanceof NumericTerm.OccurrencesOfAKey)) {
+            throw new IllegalArgumentException(term + " is no count of how often a value occurs"
+                    + " in a run");
+        }
+        return TermReading.occurrencesOf(this, own, values);
+    }
+
+    /**
+     * How often each of the values of a run occurs among all of them: one reading for each value,
+     * in the order they are given.
+     *
+     * <p>The values of every occurrence of the place the term counts, gathered across the
+     * containers they stand in ({@link NumericTerm.OccurrencesOfItsValue}).
+     */
+    public List<NumericTerm.Reading> readEachAmong(List<ObservedValue> values) {
+        if (!(term instanceof NumericTerm.OccurrencesOfItsValue)) {
+            throw new IllegalArgumentException(term + " is no count of how often a value occurs"
+                    + " in a run");
+        }
+        return TermReading.occurrencesAmong(this, values);
+    }
+
     /**
      * The same, over a run computed of each element: one reading per element, each answering what
      * stands at a field of that element.
@@ -165,6 +286,20 @@ public final class TermOrders {
      *  element, or null where nothing orders it. */
     public Carrier fieldCarrier(ElementProjection field) {
         return fields.get(field);
+    }
+
+    /** The names the declaration puts at {@code place} of an element, outermost first; none where
+     *  it puts none there. */
+    public List<TypeSymbol> wornAt(ElementProjection place) {
+        return worn.getOrDefault(place, List.of());
+    }
+
+    /**
+     * What stands at {@code place} of {@code element}, walked through the names the declaration puts
+     * on the way ({@link ElementProjection#in}).
+     */
+    public ObservedValue in(ElementProjection place, ObservedValue element) {
+        return place.in(element, this::wornAt);
     }
 
     /** What a value at the term's path is decoded on, or null where nothing orders it. */
@@ -191,12 +326,13 @@ public final class TermOrders {
                 && term.equals(that.term)
                 && Objects.equals(observed, that.observed)
                 && Objects.equals(answered, that.answered)
-                && fields.equals(that.fields);
+                && fields.equals(that.fields)
+                && worn.equals(that.worn);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(term, observed, answered, fields);
+        return Objects.hash(term, observed, answered, fields, worn);
     }
 
     @Override

@@ -560,16 +560,16 @@ enum Question {
             // weaker answer to a question that has one, and which of them was read would be
             // whichever reader arrived.
             //
-            // And the narrowings of an exact value. What they are given is a Rational, which is on
-            // no carrier and has no counts for anything to be read in, so a bound relating what
-            // they answer to what they were handed has nothing to relate: `Decimal.toInt` states
-            // one because both sides of it are counted, and these have only one side that is.
+            // And the narrowing of an exact value to a decimal, which rounds at a scale it is
+            // handed and has no bound written for it. `Rational.toInt` has one: what it is given is
+            // a Rational, and where that is a form over counted values, being within one of it is a
+            // line on them.
             return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
                     op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
                     op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"),
                     op("Decimal", "max"), op("Decimal", "clamp"), op("Decimal", "fromInt"),
                     op("Decimal", "round"), op("Date", "daysBetween"),
-                    op("Rational", "toInt"), op("Rational", "toDecimal"));
+                    op("Rational", "toDecimal"));
         }
     },
 
@@ -631,15 +631,13 @@ enum Question {
         @Override
         Set<ValueName> deliberatelyUnanswered() {
             // They compute a new number in one way rather than case by case: what `a + b` answers
-            // is a sum of the two, `compare` answers a sign, `floorMod` a remainder, `toInt` a
-            // whole number, `round` and `Rational.toDecimal` a value at another scale.
-            // `Decimal.fromInt` answers the number it was given unconditionally, which is a
-            // statement of its own rather than a case.
+            // is a sum of the two, `floorMod` a remainder, `toInt` a whole number, `round` and
+            // `Rational.toDecimal` a value at another scale. `Decimal.fromInt` answers the number
+            // it was given unconditionally, which is a statement of its own rather than a case.
             return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
                     op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
-                    op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
-                    op("Decimal", "toInt"), op("Decimal", "round"), op("Decimal", "fromInt"),
-                    op("Rational", "toDecimal"));
+                    op("Int", "floorMod"), op("Decimal", "toInt"), op("Decimal", "round"),
+                    op("Decimal", "fromInt"), op("Rational", "toDecimal"));
         }
     },
 

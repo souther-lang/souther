@@ -175,7 +175,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
-        assertEquals(answer, in.at().valueOf(x.binding()),
+        assertEquals(answer, in.at().givenTo(x.binding()).value(),
                 "what the arm opened is what its name was given");
     }
 

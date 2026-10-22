@@ -5,6 +5,7 @@ import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -32,6 +33,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -352,9 +354,27 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         assertEquals(Stage.INVOKED, crossed.stage());
     }
 
+    /** The classes of each model, emitted once for the class. */
+    private static final Map<String, Map<String, ClassFileImage>> EMITTED = new HashMap<>();
+
+    /** What each model's rows came to against each implementation, run once for the class. */
+    private static final Map<List<String>, Observations> RUN = new HashMap<>();
+
+    /**
+     * And given back when the class is done with them: a fork keeps its JVM.
+     *
+     * <p>Kept for the class because several questions here read one run — what the rows came to,
+     * what applied them, what was counted — and none of them changes it.
+     */
+    @AfterAll
+    static void released() {
+        EMITTED.clear();
+        RUN.clear();
+    }
+
     private static Map<String, ClassFileImage> compiled(String model) {
-        Compilation c = Compilation.ofSource(model, "Main");
-        return c.db().ask(new Output.All()).value();
+        return EMITTED.computeIfAbsent(model,
+                written -> Compilation.ofSource(written, "Main").db().ask(new Output.All()).value());
     }
 
     private static RowOutcome named(Observations observed, String name) {
@@ -374,6 +394,16 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
 
     private static Observations evaluated(String model, String implementation)
             throws Exception {
+        List<String> asked = List.of(model, implementation);
+        Observations known = RUN.get(asked);
+        if (known == null) {
+            known = run(model, implementation);
+            RUN.put(asked, known);
+        }
+        return known;
+    }
+
+    private static Observations run(String model, String implementation) throws Exception {
         Compilation c = Compilation.ofSource(model, "Main");
         c.db().ask(new Output.All());
         assertEquals(List.of(), c.diagnostics().values().stream().flatMap(List::stream)

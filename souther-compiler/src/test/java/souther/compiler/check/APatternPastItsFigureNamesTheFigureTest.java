@@ -4,8 +4,6 @@ import net.unit8.notation199x.pattern.Meter;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
@@ -78,7 +76,7 @@ class APatternPastItsFigureNamesTheFigureTest {
                 new BlockReason.WhatItStatesIsNoLine(
                         BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE).figures());
         assertEquals(List.of(WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(
-                        WrittenOutElements.MOST_WALKED)),
+                        ElementsWrittenOut.MOST_WALKED)),
                 new BlockReason.WhatItStatesIsNoLine(
                         BlockReason.WhatItStatesIsNoLine.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT)
                         .figures());
@@ -147,8 +145,6 @@ class APatternPastItsFigureNamesTheFigureTest {
                 new BlockReason.ValueRulesNotReachedPastDepthLimit(),
                 new BlockReason.ValueRulesNotReached(),
                 new BlockReason.TypeUnresolved(),
-                new BlockReason.RecursiveExpansion(TypeSymbols.declared(new TypeKey("g", "Chain")),
-                        TermPath.of("c")),
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.LineAtANumberNoRatioHolds(),
@@ -191,7 +187,6 @@ class APatternPastItsFigureNamesTheFigureTest {
                     invariant plain = String.matches("a{300}", value)
                     invariant marked = String.matches("a{300}b?", value)
                 """, "Main");
-        compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Long"));
         ReadingPolicy policy = new ReadingPolicy(ReadAs.THE_COMPILATION_DOES.dnfExpansionLimit(),

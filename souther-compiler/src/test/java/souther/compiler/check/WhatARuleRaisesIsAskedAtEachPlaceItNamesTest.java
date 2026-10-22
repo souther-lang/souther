@@ -41,8 +41,8 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
      * <p>{@code lo >= 1} is a bound this compiler folds, so where the values at {@code lo} stop is
      * a question it raises and answers. {@code hi <= 10 * 2} states where the values at {@code hi}
      * stop and this could not fold the number, so the line is raised and stands. {@code
-     * Decimal.compare(a.value, b.value) <= 0} speaks of what an operation answered, so whether it
-     * bounds {@code a} or {@code b} is what nothing worked out — and which values may stand at
+     * Decimal.compare(a.value, b.value) <= 2} speaks of what an operation answered and states no
+     * order of its arguments, so whether it bounds {@code a} or {@code b} is what nothing worked out — and which values may stand at
      * either is a question the model asks regardless.
      */
     private static final String SOURCE = """
@@ -58,7 +58,7 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
                 }
                 invariant said = lo >= 1
                        && hi <= 10 * 2
-                       && Decimal.compare(a.value, b.value) <= 0
+                       && Decimal.compare(a.value, b.value) <= 2
 
             data Taken
 
@@ -128,7 +128,6 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
     /** What the one clause of {@code Span} raises there. */
     private static Required raised() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);

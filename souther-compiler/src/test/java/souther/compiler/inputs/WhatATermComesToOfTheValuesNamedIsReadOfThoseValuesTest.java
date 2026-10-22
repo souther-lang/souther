@@ -5,6 +5,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
 import souther.compiler.values.Value;
@@ -33,7 +34,8 @@ class WhatATermComesToOfTheValuesNamedIsReadOfThoseValuesTest {
 
     private static TermOrders notWhitespaceOf(String position) {
         return TermOrdersFixtures.at(NumericTerm.CodePointClassCount.of(
-                        TermPath.of(position), new CodePointClass.NotWhitespace(), Type.STRING,
+                        TermPath.of(position), new CodePointClass.NotWhitespace(),
+                        CaseMapping.NONE, Type.STRING,
                         ScopedDeclarations.wrapsOf(SYMBOLS)),
                 Type.STRING, SYMBOLS);
     }

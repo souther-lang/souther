@@ -55,7 +55,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               Map<BindingId, ElementProjection> projected,
                               ValueTemplates templates,
                               Map<BindingId, ElementAnswer> answers,
-                              Map<BindingId, ClosureUses> uses) {
+                              Map<BindingId, ClosureUses> uses,
+                              OrderOfElements order) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -71,6 +72,21 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
             throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
                     + " none");
         }
+        if (order == null) {
+            throw new IllegalArgumentException("a body reads the order of its lists or not, or is"
+                    + " not known to");
+        }
+    }
+
+    /** Of a body whose order of elements nothing read. */
+    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
+                           ElementProvenance provenance,
+                           Map<BindingId, ElementProjection> projected,
+                           ValueTemplates templates,
+                           Map<BindingId, ElementAnswer> answers,
+                           Map<BindingId, ClosureUses> uses) {
+        this(containers, held, provenance, projected, templates, answers, uses,
+                OrderOfElements.NOT_KNOWN);
     }
 
     /** Of a body whose closures are asked for no more than what they answered. */
@@ -122,7 +138,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         joinedEntries.putAll(other.uses);
         return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
                 joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers,
-                joinedEntries);
+                joinedEntries, order.and(other.order));
     }
 
     /**
@@ -237,7 +253,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, List<HeldIn>> found = new LinkedHashMap<>();
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
-        Map<BindingId, Core> standing = new LinkedHashMap<>();
+        Map<BindingId, ElementAnswer> standing = new LinkedHashMap<>();
         walk(body, found, held, provenance, answered, standing);
         for (Core template : templates) {
             walk(template, found, held, provenance, answered, standing);
@@ -255,9 +271,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ElementProjection> projected =
                 projections(answered, found, held, provenance, newtypes, closures);
         standing.forEach((element, closure) -> {
-            closures.putIfAbsent(element, new ElementAnswer(element, closure));
+            closures.putIfAbsent(element, closure);
             ElementProjection was =
-                    ElementProjection.read(closure, element, held, newtypes);
+                    ElementProjection.read(closure.body(), element, held, newtypes);
             if (was != null) {
                 projected.putIfAbsent(element, was);
             }
@@ -268,7 +284,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ClosureUses> entered = ClosureEntries.of(roots, held);
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
                 : new ElementBindings(found, held, provenance, projected, values, closures,
-                        entered);
+                        entered, OrderOfElements.of(roots, held));
     }
 
     /**
@@ -312,7 +328,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                             provenance.projectedFrom(parameter), held)) {
                 return;
             }
-            closures.putIfAbsent(read.binding(), new ElementAnswer(parameter, body));
+            // What an expansion wrote says which element the closure was handed and nothing of
+            // where that element stood, so the closure is handed no position this knows of.
+            closures.putIfAbsent(read.binding(), new ElementAnswer(parameter, body, null));
             ElementProjection projected =
                     ElementProjection.read(body, parameter, held, newtypes);
             if (projected != null) {
@@ -365,7 +383,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static void walk(Core e, Map<BindingId, List<HeldIn>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
-                             Map<BindingId, Core> standing) {
+                             Map<BindingId, ElementAnswer> standing) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
             // What a name was given, as it was written. A build of a value is held as the build:
@@ -415,7 +433,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static void handed(ValueName operation,
                                List<Core> args,
                                Map<BindingId, List<HeldIn>> found,
-                               Map<BindingId, Core> standing, Map<BindingId, Core> held) {
+                               Map<BindingId, ElementAnswer> standing,
+                               Map<BindingId, Core> held) {
         Combinators.Handed handed = Combinators.handedTo(operation, args,
                 closure -> blockOf(closure, held));
         if (handed == null) {
@@ -437,7 +456,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         takes(found, element, new HeldIn(handed.container(), HeldIn.Part.ELEMENT,
                 handed.applied(), ofAnOption));
         if (standing != null && answersOnePerElementOf(operation, handed.container(), args)) {
-            standing.putIfAbsent(element, handed.step().body());
+            standing.putIfAbsent(element, new ElementAnswer(element, handed.step().body(),
+                    handed.position() == null ? null : handed.position().binding()));
         }
     }
 
@@ -648,7 +668,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      * compiler builds, and reading it as a closure nobody wrote would file the rule inside it
      * nowhere and say nothing about having done so.
      */
-    private static Core.Block blockOf(Core closure, Map<BindingId, Core> held) {
+    static Core.Block blockOf(Core closure, Map<BindingId, Core> held) {
         Core at = Core.withoutStanding(closure);
         Set<BindingId> met = new HashSet<>();
         while (at instanceof Core.Read read) {

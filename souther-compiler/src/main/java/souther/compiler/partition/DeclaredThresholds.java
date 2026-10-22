@@ -38,6 +38,14 @@ import java.util.Optional;
  * dates — is one this reads to the end, so a clause set aside there is asked here rather than taken
  * as settled.
  *
+ * <p>Save one whose arithmetic named an operation no form says
+ * ({@link ClauseWithoutAnEnd#noFormSaysIt}): a product of two values that are not constants, a
+ * quotient by one. Every place it names is told that no line on its values says it, which is a sentence about
+ * the arithmetic and not about the other reading's atoms, and a line drawn here would say of the
+ * same comparison that one does. So such a clause draws no line here, and nothing here says it draws
+ * none: it stays the rule nothing read, which is what an arithmetic that comes to read it will
+ * change.
+ *
  * <p>Only the lines that are on no position. A clause bounding one coordinate leaves an end, the end
  * becomes a cut of that position's axis, and the axis is where its line already is; drawn again here
  * it would be two lines where the author wrote one, and a row would be owed twice for one rule.
@@ -68,6 +76,9 @@ public final class DeclaredThresholds {
     /** What one conjunct draws, or nothing where it draws no line on a quantity of its own. */
     private static void drawn(String behavior, ClauseWithoutAnEnd clause,
                               InputReading read, List<LineDrawn> out) {
+        if (clause.noFormSaysIt()) {
+            return;
+        }
         Symbols symbols = read.symbols();
         Map<BindingId, TermPath> roots = rootsOf(clause, symbols, read.rules().newtypes());
         if (roots.isEmpty()) {
@@ -100,10 +111,29 @@ public final class DeclaredThresholds {
         // naming one value of the quantity, held equal or apart, keeps no end of it
         // ({@link #originOf}). What such a clause admits is the declaration's values themselves,
         // which is not a border a body's rule is measured against.
+        //
+        // And not between places this input does not have, for a clause of a copy of its type the
+        // listing does not reach. That copy answers for what the naming that opened it reaches, and
+        // a statement of its conjunct that names a place further down draws a line nobody can be
+        // owed a row at. Decided here, of the statement, because this is where the places one
+        // statement names are known; its neighbours in the conjunct are asked on their own.
         if (assessed instanceof ComparisonAssessment.AcrossPositions over
-                && over.places() == ComparisonAssessment.Places.ACROSS_THE_VALUE) {
+                && over.places() == ComparisonAssessment.Places.ACROSS_THE_VALUE
+                && (!clause.ofACopyNothingListed()
+                        || namesOnlyPlacesOfTheInput(over.cutting(), read))) {
             out.add(new LineDrawn(over.cutting(), originOf(clause, over.cutting())));
         }
+    }
+
+    /**
+     * Whether every position the line is over is one the input has.
+     *
+     * <p>Asked of the line's own coordinates, which every kind of quantity answers alike, so no
+     * kind of quantity is one this has to know about.
+     */
+    private static boolean namesOnlyPlacesOfTheInput(Cutting cutting, InputReading read) {
+        return cutting.over().stream()
+                .allMatch(coordinate -> read.domain().at(coordinate.path()) != null);
     }
 
     /**

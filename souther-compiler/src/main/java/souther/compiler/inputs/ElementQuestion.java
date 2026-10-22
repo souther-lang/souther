@@ -28,5 +28,33 @@ public enum ElementQuestion {
 
     /** Which position holds these very values, every occurrence of it and each as often as the
      *  container holds it, so that a total of them is a total of everything standing there. */
-    EVERY_OCCURRENCE
+    EVERY_OCCURRENCE,
+
+    /**
+     * Which position holds these very values, every occurrence of it once each, handed in a
+     * direction the question names ({@link TraversalDirection}) — so that where a value stands among
+     * them is where it stands counting from the end that direction starts at.
+     *
+     * <p>{@link #EVERY_OCCURRENCE} and the order beside it. That one crosses what puts the elements
+     * in another order, which a total of them does not see; a number that turns on where each
+     * element stands does, so this crosses the names and choices a list is written through, and
+     * of the operations only those declared to answer a list the other way round, each turning the
+     * direction over.
+     */
+    IN_THE_ORDER_WRITTEN,
+
+    /**
+     * Which container of the input a list holds one value for each element of, in the one
+     * occurrence of the container the list was made from, and where in the element that value
+     * stands — so that how often a value occurs in the list is how often it occurs there.
+     *
+     * <p>Not {@link #EVERY_OCCURRENCE}: a list made from the items of one order holds those items
+     * and none of another order's, and how often a value occurs among them is a number of that
+     * order.
+     */
+    ONE_PER_ELEMENT,
+
+    /** Which container of the input a list holds something exactly where it does, whatever the
+     *  values it holds are. */
+    SAME_EMPTINESS
 }

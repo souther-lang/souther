@@ -71,6 +71,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
 
     private static final String HELD = "L" + CHECK + "FieldDomains$Held;";
 
+    private static final String LIMITS = "L" + CHECK + "FieldDomains$ConstructionLimits;";
+
     private static final String ADMITTED = "Lsouther/compiler/values/AdmissibleSet;";
 
     private static final String REALIZATION = "L" + PARTITION + "TermRealizations$Realization;";
@@ -112,6 +114,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + "L" + CHECK + "RuleKey;Ljava/util/function/Function;" + SOURCE
                             + ")Ljava/util/List;",
                     THE_POSITION),
+            row(CHECK + "ElementsApart", "keptAt",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + CHECK + "RuleKey;" + TYPE
+                            + "Ljava/util/function/Function;" + SOURCE + ")Ljava/util/List;",
+                    THE_POSITION),
             row(CHECK + "InvariantChecker", "name",
                     "(Lsouther/compiler/core/Core;L" + CHECK + "RuleKey;" + TYPE + "L" + CHECK
                             + "Denotations;" + SYMBOLS
@@ -135,6 +141,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "NameReach$Observed;L" + INPUTS + "InputDomain$Gathered;L" + INPUTS
                             + "InputDomain$Reach;)V",
                     THE_POSITION),
+            row(INPUTS + "TermOrdering", "namesWorn", "(" + TYPE + INNERS + ")Ljava/util/List;",
+                    THE_SPINE),
             row(PARTITION + "BehaviorInputs", "view", "(" + TYPE + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "compose",
@@ -151,6 +159,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
                             + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "CardinalityComposer$OfTheType", "of",
+                    "(" + TYPE + CONTEXT + ")L" + PARTITION + "CardinalityComposer$OfTheType;",
+                    THE_POSITION),
             row(PARTITION + "ConstructionPlan", "applying",
                     "(L" + PARTITION + "ConstructionPlan$Settled;L" + INPUTS + "Refinement;" + INNERS
                             + SYMBOLS + KINDS + SUMS + ")L" + PARTITION
@@ -163,17 +174,18 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ConstructionPlan$WhatItMayHold;)L" + PARTITION
                             + "ConstructionPlan$NodeResult;",
                     THE_POSITION),
-            row(PARTITION + "ContainersAddingUp", "to",
-                    "(Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
+            row(PARTITION + "ContainersAddingUp", "composedThrough",
+                    "(L" + PARTITION + "ContainersAddingUp$FieldSolved;"
+                            + "Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
                             + "TermOrders;L" + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
-                            + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION
+                            + "ContainersAddingUp$HowManyIsAskedFor;Ljava/util/List;L" + PARTITION
                             + "DemandsInside;)" + REALIZATION,
                     THE_POSITION),
-            row(PARTITION + "NestedContainersAddingUp", "to",
-                    "(Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
-                            + "TermOrders;L" + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
-                            + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION
-                            + "DemandsInside;)" + REALIZATION,
+            row(PARTITION + "NestedContainersAddingUp", "levelsOf",
+                    "(" + TYPE + "Ljava/util/List;L" + INPUTS + "SearchRegion;" + CONTEXT + "L"
+                            + PARTITION + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION
+                            + "DemandsInside;L" + PARTITION + "ContainersAddingUp$WhatWasLeft;)L"
+                            + PARTITION + "NestedContainersAddingUp$Levels;",
                     THE_POSITION),
             row(PARTITION + "NestedContainersAddingUp", "typeAlong",
                     "(" + TYPE + "L" + INPUTS + "TermPath;L" + INPUTS + "TermPath;" + CONTEXT
@@ -188,7 +200,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "admittedStrings",
                     "(" + TYPE + CONTEXT + "I)Ljava/util/List;", THE_POSITION),
             row(PARTITION + "Partitions", "displacedRepresentativesOf",
-                    "(" + TYPE + CONTEXT + BOUNDS + HELD + ")" + PROPOSALS, THE_POSITION),
+                    "(" + TYPE + CONTEXT + LIMITS + ")" + PROPOSALS, THE_POSITION),
             row(PARTITION + "Partitions", "inReserve",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/List;)Ljava/util/List;",
                     THE_POSITION),
@@ -204,7 +216,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + CONTEXT + ")L" + PARTITION + "StringOfferShortfall;",
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesHolding",
-                    "(" + TYPE + CONTEXT + BOUNDS + HELD + "Ljava/util/Set;)" + PROPOSALS,
+                    "(" + TYPE + CONTEXT + LIMITS + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
@@ -223,18 +235,15 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(Ljava/util/List;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
                             + REALIZATION,
                     THE_POSITION),
-            row(PARTITION + "TermRealizations", "onThoseParts",
-                    "(Ljava/util/Map;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
-                            + REALIZATION,
-                    THE_POSITION),
             row(PARTITION + "TermRealizations", "oneValue",
                     "(L" + PARTITION + "FixtureTemplate;" + TYPE + SOURCE + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "stringsHoldingThatManyOf",
-                    "(Lsouther/compiler/semantics/CodePointClass;" + TYPE
+                    "(Lsouther/compiler/semantics/CodePointClass;"
+                            + "Lsouther/compiler/semantics/CaseMapping;" + TYPE
                             + "Lsouther/compiler/numeric/Place;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
-            row(PARTITION + "TermRealizations", "stringsHoldingTheirCounts",
+            row(PARTITION + "TermRealizations", "stringsHoldingTheirNumbers",
                     "(Ljava/util/Map;" + TYPE + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/inputs/SearchRegion;" + CONTEXT + ")"
                             + REALIZATION,
@@ -244,7 +253,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "ValuesOfAnElement", "valuesOf",
                     "(" + TYPE + "L" + INPUTS + "TermPath;" + ADMITTED + CONTEXT
-                            + "ILjava/util/function/Function;Ljava/util/Set;)Ljava/util/List;",
+                            + "ILjava/util/function/BiFunction;Ljava/util/Set;)Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "differing",
                     "(" + TYPE + "I" + HELD + CONTEXT + "Ljava/util/Set;)" + PROPOSALS,

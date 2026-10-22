@@ -45,7 +45,7 @@ public record RowAsRead(List<ObservedValue> values, Settlement.Reason whyNotRead
     /** Nothing here could read a row of this behavior at all. */
     public static RowAsRead nothingRead() {
         return new RowAsRead(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES,
-                new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered(), null);
+                new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered(), null);
     }
 
     /**

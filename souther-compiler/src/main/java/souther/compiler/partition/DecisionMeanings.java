@@ -129,7 +129,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             case OnTheWay.Narrowed _, OnTheWay.Declined _,
                  OnTheWay.TakenIn(var _, RowDemand.SoMany _) -> true;
             // One of several ways is no relation, and the column is what the condition states.
-            case OnTheWay.OneOf _ -> false;
+            case OnTheWay.OneOf _, OnTheWay.Counted _ -> false;
             // Taken off before a column is read ({@link #asked}): it asks nothing to read one off.
             case OnTheWay.Settled _ -> false;
         };
@@ -177,7 +177,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                                       boolean holds, var _) when overDecisionAtoms(form) ->
                     new DecidedCondition.Compared(new DecisionCondition.AComparison(
                             decisionForm(form), proposition), holds == held);
-            default -> DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
+            case Proposition.Compared _, Proposition.Always _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SoManyHold _, Proposition.WhereItAnswers _ ->
+                    DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
         };
     }
 
@@ -248,9 +253,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             // Which case a position is, asked by a condition and not by a fork, or one of several
             // ways: the column is what the condition states.
             case OnTheWay.Narrowed _ when condition != null -> asOneColumn(condition, held);
-            case OnTheWay.OneOf _ when condition != null -> asOneColumn(condition, held);
+            case OnTheWay.OneOf _, OnTheWay.Counted _ when condition != null ->
+                    asOneColumn(condition, held);
             case OnTheWay.OneOf several -> throw new IllegalArgumentException(
                     "one of several ways is read with the arm it is entering: " + several);
+            case OnTheWay.Counted counted -> throw new IllegalArgumentException(
+                    "a count of statements is read with the arm it is entering: " + counted);
             // An arm's, and read with the fork it is an arm of ({@link #asTheArm}): what the column
             // is turns on the answers the other arms have.
             case OnTheWay.Narrowed narrowed -> throw new IllegalArgumentException(
@@ -307,7 +315,11 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
     private Read asTheArm(Core.Match match, int part, InputReads reads,
                           ReachingCuts.Stating entered) {
         List<OnTheWay> onTheWay = entered.entries();
-        if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed) {
+        // A narrowing of a fork on a position is an answer to the question that fork asks. One of a
+        // fork on a value the body computed is what the arm comes to for the input, which is no
+        // answer to the question about the computed value.
+        if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed
+                && states.narrowsItsOwnPosition(match, part, reads)) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
@@ -328,10 +340,36 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                     new DecisionCondition.ACase(subject, states.answersOf(match, reads)),
                     narrowing), entered);
         }
+        Optional<DecidedCondition.Narrowed> ofTheInput = asACaseOfTheInput(match, part, reads);
+        if (ofTheInput.isPresent()) {
+            return new Read(ofTheInput.get(), entered);
+        }
         // Otherwise the column is what entering the arm states: which case a value the body
         // computed is of, under what.
         return new Read(columnOf(states.entered(match, part, reads), true, metAt(onTheWay),
                 states::denied), entered);
+    }
+
+    /**
+     * Arm {@code part} of a fork on a value the body computed, as the case of an input position
+     * the arms between them divide.
+     *
+     * <p>Each arm comes to a case of one position when every arm states exactly that: the same
+     * position, held, and the arms leave it nothing in common. The answers are what the
+     * declarations leave the position, as for a fork on the position itself, so the one question is
+     * asked whichever way the body reaches it. Empty where an arm states anything else, because
+     * nothing then says the arms divide the position and a table would admit a value that is two
+     * of them.
+     */
+    private Optional<DecidedCondition.Narrowed> asACaseOfTheInput(Core.Match match, int part,
+                                                                  InputReads reads) {
+        Optional<WhatConditionsState.DividedInput> divided = states.inputDividedBy(match, reads);
+        if (divided.isEmpty() || !divided.get().answered().containsKey(part)) {
+            return Optional.empty();
+        }
+        return Optional.of(new DecidedCondition.Narrowed(
+                new DecisionCondition.ACase(divided.get().of(), divided.get().question()),
+                divided.get().answered().get(part)));
     }
 
     /**
@@ -364,6 +402,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                 }
                 case OnTheWay.OneOf several -> {
                     return several.condition();
+                }
+                case OnTheWay.Counted counted -> {
+                    return counted.condition();
                 }
                 case OnTheWay.TakenIn _, OnTheWay.Narrowed _ -> { }
             }

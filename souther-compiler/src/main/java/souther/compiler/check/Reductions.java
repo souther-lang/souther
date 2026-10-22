@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.proof.TheWalkEnds;
 import souther.compiler.proof.WalksFromASeed;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.types.ValueName;
 
@@ -29,25 +30,30 @@ import java.util.function.Function;
  * <p>What the rule licenses is stated once, here, and is the whole of what anything downstream may
  * assume: the answer is the seed, or is {@code step} applied to an earlier accumulator and something
  * the container holds. Nothing about how many elements there are, nothing about the order they
- * arrive in, and nothing about the walk terminating. {@link InductiveBounds} is written against
- * exactly that and knows no operation's name.
+ * arrive in unless {@link Reducing#inTheContainersOrder} says it, and nothing about the walk
+ * terminating. {@link InductiveBounds} is written against
+ * exactly that and knows no operation's name. That the step is applied to every element is a
+ * separate fact, proved of the operation's body by {@link Combinators} and handed on beside it
+ * ({@link Reducing#applied}).
  */
 final class Reductions {
 
     /** A reduction's seed and the closure parameter it arrives on, as positions of the call —
      * meaningful only beside the call they are positions in, which is why they are read through
      * {@link #reducing} rather than handed about on their own. */
-    record Reduction(int seedArg, int accumulatorParam) {}
+    record Reduction(int seedArg, int accumulatorParam, boolean inTheContainersOrder) {}
 
     /**
-     * What a call reduces: the value it starts from, the step it repeats, and the parameters the step
-     * is handed.
+     * What a call reduces: the value it starts from, the step it repeats, the parameters the step
+     * is handed, and how far the operation goes applying the step.
      *
-     * <p>The element and the container come from {@link Combinators}, so a caller reading this reads
-     * one answer about the call rather than two it has to line up itself.
+     * <p>The element, the container and how far come from {@link Combinators}, so a caller reading
+     * this reads one answer about the call rather than two it has to line up itself. How far is
+     * what the rule here does not say: a reader concluding something about every element of the
+     * container asks it.
      */
     record Reducing(Core seed, Core.Block step, Core.Binder accumulator, Core.Binder element,
-                    Core container) {}
+                    Core container, HowAClosureIsApplied applied, boolean inTheContainersOrder) {}
 
     /** The reduction {@code operation} is, or null where it reduces nothing — including where it
      * applies no closure at all, and where the name applied is not a library operation. */
@@ -75,14 +81,17 @@ final class Reductions {
      */
     static Reducing reducing(Core.PreservedCall call, Function<Core, Core.Block> blockOf) {
         Reduction rule = of(call.operation());
+        if (rule == null) {
+            return null;
+        }
         Combinators.Handed handed = Combinators.handedTo(call, blockOf);
-        if (rule == null || handed == null
+        if (handed == null
                 || rule.accumulatorParam() >= handed.step().params().size()) {
             return null;
         }
         return new Reducing(call.args().get(rule.seedArg()), handed.step(),
                 handed.step().params().get(rule.accumulatorParam()), handed.element(),
-                handed.container());
+                handed.container(), handed.applied(), rule.inTheContainersOrder());
     }
 
     /** The operations there is a rule about. */
@@ -126,7 +135,8 @@ final class Reductions {
     private static Map<ValueName.Stdlib.Operation, Reduction> read() {
         Map<ValueName.Stdlib.Operation, Reduction> rules = new LinkedHashMap<>();
         WalksFromASeed.of(DefaultStdlib.get(), Combinators.all()).forEach((operation, walk) ->
-                rules.put(operation, new Reduction(walk.seedArg(), walk.accumulatorParam())));
+                rules.put(operation, new Reduction(walk.seedArg(), walk.accumulatorParam(),
+                        walk.inTheContainersOrder())));
         return Map.copyOf(rules);
     }
 

@@ -21,7 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * The values an element is chosen among, where what is asked of it is read of each whole: every
@@ -65,11 +65,11 @@ final class ValuesOfAnElement {
      * As many as {@code most} values of {@code type} standing at {@code at}; null where some part
      * of it is one nothing here chooses values of.
      *
-     * @param numbersAt the values a number standing at a position is read at, or null where none
-     *                  are chosen there
+     * @param numbersAt the values a number standing at a position, of the type read there, is
+     *                  read at, or null where none are chosen there
      */
     static Listed of(Type type, TermPath at, RuleReadingContext reading, int most,
-                     Function<TermPath, List<ObservedValue>> numbersAt) {
+                     BiFunction<TermPath, TypeView, List<ObservedValue>> numbersAt) {
         List<ObservedValue> out = valuesOf(type, at, NO_RULE_HERE, reading, most + 1, numbersAt,
                 new HashSet<>());
         if (out == null) {
@@ -98,7 +98,7 @@ final class ValuesOfAnElement {
      */
     private static List<ObservedValue> valuesOf(Type type, TermPath at, AdmissibleSet atThePlace,
                                                 RuleReadingContext reading, int most,
-                                                Function<TermPath, List<ObservedValue>> numbersAt,
+                                                BiFunction<TermPath, TypeView, List<ObservedValue>> numbersAt,
                                                 Set<TypeSymbol> expanding) {
         if (most <= 0) {
             return List.of();
@@ -134,7 +134,7 @@ final class ValuesOfAnElement {
                         named.add(one);
                     }
                 }
-                yield whole && !named.isEmpty() ? named : numbersAt.apply(at);
+                yield whole && !named.isEmpty() ? named : numbersAt.apply(at, view);
             }
             case Shape.Unit unit -> List.of(new ObservedValue.Unit(unit.name()));
             case Shape.Product product -> {
@@ -212,7 +212,7 @@ final class ValuesOfAnElement {
      *  first field changing slowest, and each field at the values the record's rules leave it. */
     private static List<ObservedValue> recordsOf(Shape.Product product, TermPath at,
                                                  RuleReadingContext reading, int most,
-                                                 Function<TermPath, List<ObservedValue>> numbersAt,
+                                                 BiFunction<TermPath, TypeView, List<ObservedValue>> numbersAt,
                                                  Set<TypeSymbol> expanding) {
         List<Map<String, ObservedValue>> made = new ArrayList<>();
         made.add(new LinkedHashMap<>());

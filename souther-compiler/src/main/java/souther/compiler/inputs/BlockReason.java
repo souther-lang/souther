@@ -493,11 +493,9 @@ public sealed interface BlockReason {
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                // A type nothing could interpret, a path returning to a declaration it has been
-                // through, and rules nothing reached. None of them is a figure anything was
-                // compared against.
-                case TypeUnresolved _, RecursiveExpansion _,
-                     ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
+                // A type nothing could interpret and rules nothing reached. Neither is a figure
+                // anything was compared against.
+                case TypeUnresolved _, ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
                 // And the one figure among them: a reading that stopped at the depth it could
                 // afford, which a run allowed to read further need not stop at.
                 case ValueRulesNotReachedPastDepthLimit _ -> RunSensitivity.MAY_CHANGE;
@@ -511,7 +509,7 @@ public sealed interface BlockReason {
         @Override
         default List<Figure> figures() {
             return switch (this) {
-                case TypeUnresolved _, RecursiveExpansion _, ValueRulesNotReached _ -> List.of();
+                case TypeUnresolved _, ValueRulesNotReached _ -> List.of();
                 case ValueRulesNotReachedPastDepthLimit _ -> List.of(
                         WorkFigure.FIELDS_A_RULE_IS_FOLLOWED_DOWN.at(GuaranteeWalk.FIELDS_SEEDED));
             };
@@ -740,30 +738,6 @@ public sealed interface BlockReason {
      * about such a model, so this is a position a report is asked about and cannot be answered for.
      */
     record TypeUnresolved() implements AboutThePosition {}
-
-    /**
-     * Reading on would open a declaration this path has already opened, so what is under the
-     * position is not unfolded again.
-     *
-     * <p><b>Not that the declaration is recursive.</b> A type that names itself is an ordinary
-     * thing to declare and an ordinary thing to hold a value of; what this says is that one
-     * derivation does not unfold one declaration twice on one path, which is a bound this reading
-     * puts on itself. Named the other way, an author would read a report of their model where there
-     * is a report of this compiler.
-     *
-     * @param declaration what the input returned to
-     * @param openedAt    where the path opened it the first time, which is the far end of the cycle
-     */
-    record RecursiveExpansion(souther.compiler.types.TypeSymbol declaration, TermPath openedAt)
-            implements AboutThePosition {
-
-        public RecursiveExpansion {
-            if (declaration == null || openedAt == null) {
-                throw new IllegalArgumentException(
-                        "a return to nowhere is not one: " + declaration + " at " + openedAt);
-            }
-        }
-    }
 
     /**
      * A comparison naming the position is written in a form no reader here takes apart: the
@@ -1349,6 +1323,17 @@ public sealed interface BlockReason {
     record ComparisonCuttingNothing() implements ReadToEndWithoutLine {}
 
     /**
+     * The comparison was read to the end, and every run that reaches it stops in an operation it is
+     * read through: {@code a / 0 >= k} is worked out only after a quotient that aborts.
+     *
+     * <p>Its own case beside {@link ComparisonCuttingNothing}. There a run gets past the comparison
+     * and it comes out the same for every row; here no run gets past, so it states nothing on
+     * either side and nothing is owed at it. Read as a rule this compiler could not take in, an
+     * author was sent after a form that was read.
+     */
+    record ComparisonAnswersNowhere() implements ReadToEndWithoutLine {}
+
+    /**
      * The comparison was read to the end, the quantity it cuts was found, and the line it draws
      * falls where that quantity never runs.
      *
@@ -1370,7 +1355,9 @@ public sealed interface BlockReason {
      * with nothing against it: every row that gets there is already past it. The line is inside
      * what the declarations leave, so this is not {@link ComparisonCuttingOutsideDomain} — an
      * author reading that one would look at the rule for a line their declarations refuse, and
-     * what refuses it is the conditions on the way to the comparison.
+     * what refuses it is what holds on the way to the comparison: the conditions taken, and what a
+     * run got past working out — {@code a + 1} is past only where {@code a} is below the greatest
+     * {@code Int}.
      *
      * <p>Said only on a proof. The values that arrive were read off the paths, and either nothing
      * arrives at all or what arrives stops short of the line; a comparison whose arrival nothing
@@ -1393,6 +1380,19 @@ public sealed interface BlockReason {
      * on it, shown to hold no row.
      */
     record ComparisonLineTurningNothing() implements ReadToEndWithoutLine {}
+
+    /**
+     * The comparison was read to the end as a relation of the value at a position to another
+     * value, and no row that arrives at the comparison takes the way to it.
+     *
+     * <p>Not {@link ComparisonNothingArrivesAtItsLine}: a relation has no line of its own for
+     * the rows to miss. What refuses them is what holds on the way to the comparison, as there,
+     * and not the relation being left without a line ({@link RelationNotShownToReachEveryValue}),
+     * which an author would go looking for in the rule.
+     *
+     * <p>Said only on a proof, as there.
+     */
+    record ComparisonRelationNothingArrivesAt() implements ReadToEndWithoutLine {}
 
     /**
      * The comparison relates the value at a position to another value rather than dividing the

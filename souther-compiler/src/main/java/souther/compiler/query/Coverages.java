@@ -321,7 +321,8 @@ final class Coverages {
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
                 pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, body),
-                partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
+                partitioning.undivided(), partitioning.rulesWithoutALine(),
+                partitioning.rulesWhereARunMayStop(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
                 // measured is the separate answer `undivided` beside them carries, and a position
@@ -1543,6 +1544,10 @@ final class Coverages {
                         return noRowTakes(label, within, Generator.UnresolvedCombination.Reason
                                 .A_CONDITION_NEVER_COMES_OUT_THAT_WAY);
                     }
+                    case Reachability.NumbersLeaveNone _ -> {
+                        return noRowTakes(label, within,
+                                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+                    }
                 }
                 // Where a condition on the way came out one of several ways, a row is looked for
                 // along each of them first, each narrower than the way whole. A row standing along
@@ -1565,11 +1570,21 @@ final class Coverages {
                         return whole;
                     }
                 }
+                SearchOutcomes alongEach = SearchOutcomes.none();
                 for (Reachability.Reaching along : able.along()) {
                     Looked one = lookedAlong(criterion, label, narrowing, along);
                     if (one.witness().isPresent()) {
                         return one;
                     }
+                    alongEach = alongEach.plus(one.outcomes());
+                }
+                // Split into every way a row takes, and along each of them the rules leave no
+                // value at the point: no row past the way stands there. The way whole spans the
+                // values between the ways and would offer one, and a row built there turns back
+                // before the point.
+                if (able.ways() instanceof Reachability.Ways.Each
+                        && alongEach.provesInfeasible()) {
+                    return new Looked(alongEach, null, Optional.empty());
                 }
                 return whole != null ? whole : lookedAlong(criterion, label, narrowing, able);
             }
@@ -1622,6 +1637,12 @@ final class Coverages {
                     if (last == null) {
                         last = came.outcomes();
                         first = came.realized();
+                    }
+                    // Short of a population at this value that it is short of at every value: the
+                    // next value is written as short, builds no row, and ends the asking with the
+                    // word this one did, so it is not asked for.
+                    if (came.outcomes().shortWhateverTheValue()) {
+                        return new Looked(last, first, Optional.empty());
                     }
                     // Every way of standing the dependencies in was built and none of them stood,
                     // so this is the value that did not answer and not one of the rows it was built
@@ -2137,9 +2158,10 @@ final class Coverages {
             // hands on, and this is the only place they are turned into what a search came to.
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
                     switch (standing.get()) {
-                        case StandingAtAPoint.Met.AtPoint _ ->
+                        case StandingAtAPoint.Met.AtPoint at ->
                                 new ItemAssessment.Attempt.Certified(built.row(), within,
-                                        built.unrepresented());
+                                        built.unrepresented(),
+                                        at instanceof StandingAtAPoint.Met.Reached);
                         // Composed and not seen where it was composed for. Which says the way to
                         // the border was not composed against in full and never that the point is
                         // unwritable, and it carries what the composer could not act on because

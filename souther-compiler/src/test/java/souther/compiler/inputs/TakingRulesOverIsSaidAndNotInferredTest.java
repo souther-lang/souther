@@ -14,11 +14,10 @@ import souther.compiler.query.ReadAs;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -59,14 +58,20 @@ class TakingRulesOverIsSaidAndNotInferredTest {
         assertThrows(IllegalArgumentException.class,
                 () -> handoffs.accepts(P, HANDS_ON, P.then("y")),
                 "a reading at a position this handoff never named is not one it passed rules to");
-        assertInstanceOf(RuleHandoffs.Shortfall.NotFullyAccepted.class,
-                handoffs.unresolvedAt(HANDS_ON),
+        assertTrue(handoffs.standingAt(HANDS_ON),
                 "and the handoff is where it was: a recipient was named and none was opened");
     }
 
-    /** And a handoff no descent ever reached stands however many readings were opened elsewhere. */
+    /**
+     * A handoff no descent ever reached is the walk contradicting itself, whatever was read
+     * elsewhere.
+     *
+     * <p>A handing over is owed at a position the descent then crosses, and the descent names who
+     * takes the rules over. One that names nobody is not a shortfall of the model to be reported,
+     * and counting it as one would read the absence of an entry as evidence that nothing was read.
+     */
     @Test
-    void aHandoffNoDescentReachedStandsWhateverElseWasRead() {
+    void aHandoffNoDescentReachedIsRefusedWhateverElseWasRead() {
         RuleHandoffs handoffs = new RuleHandoffs();
         handoffs.owes(P, HANDS_ON);
         TermPath elsewhere = P.then("y");
@@ -74,12 +79,8 @@ class TakingRulesOverIsSaidAndNotInferredTest {
         handoffs.passesTo(P, elsewhere, List.of(elsewhere.element()));
         handoffs.accepts(P, elsewhere, elsewhere.element());
 
-        assertNull(handoffs.unresolvedAt(elsewhere), "that one was passed on and taken");
-        // And which of the two ways it is left standing, because that is what tells a reader
-        // whether anything else already reports the stop. A descent that named nobody is one the
-        // walk could not make; a recipient left unopened is a walk that went on.
-        assertInstanceOf(RuleHandoffs.Shortfall.NothingExpected.class,
-                handoffs.unresolvedAt(HANDS_ON),
+        assertFalse(handoffs.standingAt(elsewhere), "that one was passed on and taken");
+        assertThrows(IllegalStateException.class, () -> handoffs.standingAt(HANDS_ON),
                 "and this one was never passed to anybody, whatever happened beside it");
     }
 
@@ -99,11 +100,10 @@ class TakingRulesOverIsSaidAndNotInferredTest {
         handoffs.passesTo(P, HANDS_ON, List.of(one, other));
 
         handoffs.accepts(P, HANDS_ON, one);
-        assertInstanceOf(RuleHandoffs.Shortfall.NotFullyAccepted.class,
-                handoffs.unresolvedAt(HANDS_ON), "the other case was passed the rules too");
+        assertTrue(handoffs.standingAt(HANDS_ON), "the other case was passed the rules too");
 
         handoffs.accepts(P, HANDS_ON, other);
-        assertNull(handoffs.unresolvedAt(HANDS_ON), "and now both of them were opened");
+        assertFalse(handoffs.standingAt(HANDS_ON), "and now both of them were opened");
     }
 
     /**
@@ -111,7 +111,7 @@ class TakingRulesOverIsSaidAndNotInferredTest {
      *
      * <p>Which reading that is follows from where the descent last crossed an ownership boundary, so
      * it is a function of the path. Everything here carries the pair and one step does not:
-     * {@link RuleHandoffs#unresolvedAt} asks by position alone. That projection is safe only while
+     * {@link RuleHandoffs#standingAt} asks by position alone. That projection is safe only while
      * this holds, so it is refused rather than assumed — a handoff owed by a reading nobody kept
      * would otherwise leave somebody else's position short, which is this issue's own shape.
      */
@@ -169,7 +169,6 @@ class TakingRulesOverIsSaidAndNotInferredTest {
 
     private static InputDomain read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

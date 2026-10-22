@@ -9,9 +9,12 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -21,7 +24,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -138,6 +140,19 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                             && (b.open || List.all(i -> i.price >= 1, b.others))"""),
                 stated("List.all(i -> i.price >= 1, if b.open then b.items else b.others)"),
                 "the element handed the closure in each case is one of the list that case chose");
+    }
+
+    /**
+     * A list chosen by cases whose arms are written out holds each arm's elements where that arm is
+     * taken: an element of the arm a run does not take meets nothing there. Handed to a walk's
+     * parameter first, the elements are the same ones.
+     */
+    @Test
+    void anElementOfAnArmWrittenOutMeetsAStatementOnlyWhereItsArmIsTaken() {
+        Proposition byCases = stated("(b.open && b.x == 1) || (Bool.not(b.open) && b.y == 1)");
+        assertEquals(byCases, stated("List.any(v -> v == 1, if b.open then [ b.x ] else [ b.y ])"));
+        assertEquals(byCases, stated(
+                "List.any(v -> v == 1, List.flatMap(e -> [ e ], if b.open then [ b.x ] else [ b.y ]))"));
     }
 
     /**
@@ -273,8 +288,18 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 "List.map(e -> e + 1, b.xs)", "{ let ys = List.flatMap(e -> [e], b.xs)\n ys }")) {
             assertEquals(once, stated(sum.formatted(made)), made);
         }
+        // A walk adding one for every element counts them, and one adding two counts them twice;
+        // so does a walk putting one more in what it carries, and one that doubles what it
+        // carries is no count of anything.
+        assertEquals(once, stated(
+                "List.fold((acc, e) -> acc + 1, 0, b.xs) + List.length(b.items) >= 1"));
+        assertEquals(once, stated(sum.formatted("List.fold((acc, e) -> acc ++ [e], [], b.xs)")));
+        assertInstanceOf(Proposition.Unread.class,
+                stated(sum.formatted("List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)")));
         Proposition twice = stated(
                 "List.length(b.xs) + List.length(b.xs) + List.length(b.items) >= 1");
+        assertEquals(twice, stated(
+                "List.fold((acc, e) -> acc + 2, 0, b.xs) + List.length(b.items) >= 1"));
         for (String made : List.of("List.flatMap(e -> [e, e], b.xs)", "List.append(b.xs, b.xs)",
                 "List.concat([b.xs, b.xs])")) {
             assertEquals(twice, stated(sum.formatted(made)), made);
@@ -294,7 +319,8 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     /**
      * A closure answering as many as the element it is handed says is summed over the elements,
-     * the same sum however the lists are put end to end. One answering a number by cases is no
+     * which is how many occurrences of what those lists hold there are in all, the same number
+     * however the lists are put end to end. One answering a number by cases is no
      * number of how many elements there are, and is not read as one.
      */
     @Test
@@ -303,15 +329,31 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 + " + List.length(b.xs) >= 1");
         Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, flattened);
         assertTrue(((Relation.Affine) compared.relation()).form().coefs().keySet().stream()
-                        .anyMatch(Quantity.SumOver.class::isInstance),
-                () -> "a sum over the items: " + flattened);
+                        .anyMatch(number -> number instanceof DecisionAtom.OfTheInput(
+                                NumericTerm.TakenOver over)
+                                && over.source().equals(new RunSource.FlattenedOccurrences(
+                                        TermPath.of("b").then("items").element().then("parts")
+                                                .element()))),
+                () -> "every part of every item: " + flattened);
         assertEquals(stated("List.length(List.concat(List.map(i -> i.parts, b.items)))"
                 + " + List.length(b.xs) >= 1"), flattened);
-        for (String byCases : List.of("e -> if e > 0 then [e] else []",
-                "e -> if e > 0 then [e] else [e, e]")) {
-            assertInstanceOf(Proposition.Unread.class, stated("List.length(List.flatMap("
-                    + byCases + ", b.xs)) + List.length(b.items) >= 1"), byCases);
+        // And the sizes of those lists added up are the same number, by a total or by a fold.
+        for (String added : List.of("List.sum(List.map(i -> List.length(i.parts), b.items))",
+                "List.fold((acc, i) -> acc + List.length(i.parts), 0, b.items)",
+                "List.length(List.fold((acc, i) -> acc ++ i.parts, [], b.items))")) {
+            assertEquals(flattened, stated(added + " + List.length(b.xs) >= 1"), added);
         }
+        // One answering a number by cases holds, for each case, that many for every element
+        // taking it: how many elements meet the case, as a filter keeping them counts them.
+        assertEquals(stated("List.length(List.filter(e -> e > 0, b.xs))"
+                        + " + List.length(b.items) >= 1"),
+                stated("List.length(List.flatMap(e -> if e > 0 then [e] else [], b.xs))"
+                        + " + List.length(b.items) >= 1"));
+        assertEquals(stated("List.length(List.filter(e -> e > 0, b.xs))"
+                        + " + 2 * List.length(List.filter(e -> e <= 0, b.xs))"
+                        + " + List.length(b.items) >= 1"),
+                stated("List.length(List.flatMap(e -> if e > 0 then [e] else [e, e], b.xs))"
+                        + " + List.length(b.items) >= 1"));
     }
 
     /**
@@ -374,15 +416,15 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     /**
      * A value the body works out from the parameter is another value on each application, so it is
-     * no one value to relate: its binding names all of them alike.
+     * no one value to relate: what each application states of it is what the same comparison
+     * written out states there, and its binding names none of them.
      */
     @Test
     void aValueWorkedOutFromTheParameterIsNoOneValue() {
         for (String over : List.of("List.any", "List.all")) {
-            Proposition stated = stated(over
-                    + "(v -> { let y = Int.floorMod(v - b.x, 7)\n y > 3 }, [1, 5])");
-            assertFalse(stated.toString().contains("Affine"),
-                    () -> over + " relates no value of one application to another's: " + stated);
+            assertEquals(stated(over + "(v -> Int.floorMod(v - b.x, 7) > 3, [1, 5])"),
+                    stated(over + "(v -> { let y = Int.floorMod(v - b.x, 7)\n y > 3 }, [1, 5])"),
+                    over);
         }
     }
 
@@ -414,9 +456,10 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 let f (b) = if %s then 1 else 0
                 """.formatted(condition);
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+        // The errors of what was asked, which is the body checked: a model that does not check
+        // has no fork to read, whatever its condition says.
+        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");

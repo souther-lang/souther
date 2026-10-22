@@ -312,12 +312,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource, met);
-                if (term == null) {
-                    return null;
+                LinearForm<NumericTerm> numbers =
+                        InputNumber.formOf(node, inputs, at, ruleSource, met);
+                if (numbers != null) {
+                    named.addAll(numbers.coefs().keySet());
                 }
-                named.add(term);
-                return LinearForm.atom(term);
+                return numbers;
             }
 
             @Override
@@ -375,7 +375,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // A target that may stand at a position of the input does, on some run, and
                     // which is not for arithmetic to decide by walking into it. Read through, a
                     // field of it would be a term over a place it may never stand at.
-                    case PathResolution.MayStandAt _ -> true;
+                    case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> true;
                 };
                 return !stands
                         && !Location.isStep(fa.target().type(), fa.field(), ruleSource.newtypes());

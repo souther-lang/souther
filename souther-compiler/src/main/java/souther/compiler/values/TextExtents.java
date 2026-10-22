@@ -8,6 +8,8 @@ import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 
+import java.util.Set;
+
 /**
  * Where a language stops on the order the strings it holds are measured on.
  *
@@ -87,6 +89,8 @@ public final class TextExtents {
             case ValueSet.Finite it -> Language.ofWords(Sets.textsIn(it.values()), meter);
             case ValueSet.Cofinite it ->
                     Language.EVERY_STRING.without(Sets.textsIn(it.excluded()), meter);
+            // Whole numbers, none of which is a string.
+            case ValueSet.WholeRuns _ -> Language.ofWords(Set.of(), meter);
         };
     }
 

@@ -4,6 +4,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,6 +35,9 @@ import java.util.function.Predicate;
  * looking at any.
  */
 final class WhichOfThemHold {
+
+    /** How many choices a relation comes to before it is a count: a count of one is no count. */
+    private static final long ONE_CHOICE = 1;
 
     /** Each statement once, in the order first written. */
     private final List<Proposition> statements;
@@ -81,18 +85,110 @@ final class WhichOfThemHold {
                 admitted);
     }
 
-    /** How many choices this is written as, counted no further than one past {@code most}. */
-    long choices(long most) {
-        long[] made = {0};
-        walk(chosen -> ++made[0] <= most);
-        return made[0];
+    /** The same count, held as {@code held} holds it. */
+    static WhichOfThemHold of(Proposition.SoManyHold held) {
+        boolean[] admitted = new boolean[held.weight() + 1];
+        held.admitted().forEach(count -> admitted[count] = true);
+        return new WhichOfThemHold(held.statements(), held.weights(), admitted);
     }
 
-    /** Some one of the choices holding, or null where they are more than {@code most}. */
-    Proposition written(long most) {
+
+    /**
+     * What the relation states: the one choice it comes to, where it comes to no more than one
+     * (or to none, which no row is) — and otherwise the statements and the counts it admits, held
+     * as they are ({@link Proposition.SoManyHold}).
+     *
+     * <p>The count is what is stated and the choices are one way of writing it, so a count is held
+     * whenever it is a count. With one choice nothing is chosen, and the choice is the same
+     * statement said again. Exactly one of {@code n} is {@code n} choices of {@code n} statements
+     * and exactly four of eight is seventy: how many of them there are is no part of what is
+     * stated, and a reader that reads a count does not take it apart. One that reads only
+     * conjunctions and disjunctions is handed the choices ({@link CountsWrittenOut}).
+     *
+     * <p>One relation is stated one way, whichever reader made it: which way turns on the
+     * statements and the counts alone, and on no figure a reader has in hand.
+     */
+    Proposition stated() {
+        Written within = written(ONE_CHOICE,
+                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.maximum(),
+                CompositionBudget.READINGS_OF_ONE_CONDITION,
+                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES);
+        if (within.choices() != null) {
+            return within.choices();
+        }
+        List<Integer> byKey = new ArrayList<>(statements.size());
+        for (int one = 0; one < statements.size(); one++) {
+            byKey.add(one);
+        }
+        byKey.sort(Comparator.comparing((Integer one) -> statements.get(one).key()));
+        List<Proposition> kept = new ArrayList<>(statements.size());
+        List<Integer> weighed = new ArrayList<>(statements.size());
+        byKey.forEach(one -> {
+            kept.add(statements.get(one));
+            weighed.add(weights.get(one));
+        });
+        List<Integer> counts = new ArrayList<>();
+        for (int count = 0; count < admitted.length; count++) {
+            if (admitted[count]) {
+                counts.add(count);
+            }
+        }
+        return SharedPropositions.shared(new Proposition.SoManyHold(kept, weighed, counts));
+    }
+
+    /**
+     * The choices written out, where they are no more than {@code choicesFigure} allows and come to
+     * no more parts than {@code partsFigure} does — or none, and the figure they were past.
+     *
+     * @param choices   the choices within both figures, or null
+     * @param stoppedAt the figure they were past, or null where they were within both
+     * @param parts     how many parts {@code choices} come to written out, and nought where there
+     *                  are none — what a reader walking them is charged
+     */
+    record Written(Proposition choices, CompositionBudget stoppedAt, long parts) {}
+
+    /**
+     * What {@link Written} says of the choices, held to {@code choicesFigure} by how many they are
+     * and to {@code partsFigure} by how many parts they come to.
+     *
+     * <p>Each choice is counted as it is made, in the parts a step is counted in — the same count
+     * the figure is of, however deep a statement goes — so a walk past the parts stops at the
+     * choice that takes it past and makes no more. Counted once for all of them: a statement and
+     * its denial are in many choices, and are counted the first time and known after.
+     */
+    Written written(CompositionBudget choicesFigure, CompositionBudget partsFigure) {
+        return written(choicesFigure.maximum(), partsFigure.maximum(), choicesFigure, partsFigure);
+    }
+
+    /** The same, held to {@code mostChoices} and {@code mostParts}, which {@code choicesFigure}
+     *  and {@code partsFigure} are named for where the choices are past one of them. */
+    private Written written(long mostChoices, long mostParts, CompositionBudget choicesFigure,
+                            CompositionBudget partsFigure) {
+        // One counting for every choice: the statements are the same in each, and each, and each
+        // denial of one, is counted once and then known.
+        Conclusion counting = Conclusion.countingTo(partsFigure);
         List<Proposition> ways = new ArrayList<>();
-        return walk(chosen -> ways.add(chosen) && ways.size() <= most)
-                ? Proposition.any(ways) : null;
+        long[] parts = {1};
+        boolean[] pastTheChoices = {false};
+        boolean whole = walk(chosen -> {
+            if (ways.size() == mostChoices) {
+                pastTheChoices[0] = true;
+                return false;
+            }
+            parts[0] += counting.partsWrittenOut(chosen);
+            if (parts[0] > mostParts) {
+                return false;
+            }
+            ways.add(chosen);
+            return true;
+        });
+        if (pastTheChoices[0]) {
+            return new Written(null, choicesFigure, 0);
+        }
+        Proposition written = whole ? Proposition.any(ways) : null;
+        long counted = written == null ? 0 : counting.partsWrittenOut(written);
+        return written != null && counted <= mostParts ? new Written(written, null, counted)
+                : new Written(null, partsFigure, 0);
     }
 
     /**

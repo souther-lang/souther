@@ -2,10 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConstantArguments;
-import souther.compiler.semantics.LawProposition;
-import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.ResultBound;
-import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
@@ -16,8 +13,10 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.function.Function;
 
 /**
@@ -100,88 +99,46 @@ final class IntrinsicNumericFacts {
                 standing(atom, built.container(), rel, at, terms, out);
             }
         }
+        // And exactly as many as the law of the operation that answered it says, where it says a
+        // number of the arguments this names: `a ++ b` holds as many as both halves together, which
+        // no number of bounds on it against either half says.
+        LinearForm<FactSubject> lawSays =
+                LawOverAtoms.sizeOf(AnOperationApplied.of(container), at, terms);
+        if (lawSays != null && LinearForm.atom(atom).minus(lawSays)
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
+            out.add(new NumericConstraint(held.value(), Rel.EQ));
+        }
+        // And as many as it was written out with, where it was, which is what a size of it read
+        // as a number is and so what the atom a law names it by is.
+        OptionalLong written = terms.writtenCount(container, at);
+        if (written.isPresent()) {
+            out.add(new NumericConstraint(LinearForm.atomMinusConstant(atom,
+                    ExactRatio.of(written.getAsLong())), Rel.EQ));
+        }
         return out;
     }
 
     /**
-     * How many {@code container} holds, where the law of the operation that answered it says
-     * whether it holds anything by whether its arguments do — or null where no operation answered
-     * it, no law says that, or the law reads something of an argument other than whether it holds
-     * anything.
+     * How many {@code container} holds, where the laws of the operation that answered it say so by
+     * what it was handed: whether it holds anything, and how many case by case — or null where no
+     * operation answered it, no law says either, or a part of each is one this side has no name
+     * for ({@link LawOverAtoms}).
      *
-     * <p>The whole law or nothing. It says when the answer holds something and, by the same
+     * <p>Each law whole or not at all. One says when the answer holds something and, by the same
      * statement, when it holds nothing, so a part of it left out would answer the second wrong.
      */
-    static Derivation heldWhereItsLawSays(Core container, Denotations at, Terms terms) {
+    static Derivation heldWhereItsLawsSay(Core container, Denotations at, Terms terms) {
         AnOperationApplied applied = AnOperationApplied.of(container);
-        LawProposition<DeclaredArgument> law = applied == null ? null
-                : DischargeRules.whereItHoldsSomething(applied.operation());
-        Derivation.HoldsSomethingWhere.Holding holds = law == null ? null
-                : holding(law, applied, at, terms);
-        return holds == null ? null : new Derivation.HoldsSomethingWhere(holds);
-    }
-
-    /** {@code law} over the counts of what {@code applied} hands it, or null where a part of it is
-     *  about something else. */
-    private static Derivation.HoldsSomethingWhere.Holding holding(
-            LawProposition<DeclaredArgument> law, AnOperationApplied applied, Denotations at,
-            Terms terms) {
-        return switch (law) {
-            case LawProposition.Always<DeclaredArgument>(boolean holds) -> holds
-                    ? new Derivation.HoldsSomethingWhere.Holding.AllOf(List.of())
-                    : new Derivation.HoldsSomethingWhere.Holding.AnyOf(List.of());
-            case LawProposition.All<DeclaredArgument>(var parts) -> {
-                List<Derivation.HoldsSomethingWhere.Holding> ways = holdings(parts, applied, at,
-                        terms);
-                yield ways == null ? null : new Derivation.HoldsSomethingWhere.Holding.AllOf(ways);
-            }
-            case LawProposition.Any<DeclaredArgument>(var parts) -> {
-                List<Derivation.HoldsSomethingWhere.Holding> ways = holdings(parts, applied, at,
-                        terms);
-                yield ways == null ? null : new Derivation.HoldsSomethingWhere.Holding.AnyOf(ways);
-            }
-            case LawProposition.Observed<DeclaredArgument>(
-                    LawSubject.Argument<DeclaredArgument>(DeclaredArgument which),
-                    SideAnswered(AnswerAspect aspect, boolean holds))
-                    when aspect == AnswerAspect.EMPTINESS -> {
-                FactSubject count = countOf(applied.argument(which), at, terms);
-                if (count == null) {
-                    yield null;
-                }
-                Derivation.HoldsSomethingWhere.Holding something =
-                        new Derivation.HoldsSomethingWhere.Holding.Something(LinearForm.atom(count));
-                yield holds ? something : new Derivation.HoldsSomethingWhere.Holding.Not(something);
-            }
-            case LawProposition.Observed<DeclaredArgument> _,
-                 LawProposition.Compared<DeclaredArgument> _,
-                 LawProposition.SomeElement<DeclaredArgument> _,
-                 LawProposition.Same<DeclaredArgument> _ -> null;
-        };
-    }
-
-    private static List<Derivation.HoldsSomethingWhere.Holding> holdings(
-            List<LawProposition<DeclaredArgument>> parts, AnOperationApplied applied,
-            Denotations at, Terms terms) {
-        List<Derivation.HoldsSomethingWhere.Holding> out = new ArrayList<>();
-        for (LawProposition<DeclaredArgument> part : parts) {
-            Derivation.HoldsSomethingWhere.Holding one = holding(part, applied, at, terms);
-            if (one == null) {
-                return null;
-            }
-            out.add(one);
+        Derivation.HoldsSomethingWhere.Holding holds =
+                LawOverAtoms.whereItHolds(applied, AnswerAspect.EMPTINESS, at, terms);
+        Derivation held = holds == null ? null : new Derivation.HoldsSomethingWhere(holds);
+        // And how many case by case, where the law says it so: a size in cases is no relation the
+        // atom carries whatever the path, since which case holds is the path's.
+        Derivation sized = LawOverAtoms.sizeInCases(applied, at, terms);
+        if (held == null || sized == null) {
+            return held != null ? held : sized;
         }
-        return out;
-    }
-
-    /** The count of what {@code argument} is, by the measure its type is counted by, or null where
-     *  there is no argument there, nothing counts it, or this cannot name the count. */
-    private static FactSubject countOf(Core argument, Denotations at, Terms terms) {
-        if (argument == null) {
-            return null;
-        }
-        ValueName counts = NumericMeasures.takenOf(Core.withoutStanding(argument).type(),
-                terms.newtypeInners());
-        return counts == null ? null : terms.sizeAtomFor(counts, argument, at);
+        return new Derivation.Each(List.of(held, sized));
     }
 
     /** States how {@code atom} stands to the size of {@code source}, where that size is one this can
@@ -273,17 +230,22 @@ final class IntrinsicNumericFacts {
         if (!DischargeRules.isAMeasure(call.operation()) || call.args().size() != 2) {
             return;
         }
-        if (!(Core.withoutStanding(
-                terms.originating(call.args().get(1), at, new java.util.HashSet<>()))
+        // The shift's arguments are read where the shift was written, which is not here where it
+        // came through a name.
+        Terms.Given origin = terms.originating(call.args().get(1), at, new HashSet<>());
+        if (origin == null || !(Core.withoutStanding(origin.value())
                 instanceof Core.PreservedCall moved)) {
             return;
         }
+        Denotations there = origin.at();
         BoundOperationFact.ShiftsBy shift = DischargeRules.shiftBy(moved);
         if (shift == null || !shift.measure().operation().equals(call.operation())
-                || !sameValue(CallArguments.of(shift.of(), moved), call.args().get(0), at, terms)) {
+                || !sameValue(CallArguments.of(shift.of(), moved), there, call.args().get(0), at,
+                        terms)) {
             return;
         }
-        LinearForm<FactSubject> amount = terms.affineOf(CallArguments.of(shift.amount(), moved), at);
+        LinearForm<FactSubject> amount =
+                terms.affineOf(CallArguments.of(shift.amount(), moved), there);
         // A shift whose form no ratio holds is a relation not stated.
         if (amount != null && amount.times(ExactRatio.of(shift.per()))
                 .flatMap(shifted -> LinearForm.atom(atom).minus(shifted))
@@ -294,9 +256,10 @@ final class IntrinsicNumericFacts {
 
     /** Whether the two expressions are one value, which is whether the term grammar names them
      * alike. */
-    private static boolean sameValue(Core a, Core b, Denotations at, Terms terms) {
-        Term one = terms.bodyKey(a, at);
-        return one != null && one.equals(terms.bodyKey(b, at));
+    private static boolean sameValue(Core a, Denotations aAt, Core b, Denotations bAt,
+                                     Terms terms) {
+        Term one = terms.bodyKey(a, aAt);
+        return one != null && one.equals(terms.bodyKey(b, bAt));
     }
 
     /** {@code form} with {@code offset} added, or null where the form could not be read or the sum

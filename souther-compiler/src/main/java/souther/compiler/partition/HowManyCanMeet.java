@@ -133,7 +133,7 @@ final class HowManyCanMeet {
         }
         Quantities quantities = read.quantities();
         ElementValues values = ElementValues.of(counted.container(), element, read.ruleReading(),
-                at -> everyValueAt(at, quantities));
+                (at, _) -> everyValueAt(at, quantities));
         if (values == null || !values.listed().all()) {
             return Long.MAX_VALUE;
         }

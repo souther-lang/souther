@@ -46,15 +46,6 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
      * beside the code that stops.
      */
     private static final Map<String, String> NOT_A_BUDGET = new LinkedHashMap<>(Map.ofEntries(
-            // Numbers a value is written at, which are what a date or a time looks like and not how
-            // far this looks for one.
-            Map.entry("souther.compiler.partition.TermRealizations.A_LEAP_YEAR",
-                    "the year a date is written in where no rule asked for one"),
-            Map.entry("souther.compiler.partition.TermRealizations.A_LONGEST_MONTH",
-                    "the month a day of the month is offered in"),
-            Map.entry("souther.compiler.partition.TermRealizations.FIRST_OF_THE_MONTH",
-                    "the day a date's other parts are offered at"),
-
             // How far a part of a date runs, which is the calendar's and not this compiler's. A
             // walk over every one of them is what makes an answer of nothing a statement about
             // dates, so raising either would be writing down a month no year has.
@@ -62,6 +53,24 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many months a year has, which is what a month may stand at"),
             Map.entry("souther.compiler.partition.TermRealizations.DAYS_THE_LONGEST_MONTH_HAS",
                     "how far the days run in the longest month, which is as far as a day runs"),
+
+            // The calendar's cycle and the stretch of years a proof about it is made over: what has
+            // to be looked at for an answer to hold of every year, not how far a search goes.
+            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.FIRST_YEAR",
+                    "where the four hundred years that stand for every year start"),
+            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.YEARS_OF_A_CYCLE",
+                    "how many years the calendar's pattern repeats over"),
+            Map.entry("souther.compiler.partition.YearsAWayAllows.YEARS_OF_A_CYCLE",
+                    "how many years the calendar's pattern repeats over, which is as many years"
+                            + " as a look from one year meets every pattern in"),
+            // A way that states the parts or the years of more dates than this is not asked, and
+            // nothing is then claimed of the years or the months and days it names; no search
+            // stops at it.
+            Map.entry("souther.compiler.partition.YearsAWayAllows.MOST_DATES",
+                    "how many dates a way may state the years of for them to be chosen together"),
+            Map.entry("souther.compiler.partition.WhatStatementsOfDatePartsLeaveAlone"
+                            + ".MOST_DATES_A_WAY_IS_ASKED_OF",
+                    "how many dates a way may state the parts of for them to be looked through"),
 
             // A place in a list rather than an amount of anything.
             Map.entry("souther.compiler.partition.Generator.NOT_HERE",

@@ -273,8 +273,13 @@ public record UndividedPosition(TermPath at, Why why) {
          * <p>{@code List.allDistinctBy(k -> k, value)} is about pairs of elements and not about any
          * one value the position holds. It was recognised — a container composed here keeps it —
          * so it is not {@link #UNSUPPORTED_SYNTAX}, and a reader told so would rewrite a rule that
-         * is not the difficulty. Nor is it a rule read to the end: the containers it refuses are
-         * still among what the position is taken to hold.
+         * is not the difficulty.
+         *
+         * <p>Said only where nothing took the rule in. Stated on its own it is read whole — the
+         * containers it admits are the ones composed with their elements apart — and raises nothing
+         * to say this about. Offered as one alternative of a choice it is not: no builder keeps
+         * either of two rules, and the containers it refuses are still among what the position is
+         * taken to hold.
          */
         RULE_RELATING_ELEMENTS,
         /**
@@ -330,15 +335,6 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS,
         /**
-         * The input returns here to a declaration it has already been through, and what is under
-         * this position was not read again.
-         *
-         * <p>A position whose values are values of a type the path has already met. What stands
-         * under it is what stands under that one, so a reader is told the return rather than a list
-         * of positions repeating for as long as anybody keeps reading.
-         */
-        RETURNS_TO_A_DECLARATION_ALREADY_READ,
-        /**
          * The type at this position could not be interpreted, so nothing about its values is
          * established. A report is written about a model carrying one, which is why this is a word
          * a report writes rather than a state nothing reaches.
@@ -378,6 +374,15 @@ public record UndividedPosition(TermPath at, Why why) {
          * completely — there was no line in the rule to draw.
          */
         RULE_CUTS_NOTHING,
+        /**
+         * A rule naming this position was read to the end and every run that reaches it stops in an
+         * operation it is read through, such as a division by nought.
+         *
+         * <p>Its own word beside {@link #RULE_CUTS_NOTHING}: there a run gets past the rule and it
+         * comes out the same for every value, and here none does, so it tells no value from
+         * another and nothing is owed on its account.
+         */
+        RULE_ANSWERS_NOWHERE,
         /**
          * A rule naming this position was read to the end and puts every value it may hold on one
          * side of itself.
@@ -431,6 +436,16 @@ public record UndividedPosition(TermPath at, Why why) {
          * rule against the declarations, here they read the guards above it.
          */
         NOTHING_ARRIVES_AT_THE_RULES_LINE,
+        /**
+         * A rule naming this position relates it to another value, and no row that arrives at the
+         * comparison takes the way to it: the conditions on the way there rule the rows out.
+         *
+         * <p>Its own word beside {@link #NOTHING_ARRIVES_AT_THE_RULES_LINE}, for a rule that has
+         * no line of its own for the rows to miss, and beside
+         * {@link #RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE}, which says the rule was not worked
+         * out, where this one says there is nothing to work out.
+         */
+        NOTHING_ARRIVES_AT_THE_RELATION,
         /**
          * A rule naming this position states several relations held together, and one of its
          * lines is here — rows arrive at it, and wherever they do the rule comes out the same on

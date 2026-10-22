@@ -2,14 +2,13 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import souther.cli.CliProcess.Ran;
 import souther.cli.backend.LocalRepository;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -18,28 +17,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What {@code compile --target} and {@code backend fetch} refuse from the line alone, or from the
  * project the line is run in, is refused before any directory a backend is installed in is looked
- * at and before any repository is asked. So it is asked of the CLI in this process: nothing here
- * reads the home or the environment a run is given, which is what a process would be for.
+ * at and before any repository is asked. So it is asked of the CLI in this JVM, in an environment
+ * that names nothing but where a run is.
  */
 class ALineATargetIsWrittenWrongOnIsRefusedBeforeAnythingIsLookedForTest {
 
-    private record Said(int code, String err, String out) {}
+    private static Ran run(Path workingDirectory, String... args) {
+        return run(workingDirectory, Map.of(), args);
+    }
 
-    private static Said run(Path workingDirectory, String... args) {
-        PrintStream originalErr = System.err;
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            int code = Main.dispatch(args, workingDirectory);
-            return new Said(code, err.toString(StandardCharsets.UTF_8),
-                    out.toString(StandardCharsets.UTF_8));
-        } finally {
-            System.setErr(originalErr);
-            System.setOut(originalOut);
-        }
+    private static Ran run(Path workingDirectory, Map<String, String> properties,
+                           String... args) {
+        return CliInProcess.run(workingDirectory, workingDirectory, Map.of(), properties, "",
+                args);
     }
 
     /**
@@ -59,8 +49,8 @@ class ALineATargetIsWrittenWrongOnIsRefusedBeforeAnythingIsLookedForTest {
 
     @Test
     void aTargetWrittenWithNoNameIsRefused(@TempDir Path work) {
-        Said bare = run(work, "compile", "--target");
-        Said option = run(work, "compile", "--target", "--help");
+        Ran bare = run(work, "compile", "--target");
+        Ran option = run(work, "compile", "--target", "--help");
 
         assertEquals(2, bare.code());
         assertEquals(2, option.code());
@@ -69,7 +59,7 @@ class ALineATargetIsWrittenWrongOnIsRefusedBeforeAnythingIsLookedForTest {
 
     @Test
     void theTargetIsReadOnlyAsTheFirstArgument(@TempDir Path work) {
-        Said said = run(work, "compile", "a.sou", "--target", "jvm");
+        Ran said = run(work, "compile", "a.sou", "--target", "jvm");
 
         assertEquals(2, said.code());
         assertTrue(said.err().contains("--target"), said.err());
@@ -77,7 +67,7 @@ class ALineATargetIsWrittenWrongOnIsRefusedBeforeAnythingIsLookedForTest {
 
     @Test
     void theJvmTargetStillRefusesAnOptionTheJvmDoesNotHave(@TempDir Path work) {
-        Said said = run(work, "compile", "--target", "jvm", "--component", "m.sou");
+        Ran said = run(work, "compile", "--target", "jvm", "--component", "m.sou");
 
         assertEquals(2, said.code());
         assertTrue(said.err().contains("--component"), said.err());
@@ -87,7 +77,7 @@ class ALineATargetIsWrittenWrongOnIsRefusedBeforeAnythingIsLookedForTest {
     void aProjectNamingAnotherSoutherRefusesTheTargetToo(@TempDir Path work) throws Exception {
         Files.writeString(work.resolve(ProjectVersion.FILE), "0.0.1-other\n");
 
-        Said said = run(work, "compile", "--target", "fake");
+        Ran said = run(work, "compile", "--target", "fake");
 
         assertEquals(2, said.code());
         assertEquals("", said.out());
@@ -101,18 +91,14 @@ class ALineATargetIsWrittenWrongOnIsRefusedBeforeAnythingIsLookedForTest {
     @Test
     void theFetchCommandTakesFetchAndATargetAndNothingElse(@TempDir Path work) throws Exception {
         try (LocalRepository repository = LocalRepository.start()) {
-            System.setProperty("souther.repository", repository.uri().toString());
-            try {
-                for (List<String> line : List.of(List.of("backend"), List.of("backend", "fetch"),
-                        List.of("backend", "get", "wasm"), List.of("backend", "fetch", "wasm", "x"),
-                        List.of("backend", "fetch", "jvm"))) {
-                    Said said = run(work, line.toArray(String[]::new));
+            Map<String, String> named = Map.of("souther.repository", repository.uri().toString());
+            for (List<String> line : List.of(List.of("backend"), List.of("backend", "fetch"),
+                    List.of("backend", "get", "wasm"), List.of("backend", "fetch", "wasm", "x"),
+                    List.of("backend", "fetch", "jvm"))) {
+                Ran said = run(work, named, line.toArray(String[]::new));
 
-                    assertEquals(2, said.code(), line + said.err());
-                    assertFalse(said.out().contains("wasm"), line + said.out());
-                }
-            } finally {
-                System.clearProperty("souther.repository");
+                assertEquals(2, said.code(), line + said.err());
+                assertFalse(said.out().contains("wasm"), line + said.out());
             }
             assertEquals(List.of(), repository.asked());
         }

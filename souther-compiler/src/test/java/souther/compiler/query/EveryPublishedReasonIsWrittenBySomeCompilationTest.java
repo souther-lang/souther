@@ -49,9 +49,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * nothing produces is one to take out of the vocabulary or to give a way in, and an entry saying so
  * would make this test agree that a promise need not be kept.
  *
- * <p><b>Which is narrower than what the schema admits, by one word.</b> The field's vocabulary out
- * there also holds the walk stopping after a count of steps, which nothing writes any more and
- * which no reason of this compiler projects to — a word documents of this version carry because
+ * <p><b>Which is narrower than what the schema admits, by two words.</b> The field's vocabulary out
+ * there also holds the walk stopping after a count of steps and the input returning to a
+ * declaration already read, which nothing writes any more and which no reason of this compiler
+ * projects to — words documents of this version carry because
  * they were written before it stopped being written, kept and accounted for where the two surfaces
  * are held to their own producers
  * ({@code WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest}). Enumerated here as well, it
@@ -276,32 +277,37 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 let f (p) = if p.lo < p.hi then Yes else No
                 """.formatted(ANSWER)));
         // What the rule states is read through what the operation answers in each of its cases,
-        // and comes to one line or another — and one of them is over a value the body made rather
-        // than the input's own numbers, so none of its lines is drawn.
+        // and comes to one line or another — each a line on how many elements meet something less
+        // another number, and where each decides turns on that difference, which no row is asked,
+        // so none of its lines is drawn.
         out.put(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE, of("""
                 module m
                 %s
-                behavior f : (a: Int, b: Int, c: Int) -> Answer
-                let f (a, b, c) = {
-                    let p = a * b
-                    if Int.max(p, c) > 5 then Yes else No
+                behavior f : (a: Int, xs: List<Int>) -> Answer
+                let f (a, xs) = {
+                    let m = List.length(List.filter(x -> x > 0, xs))
+                    if Int.max(m - a, 0) > 5 then Yes else No
                 }
                 """.formatted(ANSWER)));
-        // A relation whose other side never reaches some values here: the length of a string is
-        // never below nought, so n below nought settles the rule whatever s holds.
+        // A relation whose other side is not shown to reach the values here left between those
+        // that settle it: a string held to one character or three is no length of two, and a
+        // length of one or three is not shown to be every length between.
         out.put(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE, of("""
                 module m
                 %s
-                behavior f : (n: Int, s: String) -> Answer
-                let f (n, s) = if n == String.length(s) then Yes else No
+                data S = String
+                    invariant value == "a" || value == "aaa"
+                behavior f : (n: Int, s: S) -> Answer
+                let f (n, s) = if n == String.length(s.value) then Yes else No
                 """.formatted(ANSWER)));
-        // A rule about how a list's elements stand to each other, which no set of the list's own
-        // values holds.
+        // A rule about how a list's elements stand to each other, offered as one alternative of a
+        // choice: no builder keeps either of two such rules, and no set of the list's own values
+        // holds it.
         out.put(UndividedPosition.Reason.RULE_RELATING_ELEMENTS, of("""
                 module m
                 %s
                 data Keys = List<String>
-                    invariant apart = List.allDistinctBy(k -> k, value)
+                    invariant apart = List.allDistinctBy(k -> k, value) || List.length(value) >= 4
                 behavior f : (ks: Keys, shelf: Map<String, String>) -> Answer
                 let f (ks, shelf) =
                     if List.any(k -> match Map.get(k, shelf) with
@@ -328,16 +334,17 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 """.formatted(ANSWER)));
         // And a line on a number taken over a run of the values at a position rather than on any
         // one of them: two of them either side of a total are on the line as surely as one is.
+        // Held against a number and no position, which a position beside it would be related to.
         out.put(UndividedPosition.Reason.RULE_ABOUT_A_RUN, of("""
                 module m
                 %s
                 data Line = { v: Int }
-                data Bag = { lines: List<Line>, cap: Int }
+                data Bag = { lines: List<Line> }
 
                 let total (lines: List<Line>): Int = List.sum(List.map(one -> one.v, lines))
 
                 behavior f : (bag: Bag) -> Answer
-                let f (bag) = if total(bag.lines) > bag.cap then Yes else No
+                let f (bag) = if total(bag.lines) > 10 then Yes else No
                 """.formatted(ANSWER)));
         // A denial says which values exist rather than where they stop, so it holds the position to
         // what it admits and places no end on it.
@@ -350,16 +357,6 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: N) -> Answer
                 let f (n) = Yes
                 """.formatted(ANSWER)));
-        // The walk reaches this declaration again under itself, so what stands below is what stands
-        // below the one it already read.
-        out.put(UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ, of("""
-                module m
-                %s
-                data Node = { next: Node?, n: Int }
-
-                behavior f : (node: Node) -> Answer
-                let f (node) = if node.n > 3 then Yes else No
-                """.formatted(ANSWER)));
         // A newtype spine that comes back to itself: the walk over the names ends with the name
         // still on, so there is no base to read a shape from.
         out.put(UndividedPosition.Reason.TYPE_UNRESOLVED, of("""
@@ -371,19 +368,22 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
                 """));
-        // A comparison over a product of two input fields, and over a quotient by one: the
-        // arithmetic met a shape it has no term for, and nothing was made of either position.
+        // A comparison over a product of two input fields one of which is weighed before the
+        // product is taken, and over a quotient by one held against a third: the arithmetic met a
+        // shape it has no term for, and nothing was made of either position. A quotient held
+        // against a number is a line on each sign of the divisor, and only a number times the
+        // divisor is a form; a value times it is a product.
         out.put(UndividedPosition.Reason.NON_AFFINE_PRODUCT, of("""
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
-                let f (a, b) = if a * b > 10 then Yes else No
+                let f (a, b) = if 2 * a * b > 10 then Yes else No
                 """.formatted(ANSWER)));
         out.put(UndividedPosition.Reason.NON_CONSTANT_DIVISOR, of("""
                 module m
                 %s
-                behavior f : (a: Int, b: Int) -> Answer
-                let f (a, b) = if a / b > 10 then Yes else No
+                behavior f : (a: Int, b: Int, c: Int) -> Answer
+                let f (a, b, c) = if a / b > c then Yes else No
                 """.formatted(ANSWER)));
         // And a remainder by one: it has no period the positions could be told apart by, which is
         // said of the divisor and not of a value made of the positions.
@@ -391,7 +391,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
-                let f (a, b) = if Int.floorMod(a, b) > 10 then Yes else No
+                let f (a, b) = if Int.floorMod(a + 1, b) > 10 then Yes else No
                 """.formatted(ANSWER)));
         // A line on what a division by a written number leaves of a number made of two positions:
         // the border is drawn on the remainder and neither position is divided by it.
@@ -438,6 +438,14 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (a: Int) -> Answer
                 let f (a) = if a - a <= 0 then Yes else No
                 """.formatted(ANSWER)));
+        // Every run that reaches the comparison stops in the division by nought, so it states
+        // nothing on either side.
+        out.put(UndividedPosition.Reason.RULE_ANSWERS_NOWHERE, of("""
+                module m
+                %s
+                behavior f : (a: Int) -> Answer
+                let f (a) = if a / 0 <= 0 then Yes else No
+                """.formatted(ANSWER)));
         // Every string begins with the empty one, so the rule puts every value the position holds
         // on one side of itself and the model draws no line between any two of them.
         out.put(UndividedPosition.Reason.RULE_TELLS_NOTHING_APART, of("""
@@ -473,25 +481,18 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: N) -> Answer
                 let f (n) = if n.value < 0 - 5 then Yes else No
                 """.formatted(ANSWER)));
-        // A comparison over nine values each chosen by cases on a position of its own, read once
-        // for each way the cases can fall: no way is closed by another, so it is more readings
-        // than one condition is read on.
+        // A comparison of the larger of two values whose readings stopped at two different
+        // operations: neither operation is what stopped the statement, so what it states has a
+        // part that was not read. The same word is written where the reading stops at a figure,
+        // and AReadingStoppedAtAFigureSaysWhichFigureTest is what holds a document to that.
         out.put(UndividedPosition.Reason.RULE_MEANING_NOT_READ, of("""
                 module m
                 %s
-                data N = { a: Int, b: Int, c: Int, d: Int, e: Int, g: Int, h: Int, i: Int, j: Int }
-                behavior f : (n: N) -> Answer
-                let f (n) = {
-                    let a = if n.a > 0 then 1 else 0
-                    let b = if n.b > 0 then 1 else 0
-                    let c = if n.c > 0 then 1 else 0
-                    let d = if n.d > 0 then 1 else 0
-                    let e = if n.e > 0 then 1 else 0
-                    let g = if n.g > 0 then 1 else 0
-                    let h = if n.h > 0 then 1 else 0
-                    let i = if n.i > 0 then 1 else 0
-                    let j = if n.j > 0 then 1 else 0
-                    if a + b + c + d + e + g + h + i + j > 4 then Yes else No
+                behavior f : (a: Int, b: Int, c: Int) -> Answer
+                let f (a, b, c) = {
+                    let p = a * b
+                    let q = Int.floorMod(a, b)
+                    if Int.max(p, q) <= c then Yes else No
                 }
                 """.formatted(ANSWER)));
         // And a line the declarations do leave values at, that no row arriving at the comparison
@@ -505,6 +506,23 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     guard n > 10 else No
                     Yes
                 }
+                """.formatted(ANSWER)));
+        // And a relation to another value that no row arriving at the comparison takes the way
+        // to, which has no line for them to miss.
+        out.put(UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RELATION, of("""
+                module m
+                %s
+                data Item = { n: Int }
+                    invariant n >= 0 && n <= 100
+                data Order = { items: List<Item>, open: Bool, q: Int }
+                    invariant q >= 0
+
+                behavior f : (o: Order) -> Answer
+                let f (o) =
+                    if o.q < 0 then
+                        (if List.fold((w, i) -> if i.n > (if o.open then w else 5) then i.n else w,
+                                      0, o.items) <= 50 then Yes else No)
+                    else No
                 """.formatted(ANSWER)));
         return out;
     }

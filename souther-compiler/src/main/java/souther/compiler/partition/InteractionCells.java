@@ -751,49 +751,10 @@ public final class InteractionCells {
                 if (states == null) {
                     return null;
                 }
-                Cut line = cutAt(axes.get(axis), states);
-                if (line == null) {
-                    return null;
-                }
-                LineOrigin.ComparisonOrigin guard = guardOf(line, states);
-                int home = holding(axes.get(axis), line);
-                if (home < 0) {
-                    return null;
-                }
-                // A rule that names one value has no side its values are true on: what it
-                // distinguishes is that value from every other. So the cell is the value's own
-                // class, or every class but that one — the value where the rule is wanted to hold
-                // at it, which an equality held and an inequality broken both are.
-                //
-                // Only where the class says it is that one value and nothing else. A class holding
-                // it among others is one the rule cuts through, and no set of classes is what the
-                // rule admits.
-                if (guard.facts().claim() instanceof ComparisonClaim.Singled named) {
-                    if (!axes.get(axis).classes().get(home).holdsOnlyTheNumberAt(line.at())) {
-                        return null;
-                    }
-                    return named.holdsAtTheValue() == one.held()
-                            ? only(axes, axis, home, home) : allBut(axes, axis, home);
-                }
-                // Which side the comparison is true on, from the two facts the order carries: which
-                // side of it the cut value itself sits on, and whether the comparison holds there.
-                // The whole side and not its nearest class: the comparison admits every value out
-                // that way, and a reading that answered with one of them would have said more than
-                // the rule does — which is what makes two of them impossible to take together.
-                if (!(guard.facts().claim() instanceof ComparisonClaim.Cut order)) {
-                    return null;
-                }
-                boolean wantedIsHomeSide = order.holdsAtTheValue() == one.held();
-                // The side the cell wants: the one the rule is satisfied on where it wants the rule
-                // met, and the other where it wants it broken.
-                boolean wantedIsUp = (one.held() ? order.satisfyingSide()
-                        : order.satisfyingSide().opposite()) == Towards.ABOVE;
-                int last = axes.get(axis).classes().size() - 1;
-                int edge = wantedIsHomeSide ? home : (wantedIsUp ? home + 1 : home - 1);
-                if (edge < 0 || edge > last) {
-                    return null;
-                }
-                return wantedIsUp ? only(axes, axis, edge, last) : only(axes, axis, 0, edge);
+                boolean onAVisit = one.visit().isPresent();
+                Cut line = cutAt(axes.get(axis), states, onAVisit);
+                return line == null ? null
+                        : sideOf(axes, axis, line, guardOf(line, states, onAVisit), one.held());
             }
             // A fork this reading could not name a position for narrows nothing.
             case souther.compiler.reading.Condition.Arm _ -> {
@@ -886,10 +847,56 @@ public final class InteractionCells {
         return found;
     }
 
+    /**
+     * Which classes a comparison coming out {@code held} leaves, by the line {@code guard} drew at
+     * {@code line}, or null where the line names no classes.
+     */
+    static Cell sideOf(List<Axis> axes, int axis, Cut line,
+                               LineOrigin.ComparisonOrigin guard, boolean held) {
+        int home = holding(axes.get(axis), line);
+        if (home < 0) {
+            return null;
+        }
+        // A rule that names one value has no side its values are true on: what it
+        // distinguishes is that value from every other. So the cell is the value's own
+        // class, or every class but that one — the value where the rule is wanted to hold
+        // at it, which an equality held and an inequality broken both are.
+        //
+        // Only where the class says it is that one value and nothing else. A class holding
+        // it among others is one the rule cuts through, and no set of classes is what the
+        // rule admits.
+        if (guard.facts().claim() instanceof ComparisonClaim.Singled named) {
+            if (!axes.get(axis).classes().get(home).holdsOnlyTheNumberAt(line.at())) {
+                return null;
+            }
+            return named.holdsAtTheValue() == held
+                    ? only(axes, axis, home, home) : allBut(axes, axis, home);
+        }
+        // Which side the comparison is true on, from the two facts the order carries: which
+        // side of it the cut value itself sits on, and whether the comparison holds there.
+        // The whole side and not its nearest class: the comparison admits every value out
+        // that way, and a reading that answered with one of them would have said more than
+        // the rule does — which is what makes two of them impossible to take together.
+        if (!(guard.facts().claim() instanceof ComparisonClaim.Cut order)) {
+            return null;
+        }
+        boolean wantedIsHomeSide = order.holdsAtTheValue() == held;
+        // The side the cell wants: the one the rule is satisfied on where it wants the rule
+        // met, and the other where it wants it broken.
+        boolean wantedIsUp = (held ? order.satisfyingSide()
+                : order.satisfyingSide().opposite()) == Towards.ABOVE;
+        int last = axes.get(axis).classes().size() - 1;
+        int edge = wantedIsHomeSide ? home : (wantedIsUp ? home + 1 : home - 1);
+        if (edge < 0 || edge > last) {
+            return null;
+        }
+        return wantedIsUp ? only(axes, axis, edge, last) : only(axes, axis, 0, edge);
+    }
+
     /** The cut the rule stated at {@code states} drew, or null where it drew none. */
-    private static Cut cutAt(Axis axis, ModelOccurrence states) {
+    private static Cut cutAt(Axis axis, ModelOccurrence states, boolean onAVisit) {
         for (Cut each : axis.cuts()) {
-            if (guardOf(each, states) != null) {
+            if (guardOf(each, states, onAVisit) != null) {
                 return each;
             }
         }
@@ -903,11 +910,17 @@ public final class InteractionCells {
      * <p>Not a line of a statement of several. Which way {@code Int.max(a, b) > 5} came out says
      * nothing about which side of {@code a = 5} the row was on, since {@code b} may have settled
      * it — so such a line names no class, and the condition narrows nothing here.
+     *
+     * <p>A decision about one visit to a comparison is about one application of it, and the line of
+     * the number that application compares is its own: a comparison applied to each element states
+     * a line per element, and which way the comparison came out on that application is which
+     * side of that application's line the row is on.
      */
-    private static LineOrigin.ComparisonOrigin guardOf(Cut cut, ModelOccurrence states) {
+    private static LineOrigin.ComparisonOrigin guardOf(Cut cut, ModelOccurrence states,
+                                                       boolean onAVisit) {
         for (LineOrigin origin : cut.origins()) {
             if (origin instanceof LineOrigin.ComparisonOrigin guard
-                    && guard.comesOutBySides()
+                    && (onAVisit ? guard.decidesItsApplication() : guard.comesOutBySides())
                     && guard.read().states().equals(states)) {
                 return guard;
             }

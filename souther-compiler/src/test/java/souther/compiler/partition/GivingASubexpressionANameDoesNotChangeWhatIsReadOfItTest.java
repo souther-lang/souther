@@ -177,18 +177,19 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
     }
 
     /**
-     * And arithmetic over two positions, where what has to agree is the reason as much as the line.
+     * And arithmetic over two positions, where what has to agree is what the rule does to each
+     * position as much as the line.
      *
-     * <p>A rule relating two positions draws a line, and the report says at each position what it
-     * left there — here that the other position, held to its declared run, is not shown to reach
-     * every value at this one. The bound spelling said nothing at all — which reads as a model with
-     * no rule there rather than a rule this could not turn into a class.
+     * <p>A rule relating two positions draws a line, and where one of them settles it whatever the
+     * other is, that run of its values is a class of its own — here each mile from twenty-five
+     * thousand on, the other being nought or more. A bound spelling that said nothing at all would
+     * read as a model with no rule there rather than one dividing both positions.
      */
     @Test
     void aNameGivenArithmeticOverTwoPositionsIsThatArithmetic() {
         Map<String, PartitionEvidence> measured = measured(MODEL, "example.named");
-        assertFalse(reasonsOf(measured.get("overTwoPositions")).isEmpty(),
-                "the spelling that writes the arithmetic reports a rule it could not read");
+        assertFalse(axesOf(measured.get("overTwoPositions")).isEmpty(),
+                "the spelling that writes the arithmetic divides the positions it settles");
         agree("overTwoPositionsNamed");
     }
 
@@ -251,6 +252,8 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
                             + " on " + apart.on() + ", " + apart.against();
             case BorderQuantity.HowMany count -> count.left();
             case BorderQuantity.RemainderOfAForm remainder -> remainder.left();
+            case BorderQuantity.RemainderOfAPair remainder -> remainder.left();
+            case BorderQuantity.ProductOfAPair product -> product.left();
         };
     }
 

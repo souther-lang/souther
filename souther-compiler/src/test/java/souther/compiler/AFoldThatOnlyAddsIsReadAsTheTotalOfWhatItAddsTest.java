@@ -11,8 +11,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -165,7 +167,14 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
         assertFalse(wrapped.contains("not read"), wrapped);
     }
 
-    /** A total that is a number among others in a comparison is read as one of them. */
+    /**
+     * A total that is a number among others in a comparison is read as one of them. A list of one
+     * note totals that note, so the total takes every {@code Int} a gross does; held at nought it
+     * leaves the ask and the limit held against each other, each at every value the other takes,
+     * and both are left either way. The total itself is what an operation answers and not the
+     * value at a place, so the limit is not taken past the greatest {@code Int} for it, and that
+     * it reaches every value of the total is all it leaves unread.
+     */
     @Test
     void aTotalBesideAnotherNumberIsRead() {
         String report = report("""
@@ -179,23 +188,40 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                     asked <= limit - List.fold((acc, n) -> acc + n.gross, 0, ns)
                 """);
         assertTrue(report.contains("List.sum(ns[*].gross)"), report);
-        assertFalse(report.contains("not read"), report);
+        assertEquals(Set.of("asked", "limit"), placesSaying(report,
+                "rather than dividing the values here"), report);
+        assertEquals(Set.of("List.sum(ns[*].gross)"), placesSaying(report,
+                "not shown to reach every value here"), report);
+    }
+
+    /** The places the lines of {@code report} saying {@code words} of a rule's line are about. */
+    private static Set<String> placesSaying(String report, String words) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.startsWith("· no line") || line.startsWith("· not read"))
+                .filter(line -> line.contains(words))
+                .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
+                .collect(Collectors.toSet());
     }
 
     /**
      * What is not an addition of something the element alone holds says nothing of a total.
      *
      * <p>The answer so far moves by one for each of itself and by nothing else, which is asked of
-     * the step and not of how it is written: scaled, ignored, doubled, chosen between, or added to
-     * by a figure that turns on the answer so far, the answer is not the seed and a total.
+     * the step and not of how it is written: scaled, ignored, doubled, or added to by a figure that
+     * turns on the answer so far, the answer is not the seed and a total. Chosen between, it is
+     * the greater of the two, which is read as that and is no total either.
      */
     @Test
     void aStepThatIsNotAnAdditionIsNotReadAsOne() {
+        // Read as the greatest, its line is on what one element holds and on no total.
+        String chosen = report(model("if a.q > acc then a.q else acc", "0", 4));
+        assertTrue(chosen.contains("read as decide/xs[*].q: = 4"), chosen);
+        assertTrue(chosen.contains("read as decide/xs[*].q: = 3"), chosen);
+        assertFalse(chosen.contains("List.sum"), chosen);
         for (String step : List.of(
                 "acc * 2 + a.q",
                 "a.q",
                 "acc + acc",
-                "if a.q > acc then a.q else acc",
                 "acc + a.q * acc",
                 "acc + acc * a.q",
                 // Right at an answer of nought and of one and wrong past them: the step is judged

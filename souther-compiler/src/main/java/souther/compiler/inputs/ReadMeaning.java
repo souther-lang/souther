@@ -1,8 +1,11 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ElementsWrittenOut;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 
 /**
  * What a name a body reads stands for, said in terms of the behavior's input.
@@ -160,7 +163,8 @@ public sealed interface ReadMeaning {
         for (Occurrence each : occurrences) {
             List<Occurrence.Kept> open = kept.stillOpen(each.keptWhere());
             if (open != null) {
-                out.add(open == each.keptWhere() ? each : new Occurrence(each.value(), open));
+                out.add(open == each.keptWhere() ? each
+                        : new Occurrence(each.value(), open, each.answered(), each.within()));
             }
         }
         return out;
@@ -201,17 +205,27 @@ public sealed interface ReadMeaning {
      * statement: a filter's closure was applied to the element in the reading that handed it, and
      * a filter around that one to the element it was handed in turn. Read in any other names, the
      * same truth would be about another value.
+     *
+     * @param answered which application of the step that made {@code value} this is, where that is
+     *                 also the run's own count of the step's applications
+     *                 ({@link ElementsWrittenOut.Occurrence#answered})
+     * @param within   the applications that wrote it out, outermost first
+     *                 ({@link ElementsWrittenOut.Occurrence#within})
      */
-    record Occurrence(Denotation value, List<Kept> keptWhere) {
+    record Occurrence(Denotation value, List<Kept> keptWhere, OptionalInt answered,
+                      List<ElementsWrittenOut.Applied> within) {
 
         public Occurrence {
             Objects.requireNonNull(value, "an occurrence is of some value");
             keptWhere = List.copyOf(keptWhere);
+            Objects.requireNonNull(answered,
+                    "an occurrence is answered by some application or none");
+            within = List.copyOf(within);
         }
 
         /** An occurrence nothing keeps out. */
         public static Occurrence always(Denotation value) {
-            return new Occurrence(value, List.of());
+            return new Occurrence(value, List.of(), OptionalInt.empty(), List.of());
         }
 
         /** The same occurrence, kept also where every one of {@code more} holds — those decided
@@ -219,21 +233,46 @@ public sealed interface ReadMeaning {
         public Occurrence keptAlsoWhere(List<Kept> more) {
             List<Kept> all = new ArrayList<>(more);
             all.addAll(keptWhere);
-            return new Occurrence(value, all);
+            return new Occurrence(value, all, answered, within);
         }
 
-        /** A truth an occurrence was kept by, and which way it came out. */
-        public record Kept(Denotation truth, boolean holds) {
+        /**
+         * What an occurrence was kept by ({@link ElementsWrittenOut.Kept}), read where it was
+         * decided. What it states is not this reading's to say: a reader of conditions says it,
+         * and says it once for every reader of an occurrence.
+         */
+        public sealed interface Kept {
 
-            public Kept {
-                Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+            /** A truth, and which way it came out, of the {@code application}th application of the
+             *  step that made it ({@link ElementsWrittenOut.Kept.ATruth}). */
+            record ATruth(Denotation truth, boolean holds, OptionalInt application)
+                    implements Kept {
+
+                public ATruth {
+                    Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+                    Objects.requireNonNull(application,
+                            "a truth is of some application or none that can be numbered");
+                    if (application.isPresent() && application.getAsInt() < 0) {
+                        throw new IllegalArgumentException(
+                                "applications are counted from none: " + application);
+                    }
+                }
+            }
+
+            /** The arm {@code part} of {@code fork} being the one a run takes
+             *  ({@link ElementsWrittenOut.Kept.AnArm}). */
+            record AnArm(Denotation fork, int part) implements Kept {
+
+                public AnArm {
+                    Objects.requireNonNull(fork, "an arm is an arm of some fork");
+                }
             }
         }
     }
 
     /**
      * An element of a container that could be written out, holding more than this reading writes
-     * out ({@link WrittenOutElements#MOST_WALKED}).
+     * out ({@link ElementsWrittenOut#MOST_WALKED}).
      *
      * <p>Beside {@link Element} and not folded into it. That one says this reading cannot name the
      * values; this one says it could and stopped at a figure, which is a limit a reader reports as

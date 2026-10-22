@@ -2,12 +2,12 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
 
-    private static String reported(String example) throws Exception {
+    private static String reported(String example, int code) throws Exception {
         StringBuilder model = new StringBuilder("""
                 module probe.follow
 
@@ -49,24 +49,15 @@ class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
         Path file = Files.createTempDirectory("souther-multiple").resolve("probe.sou");
         Files.writeString(file, model);
 
-        PrintStream wasOut = System.out;
-        PrintStream wasErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        try {
-            Main.guarded(() -> Main.dispatch(new String[] {"examples", file.toString()}));
-        } finally {
-            System.setOut(wasOut);
-            System.setErr(wasErr);
-        }
-        return out.toString(StandardCharsets.UTF_8) + err.toString(StandardCharsets.UTF_8);
+        Ran ran = CliInProcess.run("examples", file.toString());
+        String said = ran.out() + ran.err();
+        assertEquals(code, ran.code(), said);
+        return said;
     }
 
     @Test
     void theMeasurementNamesTheRuleItCouldNotReadRatherThanFailing() throws Exception {
-        String said = reported("");
+        String said = reported("", 0);
 
         assertFalse(said.contains("internal compiler error"), () -> "the run completes:\n" + said);
         assertTrue(said.contains(THE_SIDE),
@@ -81,7 +72,7 @@ class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
 
                 example take
                     | "one" : (H { a = A(50.0m) }) -> No
-                """);
+                """, 1);
 
         assertFalse(said.contains("internal compiler error"), () -> "the run completes:\n" + said);
         assertTrue(said.contains(THE_SIDE),

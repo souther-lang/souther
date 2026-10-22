@@ -1,12 +1,13 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Congruences;
+import souther.compiler.check.HeldClass;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.values.ValueSet;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,17 +68,24 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public NumericDomain.FormProjection projectionOf(NumericTerm term,
+                                                     Collection<? extends NumericTerm> alongside) {
+        return within.projectionOf(term, alongside);
+    }
+
+    @Override
     public NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
         if (!apartAt(term).isEmpty()
-                || (term instanceof NumericTerm.ValueOf value && valueClassAt(value) != null)) {
+                || (term instanceof NumericTerm.ValueOf value
+                        && !(classAt(value) instanceof HeldClass.None))) {
             return null;
         }
         return within.wholeRunOf(term);
     }
 
     @Override
-    public Congruences valueClassAt(NumericTerm.ValueOf place) {
-        return within.valueClassAt(place);
+    public HeldClass classAt(NumericTerm.ValueOf place) {
+        return within.classAt(place);
     }
 
     @Override

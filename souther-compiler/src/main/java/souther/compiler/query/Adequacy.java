@@ -12,6 +12,7 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.partition.BehaviorInputs;
+import souther.compiler.partition.ComposedRow;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
@@ -1523,7 +1524,7 @@ public final class Adequacy {
                 }
                 souther.compiler.partition.InteractionRequirements asked =
                         souther.compiler.partition.InteractionRequirements.of(behavior,
-                                read.interactions(), subject.axes(), cells);
+                                read.interactions(), read.notJoined(), subject.axes(), cells);
                 out.put(behavior, whatTheRowsMade(behavior, asked,
                         RowReadings.readingFor(byTarget, behavior), numbering,
                         db.ask(new Unanswered(name, behavior)).value()));
@@ -1875,7 +1876,8 @@ public final class Adequacy {
                     out = out.secondary(Region.point(each.at()), each.said(
                             new DeadBranchMessage.ThisOneHoldsOnTheWayHere(),
                             new DeadBranchMessage.ThisOneFailsOnTheWayHere(),
-                            new DeadBranchMessage.ThisArmIsTakenOnTheWayHere()));
+                            new DeadBranchMessage.ThisArmIsTakenOnTheWayHere(),
+                            new DeadBranchMessage.ThisHasToAnswerOnTheWayHere()));
                 }
                 return out;
             }
@@ -2804,6 +2806,10 @@ public final class Adequacy {
                         RuleSettlement.read(
                                 new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(
                                         never.condition()));
+                case souther.compiler.partition.Reachability.NumbersLeaveNone numbers ->
+                        RuleSettlement.read(
+                                new RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone(
+                                        numbers));
                 case souther.compiler.partition.Reachability.Reaching reaching -> {
                     RuleRequirement.Excluded out = unreached.onTheWay(ruled);
                     yield out != null ? RuleSettlement.read(out)
@@ -3708,7 +3714,7 @@ public final class Adequacy {
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
             // What the model says, read to the end. A row does not change it.
-            case About.APositionNoLineDivides _ ->
+            case About.APositionNoLineDivides _, About.ARuleThatMayStopARun _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.A_FACT_ABOUT_THE_MODEL);
             // <b>Asked of the finding and not read off which kind it is.</b> The two reasons here
@@ -5226,6 +5232,7 @@ public final class Adequacy {
                     // What this compiler could not read, and what it read to the end and found the
                     // model says nothing at. Neither is work a row does anything about.
                     case About.APositionNoLineDivides _, About.ARuleWithoutALine _,
+                         About.ARuleThatMayStopARun _,
                          About.ARuleNothingClassified _, About.APositionThisCouldNotRead _,
                          About.APositionReadWiderThanItsRules _,
                          About.APositionWhoseRulesWereNotReached _,
@@ -5287,7 +5294,8 @@ public final class Adequacy {
             Set<souther.compiler.partition.BorderObligationPoint> out = new HashSet<>();
             for (BorderObligationPointAssessment point : owed == null
                     ? List.<BorderObligationPointAssessment>of() : owed) {
-                if (point.carriedBy(behavior) && !point.owed().open().isEmpty()) {
+                if (point.carriedBy(behavior)
+                        && !ObligationDisposition.premisesIn(point.owed().open()).isEmpty()) {
                     out.add(point.point());
                 }
             }
@@ -5633,6 +5641,7 @@ public final class Adequacy {
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
+                                    About.ARuleThatMayStopARun _,
                                     About.APositionWhoseRulesWereNotReached _,
                                     About.APositionReadWiderThanItsRules _,
                                     About.AQuestionNothingAnswered _ ->
@@ -6358,10 +6367,10 @@ public final class Adequacy {
                 case ControlPlace.Outcome outcome -> holding(subject, edges, reaching, outcome);
                 // An arm a run is seen taking where its fork's condition is a truth nothing else
                 // records: what that truth coming out the way the arm is taken on asks of a row.
-                case ControlPlace.Arm arm -> HeldOutcome.Bringing.of(
-                        ModelOccurrence.statedAt(arm.arm().fork())
-                                .flatMap(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
-                                        subject.quantities().region())));
+                case ControlPlace.Arm arm -> ModelOccurrence.statedAt(arm.arm().fork())
+                        .map(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
+                                subject.quantities().region()))
+                        .orElseGet(HeldOutcome.Bringing.NothingFound::new);
             });
         }
 
@@ -6370,8 +6379,9 @@ public final class Adequacy {
          *
          * <p>For a comparison, the side is which of the border's roles stand inside it: a point in
          * {@link PointRole#ON} or {@link PointRole#IN} is one the comparison holds at, and one in
-         * {@link PointRole#OFF} or {@link PointRole#OUT} one it fails at. For a truth, what it
-         * coming out that way asks of a row ({@link ReachingCuts#heldAt}).
+         * {@link PointRole#OFF} or {@link PointRole#OUT} one it fails at. For a truth, and for a
+         * comparison no border offers such a point for, what it coming out that way asks of a row
+         * ({@link ReachingCuts#heldAt}).
          */
         private static HeldOutcome.Bringing holding(MeasuredInput subject,
                                                     List<BorderAssessment> edges,
@@ -6391,10 +6401,13 @@ public final class Adequacy {
                 if (edge.border().noValueStandsWhereItComesOut(outcome.held())) {
                     return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
-                if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison),
+                // No row takes the way to it, which is the model's as much as no value standing on
+                // the side is: a proof, and not something this compiler fell short on.
+                WayToTheBorder way = reaching.wayTo(comparison);
+                if (!(souther.compiler.partition.Reachability.of(way,
                         subject.quantities().region())
                         instanceof souther.compiler.partition.Reachability.Reaching able)) {
-                    return new HeldOutcome.Bringing.NothingFound();   // nothing takes the way to it
+                    return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
                 List<PointRole> onThatSide = outcome.held()
                         ? List.of(PointRole.ON, PointRole.IN)
@@ -6409,20 +6422,22 @@ public final class Adequacy {
                         if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
-                            return new HeldOutcome.Bringing.Found(new HeldOutcome(
+                            return new HeldOutcome.Bringing.Found(List.of(new HeldOutcome(
                                     List.of(new RowDemand.AtAPoint(at.fixing(),
                                             quantity.asksOfEachTerm(owed.criterion()))),
-                                    able));
+                                    List.of(), way, Map.of(), able)), Set.of());
                         }
                     }
                 }
             }
-            // No point of a border brings it out that way, and the outcome may be an operation's
-            // truth a fork's condition asks: what that coming out the way asked demands of a row,
-            // composed past the way to it.
-            return HeldOutcome.Bringing.of(ModelOccurrence.statedAt(outcome.occurrence())
-                    .flatMap(answers -> reaching.heldAt(answers, outcome.held(),
-                            subject.quantities().region())));
+            // No point of a border brings it out that way: an operation's truth a fork's condition
+            // asks, or a comparison with no border of its own — one carried past to the lines of
+            // its closures. What that coming out the way asked states of a row, composed past the
+            // way to it.
+            return ModelOccurrence.statedAt(outcome.occurrence())
+                    .map(answers -> reaching.heldAt(answers, outcome.held(),
+                            subject.quantities().region()))
+                    .orElseGet(HeldOutcome.Bringing.NothingFound::new);
         }
 
         private static souther.compiler.partition.FillResult rowsFor(
@@ -6628,17 +6643,18 @@ public final class Adequacy {
         // behavior's points compose many of the same rows.
         return Generator.once(new Generator.Trial() {
 
+            /**
+             * The row last asked about, built. A search runs a row and then each rewrite of it, one
+             * after the other, and every one of them is of the same values.
+             */
+            private volatile BuiltRow last;
+
             @Override
             public Generator.ObservedRun run(RowToRun row) {
-                List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
-                if (standing == null) {
-                    // A row short of a stand-in the behavior requires is a row nothing applies,
-                    // which is said here rather than by a construction failing: what comes back
-                    // from that is a row nothing was seen doing, and so is this — but only this one
-                    // knows why.
-                    return Generator.ObservedRun.nothingRan();
-                }
-                return application.run(valuesOf(row), standing)
+                // A row short of a stand-in the behavior requires is a row nothing applies, which is
+                // said as a row nothing was seen doing rather than by a construction failing.
+                return builtFor(row)
+                        .flatMap(RowTrials.Prepared::run)
                         .map(ran -> new Generator.ObservedRun(switch (ran.recorded()) {
                             // Read under the numbering the caller is asking about. What a run left
                             // behind says which numbering it was made under, so a recording of
@@ -6654,9 +6670,23 @@ public final class Adequacy {
             @Override
             public Optional<AnswerObservation> runReplacing(RowToRun row,
                                                             Map<Integer, Integer> replacing) {
+                return builtFor(row).flatMap(built -> built.runReplacing(replacing));
+            }
+
+            private Optional<RowTrials.Prepared> builtFor(RowToRun row) {
+                // Kept by what the row is written as, which is how Generator.once tells one row
+                // from another, and not by the RowToRun a caller happened to make: a row asked
+                // about again is handed a value made again.
+                List<String> written = new ComposedRow(row.inputs(), row.answers()).writtenAs();
+                BuiltRow held = last;
+                if (held != null && held.written().equals(written)) {
+                    return held.built();
+                }
                 List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
-                return standing == null ? Optional.empty()
-                        : application.runReplacing(valuesOf(row), standing, replacing);
+                Optional<RowTrials.Prepared> built = standing == null ? Optional.empty()
+                        : application.prepare(valuesOf(row), standing);
+                last = new BuiltRow(written, built);
+                return built;
             }
 
             @Override
@@ -6675,6 +6705,9 @@ public final class Adequacy {
             }
         });
     }
+
+    /** A row, and what building it came to. */
+    private record BuiltRow(List<String> written, Optional<RowTrials.Prepared> built) {}
 
     /**
      * What one measure found and nothing filled.
@@ -6847,7 +6880,17 @@ public final class Adequacy {
          * What it qualifies is the classes rather than their absence, so it is said at positions the
          * axes measured as readily as at positions they did not.
          */
-        PARTITION_VALUES_NOT_SEPARATED(null);
+        PARTITION_VALUES_NOT_SEPARATED(null),
+        /**
+         * A rule of the model that a run reaching it may stop in, such as a division by nought on
+         * one of the ways it is worked out, where the ways before it do not rule the run out.
+         *
+         * <p>Its own finding beside {@link #PARTITION_NOT_READ}. The rule was read, so nothing is
+         * missing from the measure; what a reader is told is that a run may end in it, which no
+         * line says. A possibility, not a run shown to exist. A rule every run stops in is told as
+         * a rule that draws no line, with its own reason.
+         */
+        RULE_MAY_STOP_A_RUN(null);
 
         private final DiagnosticCode code;
 
@@ -6920,6 +6963,7 @@ public final class Adequacy {
                     About.APointOfABorder _, About.ALineTheRowsDoNotTellFromAnother _,
                     About.APositionNoLineDivides _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
+                    About.ARuleThatMayStopARun _,
                     About.APositionThisCouldNotRead _, About.APositionReadWiderThanItsRules _,
                     About.APositionWhoseRulesWereNotReached _, About.AQuestionNothingAnswered _ ->
                     whereItIsDeclared(db, module, finding.subject());
@@ -7199,6 +7243,7 @@ public final class Adequacy {
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleWithoutALine _, About.ARuleNothingClassified _ ->
                         Kind.PARTITION_NOT_READ;
+                case About.ARuleThatMayStopARun _ -> Kind.RULE_MAY_STOP_A_RUN;
                 // One word, whatever stopped the reading, and the reason beside it says which.
                 // PARTITION_RULES_NOT_REACHED belongs to the finding above — a position the axes
                 // did measure — and the two write nothing but the position, so sharing the word
@@ -8543,6 +8588,12 @@ public final class Adequacy {
                                     new About.APositionThisCouldNotRead(position);
                         }));
             }
+            // And the rules some run reaching them stops in, which are read and draw their lines:
+            // nothing is missing from the measure, and a reader is told what the lines leave out.
+            for (souther.compiler.inputs.RuleWhereARunMayStop each
+                    : partition.rulesWhereARunMayStop()) {
+                out.add(Finding.noticed(behavior.name(), new About.ARuleThatMayStopARun(each)));
+            }
             // And what the reading could not hold together, which is neither of the two above: no
             // rule is answerable for it and nothing went unreached. Said whatever the axes made of
             // the position, since what it qualifies is the classes and not their absence.
@@ -8988,7 +9039,7 @@ public final class Adequacy {
                         // arriving as a warning with no sentence.
                         case About.ACaseNothingWasSeenToProduce _,
                                 About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
-                                About.ARuleNothingClassified _,
+                                About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.APositionReadWiderThanItsRules _,
                                 About.AQuestionNothingAnswered _ ->
@@ -9187,7 +9238,7 @@ public final class Adequacy {
                         About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
                         About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
-                        About.ARuleNothingClassified _,
+                        About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,
                         About.AQuestionNothingAnswered _ -> { }
@@ -9318,7 +9369,7 @@ public final class Adequacy {
         private static void said(Db db, souther.compiler.diag.Diagnostic.Builder built,
                                  DecisionRuleReading read) {
             switch (read) {
-                case DecisionRuleReading.AComparisonCameOut(var comparison, var held) ->
+                case DecisionRuleReading.AComparisonCameOut(var comparison, var _, var held) ->
                         label(built, comparison.at(), held
                                 ? new ExampleMessage.TheRuleTakesThisConditionHolding()
                                 : new ExampleMessage.TheRuleTakesThisConditionFailing());
@@ -9375,7 +9426,7 @@ public final class Adequacy {
          *  at that call says it in. */
         private static Supporting takenAt(DecisionRuleReading read, String called) {
             return switch (read) {
-                case DecisionRuleReading.AComparisonCameOut(var _, var held) -> held
+                case DecisionRuleReading.AComparisonCameOut(var _, var _, var held) -> held
                         ? new ExampleMessage.TheRuleTakesItHoldingInThisCall(called)
                         : new ExampleMessage.TheRuleTakesItFailingInThisCall(called);
                 case DecisionRuleReading.AnApplicationAnswered(var _, var held) -> held
@@ -9724,7 +9775,7 @@ public final class Adequacy {
     static Set<ArmProbe> armsSeenIn(Generator.Watched watched) {
         return switch (watched) {
             case Generator.Watched.Ran(var account) -> account.arms();
-            case Generator.Watched.NoAccount _ -> Set.of();
+            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
         };
     }
 
@@ -9733,7 +9784,7 @@ public final class Adequacy {
     static Set<SeenConditionOutcome> outcomesSeenIn(Generator.Watched watched) {
         return switch (watched) {
             case Generator.Watched.Ran(var account) -> account.outcomes();
-            case Generator.Watched.NoAccount _ -> Set.of();
+            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
         };
     }
 

@@ -3,10 +3,13 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.values.AsACompilationAllows;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
@@ -74,18 +77,32 @@ class WhatAStandingQuestionIsAccountedForByTest {
      * what one machine may be. The two repeat over runs of one length and of another that share no
      * factor, so a walk over both at once is in a different pair at every step until the lengths
      * come round together. So nothing is short of a rule here, and what is short is the answer they
-     * come to between them — which is why the question stands with no reading naming a rule. The
-     * same model is read for what it leaves the position in
+     * come to between them — which is why the question stands with no reading naming a rule. A
+     * model of the same shape is read for what it leaves the position in
      * {@code ABranchNobodyCouldWorkOutIsNotOneAnybodyReadTest}.
+     *
+     * <p>Read under {@link #A_SMALL_ALLOWANCE}, which is what lets the lengths be short: what the
+     * question stands on is that the meet is past the allowance, and how large the two are is the
+     * allowance's to say.
      */
     private static final String AN_ANSWER_BEYOND_THE_ALLOWANCE = """
             module demo
 
             data N = { x: String, y: String }
                 invariant r =
-                    (String.matches("(a{251})*b", y) && String.matches("(a{223})*c", y))
+                    (String.matches("(a{7})*b", y) && String.matches("(a{11})*c", y))
                     || x == "A"
             """;
+
+    /**
+     * An allowance for what a position admits that holds each of the patterns above on its own and
+     * not the two of them met, the other figures being what a compilation reads with.
+     */
+    private static final ReadingPolicy A_SMALL_ALLOWANCE = new ReadingPolicy(
+            ReadAs.THE_COMPILATION_DOES.dnfExpansionLimit(),
+            ReadAs.THE_COMPILATION_DOES.scalePlacesLimit(),
+            new PatternPlan.Budget(40, 1_000, 1_000_000_000L),
+            AsACompilationAllows.whatARuleLeaves());
 
     /**
      * A rule relating two positions, written out and reached through a helper standing in one of
@@ -129,6 +146,30 @@ class WhatAStandingQuestionIsAccountedForByTest {
                 "and a binding standing in an operand is not a form nothing reads");
     }
 
+    /**
+     * A rule written in a library operation handed two positions.
+     *
+     * <p>The operation is expanded where the clause calls it, and its parameters stand for what the
+     * clause handed it — here a lookup of one field's value in the other. What the rule names is
+     * what those parameters were handed, so the questions it raises at both fields are the ones the
+     * reading of values has to account for, by the form it could not take apart.
+     */
+    private static final String A_LOOKUP_A_LIBRARY_OPERATION_IS_HANDED = """
+            module demo
+
+            data N = { base: String, flags: Map<String, Bool> }
+                invariant ok = Option.withDefault(false, Map.get(base, flags))
+            """;
+
+    @Test
+    void aRuleALibraryOperationIsHandedPositionsIsAccountedForAtThem() {
+        assertEquals(Map.of("invariant N (ok) at base", "TheValueReadingSays",
+                        "invariant N (ok) at flags", "TheValueReadingSays"),
+                whyStanding(A_LOOKUP_A_LIBRARY_OPERATION_IS_HANDED));
+        assertEquals(UnreadReason.FORM_NOT_READ,
+                whyWider(A_LOOKUP_A_LIBRARY_OPERATION_IS_HANDED, "base"));
+    }
+
     /** What the values reading was left short by at one name. */
     private static souther.compiler.values.UnreadReason whyWider(String source, String field) {
         return ((souther.compiler.values.AdmissibleSet.Widening.RuleUnread)
@@ -161,7 +202,7 @@ class WhatAStandingQuestionIsAccountedForByTest {
     void anAnswerBeyondTheAllowanceIsWhatTheQuestionStandsOn() {
         assertEquals(Map.of("invariant N (r) at y",
                         new StandsOn(List.of(), Set.of(UnreadReason.EXACT_VALUES_TOO_COSTLY))),
-                standingOn(AN_ANSWER_BEYOND_THE_ALLOWANCE),
+                standingOn(AN_ANSWER_BEYOND_THE_ALLOWANCE, A_SMALL_ALLOWANCE),
                 "the rule has nothing of its own, and what the question stands on is the answer's");
     }
 
@@ -181,8 +222,8 @@ class WhatAStandingQuestionIsAccountedForByTest {
     void aRuleShortInBothWaysStandsOnBoth() {
         assertEquals(new StandsOn(List.of(UnreadReason.FORM_NOT_READ),
                         Set.of(UnreadReason.EXACT_VALUES_TOO_COSTLY)),
-                standingOn(A_FORM_NO_READING_TAKES_APART_BESIDE_AN_ANSWER_BEYOND_THE_ALLOWANCE)
-                        .get("invariant N (r) at y"),
+                standingOn(A_FORM_NO_READING_TAKES_APART_BESIDE_AN_ANSWER_BEYOND_THE_ALLOWANCE,
+                        A_SMALL_ALLOWANCE).get("invariant N (r) at y"),
                 "both, each where it belongs — the form under the rule that wrote it, and the"
                         + " limit at the position whose answer ran into it");
     }
@@ -206,7 +247,9 @@ class WhatAStandingQuestionIsAccountedForByTest {
      *
      * <p>Both limits are this rule's own, which is what makes it the pair rather than a rule
      * carrying a neighbour's. The conjunct is refused by every reading of clauses; the two patterns
-     * beside it are read in full and meet at about ninety thousand states.
+     * beside it are read in full and meet past {@link #A_SMALL_ALLOWANCE}. They share the empty
+     * string, so what the rule admits is something a compilation reading with more room finds
+     * there is.
      *
      * <p>A conjunction and no choice in it. A rule whose branch a reading gave up on is answerable
      * for an alternative nothing read, which is a third thing to say about this rule and not the
@@ -219,7 +262,7 @@ class WhatAStandingQuestionIsAccountedForByTest {
 
             data N = { x: String, y: String }
                 invariant r =
-                    String.matches("(a{251})*b", y) && String.matches("(a{223})*c", y) && UNREAD_Y
+                    String.matches("(a{7})*", y) && String.matches("(a{11})*", y) && UNREAD_Y
             """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
 
     /**
@@ -249,8 +292,13 @@ class WhatAStandingQuestionIsAccountedForByTest {
      * which is the order this is about there being none of.
      */
     private static Map<String, StandsOn> standingOn(String source) {
+        return standingOn(source, ReadAs.THE_COMPILATION_DOES);
+    }
+
+    /** The same, read under {@code policy}. */
+    private static Map<String, StandsOn> standingOn(String source, ReadingPolicy policy) {
         Map<String, StandsOn> out = new LinkedHashMap<>();
-        read(source).accounting().values().forEach(accounting ->
+        read(source, policy).accounting().values().forEach(accounting ->
                 accounting.answers().forEach((owed, outcome) -> {
                     if (outcome instanceof RuleAccounting.Outcome.Unaccounted unaccounted
                             && unaccounted.why()
@@ -318,6 +366,10 @@ class WhatAStandingQuestionIsAccountedForByTest {
     }
 
     private static FieldDomains read(String source) {
+        return read(source, ReadAs.THE_COMPILATION_DOES);
+    }
+
+    private static FieldDomains read(String source, ReadingPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
@@ -327,6 +379,6 @@ class WhatAStandingQuestionIsAccountedForByTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         return FieldDomains.of(name, RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                policy));
     }
 }

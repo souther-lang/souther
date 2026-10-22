@@ -35,7 +35,12 @@ class HowOftenAValueOccursIsCountedByTheOrderItStandsOnTest {
 
     private static NumericTerm.Reading read(Carrier on, ObservedValue own,
                                             List<ObservedValue> every) {
-        return TermOrdersFixtures.itself(AMONG, on).readAmong(own, every);
+        return switch (TermOrdersFixtures.numberOf(TermOrdersFixtures.itself(AMONG, on), own,
+                every)) {
+            case TermOrders.Neighbouring.Read<String>(NumericTerm.Reading reading) -> reading;
+            case TermOrders.Neighbouring.HeldNothing<String>(String why) ->
+                    throw new AssertionError("every value here is held, and " + why);
+        };
     }
 
     @Test

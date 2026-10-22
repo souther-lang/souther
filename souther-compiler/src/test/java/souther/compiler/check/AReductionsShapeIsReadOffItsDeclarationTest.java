@@ -30,22 +30,23 @@ class AReductionsShapeIsReadOffItsDeclarationTest {
      * parameter. */
     @Test
     void aFoldFromCarriesItsAccumulatorOnTheFirstParameter() {
-        assertEquals(new Reductions.Reduction(1, 0), Reductions.of(op("List", "foldFrom")));
+        assertEquals(new Reductions.Reduction(1, 0, true), Reductions.of(op("List", "foldFrom")));
     }
 
     /** The same walk over the container reversed, whose step takes the element first. Read off the
-     * declaration, so the difference costs nothing to know. */
+     * declaration, so the difference costs nothing to know. The elements arrive last to first. */
     @Test
     void aFoldRightCarriesItsAccumulatorOnTheSecondParameter() {
-        assertEquals(new Reductions.Reduction(1, 1), Reductions.of(op("List", "foldRight")));
+        assertEquals(new Reductions.Reduction(1, 1, false),
+                Reductions.of(op("List", "foldRight")));
     }
 
     /** A walk over a container with no order is read the same way: what the rule licenses says
-     * nothing about the order elements arrive in. */
+     * nothing about the order elements arrive in, and none is claimed. */
     @Test
     void aWalkOverAContainerWithNoOrderIsReadAlike() {
-        assertEquals(new Reductions.Reduction(1, 0), Reductions.of(op("Set", "fold")));
-        assertEquals(new Reductions.Reduction(1, 0), Reductions.of(op("Map", "fold")));
+        assertEquals(new Reductions.Reduction(1, 0, false), Reductions.of(op("Set", "fold")));
+        assertEquals(new Reductions.Reduction(1, 0, false), Reductions.of(op("Map", "fold")));
     }
 
     /** A sugar has no declaration of its own, so what is true of the call it becomes is true of it

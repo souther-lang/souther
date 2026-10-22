@@ -244,6 +244,127 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 "and with the distance held at nought neither run has a value");
     }
 
+    /**
+     * And what two numbers come to multiplied: where the region leaves the first factor no value
+     * dividing the level the item asks for, every pair multiplying to it is one the region refuses,
+     * and the product is out of reach; where it leaves one, it is not.
+     *
+     * <p>The region holds {@code x} at two. Seven is no multiple of two, so every pair of its
+     * divisors puts {@code x} somewhere else; six is two times three. Held at minus two, six is
+     * minus two times minus three, which a walk of the divisors above nought alone would miss.
+     */
+    @Test
+    void aProductTheRegionLeavesNoPairOfIsOutOfReach() {
+        SearchRegion atTwo = region().assuming(form(1, 0, -2), Rel.EQ).taken();
+        SearchRegion atMinusTwo = region().assuming(form(1, 0, 2), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class, realize(productAt(7), atTwo),
+                "the first factor stands at two, which divides no pair multiplying to seven");
+        assertFalse(realize(productAt(6), atTwo) instanceof Realization.Impossible,
+                "and six is two times three");
+        assertFalse(realize(productAt(6), atMinusTwo) instanceof Realization.Impossible,
+                "and minus two times minus three");
+    }
+
+    /**
+     * And what {@code x} leaves divided by {@code y}: where the region holds the divisor at three,
+     * a remainder of five is one no pair gives, since a remainder is below its divisor in size, and
+     * is out of reach; a remainder of two is not.
+     */
+    @Test
+    void aRemainderTheRegionLeavesNoDivisorForIsOutOfReach() {
+        SearchRegion atThree = region().assuming(form(0, 1, -3), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class, realize(remainderByAnInputAt(5), atThree),
+                "the divisor stands at three, which no remainder of five is below");
+        assertFalse(realize(remainderByAnInputAt(2), atThree) instanceof Realization.Impossible,
+                "and two is below three");
+    }
+
+    /**
+     * A remainder is below its divisor in size, and the divisors are numbers of the type: nothing
+     * leaves the greatest {@code Int} or the least, since each would need a divisor one past an
+     * end, and a divisor at the least {@code Int} leaves the remainder one above it.
+     */
+    @Test
+    void aRemainderNoDivisorOfTheTypeLeavesIsOutOfReach() {
+        SearchRegion free = region();
+
+        assertInstanceOf(Realization.Impossible.class,
+                realize(remainderByAnInputAt(Long.MAX_VALUE), free),
+                "the divisor would be one past the greatest Int");
+        assertInstanceOf(Realization.Impossible.class,
+                realize(remainderByAnInputAt(Long.MIN_VALUE), free),
+                "and the least needs one below the least");
+        assertFalse(realize(remainderByAnInputAt(Long.MIN_VALUE + 1), free)
+                instanceof Realization.Impossible, "the least Int itself leaves the next one up");
+        assertFalse(realize(remainderByAnInputAt(Long.MAX_VALUE - 1), free)
+                instanceof Realization.Impossible, "and the greatest leaves one below it");
+    }
+
+    /**
+     * Where the divisors tried are all there is room for and the rules still refuse every one, the
+     * item is left open and not proved out of reach: the divisors past the figure were not asked.
+     * With the dividend held at nought nothing is a remainder of one but a divisor of one, which
+     * is none above one.
+     */
+    @Test
+    void aSearchThatRanOutOfDivisorsProvesNothing() {
+        SearchRegion atNought = region().assuming(form(1, 0, 0), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Unknown.class,
+                realize(remainderByAnInputAt(1), atNought),
+                "no divisor tried leaves one, and the ones past the figure were not tried");
+    }
+
+    /** What {@code x} leaves divided by {@code y}, at one of the remainders. */
+    private static Standing remainderByAnInputAt(long remainder) {
+        Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
+        on.put(term("x"), Carrier.WHOLE);
+        on.put(term("y"), Carrier.WHOLE);
+        return new Standing.OfARemainderByAnInput(term("x"), term("y"), on,
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(remainder)));
+    }
+
+    /** What {@code x} and {@code y} come to multiplied, at one of the products. */
+    private static Standing productAt(long product) {
+        Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
+        on.put(term("x"), Carrier.WHOLE);
+        on.put(term("y"), Carrier.WHOLE);
+        return new Standing.OfAProduct(term("x"), term("y"), on,
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(product)));
+    }
+
+    /**
+     * A remainder of a form together with another number the region leaves nowhere the level asks
+     * for is out of reach.
+     *
+     * <p>Held at nought, {@code x} leaves nought by seven and {@code y} is nought, so the sum is
+     * nought and not three. The remainders the added number can make up three with are the ones it
+     * leaves, and none is one the region leaves {@code x}.
+     */
+    @Test
+    void aRemainderPlusANumberTheRegionLeavesNoSumOfIsOutOfReach() {
+        SearchRegion holdingNought = region().assuming(form(1, 0, 0), Rel.EQ).taken()
+                .assuming(form(0, 1, 0), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class,
+                realize(remainderPlusAt(3), holdingNought),
+                "both stand at nought, which sum to nought and not three");
+        assertFalse(realize(remainderPlusAt(0), holdingNought) instanceof Realization.Impossible,
+                "and nought is the sum they do come to");
+    }
+
+    /** The remainder of {@code x} by seven plus {@code y}, at one of the sums. */
+    private static Standing remainderPlusAt(long sum) {
+        return new Standing.OfARemainderAndAForm(form(1, 0, 0), Map.of(term("x"), Carrier.WHOLE),
+                BigInteger.valueOf(7), form(0, 1, 0), Map.of(term("y"), Carrier.WHOLE),
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(sum)));
+    }
+
     /** A remainder of {@code x + y} by seven, at one of the remainders. */
     private static Standing remainderAt(long remainder) {
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
@@ -432,7 +553,6 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     private static Read read(String source, String behavior) {
         Compilation compilation =
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

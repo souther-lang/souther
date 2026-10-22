@@ -76,7 +76,8 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
         List<WayIn> answeredTurned =
                 turnedRound(read.answeredBy(), read.saidInPart(), turnedInPart);
         BodyInputReading turnedRoundReading = BodyInputReading.of(new CoverageRead.Read(
-                read.interactions(), read.arms(), turned, answeredTurned, turnedInPart,
+                read.interactions(), read.notJoined(), read.arms(), turned, answeredTurned,
+                turnedInPart,
                 read.restOfTheBlock(), read.answersNothing()), subject, arrives);
         Map<AxisId, BodyDistinction> turnedRound = turnedRoundReading.distinctions();
 

@@ -178,7 +178,7 @@ final class Clauses {
                     new ClausesInOrder.OneClause.Unread(it.ref(),
                             ClausesInOrder.WhyAClauseIsUnread.A_FIELD_LEFT_OUT);
             case ClauseMeaning.Stated it -> new ClausesInOrder.OneClause.Stated(it.ref(),
-                    substituted(it.states().termForClauseReading(), given), it.parts());
+                    it.states().termForClauseReading(), given, it.parts());
         };
     }
 
@@ -274,8 +274,11 @@ final class Clauses {
                 // The clause as one reading, and the parts its author wrote as subtrees of that
                 // very reading. Read apart instead, a conjunct would be read without the conjunct
                 // beside it, and a branch one of them rules out would stand.
-                case ClausesInOrder.OneClause.Stated it -> stated.add(new Stated(it.clause(),
-                        it.states(), partsOf(new AsStated(it.states(), it.parts()))));
+                case ClausesInOrder.OneClause.Stated it -> {
+                    Core states = it.substituted();
+                    stated.add(new Stated(it.clause(), states,
+                            partsOf(new AsStated(states, it.parts()))));
+                }
                 case ClausesInOrder.OneClause.Unread it ->
                         lost.add(new RuleRef.Invariant(it.clause()));
             }
@@ -447,30 +450,37 @@ final class Clauses {
         void walk(Core e) {
             Location at = locationOf(e);
             if (at != null) {
-                read(at, ClauseRead.Kind.ITS_VALUES);
+                read(at, ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE);
+                return;
+            }
+            Core.PreservedCall call = e instanceof Core.PreservedCall preserved ? preserved : null;
+            ElementsApart.Stated apart = call == null ? null : ElementsApart.stated(call, newtypes);
+            Location container = apart == null ? null : locationOf(apart.container());
+            if (container != null) {
+                read(container, ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(apart.run()));
                 return;
             }
             if (e instanceof Core.Read r) {
                 bindings.add(r.binding());
             }
-            Core counted = e instanceof Core.PreservedCall call ? countedArgument(call) : null;
+            Core counted = call == null ? null : countedArgument(call);
             Core.forEachChild(e, child -> {
                 if (child == counted) {
-                    read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS);
+                    read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, RuleKey.THE_VALUE);
                 } else {
                     walk(child);
                 }
             });
         }
 
-        private void read(Location at, ClauseRead.Kind kind) {
+        private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
             bindings.add(at.root());
             List<String> steps = new ArrayList<>();
             if (!wraps) {
                 steps.add(fields.get(at.root()));
             }
             steps.addAll(at.path());
-            reads.add(new ClauseRead(new RuleKey(steps), kind));
+            reads.add(new ClauseRead(new RuleKey(steps), kind, run));
         }
 
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */

@@ -109,6 +109,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("MeetingsNotWalked", "answers/MAY_CHANGE");
         // A meeting the classes do not place is placed the same way however much a run allows.
         table.put("MeetingsNotPlaced", "answers/UNAFFECTED");
+        // And a sum whose decisions are not joined to evaluations is joined the same way.
+        table.put("MeetingsNotJoined", "answers/UNAFFECTED");
         // A run this reading cannot place among the rules is not placed by allowing more.
         table.put("DecisionOfRowUnreadable", "answers/UNAFFECTED");
         // And a run nothing recorded is not recorded by allowing more either: what watched it is
@@ -121,6 +123,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // The rows written hold each key once, and a run allowed more writes no row that holds
         // one twice: what is short is a capacity and not a figure.
         table.put("KeyedOverwriteCasesUnmeasured", "answers/UNAFFECTED");
+        // No row is written toward a node further down than the ones a row writes, and a run
+        // allowed more of everything writes none either.
+        table.put("ReachableNodeCasesUnmeasured", "answers/UNAFFECTED");
         // A rewrite left open asks why: a search stopped at how many rows a generation writes may
         // go further where more are allowed, and nothing else that leaves one open is an allowance.
         table.put("RewriteUndecided", "asks why it was left open/MAY_CHANGE");
@@ -213,22 +218,15 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
      */
     private static RunSensitivity sensitivityOf(RulesLeftUnread why) {
         return switch (why) {
-            case RulesLeftUnread.ClauseOfThisReadingWasUnread _ -> RunSensitivity.UNAFFECTED;
-            case RulesLeftUnread.Handoff handoff -> switch (handoff.why()) {
-                case RulesLeftUnread.HandoffUnread.FromBlockedDescent _,
-                     RulesLeftUnread.HandoffUnread.NotFullyAccepted _ ->
-                        RunSensitivity.UNAFFECTED;
-            };
+            case RulesLeftUnread.ClauseOfThisReadingWasUnread _,
+                 RulesLeftUnread.HandoffNotAccepted _ -> RunSensitivity.UNAFFECTED;
         };
     }
 
     /** One of each way rules are left unread, which is what a `RulesNotReached` is written from. */
     private static List<RulesLeftUnread> everyWayRulesAreLeftUnread() {
         return List.of(new RulesLeftUnread.ClauseOfThisReadingWasUnread(),
-                new RulesLeftUnread.Handoff(
-                        new RulesLeftUnread.HandoffUnread.FromBlockedDescent()),
-                new RulesLeftUnread.Handoff(
-                        new RulesLeftUnread.HandoffUnread.NotFullyAccepted()));
+                new RulesLeftUnread.HandoffNotAccepted());
     }
 
     /** Whether the arm holds something to put the question to, which is what the rows record. */
@@ -250,9 +248,11 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
                  Weakening.MeetingsNotWalked _, Weakening.MeetingsNotPlaced _,
+                 Weakening.MeetingsNotJoined _,
                  Weakening.DecisionReadingIncomplete _,
                  Weakening.DecisionRuleReadShort _,
-                 Weakening.KeyedOverwriteCasesUnmeasured _ -> "answers";
+                 Weakening.KeyedOverwriteCasesUnmeasured _,
+                 Weakening.ReachableNodeCasesUnmeasured _ -> "answers";
         };
     }
 
@@ -296,6 +296,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.MeetingsNotWalked("b", 1,
                 List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(4))));
         out.add(new Weakening.MeetingsNotPlaced("b", 1));
+        out.add(new Weakening.MeetingsNotJoined("b", 1));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));
         out.add(new Weakening.DecisionRunNotWatched("b"));
@@ -305,6 +306,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                                 .PATHS_OF_A_DECISION_READ)));
         out.add(new Weakening.DecisionRuleReadShort("b"));
         out.add(new Weakening.KeyedOverwriteCasesUnmeasured("b"));
+        out.add(new Weakening.ReachableNodeCasesUnmeasured("b"));
         out.add(new Weakening.RewriteUndecided("b",
                 new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                         new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),

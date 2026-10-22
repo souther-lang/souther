@@ -56,11 +56,19 @@ public final class Conclusion {
          *  held at one past it. By identity, since a part held twice is one statement counted
          *  twice wherever it is held. */
         private final Map<Proposition, Long> parts = new IdentityHashMap<>();
+        /** The figure parts are counted up to, and held at one past. */
+        private final long mostParts;
         private int unread;
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing) {
+            this(where, reusing, PARTS);
+        }
+
+        private Shared(Optional<ModelOccurrence> where, boolean reusing,
+                       CompositionBudget countedTo) {
             this.where = where;
             this.reusing = reusing;
+            this.mostParts = countedTo.maximum();
         }
     }
 
@@ -138,6 +146,20 @@ public final class Conclusion {
     }
 
     /**
+     * A counting of parts written out, counted as a step is ({@link #partsIn}) and no further than
+     * one past {@code figure} — for one that counts many statements sharing parts, each part
+     * counted once and then known.
+     */
+    static Conclusion countingTo(CompositionBudget figure) {
+        return new Conclusion(new Shared(Optional.empty(), false, figure), Map.of());
+    }
+
+    /** How many parts {@code stated} comes to written out, as {@link #countingTo} counts. */
+    long partsWrittenOut(Proposition stated) {
+        return partsIn(stated);
+    }
+
+    /**
      * How many parts {@code stated} comes to written out — each part as many times as it is held,
      * the statements a count is taken over among them — or one past the figure, where it is past
      * it.
@@ -164,9 +186,10 @@ public final class Conclusion {
                  Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
                  Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.Unread _,
-                 Proposition.Carried _ -> 0;
+                 Proposition.Carried _, Proposition.SoManyHold _,
+                 Proposition.WhereItAnswers _ -> 0;
         };
-        long kept = Math.min(out, PARTS.maximum() + 1L);
+        long kept = Math.min(out, shared.mostParts + 1L);
         shared.parts.put(stated, kept);
         return kept;
     }
@@ -192,10 +215,16 @@ public final class Conclusion {
                 }
                 yield out;
             }
+            case Quantity.APieceOf piece -> partsIn(piece.string());
+            case Quantity.IsAmongThePieces among ->
+                    partsIn(among.value()) + partsIn(among.string());
             case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
-                 DecisionAtom.TakenOfAnAnswer _, Quantity.OfABinding _,
+                 DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
+                 Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,
-                 Quantity.RemainderOfADividend _ -> 0;
+                 Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
+                 Quantity.RemainderOfADividend _, Quantity.RemainderByAnInput _,
+                 Quantity.ProductOfTwo _, Quantity.HowManyCarried _ -> 0;
         };
     }
 
@@ -207,6 +236,57 @@ public final class Conclusion {
     /** What {@code step} concluded the last time it was concluded here, or null where it was not. */
     public Proposition concludedAt(Derivation step) {
         return shared.last.get(step);
+    }
+
+    /**
+     * Some element of {@code container} meeting {@code element} — or, where {@code element}
+     * quantifies {@code container} already, a part nothing read: two elements of one container
+     * said of one element would be one subject ({@link Proposition.Some}). Every quantifier a
+     * derivation concludes is made here, so no reading of two elements reaches a reader as one.
+     */
+    Proposition someElement(DecisionSubject container, Proposition element) {
+        return Proposition.Some.quantifiesOver(container, element)
+                ? twoElementsAsOne()
+                : new Proposition.Some(container, element, true);
+    }
+
+    /**
+     * Some element of {@code container} meeting {@code element}, where {@code element} picks out
+     * the one element worked out — the entry a lookup found — and so where that one answers is
+     * where the whole does: its divisor nought stops the run, and no other element is asked.
+     * Read as some element meeting it where it holds, on the rows no element it picks out answers
+     * nothing on ({@link #someElement}, of statements every row answers).
+     */
+    Proposition theEntryMeeting(DecisionSubject container, Proposition element) {
+        Proposition answers = Proposition.whereItAnswersAtAll(element);
+        return answers == null ? someElement(container, element)
+                : Proposition.whereItAnswers(someElement(container, answers.denied()).denied(),
+                        someElement(container, Proposition.whereItHolds(element)));
+    }
+
+    /**
+     * {@code element} said of one element of {@code container} that a lookup picked out — or,
+     * where {@code element} quantifies {@code container}, a part nothing read. The element picked
+     * out stands at {@code container[*]} with no quantifier around it, so a quantifier over
+     * {@code container} inside {@code element} takes it for its own element, and the two are one
+     * subject just as two quantifiers would make them.
+     */
+    Proposition ofOneElement(DecisionSubject container, Proposition element) {
+        return Proposition.Some.quantifiesOver(container, element) ? twoElementsAsOne() : element;
+    }
+
+    private Proposition twoElementsAsOne() {
+        return unread(new Derivation.Stopped(new WhyUnread.TwoElementsOfOneContainer(), false));
+    }
+
+    /**
+     * A part nothing read, for a statement about elements where what is stated of one may answer
+     * nothing on some rows and nothing says which element a run reaches first
+     * ({@link HowTheElementsAreAsked}): a quantifier, a count or a search is of statements every row
+     * answers, so the one a step would make is not made.
+     */
+    Proposition whichElementARunStopsAt() {
+        return unread(new Derivation.Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
     }
 
     Proposition unread(Derivation.Stopped stopped) {

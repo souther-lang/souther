@@ -2,9 +2,8 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -23,8 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reached by a value.
  *
  * <p>What the type says a value can be is asked as such: a record is the one case it is, a newtype
- * over a sum is the cases of the sum, and a sum inside a sum is its leaves. Where the declaration
- * says nothing this can follow — an optional — nothing is ruled out.
+ * over a sum is the cases of the sum, a sum inside a sum is its leaves, and the value an optional
+ * holds is what the optional is declared over.
  */
 class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
 
@@ -172,13 +171,13 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
                 | "live" : (Live { n = 1 }) -> 1
             """;
 
-    /** An optional is a position the declaration does not say the cases of this way, so the arms
-     *  over it are owed rows however narrow what it holds. */
+    /** An optional over the narrower sum, handed whole to a helper that takes an optional of the
+     *  wider one and hands its present value on. */
     private static final String AN_OPTIONAL = TYPES + """
 
             data Box = { stage: OpenStage? }
 
-            let present (s: Stage?): Int =
+            let present (s: Option<Stage>): Int =
                 match s with
                     | Some stage -> weightOf(stage)
                     | None -> 0
@@ -205,23 +204,10 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     private static Output run(String model, boolean strict) throws Exception {
         Path file = Files.createTempDirectory("souther-narrower").resolve("model.sou");
         Files.writeString(file, model);
-        PrintStream out = System.out;
-        PrintStream err = System.err;
-        ByteArrayOutputStream said = new ByteArrayOutputStream();
-        ByteArrayOutputStream warned = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(said, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(warned, true, StandardCharsets.UTF_8));
-        int exit;
-        try {
-            exit = Main.dispatch(strict
-                    ? new String[] {"examples", "--strict", file.toString()}
-                    : new String[] {"examples", file.toString()});
-        } finally {
-            System.setOut(out);
-            System.setErr(err);
-        }
-        return new Output(said.toString(StandardCharsets.UTF_8),
-                warned.toString(StandardCharsets.UTF_8), exit);
+        Ran ran = CliInProcess.run(strict
+                ? new String[] {"examples", "--strict", file.toString()}
+                : new String[] {"examples", file.toString()});
+        return new Output(ran.out(), ran.err(), ran.code());
     }
 
     @Test
@@ -259,6 +245,7 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     void anArmOneCallerReachesIsOwedAndIsNoDeadBranchForTheOther() throws Exception {
         Output output = run(BOTH, false);
 
+        assertEquals(0, output.exit(), () -> output.report() + output.warnings());
         assertTrue(output.report().contains("branch      2/2")
                         && output.report().contains("branch      2/3"),
                 () -> "each behavior counts the arms its own input can reach:\n"
@@ -325,11 +312,15 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     }
 
     @Test
-    void whatTheDeclarationSaysNothingOfIsNotRuledOut() throws Exception {
+    void whatAnOptionalHoldsIsWhatItsDeclarationSays() throws Exception {
         Output output = run(AN_OPTIONAL, false);
 
-        assertFalse(output.warnings().contains("E1327"),
-                () -> "an optional is no position whose cases this reading follows:\n"
+        assertEquals(0, output.exit(), () -> output.report() + output.warnings());
+        assertTrue(output.warnings().contains("E1327")
+                        && output.warnings().contains("`b.stage@Some` is declared as Draft, Live")
+                        && output.warnings().contains("the arm is for Done"),
+                () -> "the value an optional holds is an `OpenStage` through the helper over the"
+                        + " wider optional, and the arm no value arrives at is the one for `Done`:\n"
                         + output.warnings());
     }
 

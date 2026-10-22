@@ -40,7 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that takes it is as sound as it is. These are the axioms the proofs of the library's written
  * operations take beside a kernel's laws (which {@code EveryLawHoldsOfWhatTheLibraryComputesTest}
  * runs): what its answer comes to beside what others answer, the containers it is no smaller than,
- * the one value it puts in, what every element of its answer is, which code points it keeps the
+ * the one value it puts in, what every element of its answer is,
+ * which code points it keeps the
  * having of, what it lists, what it builds its answer from, and how far it goes applying its
  * closure. Each is written from the axiom itself and run
  * ({@link WhatTheLibraryComputes}); how far a closure is applied is run through a closure that

@@ -2,18 +2,15 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.lang.reflect.Constructor;
+import souther.compiler.WhatWasCompiled;
+
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.MethodModel;
+import java.lang.constant.ClassDesc;
+import java.lang.constant.MethodTypeDesc;
 import java.lang.reflect.Method;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,33 +38,39 @@ class WhatIsSettledAfterAChoiceIsObservedAndNotComposedAgainTest {
      * <p>Over every class this compiler holds and not over the type alone: an algebra written
      * beside it — a static method over two of them, a builder holding one and returning one — is
      * the same second answer arrived at from outside.
+     *
+     * <p>The classes the compiler compiles and no others: the modules below it cannot name this
+     * type, and a test's fixture holding one is no reader this is about.
      */
     @Test
     void nothingTakesASettledOrderAndAnswersWithAnother() {
         Set<String> composing = new TreeSet<>();
         int mentioning = 0;
-        for (Class<?> each : compiled()) {
-            for (Method method : each.getDeclaredMethods()) {
-                boolean takes = takesOne(method.getParameterTypes());
-                boolean answers = method.getReturnType() == SettledOrderEnvelope.class;
+        for (ClassModel each : WhatWasCompiled.compiled().all()) {
+            String named = each.thisClass().asInternalName().replace('/', '.');
+            for (MethodModel method : each.methods()) {
+                MethodTypeDesc type = method.methodTypeSymbol();
+                boolean takes = type.parameterList().contains(ENVELOPE);
+                if (method.methodName().equalsString("<init>")) {
+                    // A constructor answers with the class it is of, so one taking a settled order
+                    // is a reader holding what it was handed. The exception is this type's own:
+                    // made from another of these, it would be the same operation under the one
+                    // name that does not read as one.
+                    if (takes) {
+                        mentioning++;
+                        if (each.thisClass().asSymbol().equals(ENVELOPE)) {
+                            composing.add(named + ".<init>");
+                        }
+                    }
+                    continue;
+                }
+                boolean answers = type.returnType().equals(ENVELOPE);
                 if (!takes && !answers) {
                     continue;
                 }
                 mentioning++;
                 if (takes && answers) {
-                    composing.add(each.getName() + "." + method.getName());
-                }
-            }
-            // A constructor answers with the class it is of, so one taking a settled order is a
-            // reader holding what it was handed. The exception is this type's own: made from
-            // another of these, it would be the same operation under the one name that does not
-            // read as one.
-            for (Constructor<?> made : each.getDeclaredConstructors()) {
-                if (takesOne(made.getParameterTypes())) {
-                    mentioning++;
-                    if (each == SettledOrderEnvelope.class) {
-                        composing.add(each.getName() + ".<init>");
-                    }
+                    composing.add(named + "." + method.methodName().stringValue());
                 }
             }
         }
@@ -105,53 +108,12 @@ class WhatIsSettledAfterAChoiceIsObservedAndNotComposedAgainTest {
                         + " the reading that composed the connectives over it");
     }
 
-    private static boolean takesOne(Class<?>[] these) {
-        for (Class<?> each : these) {
-            if (each == SettledOrderEnvelope.class) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /**
-     * Every class of this compiler, loaded for what it declares.
+     * A settled order, as a class file names it.
      *
-     * <p>Not initialised, for the reason the reading of orders beside it gives: what is read here is
-     * what a type declares, and running its static initialisers would make this test depend on what
-     * they touch.
+     * <p>Read off what this module compiled to rather than off classes loaded for it: what is asked
+     * is what a type declares, and the class file says that without the type being loaded.
      */
-    private static List<Class<?>> compiled() {
-        List<Class<?>> found = new ArrayList<>();
-        for (String entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
-            Path root = Path.of(entry);
-            if (!entry.contains("souther-") || !Files.isDirectory(root)) {
-                continue;
-            }
-            try (Stream<Path> walk = Files.walk(root)) {
-                walk.filter(each -> each.toString().endsWith(".class"))
-                        .map(each -> root.relativize(each).toString())
-                        .forEach(name -> load(name, found));
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        }
-        return found;
-    }
-
-    private static void load(String path, List<Class<?>> into) {
-        String named = path.substring(0, path.length() - ".class".length())
-                .replace(File.separatorChar, '.').replace('/', '.');
-        if (!named.startsWith("souther.") || named.endsWith("package-info")
-                || named.endsWith("module-info")) {
-            return;
-        }
-        try {
-            into.add(Class.forName(named, false,
-                    WhatIsSettledAfterAChoiceIsObservedAndNotComposedAgainTest.class
-                            .getClassLoader()));
-        } catch (ClassNotFoundException | LinkageError _) {
-            // a class this test's path cannot resolve says nothing about the rule
-        }
-    }
+    private static final ClassDesc ENVELOPE = SettledOrderEnvelope.class.describeConstable()
+            .orElseThrow();
 }

@@ -78,6 +78,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -747,17 +748,29 @@ public final class Generator {
                              CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
+                             COUNTS_OF_KEYS_TRIED,
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
+                             ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
+                             // The divisors past this one were never asked for, so what the search
+                             // came to is about the pairs of the ones it tried.
+                             DIVISORS_OF_A_PRODUCT_TRIED,
+                             // Likewise the divisors of a remainder past the ones it tried.
+                             DIVISORS_OF_A_REMAINDER_TRIED,
+                             // And the remainders of a sum past the ones it tried.
+                             REMAINDERS_A_SUM_IS_TRIED_AT,
                              // The numbers past this one were never asked for, so what the search
                              // came to is about the numbers it tried and about nothing else. The
                              // word says that, where the word for a set walked to its end says the
                              // set has no value in it.
                              NUMBERS_OF_A_SET_TRIED,
+                             // Likewise the choices of a number for each of several totals past
+                             // this one: the search came to is about the choices it tried.
+                             COMBINATIONS_OF_TOTALS_TRIED,
                              // The counts a string is written for past this one, and the lengths
                              // past the ones looked at, were never asked for either.
                              CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
@@ -785,6 +798,10 @@ public final class Generator {
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION, TOTAL_READINGS_OF_ONE_CONDITION,
                              PARTS_A_DERIVATION_CONCLUDES,
+                             // It stops a reader taking a count of statements apart into its
+                             // choices, which takes the count as a part it could not see into,
+                             // naming it.
+                             PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                              // It stops what a path takes in of a condition, and what it stopped
                              // is carried as a condition the path did not take in, naming it.
                              ALTERNATIVES_A_PATH_TRIES,
@@ -1359,7 +1376,7 @@ public final class Generator {
 
         /** A row nothing ran: nothing can say where it went, and it answered nothing. */
         public static ObservedRun nothingRan() {
-            return new ObservedRun(new Watched.NoAccount(), new AnswerObservation.NotAnswered());
+            return new ObservedRun(new Watched.NotRun(), new AnswerObservation.NotAnswered());
         }
     }
 
@@ -1379,15 +1396,20 @@ public final class Generator {
         record Ran(AlignedObservation seen) implements Watched {}
 
         /**
-         * Nothing here can say what it did.
-         *
-         * <p>Three things come to this and they are one arm because nothing tells them apart by
-         * acting differently: nothing ran the row, something ran it and nothing was recording, and
-         * something ran it and the recording was never read. What none of them is, is a run that
-         * reached nothing — that is {@link Ran} of an empty account, and it is the one difference
-         * anything here turns on.
+         * Something ran the row and nothing here can say what it did: nothing was recording, or the
+         * recording was never read. What it answered is the run's, and a run that aborted is as
+         * much one that did not answer here as it is in {@link Ran}. What this is not is a run that
+         * reached nothing — that is {@link Ran} of an empty account — or a row nothing ran
+         * ({@link NotRun}).
          */
         record NoAccount() implements Watched {}
+
+        /**
+         * Nothing ran the row: no way to run it, or a row short of what the behavior is stood in
+         * with. It answered nothing because nothing was asked, which is not a run that stopped
+         * without an answer, and a search that needs a run to say anything has nothing to go on.
+         */
+        record NotRun() implements Watched {}
     }
 
     // --- composing the rows ---------------------------------------------------------------------
@@ -2124,7 +2146,7 @@ public final class Generator {
                             Pins pins = Pins.of(axes, Map.of(at, cls));
                             seen = looking.tookFromSearching(() -> search(axes, pins, purposes,
                                     origins, (_, _) -> true, check, references, answers,
-                                    List.of(), row -> looking.of(row, null), true,
+                                    HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
                                     goingOn.answersNothing()));
                             if (seen != null) {
                                 break;
@@ -2799,58 +2821,101 @@ public final class Generator {
                 ArmProbe goneOn = rest.get().arm();
                 List<WayPastTheGuard> ways = waysOn(seen, written, against);
                 RepairShortfall.WayPast[] came = new RepairShortfall.WayPast[ways.size()];
-                // Two ways that ask the row for the same things are one search, and what it came
-                // to is what both of them came to.
-                Map<List<HeldOutcome>, RepairShortfall.WayPast> asked = new HashMap<>();
+                // Two choices that ask the row for the same things are one search, whichever ways
+                // they are choices of, and what it came to is what both of them came to.
+                Map<AChoice, ChoiceCame> asked = new HashMap<>();
                 GeneratedRow further = null;
+                // The first choice of each way is looked for as a way with one choice is; the
+                // rest share one figure over the guard, so that the searches made past it are as
+                // many as its ways and that figure, and never their product.
+                int more = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
                 // Every way is looked for, runs left or not. Looking at a row run already costs
                 // nothing, so a search with none left can still be answered by rows run before;
                 // what says a way was given up is a run refused inside its own search.
                 for (int at : fewestFirst(ways)) {
-                    List<HeldOutcome> way = ((WayPastTheGuard.Holding) ways.get(at)).demands();
-                    RepairShortfall.WayPast already = asked.get(way);
-                    if (already != null) {
-                        came[at] = already;
-                        continue;
+                    WayPastTheGuard.Holding way = (WayPastTheGuard.Holding) ways.get(at);
+                    // One search for each choice the way can be held along, and what the way came
+                    // to is what every one of them came to.
+                    List<CameToNothing> each = new ArrayList<>();
+                    Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
+                    cutShort.addAll(way.cutShort());
+                    for (int choosing = 0; choosing < way.choices().size(); choosing++) {
+                        List<HeldOutcome> choice = way.choices().get(choosing);
+                        List<HeldOutcome> both = new ArrayList<>(held);
+                        both.addAll(choice);
+                        ChoiceCame already = asked.get(new AChoice(choice));
+                        if (already != null) {
+                            each.add(already.came());
+                            if (already.stopped()) {
+                                cutShort.add(CompositionBudget.RUNS_REPAIRING_A_ROW);
+                            }
+                            continue;
+                        }
+                        // What the choice asks beside what the row was held to above, put together
+                        // once. A later choice no row is — one that takes a value two cases at
+                        // once along the ways held above, or a number to two places — is no way
+                        // for this row, and is not looked for nor counted. The first choice is
+                        // looked for whatever it is, so that what the way came to says why.
+                        HeldTogether together = heldTogether(axes.subject(), both, check);
+                        if (choosing > 0 && together instanceof HeldTogether.Refused) {
+                            continue;
+                        }
+                        if (choosing > 0 && more == 0) {
+                            cutShort.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+                            break;
+                        }
+                        if (choosing > 0) {
+                            more--;
+                        }
+                        runs.stopped = false;
+                        Searched searched = search(axes, pins, purposes, List.of(from.from()),
+                                keeping, check, references, answers, together,
+                                row -> switch (watched(row, runs).orElse(null)) {
+                                    case null -> {
+                                        runs.stopped = true;
+                                        yield Acceptance.STOPPED;
+                                    }
+                                    // Past the guard and to an answer. A run that went on and
+                                    // then stopped without one, or went past what a run may
+                                    // spend, is not a row that answers, wherever it got to first.
+                                    case ObservedRun(Watched.Ran(AlignedObservation run),
+                                                     AnswerObservation answer)
+                                            when run.lit(goneOn)
+                                            && answer instanceof AnswerObservation.Answered ->
+                                            Acceptance.TAKEN;
+                                    default -> Acceptance.PASSED;
+                                }, answersNothing);
+                        if (searched.row() != null) {
+                            further = searched.row();
+                            held = List.copyOf(both);
+                            break;
+                        }
+                        asked.put(new AChoice(choice),
+                                new ChoiceCame(searched.came(), runs.stopped));
+                        each.add(searched.came());
+                        if (runs.stopped) {
+                            cutShort.add(CompositionBudget.RUNS_REPAIRING_A_ROW);
+                        }
                     }
-                    List<HeldOutcome> both = new ArrayList<>(held);
-                    both.addAll(way);
-                    runs.stopped = false;
-                    Searched searched = search(axes, pins, purposes, List.of(from.from()), keeping,
-                            check, references, answers, List.copyOf(both),
-                            row -> switch (watched(row, runs).orElse(null)) {
-                                case null -> {
-                                    runs.stopped = true;
-                                    yield Acceptance.STOPPED;
-                                }
-                                // Past the guard and to an answer. A run that went on and then
-                                // stopped without one is a row the compiler refuses, wherever it
-                                // got to first.
-                                case ObservedRun(Watched.Ran(AlignedObservation run),
-                                                 AnswerObservation answer)
-                                        when run.lit(goneOn)
-                                        && !(answer instanceof AnswerObservation.NotAnswered) ->
-                                        Acceptance.TAKEN;
-                                default -> Acceptance.PASSED;
-                            }, answersNothing);
-                    if (searched.row() != null) {
-                        further = searched.row();
-                        held = List.copyOf(both);
+                    if (further != null) {
                         break;
                     }
-                    RepairShortfall.WayPast its = runs.stopped
-                            ? new RepairShortfall.WayPast.CutShort(searched.came(),
-                                    CompositionBudget.RUNS_REPAIRING_A_ROW)
-                            : new RepairShortfall.WayPast.Searched(searched.came());
-                    came[at] = its;
-                    asked.put(way, its);
+                    // A way some of whose choices a figure left unlooked at is cut short as much
+                    // as one whose runs ran out: a row past none of those looked along may still
+                    // be past it. Every figure that did, since each is a number to raise.
+                    List<CameToNothing> joined = CameToNothing.joined(each);
+                    came[at] = cutShort.isEmpty() ? new RepairShortfall.WayPast.Searched(joined)
+                            : new RepairShortfall.WayPast.CutShort(joined, cutShort);
                 }
                 if (further == null) {
                     List<RepairShortfall.WayPast> each = new ArrayList<>();
                     for (int at = 0; at < ways.size(); at++) {
-                        each.add(ways.get(at)
-                                instanceof WayPastTheGuard.Barred(RepairShortfall.Barrier why)
-                                ? new RepairShortfall.WayPast.NotSearchable(why) : came[at]);
+                        each.add(switch (ways.get(at)) {
+                            case WayPastTheGuard.Unheld(var why, var figures) -> why.isEmpty()
+                                    ? new RepairShortfall.WayPast.CutShort(List.of(), figures)
+                                    : new RepairShortfall.WayPast.NotSearchable(why, figures);
+                            case WayPastTheGuard.Holding _ -> came[at];
+                        });
                     }
                     return Composed.stopping(best, new RepairShortfall(purposes,
                             rest.get().refused(), new RepairShortfall.AtTheGuard.NoWayPast(each)));
@@ -2887,16 +2952,94 @@ public final class Generator {
          */
         private sealed interface WayPastTheGuard {
 
-            /** What holds every part of the way the row did not do. */
-            record Holding(List<HeldOutcome> demands) implements WayPastTheGuard {
+            /**
+             * What holds every part of the way the row did not do, one of {@code choices} at a
+             * time.
+             *
+             * <p>Several where a part of the way is one of several things a row can be held to
+             * ({@link HeldOutcome.Bringing.Found}): each choice is one of those for each part, so
+             * a row held to any one of them is held to the whole way, and none of them is all a
+             * row past the way could be.
+             *
+             * @param choices  one or more, each holding every part the row did not do, in the order
+             *                 they are looked for in
+             * @param cutShort the figures that left some choice out, none where none did
+             */
+            record Holding(List<List<HeldOutcome>> choices, Set<CompositionBudget> cutShort)
+                    implements WayPastTheGuard {
 
                 public Holding {
-                    demands = List.copyOf(demands);
+                    choices = choices.stream().map(List::copyOf).toList();
+                    if (choices.isEmpty() || choices.getFirst().isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "a way a row is held to holds it to something");
+                    }
+                    cutShort = InDeclaredOrder.of(cutShort);
                 }
             }
 
-            /** Nothing here can hold a row to it, and why. */
-            record Barred(RepairShortfall.Barrier why) implements WayPastTheGuard {}
+            /**
+             * Nothing here can hold a row to it: every reason a part of it gave, and every figure
+             * that left a part unlooked at.
+             *
+             * <p>All of them, since the way is all of its parts at once and each part that cannot
+             * be held is a thing somebody would have to do — told the first, a reader who does it
+             * meets the next.
+             *
+             * @param why     the reasons; none where only figures stand in the way
+             * @param figures the figures; none where none left a part unlooked at
+             */
+            record Unheld(Set<RepairShortfall.Barrier> why, Set<CompositionBudget> figures)
+                    implements WayPastTheGuard {
+
+                public Unheld {
+                    why = InDeclaredOrder.of(why);
+                    figures = InDeclaredOrder.of(figures);
+                    if (why.isEmpty() && figures.isEmpty()) {
+                        throw new IllegalArgumentException("a way nothing holds is held by nothing"
+                                + " for some reason");
+                    }
+                }
+
+                /** For one reason alone. */
+                static Unheld because(RepairShortfall.Barrier why) {
+                    return new Unheld(Set.of(why), Set.of());
+                }
+            }
+        }
+
+        /** What looking for one choice of a way came to, and whether a run was refused in it. */
+        private record ChoiceCame(CameToNothing came, boolean stopped) {}
+
+        /**
+         * One choice of a way past a guard, as a key: the same choice where it holds the same ways
+         * of holding each part, which are the same objects wherever they were met — what holds a
+         * condition is worked out once per place ({@link HeldOutcome.Of}) — so they are compared
+         * as objects, and a way's account of every condition on it is not walked to file one.
+         */
+        private record AChoice(List<HeldOutcome> held) {
+
+            @Override
+            public boolean equals(Object other) {
+                if (!(other instanceof AChoice that) || that.held.size() != held.size()) {
+                    return false;
+                }
+                for (int at = 0; at < held.size(); at++) {
+                    if (held.get(at) != that.held.get(at)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            @Override
+            public int hashCode() {
+                int out = 1;
+                for (HeldOutcome each : held) {
+                    out = 31 * out + System.identityHashCode(each);
+                }
+                return out;
+            }
         }
 
         /**
@@ -2916,7 +3059,7 @@ public final class Generator {
                 }
             }
             out.sort(Comparator.comparingInt(
-                    at -> ((WayPastTheGuard.Holding) ways.get(at)).demands().size()));
+                    at -> ((WayPastTheGuard.Holding) ways.get(at)).choices().getFirst().size()));
             return out;
         }
 
@@ -2930,11 +3073,12 @@ public final class Generator {
          * a guard that refused it on the next.
          *
          * <p>What the run already did is no demand: it was seen doing it, and the row it is
-         * composed again holds it as the row did, or holds it by the classes. A part of a way that
-         * is an arm, or a comparison no border offers a point on the side it comes out on, is one
-         * nothing here can hold a row to. Nor is one whose comparison stands a term at a parameter
-         * the row writes as the value the model states ({@code against}): holding it would compose
-         * that parameter afresh, and the value the author chose is the row's.
+         * composed again holds it as the row did, or holds it by the classes. A part of a way
+         * nothing here can state a demand for is one nothing here can hold a row to. Nor is one
+         * whose demand stands a term at a parameter the row writes as the value the model states
+         * ({@code against}): holding it would compose that parameter afresh, and the value the
+         * author chose is the row's. Asked of each way a part can be held along, since another
+         * way of holding the same part may leave the parameter as it is.
          *
          * <p>In the order the reading wrote them, one apiece.
          */
@@ -2957,41 +3101,59 @@ public final class Generator {
          */
         private WayPastTheGuard wayOn(AlignedObservation seen, List<ControlClaim> way,
                                       Set<String> against) {
-            List<HeldOutcome> demands = new ArrayList<>();
-            RepairShortfall.Barrier barred = null;
-            for (ControlClaim each : way) {
-                if (each.satisfiedBy(seen)) {
-                    continue;
-                }
-                switch (holding.at(each.at())) {
-                    case HeldOutcome.Bringing.NoValueCanStandThere _ -> {
-                        return new WayPastTheGuard.Barred(
-                                RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY);
-                    }
-                    case HeldOutcome.Bringing.NothingFound _ -> {
-                        if (barred == null) {
-                            barred = RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT;
-                        }
-                    }
-                    case HeldOutcome.Bringing.Found(HeldOutcome holds) -> {
-                        if (holds.demands().stream()
-                                .anyMatch(demand -> writesAnyOf(demand, against))) {
-                            if (barred == null) {
-                                barred = RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE;
-                            }
-                        } else {
-                            demands.add(holds);
-                        }
-                    }
+            List<HeldOutcome.Bringing> each = new ArrayList<>();
+            for (ControlClaim part : way) {
+                if (!part.satisfiedBy(seen)) {
+                    each.add(holding.at(part.at()));
                 }
             }
-            if (barred != null) {
-                return new WayPastTheGuard.Barred(barred);
+            if (each.isEmpty()) {
+                return WayPastTheGuard.Unheld.because(
+                        RepairShortfall.Barrier.THE_ROW_ALREADY_DOES_ALL_OF_IT);
             }
-            return demands.isEmpty()
-                    ? new WayPastTheGuard.Barred(
-                            RepairShortfall.Barrier.THE_ROW_ALREADY_DOES_ALL_OF_IT)
-                    : new WayPastTheGuard.Holding(demands);
+            // A way that would write a stated value afresh is left, and the rest are what holds
+            // the part.
+            PartsHeld together = partsHeld(each, one -> !writesAnyOf(one, against));
+            if (together.noRowGoes()) {
+                return WayPastTheGuard.Unheld.because(
+                        RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY);
+            }
+            if (!together.why().isEmpty() || !together.unlooked().isEmpty()) {
+                return new WayPastTheGuard.Unheld(together.why(), together.unlooked());
+            }
+            Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
+            cutShort.addAll(together.cutShort());
+            OneOfEach.Taken<HeldOutcome> choices = OneOfEach.ofEachPart(together.parts(),
+                    CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum());
+            if (!choices.everyWay()) {
+                cutShort.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+            }
+            return new WayPastTheGuard.Holding(choices.ways(), cutShort);
+        }
+
+        /**
+         * Whether holding the row to {@code held} composes a parameter in {@code against}: in
+         * every vocabulary it asks in, a case written at a position as much as a number, and of
+         * every alternative it takes on the way as much as the condition ({@link HeldOutcome#asks}).
+         */
+        private static boolean writesAnyOf(HeldOutcome held, Set<String> against) {
+            if (held.demands().stream().anyMatch(demand -> writesAnyOf(demand, against))) {
+                return true;
+            }
+            for (OnTheWay asked : held.asks()) {
+                boolean writes = switch (asked) {
+                    case OnTheWay.TakenIn in -> writesAnyOf(in.demand(), against);
+                    case OnTheWay.Narrowed narrowed -> WayToTheBorder.positionsOf(narrowed)
+                            .stream().anyMatch(position -> against.contains(position.head()));
+                    case OnTheWay.Counted counted -> WayToTheBorder.positionsOf(counted)
+                            .stream().anyMatch(position -> against.contains(position.head()));
+                    case OnTheWay.Settled _, OnTheWay.Declined _, OnTheWay.OneOf _ -> false;
+                };
+                if (writes) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /** Whether holding the row to {@code demand} composes a parameter in {@code against}. */
@@ -3053,7 +3215,8 @@ public final class Generator {
                                    FixtureReferences references,
                                    List<StoodInAnswer> answers, GoingOn goingOn) {
         Searched searched = search(axes, pins, purposes, origins, (_, _) -> true, check,
-                references, answers, List.of(), _ -> Acceptance.TAKEN, goingOn.answersNothing());
+                references, answers, HeldTogether.Asked.NOTHING, _ -> Acceptance.TAKEN,
+                goingOn.answersNothing());
         if (searched.row() == null) {
             return new Composed(null, null, searched.came());
         }
@@ -3123,7 +3286,10 @@ public final class Generator {
      *
      * @param origins what a row may be written against
      * @param admits  the classes each position may stand at beside the pins
-     * @param held    the comparisons every candidate is held to beside the pins
+     * @param held    the conditions every candidate is held to beside the pins, put together
+     *                ({@link #heldTogether}) by whoever holds the row to them: what they ask is
+     *                the same of every candidate, and whether it is anything a row can be is what
+     *                a caller holding a choice of several asks before it searches
      * @param accepts what a row that holds every pin has to be besides
      * @param answersNothing where the body answers nothing, which no row taken may sit
      */
@@ -3131,7 +3297,7 @@ public final class Generator {
                                    List<Purpose> purposes, List<ResolvedOrigin> origins,
                                    Admits admits, CandidateCheck check,
                                    FixtureReferences references, List<StoodInAnswer> answers,
-                                   List<HeldOutcome> held,
+                                   HeldTogether held,
                                    Function<GeneratedRow, Acceptance> accepts,
                                    WhereNothingIsAnswered answersNothing) {
         return search(axes, pins, purposes, origins, admits, check, references, answers, held,
@@ -3147,7 +3313,7 @@ public final class Generator {
                                    List<Purpose> purposes, List<ResolvedOrigin> origins,
                                    Admits admits, CandidateCheck check,
                                    FixtureReferences references, List<StoodInAnswer> answers,
-                                   List<HeldOutcome> held,
+                                   HeldTogether held,
                                    Function<GeneratedRow, Acceptance> accepts,
                                    boolean rechoosing, WhereNothingIsAnswered answersNothing) {
         String label = String.join(" with ", pins.labels());
@@ -3315,7 +3481,7 @@ public final class Generator {
         private Building(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
                          String label, CandidateCheck check, int most,
                          FixtureReferences references, List<StoodInAnswer> answers,
-                         List<HeldOutcome> held, Function<GeneratedRow, Acceptance> accepts,
+                         HeldTogether held, Function<GeneratedRow, Acceptance> accepts,
                          boolean rechoosing, WhereNothingIsAnswered answersNothing) {
             this.rechoosing = rechoosing;
             this.answersNothing = answersNothing;
@@ -3327,8 +3493,7 @@ public final class Generator {
             this.most = most;
             this.references = references;
             this.answers = answers;
-            this.held = held.isEmpty() ? HeldTogether.Asked.NOTHING
-                    : heldTogether(axes.subject(), held, check);
+            this.held = held;
             this.accepts = accepts;
             this.known = new ParameterProjections(axes);
         }
@@ -5321,6 +5486,8 @@ public final class Generator {
                         ? new TellingArmsApart(trial, answers) : null;
         RowTaking taking = preferring == null ? RowTaking.FIRST
                 : preferring.over(RowTaking.FIRST);
+        boolean[] noRowAnswered = {false};
+        SearchShortfall[] passedFound = {SearchShortfall.NONE};
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
@@ -5374,11 +5541,19 @@ public final class Generator {
                     List<FixtureTemplate> kept = preferring == null ? null : preferring.taken();
                     if (kept != null) {
                         kept.toArray(composed);
-                    } else if (!(came instanceof WalkedInOrder.RowTaken)) {
-                        throw new IllegalStateException("rows at a point were passed over and"
-                                + " none was kept");
+                        return true;
                     }
-                    return true;
+                    if (came instanceof WalkedInOrder.RowTaken) {
+                        return true;
+                    }
+                    // Rows were composed and none was run to an answer: said with the rest of
+                    // what the ways came to once they are all tried, as a row passed over and not
+                    // as a parameter that came to nothing.
+                    if (came instanceof WalkedInOrder.PassedOver(SearchShortfall its)) {
+                        passedFound[0] = passedFound[0].and(its);
+                    }
+                    noRowAnswered[0] = true;
+                    return false;
                 }
             }
         });
@@ -5387,28 +5562,35 @@ public final class Generator {
             // What every way tried came to, beside the figure where the walk stopped short of the
             // rest and a way under a case nobody read; where no way came to nothing to say it in,
             // the figure, the case nobody read, or that no case held them.
-            switch (WhatTheAlternativesCameTo.over(cameToNothing, null,
+            // And, where rows were composed and none came to an answer, those rows passed over:
+            // beside what the choice among rows was stopped at, which leaves the rows past it
+            // untried, and what the other ways came to — none of which a row passed over takes
+            // away, and a proof among them is not the walk's.
+            SearchShortfall passedOver = noRowAnswered[0]
+                    ? preferring.untried().and(passedFound[0]) : null;
+            switch (WhatTheAlternativesCameTo.over(cameToNothing, passedOver,
                     under.foundOut(walked), PARAMETERS)) {
                 case WhatTheAlternativesCameTo.Came.Said(ParameterCameToNothing said) ->
                         failed = said;
                 case WhatTheAlternativesCameTo.Came.Untried(SearchShortfall found) -> {
-                    if (!found.met().figures().isEmpty()) {
-                        return BoundaryAttempt.Stopped.at(label, found.met().figures(),
-                                where.unrepresented());
-                    }
-                    return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
-                            found.wordFor(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
-                            A_CASE_WAS_NOT_READ), where.unrepresented());
+                    return leftUntried(label, found,
+                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                            A_CASE_WAS_NOT_READ, where.unrepresented());
                 }
                 case WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ -> {
                     return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                             UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             NO_CASE_HOLDS_THEM), where.unrepresented());
                 }
-                // No row is handed a caller on the way to a point, so none is passed over.
-                case WhatTheAlternativesCameTo.Came.PassedOver<ParameterCameToNothing> _ ->
-                        throw new IllegalStateException("a row on the way to a point was passed"
-                                + " over, and nothing passes rows over there");
+                // Rows were composed and run, and none came to an answer: a fact about those rows,
+                // which is not that no row reaches the point. A figure that stopped the search is
+                // said as the figure; otherwise the word is the one for rows none of which was a
+                // witness, or the one for what else the search left untried.
+                case WhatTheAlternativesCameTo.Came.PassedOver<ParameterCameToNothing>(
+                        SearchShortfall found) -> {
+                    return noRowAnswered(label, found, preferring.aRunRanOut(),
+                            where.unrepresented());
+                }
             }
         }
         if (failed != null) {
@@ -5641,6 +5823,53 @@ public final class Generator {
                 Math.max(holds.least(), to.least()), Math.min(holds.most(), to.most()));
     }
 
+    /** What is said of a point at which rows were composed and run and none came to an answer. */
+    private static final String NO_ROW_ANSWERED = "no row composed here was run to an answer";
+
+    /** The same, where a run of one of them went past what a run may spend. */
+    private static final String NO_ROW_ANSWERED_A_RUN_RAN_OUT = NO_ROW_ANSWERED
+            + ", and a run went past what a run may spend";
+
+    /**
+     * What a point comes to where rows were composed and run and none came to an answer, with
+     * {@code found} of what the search left untried beside them.
+     *
+     * <p>A figure that stopped the search is said as the figure, because the rows past it were
+     * never composed. Otherwise the rows themselves are what is said, in the word for rows none of
+     * which was a witness or in the one for what else was left untried — a fact about the rows
+     * this compiler composed, and never that no row reaches the point.
+     */
+    static BoundaryAttempt noRowAnswered(String label, SearchShortfall found, boolean aRunRanOut,
+                                         CompositionAccount unrepresented) {
+        return leftUntried(label, found, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                aRunRanOut ? NO_ROW_ANSWERED_A_RUN_RAN_OUT : NO_ROW_ANSWERED, unrepresented);
+    }
+
+    /**
+     * What a point comes to where the search found something out that it did not have everything
+     * for, with all of it: the figures it stopped at, the populations it could not enumerate and the
+     * values it could not write, and which rule an offer was short of.
+     *
+     * <p>The shape is the one the search left, and nothing is dropped for the sake of the word. A
+     * reader told only of the figure raises it, and the population is what had to be widened.
+     * {@code otherwise} is the word where none of that was found out and the sentence is all there
+     * is to say.
+     */
+    private static BoundaryAttempt leftUntried(String label, SearchShortfall found,
+                                               UnresolvedCombination.Reason otherwise, String said,
+                                               CompositionAccount unrepresented) {
+        CompositionShortfall met = found.met();
+        if (!met.figures().isEmpty()) {
+            return BoundaryAttempt.Stopped.at(label, said, found.offered(), met, unrepresented);
+        }
+        if (!met.nothing()) {
+            return BoundaryAttempt.Unexhausted.at(label, said, found.offered(), met,
+                    unrepresented);
+        }
+        return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
+                found.wordFor(otherwise), said, found.offered()), unrepresented);
+    }
+
     /** What is said of a row no case of which holds every container and value it is asked of. */
     private static final String NO_CASE_HOLDS_THEM = "no case the row can be holds every"
             + " container and value the way asks to be written into one";
@@ -5678,8 +5907,14 @@ public final class Generator {
         /** A row, taken, and standing in the walk's values. */
         record RowTaken() implements WalkedInOrder {}
 
-        /** Rows were composed and every one was passed over. Not a refusal of any of them. */
-        record PassedOver() implements WalkedInOrder {}
+        /**
+         * Rows were composed and every one was passed over. Not a refusal of any of them.
+         *
+         * @param found what the walk found out beside passing them over: the figures it stopped at
+         *              and what the parameters it went on to came to, none of which a row passed
+         *              over takes away
+         */
+        record PassedOver(SearchShortfall found) implements WalkedInOrder {}
 
         /** The caller stopped. */
         record Halted() implements WalkedInOrder {}
@@ -5688,7 +5923,7 @@ public final class Generator {
         record CameToNothingAt(ParameterCameToNothing why) implements WalkedInOrder {}
 
         RowTaken TAKEN = new RowTaken();
-        PassedOver PASSED_OVER = new PassedOver();
+        PassedOver PASSED_OVER = new PassedOver(SearchShortfall.NONE);
         Halted HALTED = new Halted();
     }
 
@@ -5768,13 +6003,16 @@ public final class Generator {
             WalkedInOrder[] after = {null};
             List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
             boolean[] passed = {false};
+            // What the rows passed over left found out beside them, from every value of this one.
+            SearchShortfall[] passedFound = {SearchShortfall.NONE};
             ValueTaking taking = value -> {
                 composed[p] = value.value();
                 after[0] = from(next + 1, elsewhere.and(value.read()));
                 return switch (after[0]) {
                     case WalkedInOrder.RowTaken _ -> Acceptance.TAKEN;
-                    case WalkedInOrder.PassedOver _ -> {
+                    case WalkedInOrder.PassedOver(SearchShortfall its) -> {
                         passed[0] = true;
+                        passedFound[0] = passedFound[0].and(its);
                         yield Acceptance.PASSED;
                     }
                     case WalkedInOrder.Halted _ -> Acceptance.STOPPED;
@@ -5798,48 +6036,136 @@ public final class Generator {
                 case Outcome.Built _ -> after[0];
                 // Every value passed over: for a row the caller passed over, or for what a
                 // parameter after it came to under each of them — said over all of them.
-                case Outcome.PassedOver _ -> passed[0] ? WalkedInOrder.PASSED_OVER
-                        : new WalkedInOrder.CameToNothingAt(
-                                overEveryValue(cameToNothing, found.shortfall()));
+                case Outcome.PassedOver _ -> overTheAlternatives(cameToNothing,
+                        passed[0] ? passedFound[0] : null, found.shortfall());
                 // Stopped by the caller, which is the answer as it stands; or by a parameter after
                 // this one that nothing could be composed for whatever this one is. Where nothing
                 // after it turns on it, that is said as it came, the value before it being the
                 // first; otherwise with the values before it that one came to nothing under.
                 case Outcome.Halted _ -> {
                     if (!(after[0] instanceof WalkedInOrder.CameToNothingAt(
-                            ParameterCameToNothing why)) || passed[0]) {
-                        yield passed[0] ? WalkedInOrder.PASSED_OVER : after[0];
+                            ParameterCameToNothing why))) {
+                        yield passed[0] ? overTheAlternatives(cameToNothing, passedFound[0],
+                                found.shortfall()) : after[0];
                     }
-                    yield !awaited ? after[0] : new WalkedInOrder.CameToNothingAt(
-                            overEveryValue(withFirst(why, cameToNothing), found.shortfall()));
+                    yield !awaited && !passed[0] ? after[0] : overTheAlternatives(
+                            withFirst(why, cameToNothing), passed[0] ? passedFound[0] : null,
+                            found.shortfall());
                 }
                 // Its own search came to nothing, which ended the walk.
                 case Outcome.Unresolved _, Outcome.Stopped _, Outcome.Unexhausted _,
                      Outcome.OfferShort _, Outcome.Limited _, Outcome.Unplanned _ ->
-                        passed[0] ? WalkedInOrder.PASSED_OVER
-                                : new WalkedInOrder.CameToNothingAt(overEveryValue(withFirst(
-                                        new ParameterCameToNothing(p, tried, found.shortfall(),
-                                                here),
-                                        cameToNothing), found.shortfall()));
+                        overTheAlternatives(withFirst(
+                                new ParameterCameToNothing(p, tried, found.shortfall(), here),
+                                cameToNothing), passed[0] ? passedFound[0] : null,
+                                found.shortfall());
             };
         }
 
         /**
-         * What every value tried came to, none of which a row was composed with — with what this
-         * parameter's search found out about its own candidates, which is the point's to know
+         * What the alternatives came to, said as a walk: the row passed over with what was found
+         * beside it where one was, and otherwise the parameter they came to nothing at.
+         *
+         * <p>The same composition {@link WhatTheAlternativesCameTo} gives every search that passes
+         * rows, so a row passed over keeps what the others came to and a proof among them is not
+         * read as the walk's. Where none was, what every value tried came to is said with what
+         * this parameter's search found out about its own candidates, which is the point's to know
          * whichever parameter the word is said at: a value another parameter came to nothing
          * under is not every value there was where a value of this one was not handed on.
          */
-        private static ParameterCameToNothing overEveryValue(
-                List<ParameterCameToNothing> cameToNothing, SearchShortfall found) {
-            if (!(WhatTheAlternativesCameTo.over(cameToNothing, null, found, PARAMETERS)
-                    instanceof WhatTheAlternativesCameTo.Came.Said(
-                            ParameterCameToNothing said))) {
-                throw new IllegalStateException(
-                        "a value was tried and nothing is said of what came of it");
-            }
-            return said;
+        private static WalkedInOrder overTheAlternatives(List<ParameterCameToNothing> cameToNothing,
+                                                         SearchShortfall passedOver,
+                                                         SearchShortfall found) {
+            return switch (WhatTheAlternativesCameTo.over(cameToNothing, passedOver, found,
+                    PARAMETERS)) {
+                case WhatTheAlternativesCameTo.Came.PassedOver<ParameterCameToNothing>(
+                        SearchShortfall its) -> new WalkedInOrder.PassedOver(its);
+                case WhatTheAlternativesCameTo.Came.Said<ParameterCameToNothing>(
+                        ParameterCameToNothing said) -> new WalkedInOrder.CameToNothingAt(said);
+                case WhatTheAlternativesCameTo.Came.Untried<ParameterCameToNothing> _,
+                     WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ ->
+                        throw new IllegalStateException(
+                                "a value was tried and nothing is said of what came of it");
+            };
         }
+    }
+
+    /**
+     * The values the inputs hold that the targets are asked for — the key a count of elements, or
+     * a total of them, is of — placed before the elements are composed: they are composed holding
+     * them, and each is another input's.
+     *
+     * <p>The key of a fold asked for twice is two keys, and held at one value they would be one,
+     * whose elements come to the one number asked of both: so the later is held away from the
+     * earlier. A key that is what each element adds is chosen where the number is.
+     *
+     * @param keysPlaced the keys placed so far, by the target they are the key of, which this adds
+     *                   to
+     * @return the region with what was placed given to it
+     */
+    private static SearchRegion placeKeysAskedFor(
+            Collection<Map.Entry<RealizationTarget, Place>> targets, SearchRegion region,
+            MeasuredInput subject, Map<RealizationTarget, Place> out,
+            Map<NumericTerm, RealizationTarget> routed, Set<RealizationTarget> chosen,
+            List<ReachabilityGap> gaps, Map<RealizationTarget, Place> keysPlaced,
+            WitnessSearch looking, Reachability.Reaching reaching) {
+        SearchRegion here = region;
+        for (Map.Entry<RealizationTarget, Place> each : targets) {
+            TermPath keyAsked = each.getKey().keyAskedFor();
+            if (keyAsked == null) {
+                continue;
+            }
+            NumericTerm.FromOnePosition key = new NumericTerm.ValueOf(keyAsked);
+            if (out.containsKey(RealizationTarget.of(key))) {
+                continue;
+            }
+            Function<NumericTerm, Carrier> on = term -> {
+                TermOrders orders = subject.quantities().ordersOf(term);
+                return orders == null ? null : orders.observed();
+            };
+            if (each.getKey().keyIsTheNumber()) {
+                here = here.given(key, each.getValue());
+            }
+            // Held away from the keys of the same fold placed already where that can be, which is
+            // a way to try and not a rule: the rules and the way here may say the two are one value,
+            // and a row at which they are is as much a row.
+            SearchRegion apart = here;
+            for (Map.Entry<RealizationTarget, Place> earlier : keysPlaced.entrySet()) {
+                if (each.getKey().keyIsToldApartFrom(earlier.getKey())) {
+                    apart = apart.apartFrom(key, earlier.getValue());
+                }
+            }
+            NumericWitness.Standing placing = NumericWitness.of(apart, List.of(key), on, looking);
+            if (apart != here && !(placing instanceof NumericWitness.Standing.Found)) {
+                placing = NumericWitness.of(here, List.of(key), on, looking);
+            }
+            switch (placing) {
+                case NumericWitness.Standing.Found beside -> {
+                    for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
+                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                        if (out.putIfAbsent(at, placed.place()) == null) {
+                            routed.put(placed.term(), at);
+                            chosen.add(at);
+                            here = here.given(placed.term(), placed.place());
+                        }
+                        if (placed.term().equals(key)) {
+                            keysPlaced.put(each.getKey(), placed.place());
+                        }
+                    }
+                }
+                // Said against a condition on the way where there is one; a row held to none is
+                // composed with the key at no one value, which the composing says.
+                case NumericWitness.Standing.ProvedImpossible _ ->
+                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
+                                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                        new ReachabilityGap.Why.NoValueComposedForItsPositions())));
+                case NumericWitness.Standing.NotFound(CompositionShortfall met) ->
+                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
+                                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                        ReachabilityGap.Why.ofAWalkThatFoundNothing(met))));
+            }
+        }
+        return here;
     }
 
     /**
@@ -5919,6 +6245,11 @@ public final class Generator {
                     + reaching.requirements());
         }
         Requirements assumed = onTheWay;
+        // The value a number of how often it occurs is counted for, placed before the occurrences
+        // are composed: they are composed holding it, and it is another input's.
+        Map<RealizationTarget, Place> keysPlaced = new LinkedHashMap<>();
+        here = placeKeysAskedFor(fixing.entrySet(), here, subject, out, routed, chosen, gaps,
+                keysPlaced, looking, reaching);
         // The count the item itself asks for, which is the one count its level is — by which
         // count it is, so a condition on the way asking for the same count asks it of this one.
         Map<CountedElements.Identity, RealizationTarget.ACount> itemCounts = new LinkedHashMap<>();
@@ -6047,6 +6378,10 @@ public final class Generator {
                 countsAsked.put(target, NumbersAskedFor.of(left));
             }
         });
+        // And the values the counts a condition asks for are counts of, which the container is
+        // composed holding as it is for the item's own.
+        here = placeKeysAskedFor(countsToCome.entrySet(), here, subject, out, routed, chosen, gaps,
+                keysPlaced, looking, reaching);
         // How a value is composed where a cut's numbers stand, asked as the row is composed: in the
         // way's region, for what each number is one of with the cut's own numbers routed beside the
         // ones already standing, under the bounds on the elements.
@@ -6933,14 +7268,26 @@ public final class Generator {
             // assignment that composes and asks nothing after it, so the last one asked about is
             // the one it took.
             List<ComposedAt> composedWith = new ArrayList<>();
-            NumericWitness.Standing found = NumericWitness.of(
-                    here.given(remaindersStanding(alreadyStanding)), numbers,
+            SearchRegion within = here.given(remaindersStanding(alreadyStanding));
+            SearchRegion apart = keysApart(within, owing.keySet());
+            NumericWitness.Standing found = NumericWitness.of(apart, numbers,
                     term -> carrierOf(term, subject.quantities()), looking,
                     assignment -> {
                         composedWith.clear();
                         return composer.composes(alreadyStanding, some, asked, owing,
                                 assignment, composedWith);
                     });
+            // The keys held apart are a way to try: where nothing stands that way, they are tried
+            // as the rules leave them.
+            if (apart != within && !(found instanceof NumericWitness.Standing.Found)) {
+                found = NumericWitness.of(within, numbers,
+                        term -> carrierOf(term, subject.quantities()), looking,
+                        assignment -> {
+                            composedWith.clear();
+                            return composer.composes(alreadyStanding, some, asked, owing,
+                                    assignment, composedWith);
+                        });
+            }
             // What the rules settle before what this compiler managed, because a reader may act on
             // the first and on none of the rest. A proof is the region's alone: an assignment no
             // row composed with is what this compiler built, and says nothing of the rules.
@@ -6967,6 +7314,30 @@ public final class Generator {
                         new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
                                 ReachabilityGap.Why.ofAWalkThatFoundNothing(met)));
             };
+        }
+
+        /**
+         * {@code region} with the key of each target owed held away from the keys of the same
+         * fold already standing: the key of a fold asked for twice is two keys, and held at one
+         * value they would be one, whose elements come to the one number asked of both.
+         */
+        private SearchRegion keysApart(SearchRegion region, Collection<RealizationTarget> owing) {
+            SearchRegion apart = region;
+            for (RealizationTarget owed : owing) {
+                TermPath asked = owed.keyAskedFor();
+                if (asked == null) {
+                    continue;
+                }
+                for (RealizationTarget earlier : alreadyStanding.keySet()) {
+                    TermPath earlierAsked = earlier.keyAskedFor();
+                    Place earlierAt = earlierAsked == null ? null : alreadyStanding.get(
+                            RealizationTarget.of(new NumericTerm.ValueOf(earlierAsked)));
+                    if (earlierAt != null && owed.keyIsToldApartFrom(earlier)) {
+                        apart = apart.apartFrom(new NumericTerm.ValueOf(asked), earlierAt);
+                    }
+                }
+            }
+            return apart;
         }
 
         /** {@code standing} with nothing a condition chose. */
@@ -7124,6 +7495,13 @@ public final class Generator {
             case RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term) -> term;
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
             case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
+            case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
+            case RealizationTarget.UnderItsKey(NumericTerm.GatheredUnderItsKey term) -> term;
+            case RealizationTarget.UnderAKey(NumericTerm.GatheredUnderAKey term) -> term;
+            case RealizationTarget.AmongEveryOccurrence(
+                    NumericTerm.OccurrencesOfItsValue term) -> term;
+            case RealizationTarget.AmongEveryOccurrenceEqualToAKey(
+                    NumericTerm.OccurrencesOfAKey term) -> term;
             case RealizationTarget.AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
                                                          TermPath root) -> {
                 NumericTerm moved = subject.quantities().namedAt(term, root);
@@ -7639,14 +8017,35 @@ public final class Generator {
         if (on == null) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.NoOrdersOnTheEdge());
         }
+        // How often a key occurs, or what its elements come to, is read with the key's value, which
+        // is another parameter's and is no part of the one candidate; the whole-row reading that
+        // follows is what reads it.
+        if (target.term() instanceof NumericTerm.OccurrencesOfAKey
+                || target.term() instanceof NumericTerm.GatheredUnderAKey) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.TurnsOnAnotherParameter());
+        }
         // Only this parameter's value is filled in: the walk reads the one the path names, and the
         // others are not this candidate's to say anything about.
         List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
                 java.util.Collections.nCopies(subject.parameters().size(), null));
         row.set(parameter, observed);
+        // A number of an element read off the elements beside it is read off each container whole:
+        // the values at the place gathered across containers would count, or take an end of, the
+        // elements of one container among those of another.
+        TermPath readAt = switch (target.term()) {
+            case NumericTerm.OfAnElementsNeighbours among -> among.container();
+            // Every value at the place across the containers, which is what the count is among.
+            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
+                    target.term().subjectPath();
+            // Every element of every container, which is what a key's elements are gathered
+            // from.
+            case NumericTerm.GatheredUnderItsKey gathered -> gathered.elements();
+            case NumericTerm.GatheredUnderAKey asked -> asked.subjectPath();
+        };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
-        return switch (subject.inputs().valuesAt(row, target.term().subjectPath())) {
+        return switch (subject.inputs().valuesAt(row, readAt)) {
             case WalkResult.CouldNotWalk<List<souther.compiler.observe.ObservedValue>> _ ->
                     new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
             case WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values) ->
@@ -7663,14 +8062,24 @@ public final class Generator {
      * from, and the term's own reader says what that comes to ({@link TermOrders#readOver}). Asked
      * of the term's kind with no {@code default}, so a kind of term added is one this has to say
      * something of.
+     *
+     * <p>For a number of an element read off the elements beside it the values are the containers
+     * the elements stand in, each read on its own ({@link AnOccurrence}); no element in any of them
+     * is no value there. A container not read whole is a reading that could not be made, and never
+     * a container holding nothing.
      */
     static RealizationReadback readBack(TermOrders on,
                                         List<souther.compiler.observe.ObservedValue> values,
                                         Place at) {
         NumericTerm term = on.term();
         boolean nothingToRead = switch (term) {
-            case NumericTerm.Multiplicity _, NumericTerm.FromOnePosition _ -> values.isEmpty();
-            case NumericTerm.TakenOver _ -> false;
+            case NumericTerm.OfAnElementsNeighbours _ -> values.stream().allMatch(each -> AnOccurrence.of(each)
+                            instanceof AnOccurrence.Read(List<ObservedValue> held)
+                            && held.isEmpty());
+            case NumericTerm.FromOnePosition _, NumericTerm.OccurrencesOfItsValue _,
+                 NumericTerm.GatheredUnderItsKey _ -> values.isEmpty();
+            case NumericTerm.TakenOver _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.GatheredUnderAKey _ -> false;
         };
         if (nothingToRead) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
@@ -7685,19 +8094,43 @@ public final class Generator {
         // one added later is not a reading of its own.
         Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
         Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
+        // A container, or an element in one, that is not of the shape the walk and the type say:
+        // no reading of it is made, which is neither the value standing elsewhere nor an
+        // observation that came back short.
+        boolean ofAnotherShape = false;
+        // An occurrence the statement keeping some of them could not be put to.
+        Set<ReadingGap> keptNotTold = new LinkedHashSet<>();
         boolean stands = switch (term) {
-            // How often a value occurs among the values standing there: a row stands at a point
-            // where some element's value is that frequent.
-            case NumericTerm.Multiplicity _ -> {
+            // How often a value occurs, or the end of the values of a key, among the elements of
+            // each container: a row stands at a point where some element's number comes to it.
+            case NumericTerm.OfAnElementsNeighbours _ -> {
                 boolean any = false;
-                for (ObservedValue value : values) {
-                    switch (on.readAmong(value, values)) {
-                        case NumericTerm.Reading.Number number ->
-                                any |= number.value().compareTo(at) == 0;
-                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
-                        case NumericTerm.Reading.NotNumber _ -> { }
-                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
-                                notWorkedOut.add(why);
+                for (ObservedValue container : values) {
+                    switch (AnOccurrence.of(container)) {
+                        case AnOccurrence.NotRead(Incompleteness.Code why) -> unread.add(why);
+                        case AnOccurrence.OfAnotherShape _ -> ofAnotherShape = true;
+                        case AnOccurrence.Read(List<ObservedValue> held) -> {
+                            for (TermOrders.Neighbouring<AnOccurrence.OfAnotherShape> each
+                                    : readEachOf(on, held)) {
+                                switch (each) {
+                                    case TermOrders.Neighbouring.HeldNothing<
+                                            AnOccurrence.OfAnotherShape> _ -> ofAnotherShape = true;
+                                    case TermOrders.Neighbouring.Read<
+                                            AnOccurrence.OfAnotherShape>(
+                                            NumericTerm.Reading read) -> {
+                                        switch (read) {
+                                            case NumericTerm.Reading.Number number ->
+                                                    any |= number.value().compareTo(at) == 0;
+                                            case NumericTerm.Reading.Missing missing ->
+                                                    unread.add(missing.code());
+                                            case NumericTerm.Reading.NotNumber _ -> { }
+                                            case NumericTerm.Reading.NotWorkedOut(
+                                                    UnheldNumber why) -> notWorkedOut.add(why);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 yield any;
@@ -7716,6 +8149,87 @@ public final class Generator {
                 }
                 yield any;
             }
+            // A row stands at a point where some value's count among all of them comes to it.
+            case NumericTerm.OccurrencesOfItsValue occurrences -> {
+                boolean any = false;
+                List<souther.compiler.observe.ObservedValue> counted = values;
+                KeptOccurrences kept = occurrences.selection();
+                if (kept != null) {
+                    // Only the values the statement keeps are counted. An occurrence the
+                    // statement cannot be put to may be one of them, so a count made without it
+                    // is a floor and no count: nothing is read back from the values alone.
+                    counted = new ArrayList<>();
+                    for (souther.compiler.observe.ObservedValue value : values) {
+                        switch (kept.perElement().at(new CardinalityComposer.AnElementRead(
+                                kept.position(), occurrences.subjectPath(), Map.of(),
+                                List.of(value)))) {
+                            case AStatementAtARow.Answer.Holds _ -> counted.add(value);
+                            case AStatementAtARow.Answer.Fails _ -> { }
+                            case AStatementAtARow.Answer.CouldNotTell(Set<ReadingGap> why) ->
+                                    keptNotTold.addAll(why);
+                        }
+                    }
+                }
+                for (NumericTerm.Reading read : on.readEachAmong(counted)) {
+                    switch (read) {
+                        case NumericTerm.Reading.Number number ->
+                                any |= number.value().compareTo(at) == 0;
+                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
+                        case NumericTerm.Reading.NotNumber _ -> { }
+                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                notWorkedOut.add(why);
+                    }
+                }
+                yield any;
+            }
+            // A row stands at a point where some element's key comes to it, read among every
+            // element of the run by the one law the elements beside an element are read by.
+            case NumericTerm.GatheredUnderItsKey gathered -> {
+                boolean any = false;
+                List<ObservedValue> filed = values;
+                KeptOccurrences kept = gathered.selection();
+                if (kept != null) {
+                    // Only the elements the statement keeps are filed under a key, and one it
+                    // cannot be put to may be one of them: as for a count of the kept ones. Each
+                    // is read back whole, so the statement is put to what it holds.
+                    filed = new ArrayList<>();
+                    for (ObservedValue element : values) {
+                        switch (kept.perElement().at(new AWholeElement(kept.position(),
+                                gathered.elements(), element, on))) {
+                            case AStatementAtARow.Answer.Holds _ -> filed.add(element);
+                            case AStatementAtARow.Answer.Fails _ -> { }
+                            case AStatementAtARow.Answer.CouldNotTell(Set<ReadingGap> why) ->
+                                    keptNotTold.addAll(why);
+                        }
+                    }
+                }
+                for (TermOrders.Neighbouring<AnOccurrence.OfAnotherShape> each
+                        : readEachOf(on, filed)) {
+                    switch (each) {
+                        case TermOrders.Neighbouring.HeldNothing<
+                                AnOccurrence.OfAnotherShape> _ -> ofAnotherShape = true;
+                        case TermOrders.Neighbouring.Read<AnOccurrence.OfAnotherShape>(
+                                NumericTerm.Reading read) -> {
+                            switch (read) {
+                                case NumericTerm.Reading.Number number ->
+                                        any |= number.value().compareTo(at) == 0;
+                                case NumericTerm.Reading.Missing missing ->
+                                        unread.add(missing.code());
+                                case NumericTerm.Reading.NotNumber _ -> { }
+                                case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                        notWorkedOut.add(why);
+                            }
+                        }
+                    }
+                }
+                yield any;
+            }
+            // Read with another parameter's value, so the one candidate stands nowhere here; the
+            // entry point answers before this is reached.
+            case NumericTerm.OccurrencesOfAKey _ -> throw new IllegalStateException(
+                    "how often a key occurs is read back from a whole row");
+            case NumericTerm.GatheredUnderAKey _ -> throw new IllegalStateException(
+                    "what a key's elements come to is read back from a whole row");
             case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
                 case NumericTerm.Reading.Number number -> number.value().compareTo(at) == 0;
                 case NumericTerm.Reading.Missing missing -> {
@@ -7729,6 +8243,11 @@ public final class Generator {
                 }
             };
         };
+        // Before a stand is taken: the count that stands was made without an occurrence that may
+        // have been counted.
+        if (!keptNotTold.isEmpty()) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.KeptNotTold(keptNotTold));
+        }
         if (stands) {
             return new RealizationReadback.AtRequestedPlace();
         }
@@ -7742,8 +8261,102 @@ public final class Generator {
         if (!unread.isEmpty()) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.Observation(unread));
         }
+        if (ofAnotherShape) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
+        }
         return new RealizationReadback.Elsewhere("it was composed to put " + term + " at " + at
                 + " and does not stand there");
+    }
+
+    /**
+     * What a container the walk stood at reads as, for a number of each of its elements: the
+     * elements, where it was read whole and holds them in order; why it was not read, where it was
+     * not; and neither, where it was read and is no container of elements.
+     */
+    private sealed interface AnOccurrence {
+
+        record Read(List<ObservedValue> elements) implements AnOccurrence {}
+
+        record NotRead(Incompleteness.Code why) implements AnOccurrence {}
+
+        record OfAnotherShape() implements AnOccurrence {}
+
+        static AnOccurrence of(ObservedValue container) {
+            if (container.cause() != null) {
+                return new NotRead(container.cause().code());
+            }
+            return container instanceof ObservedValue.Sequence held ? new Read(held.elements())
+                    : new OfAnotherShape();
+        }
+    }
+
+    /**
+     * What each of {@code held}, the elements of one container, reads as {@code on}'s number among
+     * them, by the one law a row's elements are read by: an element read whole that holds nothing
+     * at a way the number reads is an element of another shape than the walk's, and stops what
+     * its reading stops.
+     */
+    private static List<TermOrders.Neighbouring<AnOccurrence.OfAnotherShape>> readEachOf(
+            TermOrders on, List<ObservedValue> held) {
+        List<Function<ElementProjection, TermOrders.Holding<AnOccurrence.OfAnotherShape>>> each =
+                new ArrayList<>(held.size());
+        for (ObservedValue element : held) {
+            each.add(field -> on.in(field, element) instanceof ObservedValue value
+                    ? new TermOrders.Holding.Value<>(value)
+                    : new TermOrders.Holding.Nothing<>(new AnOccurrence.OfAnotherShape()));
+        }
+        TermOrders.ElementsTogether<AnOccurrence.OfAnotherShape> together = on.together(each);
+        List<TermOrders.Neighbouring<AnOccurrence.OfAnotherShape>> out =
+                new ArrayList<>(each.size());
+        for (Function<ElementProjection, TermOrders.Holding<AnOccurrence.OfAnotherShape>> one
+                : each) {
+            out.add(together.numberOf(one));
+        }
+        return out;
+    }
+
+    /**
+     * A row holding nothing but one element of {@code container}, read back whole: a place in it
+     * is walked to through the names {@code on} says are worn on the way, and anything else could
+     * not be walked to, which a statement reads as not being able to tell and never as failing.
+     *
+     * <p>A value of another case than a narrowing on the way leaves holds nothing below it, which
+     * is the element's own answer ({@link ElementProjection#in}). A field the element holds no
+     * value at is told as not walked to: nothing here says it was left unwritten.
+     */
+    private record AWholeElement(TermPath container, TermPath element, ObservedValue held,
+                                 TermOrders on) implements BorderQuantity.Observation {
+
+        @Override
+        public WalkResult<ObservationAtPoint> at(TermPath path) {
+            ElementProjection within = ElementProjection.below(element, path);
+            if (within == null) {
+                return WalkResult.couldNotWalk();
+            }
+            ObservedValue there = on.in(within, held);
+            if (there != null) {
+                return WalkResult.reached(new ObservationAtPoint.Value(there));
+            }
+            for (ElementProjection each : within.onTheWay()) {
+                if (each.narrowing() != null && on.in(each, held) == null
+                        && on.in(each.narrowedFrom(), held) != null) {
+                    return WalkResult.reached(ObservationAtPoint.WROTE_NOTHING);
+                }
+            }
+            return WalkResult.couldNotWalk();
+        }
+
+        @Override
+        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+            return path.equals(element) ? WalkResult.reached(List.of(held))
+                    : WalkResult.couldNotWalk();
+        }
+
+        @Override
+        public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
+            return of.equals(container) ? WalkResult.reached(List.of(this))
+                    : WalkResult.couldNotWalk();
+        }
     }
 
     /**
@@ -7752,6 +8365,10 @@ public final class Generator {
      * <p>For a run computed of each element those values are the elements, and each is read as one
      * element: the fields its computation reads are the fields of that element, so what is paired
      * is what the row pairs.
+     *
+     * <p>What a run of the program comes to where it answers ({@link TermOrders#readOverElements}),
+     * so a candidate reading back at the place it was built for is one worth running and not one
+     * shown to get there: its run may stop on the way.
      */
     private static NumericTerm.Reading readRun(TermOrders on, List<ObservedValue> values) {
         if (!(on.term() instanceof NumericTerm.TakenOver over)
@@ -7760,7 +8377,7 @@ public final class Generator {
         }
         List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
         for (ObservedValue element : values) {
-            each.add(field -> field.in(element));
+            each.add(field -> on.in(field, element));
         }
         return on.readOverElements(each);
     }
@@ -7806,6 +8423,13 @@ public final class Generator {
         /** The row wrote no value at the position the term names. */
         record NoValueAtThePosition() implements ReadbackGap {}
 
+        /** The number turns on the value of another parameter than the one being read back. */
+        record TurnsOnAnotherParameter() implements ReadbackGap {}
+
+        /** The statement keeping some of the occurrences could not be put to one of them, and
+         *  that one may be among those counted. */
+        record KeptNotTold(Set<ReadingGap> causes) implements ReadbackGap {}
+
         /** The observation of the value did not come back whole. */
         record Observation(Set<Incompleteness.Code> causes) implements ReadbackGap {}
 
@@ -7820,7 +8444,8 @@ public final class Generator {
      * row fixed it.
      *
      * <p>A count is met by elements chosen against the numbers its statement reads beside them, and
-     * those are numbers of other locations, fixed with the count. Every other group is composed out
+     * those are numbers of other locations, fixed with the count; so is how often a key occurs,
+     * which is counted for the value of another location. Every other group is composed out
      * of its own numbers and the way's region, which is what it is handed.
      *
      * <p>Not a number inside a container. A value placed at an element is some element standing
@@ -7845,7 +8470,8 @@ public final class Generator {
         }
         for (RealizationTarget each : group.keySet()) {
             if (each instanceof RealizationTarget.ACount
-                    || each instanceof RealizationTarget.ElementsMeetingTogether) {
+                    || each instanceof RealizationTarget.ElementsMeetingTogether
+                    || each.keyAskedFor() != null) {
                 Map<NumericTerm, Place> fixed = new LinkedHashMap<>();
                 standing.forEach((target, place) -> {
                     if (target instanceof RealizationTarget.OfANumber number
@@ -8703,8 +9329,8 @@ public final class Generator {
      * before the figure, the one the most of them answered differently on, the earliest of those.
      *
      * <p>Over whatever says a row meets the requirement ({@link #over}), and never in place of it.
-     * The first row that check takes is kept whatever the runs say, so a requirement whose arms
-     * answer alike on every row is still one a row is handed out for. What the rewrites came to on
+     * The first row that check takes and whose run answers is kept whatever the rewrites say, so a
+     * requirement whose arms answer alike on every row is still one a row is handed out for. What the rewrites came to on
      * the row taken is not kept either: a row composed here is a question put to a person, and
      * whether its answer tells a rewrite apart is read off the answer they write
      * ({@link ReplacementOwed}).
@@ -8714,7 +9340,8 @@ public final class Generator {
      * choosing what those measures see as well. Which is also why a row composed for a combination
      * of arms, or for getting past a guard, stays one: the same arms lit, and the same conditions,
      * are the same combination and the same guard passed. A row whose run answered nothing is one
-     * the compiler refuses, and is never taken over the first.
+     * the compiler refuses, and is never taken, the first included; where nothing can run a row,
+     * the first is taken as it is composed.
      *
      * <p>Which rewrites are asked of a row is what its run went through, and not what the row was
      * composed for. A line and an arm are not one to one — a comparison may decide no fork, or
@@ -8727,6 +9354,11 @@ public final class Generator {
      */
     static final class TellingArmsApart {
 
+        /** What bounds the rows a walk hands the choice, whatever they come to. */
+        private static final CompositionBudget HANDED_THE_CHOICE =
+                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
+        private static final int MOST_ROWS_HANDED = HANDED_THE_CHOICE.maximum();
+
         private final RunOnce trial;
         private final List<StoodInAnswer> answers;
         /** Every row ranked so far, as it is written, so a row composed again is not ranked again. */
@@ -8738,6 +9370,12 @@ public final class Generator {
         /** The row taken so far, and how many rewrites were told apart on it. */
         private List<FixtureTemplate> best;
         private int bestTold = -1;
+        /** How many rows that met the requirement were run and came to an answer. */
+        private int answering;
+        /** Whether a row that met the requirement was run and went past what a run may spend. */
+        private boolean aRunRanOut;
+        /** Whether the walk was stopped for handing more rows than it may. */
+        private boolean stoppedAtItsFigure;
         /** How many rows a walk has handed here, ranked or not. */
         private int handed;
 
@@ -8753,21 +9391,24 @@ public final class Generator {
          *
          * <p>Two figures, each of its own thing. What is ranked is bounded by
          * {@link #MOST_ROWS_OFFERED_FOR_THE_ARMS}; and the rows a walk hands here at all — ranked,
-         * not meeting the requirement, or composed again — by {@link #MOST_REPAIRS}, which bounds
-         * choosing a candidate's values again wherever that is done. A walk over every assignment of
-         * every parameter multiplies, and the rows it hands on that are no candidates cost
-         * composing each time even though they cost no run.
+         * not meeting the requirement, or composed again — by
+         * {@link CompositionBudget#ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW}. A walk over every
+         * assignment of every parameter multiplies, and the rows it hands on that are no
+         * candidates cost composing each time even though they cost no run.
          */
         RowTaking over(RowTaking meets) {
             return inputs -> {
-                if (++handed > MOST_REPAIRS) {
+                if (++handed > MOST_ROWS_HANDED) {
+                    stoppedAtItsFigure = true;
                     return Acceptance.STOPPED;
                 }
-                if (ranked.contains(RunOnce.writtenAs(new RowToRun(inputs, answers)))) {
+                RowToRun row = new RowToRun(inputs, answers);
+                List<String> written = RunOnce.writtenAs(row);
+                if (ranked.contains(written)) {
                     return Acceptance.PASSED;
                 }
                 Acceptance met = meets.take(inputs);
-                return met == Acceptance.TAKEN ? rank(inputs) : met;
+                return met == Acceptance.TAKEN ? rank(row, written) : met;
             };
         }
 
@@ -8776,11 +9417,46 @@ public final class Generator {
             return best;
         }
 
+        /** Whether a run of a row that met the requirement went past what a run may spend. */
+        boolean aRunRanOut() {
+            return aRunRanOut;
+        }
+
+        /**
+         * Whether the walk handed more rows than {@link #HANDED_THE_CHOICE} allows and was
+         * stopped, which leaves the rows past it untried.
+         */
+        boolean stoppedAtItsFigure() {
+            return stoppedAtItsFigure;
+        }
+
+        /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
+        SearchShortfall untried() {
+            return stoppedAtItsFigure
+                    ? SearchShortfall.of(CompositionShortfall.of(List.of(HANDED_THE_CHOICE)))
+                    : SearchShortfall.NONE;
+        }
+
         /** What is made of one row that meets the requirement, not ranked before. */
-        private Acceptance rank(List<FixtureTemplate> inputs) {
-            RowToRun row = new RowToRun(inputs, answers);
-            ranked.add(RunOnce.writtenAs(row));
-            ObservedRun ran = trial.run(row);
+        private Acceptance rank(RowToRun row, List<String> written) {
+            List<FixtureTemplate> inputs = row.inputs();
+            ranked.add(written);
+            ObservedRun ran = trial.runsRows() ? trial.run(row) : ObservedRun.nothingRan();
+            // Where nothing ran the row, nothing says whether it answers; the first row is offered
+            // as it is composed.
+            if (ran.watched() instanceof Watched.NotRun) {
+                if (best == null) {
+                    best = List.copyOf(inputs);
+                }
+                return Acceptance.TAKEN;
+            }
+            // A row is a candidate only where its run answered: what it was composed to read back
+            // says what the run comes to where it answers, and nothing of whether it does.
+            if (!(ran.answer() instanceof AnswerObservation.Answered)) {
+                aRunRanOut |= ran.answer() instanceof AnswerObservation.RanOut;
+                return Acceptance.PASSED;
+            }
+            answering++;
             if (best == null) {
                 best = List.copyOf(inputs);
                 // The first row with nothing to say which arms it went through is a requirement
@@ -8791,10 +9467,9 @@ public final class Generator {
                 way = seen;
                 rewrites = trial.rewritesThrough(seen);
             } else if (!(ran.watched() instanceof Watched.Ran(AlignedObservation seen))
-                    || ran.answer() instanceof AnswerObservation.NotAnswered
                     || !seen.equals(way)) {
                 // Only a row that goes the way the first one did, through the same arms with every
-                // condition coming out the same, and comes to an answer.
+                // condition coming out the same.
                 return onward();
             }
             // One way is one set of arms, so every row offered here is asked the same rewrites, and
@@ -8818,7 +9493,7 @@ public final class Generator {
 
         /** The walk going on to the next row, or stopping where the figure is reached. */
         private Acceptance onward() {
-            return ranked.size() < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
+            return answering < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
                     : Acceptance.STOPPED;
         }
     }
@@ -9123,16 +9798,28 @@ public final class Generator {
                     // Nothing can say where it went, so nothing certifies it and nothing refutes
                     // it. Offered as it was before anything ran, and said to be. Both of the ways
                     // that happens come here: nothing applied the row, or nothing was recording
-                    // while it was applied.
+                    // while it was applied and it answered.
+                    case Watched.NotRun _ -> {
+                        found = new Witness.Unconfirmed(named, candidate.where());
+                        return Taken.AND_DONE;
+                    }
                     case Watched.NoAccount _ -> {
+                        // Applied and not recorded, so a run that did not answer is as much no
+                        // witness here as where it was recorded.
+                        if (!(observed.answer() instanceof AnswerObservation.Answered)) {
+                            missed = true;
+                            return Taken.AND_MORE;
+                        }
                         found = new Witness.Unconfirmed(named, candidate.where());
                         return Taken.AND_DONE;
                     }
                     case Watched.Ran ran -> {
-                        // A run that stopped without an answer is no witness, wherever it went
-                        // before it stopped: a row that aborts is one the compiler refuses — at an
+                        // A run that did not answer is no witness, wherever it went before it
+                        // stopped: a row that aborts is one the compiler refuses — at an
                         // `unreachable` it is E1911 — and what it lit, it lit on the way to nothing.
-                        if (observed.answer() instanceof AnswerObservation.NotAnswered) {
+                        // Nor is one that went past what a run may spend, which given more might
+                        // have answered and has not.
+                        if (!(observed.answer() instanceof AnswerObservation.Answered)) {
                             missed = true;
                             return Taken.AND_MORE;
                         }
@@ -9200,7 +9887,7 @@ public final class Generator {
                                 return Acceptance.STOPPED;
                             }
                             // No witness, for the reason one built at once is none.
-                            if (observed.answer() instanceof AnswerObservation.NotAnswered) {
+                            if (!(observed.answer() instanceof AnswerObservation.Answered)) {
                                 missed = true;
                                 return Acceptance.PASSED;
                             }
@@ -9367,12 +10054,77 @@ public final class Generator {
     }
 
     /**
+     * What the parts of one way past a guard come to together, where the way is all of them at
+     * once ({@link #partsHeld}).
+     *
+     * @param noRowGoes whether some part is one no row goes, which settles the way whatever the
+     *                  others say
+     * @param why       every reason a part cannot be held: nothing found for it, or every way of
+     *                  holding it would write a stated value afresh
+     * @param unlooked  every figure that left a part's ways unlooked at before one was kept
+     * @param parts     the ways each part can be held along, where none of the above stands in
+     *                  the way
+     * @param cutShort  every figure that left out some way of holding a part that is held
+     */
+    record PartsHeld(boolean noRowGoes, Set<RepairShortfall.Barrier> why,
+                     Set<CompositionBudget> unlooked, List<List<HeldOutcome>> parts,
+                     Set<CompositionBudget> cutShort) {
+
+        PartsHeld {
+            why = InDeclaredOrder.of(why);
+            unlooked = InDeclaredOrder.of(unlooked);
+            parts = parts.stream().map(List::copyOf).toList();
+            cutShort = InDeclaredOrder.of(cutShort);
+        }
+    }
+
+    /**
+     * The parts of one way, {@code each} what brings a run through one part, put together — the
+     * ways of holding each that {@code kept} keeps.
+     *
+     * <p>The law for parts beside the one for alternatives ({@link HeldOutcome.Bringing#oneOf}).
+     * A way is all of its parts at once, so one no row goes settles it; short of that, every
+     * reason any part cannot be held and every figure that left one unlooked at is said, none
+     * standing in for another — told the first of two, a reader who deals with it meets the next.
+     */
+    static PartsHeld partsHeld(List<HeldOutcome.Bringing> each, Predicate<HeldOutcome> kept) {
+        List<List<HeldOutcome>> parts = new ArrayList<>();
+        Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
+        Set<RepairShortfall.Barrier> why = EnumSet.noneOf(RepairShortfall.Barrier.class);
+        Set<CompositionBudget> unlooked = EnumSet.noneOf(CompositionBudget.class);
+        boolean noRowGoes = false;
+        for (HeldOutcome.Bringing part : each) {
+            switch (part) {
+                case HeldOutcome.Bringing.NoValueCanStandThere _ -> noRowGoes = true;
+                case HeldOutcome.Bringing.NothingFound _ ->
+                        why.add(RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT);
+                case HeldOutcome.Bringing.LeftUnlooked(Set<CompositionBudget> figures) ->
+                        unlooked.addAll(figures);
+                case HeldOutcome.Bringing.Found found -> {
+                    switch (found.keeping(kept)) {
+                        case HeldOutcome.Bringing.Kept.Some(var some) -> {
+                            cutShort.addAll(some.cutShort());
+                            parts.add(some.ways());
+                        }
+                        case HeldOutcome.Bringing.Kept.NoneLookedAtWas(var figures) ->
+                                unlooked.addAll(figures);
+                        case HeldOutcome.Bringing.Kept.None _ ->
+                                why.add(RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE);
+                    }
+                }
+            }
+        }
+        return new PartsHeld(noRowGoes, why, unlooked, parts, cutShort);
+    }
+
+    /**
      * {@code held}, put together.
      *
-     * <p>The way to the last comparison and not a meet of every way. A comparison is reached by
-     * the conditions above it, and a later guard stands below an earlier one — so the way to it
-     * already takes in what the earlier guard holding asks, and a meet of the two would be that way
-     * met with a part of itself.
+     * <p>Every way put together, each condition once, along the choices the ways made
+     * ({@link HeldOutcome#along}), and refused where no row takes it so. A later guard stands below
+     * an earlier one and its way usually takes the earlier one's in, but not always — a way read
+     * through several copies holds only what each copy's way does — and what the row was held to
+     * above is what it has to be wherever it goes next.
      *
      * @param check what a value's own type says of it, which a location the way's numbers are
      *              composed at is held to
@@ -9408,7 +10160,27 @@ public final class Generator {
                 }
             }
         }
-        Reachability.Reaching reaching = held.getLast().reaching();
+        // A way no row takes along the ways the row was held past the guards above, in the word
+        // for why — the same words a way to a point no row takes is said in.
+        Reachability.Reaching reaching;
+        switch (HeldOutcome.along(held, subject.quantities().region())) {
+            case Reachability.Reaching taken -> reaching = taken;
+            case Reachability.NothingReaches _ -> {
+                return new HeldTogether.Refused(new Attempt(null,
+                        UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
+                        Optional.empty()));
+            }
+            case Reachability.NothingComesOutThatWay _ -> {
+                return new HeldTogether.Refused(new Attempt(null,
+                        UnresolvedCombination.Reason.A_CONDITION_NEVER_COMES_OUT_THAT_WAY, null,
+                        Optional.empty()));
+            }
+            case Reachability.NumbersLeaveNone _ -> {
+                return new HeldTogether.Refused(new Attempt(null,
+                        UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE, null,
+                        Optional.empty()));
+            }
+        }
         Requirements required;
         switch (reaching.writing(fixing.keySet())) {
             case Reachability.Written.Under(Requirements both) -> required = both;
@@ -11426,7 +12198,7 @@ public final class Generator {
                 // What building these met is what building the position's offer met, which
                 // {@link #met} already holds.
                 for (FixtureTemplate each : Partitions.displacedRepresentativesOf(slot.type(),
-                        reading, slot.within(), slot.held()).values()) {
+                        reading, slot.limits()).values()) {
                     if (here.stream().noneMatch(had -> had.text().equals(each.text()))) {
                         here.add(each);
                     }
@@ -11486,8 +12258,7 @@ public final class Generator {
             }
             FieldDomains.ConstructionLimits limits = left.limitsAt(slot.at());
             NumericDomain.Bounds here = limits.values();
-            FieldDomains.Held held = limits.held();
-            Proposals stands = subject.representativesHolding(slot.type(), here, held);
+            Proposals stands = subject.representativesHolding(slot.type(), limits);
             met = met.and(stands.met());
             if (stands.isEmpty()) {
                 // Nothing could be written at all: a position of a type nothing stands for. Which is
@@ -11507,14 +12278,13 @@ public final class Generator {
             paths.add(slot.at());
             values.add(stands.values());
             reserves.add(Partitions.inReserve(slot.type(), reading, here, stands.values()));
-            displacing.add(new Displacing(slot.type(), here, held));
+            displacing.add(new Displacing(slot.type(), limits));
         }
         return new Choices(plan, paths, values, reserves, null, Set.of(), displacing, met);
     }
 
     /** What a position's value is displaced within: its type, and what its rules leave of it. */
-    private record Displacing(Type type, NumericDomain.Bounds within,
-                              FieldDomains.Held held) {}
+    private record Displacing(Type type, FieldDomains.ConstructionLimits limits) {}
 
     /**
      * A row stands at no class of this axis.
@@ -12303,10 +13073,14 @@ public final class Generator {
                                 ? one.value() : null;
                 // What an operation answered is not what its root holds — three characters is not
                 // the position standing at three, and a hundred is not what the list adding up to
-                // it holds. Nor is how many of a string's code points are in a class, or how often
-                // a value occurs among the elements beside it.
+                // it holds. Nor is how many of a string's code points are in a class, what they
+                // come to, or how often a value occurs among the elements beside it, or the end of
+                // the values of a key, which another element of the key may hold.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.Multiplicity _, NumericTerm.TakenOver _ -> null;
+                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                     NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _,
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.
             case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;

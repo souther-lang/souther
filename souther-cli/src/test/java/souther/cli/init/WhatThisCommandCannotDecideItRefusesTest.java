@@ -325,7 +325,7 @@ class WhatThisCommandCannotDecideItRefusesTest {
 
         int code = InitCommand.run(new String[] {"com.example:hello"}, Locale.ENGLISH,
                 new PrintStream(out, true, StandardCharsets.UTF_8),
-                new PrintStream(err, true, StandardCharsets.UTF_8), directory, null);
+                new PrintStream(err, true, StandardCharsets.UTF_8), directory, null, null);
 
         assertEquals(2, code);
         try (Stream<Path> wrote = Files.list(directory)) {
@@ -348,7 +348,7 @@ class WhatThisCommandCannotDecideItRefusesTest {
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         int code = InitCommand.run(args, Locale.ENGLISH,
                 new PrintStream(out, true, StandardCharsets.UTF_8),
-                new PrintStream(err, true, StandardCharsets.UTF_8), here, "9.9.9");
+                new PrintStream(err, true, StandardCharsets.UTF_8), here, "9.9.9", null);
         return new Run(code, out.toString(StandardCharsets.UTF_8),
                 err.toString(StandardCharsets.UTF_8));
     }

@@ -2,10 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
-
-import java.math.BigDecimal;
 
 /**
  * The condition a union-answering operation comes back as a case other than its number's under,
@@ -39,9 +38,12 @@ final class TheOtherCase {
         }
         Core argument = Terms.argsOf(called).get(CallArguments.positionOf(
                 result.unless().argument(), Terms.operationOf(called)));
-        return new Core.Binary(result.unless().op(), argument,
-                numberOf(result.unless().than(), argument.type(), argument.pos()),
-                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL,
+        // The number as a source would write it beside the argument, so the condition compares
+        // the two as a source-written one would.
+        ConstantComparison.WrittenBeside than = ConstantComparison.writtenBeside(argument,
+                ExactRatio.of(result.unless().than()));
+        return than == null ? null : new Core.Binary(result.unless().op(), argument,
+                than.number(), than.reading(), ConstructOccurrence.unwritten(), Type.BOOL,
                 argument.pos());
     }
 
@@ -53,14 +55,6 @@ final class TheOtherCase {
         return result != null
                 && result.at() instanceof NumericResult.Answered.InTheCaseCarrying(Type answersIn)
                 ? answersIn : null;
-    }
-
-    /** {@code n} written at the type the argument is, so that the condition compares two values of
-     * one type as a source-written one would. */
-    private static Core numberOf(long n, Type type, souther.compiler.diag.SourcePos pos) {
-        return type == Type.DECIMAL
-                ? new Core.Decimal(BigDecimal.valueOf(n), type, pos)
-                : new Core.Int(n, type, pos);
     }
 
     private TheOtherCase() {}

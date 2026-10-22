@@ -17,12 +17,18 @@ import java.util.Objects;
  *
  * @param at   where it reads, as the rules of the value call a place in it
  * @param kind what it reads there
+ * @param run  for {@link Kind#EACH_ELEMENTS_RUN}, what it reads of an element, as the rules of the
+ *             element call a place in it; the element itself for every other kind
  */
-public record ClauseRead(RuleKey at, Kind kind) {
+public record ClauseRead(RuleKey at, Kind kind, RuleKey run) {
 
     public ClauseRead {
         Objects.requireNonNull(at, "a clause reads somewhere");
         Objects.requireNonNull(kind, "a clause reads something of where it reads");
+        Objects.requireNonNull(run, "a clause reads a place of an element, or the element");
+        if (kind != Kind.EACH_ELEMENTS_RUN && !run.isTheValueItself()) {
+            throw new IllegalArgumentException("only a read of elements goes down a run: " + kind);
+        }
     }
 
     /** What a clause reads of a place. */
@@ -37,6 +43,13 @@ public record ClauseRead(RuleKey at, Kind kind) {
          * string's length is not one of these — which strings there are of a length is which
          * strings there are.
          */
-        HOW_MANY_IT_HOLDS
+        HOW_MANY_IT_HOLDS,
+
+        /**
+         * The fields of each element of the list, set or map there that a run names, and nothing
+         * else of the element: what a call saying no two elements share them reads
+         * ({@code ElementsApart}).
+         */
+        EACH_ELEMENTS_RUN
     }
 }

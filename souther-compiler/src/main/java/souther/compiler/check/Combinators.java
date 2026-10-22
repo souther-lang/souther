@@ -72,11 +72,12 @@ final class Combinators {
     }
 
     /** What a call hands its closure: the argument that takes the function, the block that argument
-     * is, the parameter the element arrives on, the container it comes from, and the parameter the
-     * key it is filed under arrives on — null where the closure is handed no key — and how far the
-     * operation goes applying it. */
+     * is, the parameter the element arrives on, the container it comes from, the parameter the
+     * key it is filed under arrives on — null where the closure is handed no key — the parameter
+     * the element's position arrives on — null where it is shown to be handed none — and how far
+     * the operation goes applying it. */
     record Handed(Core closure, Core.Block step, Core.Binder element, Core container,
-                  Core.Binder key, HowAClosureIsApplied applied) {}
+                  Core.Binder key, Core.Binder position, HowAClosureIsApplied applied) {}
 
     /** The same, off the tree an author wrote, where a closure is the block as written. */
     record Written(Hir.Block step, Hir.Binder element, Hir.Expr container) {}
@@ -125,12 +126,15 @@ final class Combinators {
         Core closure = args.get(rule.closureArg());
         Core.Block step = blockOf.apply(closure);
         if (step == null || rule.elementParam() >= step.params().size()
-                || rule.keyParam() >= step.params().size()) {
+                || rule.keyParam() >= step.params().size()
+                || rule.positionParam() >= step.params().size()) {
             return null;
         }
         return new Handed(closure, step, step.params().get(rule.elementParam()),
                 args.get(rule.containerArg()),
-                rule.handsAKey() ? step.params().get(rule.keyParam()) : null, rule.applied());
+                rule.handsAKey() ? step.params().get(rule.keyParam()) : null,
+                rule.handsAPosition() ? step.params().get(rule.positionParam()) : null,
+                rule.applied());
     }
 
     /** Whether a call hands its closure the container's elements from the first. */
@@ -220,6 +224,33 @@ final class Combinators {
             ValueName.Stdlib.operation("Map", "get"),
             new AppliedClosures.Listing.AtMostOneElementOf(1));
 
+    /**
+     * The kernels whose answer holds the elements of the argument at the position given, each once
+     * and in the opposite order: the first of the answer is the last of the argument.
+     *
+     * <p>An axiom about each, as {@link #KERNELS} is, and held to what the kernel computes by a
+     * test that runs it. A walk after where an element stands turns its direction over through one
+     * of these and stops at every other operation.
+     */
+    private static final Map<ValueName.Stdlib.Operation, Integer> REVERSING = Map.of(
+            ValueName.Stdlib.operation("List", "reverse"), 0);
+
+    /**
+     * The position of the argument whose elements {@code operation} answers in the opposite order,
+     * or -1 where it answers no argument's so.
+     */
+    public static int positionOfTheArgumentReversed(Stdlib stdlib, ValueName operation) {
+        if (!(operation instanceof ValueName.Stdlib.Operation named)
+                || !REVERSING.containsKey(named)) {
+            return -1;
+        }
+        if (stdlib.intrinsicOf(named) == null) {
+            throw new IllegalStateException(named + " is declared to answer its argument reversed"
+                    + " as a kernel, and the library writes it in the language");
+        }
+        return REVERSING.get(named);
+    }
+
     /** The places, read off the library's signatures on the first ask. */
     private static final class Positions {
         private static final Map<ValueName.Stdlib.Operation, ClosurePositions> RULES =
@@ -236,10 +267,16 @@ final class Combinators {
 
     /** A pure function of the library and what its kernels are declared to answer, so the holders
      *  above are the only things here that reach for the process's own. */
-    private static Map<ValueName.Stdlib.Operation, Combinator> read(Stdlib stdlib,
-                                                                    BoundOperationFacts facts) {
+    static Map<ValueName.Stdlib.Operation, Combinator> read(Stdlib stdlib,
+                                                            BoundOperationFacts facts) {
         return AppliedClosures.of(stdlib, kernelsIn(stdlib),
-                operation -> listing(stdlib, facts, operation), Combinators::positionsOf);
+                operation -> listing(stdlib, facts, operation), signaturesOf(stdlib));
+    }
+
+    /** Where the signatures of {@code stdlib} put each operation's closure and container, read
+     *  once — the library's own, so a body is held to what its own library declares. */
+    static Function<ValueName.Stdlib.Operation, ClosurePositions> signaturesOf(Stdlib stdlib) {
+        return positions(stdlib)::get;
     }
 
     /** What the kernels taking a closure are declared to apply it to, held to the library. */
@@ -257,7 +294,8 @@ final class Combinators {
                         + " its signature puts no closure beside a container");
             }
             kernels.put(operation, new Combinator(at.closureArg(), at.elementParam(),
-                    at.containerArg(), at.keyParam(), how, Combinator.FROM_THE_FIRST));
+                    at.containerArg(), at.keyParam(), Combinator.NO_POSITION, how,
+                    Combinator.FROM_THE_FIRST));
         });
         return kernels;
     }

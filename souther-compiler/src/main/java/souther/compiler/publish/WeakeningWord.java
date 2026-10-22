@@ -220,6 +220,17 @@ public enum WeakeningWord {
      */
     MEETINGS_NOT_PLACED,
 
+    /**
+     * A sum of the elements a comparison keeps was met, and its decisions were not joined to the
+     * evaluations a run records, so none of its combinations was asked of the rows.
+     *
+     * <p>Its own word beside the one above, because the remedy differs: a sum whose elements are
+     * kept by one comparison is read, and one kept by several, or by a call expanding more than one
+     * way, is not. Nothing is owed at these, and the behavior is not said to have had every
+     * combination of its decisions made.
+     */
+    MEETINGS_NOT_JOINED,
+
     /** A row went through an arm this compiler had proven nothing arrives at. */
     PROOF_CONTRADICTED,
 
@@ -274,6 +285,18 @@ public enum WeakeningWord {
      * rules here are read whole, and a capacity to write rows is what is short.
      */
     KEYED_OVERWRITE_CASES_UNMEASURED,
+
+    /**
+     * A search from a node for some node below it decides something of the body, and what a node
+     * further down meeting what it asks does to the answer has not been measured.
+     *
+     * <p>The search is read as it is. What is missing is the rows: a value holding values of its
+     * own kind is written so deep and no deeper, so no row is written toward a node further down
+     * settling the search. Apart from {@link #DECISION_RULE_READ_SHORT}: the rules here are read
+     * whole, and a capacity to write rows is what is short. Apart from {@link #POSITION_NOT_READ}
+     * too: nothing about the input's own positions was left unread.
+     */
+    REACHABLE_NODE_CASES_UNMEASURED,
 
     /**
      * A rewrite of a body nothing here could decide about: whether a row tells it from the body is

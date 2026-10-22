@@ -289,9 +289,11 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                 return false;
             }
         };
-        assertTrue(Border.reachesBothSides(new Level.OfTheQuantity(ExactRatio.ONE),
-                        ExactAnswer.unheld(UnheldNumber.MORE_ROOM_COULD_ANSWER), none),
-                "a seam that was not worked out keeps both sides");
+        for (Towards side : Towards.values()) {
+            assertTrue(Border.standsBeside(new Level.OfTheQuantity(ExactRatio.ONE),
+                            ExactAnswer.unheld(UnheldNumber.MORE_ROOM_COULD_ANSWER), side, none),
+                    () -> "a seam that was not worked out keeps the side " + side);
+        }
     }
 
     /**
@@ -354,6 +356,205 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                 example pick
                     | "decided by a" : (6, Pos { v = 2 }) -> High
                 """), "b below five leaves the statement to the line");
+    }
+
+    /**
+     * A relation on what two numbers come to multiplied is a line among several as a relation on a
+     * position is, and decides where the statement turns on it.
+     *
+     * <p>{@code Int.max(0, a * b.v) <= 3} draws a line where the product is three and a line where
+     * it is nought. The first decides where the product is above nought, and a row on each side of
+     * three is there. The second decides only where the product is above three, where no row
+     * stands at nought: the two arms of max meet there and the answer does not jump.
+     */
+    @Test
+    void aLineOnAProductAmongSeveralIsDrawnWhereItDecides() {
+        JsonNode report = reportOf("Int.max(0, a * b.v) <= 3", "");
+        assertTrue(reasonsAt(report, "a").stream()
+                        .noneMatch("several_lines_in_one_rule"::equals),
+                () -> "the statement is drawn, not held back: " + reasonsAt(report, "a"));
+        assertTrue(reasonsAt(report, "a").contains("rule_never_turns_on_this_line"),
+                () -> "the line where the arms meet decides nowhere: " + reasonsAt(report, "a"));
+        assertEquals(Set.of("pick/a * b.v 3", "pick/a * b.v 4"), pointsOfParts(report),
+                "a row is owed on each side of three and nowhere about nought");
+    }
+
+    /**
+     * A remainder of a form of several numbers is something a row is asked, as a product is: the
+     * line on the remainder is drawn among several, and the rows owed are named by the remainder
+     * they stand at.
+     */
+    @Test
+    void aLineOnARemainderOfAFormAmongSeveralIsDrawnWhereItDecides() {
+        JsonNode report = reportOf("Int.max(0, Int.floorMod(a + b.v, 11) - 5) <= 2", "");
+        assertTrue(reasonsAt(report, "a").stream()
+                        .noneMatch("several_lines_in_one_rule"::equals),
+                () -> "the statement is drawn, not held back: " + reasonsAt(report, "a"));
+        assertEquals(Set.of("pick/Int.floorMod(a + b.v, 11) 7",
+                        "pick/Int.floorMod(a + b.v, 11) 8"), pointsOfParts(report),
+                "a row is owed on each side of seven and nowhere about the arms' meeting at five");
+    }
+
+    /**
+     * The rule as it was first met: a check digit worked out of the remainder of a sum by a
+     * constant, branched on, and its result compared. The remainder is eight where the result is
+     * three, so the rows that tell the rule apart are the ones at seven, eight and nine.
+     */
+    private static final String CHECK_DIGIT = """
+            module probe.e9
+
+            data Yes = { n: Int }
+            data No = { n: Int }
+
+            let f (x: Int, y: Int): Int = {
+                let r = Int.floorMod(x + y, 11)
+                if r <= 1 then 0 else 11 - r
+            }
+
+            behavior verify : (x: Int, y: Int) -> Yes | No
+                constructs Yes, No
+
+            let verify (x, y) =
+                if 3 == f(x, y) then Yes { n = 0 } else No { n = 0 }
+
+            example verify
+                | "the remainder is seven" : (3, 4) -> No { n = 0 }
+                | "the remainder is eight" : (3, 5) -> Yes { n = 0 }
+                | "the remainder is nine" : (3, 6) -> No { n = 0 }
+            """;
+
+    @Test
+    void aCheckDigitComparedAfterABranchOnARemainderIsDrawn() {
+        JsonNode report = reportOfSource(CHECK_DIGIT);
+        assertTrue(reasonsAt(report, "x").stream()
+                        .noneMatch("several_lines_in_one_rule"::equals),
+                () -> "the rule is drawn, not held back: " + reasonsAt(report, "x"));
+        assertEquals(Set.of("verify/Int.floorMod(x + y, 11) 7", "verify/Int.floorMod(x + y, 11) 8",
+                        "verify/Int.floorMod(x + y, 11) 9"), pointsOfParts(report),
+                "a row is owed at each remainder the result of three is told apart by");
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            JsonNode reading = obligation.path("readings").get(0);
+            if (reading.path("against").asString().contains("<")) {
+                continue;
+            }
+            assertTrue(reading.path("hit").asBoolean(),
+                    () -> "the rows written stand at " + reading.path("against") + ": " + reading);
+        }
+    }
+
+    /** The remainder is of the form with its weights and constant, and read as a floor remainder. */
+    @Test
+    void aRemainderOfAWeightedFormWithAConstantIsDrawnToo() {
+        JsonNode report = reportOf("Int.max(0, Int.floorMod(3 * a + b.v + 5, 11) - 5) <= 2", "");
+        assertTrue(reasonsAt(report, "a").stream()
+                        .noneMatch("several_lines_in_one_rule"::equals),
+                () -> "the statement is drawn, not held back: " + reasonsAt(report, "a"));
+        assertEquals(Set.of("pick/Int.floorMod(3 * a + b.v + 5, 11) 7",
+                        "pick/Int.floorMod(3 * a + b.v + 5, 11) 8"), pointsOfParts(report));
+    }
+
+    /** A statement about a remainder that holds of no row turns on none of its lines. */
+    @Test
+    void aStatementOnARemainderOfAFormThatHoldsNowhereTurnsOnNoLine() {
+        JsonNode report = reportOf("Int.max(0, Int.floorMod(a + b.v, 11)) <= -1", "");
+        assertTrue(obligationsOfParts(report).isEmpty(),
+                () -> "no row is owed at either line: " + obligationsOfParts(report));
+    }
+
+    /** A statement about a product that holds of no row turns on none of its lines. */
+    @Test
+    void aStatementOnAProductThatHoldsNowhereTurnsOnNoLine() {
+        JsonNode report = reportOf("Int.max(0, a * b.v) <= -1", "");
+        assertEquals(List.of("rule_never_turns_on_this_line"),
+                reasonsAt(report, "a").stream().distinct().toList(),
+                () -> "neither line turns the statement: " + reasonsAt(report, "a"));
+        assertTrue(obligationsOfParts(report).isEmpty(),
+                () -> "and no row is owed at either: " + obligationsOfParts(report));
+    }
+
+    /**
+     * Where a line on how many elements meet something decides is read off the other relations on
+     * that count, as it is for a line on a position: no row stands on both sides of two where the
+     * count is above five.
+     */
+    @Test
+    void aLineOnACountTurnsOnlyWhereItsCaseLeavesTheCountOnBothSides() {
+        JsonNode report = reportOfSource("""
+                module probe
+
+                data Low
+                data High
+
+                behavior pick : (xs: List<Int>) -> Low | High
+                let pick (xs) = {
+                    let n = List.length(List.filter(x -> x > 0, xs))
+                    if Int.max(2, n) <= 5 then High else Low
+                }
+                """);
+        assertTrue(reasonsAt(report, "xs[*]").contains("rule_never_turns_on_this_line"),
+                () -> "the line where the arms meet decides nowhere: "
+                        + reasonsAt(report, "xs[*]"));
+        assertEquals(Set.of("pick/#xs [xs[*] > 0] 5", "pick/#xs [xs[*] > 0] 6"),
+                pointsOfParts(report),
+                "a row is owed on each side of five and nowhere about two");
+    }
+
+    /**
+     * A case kept because nothing ruled a row out on either side is not a row standing there. With
+     * one factor held at ten the product is a multiple of ten, and is never three or four, so no
+     * row is owed at either: a line kept there has its points settled by the search, which proves
+     * nothing stands at them, and a line the case drops has none.
+     */
+    @Test
+    void aCaseNothingRuledOutOwesNoRowWhereNoneStands() {
+        JsonNode report = reportOfSource("""
+                module probe
+
+                data Low
+                data High
+                data Ten = { v: Int }
+                    invariant v == 10
+
+                behavior pick : (a: Ten, b: Int) -> Low | High
+                let pick (a, b) = if Int.max(2, a.v * b) <= 3 then High else Low
+                """);
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            String against = obligation.path("readings").get(0).path("against").asString();
+            if (against.equals("3") || against.equals("4")) {
+                assertEquals("refuted", obligation.path("disposition").asString(),
+                        () -> "nothing stands at " + against + ": " + obligation);
+            }
+        }
+    }
+
+    /** A row at the line on a product, read off what its two numbers come to multiplied. */
+    @Test
+    void aRowAtALineOnAProductMeetsItWhereItsNumbersMultiplyToThePoint() {
+        JsonNode report = reportOf("Int.max(0, a * b.v) <= 3", """
+                example pick
+                    | "three" : (3, Pos { v = 1 }) -> High
+                """);
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            JsonNode reading = obligation.path("readings").get(0);
+            if (reading.path("against").asString().equals("3")) {
+                assertTrue(reading.path("hit").asBoolean(), () -> "met at three: " + obligation);
+                return;
+            }
+        }
+        throw new AssertionError("the line on the product has a point at three: " + report);
+    }
+
+    /** Each point owed at a line of a statement of several, as its axis and where it stands. */
+    private static Set<String> pointsOfParts(JsonNode report) {
+        Set<String> out = new TreeSet<>();
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            String against = obligation.path("readings").get(0).path("against").asString();
+            if (!against.contains("<")) {
+                out.add(obligation.path("readings").get(0).path("axis").asString() + " "
+                        + against);
+            }
+        }
+        return out;
     }
 
     /** Whether the point at a = 6 of the line on a was met by the rows {@code examples} writes. */

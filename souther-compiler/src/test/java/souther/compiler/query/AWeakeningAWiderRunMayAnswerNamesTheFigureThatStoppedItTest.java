@@ -259,11 +259,13 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.put("MeetingsNotWalked", new Weakening.MeetingsNotWalked("b", 1,
                 List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(4))));
         out.put("MeetingsNotPlaced", new Weakening.MeetingsNotPlaced("b", 1));
+        out.put("MeetingsNotJoined", new Weakening.MeetingsNotJoined("b", 1));
         out.put("DecisionReadingIncomplete", new Weakening.DecisionReadingIncomplete("b",
                 new DecisionReading.Enumeration.StoppedAtAFigure(
                         CompositionBudget.PATHS_OF_A_DECISION_READ)));
         out.put("DecisionRuleReadShort", new Weakening.DecisionRuleReadShort("b"));
         out.put("KeyedOverwriteCasesUnmeasured", new Weakening.KeyedOverwriteCasesUnmeasured("b"));
+        out.put("ReachableNodeCasesUnmeasured", new Weakening.ReachableNodeCasesUnmeasured("b"));
         Replacement rewrite = new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                 new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1)));
         for (ReplacementEvidence.Undecided.Way way : everyWayARewriteIsLeftOpen()) {

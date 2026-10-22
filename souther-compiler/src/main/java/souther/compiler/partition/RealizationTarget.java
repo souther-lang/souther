@@ -1,9 +1,11 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -51,6 +53,55 @@ public sealed interface RealizationTarget {
     TermPath writeRoot();
 
     /**
+     * Where the value this target is for stands, where it is for a value an input holds that is
+     * not the target's own to write — the key a count of elements, or a total of them, is asked
+     * for — and null where it is not.
+     *
+     * <p>Another parameter's, and fixed with the rest of the row before the container is
+     * composed holding it.
+     */
+    default TermPath keyAskedFor() {
+        return null;
+    }
+
+    /**
+     * Whether the value at {@link #keyAskedFor} is the number this target is asked for, so that
+     * the two are chosen together and the key is not placed before the number it is.
+     */
+    default boolean keyIsTheNumber() {
+        return false;
+    }
+
+    /**
+     * Whether the key of this target is placed at another value than the key of {@code other}.
+     *
+     * <p>Two keys told apart by the same way from an element to its key are two keys of one
+     * fold, and the row that has them apart is the one whose elements of each come to a number
+     * of their own: held at one value they are one key, whose elements come to one number
+     * between them.
+     */
+    default boolean keyIsToldApartFrom(RealizationTarget other) {
+        AskedKey mine = askedKey();
+        AskedKey theirs = other.askedKey();
+        return mine != null && theirs != null && mine.elements().equals(theirs.elements())
+                && mine.keyAt().equals(theirs.keyAt()) && !mine.asked().equals(theirs.asked());
+    }
+
+    /** The key of the elements this target is asked about, or null where it is about no such key. */
+    default AskedKey askedKey() {
+        return null;
+    }
+
+    /**
+     * The key a target asks about ({@link #askedKey}).
+     *
+     * @param elements where the elements stand
+     * @param keyAt    the field of an element that is its key
+     * @param asked    the input whose value the key is asked for
+     */
+    record AskedKey(TermPath elements, TermPath keyAt, TermPath asked) {}
+
+    /**
      * The target of a number, which every number has.
      *
      * <p>Exhaustive over the terms there are, with no {@code default} and no null. Read off a
@@ -66,6 +117,11 @@ public sealed interface RealizationTarget {
     static OfANumber of(NumericTerm term) {
         return switch (term) {
             case NumericTerm.Multiplicity among -> new AmongTheElements(among);
+            case NumericTerm.ExtremeOfItsKey extreme -> new AtItsKey(extreme);
+            case NumericTerm.GatheredUnderItsKey gathered -> new UnderItsKey(gathered);
+            case NumericTerm.GatheredUnderAKey asked -> new UnderAKey(asked);
+            case NumericTerm.OccurrencesOfItsValue among -> new AmongEveryOccurrence(among);
+            case NumericTerm.OccurrencesOfAKey asked -> new AmongEveryOccurrenceEqualToAKey(asked);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
             case NumericTerm.TakenOver over -> new OverARun(over);
         };
@@ -145,6 +201,54 @@ public sealed interface RealizationTarget {
     }
 
     /**
+     * How often the value at a place occurs among every occurrence of it, realized by writing the
+     * outermost container the occurrences stand in with that many of them holding the value.
+     *
+     * <p>A number one position reads and no position holds, as {@link AmongTheElements} is, but
+     * over the containers inside the elements of another: the occurrences are spread over them, so
+     * the row that moves the number is one that rebuilds the outermost container.
+     */
+    record AmongEveryOccurrence(NumericTerm.OccurrencesOfItsValue term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.subjectPath().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * How often the value an input holds occurs among every occurrence of a place, realized by
+     * writing the outermost container the occurrences stand in with that many of them holding it.
+     *
+     * <p>As {@link AmongEveryOccurrence} is, except that the value counted for is not one of those
+     * at the place: it is the key's, which the row holds as another input and which is fixed with
+     * the rest of the row, so a count of nought is a row where none of them holds it.
+     */
+    record AmongEveryOccurrenceEqualToAKey(NumericTerm.OccurrencesOfAKey term)
+            implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.subjectPath().outermostContainer();
+        }
+
+        @Override
+        public TermPath keyAskedFor() {
+            return term.key();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
      * A number taken over a run of values, realized by writing the container they are read from.
      *
      * <p>What makes the root one location is the run's own invariant: a run is over every occurrence
@@ -160,6 +264,12 @@ public sealed interface RealizationTarget {
 
         @Override
         public TermPath writeRoot() {
+            // The nodes of a tree are counted by writing what is below its root, which holds the
+            // root's own number nothing moves.
+            if (term.source() instanceof RunSource.ReachableNodes nodes
+                    && nodes.container().isEmpty()) {
+                return nodes.root().then(nodes.through().getFirst());
+            }
             return term.source().subjectPath().outermostContainer();
         }
 
@@ -182,6 +292,91 @@ public sealed interface RealizationTarget {
         @Override
         public TermPath writeRoot() {
             return term.container().element().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * The least or greatest of the values the elements of one key hold, realized by writing the
+     * value at the place it is taken of.
+     *
+     * <p>An element alone under its key reads its own value, so a value written there is the
+     * number wherever no other element of that key holds a value past it. Whether one does is what
+     * the row holds beside it, which the candidate is read back against as a whole
+     * ({@code Generator.readBack}), so a value written here and moved by a neighbour is refused
+     * rather than taken for the number.
+     */
+    record AtItsKey(NumericTerm.ExtremeOfItsKey term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.value();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * What the elements of one key come to, realized by writing the container the elements stand
+     * in with elements whose numbers come to it.
+     *
+     * <p>Written as a total over the container is ({@link ContainersAddingUp}): an end as one
+     * element, which comes to its own number by either end, and a total as elements adding up to
+     * it. They come to the number where they are all of one key and no other element shares it,
+     * and whether they are is what the row holds beside them — read back whole ({@code
+     * Generator.readBack}), as {@link AtItsKey} is. The innermost container and not the outermost:
+     * the containers around it are another element's, and a row writing one value inside them
+     * holds the elements of the others it writes as it writes any position under them.
+     */
+    record UnderItsKey(NumericTerm.GatheredUnderItsKey term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.elements().containersHoldingIt().getLast();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * What the elements of the key an input holds come to, realized as {@link UnderItsKey} is,
+     * with every element written holding that key.
+     *
+     * <p>The key is another parameter's and is fixed with the rest of the row, so the elements
+     * are written holding it; elements of other keys are the row's other containers', and a key
+     * no element holds is a row none of them holds it at, which the number is not read for.
+     */
+    record UnderAKey(NumericTerm.GatheredUnderAKey term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.subjectPath().containersHoldingIt().getLast();
+        }
+
+        @Override
+        public TermPath keyAskedFor() {
+            return term.asked();
+        }
+
+        @Override
+        public boolean keyIsTheNumber() {
+            return term.keyIsEachElementsNumber();
+        }
+
+        @Override
+        public AskedKey askedKey() {
+            return new AskedKey(term.gathered().elements(),
+                    term.key().from(term.gathered().elements()), term.asked());
         }
 
         @Override
@@ -214,6 +409,26 @@ public sealed interface RealizationTarget {
         @Override
         public TermPath writeRoot() {
             return count.container().element().outermostContainer();
+        }
+
+        /** The key the elements counted have, where they are counted for having the value an
+         *  input holds for the field that is their key. */
+        @Override
+        public AskedKey askedKey() {
+            List<TermPath> equal = Proposition.positionsHeldEqual(count.meeting());
+            if (equal == null
+                    || equal.get(0).insideAContainer() == equal.get(1).insideAContainer()) {
+                return null;
+            }
+            TermPath inside = equal.get(0).insideAContainer() ? equal.get(0) : equal.get(1);
+            return new AskedKey(count.container().element(), inside,
+                    inside == equal.get(0) ? equal.get(1) : equal.get(0));
+        }
+
+        @Override
+        public TermPath keyAskedFor() {
+            AskedKey key = askedKey();
+            return key == null ? null : key.asked();
         }
 
         @Override
@@ -260,11 +475,14 @@ public sealed interface RealizationTarget {
          * @param behavior the behavior whose input the statement reads
          */
         public static Optional<ElementsMeetingTogether> of(String behavior, OnTheWay several) {
-            if (!(several instanceof OnTheWay.OneOf oneOf) || oneOf.stated().isEmpty()
-                    || !AStatementAtARow.askable(oneOf.stated().get())) {
+            Proposition stated = switch (several) {
+                case OnTheWay.OneOf oneOf -> oneOf.stated().orElse(null);
+                case OnTheWay.Counted counted -> counted.stated();
+                default -> null;
+            };
+            if (stated == null || !AStatementAtARow.askable(stated)) {
                 return Optional.empty();
             }
-            Proposition stated = oneOf.stated().get();
             TermPath container = AStatementAtARow.containerItIsAbout(stated);
             return container == null || !container.steps().isEmpty() ? Optional.empty()
                     : Optional.of(new ElementsMeetingTogether(behavior, container, stated));

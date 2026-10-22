@@ -1,6 +1,8 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,6 +80,8 @@ public final class ClosedStates {
 
     private final AtomicLong workedOut = new AtomicLong();
 
+    private final AtomicLong asked = new AtomicLong();
+
     /** Whether the rules are closed in one run, which is {@link #IN_ONE_RUN} and nothing else. */
     private final boolean inOneRun;
 
@@ -92,29 +96,233 @@ public final class ClosedStates {
     /** What {@code rules} leave, spaced by {@code spacing} and walked in {@code order}. */
     <A> ClosedState<A> of(List<AffineConstraint<A>> rules, Function<A, Granularity> spacing,
                           CanonicalOrder<A> order) {
+        return of(rules, spacing, order, null).state();
+    }
+
+    /**
+     * The same, lent every part of {@code before} that the rules said after it do not reach.
+     *
+     * <p>For a domain made from another by saying more rules: the rules {@code before} was worked
+     * out from come first among {@code rules}, in the same order, and what follows them reaches
+     * some of its parts and not the others. A part it does not reach is the same question it was
+     * ({@link ClosureQuestion}), so its closure is the one {@code before} already holds; a part it
+     * does reach is a question of its own and is asked here as every question is. What comes back
+     * is the closure {@code rules} put without anything lent, part for part — lending decides what
+     * is worked out again and never what it comes to.
+     *
+     * @param before what a domain these rules were said onto worked out, or null where there is
+     *               none to lend from
+     */
+    <A> Parted<A> of(List<AffineConstraint<A>> rules, Function<A, Granularity> spacing,
+                     CanonicalOrder<A> order, Parted<A> before) {
         if (inOneRun) {
-            return ClosedState.closedTogether(rules, spacing, order);
+            return Parted.whole(ClosedState.closedTogether(rules, spacing, order));
         }
         // Nothing kept, so nothing to state: the question is what a kept closure is found by, and a
         // closure that is not kept is worked out from what it was handed, as it always was.
         if (answers == null) {
-            return ClosedState.of(rules, spacing, order);
+            return Parted.whole(ClosedState.of(rules, spacing, order));
+        }
+        Parted<A> lent = before == null ? null : before.followedBy(rules, this);
+        if (lent == null) {
+            lent = Parted.unread(ClosureQuestion.independentRules(rules), rules, this);
         }
         // Asked a part at a time. A question is one closure on its own, and two sets of rules that
-        // differ only in some of their parts put the same question for every other part.
-        List<ClosureQuestion<A>> questions =
-                ClosureQuestion.independent(rules, spacing, weighed -> placed(weighed, order));
-        List<ClosedState<A>> closed = new ArrayList<>(questions.size());
-        for (ClosureQuestion<A> question : questions) {
-            closed.add(of(question));
+        // differ only in some of their parts put the same question for every other part. A part
+        // lent is lent only where its rules still put the question it was worked out for, which is
+        // the question's to say.
+        Function<Set<A>, Map<A, Integer>> placing = weighed -> placed(weighed, order);
+        List<ClosureQuestion<A>> questions = new ArrayList<>(lent.parts.size());
+        List<ClosedState<A>> closed = new ArrayList<>(lent.parts.size());
+        boolean everyPartLent = true;
+        for (int at = 0; at < lent.parts.size(); at++) {
+            ClosureQuestion<A> had = lent.questions.get(at);
+            if (had != null && had.isPutBy(spacing, order, placing)) {
+                questions.add(had);
+                closed.add(lent.closed.get(at));
+                continue;
+            }
+            everyPartLent = false;
+            ClosureQuestion<A> asked =
+                    ClosureQuestion.of(lent.parts.get(at), spacing, order, placing);
+            questions.add(asked);
+            closed.add(of(asked));
         }
-        return ClosedState.product(closed);
+        if (everyPartLent && lent.state != null) {
+            return lent;
+        }
+        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf,
+                ClosedState.product(closed));
+    }
+
+    /**
+     * A closure worked out a part at a time, with the parts it was worked out from.
+     *
+     * <p>Held beside the domain it is the closure of, so that a domain made from that one by saying
+     * more rules can be lent the parts those rules do not reach ({@link #of(List, Function,
+     * CanonicalOrder, Parted)}). The parts are {@link ClosureQuestion#independentRules} of the
+     * rules, in its order, and each closure is the one the question beside it puts.
+     *
+     * @param <A> what a position of the rules is
+     */
+    public static final class Parted<A> {
+
+        /** Where the parts were asked, or null where nothing was parted. */
+        private final ClosedStates owner;
+        private final List<AffineConstraint<A>> rules;
+        private final List<List<AffineConstraint<A>>> parts;
+
+        /** The question each part put, or null for a part that has yet to put one. */
+        private final List<ClosureQuestion<A>> questions;
+
+        /** What each part's question leaves, beside it. */
+        private final List<ClosedState<A>> closed;
+
+        /** Which part weighs each position. */
+        private final Map<A, Integer> partOf;
+        private final ClosedState<A> state;
+
+        private Parted(ClosedStates owner, List<AffineConstraint<A>> rules,
+                       List<List<AffineConstraint<A>>> parts, List<ClosureQuestion<A>> questions,
+                       List<ClosedState<A>> closed, Map<A, Integer> partOf,
+                       ClosedState<A> state) {
+            this.owner = owner;
+            this.rules = rules;
+            this.parts = parts;
+            this.questions = questions;
+            this.closed = closed;
+            this.partOf = partOf;
+            this.state = state;
+        }
+
+        /** A closure worked out in one piece, with no parts to lend. */
+        private static <A> Parted<A> whole(ClosedState<A> state) {
+            return new Parted<>(null, List.of(), List.of(), List.of(), List.of(), Map.of(), state);
+        }
+
+        /** {@code parts} of {@code rules}, none of them asked yet. */
+        private static <A> Parted<A> unread(List<List<AffineConstraint<A>>> parts,
+                                            List<AffineConstraint<A>> rules, ClosedStates owner) {
+            Map<A, Integer> partOf = new HashMap<>();
+            List<ClosureQuestion<A>> unasked = new ArrayList<>(parts.size());
+            List<ClosedState<A>> unclosed = new ArrayList<>(parts.size());
+            for (int at = 0; at < parts.size(); at++) {
+                for (AffineConstraint<A> rule : parts.get(at)) {
+                    putting(rule, at, partOf);
+                }
+                unasked.add(null);
+                unclosed.add(null);
+            }
+            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null);
+        }
+
+        /** What the rules leave. */
+        public ClosedState<A> state() {
+            return state;
+        }
+
+        /**
+         * The parts of {@code more}, which these rules followed by others are, with the question and
+         * the closure of each part the others do not reach — or null where this cannot say what the
+         * parts are.
+         *
+         * <p>A rule said later joins the part of every position it weighs, and parts come in the
+         * order of their first rule with each part's rules in the order they were said
+         * ({@link ClosureQuestion#independentRules}). So a later rule weighing positions of one part
+         * goes at the end of that part, and one weighing no position of any goes into a part after
+         * all of these. A rule weighing positions of two parts joins them, and where the rules of
+         * the two then go is a merge this does not make: it is null, and the parts are worked out
+         * from the rules.
+         *
+         * <p>Null as well where {@code more} does not start with these rules, the very ones in the
+         * same order, or is kept by another owner. Whether a part not reached still puts its
+         * question under the spacing and the order {@code more} is closed with is asked of the
+         * question, where the closure is asked for.
+         */
+        private Parted<A> followedBy(List<AffineConstraint<A>> more, ClosedStates asking) {
+            if (owner != asking || more.size() < rules.size()) {
+                return null;
+            }
+            for (int at = 0; at < rules.size(); at++) {
+                if (more.get(at) != rules.get(at)) {
+                    return null;
+                }
+            }
+            if (more.size() == rules.size()) {
+                return this;
+            }
+            Map<A, Integer> into = new HashMap<>(partOf);
+            List<List<AffineConstraint<A>>> grown = new ArrayList<>(parts);
+            List<ClosureQuestion<A>> asked = new ArrayList<>(questions);
+            // Which parts hold a list of their own here, to be added to; the rest are this one's.
+            BitSet ownList = new BitSet();
+            for (int at = rules.size(); at < more.size(); at++) {
+                AffineConstraint<A> rule = more.get(at);
+                int part = partWeighedBy(rule, into);
+                if (part == SEVERAL) {
+                    return null;
+                }
+                if (part == NONE) {
+                    part = grown.size();
+                    grown.add(new ArrayList<>());
+                    asked.add(null);
+                } else if (!ownList.get(part)) {
+                    grown.set(part, new ArrayList<>(grown.get(part)));
+                    asked.set(part, null);
+                }
+                ownList.set(part);
+                grown.get(part).add(rule);
+                putting(rule, part, into);
+            }
+            List<List<AffineConstraint<A>>> parted = new ArrayList<>(grown.size());
+            grown.forEach(each -> parted.add(List.copyOf(each)));
+            List<ClosedState<A>> kept = new ArrayList<>(closed);
+            while (kept.size() < asked.size()) {
+                kept.add(null);
+            }
+            return new Parted<>(owner, more, parted, asked, kept, into, null);
+        }
+
+        /** What {@link #partWeighedBy} answers for a rule weighing no position of any part. */
+        private static final int NONE = -1;
+
+        /** What {@link #partWeighedBy} answers for a rule weighing positions of two parts. */
+        private static final int SEVERAL = -2;
+
+        /**
+         * The one part {@code partOf} has the positions {@code rule} weighs in, {@link #NONE} where
+         * it has none of them and {@link #SEVERAL} where they are in more than one — which of its
+         * positions is taken first decides none of the three.
+         */
+        private static <A> int partWeighedBy(AffineConstraint<A> rule, Map<A, Integer> partOf) {
+            int found = NONE;
+            for (A position : rule.form().coefs().keySet()) {
+                Integer its = partOf.get(position);
+                if (its == null) {
+                    continue;
+                }
+                if (found != NONE && found != its) {
+                    return SEVERAL;
+                }
+                found = its;
+            }
+            return found;
+        }
+
+        /** {@code partOf} with every position {@code rule} weighs in {@code part}. */
+        private static <A> void putting(AffineConstraint<A> rule, int part,
+                                        Map<A, Integer> partOf) {
+            for (A position : rule.form().coefs().keySet()) {
+                partOf.put(position, part);
+            }
+        }
     }
 
     /** What {@code question} leaves, lent where it has been worked out before. */
     private <A> ClosedState<A> of(ClosureQuestion<A> question) {
         // The cast holds because an entry is only ever put under the question it answers, and a
         // question over positions of type A is answered by a closure over the same positions.
+        asked.incrementAndGet();
         @SuppressWarnings("unchecked")
         ClosedState<A> had = (ClosedState<A>) answers.get(question);
         if (had != null) {
@@ -154,5 +362,14 @@ public final class ClosedStates {
      */
     public long workedOut() {
         return workedOut.get();
+    }
+
+    /**
+     * How many questions have been put to this, worked out or lent, for a test holding a closure
+     * lent part by part to asking only for the parts the rules said since reach. Nought for
+     * {@link #NONE}, which is asked nothing.
+     */
+    long questionsAsked() {
+        return asked.get();
     }
 }

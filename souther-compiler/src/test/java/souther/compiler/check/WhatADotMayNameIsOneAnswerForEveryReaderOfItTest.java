@@ -318,9 +318,7 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
     }
 
     private static Compilation compiled() {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
-        c.answerEverything();
-        return c;
+        return Compilation.ofSource(MODEL, "Main");
     }
 
     private static TypeSymbol named(String declaration) {

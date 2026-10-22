@@ -67,7 +67,7 @@ public sealed interface Reachability {
                 List<Reaching> along = new ArrayList<>();
                 for (OneOfEach.Way<OnTheWay> one : ways) {
                     along.add(switch (one) {
-                        case OneOfEach.Way.Chosen<OnTheWay>(var entries) ->
+                        case OneOfEach.Way.Chosen<OnTheWay>(var entries, var _) ->
                                 reaching(new WayToTheBorder(entries), declarations);
                         // A condition the walk left as it stands is one this way was not split
                         // at past the figure, and is said as one, so that a row composed along
@@ -198,7 +198,7 @@ public sealed interface Reachability {
                 unsplit = List.copyOf(unsplit);
                 along = List.copyOf(along);
                 if (unsplit.isEmpty() || figure == null
-                        || !unsplit.stream().allMatch(OnTheWay::ofSeveralWays)) {
+                        || !unsplit.stream().allMatch(OnTheWay::splitsTheWay)) {
                     throw new IllegalArgumentException("a way looked along whole past a figure has"
                             + " a condition of several ways on it, and a figure it met");
                 }
@@ -259,6 +259,25 @@ public sealed interface Reachability {
             return ways.along();
         }
 
+        /**
+         * Regions that between them hold every row past this way: the region of each way it is
+         * split into, where it is split into every way a row may take, and its own region
+         * otherwise.
+         *
+         * <p>What a question about the rows that arrive somewhere is asked of. The region alone
+         * spans every way, so a choice between runs of one number leaves the values between the
+         * runs in it: a line drawn there looks reached when no way a row takes gets to it, and a
+         * value there stands beside a line as if a row held it. Past a figure
+         * the ways looked along are not every way, so only the region whole is a statement about
+         * every row.
+         */
+        public List<SearchRegion> holdingEveryRow() {
+            return switch (ways) {
+                case Ways.Each each -> each.along().stream().map(Reaching::region).toList();
+                case Ways.One _, Ways.Whole _ -> List.of(region);
+            };
+        }
+
         /** The same way, split as {@code split} says. What the way asks of a row is the same
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
@@ -314,6 +333,27 @@ public sealed interface Reachability {
             if (why == null) {
                 throw new IllegalArgumentException("a way nothing takes asks some position twice");
             }
+        }
+    }
+
+    /**
+     * The statements of numbers on the way weigh one form of terms alike and leave no point of the
+     * line in common, so no row takes it.
+     *
+     * <p>A fact about the model like {@link NothingReaches}, and not that: no position is asked
+     * twice. The terms may be read from several positions, and it is the relation between them
+     * that the statements contradict, so there is no position to name. What proves it is the
+     * statements, which this carries.
+     *
+     * @param statements the statements of the way, of which some one form is held to no point
+     */
+    record NumbersLeaveNone(List<TakenConstraint.Affine> statements) implements Reachability {
+
+        public NumbersLeaveNone {
+            if (statements == null || statements.isEmpty()) {
+                throw new IllegalArgumentException("numbers that leave none are some statements");
+            }
+            statements = List.copyOf(statements);
         }
     }
 

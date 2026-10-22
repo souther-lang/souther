@@ -5,13 +5,19 @@ import souther.test.CompiledClasses;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.constantpool.ClassEntry;
 import java.lang.classfile.constantpool.ConstantPool;
+import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.MethodTypeEntry;
 import java.lang.classfile.constantpool.PoolEntry;
 import java.lang.constant.ClassDesc;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * What this module compiled to, for a rule about who may depend on what.
@@ -80,10 +86,12 @@ public final class WhatWasCompiled {
      */
     public static Set<String> answering(Class<?> answered) {
         ClassDesc asked = answered.describeConstable().orElseThrow();
+        Set<String> isOne = kinds().getOrDefault(asked, Set.of());
         Set<String> found = new LinkedHashSet<>();
         for (ClassModel each : compiled().all()) {
-            if (reaches(each, asked, new LinkedHashSet<>()) || lambdaOf(each, asked)) {
-                found.add(named(each));
+            String name = named(each);
+            if (isOne.contains(name) || lambdaOf(each, asked)) {
+                found.add(name);
             }
         }
         return found;
@@ -103,41 +111,70 @@ public final class WhatWasCompiled {
      */
     public static Set<String> implementing(Class<?> answered) {
         ClassDesc asked = answered.describeConstable().orElseThrow();
-        Set<String> found = new LinkedHashSet<>();
-        for (ClassModel each : compiled().all()) {
-            if (reaches(each, asked, new LinkedHashSet<>())) {
-                found.add(named(each));
-            }
-        }
-        return found;
+        return new LinkedHashSet<>(kinds().getOrDefault(asked, Set.of()));
     }
 
     /**
-     * Whether {@code model} is an {@code asked}, through however many types in between.
+     * Every type each compiled class is, through however many types in between, turned round: for
+     * each type, the compiled classes that are one, in the order the classes are listed.
      *
      * <p>Directly or not. An interface between the two is a way of answering it and not a way of
      * not answering it, and a rule reading only the interfaces named on the class itself would let
      * one through for the length of one declaration.
+     *
+     * <p>Read once, because it is one fact about the output: asked type by type, the supertypes of
+     * every class were followed again for each type asked about.
      */
-    private static boolean reaches(ClassModel model, ClassDesc asked, Set<ClassDesc> seen) {
-        List<ClassDesc> above = new ArrayList<>();
-        model.superclass().ifPresent(each -> above.add(each.asSymbol()));
-        model.interfaces().forEach(each -> above.add(each.asSymbol()));
-        for (ClassDesc each : above) {
-            if (each.equals(asked)) {
-                return true;
-            }
-            if (!seen.add(each)) {
-                continue;
-            }
-            ClassModel further = compiled().find(each.packageName().isEmpty()
-                    ? each.displayName()
-                    : each.packageName() + "." + each.displayName()).orElse(null);
-            if (further != null && reaches(further, asked, seen)) {
-                return true;
-            }
+    private static Map<ClassDesc, Set<String>> kinds() {
+        Map<ClassDesc, Set<String>> read = kinds;
+        if (read != null) {
+            return read;
         }
-        return false;
+        synchronized (WhatWasCompiled.class) {
+            if (kinds == null) {
+                Map<String, Set<ClassDesc>> above = new HashMap<>();
+                Map<ClassDesc, Set<String>> out = new HashMap<>();
+                for (ClassModel each : compiled().all()) {
+                    String name = named(each);
+                    for (ClassDesc type : typesAbove(each, above)) {
+                        out.computeIfAbsent(type, _ -> new LinkedHashSet<>()).add(name);
+                    }
+                }
+                kinds = out;
+            }
+            return kinds;
+        }
+    }
+
+    private static volatile Map<ClassDesc, Set<String>> kinds;
+
+    /**
+     * Every type {@code model} is, other than itself: what it extends and implements, and what
+     * each of those that this module compiled is in turn. A type this module did not compile is
+     * where the walk stops.
+     *
+     * @param known what was found of the classes already walked, by name
+     */
+    private static Set<ClassDesc> typesAbove(ClassModel model, Map<String, Set<ClassDesc>> known) {
+        String name = named(model);
+        Set<ClassDesc> found = known.get(name);
+        if (found != null) {
+            return found;
+        }
+        known.put(name, Set.of());
+        Set<ClassDesc> out = new LinkedHashSet<>();
+        List<ClassDesc> direct = new ArrayList<>();
+        model.superclass().ifPresent(each -> direct.add(each.asSymbol()));
+        model.interfaces().forEach(each -> direct.add(each.asSymbol()));
+        for (ClassDesc each : direct) {
+            out.add(each);
+            compiled().find(each.packageName().isEmpty()
+                            ? each.displayName()
+                            : each.packageName() + "." + each.displayName())
+                    .ifPresent(further -> out.addAll(typesAbove(further, known)));
+        }
+        known.put(name, out);
+        return out;
     }
 
     /** Whether {@code model} makes a lambda whose type is {@code asked}: the interface a functional
@@ -188,25 +225,53 @@ public final class WhatWasCompiled {
         for (String each : implementing(on)) {
             owners.add(ClassDesc.of(each));
         }
-        Set<String> found = new LinkedHashSet<>();
-        for (ClassModel model : compiled().all()) {
-            ConstantPool pool = model.constantPool();
-            for (int i = 1; i < pool.size(); i++) {
-                PoolEntry entry;
-                try {
-                    entry = pool.entryByIndex(i);
-                } catch (Exception _) {
-                    continue;
-                }
-                if (entry instanceof java.lang.classfile.constantpool.MemberRefEntry asCall
-                        && owners.contains(asCall.owner().asSymbol())
-                        && asCall.name().stringValue().equals(method)) {
-                    found.add(named(model));
-                }
-            }
+        Map<ClassDesc, Set<String>> byOwner = callsByName().getOrDefault(method, Map.of());
+        Set<String> found = new TreeSet<>();
+        for (ClassDesc owner : owners) {
+            found.addAll(byOwner.getOrDefault(owner, Set.of()));
         }
         return found;
     }
+
+    /**
+     * Every member each compiled class refers to, by the member's name and then its owner, and the
+     * classes that refer to it: what the compiled classes say about who calls what, read once.
+     *
+     * <p>Once because it is one fact about the output, and asked of it member by member the same
+     * pool of every class was read again for each member asked about.
+     */
+    private static Map<String, Map<ClassDesc, Set<String>>> callsByName() {
+        Map<String, Map<ClassDesc, Set<String>>> read = calls;
+        if (read != null) {
+            return read;
+        }
+        synchronized (WhatWasCompiled.class) {
+            if (calls == null) {
+                Map<String, Map<ClassDesc, Set<String>>> out = new HashMap<>();
+                for (ClassModel model : compiled().all()) {
+                    ConstantPool pool = model.constantPool();
+                    for (int i = 1; i < pool.size(); i++) {
+                        PoolEntry entry;
+                        try {
+                            entry = pool.entryByIndex(i);
+                        } catch (Exception _) {
+                            continue;
+                        }
+                        if (entry instanceof MemberRefEntry asCall) {
+                            out.computeIfAbsent(asCall.name().stringValue(), _ -> new HashMap<>())
+                                    .computeIfAbsent(asCall.owner().asSymbol(),
+                                            _ -> new LinkedHashSet<>())
+                                    .add(named(model));
+                        }
+                    }
+                }
+                calls = out;
+            }
+            return calls;
+        }
+    }
+
+    private static volatile Map<String, Map<ClassDesc, Set<String>>> calls;
 
     /**
      * {@code named} and every compiled type that is one, however many types in between.
@@ -219,17 +284,23 @@ public final class WhatWasCompiled {
     public static Set<String> everyKindOf(String named) {
         Set<String> found = new LinkedHashSet<>();
         found.add(named);
-        ClassDesc asked = ClassDesc.of(named);
-        for (ClassModel each : compiled().all()) {
-            if (reaches(each, asked, new LinkedHashSet<>())) {
-                found.add(named(each));
-            }
-        }
+        found.addAll(kinds().getOrDefault(ClassDesc.of(named), Set.of()));
         return found;
     }
 
-    /** Every type {@code name} names — what it implements, calls, holds, catches or hands over. */
+    /**
+     * Every type {@code name} names — what it implements, calls, holds, catches or hands over.
+     *
+     * <p>Read once for each class, since the class does not change while the fork holds it, and a
+     * census of every class asks it of each of them.
+     */
     public static Set<String> typesNamedBy(String name) {
+        return NAMED.computeIfAbsent(name, each -> Collections.unmodifiableSet(readNamedBy(each)));
+    }
+
+    private static final Map<String, Set<String>> NAMED = new ConcurrentHashMap<>();
+
+    private static Set<String> readNamedBy(String name) {
         Set<String> named = new LinkedHashSet<>();
         ConstantPool pool = compiled().find(name)
                 .orElseThrow(() -> new IllegalArgumentException(

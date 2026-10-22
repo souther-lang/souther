@@ -46,14 +46,13 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
      * A position that cancels out of the form is not one the rule is filed at.
      *
      * <p>What survives relates two positions, so what the rule leaves at each of them is that — a
-     * sum held against a number, which neither is shown to reach at the ends of the other — and
+     * sum held against a number, which each reaches but where the other's type stops — and
      * {@code t.y} is left alone, because the rule the arithmetic came to does not mention it.
      */
     @Test
     void aCancelledPositionIsFiledAtByNothing() {
         assertEquals(
-                List.of("t.x/RelationNotShownToReachEveryValue",
-                        "t.z/RelationNotShownToReachEveryValue"),
+                List.of("t.x/ComparisonRelatingTwoValues", "t.z/ComparisonRelatingTwoValues"),
                 filedAt("t.x + t.y - t.y + t.z <= 10"));
     }
 
@@ -74,7 +73,6 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
                         else Low
                 """.replace("CONDITION", condition);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

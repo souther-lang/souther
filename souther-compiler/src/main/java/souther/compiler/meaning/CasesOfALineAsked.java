@@ -7,7 +7,10 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -113,6 +116,72 @@ public final class CasesOfALineAsked {
         return new CasesOfALineAsked(crossedIn).asked(said);
     }
 
+    /**
+     * One case taken apart to the end, and what asking it came to.
+     *
+     * @param condition the conjunction of what the case chose
+     * @param answer    what was asked of that condition
+     */
+    public record Atom<T>(Proposition condition, T answer) {
+
+        public Atom {
+            Objects.requireNonNull(condition, "a case is some condition");
+        }
+    }
+
+    /**
+     * What asking found of every case a condition was said for.
+     *
+     * @param each         every case taken apart to the end that was walked to, in the order they
+     *                     are chosen, each with its answer
+     * @param notWorkedOut every figure some case was stopped at, where some was: those cases are
+     *                     in none of {@code each}, and empty where every case was walked to
+     */
+    public record Atoms<T>(List<Atom<T>> each, Set<CompositionBudget> notWorkedOut) {
+
+        public Atoms {
+            each = List.copyOf(each);
+            notWorkedOut = notWorkedOut.isEmpty() ? Set.of()
+                    : Collections.unmodifiableSet(EnumSet.copyOf(notWorkedOut));
+        }
+    }
+
+    /**
+     * What {@code answer} comes to in each of the cases {@code said} stands for, each asked by
+     * itself and none given up on the strength of another.
+     *
+     * <p>For an answer that is not about one line fixed beforehand: what parts the values a
+     * relation settles is read off the rows in a case, and a narrower case can part values that a
+     * wider one does not. Nothing is kept or dropped here, so nothing hangs on the answers being
+     * the same for a case and for the cases it is part of; it is the caller's to say which of the
+     * answers it keeps, and to say each case it kept none of. The steps and the ways of choosing
+     * are counted as they are for {@link #casesOf}.
+     */
+    public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer) {
+        return new CasesOfALineAsked(_ -> true).allAsked(said, answer);
+    }
+
+    private <T> Atoms<T> allAsked(DecidingCase said, Function<Proposition, T> answer) {
+        if (!aStepIsLeft()) {
+            pastTheSteps(List.of(said.standsFor()));
+            return new Atoms<>(List.of(), stopped);
+        }
+        if (said.saidAlone()) {
+            return new Atoms<>(List.of(new Atom<>(said.condition(), answer.apply(said.condition()))),
+                    Set.of());
+        }
+        long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+        if (said.standsFor().waysOfChoosing(most) > most) {
+            stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+            notTakenApartAt(said.standsFor(), stopped);
+            return new Atoms<>(List.of(), stopped);
+        }
+        List<Atom<T>> out = new ArrayList<>();
+        chosen(new ArrayList<>(), List.of(heldFirst(said.standsFor())), _ -> true,
+                chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
+        return new Atoms<>(out, stopped);
+    }
+
     private Found asked(DecidingCase said) {
         if (!aStepIsLeft()) {
             pastTheSteps(List.of(said.standsFor()));
@@ -135,7 +204,8 @@ public final class CasesOfALineAsked {
             notTakenApartAt(said.standsFor(), stopped);
             return new Found(List.of(), stopped);
         }
-        chosen(new ArrayList<>(), List.of(said.standsFor()));
+        chosen(new ArrayList<>(), List.of(heldFirst(said.standsFor())), crossedIn,
+                chosen -> dividing.add(chosen));
         // Every case divides rows and every one was worked out: the case is what it was said as,
         // and saying it again would read the line under another condition for nothing.
         if (!dropped && stopped.isEmpty() && !dividing.isEmpty()) {
@@ -145,15 +215,60 @@ public final class CasesOfALineAsked {
     }
 
     /**
+     * {@code cases} with what every case of them holds written before the choices, at every depth
+     * choosing together is written to.
+     *
+     * <p>A prefix is walked further only while rows stand on both sides of the line in it, and what
+     * is certain to be chosen narrows it from the first alternative on. Chosen last, the parts
+     * every case holds are asked once for each way of choosing, and the ones that contradict them
+     * are found only at the end of each.
+     *
+     * <p>Choosing together is associative, so a group written inside a group is the parts of both.
+     * What is written under an alternative is held only where the alternative is taken, and stays
+     * in it: each alternative is put in this order on its own. The choices keep the order they
+     * were written in, since a choice nobody took apart ends the walk there.
+     */
+    private static DecidingCase.Cases heldFirst(DecidingCase.Cases cases) {
+        return switch (cases) {
+            case DecidingCase.Cases.One _, DecidingCase.Cases.NotTakenApart _ -> cases;
+            case DecidingCase.Cases.EachOf(var alternatives) -> new DecidingCase.Cases.EachOf(
+                    alternatives.stream().map(CasesOfALineAsked::heldFirst).toList());
+            case DecidingCase.Cases.Together(var factors) -> {
+                List<DecidingCase.Cases> held = new ArrayList<>();
+                List<DecidingCase.Cases> choices = new ArrayList<>();
+                gatherHeldFirst(factors, held, choices);
+                held.addAll(choices);
+                yield new DecidingCase.Cases.Together(held);
+            }
+        };
+    }
+
+    private static void gatherHeldFirst(List<DecidingCase.Cases> factors,
+                                        List<DecidingCase.Cases> held,
+                                        List<DecidingCase.Cases> choices) {
+        for (DecidingCase.Cases factor : factors) {
+            switch (factor) {
+                case DecidingCase.Cases.One _ -> held.add(factor);
+                case DecidingCase.Cases.Together(var inner) ->
+                        gatherHeldFirst(inner, held, choices);
+                case DecidingCase.Cases.EachOf _, DecidingCase.Cases.NotTakenApart _ ->
+                        choices.add(heldFirst(factor));
+            }
+        }
+    }
+
+    /**
      * Each case holding all of {@code chosen}, and one case of each of {@code toChoose}, that holds
      * a row on each side of the line — {@code chosen} already shown to.
      *
      * <p>{@code chosen} is the one path walked, taken a part further on the way down and given back
-     * on the way up, and written out only for a case kept.
+     * on the way up, and written out only for a case kept. {@code goesOn} says whether what has
+     * been chosen so far is walked further, and {@code atEnd} takes each case chosen to the end.
      */
-    private void chosen(List<Proposition> chosen, List<DecidingCase.Cases> toChoose) {
+    private void chosen(List<Proposition> chosen, List<DecidingCase.Cases> toChoose,
+                        Predicate<Proposition> goesOn, Consumer<Proposition> atEnd) {
         if (toChoose.isEmpty()) {
-            dividing.add(Proposition.all(chosen));
+            atEnd.accept(Proposition.all(chosen));
             return;
         }
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
@@ -164,8 +279,8 @@ public final class CasesOfALineAsked {
                     return;
                 }
                 chosen.add(condition);
-                if (crossedIn.test(Proposition.all(chosen))) {
-                    chosen(chosen, rest);
+                if (goesOn.test(Proposition.all(chosen))) {
+                    chosen(chosen, rest, goesOn, atEnd);
                 } else {
                     dropped = true;
                 }
@@ -185,13 +300,13 @@ public final class CasesOfALineAsked {
                     List<DecidingCase.Cases> next = new ArrayList<>();
                     next.add(alternatives.get(at));
                     next.addAll(rest);
-                    chosen(chosen, next);
+                    chosen(chosen, next, goesOn, atEnd);
                 }
             }
             case DecidingCase.Cases.Together(var factors) -> {
                 List<DecidingCase.Cases> next = new ArrayList<>(factors);
                 next.addAll(rest);
-                chosen(chosen, next);
+                chosen(chosen, next, goesOn, atEnd);
             }
             // Nobody took them apart, and nothing asks them.
             case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> stopped.add(stoppedAt);

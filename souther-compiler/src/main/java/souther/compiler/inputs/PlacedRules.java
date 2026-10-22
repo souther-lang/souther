@@ -188,6 +188,27 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * Every place under this value that its rules name, whether or not a rule puts an end there.
+     *
+     * <p>The places a rule is read through, and not the places it owes an answer at: a rule
+     * relating two positions puts no end at either, so {@link #placed} never names them, and a
+     * reader that went only where an end was placed would stop short of the second. Read off what
+     * the rules came to: the places an end was put at and the places a rule was filed at because it
+     * drew no line there.
+     */
+    List<RuleKey> namedPlaces() {
+        java.util.Set<RuleKey> out = new java.util.LinkedHashSet<>();
+        for (PlacementSeed seed : placed()) {
+            out.add(seed.address().key());
+        }
+        for (FieldDomains.NoLine each : bounds().noLines()) {
+            out.add(each.path());
+        }
+        out.removeIf(RuleKey::isTheValueItself);
+        return List.copyOf(out);
+    }
+
+    /**
      * What is left for the position at {@code path}, which is read from the value this is of.
      *
      * <p>Nothing at a position inside a container, and nothing at the value's own path. The clauses
@@ -404,8 +425,11 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      *
      * <p>What it licenses is a whole value: a row at an edge is a value with that edge in it, so a
      * rule the bounds cannot express is a way that value can be refused however plainly the numbers
-     * beside it were read. Which is why it is one answer for every position of a value — and why it
-     * is asked at a position all the same, because a position can be of two values.
+     * beside it were read. Unless the rule is shown to stand apart from this position — it names
+     * only places no rule relates to this one, and leaves them some value — which is a question
+     * about where the rule is and so is asked at the position
+     * ({@link FieldDomains#projectionAt}). And a position can be of two
+     * values.
      *
      * <p><b>A shared field belongs to the case and to the value the sum sits in.</b> A clause
      * written up there is about the field a row writes down here, so the rules reaching this
@@ -443,7 +467,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * stopping at the first empty one would lose the ones above it.
      */
     private Proof proofAt(TermPath path) {
-        ProjectionEvidence here = rules.projection();
+        RuleKey where = keyOf(path);
+        ProjectionEvidence here =
+                rules.projectionAt(where == null ? RuleKey.THE_VALUE : where);
         int mine = rules.anythingWasWritten() ? 1 : 0;
         TermPath above = alsoAt(path);
         if (above == null) {
@@ -639,6 +665,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * <p>Not what any of them came to. Which of these is a line is the drawing reading's answer,
      * and this reading's word for why it drew none is no part of the question — the two read the
      * same clause with different atoms, and a clause set aside here is one the other may read.
+     * Only whether the arithmetic named an operation no form says goes with each
+     * ({@link ClauseWithoutAnEnd#noFormSaysIt}): that is said to an author at every place the
+     * comparison names, of the comparison and not of this reading's atoms.
      *
      * <p><b>What was handed on, and not what was reported.</b> Read off the findings, this carried
      * whatever the reading of ends owed an author a sentence about — so a rule that names a value,
@@ -649,7 +678,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
                 .map(each -> new ClauseWithoutAnEnd(each.statement(), each.states(), each.wrote(),
                         each.root(),
                         root,
-                        bounds().named()))
+                        bounds().named(), each.noFormSaysIt(), false))
                 .toList();
     }
 

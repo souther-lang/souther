@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
@@ -174,14 +175,13 @@ public final class AnAnswerComposed {
                 continue;
             }
             AnswerAsAnInput.Remade remade = AnswerAsAnInput.of(statement.statement(), at,
-                    subject.rules().inners(), subject.symbols(), pinned,
-                    CompositionBudget.READINGS_OF_ONE_CONDITION.maximum());
-            // A number put at a value can leave a count of statements alone against a constant,
-            // read as more choices of which hold than one condition is read in.
-            if (remade instanceof AnswerAsAnInput.Remade.PastTheFigure) {
+                    subject.rules().inners(), subject.symbols(), pinned);
+            // A count of statements in it whose choices are past a figure: nothing was composed
+            // against it before that figure, which looking further would cure.
+            if (remade instanceof AnswerAsAnInput.Remade.PastAFigure(CompositionBudget figure)) {
                 unaccounted.add(new DemandGap.Uncomposed(each,
                         DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
-                                List.of(CompositionBudget.READINGS_OF_ONE_CONDITION))));
+                                List.of(figure))));
                 continue;
             }
             Proposition over = remade instanceof AnswerAsAnInput.Remade.Stated(Proposition stated)
@@ -250,7 +250,7 @@ public final class AnAnswerComposed {
         Attempt first = null;
         for (OneOfEach.Way<Asked> way : ways) {
             Attempt here = switch (way) {
-                case OneOfEach.Way.Chosen<Asked>(var entries) -> composing.apply(entries);
+                case OneOfEach.Way.Chosen<Asked>(var entries, var _) -> composing.apply(entries);
                 case OneOfEach.Way.LeftUnchosen<Asked>(var chosen, var unchosen) ->
                         leavingWhatWasNotChosen(composing.apply(chosen), unchosen, jointly);
             };
@@ -481,7 +481,7 @@ public final class AnAnswerComposed {
                     return stoppedBy.isEmpty() ? new Ways.Unwritable()
                             : new Ways.Stopped(stoppedBy);
                 }
-            } else if (each instanceof DemandReading.Read.Unread(var whys)
+            } else if (each instanceof DemandReading.Read.Unread(var whys, var _)
                     && whys.stream().allMatch(why -> stoppedAt(why) != null)) {
                 // Only where a figure is every reason: a part also left for a reason more
                 // reading does not change is one no value is written toward either way.
@@ -724,6 +724,10 @@ public final class AnAnswerComposed {
                 case DecisionAtom.TakenOfAnAnswer taken -> NumericTerm.TakenOf.asItStands(
                         taken.operation(), place, taken.arguments(), taken.at(),
                         subject.rules().inners(), subject.symbols());
+                case DecisionAtom.ComputedOverAnAnswer computed ->
+                        InputNumber.overWhatWasComputedByPosition(computed.operation(), place,
+                                computed.computation(), computed.each(), computed.direction(),
+                                subject.rules().inners(), subject.symbols());
                 case DecisionAtom.OfTheInput _ -> throw new IllegalStateException(
                         "a demand of one answer is over what that answer holds, and "
                                 + each.getKey() + " is a number of the input");

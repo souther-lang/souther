@@ -58,6 +58,45 @@ class WhatARecursiveHelperAnswersIsReadByInductionTest {
     }
 
     @Test
+    void aWalkOfAListReorderedIsSomeElementMeetingWhatItsStepAsksOfTheListItWasReorderedFrom() {
+        Proposition stated = stated("""
+                partial let go (xs: List<Int>): List<Int> =
+                    match List.get(0, xs) with
+                        | None -> []
+                        | Some x -> if x > 0 then [ x ] else go(List.drop(1, xs))
+                """, "Bool.not(List.isEmpty(go(List.reverse(i.xs))))");
+        Proposition.Some some = assertInstanceOf(Proposition.Some.class, stated);
+        assertEquals(new DecisionSubject.AnInput(TermPath.of("i").then("xs")), some.container());
+        assertTrue(some.holds());
+    }
+
+    @Test
+    void aWalkOfAListReorderedWhoseAnswerTurnsOnTheLastElementIsNotRead() {
+        Proposition stated = stated("""
+                partial let go (xs: List<Int>): List<Int> =
+                    match List.get(0, xs) with
+                        | None -> []
+                        | Some x -> if List.isEmpty(List.drop(1, xs)) then (if x > 0 then [ x ] else [])
+                                    else go(List.drop(1, xs))
+                """, "Bool.not(List.isEmpty(go(List.reverse(i.xs))))");
+        assertTrue(Proposition.leavesSomethingUnread(stated), () -> "read as " + stated);
+    }
+
+    @Test
+    void aWalkOfAListThatKeptSomeOfTheElementsIsNotSomeElementOfTheListItWasMadeFrom() {
+        Proposition stated = stated("""
+                partial let go (xs: List<Int>): List<Int> =
+                    match List.get(0, xs) with
+                        | None -> []
+                        | Some x -> if x > 0 then [ x ] else go(List.drop(1, xs))
+                """, "Bool.not(List.isEmpty(go(List.filter(x -> x < 9, i.xs))))");
+        assertFalse(stated instanceof Proposition.Some some
+                && new DecisionSubject.AnInput(TermPath.of("i").then("xs"))
+                        .equals(some.container()),
+                () -> "read as " + stated);
+    }
+
+    @Test
     void aWalkWhoseAnswerTurnsOnTheLastElementIsNotRead() {
         Proposition stated = stated("""
                 partial let go (xs: List<Int>): List<Int> =
@@ -102,6 +141,54 @@ class WhatARecursiveHelperAnswersIsReadByInductionTest {
         assertEquals(reached.atANode(), reached.surely(true));
         Proposition.All none = assertInstanceOf(Proposition.All.class, reached.surely(false));
         assertTrue(none.parts().contains(reached.atANode().denied()), () -> "read as " + none);
+    }
+
+    @Test
+    void aSearchWhoseNodeAsksSeveralConditionsOfTheNodesBelowItIsSomeReachableNode() {
+        Proposition.SomeReachable reached = assertInstanceOf(Proposition.SomeReachable.class,
+                stated("""
+                        let reaches (node: Node, w: Int): Bool =
+                            List.any(c -> c.v > w || c.v == 0 || reaches(c, w), node.below)
+                        """, "reaches(i.t, i.w)"));
+        assertTrue(reached.holds());
+        assertEquals(T, reached.at());
+        assertEquals(List.of("below"), reached.through());
+        // What a node is asked is about the nodes directly below it, never the node itself.
+        Proposition.Some below = assertInstanceOf(Proposition.Some.class, reached.atANode());
+        assertEquals(new DecisionSubject.AnInput(T.then("below")), below.container());
+        assertEquals(below, reached.surely(true));
+    }
+
+    @Test
+    void aSearchWhoseNodeConditionHasTenAlternativesIsStillRead() {
+        Proposition.SomeReachable reached = assertInstanceOf(Proposition.SomeReachable.class,
+                stated("""
+                        let reaches (node: Node, w: Int): Bool =
+                            List.any(c -> c.v == 1 || c.v == 2 || c.v == 3 || c.v == 4
+                                    || c.v == 5 || c.v == 6 || c.v == 7 || c.v == 8
+                                    || c.v == 9 || c.v == 10, node.below)
+                                || List.any(c -> reaches(c, w), node.below)
+                        """, "reaches(i.t, i.w)"));
+        assertTrue(reached.holds());
+    }
+
+    @Test
+    void aSearchWhoseNodesBelowMustEachMeetSomethingIsNoReachableNodeFailingIt() {
+        Proposition.SomeReachable reached = assertInstanceOf(Proposition.SomeReachable.class,
+                stated("""
+                        let fits (node: Node, w: Int): Bool =
+                            List.all(c -> c.v > w && fits(c, w), node.below)
+                        """, "fits(i.t, i.w)"));
+        assertFalse(reached.holds());
+    }
+
+    @Test
+    void aSearchWhoseNodeAsksBothOfTheNodesBelowItIsNotTakenForOneAskingEither() {
+        Proposition stated = stated("""
+                let reaches (node: Node, w: Int): Bool =
+                    List.any(c -> c.v > w && reaches(c, w), node.below)
+                """, "reaches(i.t, i.w)");
+        assertFalse(stated instanceof Proposition.SomeReachable, () -> "read as " + stated);
     }
 
     @Test

@@ -66,6 +66,8 @@ public final class CasesHeldTo {
     private static Map<TermPath, Held> heldTo(Proposition stated) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> holds ? new LinkedHashMap<>() : null;
+            case Proposition.WhereItAnswers where ->
+                    heldTo(Proposition.all(List.of(where.answers(), where.states())));
             case Proposition.All all -> {
                 Map<TermPath, Held> out = new LinkedHashMap<>();
                 for (Proposition part : all.parts()) {
@@ -102,7 +104,12 @@ public final class CasesHeldTo {
                     one(of, new Held.OneOf(CasesLeft.of(Refinement.of(new Case.Presence(holds)))));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
                     one(of, new Held.ATruth(holds));
-            default -> new LinkedHashMap<>();
+            // A count of statements holds no value to anything here: less than it may, never more.
+            case Proposition.InCases _, Proposition.Present _, Proposition.Truth _,
+                 Proposition.Compared _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                 Proposition.Unread _, Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
+                    new LinkedHashMap<>();
         };
     }
 

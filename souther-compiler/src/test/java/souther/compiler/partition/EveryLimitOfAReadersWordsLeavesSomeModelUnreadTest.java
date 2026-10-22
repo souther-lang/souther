@@ -76,7 +76,7 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             let askedOfADependency (o, lookup) =
                 if lookup(o.a) > 3 then (if o.a > 5 then A else B) else C
 
-            let farOut (o: O): Bool = o.a > 5 || o.a < -5
+            let farOut (o: O): Bool = o.a > 5 || o.b < -5
             let allDear (xs: List<Item>): Bool = List.all(i -> i.n > 3, xs)
             let isGold (t: Tier): Bool =
                 match t with
@@ -154,7 +154,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         out.put(WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN, "askedOfADependency");
         // A search from a node, which some node further down than a row is written may settle.
         out.put(WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES, "aSearch");
-        // A helper whose answer is one of two comparisons: a path holds facts that all hold.
+        // A helper whose answer is one of two comparisons of two numbers: a path holds facts that
+        // all hold, and the values of one number they leave, which these are not.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES, "oneOfTwo");
         // A helper whose answer is every element meeting something, which a path holds only as
         // the closure it was written with.
@@ -244,9 +245,11 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
 
     private static void limitsIn(DemandReading.Read read, Set<WhyNotTaken.DomainLimit> into) {
         switch (read) {
-            case DemandReading.Read.Unread(var whys) -> whys.forEach(why -> limitOf(why, into));
+            case DemandReading.Read.Unread(var whys, var _) -> whys.forEach(why -> limitOf(why, into));
             case DemandReading.Read.OneOf oneOf -> oneOf.alternatives()
                     .forEach(each -> each.forEach(one -> limitsIn(one, into)));
+            case DemandReading.Read.Counted counted ->
+                    counted.parts().forEach(one -> limitsIn(one, into));
             case DemandReading.Read.Demands _, DemandReading.Read.Settled _,
                  DemandReading.Read.Narrows _ -> { }
         }

@@ -4,19 +4,23 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.AffineConstraint.Read;
 import souther.compiler.numeric.AffineReduction.Reduction;
+import souther.compiler.numeric.RulesAsWritten.Written;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.compiler.numeric.RulesAsWritten.OVER_THREE;
+import static souther.compiler.numeric.RulesAsWritten.admits;
+import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
+import static souther.compiler.numeric.RulesAsWritten.relationsIn;
+import static souther.compiler.numeric.RulesAsWritten.everyOrder;
 
 /**
  * A rule over several positions narrows each of them, and never past what the rules admit.
@@ -35,15 +39,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * So it is checked against the points themselves, enumerated over a bounded range rather than
  * sampled, and the claim asserted is the one that matters — no point the rules admit is ever left
  * outside what this derives.
+ *
+ * <p>Over the systems of {@link RulesAsWritten#OVER_THREE}, each written for a step the reduction
+ * takes: the rest of a rule read without the position being bounded, ends that meet at one value,
+ * a cycle of differences summing to nought, a hole sided by what is known and one that is not, and
+ * two rules or two premises bounding one thing, which a reader letting the later one win answers
+ * differently in some order. Each is given in every order its rules have.
  */
 class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
 
     private static final List<String> POSITIONS = List.of("a", "b", "c");
     private static final int LOW = -4;
     private static final int HIGH = 4;
-    private static final int CASES = 400;
-
-    private record Written(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {}
 
     private static ExactRatio num(long whole) {
         return ExactRatio.of(whole);
@@ -255,19 +262,20 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     // --- against the points ------------------------------------------------------------------------
 
     /**
-     * No point the rules admit is ever left outside what this derives, over rules and boxes drawn at
-     * random. The direction asserted is the only one that matters: a bound too tight refuses a row a
-     * model admits, and a bound too loose merely says less than it could.
+     * No point the rules admit is ever left outside what this derives. The direction asserted is the
+     * only one that matters: a bound too tight refuses a row a model admits, and a bound too loose
+     * merely says less than it could.
      */
     @Test
     void noPointTheRulesAdmitIsEverRefused() {
-        Random dice = new Random(4800);
+        assertEquals(Set.of(Rel.values()), relationsIn(OVER_THREE),
+                "a relation no system is written with is one no reading of it is asked about");
         int narrowed = 0;
-        for (int round = 0; round < CASES; round++) {
-            List<Written> written = someRules(dice);
+        int emptied = 0;
+        for (List<Written> written : OVER_THREE) {
             List<AffineConstraint<String>> stated = read(written);
             Box<String> from = between("a", LOW, HIGH, "b", LOW, HIGH, "c", LOW, HIGH);
-            List<Map<String, Integer>> admitted = pointsSatisfying(written);
+            List<Map<String, Integer>> admitted = pointsSatisfying(written, POSITIONS, LOW, HIGH);
 
             FormReach<String> reading = reading(stated, from);
             if (reading == null) {
@@ -280,6 +288,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             if (found instanceof Reduction.NothingIsLeft) {
                 assertTrue(admitted.isEmpty(),
                         () -> "said nothing is left, but " + written + " admits " + admitted);
+                emptied++;
                 continue;
             }
             Reduction.Tightened<String> tightened = (Reduction.Tightened<String>) found;
@@ -287,8 +296,24 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             if (!tightened.atLeast().isEmpty() || !tightened.atMost().isEmpty()) {
                 narrowed++;
             }
-            for (Map<String, Integer> point : admitted) {
-                for (String position : POSITIONS) {
+            // A box holds every admitted point exactly when, at each position, it holds the least
+            // and the greatest value an admitted point has there — so those two points are the
+            // ones asked about.
+            for (String position : POSITIONS) {
+                Map<String, Integer> lowest = null;
+                Map<String, Integer> highest = null;
+                for (Map<String, Integer> point : admitted) {
+                    if (lowest == null || point.get(position) < lowest.get(position)) {
+                        lowest = point;
+                    }
+                    if (highest == null || point.get(position) > highest.get(position)) {
+                        highest = point;
+                    }
+                }
+                if (lowest == null) {
+                    continue;
+                }
+                for (Map<String, Integer> point : List.of(lowest, highest)) {
                     ExactRatio at = num(point.get(position));
                     assertTrue(admits(after.leastOf(position), at, false)
                                     && admits(after.mostOf(position), at, true),
@@ -305,42 +330,40 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                         ExactCut.tighterUpper(from.mostOf(position), after.mostOf(position)));
             }
         }
-        assertTrue(narrowed > CASES / 10,
-                "only " + narrowed + " of " + CASES + " narrowed anything, so this checked little");
+        assertTrue(narrowed > 0 && emptied > 0, "narrowed " + narrowed + " and emptied " + emptied
+                + " of " + OVER_THREE.size() + ", so one of the two was never checked");
     }
 
-    /** And the same answers whatever order the rules arrived in. */
+    /** And the same answers whatever order the rules arrived in, which is every order they have. */
     @Test
     void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
-        Random dice = new Random(16);
-        for (int round = 0; round < CASES; round++) {
-            List<AffineConstraint<String>> stated = read(someRules(dice));
+        for (List<Written> written : OVER_THREE) {
+            List<AffineConstraint<String>> stated = read(written);
             Box<String> from = between("a", LOW, HIGH, "b", LOW, HIGH, "c", LOW, HIGH);
-            List<AffineConstraint<String>> shuffled = new ArrayList<>(stated);
-            Collections.shuffle(shuffled, dice);
-
             FormReach<String> asRead = reading(stated, from);
-            FormReach<String> reread = reading(shuffled, from);
-            if (asRead == null || reread == null) {
+            if (asRead == null) {
                 continue;   // the differences hold nothing, which the closure answers before a round
             }
-            Reduction<String> asWritten =
-                    AffineReduction.over(asRead, atom -> Granularity.DISCRETE,
-                            CanonicalOrder.asTheyAreSpelled());
-            Reduction<String> reordered =
-                    AffineReduction.over(reread, atom -> Granularity.DISCRETE,
-                            CanonicalOrder.asTheyAreSpelled());
-            assertEquals(asWritten, reordered,
-                    () -> "the reduction moved when the rules were reordered: " + stated);
+            Reduction<String> asWritten = AffineReduction.over(asRead,
+                    atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
+            for (List<AffineConstraint<String>> shuffled : everyOrder(stated)) {
+                FormReach<String> reread = reading(shuffled, from);
+                assertTrue(reread != null,
+                        () -> "the differences hold nothing only in another order: " + shuffled);
+                Reduction<String> reordered =
+                        AffineReduction.over(reread, atom -> Granularity.DISCRETE,
+                                CanonicalOrder.asTheyAreSpelled());
+                assertEquals(asWritten, reordered,
+                        () -> "the reduction moved when the rules were reordered: " + shuffled);
+            }
         }
     }
 
     /** Monotone: a narrower box never yields a wider answer. */
     @Test
     void aNarrowerBoxNeverSaysLess() {
-        Random dice = new Random(600);
-        for (int round = 0; round < CASES; round++) {
-            List<AffineConstraint<String>> stated = read(someRules(dice));
+        for (List<Written> written : OVER_THREE) {
+            List<AffineConstraint<String>> stated = read(written);
             Box<String> wide = between("a", LOW, HIGH, "b", LOW, HIGH, "c", LOW, HIGH);
             Box<String> narrow = between("a", LOW + 1, HIGH - 1, "b", LOW + 1, HIGH - 1,
                     "c", LOW + 1, HIGH - 1);
@@ -386,98 +409,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         assertNull(Box.<String>unbounded().mostOf("a"));
     }
 
-    private static boolean admits(ExactCut cut, ExactRatio value, boolean above) {
-        if (cut == null) {
-            return true;
-        }
-        int order = value.compareTo(cut.at());
-        return above ? (order < 0 || (order == 0 && cut.inclusive()))
-                : (order > 0 || (order == 0 && cut.inclusive()));
-    }
-
-    /** Rules over two or three positions, weighted unevenly, which is what the difference bounds
-     *  cannot hold and what this exists for. */
-    private static List<Written> someRules(Random dice) {
-        List<Written> out = new ArrayList<>();
-        int howMany = 1 + dice.nextInt(3);
-        for (int i = 0; i < howMany; i++) {
-            Map<String, ExactRatio> coefs = new LinkedHashMap<>();
-            for (String position : POSITIONS) {
-                int weight = dice.nextInt(7) - 3;
-                if (weight != 0) {
-                    coefs.put(position, num(weight));
-                }
-            }
-            if (coefs.isEmpty()) {
-                continue;
-            }
-            long constant = dice.nextInt(21) - 10L;
-            out.add(new Written(coefs, num(constant), someRelation(dice)));
-        }
-        return out;
-    }
-
-
-    /**
-     * One of the relations a rule can be written with, taken from the enum rather than from a list.
-     *
-     * <p>Written out, this was a copy of {@link Rel} that nothing compared against it, and the
-     * {@code default} arm meant it went on compiling however far the two drifted. They did: one
-     * generator here left out {@code /=} and the one beside it left out {@code /=} and {@code >},
-     * so the properties these tests hold — sound against the points, the same whatever order the
-     * rules arrived in, never wider for a narrower box — were never asked of a rule of that shape.
-     * The reading that decides which side of a hole a sum falls went unchecked by all three.
-     *
-     * <p>Taken from the values, a relation added to the language is generated here without anyone
-     * remembering to add it.
-     */
-    private static Rel someRelation(Random dice) {
-        Rel[] all = Rel.values();
-        return all[dice.nextInt(all.length)];
-    }
-
     private static List<AffineConstraint<String>> read(List<Written> written) {
-        List<AffineConstraint<String>> out = new ArrayList<>();
-        for (Written each : written) {
-            if (AffineConstraint.of(each.coefs(), each.constant(), each.rel(),
-                    atom -> Granularity.DISCRETE) instanceof Read.Stated<String> stated) {
-                out.add(stated.constraint());
-            }
-        }
-        return out;
-    }
-
-    private static List<Map<String, Integer>> pointsSatisfying(List<Written> written) {
-        List<Map<String, Integer>> out = new ArrayList<>();
-        for (int a = LOW; a <= HIGH; a++) {
-            for (int b = LOW; b <= HIGH; b++) {
-                for (int c = LOW; c <= HIGH; c++) {
-                    Map<String, Integer> point = new LinkedHashMap<>();
-                    point.put("a", a);
-                    point.put("b", b);
-                    point.put("c", c);
-                    if (written.stream().allMatch(rule -> holdsAt(rule, point))) {
-                        out.add(point);
-                    }
-                }
-            }
-        }
-        return out;
-    }
-
-    private static boolean holdsAt(Written rule, Map<String, Integer> point) {
-        ExactRatio total = rule.constant();
-        for (Map.Entry<String, ExactRatio> each : rule.coefs().entrySet()) {
-            total = each.getValue().times(num(point.get(each.getKey()))).flatMap(total::plus).orNull();
-        }
-        int sign = total.signum();
-        return switch (rule.rel()) {
-            case LE -> sign <= 0;
-            case LT -> sign < 0;
-            case GE -> sign >= 0;
-            case GT -> sign > 0;
-            case EQ -> sign == 0;
-            case NE -> sign != 0;
-        };
+        return RulesAsWritten.read(written, atom -> Granularity.DISCRETE);
     }
 }

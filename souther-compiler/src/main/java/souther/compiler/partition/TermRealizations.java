@@ -4,6 +4,8 @@ import net.unit8.notation199x.pattern.CodePoints;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ClassMembers;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
@@ -11,6 +13,7 @@ import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.ReadingsOfEachValue;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
@@ -30,6 +33,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -39,6 +43,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -53,6 +59,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -273,7 +280,7 @@ final class TermRealizations {
      * are that rule rather than a list of shapes.</b> A number that is a place in the spelling of
      * what stands there is written at: the parts of a time and the parts of a date are places, so
      * a value can be built with all of them asked for at once — and whatever the parts do to each
-     * other is the calendar's, which {@link #dateOn} answers. A number whose values come of a run
+     * other is the calendar's, which {@link #dateAnsweringMovedParts} answers. A number whose values come of a run
      * of the place's own is solved for out of the demands, which is what a quotient by a written
      * number is. A number read off a value the group already asks for is read off the values that
      * demand admits, which is what any number taken of a place is once the place's own value is
@@ -312,11 +319,31 @@ final class TermRealizations {
                 case RealizationTarget.OfANumber number -> numbers.add(number);
             }
         }
+        // What the elements of keys an input holds come to, with how many elements each key has
+        // where that is counted beside it: the counts are the keys' own, which is a statement the
+        // elements of a key meet by being its elements.
+        List<RealizationTarget.OfANumber> totals = numbers.stream()
+                .filter(each -> each.term() instanceof NumericTerm.GatheredUnderAKey).toList();
+        if (together.isEmpty() && !totals.isEmpty()
+                && (totals.size() > 1 || numbers.size() > 1 || !counts.isEmpty())
+                && numbers.stream().allMatch(each -> totals.contains(each)
+                        || standsAtTheKeyOfTheTotals(each, totals))
+                && counts.stream().allMatch(count -> countsTheElementsOfAKeyOf(count, totals))) {
+            return underSeveralKeys(targets, counts, totals, numbers);
+        }
         if (!counts.isEmpty() || !together.isEmpty()) {
             return countsOf(targets, counts, together, numbers);
         }
         if (numbers.stream().anyMatch(each -> each.term() instanceof NumericTerm.Multiplicity)) {
             return amongTheElements(targets, numbers);
+        }
+        if (numbers.stream()
+                .anyMatch(each -> each.term() instanceof NumericTerm.OccurrencesOfItsValue)) {
+            return amongEveryOccurrence(targets, numbers);
+        }
+        if (numbers.stream()
+                .anyMatch(each -> each.term() instanceof NumericTerm.OccurrencesOfAKey)) {
+            return amongEveryOccurrenceEqualToAKey(targets, numbers);
         }
         if (targets.size() == 1) {
             return new JointRealization.Supported(
@@ -334,26 +361,37 @@ final class TermRealizations {
         // place, so a second value asked for is a second place and is another group's.
         RealizationTarget.OfANumber itself = null;
         List<RealizationTarget.OfANumber> takenOfIt = new ArrayList<>();
-        // How many the container holds and what it comes to, which are the two numbers a container
-        // is composed out of rather than read for.
+        // How many the container holds and what it comes to, which are the numbers a container
+        // is composed out of rather than read for. It comes to as many totals as the group asks,
+        // each of a field of its elements.
         RealizationTarget.OfANumber manyItHolds = null;
-        RealizationTarget.OfANumber whatItComesTo = null;
-        // How many of a string's code points are in a class, which are numbers of one string to be
-        // written together with how long it is.
-        List<RealizationTarget.OfANumber> classCounts = new ArrayList<>();
+        List<RealizationTarget.OfANumber> whatItComesTo = new ArrayList<>();
+        // How many of a string's code points are in a class and what they come to, which are
+        // numbers of one string to be written together with how long it is.
+        List<RealizationTarget.OfANumber> ofItsCodePoints = new ArrayList<>();
         // Every target read before any of them is answered, because what the group is turns on all
         // of them. Decided as they come, a value asked for beside a length would be the group the
         // length is in or the group the value is in depending on which of them was read first.
         for (RealizationTarget.OfANumber target : numbers) {
             switch (target.term()) {
                 // Composed with the elements around it, which the arm above has already taken.
-                case NumericTerm.Multiplicity _ -> {
+                case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
+                     NumericTerm.OccurrencesOfAKey _ -> {
+                    return nothingSolvesAGroup();
+                }
+                // Written as the value it is the end of, alone: beside another number of the same
+                // place it would be two numbers asked of one value that need not be one. The same
+                // for what the elements of a key come to.
+                case NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
+                     NumericTerm.GatheredUnderAKey _ -> {
                     return nothingSolvesAGroup();
                 }
                 case NumericTerm.ValueOf _ -> itself = target;
-                case NumericTerm.CodePointClassCount _ -> {
+                // Numbers of a string, which a string is chosen for and no container is built to
+                // have: what its code points come to is no total of elements composed one by one.
+                case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> {
                     takenOfIt.add(target);
-                    classCounts.add(target);
+                    ofItsCodePoints.add(target);
                 }
                 // A number taken over the values a walk came to is a number of a run, and a value
                 // standing at one place is not a run — so there is nothing here to read it off.
@@ -363,7 +401,7 @@ final class TermRealizations {
                     if (!(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
                         return nothingSolvesAGroup();
                     }
-                    whatItComesTo = target;
+                    whatItComesTo.add(target);
                 }
                 case NumericTerm.TakenOf taken -> {
                     takenOfIt.add(target);
@@ -400,7 +438,7 @@ final class TermRealizations {
                         // total together is a container built to have both, and the arm below is
                         // where the two meet.
                         case TakenAs.HowManyItHolds _ -> manyItHolds = target;
-                        case TakenAs.TheSumOfWhatItHolds _ -> whatItComesTo = target;
+                        case TakenAs.TheSumOfWhatItHolds _ -> whatItComesTo.add(target);
                     }
                 }
             }
@@ -416,30 +454,40 @@ final class TermRealizations {
             return wholly(targets, owned,
                     () -> new JointBuilder.ItsOwnValueAndWhatIsTakenOfIt(stands, takenOfIt));
         }
-        // Counts of a string's code points, beside how long it is where that is asked: one string
+        // Numbers of a string's code points, beside how long it is where that is asked: one string
         // written for all of them. Beside anything else of the place there is nothing here that
         // writes one, which is a capability this compiler lacks and not a string no numbers have.
-        if (!classCounts.isEmpty()) {
+        // Asked before a length meets a total, since a length beside what code points come to is
+        // a string's two numbers and not a container's.
+        if (!ofItsCodePoints.isEmpty()) {
             RealizationTarget.OfANumber length = manyItHolds;
-            return wholly(targets, length == null ? classCounts
-                            : Stream.concat(classCounts.stream(), Stream.of(length)).toList(),
-                    () -> new JointBuilder.StringsHoldingTheirCounts(classCounts, length));
+            return wholly(targets, length == null ? ofItsCodePoints
+                            : Stream.concat(ofItsCodePoints.stream(), Stream.of(length)).toList(),
+                    () -> new JointBuilder.StringsHoldingTheirNumbers(ofItsCodePoints, length));
         }
         // How many a container holds beside what it comes to, which is one container to compose:
         // the sizes it may be are the ones the first number leaves, and filling one of those to
-        // the second is what a total is composed by anyway.
-        if (manyItHolds != null && whatItComesTo != null) {
+        // the second is what a total is composed by anyway. So is a container asked for more than
+        // one total, which is one container whose elements hold a figure at each field a total
+        // reads: a total of each is a share of every element, chosen together.
+        if (!whatItComesTo.isEmpty() && (manyItHolds != null || whatItComesTo.size() > 1)) {
+            if (whatItComesTo.size() > 1 && !ContainersAddingUp.addUpTogether(whatItComesTo)) {
+                return nothingSolvesAGroup();
+            }
             RealizationTarget.OfANumber many = manyItHolds;
-            RealizationTarget.OfANumber total = whatItComesTo;
-            return wholly(targets, List.of(many, total),
-                    () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
+            List<RealizationTarget.OfANumber> owned = new ArrayList<>(whatItComesTo);
+            if (many != null) {
+                owned.add(many);
+            }
+            return wholly(targets, owned,
+                    () -> new JointBuilder.TotalsOfOneContainer(whatItComesTo, many));
         }
         // The remainders of one place by their divisors, with nothing else asked of it. A value
         // that is none of them is nothing these write, so a quotient or a part beside them is a
         // group nothing here solves.
         if (!remainders.isEmpty()) {
             if (!quotients.isEmpty() || !times.isEmpty() || !dates.isEmpty()
-                    || manyItHolds != null || whatItComesTo != null) {
+                    || manyItHolds != null || !whatItComesTo.isEmpty()) {
                 return nothingSolvesAGroup();
             }
             return wholly(targets, remainders.keySet(),
@@ -451,24 +499,13 @@ final class TermRealizations {
             return wholly(targets, quotients.keySet(),
                     () -> new JointBuilder.SolvingForTheirQuotients(quotients));
         }
-        // A date moved before a part of it is taken is not a value spelled in parts: two years of
-        // one date are two numbers, and what writes a date answering them is a search over the
-        // days. Every part asked of the date, moved or not, is a condition on the days it comes
-        // from, so the group is one search. What bounds it is a year asked of it; a number of a
-        // moved date is only ever a year ({@link NumericTerm.TakenOf#of}), so a group holding one
-        // has that.
-        if (moved.values().stream().anyMatch(each -> !each.isNone())) {
-            return times.isEmpty() && dates.size() == numbers.size()
-                    && dates.containsValue(TakenAs.DatePart.YEAR)
-                    ? wholly(targets, dates.keySet(),
-                            () -> new JointBuilder.OnThoseMovedDateParts(dates, moved))
-                    : nothingSolvesAGroup();
-        }
-        // A value spelled in parts is written at the parts it is spelled in. Two asks at one part
-        // are two asks for one number and are the same target, so a group holding a part twice is a
-        // group somebody built by hand — not a population this compiler writes none of.
+        // Two asks at one part of a time, or at one part of a date moved by one translation, are
+        // two asks for one number and are the same target, so a group holding one twice is a group
+        // somebody built by hand — not a population this compiler writes none of. A part of a date
+        // moved two ways is two numbers: the year of a date and the year of the day before it.
         assert Set.copyOf(times.values()).size() == times.size()
-                && Set.copyOf(dates.values()).size() == dates.size()
+                && dates.keySet().stream().map(each -> List.of(dates.get(each), moved.get(each)))
+                        .distinct().count() == dates.size()
                 : "one part of one root is one number and one target";
         // The parts of a time beside the parts of a date are a value spelled two ways, and what
         // writes one is a builder for that spelling. Said as a group nobody wrote the solving for,
@@ -480,8 +517,11 @@ final class TermRealizations {
         if (times.isEmpty() && dates.isEmpty()) {
             return nothingSolvesAGroup();
         }
+        // The parts of a date, each after the date was moved as its own number says, where a date
+        // that is not moved is one moved by nothing: every part asked is a condition on the days
+        // the date comes from, so the group is one search over the days.
         return wholly(targets, times.isEmpty() ? dates.keySet() : times.keySet(),
-                () -> times.isEmpty() ? new JointBuilder.OnThoseDateParts(dates)
+                () -> times.isEmpty() ? new JointBuilder.OnThoseDateParts(dates, moved)
                         : new JointBuilder.AtThoseTimeParts(times));
     }
 
@@ -528,6 +568,112 @@ final class TermRealizations {
                         holding == null ? Stream.<RealizationTarget.OfANumber>empty()
                                 : Stream.of(holding)).toList(),
                 () -> new JointBuilder.ElementsAlikeAsOftenAsAsked(alike.getFirst(), holding));
+    }
+
+    /**
+     * How often a value occurs among every occurrence of its place, in the containers inside the
+     * elements of another.
+     *
+     * <p>One number and nothing beside it: how many the containers hold in all, or how many each
+     * holds, is another question about how the occurrences are shared out, which a group asking it
+     * beside this is one nothing here writes.
+     */
+    private static JointRealization amongEveryOccurrence(
+            Collection<RealizationTarget> group, List<RealizationTarget.OfANumber> numbers) {
+        RealizationTarget.OfANumber alike = numbers.getFirst();
+        for (RealizationTarget.OfANumber each : numbers) {
+            if (!each.term().equals(alike.term())) {
+                return nothingSolvesAGroup();
+            }
+        }
+        return wholly(group, List.of(alike),
+                () -> new JointBuilder.ValuesAlikeAcrossContainers(alike));
+    }
+
+    /**
+     * How often the value of an input occurs among every occurrence of a place, in the containers
+     * inside the elements of another.
+     *
+     * <p>Several keys, each counted over the same place: the keys are values the row fixed, and
+     * each is written as often as asked over the same containers. Nothing beside them — how many
+     * the containers hold in all is another question about how the occurrences are shared out.
+     */
+    private static JointRealization amongEveryOccurrenceEqualToAKey(
+            Collection<RealizationTarget> group, List<RealizationTarget.OfANumber> numbers) {
+        TermPath place = null;
+        for (RealizationTarget.OfANumber each : numbers) {
+            if (!(each.term() instanceof NumericTerm.OccurrencesOfAKey asked)
+                    || (place != null && !place.equals(asked.subjectPath()))) {
+                return nothingSolvesAGroup();
+            }
+            place = asked.subjectPath();
+        }
+        return wholly(group, numbers,
+                () -> new JointBuilder.ValuesEqualToAKeyAcrossContainers(numbers));
+    }
+
+    /**
+     * What the elements of several keys an input holds come to, of the elements of one fold.
+     *
+     * <p>One fold, as {@link JointBuilder.UnderSeveralKeys} writes the elements of each key apart
+     * from the others and puts them in one container: the keys are told apart by the same way
+     * from an element to its key, and the numbers are gathered of the same elements. Numbers of
+     * another way to the key, or of other elements, share elements this does not choose between.
+     */
+    private static JointRealization underSeveralKeys(Collection<RealizationTarget> group,
+                                                     List<RealizationTarget.ACount> counts,
+                                                     List<RealizationTarget.OfANumber> totals,
+                                                     List<RealizationTarget.OfANumber> numbers) {
+        NumericTerm.GatheredUnderItsKey first =
+                ((NumericTerm.GatheredUnderAKey) totals.getFirst().term()).gathered();
+        for (RealizationTarget.OfANumber each : totals) {
+            NumericTerm.GatheredUnderItsKey gathered =
+                    ((NumericTerm.GatheredUnderAKey) each.term()).gathered();
+            if (!gathered.elements().equals(first.elements())
+                    || !gathered.key().equals(first.key())) {
+                return nothingSolvesAGroup();
+            }
+        }
+        List<RealizationTarget> owned = new ArrayList<>(numbers);
+        owned.addAll(counts);
+        return wholly(group, owned, () -> new JointBuilder.UnderSeveralKeys(counts, totals));
+    }
+
+    /**
+     * Whether {@code number} is the value of the key field of the elements the totals are
+     * gathered of: what a statement counting the elements of a key reads of each, which the
+     * elements are written holding and the row is read back for.
+     */
+    private static boolean standsAtTheKeyOfTheTotals(RealizationTarget.OfANumber number,
+                                                     List<RealizationTarget.OfANumber> totals) {
+        NumericTerm.GatheredUnderAKey asked =
+                (NumericTerm.GatheredUnderAKey) totals.getFirst().term();
+        return number.term() instanceof NumericTerm.ValueOf value
+                && value.position().equals(asked.key().from(asked.gathered().elements()));
+    }
+
+    /**
+     * Whether {@code count} is how many elements have the key a total in {@code numbers} is
+     * gathered for: the elements of its container whose key is the value an input holds, which
+     * is the statement the elements of that key meet by being its elements.
+     */
+    private static boolean countsTheElementsOfAKeyOf(
+            RealizationTarget.ACount count, List<RealizationTarget.OfANumber> numbers) {
+        return keyAskedOfTheCount(count, (NumericTerm.GatheredUnderAKey)
+                numbers.getFirst().term()) != null;
+    }
+
+    /**
+     * The input whose value the elements {@code count} counts have for their key — or null where
+     * it counts something else: the elements of the container {@code gathered} gathers whose key
+     * is the value of one input standing outside every container.
+     */
+    private static TermPath keyAskedOfTheCount(RealizationTarget.ACount count,
+                                               NumericTerm.GatheredUnderAKey gathered) {
+        RealizationTarget.AskedKey key = count.askedKey();
+        TermPath elements = gathered.gathered().elements();
+        return key != null && key.elements().equals(elements)
+                && key.keyAt().equals(gathered.key().from(elements)) ? key.asked() : null;
     }
 
     /**
@@ -695,24 +841,25 @@ final class TermRealizations {
         }
 
         /**
-         * One string holding the numbers of code points asked of it in each class, and that many
-         * in all where the length is asked too.
+         * One string holding the numbers asked of its code points — how many of each class, what
+         * they come to — and that many in all where the length is asked too.
          *
-         * <p><b>One string and not one for each number.</b> The counts of one string are tied: two
-         * classes that share code points count those in both, and none counts more than the
-         * string is long. A string written for each number alone and put side by side would answer
-         * none of them, so the numbers are chosen together and the string is written out of them.
+         * <p><b>One string and not one for each number.</b> The numbers of one string are tied: two
+         * classes that share code points count those in both, none counts more than the string is
+         * long, and what the code points come to turns on which they are. A string written for
+         * each number alone and put side by side would answer none of them, so the numbers are
+         * chosen together and the string is written out of them.
          */
-        record StringsHoldingTheirCounts(List<RealizationTarget.OfANumber> classes,
-                                         RealizationTarget.OfANumber length)
+        record StringsHoldingTheirNumbers(List<RealizationTarget.OfANumber> ofItsCodePoints,
+                                          RealizationTarget.OfANumber length)
                 implements JointBuilder {
 
-            public StringsHoldingTheirCounts {
-                if (classes.isEmpty()) {
+            public StringsHoldingTheirNumbers {
+                if (ofItsCodePoints.isEmpty()) {
                     throw new IllegalArgumentException(
-                            "a string holding counts of code points says which classes");
+                            "a string holding numbers of its code points says which numbers");
                 }
-                classes = List.copyOf(classes);
+                ofItsCodePoints = List.copyOf(ofItsCodePoints);
             }
 
             @Override
@@ -722,13 +869,13 @@ final class TermRealizations {
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
                 Map<RealizationTarget.OfANumber, Carrier> answeredOn = new LinkedHashMap<>();
-                for (RealizationTarget.OfANumber each : classes) {
+                for (RealizationTarget.OfANumber each : ofItsCodePoints) {
                     answeredOn.put(each, measuring.ordersOf(each.term()).answered());
                 }
                 if (length != null) {
                     answeredOn.put(length, measuring.ordersOf(length.term()).answered());
                 }
-                return stringsHoldingTheirCounts(answeredOn, sourceType, demands, within, reading);
+                return stringsHoldingTheirNumbers(answeredOn, sourceType, demands, within, reading);
             }
         }
 
@@ -760,53 +907,25 @@ final class TermRealizations {
             }
         }
 
-        /** The parts of a date, solved over the calendar. */
-        record OnThoseDateParts(SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> parts)
-                implements JointBuilder {
-
-            public OnThoseDateParts {
-                if (parts.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a way of writing a value for some parts says which parts");
-                }
-                parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
-            }
-
-            @Override
-            public Realization from(Type sourceType, List<List<String>> keptApart,
-                                    SequencedMap<RealizationTarget, AskedAt> demands,
-                                    Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading, DemandsInside inside) {
-                nothingInside(inside);
-                Map<TakenAs.DatePart, NumericSet> asked = new LinkedHashMap<>();
-                for (Map.Entry<RealizationTarget.OfANumber, TakenAs.DatePart> each
-                        : parts.entrySet()) {
-                    asked.put(each.getValue(), demands.get(each.getKey()).walking());
-                }
-                return onThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
-                        reading.source());
-            }
-        }
-
         /**
-         * The parts of one date, each taken after the date was moved as its own number says.
+         * The parts of one date, each taken after the date was moved as its own number says, and
+         * a date that is not moved being one moved by nothing.
          *
          * <p>The year of {@code b} and the year of {@code b} a day on are two numbers of one date,
          * and a value spelled in parts has one year to write. So a date answering them is looked
          * for among the days, where every number asked is a condition on the date itself
-         * ({@link #onMovedDates}) — which holds for the parts of a date that is not moved as well,
-         * so the two kinds are asked together and neither leaves the group unsolved.
+         * ({@link #onMovedDates}). That holds of the parts of a date nobody moved as well, so they
+         * are looked for the same way and there is one search for a date and not two.
          */
-        record OnThoseMovedDateParts(
+        record OnThoseDateParts(
                 SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> parts,
                 SequencedMap<RealizationTarget.OfANumber, DateTranslation> moved)
                 implements JointBuilder {
 
-            public OnThoseMovedDateParts {
-                if (parts.isEmpty() || !parts.keySet().equals(moved.keySet())
-                        || !parts.containsValue(TakenAs.DatePart.YEAR)) {
+            public OnThoseDateParts {
+                if (parts.isEmpty() || !parts.keySet().equals(moved.keySet())) {
                     throw new IllegalArgumentException("a way of writing a moved date says how"
-                            + " each part was moved, and is walked by the year asked of it");
+                            + " each part was moved");
                 }
                 parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
                 moved = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(moved));
@@ -1072,40 +1191,72 @@ final class TermRealizations {
          * demand refuses is no candidate, and a walk that filled one would spend a figure of this
          * compiler's on a container nobody asked for.
          */
-        record HoldingThatManyAndAddingUpToThat(RealizationTarget.OfANumber manyItHolds,
-                                                RealizationTarget.OfANumber whatItComesTo)
+        record TotalsOfOneContainer(List<RealizationTarget.OfANumber> whatItComesTo,
+                                    RealizationTarget.OfANumber manyItHolds)
                 implements JointBuilder {
+
+            public TotalsOfOneContainer {
+                if (whatItComesTo.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a container composed for its totals is asked for at least one");
+                }
+                whatItComesTo = List.copyOf(whatItComesTo);
+            }
 
             @Override
             public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
-                TermOrders counted = measuring.ordersOf(manyItHolds.term());
-                TermOrders adds = measuring.ordersOf(whatItComesTo.term());
-                AskedAt holdsAt = demands.get(manyItHolds);
-                AskedAt comesToAt = demands.get(whatItComesTo);
-                NumericSet many = holdsAt == null ? null : holdsAt.walking();
-                NumericSet total = comesToAt == null ? null : comesToAt.walking();
-                if (counted == null || counted.answered() == null || adds == null
-                        || many == null || total == null) {
-                    return new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                ContainersAddingUp.HowManyIsAskedFor holding = null;
+                if (manyItHolds != null) {
+                    TermOrders counted = measuring.ordersOf(manyItHolds.term());
+                    AskedAt holdsAt = demands.get(manyItHolds);
+                    NumericSet many = holdsAt == null ? null : holdsAt.walking();
+                    if (counted == null || counted.answered() == null || many == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    // Where the rules leave the size on the way, which the container's own walk
+                    // asks of the region already. What is handed over here is the group's demand
+                    // and not the way, so neither reading stands in for the other.
+                    if (within != null && within.projectionOf(manyItHolds.term())
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    holding = new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
                 }
-                // Where the rules leave the size on the way, which the container's own walk asks
-                // of the region already. What is handed over here is the group's demand and not
-                // the way, so neither reading stands in for the other.
-                if (within != null && within.projectionOf(manyItHolds.term())
-                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
-                    return new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                List<TermOrders> adding = new ArrayList<>();
+                List<Tried> candidates = new ArrayList<>();
+                for (RealizationTarget.OfANumber each : whatItComesTo) {
+                    TermOrders adds = measuring.ordersOf(each.term());
+                    AskedAt comesToAt = demands.get(each);
+                    NumericSet total = comesToAt == null ? null : comesToAt.walking();
+                    if (adds == null || total == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    adding.add(adds);
+                    candidates.add(onTheOrder(total, adds, comesToAt.named(), within));
                 }
-                ContainersAddingUp.HowManyIsAskedFor holding =
-                        new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
+                ContainersAddingUp.HowManyIsAskedFor sizes = holding;
+                Together together = Together.of(candidates);
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
-                        onTheOrder(total, adds, comesToAt.named(), within),
-                        at -> ContainersAddingUp.to(at, sourceType, keptApart, adds, within,
-                                reading, holding, inside));
+                        together.each(), together.rest(),
+                        at -> ContainersAddingUp.to(at.getFirst(), sourceType, keptApart,
+                                adding.getFirst(), within, reading, sizes,
+                                alsoAddingUp(adding, at), inside));
+            }
+
+            /** The totals after the first, each with the number tried for it. */
+            private static List<ContainersAddingUp.AlsoAddingUp> alsoAddingUp(
+                    List<TermOrders> adding, List<Place> at) {
+                List<ContainersAddingUp.AlsoAddingUp> also = new ArrayList<>();
+                for (int each = 1; each < adding.size(); each++) {
+                    also.add(new ContainersAddingUp.AlsoAddingUp(adding.get(each), at.get(each)));
+                }
+                return also;
             }
         }
 
@@ -1172,6 +1323,256 @@ final class TermRealizations {
                 nothingInside(inside);
                 return CardinalityComposer.composeAlike(sourceType, keptApart, alike, manyItHolds,
                         demands, measuring, within, reading);
+            }
+        }
+
+        /**
+         * Containers inside the elements of another holding some value as often as asked, in all
+         * of them put end to end ({@link CardinalityComposer#composeAcrossContainers}).
+         *
+         * @param alike how often some value occurs among every occurrence of its place
+         */
+        record ValuesAlikeAcrossContainers(RealizationTarget.OfANumber alike)
+                implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.composeAcrossContainers(sourceType, keptApart, alike,
+                        demands, measuring, within, reading);
+            }
+        }
+
+        /**
+         * Containers inside the elements of another holding the value of an input as often as
+         * asked, in all of them put end to end
+         * ({@link CardinalityComposer#composeAcrossContainersEqualToAKey}).
+         *
+         * @param asked how often each key's value occurs among every occurrence of their place
+         */
+        record ValuesEqualToAKeyAcrossContainers(List<RealizationTarget.OfANumber> asked)
+                implements JointBuilder {
+
+            public ValuesEqualToAKeyAcrossContainers {
+                asked = List.copyOf(asked);
+            }
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.composeAcrossContainersEqualToAKey(sourceType,
+                        keptApart, asked, demands, measuring, within, reading);
+            }
+        }
+
+        /**
+         * A container holding the elements of each of several keys an input holds, the elements
+         * of a key coming to the number asked of it and being as many as the count asked of them.
+         *
+         * <p>Composed one key at a time and put together. The elements of a key are written
+         * holding it ({@link TermRealizations#underAKey}), so the elements of another are none of
+         * its own, and the container is the elements of each in turn. Keys the row holds at one
+         * value are one key, whose elements come to the one number asked of them all; two numbers
+         * asked of it are elements chosen for both, which nothing here does.
+         *
+         * <p>A key asked only how many elements have it is written as a key whose number is the
+         * one a total of the group asks, since nothing else says what its elements come to; one
+         * asked to have none is written with none.
+         *
+         * <p>Offered row by row, the ways one key is composed taken beside the ways of the others
+         * in turn, and not every combination of them: what is left is said as a way a total is
+         * spread that was not tried.
+         *
+         * @param counts how many elements have each key, where that is asked beside the numbers
+         */
+        record UnderSeveralKeys(List<RealizationTarget.ACount> counts,
+                                List<RealizationTarget.OfANumber> numbers)
+                implements JointBuilder {
+
+            public UnderSeveralKeys {
+                counts = List.copyOf(counts);
+                numbers = List.copyOf(numbers);
+            }
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                List<Place> keys = new ArrayList<>();
+                List<RealizationTarget.OfANumber> ofEachKey = new ArrayList<>();
+                List<AskedAt> askedOfEachKey = new ArrayList<>();
+                List<NumericSet> howManyOfEachKey = new ArrayList<>();
+                // The keys only counted: no number is asked of their elements.
+                List<Boolean> onlyCounted = new ArrayList<>();
+                List<List<RealizationTarget.ACount>> countsOfEachKey = new ArrayList<>();
+                for (RealizationTarget.OfANumber number : numbers) {
+                    NumericTerm.GatheredUnderAKey term =
+                            (NumericTerm.GatheredUnderAKey) number.term();
+                    Place key = within == null ? null : CardinalityComposer.settled(within,
+                            new NumericTerm.ValueOf(term.asked()));
+                    if (key == null) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(
+                                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                                "`" + term.asked() + "` stands at no one value, so what is"
+                                        + " gathered for it is not known");
+                    }
+                    int at = 0;
+                    while (at < keys.size() && !keys.get(at).sameAs(key)) {
+                        at++;
+                    }
+                    if (at == keys.size()) {
+                        keys.add(key);
+                        ofEachKey.add(number);
+                        askedOfEachKey.add(demands.get(number));
+                        howManyOfEachKey.add(null);
+                        onlyCounted.add(false);
+                        countsOfEachKey.add(new ArrayList<>());
+                        continue;
+                    }
+                    // Two parameters holding one value are one key, whose elements come to what
+                    // both ask: one number where the two asked are, or the point of the one that
+                    // the other holds.
+                    NumericTerm.GatheredUnderItsKey held =
+                            ((NumericTerm.GatheredUnderAKey) ofEachKey.get(at).term()).gathered();
+                    TermOrders orders = measuring.ordersOf(number.term());
+                    AskedAt agreed = !held.equals(term.gathered()) ? null
+                            : agreed(askedOfEachKey.get(at), demands.get(number),
+                                    orders == null ? null : orders.answered());
+                    if (agreed == null) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                                "two numbers are asked of the elements of one key");
+                    }
+                    askedOfEachKey.set(at, agreed);
+                }
+                // How many elements a key has, asked of the key whose elements the count is of; two
+                // counts of one key's elements are one question, asked alike or not at all.
+                NumericTerm.GatheredUnderAKey gathered =
+                        (NumericTerm.GatheredUnderAKey) numbers.getFirst().term();
+                for (RealizationTarget.ACount count : counts) {
+                    TermPath askedOfTheKey = keyAskedOfTheCount(count, gathered);
+                    Place key = within == null ? null : CardinalityComposer.settled(within,
+                            new NumericTerm.ValueOf(askedOfTheKey));
+                    if (key == null) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(
+                                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                                "`" + askedOfTheKey + "` stands at no one value, so how many"
+                                        + " elements have it is not known");
+                    }
+                    int at = 0;
+                    while (at < keys.size() && !keys.get(at).sameAs(key)) {
+                        at++;
+                    }
+                    if (at == keys.size()) {
+                        // Nothing says what its elements come to, so they are written to come to
+                        // what the first total of the group asks of its own: one of the numbers
+                        // they may come to, and the way this composes them at all.
+                        keys.add(key);
+                        ofEachKey.add(numbers.getFirst());
+                        askedOfEachKey.add(demands.get(numbers.getFirst()));
+                        howManyOfEachKey.add(null);
+                        onlyCounted.add(true);
+                        countsOfEachKey.add(new ArrayList<>());
+                    }
+                    countsOfEachKey.get(at).add(count);
+                    AskedAt asked = demands.get(count);
+                    NumericSet wanted = asked == null ? null : asked.walking();
+                    NumericSet had = howManyOfEachKey.get(at);
+                    if (!onlyCounted.get(at) && had != null && !had.equals(wanted)) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                                "two counts are asked of the elements of one key");
+                    }
+                    howManyOfEachKey.set(at, wanted);
+                }
+                List<List<FixtureTemplate>> ways = new ArrayList<>();
+                CompositionShortfall rest = CompositionShortfall.NONE;
+                for (int each = 0; each < keys.size(); each++) {
+                    NumericSet howMany = howManyOfEachKey.get(each);
+                    // A key asked to have no element is written with none.
+                    if (onlyCounted.get(each) && countsOfEachKey.get(each).stream()
+                            .allMatch(count -> {
+                                AskedAt wanted = demands.get(count);
+                                return wanted != null
+                                        && wanted.walking().holds(Count.of(0), Carrier.WHOLE)
+                                        && !wanted.walking().holds(Count.of(1), Carrier.WHOLE);
+                            })) {
+                        continue;
+                    }
+                    Realization one = underAKey(sourceType, keptApart,
+                            measuring.ordersOf(ofEachKey.get(each).term()),
+                            askedOfEachKey.get(each), within, reading, inside, howMany,
+                            keys.get(each));
+                    if (!(one instanceof Realization.Built built)) {
+                        return asked(one, keys, onlyCounted);
+                    }
+                    ways.add(built.values());
+                    rest = rest.and(built.rest());
+                }
+                int rows = ways.stream().mapToInt(List::size).max().orElse(0);
+                List<FixtureTemplate> together = new ArrayList<>();
+                for (int row = 0; row < rows; row++) {
+                    List<FixtureTemplate> parts = new ArrayList<>();
+                    for (List<FixtureTemplate> each : ways) {
+                        parts.add(each.get(row % each.size()));
+                    }
+                    FixtureTemplate joined = FixtureTemplate.concatenated(parts);
+                    if (joined == null) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                                "a container that is not a list written bare is not put together"
+                                        + " out of the elements of several keys");
+                    }
+                    together.add(joined);
+                }
+                return asked(new Realization.Built(together, rest.and(
+                        CompositionShortfall.writing(
+                                Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)))),
+                        keys, onlyCounted);
+            }
+
+            /**
+             * What came of the keys, said to be some of the ways they may be asked together
+             * where there is more than one key or one is only counted: the values they were
+             * placed at and the number a key only counted came to are a way to try, and a row not
+             * written is not a row there is none of.
+             */
+            private static Realization asked(Realization made, List<Place> keys,
+                                              List<Boolean> onlyCounted) {
+                return keys.size() > 1 || onlyCounted.contains(true)
+                        ? someOf(made, CompositionRepertoire.KEYS_OF_ONE_FOLD_ASKED_TOGETHER)
+                        : made;
+            }
+
+            /**
+             * What two parameters holding one key ask of its elements, as one asking: the one asked
+             * where they ask alike, or the point of the one that the other's set holds — and null
+             * where they ask what no one set of elements is chosen for.
+             */
+            private static AskedAt agreed(AskedAt one, AskedAt other, Carrier on) {
+                if (one == null || other == null) {
+                    return one == null ? other : one;
+                }
+                NumericSet asked = one.walking();
+                NumericSet alsoAsked = other.walking();
+                if (asked.equals(alsoAsked)) {
+                    return one;
+                }
+                if (on == null) {
+                    return null;
+                }
+                if (asked instanceof NumericSet.At point && alsoAsked.holds(point.value(), on)) {
+                    return one;
+                }
+                return alsoAsked instanceof NumericSet.At point && asked.holds(point.value(), on)
+                        ? other : null;
             }
         }
 
@@ -1309,22 +1710,29 @@ final class TermRealizations {
             return false;
         }
         return switch (builder) {
-            case JointBuilder.HoldingThatManyAndAddingUpToThat _ -> true;
+            case JointBuilder.TotalsOfOneContainer _ -> true;
             case JointBuilder.OneNumberOnItsOwn only -> switch (only.number().term()) {
                 case NumericTerm.TakenOver over ->
                         over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
                 case NumericTerm.TakenOf taken ->
                         taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                // A string is chosen whole, and what its code points come to is read off it: no
+                // element of it is composed.
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.Multiplicity _ -> false;
+                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
+                     NumericTerm.GatheredUnderAKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
-            case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _ ->
-                    false;
-            case JointBuilder.StringsHoldingTheirCounts _,
+            case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _,
+                 JointBuilder.ValuesAlikeAcrossContainers _,
+                 JointBuilder.ValuesEqualToAKeyAcrossContainers _,
+                 JointBuilder.UnderSeveralKeys _ -> false;
+            case JointBuilder.StringsHoldingTheirNumbers _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
-                 JointBuilder.OnThoseMovedDateParts _, JointBuilder.SolvingForTheirQuotients _,
+                 JointBuilder.SolvingForTheirQuotients _,
                  JointBuilder.SolvingForTheirRemainders _,
                  JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
         };
@@ -1512,13 +1920,35 @@ final class TermRealizations {
                 nothingInside(inside);
                 yield standing(sourceType, orders, asked, within, reading);
             }
+            // Written as the value it is the end of, at the place it is taken of, on the order the
+            // values stand on ({@link RealizationTarget.AtItsKey}).
+            case NumericTerm.ExtremeOfItsKey _ -> {
+                nothingInside(inside);
+                yield standing(sourceType, orders, asked, within, reading);
+            }
+            // Written as the container of the elements, holding elements of one key that come to
+            // the number ({@link RealizationTarget.UnderItsKey}).
+            case NumericTerm.GatheredUnderItsKey _ -> underItsKey(sourceType, keptApart, orders,
+                    asked, within, reading, inside, null);
+            case NumericTerm.GatheredUnderAKey _ -> underAKey(sourceType, keptApart, orders,
+                    asked, within, reading, inside, null, null);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(),
                     taken.transformation(), sourceType, keptApart, orders, asked, within,
                     reading, inside);
             case NumericTerm.CodePointClassCount counted -> {
                 nothingInside(inside);
-                yield holdingThatManyOfAClass(counted.counted(), sourceType, asked, orders,
-                        reading);
+                yield holdingThatManyOfAClass(counted.counted(), counted.through(), sourceType,
+                        asked, orders, reading);
+            }
+            // A string written for its code points alone, which is the search that writes one for
+            // several numbers of a string, asked one.
+            case NumericTerm.CodePointValueSum _ -> {
+                nothingInside(inside);
+                SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
+                demands.put(target, asked);
+                Map<RealizationTarget.OfANumber, Carrier> answeredOn = new LinkedHashMap<>();
+                answeredOn.put(target, orders.answered());
+                yield stringsHoldingTheirNumbers(answeredOn, sourceType, demands, within, reading);
             }
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, keptApart,
                     orders, asked, within, reading, inside);
@@ -1528,6 +1958,12 @@ final class TermRealizations {
             case NumericTerm.Multiplicity among -> throw new IllegalStateException(
                     among + " is written by composing its container, and no value of one element"
                             + " is asked for it");
+            case NumericTerm.OccurrencesOfItsValue among -> throw new IllegalStateException(
+                    among + " is written by composing the containers its occurrences stand in,"
+                            + " and no value of one element is asked for it");
+            case NumericTerm.OccurrencesOfAKey ofAKey -> throw new IllegalStateException(
+                    ofAKey + " is written by composing the containers its occurrences stand in,"
+                            + " and no value of one element is asked for it");
         };
     }
 
@@ -1611,11 +2047,11 @@ final class TermRealizations {
             // travels this far and the arm takes the end (#1027).
             case TakenAs.PartOfTime taken -> atThoseParts(Map.of(taken.part(), wanted), sourceType,
                     orders.observed(), ruleSource);
-            case TakenAs.PartOfDate taken -> from instanceof ValueTransformation.DateShift moved
-                    ? onMovedDates(List.of(new DatePartAsk(taken.part(), moved.translation(),
-                            wanted)), sourceType, orders.observed(), ruleSource)
-                    : onThoseParts(Map.of(taken.part(), wanted), sourceType, orders.observed(),
-                            ruleSource);
+            // And this one looks among the days, where the date as it stands is the date moved by
+            // nothing.
+            case TakenAs.PartOfDate taken -> onMovedDates(
+                    List.of(new DatePartAsk(taken.part(), from.translation(), wanted)),
+                    sourceType, orders.observed(), ruleSource);
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
@@ -1661,13 +2097,27 @@ final class TermRealizations {
      */
     static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
                                        Function<Place, Realization> of) {
+        return firstThatBuilds(walkedTheWholeQuestion, tried.numbers(), tried.rest().shortfall(),
+                of);
+    }
+
+    /**
+     * The same, over whatever a value is built for: one number, or the numbers of several totals
+     * together ({@link Together}).
+     *
+     * @param handedOver what whatever handed the numbers over left, every reason of every walk
+     *                   that did: none where it handed over all there were
+     */
+    static <T> Realization firstThatBuilds(boolean walkedTheWholeQuestion, List<T> numbers,
+                                           CompositionShortfall handedOver,
+                                           Function<T, Realization> of) {
         // Everything every number that built nothing came to without, taken as one shortfall so
         // that no vocabulary of it is left behind here. The rules leaving no number at one of the
         // numbers handed over says nothing about the next: this walk is over the numbers, and that
         // one was a value's answer, whose shortfall is none.
         CompositionShortfall met = CompositionShortfall.NONE;
         Realization last = null;
-        for (Place number : tried.numbers()) {
+        for (T number : numbers) {
             Realization made = of.apply(number);
             if (made instanceof Realization.Built built) {
                 return built;
@@ -1678,13 +2128,7 @@ final class TermRealizations {
         // Why there were no more to try, said by whatever handed them over. Worked out here, this
         // would be the one place that knows what every account's numbers are and how it walks them,
         // which is what handing the reason over is for.
-        met = met.and(switch (tried.rest()) {
-            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
-            case Remainder.StoppedAt(CompositionBudget figure) ->
-                    CompositionShortfall.of(Set.of(figure));
-            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
-                    CompositionShortfall.writing(written);
-        });
+        met = met.and(handedOver);
         if (!met.figures().isEmpty()) {
             return new Realization.Stopped(met);
         }
@@ -1701,13 +2145,222 @@ final class TermRealizations {
         // same way and has seen one number of it, so the same emptiness said of the class would be
         // a sentence about every value the class holds. And nothing here says anything about what
         // could be built at a number this walked past: this is about the numbers, not the values.
-        if (tried.numbers().isEmpty() && tried.rest() instanceof Remainder.Exhausted
-                && walkedTheWholeQuestion) {
+        if (numbers.isEmpty() && handedOver.nothing() && walkedTheWholeQuestion) {
             return new Realization.NoNumberTheDeclarationsAdmit();
         }
         return last instanceof Realization.None none ? none
                 : new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+    }
+
+    /**
+     * Containers inside the elements of a container, holding as many occurrences of the run's path
+     * in all as one of those numbers, from none upward as every count is offered.
+     *
+     * <p>Only of a run no one container holds: a count of the elements of one container is a
+     * taking of that container's place, and no term over a run is made for it
+     * ({@code NumericTerm.TakenOver.of}).
+     */
+    private static Realization counting(AskedAt asked, Type sourceType,
+                                        List<List<String>> keptApart, TermOrders orders,
+                                        SearchRegion within, RuleReadingContext reading,
+                                        DemandsInside inside) {
+        if (!(orders.term() instanceof NumericTerm.TakenOver over)) {
+            throw new IllegalStateException(orders.term() + " is no count of a run");
+        }
+        return switch (over.source()) {
+            case RunSource.FlattenedOccurrences flat -> {
+                NestedContainersAddingUp nested = new NestedContainersAddingUp(flat.subjectPath());
+                yield firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                        wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
+                                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                        count -> nested.holding(count, sourceType, keptApart, orders, within,
+                                reading, inside));
+            }
+            case RunSource.ReachableNodes nodes -> {
+                nothingInside(inside);
+                yield nodes.container().isEmpty()
+                        ? firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                                wholeNumbers(asked.walking(), orders.answered(), 0,
+                                        Integer.MAX_VALUE,
+                                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                                count -> nodesBelowARoot(count, sourceType, keptApart, reading))
+                        : treesNotWritten("nothing here writes a tree for how many values its"
+                                + " nodes hold in `" + String.join(".", nodes.container())
+                                + "`");
+            }
+            case RunSource.ProjectedOccurrences _, RunSource.ComputedOccurrences _ ->
+                    throw new IllegalStateException(orders.term() + " is a count of a run one"
+                            + " container holds, which is a taking of that container's place");
+        };
+    }
+
+    /**
+     * A tree of as many nodes as {@code answer}: the container below the root holding one fewer,
+     * each a node holding nothing below it, the root being the one more. None at nought, which no
+     * tree is. Where the rules hold what a node holds below it to fewer, a tree of that many is
+     * deeper than this writes, which is said as a tree this writes none of and never as a count no
+     * tree comes to.
+     */
+    private static Realization nodesBelowARoot(Place answer, Type sourceType,
+                                               List<List<String>> keptApart,
+                                               RuleReadingContext reading) {
+        int many = CountDomain.asCount(answer);
+        if (many == 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+        }
+        if (many < 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        Realization below = holdingExactly(sourceType, keptApart,
+                Count.of(BigDecimal.valueOf(many - 1)), reading);
+        return below instanceof Realization.None
+                ? treesNotWritten("a tree of " + many + " nodes is deeper than a root and the"
+                        + " nodes below it")
+                : below;
+    }
+
+    /** What a tree this writes none of is said as: a population written in part. */
+    private static Realization treesNotWritten(String why) {
+        return new Realization.Unexhausted(CompositionShortfall.writing(
+                Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT)), why);
+    }
+
+    /**
+     * Containers of the elements a key's number is gathered from, each holding elements that come
+     * to one number of the set asked for.
+     *
+     * <p>A total is written as a total over the container is, as many elements as add up to it and
+     * at least one. An end is written as one element: elements of one key whose least is a number
+     * are not elements adding up to it, and one element is its own least and greatest. Either way
+     * what the elements come to under their key is the number only where they share it, which the
+     * row read back whole says.
+     */
+    private static Realization underItsKey(Type sourceType, List<List<String>> keptApart,
+                                           TermOrders orders, AskedAt asked,
+                                           SearchRegion within, RuleReadingContext reading,
+                                           DemandsInside inside, NumericSet howMany) {
+        NumericTerm.GatheredUnderItsKey gathered =
+                orders.term() instanceof NumericTerm.GatheredUnderAKey ofAKey ? ofAKey.gathered()
+                        : (NumericTerm.GatheredUnderItsKey) orders.term();
+        // The elements written are written for their number alone, and a statement keeping some of
+        // them is one more thing each would have to be written to meet.
+        if (orders.answered() == null || gathered.selection() != null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // Some element, since a key is filed where one has it: a container of none comes to
+        // nought added up and files no key at all. An end is one element, which is its own end
+        // by either; and how many elements the key has is asked of them as well where a count of
+        // them is asked beside the number.
+        boolean anEnd = gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End;
+        NumericSet some = anEnd ? new NumericSet.At(Count.of(1))
+                : new NumericSet.AwayFrom(List.of(Count.of(0)));
+        // An end is written as one element, which is a way of writing it and not what an end is: a
+        // count of its key's elements that has no one in it asks for an end this does not write,
+        // and is not a count no key has.
+        if (anEnd && howMany != null && !howMany.holds(Count.of(1), Carrier.WHOLE)) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                    CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT)),
+                    "an end of the elements of a key is written as one element, and the key is"
+                            + " asked to have more");
+        }
+        // A key filed in a map has some element, so whatever count of them is asked, one or more
+        // of the counts in it is the size.
+        ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
+                howMany == null || anEnd ? some : howMany, Carrier.WHOLE, 1);
+        Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                onTheOrder(asked.walking(), orders, asked.named(), within),
+                number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
+                        reading, elements, inside));
+        // And an end that is not written is not an end no row has: the container may be one its
+        // type makes hold more of the key's elements than one, which the end is among.
+        return anEnd ? someOf(made, CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT)
+                : made;
+    }
+
+    /**
+     * Containers of the elements whose key an input holds, each element written holding that key
+     * and the elements coming to one number of the set asked for, as {@link #underItsKey} writes
+     * them.
+     *
+     * <p>The key is the row's other parameter, fixed with the rest of the row before the container
+     * is composed, so the elements are written holding the one value the region leaves it at. A
+     * key the region leaves at more than one is not chosen here.
+     *
+     * <p>Where the key is a field the number is made of, the value is not written beside the
+     * share, which would be that position asked two things: the region the elements are chosen in
+     * is narrowed to the key instead. What is composed is then one key of the several the number
+     * is reached at, and is said to be some of them ({@link #someOfTheKeys}).
+     */
+    private static Realization underAKey(Type sourceType, List<List<String>> keptApart,
+                                         TermOrders orders, AskedAt asked, SearchRegion within,
+                                         RuleReadingContext reading, DemandsInside inside,
+                                         NumericSet howMany, Place keyHeld) {
+        NumericTerm.GatheredUnderAKey term = (NumericTerm.GatheredUnderAKey) orders.term();
+        NumericTerm.GatheredUnderItsKey gathered = term.gathered();
+        Place key = keyHeld != null ? keyHeld : within == null ? null
+                : CardinalityComposer.settled(within, new NumericTerm.ValueOf(term.asked()));
+        if (key == null) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(
+                    Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                    "`" + term.asked() + "` stands at no one value, so what is gathered for it is"
+                            + " not known");
+        }
+        Carrier keyedOn = orders.fieldCarrier(term.key());
+        if (keyedOn == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        TermPath keyAt = term.key().from(gathered.elements());
+        // The key at a field the number is made of is the number there: every element holds the
+        // key at it, so each contributes the same value and the elements come to that many of it.
+        // Asked of the region, that is the run the elements are chosen in narrowed to the key; asked
+        // as a value written beside the share, it would be that position asked two things.
+        if (term.keyIsWhatIsAdded()) {
+            Realization made = underItsKey(sourceType, keptApart, orders, asked,
+                    within.given(new NumericTerm.ValueOf(keyAt), key), reading, inside, howMany);
+            return someOfTheKeys(made);
+        }
+        List<FixtureTemplate> held = List.of(FixtureTemplate.on(keyedOn, key,
+                reading.source().symbols().scope()::reach));
+        Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
+        List<FixtureTemplate> had = among.put(keyAt, held);
+        if (had != null && !had.equals(held)) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(
+                    Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                    "`" + keyAt + "` is asked to hold another value than the key");
+        }
+        return underItsKey(sourceType, keptApart, orders, asked, within, reading,
+                new DemandsInside(among, inside.required()), howMany);
+    }
+
+    /**
+     * What came of composing for a key placed at the number, said as an offer of some of the keys
+     * there are: the key was one value of the several the number is reached at, so a row not
+     * written is not a row there is none of.
+     */
+    private static Realization someOfTheKeys(Realization made) {
+        return someOf(made, CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO);
+    }
+
+    /**
+     * {@code made} said to be an offer of some of a population {@code population} names and not
+     * all of it: the nothing it came to is a nothing this tried, and never that none exists.
+     */
+    private static Realization someOf(Realization made, CompositionRepertoire population) {
+        CompositionShortfall some = CompositionShortfall.writing(Set.of(population));
+        return switch (made) {
+            case Realization.Built built -> new Realization.Built(built.values(),
+                    built.rest().and(some));
+            case Realization.Stopped stopped -> new Realization.Stopped(stopped.met().and(some));
+            case Realization.Unexhausted unexhausted -> new Realization.Unexhausted(
+                    unexhausted.met().and(some), unexhausted.detail());
+            case Realization.None none -> new Realization.Unexhausted(some, none.detail());
+            case Realization.NoNumberTheDeclarationsAdmit nothing -> nothing;
+        };
     }
 
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
@@ -1812,7 +2465,9 @@ final class TermRealizations {
             return new RemainderSolutions.Value(run, null, at -> false);
         }
         NumericTerm.ValueOf value = new NumericTerm.ValueOf(taken.position());
-        return new RemainderSolutions.Value(run, within.valueClassAt(value),
+        return new RemainderSolutions.Value(run,
+                within.classAt(value) instanceof HeldClass.OfResidues(Congruences residues)
+                        ? residues : null,
                 at -> within.given(value, at).emptiness().isPresent());
     }
 
@@ -1839,6 +2494,55 @@ final class TermRealizations {
             case RemainderSolutions.Answer.Undecided(CompositionBudget figure) ->
                     new Tried(List.of(), new Remainder.StoppedAt(figure));
         };
+    }
+
+    /**
+     * The numbers of several totals tried together: a number for each, and why there are no more
+     * choices of them.
+     *
+     * <p>Why there are no more is every reason of every walk that handed numbers over, and the
+     * reason the choices of them were cut where they were: a shortfall, which adds, and not a
+     * {@link Remainder}, which is one walk's single reason.
+     *
+     * @param each each choice of one number for every total, in the order the totals are asked
+     * @param rest why there are no more choices
+     */
+    record Together(List<List<Place>> each, CompositionShortfall rest) {
+
+        /**
+         * Every choice of one number for each of {@code candidates}, the first total's the slowest
+         * to move, up to the figure that bounds the choices.
+         */
+        static Together of(List<Tried> candidates) {
+            int most = CompositionBudget.COMBINATIONS_OF_TOTALS_TRIED.maximum();
+            CompositionShortfall left = CompositionShortfall.NONE;
+            for (Tried each : candidates) {
+                left = left.and(each.rest().shortfall());
+            }
+            List<List<Place>> out = new ArrayList<>();
+            if (candidates.stream().anyMatch(each -> each.numbers().isEmpty())) {
+                return new Together(out, left);
+            }
+            int[] at = new int[candidates.size()];
+            for (boolean more = true; more; ) {
+                if (out.size() == most) {
+                    return new Together(out, left.and(CompositionShortfall.of(
+                            Set.of(CompositionBudget.COMBINATIONS_OF_TOTALS_TRIED))));
+                }
+                List<Place> choice = new ArrayList<>();
+                for (int i = 0; i < at.length; i++) {
+                    choice.add(candidates.get(i).numbers().get(at[i]));
+                }
+                out.add(List.copyOf(choice));
+                int i = at.length - 1;
+                while (i >= 0 && ++at[i] == candidates.get(i).numbers().size()) {
+                    at[i] = 0;
+                    i--;
+                }
+                more = i >= 0;
+            }
+            return new Together(out, left);
+        }
     }
 
     /**
@@ -1880,6 +2584,23 @@ final class TermRealizations {
      * standing on a guess.
      */
     sealed interface Remainder {
+
+        /**
+         * What this says to a reader as a shortfall: the one a walk met, or none where it went to
+         * the end.
+         *
+         * <p>The one place a remainder becomes a shortfall. A remainder is one walk's reason, and
+         * walks that hand over together add their shortfalls ({@link CompositionShortfall#and})
+         * rather than choose among their remainders.
+         */
+        default CompositionShortfall shortfall() {
+            return switch (this) {
+                case Exhausted _ -> CompositionShortfall.NONE;
+                case StoppedAt(CompositionBudget figure) -> CompositionShortfall.of(Set.of(figure));
+                case SomeOf(Set<CompositionRepertoire> written) ->
+                        CompositionShortfall.writing(written);
+            };
+        }
 
         /** There are no more: the numbers handed over are every one the set has in the window its
          *  account can be asked for. */
@@ -2035,9 +2756,9 @@ final class TermRealizations {
         // A value held to a class is a value of the class, so what is offered are its members: the
         // end of a run is one only by luck, and a place the class refuses is no candidate whatever
         // else is asked of it afterwards.
-        Congruences members = orders.term() instanceof NumericTerm.ValueOf value && within != null
-                ? within.valueClassAt(value) : null;
-        if (members != null) {
+        HeldClass members = orders.term() instanceof NumericTerm.ValueOf value && within != null
+                ? within.classAt(value) : HeldClass.NONE;
+        if (!(members instanceof HeldClass.None)) {
             return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun);
         }
         Place found = Criterion.Within.somewhereIn(wanted.region(orders.answered()),
@@ -2056,7 +2777,7 @@ final class TermRealizations {
      * for the figure it was cut at.
      */
     private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
-                                           Congruences members, NumericDomain.Bounds leaves,
+                                           HeldClass members, NumericDomain.Bounds leaves,
                                            Set<CompositionRepertoire> ofTheRun) {
         Carrier carrier = orders.answered();
         List<Place> offered = new ArrayList<>();
@@ -2067,7 +2788,7 @@ final class TermRealizations {
             if (run == null) {
                 continue;
             }
-            ClassMembers inside = ClassMembers.within(members,
+            ClassMembers inside = members.within(
                     new NumericDomain.Bounds(run.low(), run.high()), Towards.ABOVE,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
             offered.addAll(inside.notApart(PlacesApart.NONE));
@@ -2402,10 +3123,8 @@ final class TermRealizations {
         return switch (how) {
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, keptApart, orders,
                     within, reading, inside);
-            // How many a run holds is the size the walk's law says, which no term over a run is
-            // made for ({@code NumericTerm.TakenOver.of}).
-            case TakenAs.HowManyItHolds _ -> throw new IllegalStateException(
-                    "a count of a run is sized by the law of what made it, not taken over it");
+            case TakenAs.HowManyItHolds _ -> counting(asked, sourceType, keptApart, orders, within,
+                    reading, inside);
             case TakenAs.PartOfTime _, TakenAs.PartOfDate _,
                     TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ -> {
                 nothingInside(inside);
@@ -2443,25 +3162,29 @@ final class TermRealizations {
      * written to, so there is a string for every number and what limits the walk is the figure the
      * counts are walked under.
      */
-    private static Realization holdingThatManyOfAClass(CodePointClass counted, Type sourceType,
+    private static Realization holdingThatManyOfAClass(CodePointClass counted,
+                                                       CaseMapping through, Type sourceType,
                                                        AskedAt asked, TermOrders orders,
                                                        RuleReadingContext reading) {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
-                count -> stringsHoldingThatManyOf(counted, sourceType, count, reading));
+                count -> stringsHoldingThatManyOf(counted, through, sourceType, count, reading));
     }
 
     /**
-     * Strings of the position holding exactly {@code answer} code points of {@code counted}, each
-     * of them read back before it is offered.
+     * Strings of the position holding exactly {@code answer} code points of {@code counted} in
+     * what {@code through} makes of them, each of them read back before it is offered.
      *
      * <p>What the type admits first and what is plainly written after, as a string of a length is
      * offered ({@link Witnesses}). What is offered is what reads back as the number asked for and
      * nothing else: a string the type admits that holds another number is a string for another
-     * number, and is left out rather than offered at this one.
+     * number, and is left out rather than offered at this one. Read back through the conversion,
+     * so a string written for a class is offered for it only where the run time's answer holds
+     * that many.
      */
-    private static Realization stringsHoldingThatManyOf(CodePointClass counted, Type sourceType,
+    private static Realization stringsHoldingThatManyOf(CodePointClass counted,
+                                                        CaseMapping through, Type sourceType,
                                                         Place answer, RuleReadingContext reading) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
@@ -2480,22 +3203,78 @@ final class TermRealizations {
         Set<String> candidates = new LinkedHashSet<>(
                 admittedStrings(holder, reading, lengthsFrom(many)));
         candidates.addAll(plainStringsHolding(counted, many));
-        Set<String> held = new LinkedHashSet<>();
-        for (String each : candidates) {
-            String text = asTheLanguageHoldsIt(each);
-            if (text != null && countIn(counted, text) == many) {
-                held.add(text);
-            }
+        Set<String> held = readBackAs(counted, through, many, candidates);
+        // The plain letters come first, and a conversion can make them into code points of no
+        // class that is asked for; the code points it leaves as they are are tried then.
+        if (held.isEmpty() && !through.equals(CaseMapping.NONE)) {
+            held = readBackAs(counted, through, many, leftAsTheyAre(counted, through, many));
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (String each : held) {
             out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
         }
         if (out.isEmpty()) {
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            // Written by the class's own code points, which a conversion can make into others,
+            // so the strings tried are some of the strings there are and not all of them.
+            return through.equals(CaseMapping.NONE)
+                    ? new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    : new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                            CompositionRepertoire.STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR)),
+                            null);
         }
         return Realization.Built.whole(out);
+    }
+
+    /** The candidates, as the language holds them, that hold {@code many} code points of
+     *  {@code counted} in what {@code through} makes of them. */
+    private static Set<String> readBackAs(CodePointClass counted, CaseMapping through, int many,
+                                          Collection<String> candidates) {
+        Set<String> held = new LinkedHashSet<>();
+        for (String each : candidates) {
+            String text = asTheLanguageHoldsIt(each);
+            if (text != null && countIn(counted, through, text) == many) {
+                held.add(text);
+            }
+        }
+        return held;
+    }
+
+    /**
+     * Strings of {@code many} ASCII code points of {@code counted} that {@code through} leaves as
+     * they are, one string for each such code point: the strings a conversion keeps the count of
+     * wherever the class is written with them, whichever of them the plain letters come first by.
+     */
+    private static List<String> leftAsTheyAre(CodePointClass counted, CaseMapping through,
+                                              int many) {
+        List<String> out = new ArrayList<>();
+        for (int member = 0x21; member < 0x7F; member++) {
+            String own = Character.toString(member);
+            if (counted.contains(member) && own.equals(BoundUnderEvaluation.mapped(through, own))) {
+                out.add(own.repeat(many));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether every whole number from nought up is how many code points of {@code counted}
+     * {@code through} makes of some string. As it stands, a string of that many of one of them is
+     * one. Converted, it is where one of the ASCII code points the class counts is left as it is,
+     * since a string of that many of it is made into itself: an ASCII code point is converted
+     * alone and composes with none beside it.
+     */
+    static boolean writesEveryCountOf(CodePointClass counted, CaseMapping through) {
+        if (through.equals(CaseMapping.NONE)) {
+            return true;
+        }
+        for (int member = 0; member <= 0x7F; member++) {
+            String own = Character.toString(member);
+            if (counted.contains(member) && own.equals(BoundUnderEvaluation.mapped(through, own))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -2595,7 +3374,18 @@ final class TermRealizations {
      * One kind of code point a string is written with: the code points standing in exactly the
      * same classes, and the ones of them it is written with, the first preferred.
      */
-    private record KindOfCodePoint(CodePoints held, List<Integer> writtenWith) {}
+    private record KindOfCodePoint(CodePoints held, List<Integer> writtenWith) {
+
+        /** The least code point of the kind, which is the least a code point of it adds. */
+        long least() {
+            return held.least();
+        }
+
+        /** The greatest code point of the kind, which is the most a code point of it adds. */
+        long most() {
+            return held.ranges().getLast().to();
+        }
+    }
 
     /**
      * The kinds of code point a string holding the numbers {@code wanted} asks of it is written
@@ -2608,8 +3398,9 @@ final class TermRealizations {
         List<CodePoints> by = new ArrayList<>();
         by.add(new CodePointClass.NotWhitespace().held());
         for (OfAString each : wanted) {
-            if (each.counted() != null && !by.contains(each.counted().held())) {
-                by.add(each.counted().held());
+            if (each.number() instanceof NumberOfAString.InAClass(CodePointClass counted, var _)
+                    && !by.contains(counted.held())) {
+                by.add(counted.held());
             }
         }
         List<CodePoints> ordered = new ArrayList<>(CodePointClass.toldApart(by));
@@ -2663,27 +3454,110 @@ final class TermRealizations {
         return text.codePoints().filter(counted::contains).count();
     }
 
+    /** The same, of what {@code through} makes of {@code text}: -1 where the run time has no
+     *  answer for it, which is a count no string is offered for. */
+    private static long countIn(CodePointClass counted, CaseMapping through, String text) {
+        String made = BoundUnderEvaluation.mapped(through, text);
+        return made == null ? -1 : countIn(counted, made);
+    }
+
     /** One number of a string asked for, with where it may be: what the demand admits and what the
-     *  rules leave of it on the way. */
-    private record OfAString(CodePointClass counted, Predicate<Place> holds, Tried tried) {}
+     *  rules leave of it on the way, and the ends of both together. */
+    private record OfAString(NumberOfAString number, NumericDomain.Bounds lies,
+                             Predicate<Place> holds, Tried tried) {}
 
     /**
-     * A string holding the numbers asked of it of each class's code points, and as many in all as
-     * the length asks.
+     * Which number of a string is asked for: how long it is, how many of its code points are in a
+     * class, or what they come to.
+     *
+     * <p>Told apart because they are not searched alike. The first two are counts: a string holds
+     * as many as it is written with, and to them the code points the same classes hold are one
+     * kind. What the code points come to is no count. Two code points of one kind come to two
+     * numbers, so it is reached by which code points of each kind are written and not by how many.
+     */
+    private sealed interface NumberOfAString {
+
+        record Length() implements NumberOfAString {}
+
+        /** How many code points of {@code counted} what {@code through} makes of the string holds.
+         *  Written by the code points of the string that the class counts, which is where it is
+         *  looked for and not what it is held to: a string is offered only as the answer reads. */
+        record InAClass(CodePointClass counted, CaseMapping through) implements NumberOfAString {
+
+            /** Whether this counts the answer of a conversion. */
+            boolean ofAnAnswer() {
+                return !through.equals(CaseMapping.NONE);
+            }
+        }
+
+        record CodePointSum() implements NumberOfAString {}
+
+        /** This number of {@code text}, as the language holds it. */
+        default long of(String text) {
+            return switch (this) {
+                case Length _ -> text.codePointCount(0, text.length());
+                case InAClass in -> countIn(in.counted(), in.through(), text);
+                case CodePointSum _ -> text.codePoints().asLongStream().sum();
+            };
+        }
+
+        /** Whether this counts the code points of {@code kind}, which every length does and no
+         *  sum. */
+        default boolean counts(KindOfCodePoint kind) {
+            return switch (this) {
+                case Length _ -> true;
+                case InAClass in -> in.counted().contains(kind.held().least());
+                case CodePointSum _ -> false;
+            };
+        }
+
+        /** The number of a string {@code term} is, which a group of a string's numbers holds and
+         *  nothing else does. */
+        static NumberOfAString of(NumericTerm term) {
+            return switch (term) {
+                case NumericTerm.TakenOf taken
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds -> new Length();
+                case NumericTerm.CodePointClassCount count ->
+                        new InAClass(count.counted(), count.through());
+                case NumericTerm.CodePointValueSum _ -> new CodePointSum();
+                case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _,
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->
+                        throw new IllegalStateException(
+                        term + " is no number a string is written for");
+            };
+        }
+    }
+
+    /**
+     * A string holding the numbers asked of its code points — how many of each class's, what they
+     * come to — and as many in all as the length asks.
      *
      * <p>Written out of how many there are of each kind of code point: the code points standing in
-     * the same classes, with whitespace a kind apart ({@link #kindsOfCodePoint}). Every number asked
-     * for is a sum of those, so a string is chosen by choosing them, and what is offered is read
-     * back through the one reader before it is — a string that does not answer every demand is not
-     * offered however the sums said it would.
+     * the same classes, with whitespace a kind apart ({@link #kindsOfCodePoint}). Every count asked
+     * for is a sum of those, so a string is chosen by choosing them; what the code points come to is
+     * then reached by moving code points inside their kind, which leaves every count where it was.
+     * What is offered is read back through the one reader before it is — a string that does not
+     * answer every demand is not offered however the counts said it would.
      *
      * <p><b>None where the demands cannot all be met, and not-walked where this did not look.</b>
      * Every number a demand admits is tried when the sets are small and every kind of code point
-     * is tried up to the largest of them, which is the whole of the question, so a search that
-     * found nothing there is a group no string answers. Where a set is larger than that the search
-     * is over some numbers, and what it did not find is a string this compiler did not write.
+     * is tried up to the largest of them, which is the whole of the question for counts, so a
+     * search that found nothing there is a group no string answers. Where a set is larger than
+     * that the search is over some numbers, and what it did not find is a string this compiler
+     * did not write.
+     *
+     * <p>What the code points come to is held to its demand by the counts of each kind, and not by
+     * numbers tried: so many code points of a kind come to no less than as many of its least and
+     * no more than as many of its greatest ({@link StringSearch#reaches}). Counts whose run misses
+     * every sum the demand admits are refused as a count is, and a search that refused every way
+     * of writing a string so is a proof — where the length is asked, since without it a string
+     * longer than any looked at could still reach the sum. Counts whose run holds a sum the moving
+     * did not reach are a string this compiler did not write, since the code points are moved a
+     * few of the ways there are.
      */
-    static Realization stringsHoldingTheirCounts(
+    static Realization stringsHoldingTheirNumbers(
             Map<RealizationTarget.OfANumber, Carrier> answeredOn, Type sourceType,
             SequencedMap<RealizationTarget, AskedAt> demands, SearchRegion within,
             RuleReadingContext reading) {
@@ -2707,25 +3581,62 @@ final class TermRealizations {
                 case null -> { }
             }
             NumericSet set = demand.walking();
-            NumericDomain.Bounds leaves = held;
-            Predicate<Place> holds = at -> set.holds(at, on) && leaves.admits(at);
-            Tried tried = wholeNumbers(set.extent(), holds, BigInteger.ZERO,
-                    BigInteger.valueOf(Integer.MAX_VALUE),
-                    CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
-            wanted.add(new OfAString(each.term() instanceof NumericTerm.CodePointClassCount count
-                    ? count.counted() : null, holds, tried));
+            // The ends the walk steps between are what the demand and the rules leave together,
+            // so numbers the rules leave out are never stepped through on the way to theirs.
+            NumericDomain.Bounds lies = set.extent().meet(held);
+            Predicate<Place> holds = at -> set.holds(at, on) && lies.admits(at);
+            NumberOfAString number = NumberOfAString.of(each.term());
+            // What code points come to runs as far as a whole number does, and a count no further
+            // than a string is long.
+            long upTo = number instanceof NumberOfAString.CodePointSum ? Long.MAX_VALUE
+                    : Integer.MAX_VALUE;
+            Tried tried = wholeNumbers(lies, holds, BigInteger.ZERO,
+                    BigInteger.valueOf(upTo), CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+            wanted.add(new OfAString(number, lies, holds, tried));
         }
         boolean wholeQuestion = walkIsOfTheWholeQuestion(demands.values());
+        // The code points told apart by what each class counts: how many of each kind a string
+        // holds.
+        List<KindOfCodePoint> written = kindsOfCodePoint(wanted);
+        long greatest = written.stream().mapToLong(KindOfCodePoint::most).max()
+                .orElse(Character.MAX_CODE_POINT);
         boolean everyNumberTried = true;
+        // The counts a string is written to have, and what its code points are moved to come to.
         List<Integer> numbers = new ArrayList<>();
+        List<Long> sums = new ArrayList<>();
+        boolean sumPastWhatIsWritten = false;
         for (OfAString each : wanted) {
-            everyNumberTried &= each.tried().rest() instanceof Remainder.Exhausted;
+            // A sum is held to its demand at every way of writing a string, by what the counts can
+            // come to, so the sums tried are where the moving aims and not the whole question.
+            everyNumberTried &= each.number() instanceof NumberOfAString.CodePointSum
+                    || each.tried().rest() instanceof Remainder.Exhausted;
             if (each.tried().numbers().isEmpty() && each.tried().rest()
                     instanceof Remainder.Exhausted) {
                 return new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
             }
             for (Place each2 : each.tried().numbers()) {
+                if (each.number() instanceof NumberOfAString.CodePointSum) {
+                    // A whole number from nought up to the most a long holds, which is the window
+                    // the sums were walked in; anything else is no sum a string is written for.
+                    if (!(each2 instanceof Count count) || !count.whole() || count.signum() < 0
+                            || count.at().compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) > 0) {
+                        continue;
+                    }
+                    long sum = count.at().longValue();
+                    // A string coming to it holds at least this many code points, none more than
+                    // the greatest any kind holds, which is a count it is written with. One longer
+                    // than a string is searched for is a number this does not write.
+                    long fewest = Math.ceilDiv(sum, greatest);
+                    if (fewest > CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL
+                            .maximum()) {
+                        sumPastWhatIsWritten = true;
+                        continue;
+                    }
+                    sums.add(sum);
+                    numbers.add((int) fewest);
+                    continue;
+                }
                 int count = CountDomain.asCount(each2);
                 if (count >= 0) {
                     numbers.add(count);
@@ -2737,9 +3648,6 @@ final class TermRealizations {
                 largest > CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL.maximum();
         boolean inFull = everyNumberTried && wholeQuestion && !pastWhatIsSearchedInFull;
 
-        // The code points told apart by what each class counts: how many of each kind a string
-        // holds.
-        List<KindOfCodePoint> written = kindsOfCodePoint(wanted);
         int kindsOfCodePoint = written.size();
         int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
         List<Integer> kinds = codePointsOfEachKind(numbers, inFull ? largest : -1,
@@ -2752,7 +3660,7 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        StringSearch search = new StringSearch(written, wanted,
+        StringSearch search = new StringSearch(written, wanted, sums,
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), steps);
         // The strings the type admits come first and are the only ones offered where any of them
         // answers every demand. Written ones stand in only where the type admits none that
@@ -2779,9 +3687,22 @@ final class TermRealizations {
         }
         // A search that looked at every way of writing a string there is, for every number the
         // demands admit, found no string: the one answer here that is about the demands and not
-        // about this compiler.
-        boolean everyWayLookedAt = inFull && kinds.size() == largest + 1
-                && search.looked() < steps && !search.leftUnwritten();
+        // about this compiler. Every count from nought to the largest is looked at where the counts
+        // tried run that far, which they do from nought without a gap, and a run starting longer
+        // than the largest is still one covering it. Where what the code points come to is asked,
+        // only with the length asked as well: the length bounds every kind, and a longer string is
+        // one no count looked at could rule out.
+        // The ways of writing a string count its code points kind by kind, which is not how the
+        // answer of a conversion holds a count, so a search over them looked at no more than some
+        // of the strings there are wherever one is asked.
+        boolean everyWayLookedAt = inFull && kinds.size() > largest
+                && wanted.stream().noneMatch(each -> each.number()
+                        instanceof NumberOfAString.InAClass in && in.ofAnAnswer())
+                && search.looked() < steps && !search.leftUnwritten()
+                && (wanted.stream().noneMatch(
+                        each -> each.number() instanceof NumberOfAString.CodePointSum)
+                    || wanted.stream().anyMatch(
+                        each -> each.number() instanceof NumberOfAString.Length));
         if (everyWayLookedAt) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -2791,13 +3712,13 @@ final class TermRealizations {
         // search was allowed.
         CompositionShortfall met = CompositionShortfall.NONE;
         for (OfAString each : wanted) {
-            met = met.and(shortfallOf(each.tried().rest()));
+            met = met.and(each.tried().rest().shortfall());
         }
-        if (pastWhatIsSearchedInFull) {
+        if (pastWhatIsSearchedInFull || sumPastWhatIsWritten) {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL)));
         }
-        if (search.looked() >= steps || (inFull && kinds.size() < largest + 1)) {
+        if (search.looked() >= steps || (inFull && kinds.size() <= largest)) {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
         }
@@ -2806,17 +3727,6 @@ final class TermRealizations {
         }
         return new Realization.Unexhausted(met.nothing() ? CompositionShortfall.writing(Set.of(
                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)) : met, null);
-    }
-
-    /** What a walk over numbers that ended short of the set says it was stopped by. */
-    private static CompositionShortfall shortfallOf(Remainder rest) {
-        return switch (rest) {
-            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
-            case Remainder.StoppedAt(CompositionBudget figure) ->
-                    CompositionShortfall.of(Set.of(figure));
-            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
-                    CompositionShortfall.writing(written);
-        };
     }
 
     /**
@@ -2856,8 +3766,21 @@ final class TermRealizations {
 
         private final List<KindOfCodePoint> written;
         private final List<OfAString> wanted;
+        /** What the code points are moved to come to, where that is asked; none where it is not. */
+        private final List<Long> sums;
+        /** Whether what the code points come to is asked, which is the demands' to say and not
+         *  whether any sum was tried. */
+        private final boolean asksASum;
         /** Whether each number wanted counts each kind of code point, asked once. */
         private final boolean[][] countedBy;
+        /** The least and the greatest sum each number wanted that is a sum admits, asked once;
+         *  nothing at the others. */
+        private final long[] sumFrom;
+        private final long[] sumTo;
+        /** The readable code points of each kind, and every code point of it: what a code point
+         *  is moved among to come to a sum, asked once. */
+        private final CodePoints[] readableOfEachKind;
+        private final CodePoints[] heldOfEachKind;
         /** How many ways of writing a kind the kind with the most of them has. */
         private final int ways;
         private final int most;
@@ -2866,17 +3789,37 @@ final class TermRealizations {
         private int looked;
         private boolean leftUnwritten;
 
-        StringSearch(List<KindOfCodePoint> written, List<OfAString> wanted, int most,
-                     int steps) {
+        StringSearch(List<KindOfCodePoint> written, List<OfAString> wanted, List<Long> sums,
+                     int most, int steps) {
             this.written = written;
             this.wanted = wanted;
+            this.sums = List.copyOf(sums);
             this.countedBy = new boolean[wanted.size()][written.size()];
             for (int number = 0; number < wanted.size(); number++) {
-                CodePointClass counted = wanted.get(number).counted();
                 for (int kind = 0; kind < written.size(); kind++) {
-                    countedBy[number][kind] = counted == null
-                            || counted.contains(written.get(kind).held().least());
+                    countedBy[number][kind] =
+                            wanted.get(number).number().counts(written.get(kind));
                 }
+            }
+            this.asksASum = wanted.stream()
+                    .anyMatch(each -> each.number() instanceof NumberOfAString.CodePointSum);
+            this.sumFrom = new long[wanted.size()];
+            this.sumTo = new long[wanted.size()];
+            for (int number = 0; number < wanted.size(); number++) {
+                // Clamped to the window the sums were walked in, which a demand reaching past it
+                // shares the part of.
+                BigInteger window = BigInteger.valueOf(Long.MAX_VALUE);
+                NumericDomain.Bounds lies = wanted.get(number).lies();
+                sumFrom[number] = startOf(lies.min(), BigInteger.ZERO).max(BigInteger.ZERO)
+                        .min(window).longValue();
+                sumTo[number] = endOf(lies.max(), window).max(BigInteger.valueOf(-1))
+                        .min(window).longValue();
+            }
+            this.readableOfEachKind = new CodePoints[written.size()];
+            this.heldOfEachKind = new CodePoints[written.size()];
+            for (int kind = 0; kind < written.size() && asksASum; kind++) {
+                heldOfEachKind[kind] = written.get(kind).held();
+                readableOfEachKind[kind] = heldOfEachKind[kind].and(READABLE);
             }
             this.ways = written.stream().mapToInt(each -> each.writtenWith().size()).max()
                     .orElse(0);
@@ -2922,7 +3865,9 @@ final class TermRealizations {
          * numbers are sums of the counts chosen, so most assignments are refused without a string
          * being written; one that is not is written with each code point of a kind in turn, since
          * which of them the others stand beside decides whether the text keeps the code points it
-         * was written with, and is read back as the language holds it.
+         * was written with, and is read back as the language holds it. Where what the code points
+         * come to is asked, each string written is moved to come to each number asked of it
+         * ({@link #comingTo}) before it is read back.
          */
         void over(int kind, int[] counts, List<Integer> kinds) {
             if (looked >= steps || found.size() >= most) {
@@ -2930,10 +3875,23 @@ final class TermRealizations {
             }
             if (kind == counts.length) {
                 looked++;
-                if (sumsAreAdmitted(counts)) {
+                if (countsAreAdmitted(counts)) {
                     boolean adopted = false;
                     for (int way = 0; way < ways && !adopted; way++) {
-                        adopted = adopt(writtenWith(counts, written, way));
+                        Laid laid = laidWith(counts, written, way);
+                        if (!asksASum) {
+                            adopted = adopt(laid.text());
+                        }
+                        for (long sum : sumsFor(laid)) {
+                            if (found.size() >= most) {
+                                break;
+                            }
+                            String moved = comingTo(laid, sum, readableOfEachKind);
+                            if (moved == null) {
+                                moved = comingTo(laid, sum, heldOfEachKind);
+                            }
+                            adopted |= moved != null && adopt(moved);
+                        }
                     }
                     leftUnwritten |= !adopted;
                 }
@@ -2946,11 +3904,44 @@ final class TermRealizations {
         }
 
         /**
-         * Whether every demand admits the number the counts chosen come to: the length is all of
-         * them, and a class holds the kinds of code point it counts.
+         * What the code points of {@code laid} are moved to come to: first the number each demand
+         * admits nearest what they come to as laid, which moves them least, and then the numbers
+         * tried of the demands. None where nothing asks it.
          */
-        private boolean sumsAreAdmitted(int[] counts) {
+        private Set<Long> sumsFor(Laid laid) {
+            Set<Long> out = new LinkedHashSet<>();
+            if (!asksASum) {
+                return out;
+            }
+            long asLaid = Arrays.stream(laid.codePoints()).asLongStream().sum();
             for (int number = 0; number < wanted.size(); number++) {
+                OfAString each = wanted.get(number);
+                if (each.number() instanceof NumberOfAString.CodePointSum
+                        && sumFrom[number] <= sumTo[number]) {
+                    long nearest = Math.clamp(asLaid, sumFrom[number], sumTo[number]);
+                    if (each.holds().test(Count.of(nearest))) {
+                        out.add(nearest);
+                    }
+                }
+            }
+            out.addAll(sums);
+            return out;
+        }
+
+        /**
+         * Whether every number asked admits what the counts chosen come to: the length is all of
+         * them, a class holds the kinds of code point it counts, and what the code points come to
+         * is some sum between as many of each kind's least and as many of its greatest
+         * ({@link #reaches}). Which of those sums is asked of the string once it is written.
+         */
+        private boolean countsAreAdmitted(int[] counts) {
+            for (int number = 0; number < wanted.size(); number++) {
+                if (wanted.get(number).number() instanceof NumberOfAString.CodePointSum) {
+                    if (!reaches(counts, number)) {
+                        return false;
+                    }
+                    continue;
+                }
                 long sum = 0;
                 for (int kind = 0; kind < counts.length; kind++) {
                     if (countedBy[number][kind]) {
@@ -2963,26 +3954,133 @@ final class TermRealizations {
             }
             return true;
         }
+
+        /**
+         * Whether a string of {@code counts} of each kind can come to some sum the {@code number}-th
+         * demand admits: its code points come to no less than as many of each kind's least, and no
+         * more than as many of its greatest. A string whose run misses the demand's has no code
+         * points that come to it, however they are chosen, so refusing it is a proof; one whose
+         * run meets it may still miss every sum, where the kinds have gaps.
+         */
+        private boolean reaches(int[] counts, int number) {
+            long least = 0;
+            long greatest = 0;
+            for (int kind = 0; kind < counts.length; kind++) {
+                least += counts[kind] * written.get(kind).least();
+                greatest += counts[kind] * written.get(kind).most();
+            }
+            return least <= sumTo[number] && greatest >= sumFrom[number];
+        }
     }
 
-    /** The string with {@code counts[i]} code points of each kind in turn, each written with the
-     *  {@code way}-th code point of its kind, or its last where it has fewer. */
-    private static String writtenWith(int[] counts, List<KindOfCodePoint> written, int way) {
-        StringBuilder out = new StringBuilder();
-        for (int at = 0; at < written.size(); at++) {
-            List<Integer> with = written.get(at).writtenWith();
-            int codePoint = with.get(Math.min(way, with.size() - 1));
-            out.append(new String(Character.toChars(codePoint)).repeat(counts[at]));
+    /**
+     * The code points of a string as they are laid, before the language holds the text, with the
+     * kind each was written as.
+     */
+    private record Laid(int[] codePoints, int[] kinds) {
+
+        String text() {
+            return new String(codePoints, 0, codePoints.length);
         }
-        return out.toString();
+    }
+
+    /** {@code counts[i]} code points of each kind in turn, each written with the {@code way}-th
+     *  code point of its kind, or its last where it has fewer. */
+    private static Laid laidWith(int[] counts, List<KindOfCodePoint> written, int way) {
+        int length = Arrays.stream(counts).sum();
+        int[] codePoints = new int[length];
+        int[] kinds = new int[length];
+        int at = 0;
+        for (int kind = 0; kind < written.size(); kind++) {
+            List<Integer> with = written.get(kind).writtenWith();
+            int codePoint = with.get(Math.min(way, with.size() - 1));
+            for (int each = 0; each < counts[kind]; each++, at++) {
+                codePoints[at] = codePoint;
+                kinds[at] = kind;
+            }
+        }
+        return new Laid(codePoints, kinds);
+    }
+
+    /**
+     * {@code laid} with one or two of its code points moved, each to another of its own kind that
+     * {@code heldOfEachKind} holds, so that together they come to {@code sum} — or null where
+     * moving that few does not.
+     *
+     * <p>Inside the kind, so every count the string was laid for stays what it was: a kind is the
+     * code points every class counted holds alike. One moved first, as far as what is short; then
+     * each in turn as near as its kind lets to what is still short, until nothing is, so a sum
+     * past what one code point holds is reached by as many as it takes. Which is a few of the
+     * strings that come to the sum and claimed to be no more, which is why a search asking for one
+     * never concludes there is none.
+     *
+     * <p>A kind is laid as one code point side by side ({@link #laidWith}), so moving one alone
+     * the first of a kind answers for every other of it.
+     */
+    private static String comingTo(Laid laid, long sum, CodePoints[] heldOfEachKind) {
+        int[] codePoints = laid.codePoints();
+        int[] kinds = laid.kinds();
+        long owed = sum - Arrays.stream(codePoints).asLongStream().sum();
+        if (owed == 0) {
+            return laid.text();
+        }
+        List<Integer> firsts = new ArrayList<>();
+        for (int at = 0; at < codePoints.length; at++) {
+            if (at == 0 || kinds[at] != kinds[at - 1]) {
+                firsts.add(at);
+            }
+        }
+        for (int one : firsts) {
+            long to = codePoints[one] + owed;
+            if (writable(heldOfEachKind[kinds[one]], to)) {
+                int[] moved = codePoints.clone();
+                moved[one] = (int) to;
+                return new String(moved, 0, moved.length);
+            }
+        }
+        int[] moved = codePoints.clone();
+        long still = owed;
+        for (int at = 0; at < moved.length && still != 0; at++) {
+            CodePoints held = heldOfEachKind[kinds[at]];
+            long to = moved[at] + still;
+            int near = writable(held, to) ? (int) to : nearestIn(held, to);
+            if (near >= 0) {
+                still -= near - moved[at];
+                moved[at] = near;
+            }
+        }
+        return still == 0 ? new String(moved, 0, moved.length) : null;
+    }
+
+    /** The code points a person reading a row reads as what they are, which a string coming to a
+     *  sum is moved among first: the printable ones of ASCII, the space, and the ideographs of
+     *  the block that has no gaps. */
+    private static final CodePoints READABLE = CodePoints.between(' ', '~')
+            .or(CodePoints.between(FIRST_IDEOGRAPH, LAST_IDEOGRAPH));
+
+    /** Whether {@code held} has {@code codePoint}. A set of code points holds no surrogate, so
+     *  what it has is a code point a string holds. */
+    private static boolean writable(CodePoints held, long codePoint) {
+        return codePoint >= 0 && codePoint <= Character.MAX_CODE_POINT
+                && held.has((int) codePoint);
+    }
+
+    /** The code point of {@code held} nearest {@code wanted}, or -1 where it has none. */
+    private static int nearestIn(CodePoints held, long wanted) {
+        long best = -1;
+        for (CodePoints.Range range : held.ranges()) {
+            long at = Math.clamp(wanted, range.from(), range.to());
+            if (best < 0 || Math.abs(at - wanted) < Math.abs(best - wanted)) {
+                best = at;
+            }
+        }
+        return (int) best;
     }
 
     /** Whether the string reads back as a number every demand admits. */
     private static boolean answersEvery(String written, List<OfAString> wanted) {
         for (OfAString each : wanted) {
-            long read = each.counted() == null ? written.codePointCount(0, written.length())
-                    : countIn(each.counted(), written);
-            if (!each.holds().test(Count.of(read))) {
+            if (!each.holds().test(Count.of(each.number().of(written)))) {
                 return false;
             }
         }
@@ -3050,7 +4148,7 @@ final class TermRealizations {
      * Every hour goes with every minute, so a number admitted for one part is admitted whatever the
      * other parts came to — which is why this needs no search across them and why a part with
      * nothing admitted is a time nothing answers rather than a combination this did not find. The
-     * parts of a date are not like this, and {@link #onThoseParts} is where that is answered.
+     * parts of a date are not like this, and {@link #onMovedDates} is where that is answered.
      *
      * <p>At least one part, which both callers hold to: a group of them says which parts it is for
      * ({@link JointBuilder.AtThoseTimeParts}) and a single number is the part it is of.
@@ -3096,130 +4194,12 @@ final class TermRealizations {
                 : Realization.Built.whole(List.of(standing));
     }
 
-    /**
-     * A date whose given part stands at that number, with the parts beside it at the first they run
-     * from.
-     *
-     * <p>One of the many, as the time above offers one of the many. Every date in the year answers
-     * the same year, and what this owes is that what it offers reads back — not that it enumerates
-     * the dates that would. The first of January is the plain choice, and it is a choice about which
-     * value to write down rather than anything the model said.
-     *
-     * <p>A day of the month is offered in the longest month there is, so every day a date can fall
-     * on is a day of the one this writes. Offered in a short month, the last days of the long ones
-     * would be days no date has, and a rule about the thirty-first would have no witness for a
-     * reason that is about this choice rather than about the calendar.
-     *
-     * <p>At least one part, as the time above has: a group says which parts it is for
-     * ({@link JointBuilder.OnThoseDateParts}) and a single number is the part it is of.
-     *
-     * <p>Whether a date can have the part at all is asked of the calendar and not of the bound the
-     * operation declares. A bound is what the model may assume of an answer; what dates there are is
-     * what a witness can be built from, and reading the second off the first would make a bound
-     * loosened by hand into dates that cannot be written.
-     */
-    private static Realization onThoseParts(Map<TakenAs.DatePart, NumericSet> parts,
-                                            Type sourceType, Carrier observed,
-                                            RuleReadingSource ruleSource) {
-        if (observed == null) {
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-        }
-        Search found = dateOn(parts, observed);
-        if (found.on() == null) {
-            // No date has parts the rules all admit. Which is a statement about the calendar where
-            // every combination was looked at, and a statement about this compiler where it was
-            // not — and the two are not the same thing to tell an author.
-            return found.everyOne()
-                    ? new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Stopped(CompositionShortfall.of(
-                            Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
-        }
-        FixtureTemplate standing = WornNames.under(
-                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
-                        ruleSource.kinds(), ruleSource.sums()).wrappers(),
-                FixtureTemplate.on(observed, Dates.dayOf(found.on()),
-                        ruleSource.symbols().scope()::reach),
-                ruleSource);
-        return standing == null
-                ? new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : Realization.Built.whole(List.of(standing));
-    }
-
-    /**
-     * The date this offers for those parts standing at those numbers, or null where no date has
-     * them.
-     *
-     * <p>Asked of the calendar rather than tried and caught. What a year, a month and a day run
-     * between is something {@code java.time} answers, and building a date to find out whether one
-     * could be built is asking a question by reading the exception from the answer.
-     *
-     * <p><b>A part nobody asked for stands at the value that rules out the fewest of the parts that
-     * were asked for.</b> The parts of a date are not independent the way the parts of a time are:
-     * how far the days run depends on the month, and February's length depends on the year. So a
-     * value chosen here for a part nobody asked for is not merely a value that part can take — a
-     * date exists for every one of those — it is the one that leaves every combination the calendar
-     * admits still writable. The longest month, and a year whose February is a day longer.
-     *
-     * <p>Chosen for a part alone, each of them would be right and the pair would not: a month and a
-     * day asked for together would be offered in whichever year the month-alone case happened to
-     * name, and the twenty-ninth of February would be a day the calendar has that nothing here
-     * writes.
-     *
-     * <p>How far the days run is asked of the month the date is actually built in, and not of how
-     * far a day of any month can run. Where no month was asked for that is the longest there is, so
-     * every day a date can fall on is a day of the one this writes; where one was, the days are
-     * that month's and a rule about the thirty-first of a short one has no witness because the
-     * calendar has none.
-     *
-     * <p><b>Solved over the sets and not at one number of each.</b> The parts constrain each other,
-     * so a combination the calendar refuses says nothing about the combinations beside it: the
-     * second of February is a date nothing writes and the thirtieth of March is one that is
-     * written, and both stand at a month at or after February and a day at or after the thirtieth.
-     * Read at one number apiece, the first of those would be the answer for the pair of sets, and
-     * a report would say the model asks for a date that does not exist.
-     *
-     * <p>The months and the days are walked to their ends, which is what makes an answer of nothing
-     * a statement about the calendar. The years are not — there are more of them than anything here
-     * will try — so a search that walked some of them says so, and the caller carries that out as a
-     * figure rather than as an answer about the model.
-     */
-    private static Search dateOn(Map<TakenAs.DatePart, NumericSet> parts, Carrier observed) {
-        // The years are more than anything here walks, so what comes back says whether it was all
-        // of them; the months and the days are as many as the calendar has, so walking their window
-        // is walking them.
-        Tried years = parts.containsKey(TakenAs.DatePart.YEAR)
-                ? wholeNumbers(parts.get(TakenAs.DatePart.YEAR), observed,
-                        java.time.LocalDate.MIN.getYear(), java.time.LocalDate.MAX.getYear(),
-                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum())
-                : Tried.allOf(List.of(Count.of(BigDecimal.valueOf(A_LEAP_YEAR))));
-        List<Place> months = numbersOf(parts, TakenAs.DatePart.MONTH, observed,
-                MONTHS_A_YEAR_HAS, A_LONGEST_MONTH);
-        List<Place> days = numbersOf(parts, TakenAs.DatePart.DAY, observed,
-                DAYS_THE_LONGEST_MONTH_HAS, FIRST_OF_THE_MONTH);
-        boolean everyOne = years.rest() instanceof Remainder.Exhausted;
-        for (Place year : years.numbers()) {
-            for (Place month : months) {
-                java.time.YearMonth in = java.time.YearMonth.of(
-                        whole(year), whole(month));
-                for (Place day : days) {
-                    if (whole(day) <= in.lengthOfMonth()) {
-                        return new Search(in.atDay(whole(day)), everyOne);
-                    }
-                }
-            }
-        }
-        return new Search(null, everyOne);
-    }
-
     /** A date this composed for those parts, or the reason there is none to report with.
      *
-     *  @param on       the date, or null where the walk below found none
+     *  @param on       the date, or null where the walk found none
      *  @param everyOne whether the walk went over every combination the parts admit, which is what
      *                  tells a calendar that has no such date from a search that stopped short */
-    record Search(java.time.LocalDate on, boolean everyOne) {}
+    record Search(LocalDate on, boolean everyOne) {}
 
     /**
      * One part of a date asked of it, after the date was moved.
@@ -3230,25 +4210,75 @@ final class TermRealizations {
      */
     record DatePartAsk(TakenAs.DatePart part, DateTranslation moved, NumericSet wanted) {
 
-        /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
-         *  whose moved date has a part the rules leave. */
-        boolean admits(long day, Carrier observed) {
-            return moved.definedAt(day)
-                    && wanted.holds(Count.of(partOf(part, day + moved.offsetDays())), observed);
+        /** This ask, ready to be put to the days. */
+        PutToTheDays putToTheDays(Carrier observed) {
+            return switch (part) {
+                case YEAR -> new PutToTheDays(this,
+                        year -> wanted.holds(Count.of(year), observed), false);
+                case MONTH -> tabled(MONTHS_A_YEAR_HAS, observed);
+                case DAY -> tabled(DAYS_THE_LONGEST_MONTH_HAS, observed);
+            };
         }
 
-        /** The days, among those after {@code from} up to {@code to}, at which this ask is
-         *  answered otherwise than on the day before: where the move stops being defined, and where
-         *  the part of the moved date starts a new run. */
+        private PutToTheDays tabled(int most, Carrier observed) {
+            BitSet left = new BitSet(most + 1);
+            for (int value = 1; value <= most; value++) {
+                left.set(value, wanted.holds(Count.of(value), observed));
+            }
+            return new PutToTheDays(this, left::get, left.isEmpty());
+        }
+    }
+
+    /**
+     * One ask, ready to be put to the days: which values of its part the set leaves, answered at
+     * once.
+     *
+     * <p>A month or a day of the month takes so few values that the set is asked of each of them
+     * once and each day reads the answer off the table; a walk over a cycle of the calendar would
+     * otherwise ask the set again at every day of four hundred years. A year runs further than a
+     * table holds and is asked of the set as it is reached, which is once a year.
+     *
+     * @param ask           what is asked
+     * @param leaves        whether the set leaves a value of the part
+     * @param leavesNothing whether it leaves no value at all, which only a table can say before a
+     *                      walk
+     */
+    record PutToTheDays(DatePartAsk ask, IntPredicate leaves, boolean leavesNothing) {
+
+        /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
+         *  whose moved date has a part the rules leave. */
+        boolean admits(long day) {
+            DateTranslation moved = ask.moved();
+            return moved.definedAt(day) && leaves.test(partOf(ask.part(), day + moved.offsetDays()));
+        }
+
+        /**
+         * The days, among those after {@code from} up to {@code to}, at which this ask is answered
+         * otherwise than on the day before: where the move starts or stops being defined, and where
+         * the part of the moved date starts a new run at a value the set answers otherwise than the
+         * value before it.
+         *
+         * <p>Every part starts a new run where its value moves, a day of the month every day. The
+         * answer turns only where the set's answer for the new value differs from its answer for
+         * the old one, and those are the days cut at, so a set that leaves one day of the month
+         * cuts a month in at most three and not in thirty-one.
+         */
         void cutsInto(SortedSet<Long> cuts, long from, long to) {
+            DateTranslation moved = ask.moved();
             for (long edge : new long[] {moved.first(), moved.last() + 1}) {
                 addIfBetween(cuts, edge, from, to);
             }
+            long low = clamped(from + moved.offsetDays());
             long high = clamped(to + moved.offsetDays());
-            for (OptionalLong start = nextStartAfter(part, clamped(from + moved.offsetDays()));
+            boolean before = leaves.test(partOf(ask.part(), low));
+            for (OptionalLong start = nextStartAfter(ask.part(), low);
                     start.isPresent() && start.getAsLong() <= high;
-                    start = nextStartAfter(part, start.getAsLong())) {
-                addIfBetween(cuts, start.getAsLong() - moved.offsetDays(), from, to);
+                    start = nextStartAfter(ask.part(), start.getAsLong())) {
+                boolean now = leaves.test(partOf(ask.part(), start.getAsLong()));
+                if (now != before) {
+                    addIfBetween(cuts, start.getAsLong() - moved.offsetDays(), from, to);
+                }
+                before = now;
             }
         }
 
@@ -3276,14 +4306,19 @@ final class TermRealizations {
         if (day >= LocalDate.MAX.toEpochDay()) {
             return OptionalLong.empty();
         }
-        LocalDate date = LocalDate.ofEpochDay(day);
         return switch (part) {
-            case YEAR -> date.getYear() == LocalDate.MAX.getYear() ? OptionalLong.empty()
-                    : OptionalLong.of(LocalDate.of(date.getYear() + 1, 1, 1).toEpochDay());
-            case MONTH -> date.getYear() == LocalDate.MAX.getYear() && date.getMonthValue() == 12
-                    ? OptionalLong.empty()
-                    : OptionalLong.of(date.withDayOfMonth(1).plusMonths(1).toEpochDay());
-            // Every day starts a new day of its month.
+            case YEAR -> {
+                int year = LocalDate.ofEpochDay(day).getYear();
+                yield year == LocalDate.MAX.getYear() ? OptionalLong.empty()
+                        : OptionalLong.of(LocalDate.of(year + 1, 1, 1).toEpochDay());
+            }
+            case MONTH -> {
+                LocalDate date = LocalDate.ofEpochDay(day);
+                yield date.getYear() == LocalDate.MAX.getYear() && date.getMonthValue() == 12
+                        ? OptionalLong.empty()
+                        : OptionalLong.of(date.withDayOfMonth(1).plusMonths(1).toEpochDay());
+            }
+            // Every day starts a new day of its month, and which day that is needs no date made.
             case DAY -> OptionalLong.of(day + 1);
         };
     }
@@ -3307,13 +4342,21 @@ final class TermRealizations {
      * <p>Solved over the days and not over the parts. Every ask is a condition on the date the
      * program was given: the move is defined there, and the part of the moved date is one the rules
      * leave. What a group asks of one date is the meeting of those conditions, so a year after one
-     * move, a year after another and a month with no move are one question and not three.
+     * move, a year after another and a month with no move are one question and not three. A date
+     * nobody moved is a date moved by nothing, and its parts are asked the same way.
      *
-     * <p>The years of the first year asked for are walked, and the days of the run each of them is
-     * are cut where any ask is answered otherwise than on the day before: between two cuts nothing
-     * the group asks changes, so the first day of each is every day of it. What this walks is
-     * therefore every combination there is, and an answer of nothing is a statement about the
-     * calendar, as it is for the parts of a date.
+     * <p>The parts constrain each other — how far the days run depends on the month, and
+     * February's length on the year — and walking the days is what keeps that the calendar's:
+     * every date walked is one there is, so no combination is offered that no date has, and none
+     * the calendar has is missed for want of a part nobody asked for standing where it allows it.
+     * Whether a date can have a part is asked of the calendar and not of the bound the operation
+     * declares, which is what the model may assume of an answer and not what a witness is built of.
+     *
+     * <p>The years of the first year asked for are walked, or one cycle of the calendar where no
+     * year is asked for ({@link #dateAnsweringMovedParts}), and the days walked are cut where any
+     * ask is answered otherwise than on the day before: between two cuts nothing the group asks
+     * changes, so the first day of each is every day of it. What this walks is therefore every
+     * combination there is, and an answer of nothing is a statement about the calendar.
      */
     private static Realization onMovedDates(List<DatePartAsk> asks, Type sourceType,
                                             Carrier observed, RuleReadingSource ruleSource) {
@@ -3342,22 +4385,34 @@ final class TermRealizations {
     }
 
     /**
-     * The first date every one of {@code asks} admits, walking the years of the first year asked
-     * for.
+     * The first date every one of {@code asks} admits.
      *
-     * <p>At least one of the asks is for a year, since that is what bounds the walk: the dates of
-     * a year are a run, and the parts of a date are not.
+     * <p>Where a year is asked for, the years the first such ask leaves are walked, and the dates
+     * whose moved date is in one of them are a run of days.
+     *
+     * <p>Where none is, one cycle of the calendar is walked. The Gregorian calendar repeats every
+     * four hundred years, and those are a whole number of days, so a month or a day of a date moved
+     * by a count of days is the same at every date a cycle away. Every combination the asks can
+     * meet at is therefore met within one cycle of days they are all defined at, or within all of
+     * those days where there are fewer than a cycle of them, and the walk is over every one there
+     * is.
      */
     static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed) {
+        List<PutToTheDays> put = asks.stream().map(each -> each.putToTheDays(observed)).toList();
+        if (put.stream().anyMatch(PutToTheDays::leavesNothing)) {
+            return new Search(null, true);
+        }
         DatePartAsk lead = asks.stream().filter(each -> each.part() == TakenAs.DatePart.YEAR)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException(
-                        "a date answering moved parts is walked by the years asked of it"));
+                .findFirst().orElse(null);
+        if (lead == null) {
+            return new Search(dateInOneCycle(put), true);
+        }
         Tried years = wholeNumbers(lead.wanted(), observed,
                 LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
         boolean everyOne = years.rest() instanceof Remainder.Exhausted;
         for (Place year : years.numbers()) {
-            LocalDate on = dateInTheRunOf(lead, whole(year), asks, observed);
+            LocalDate on = dateInTheRunOf(lead, whole(year), put);
             if (on != null) {
                 return new Search(on, everyOne);
             }
@@ -3369,46 +4424,74 @@ final class TermRealizations {
      * The first date the lead ask's moved date is in {@code year} at, and every other ask admits,
      * or null where there is none.
      */
-    private static LocalDate dateInTheRunOf(DatePartAsk lead, int year, List<DatePartAsk> asks,
-                                            Carrier observed) {
+    private static LocalDate dateInTheRunOf(DatePartAsk lead, int year, List<PutToTheDays> asks) {
         DateTranslation moved = lead.moved();
         long from = Math.max(moved.first(),
                 LocalDate.of(year, 1, 1).toEpochDay() - moved.offsetDays());
         long to = Math.min(moved.last(),
                 LocalDate.of(year, 12, 31).toEpochDay() - moved.offsetDays());
-        if (from > to) {
+        return from > to ? null : firstAdmittedIn(from, to, asks);
+    }
+
+    /**
+     * The first date of a cycle of the calendar that every one of {@code asks} admits, or null where
+     * there is none.
+     *
+     * <p>The cycle is the one from {@link #A_CYCLE_STARTS} where every ask is defined there, and
+     * otherwise the nearest one that is. It is walked a year of the date at a time, so that a date
+     * found early is found without cutting the rest of the cycle.
+     */
+    private static LocalDate dateInOneCycle(List<PutToTheDays> asks) {
+        long first = asks.stream().mapToLong(each -> each.ask().moved().first()).max()
+                .orElseThrow();
+        long last = asks.stream().mapToLong(each -> each.ask().moved().last()).min()
+                .orElseThrow();
+        if (first > last) {
             return null;
         }
-        // The run is at most a year of days, and each ask is answered the same way between two of
-        // the days it changes at, so the first day of each stretch is every day of it.
+        long from = Math.max(first, Math.min(A_CYCLE_STARTS.toEpochDay(),
+                last - DAYS_OF_A_CYCLE + 1));
+        long to = Math.min(last, from + DAYS_OF_A_CYCLE - 1);
+        for (long start = from; start <= to; ) {
+            long end = Math.min(to,
+                    LocalDate.of(LocalDate.ofEpochDay(start).getYear(), 12, 31).toEpochDay());
+            LocalDate found = firstAdmittedIn(start, end, asks);
+            if (found != null) {
+                return found;
+            }
+            start = end + 1;
+        }
+        return null;
+    }
+
+    /** The first date from {@code from} to {@code to} that every one of {@code asks} admits, or
+     *  null where there is none. The days are a year of them or fewer, which is what keeps the cuts
+     *  of a day of the month few. */
+    private static LocalDate firstAdmittedIn(long from, long to, List<PutToTheDays> asks) {
+        assert to - from < 366 : "a run of days walked at once is a year or less: " + from
+                + " to " + to;
+        // Each ask is answered the same way between two of the days it changes at, so the first
+        // day of each stretch is every day of it.
         TreeSet<Long> cuts = new TreeSet<>();
         cuts.add(from);
-        for (DatePartAsk each : asks) {
+        for (PutToTheDays each : asks) {
             each.cutsInto(cuts, from, to);
         }
         for (long day : cuts) {
-            if (asks.stream().allMatch(each -> each.admits(day, observed))) {
+            if (admitsEvery(asks, day)) {
                 return LocalDate.ofEpochDay(day);
             }
         }
         return null;
     }
 
-    /**
-     * The numbers a part may stand at, in the order they are to be tried.
-     *
-     * <p>What the part runs between is the calendar's and is handed in; which of those the rules
-     * admit is the set's. A part nobody asked for stands at the one value that rules out the fewest
-     * of the parts that were asked for, which is a choice about the date to write and is why the
-     * fallback is a number rather than the whole range.
-     */
-    private static List<Place> numbersOf(Map<TakenAs.DatePart, NumericSet> parts,
-                                         TakenAs.DatePart part, Carrier observed,
-                                         int asFarAs, int whenUnasked) {
-        NumericSet wanted = parts.get(part);
-        return wanted == null
-                ? List.of(Count.of(BigDecimal.valueOf(whenUnasked)))
-                : wholeNumbers(wanted, observed, 1, asFarAs, asFarAs).numbers();
+    private static boolean admitsEvery(List<PutToTheDays> asks, long day) {
+        for (PutToTheDays each : asks) {
+            if (!each.admits(day)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** {@code at} as a whole number, which every {@link #wholeNumbers} search this is asked of hands
@@ -3424,29 +4507,22 @@ final class TermRealizations {
         }
     }
 
-    /**
-     * The year a month or a day is offered in.
-     *
-     * <p>Which year it is says nothing about a month on its own, and says one thing about a month
-     * and a day together: February is a day longer in a leap year, so this is one. Offered in a
-     * year that is not, the twenty-ninth of February would be a day the calendar has and no witness
-     * could be written for.
-     */
-    private static final int A_LEAP_YEAR = 2000;
-
-    /** January, which has as many days as any month has, so every day-of-month a date can fall on is
-     *  a day of this one. */
-    private static final int A_LONGEST_MONTH = 1;
-
-    /** The day a year or a month is offered on. */
-    private static final int FIRST_OF_THE_MONTH = 1;
-
     /** How far the months run, which is what a month may stand at whatever the rules leave it. */
     private static final int MONTHS_A_YEAR_HAS = 12;
 
     /** How far the days run in the longest month there is, which is as far as a day of any date
-     *  runs. How far they run in the month a date is actually built in is asked of that month. */
+     *  runs. Which of them a date has is the date's, read off it where it is walked to. */
     private static final int DAYS_THE_LONGEST_MONTH_HAS = 31;
+
+    /** How many days the Gregorian calendar takes to repeat: four hundred years, of which ninety-seven
+     *  are leap years. */
+    private static final long DAYS_OF_A_CYCLE = 400L * 365 + 97;
+
+    /** Where the cycle walked for a month or a day of a moved date starts, where every ask is
+     *  defined there. Any day starts a cycle; this one is the first of a leap year, so the dates
+     *  offered are near the ones a reader writes, and a month and a day asked of a date as it
+     *  stands are met in the first year walked, the twenty-ninth of February among them. */
+    private static final LocalDate A_CYCLE_STARTS = LocalDate.of(2000, 1, 1);
 
     /**
      * One value, wearing every name the position declares, or the reason there is none.

@@ -232,7 +232,6 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
 
     private static ElementBindings elements(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         Bodies.CheckedBody checked = compilation.db().ask(new Bodies.CheckedBehavior(
                 compilation.modules().get(0), behavior)).value();
         return checked.elements();

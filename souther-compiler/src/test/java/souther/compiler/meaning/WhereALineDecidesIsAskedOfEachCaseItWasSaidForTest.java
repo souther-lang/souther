@@ -7,12 +7,15 @@ import souther.compiler.partition.CompositionBudget;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which of the cases a case said for several stands for a line decides in is asked of each of
@@ -21,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
  *
  * <p>Put to the asking with the answer for each condition written here, so what is checked is what
  * the asking makes of the answers: which conditions it asks, which cases it keeps, when it stops,
- * and what it says when a figure stopped it. Whether a region holds rows on both sides of a line is
- * {@code Cutting.crossedIn}'s, and is asked of models elsewhere.
+ * and what it says when a figure stopped it. Whether regions hold rows on both sides of a line is
+ * {@code Cutting.Sides}'s, and is asked of models elsewhere.
  */
 class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
 
@@ -131,6 +134,230 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     void whereEveryCaseDividesRowsTheCaseIsKeptAsItWasSaid() {
         assertEquals(new CasesOfALineAsked.Found(List.of(new DecidingCase(SAID, FOUR)), Set.of()),
                 new Asking(_ -> true).of(FOUR));
+    }
+
+    /** Whether {@code condition} can hold: no part of it is the denial of another. */
+    private static boolean consistent(Proposition condition) {
+        if (condition instanceof Proposition.Always always) {
+            return always.holds();
+        }
+        List<Proposition> parts = condition instanceof Proposition.All all
+                ? all.parts() : List.of(condition);
+        return parts.stream().noneMatch(part -> parts.contains(part.denied()));
+    }
+
+    /**
+     * What every case a line is asked in holds is chosen before the alternatives are, so that an
+     * alternative contradicting it is given up where it is met. Chosen after them, the
+     * contradiction is met once every alternative of every choice has been walked to, and the
+     * asking is as long as all the ways of choosing and not as long as the ones that can hold.
+     *
+     * <p>Six choices of {@code c} or not {@code c}, with three of the six held beside them, are
+     * eight cases and not sixty-four: the three choices the held parts settle are not walked both
+     * ways to the end.
+     */
+    @Test
+    void whatEveryCaseHoldsIsChosenBeforeTheAlternativesAreWalked() {
+        int choices = 6;
+        int held = 3;
+        List<DecidingCase.Cases> factors = new ArrayList<>();
+        for (int at = 0; at < choices; at++) {
+            Proposition yes = truth("c" + at);
+            factors.add(new DecidingCase.Cases.EachOf(List.of(one(yes), one(yes.denied()))));
+        }
+        for (int at = 0; at < held; at++) {
+            factors.add(one(truth("c" + at)));
+        }
+        Asking asking = new Asking(WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest::consistent);
+
+        CasesOfALineAsked.Found found = asking.of(new DecidingCase.Cases.Together(factors));
+
+        assertEquals(1 << (choices - held), found.decidesIn().size(),
+                "a case for each way of choosing the three left open");
+        assertEquals(Set.of(), found.notWorkedOut());
+        assertEquals(24, asking.asked().size(),
+                "some one holding, the three held, each of the three they settle both ways, and"
+                        + " the tree of the three left open");
+    }
+
+    /** The parts {@code condition} is the conjunction of. */
+    private static List<Proposition> partsOf(Proposition condition) {
+        return condition instanceof Proposition.All all ? all.parts() : List.of(condition);
+    }
+
+    /**
+     * The cases kept are the ones that hold, wherever among the choices the parts every case holds
+     * are written: before them, between them, or after. A conjunction is the same conjunction
+     * whichever part was chosen first, so the order of choosing is not a thing a case can be told
+     * by.
+     */
+    @Test
+    void theCasesKeptDoNotDependOnWhereTheHeldPartsAreWritten() {
+        Proposition[] yes = {truth("c0"), truth("c1"), truth("c2")};
+        List<DecidingCase.Cases> written = List.of(
+                one(yes[0]),
+                new DecidingCase.Cases.EachOf(List.of(one(yes[0]), one(yes[0].denied()))),
+                one(yes[1]),
+                new DecidingCase.Cases.EachOf(List.of(one(yes[1]), one(yes[1].denied()))),
+                new DecidingCase.Cases.EachOf(List.of(one(yes[2]), one(yes[2].denied()))),
+                one(yes[2]));
+
+        Set<Proposition> every = new LinkedHashSet<>();
+        Set<Proposition> expected = new LinkedHashSet<>();
+        for (int mask = 0; mask < 8; mask++) {
+            List<Proposition> chosen = new ArrayList<>();
+            for (int at = 0; at < 3; at++) {
+                chosen.add(yes[at]);
+                chosen.add((mask >> at & 1) == 0 ? yes[at] : yes[at].denied());
+            }
+            Proposition all = Proposition.all(chosen);
+            every.add(all);
+            if (consistent(all)) {
+                expected.add(all);
+            }
+        }
+        DecidingCase.Cases together = new DecidingCase.Cases.Together(written);
+
+        Asking asking = new Asking(WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest::consistent);
+        CasesOfALineAsked.Found found = asking.of(together);
+
+        assertEquals(expected, found.decidesIn().stream()
+                .map(DecidingCase::condition).collect(Collectors.toSet()),
+                "the cases that can hold, as the conjunction of what each chose and what every"
+                        + " case holds");
+        assertEquals(Set.of(), found.notWorkedOut());
+
+        CasesOfALineAsked.Atoms<Proposition> atoms =
+                CasesOfALineAsked.atomsOf(new DecidingCase(SAID, together), condition -> condition);
+        assertEquals(every, atoms.each().stream().map(CasesOfALineAsked.Atom::condition)
+                .collect(Collectors.toSet()),
+                "asked of every case, none given up, whichever order they are chosen in");
+        assertEquals(Set.of(), atoms.notWorkedOut());
+    }
+
+    /**
+     * What every case holds is chosen first however deep in the choices it is written, since
+     * choosing together is associative: the parts every case holds are the same whether they were
+     * written beside the choices or as a group of their own.
+     *
+     * <p>Seven choices and six parts every case holds: written as a group, the walk is as long as
+     * it is written flat, and short of the steps it is allowed. Chosen after the choices, each of
+     * the hundred and twenty-eight ways would choose six more and the steps would run out.
+     */
+    @Test
+    void whatEveryCaseHoldsIsChosenFirstWhetherItIsWrittenBesideTheChoicesOrAsAGroup() {
+        int choices = 7;
+        int held = 6;
+        List<DecidingCase.Cases> flat = new ArrayList<>();
+        List<DecidingCase.Cases> group = new ArrayList<>();
+        for (int at = 0; at < choices; at++) {
+            Proposition yes = truth("c" + at);
+            flat.add(new DecidingCase.Cases.EachOf(List.of(one(yes), one(yes.denied()))));
+        }
+        List<DecidingCase.Cases> grouped = new ArrayList<>(flat);
+        for (int at = 0; at < held; at++) {
+            flat.add(one(truth("u" + at)));
+            group.add(one(truth("u" + at)));
+        }
+        grouped.add(new DecidingCase.Cases.Together(group));
+        Asking beside = new Asking(_ -> true);
+        Asking asGroup = new Asking(_ -> true);
+
+        CasesOfALineAsked.Found written = beside.of(new DecidingCase.Cases.Together(flat));
+        CasesOfALineAsked.Found nested = asGroup.of(new DecidingCase.Cases.Together(grouped));
+
+        assertEquals(Set.of(), written.notWorkedOut(), "written beside the choices");
+        assertEquals(Set.of(), nested.notWorkedOut(), "written as a group of their own");
+        assertEquals(beside.asked().size(), asGroup.asked().size(),
+                "the same questions however the parts every case holds are written");
+    }
+
+    /**
+     * What holds only in one alternative stays in it: a part written under a choice is chosen when
+     * the choice is, and is not what every case holds.
+     */
+    @Test
+    void whatOneAlternativeHoldsIsNotChosenForTheOthers() {
+        Proposition x = truth("x");
+        Proposition y = truth("y");
+        Proposition z = truth("z");
+        DecidingCase.Cases cases = new DecidingCase.Cases.EachOf(List.of(
+                new DecidingCase.Cases.Together(List.of(one(x), one(y))), one(z)));
+
+        CasesOfALineAsked.Found found = new Asking(_ -> true).of(cases);
+
+        assertEquals(new CasesOfALineAsked.Found(List.of(new DecidingCase(SAID, cases)), Set.of()),
+                found, "every case divides rows, and they are the two that were said");
+        CasesOfALineAsked.Found withoutZ = new Asking(each -> !partsOf(each).contains(z)).of(cases);
+        assertEquals(List.of(DecidingCase.alone(both(x, y))), withoutZ.decidesIn(),
+                "x and y together, which z being refuted does not take away");
+    }
+
+    /**
+     * Where the steps run out, the cases kept are among the ones that hold and the figure the
+     * asking stopped at is said: a case not reached is not taken for one that does not hold.
+     *
+     * <p>Eight choices of two parts each, so that the walk is longer than it is allowed to be
+     * though every way of choosing is a case that can be taken apart.
+     */
+    @Test
+    void whereTheStepsRunOutWhatWasNotReachedIsSaidAndNotTakenForAnswered() {
+        int choices = 8;
+        Proposition common = truth("u");
+        List<DecidingCase.Cases> factors = new ArrayList<>();
+        Set<Proposition> holding = new LinkedHashSet<>();
+        for (int at = 0; at < choices; at++) {
+            Proposition yes = truth("c" + at);
+            factors.add(new DecidingCase.Cases.EachOf(List.of(
+                    new DecidingCase.Cases.Together(List.of(one(yes), one(common))),
+                    new DecidingCase.Cases.Together(List.of(one(yes.denied()), one(common))))));
+        }
+        for (int mask = 0; mask < 1 << choices; mask++) {
+            List<Proposition> chosen = new ArrayList<>();
+            chosen.add(common);
+            for (int at = 0; at < choices; at++) {
+                Proposition yes = truth("c" + at);
+                chosen.add((mask >> at & 1) == 0 ? yes : yes.denied());
+            }
+            holding.add(Proposition.all(chosen));
+        }
+        Asking asking = new Asking(_ -> true);
+
+        CasesOfALineAsked.Found found = asking.of(new DecidingCase.Cases.Together(factors));
+
+        assertEquals(Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN), found.notWorkedOut(),
+                "the walk is longer than the steps it is allowed");
+        Set<Proposition> kept = found.decidesIn().stream().map(DecidingCase::condition)
+                .collect(Collectors.toSet());
+        assertTrue(holding.containsAll(kept), "every case kept is one that holds");
+        assertTrue(!kept.isEmpty() && kept.size() < holding.size(),
+                "some were walked to, and not all");
+    }
+
+    /**
+     * A choice nobody took apart is said as the figure it stopped at where a case can hold in it,
+     * and not where the parts every case holds already leave no row on one side of the line: no
+     * case in it decides, whichever way it would have been taken apart.
+     */
+    @Test
+    void aChoiceNobodyTookApartIsSaidOnlyWhereACaseCouldHoldInIt() {
+        CompositionBudget figure = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO;
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(List.of(
+                new DecidingCase.Cases.EachOf(List.of(one(A),
+                        new DecidingCase.Cases.NotTakenApart(figure))),
+                one(B)));
+
+        CasesOfALineAsked.Found holding = new Asking(_ -> true).of(cases);
+        assertEquals(List.of(DecidingCase.alone(both(A, B))), holding.decidesIn(),
+                "the case that was taken apart is kept");
+        assertEquals(Set.of(figure), holding.notWorkedOut(),
+                "and the one that was not is said, beside it");
+
+        CasesOfALineAsked.Found refuted = new Asking(each -> !partsOf(each).contains(B)
+                && !each.equals(SOME_OF_FOUR)).of(cases);
+        assertEquals(List.of(), refuted.decidesIn());
+        assertEquals(Set.of(), refuted.notWorkedOut(),
+                "B leaves no row on one side, so nothing in the choice nobody took apart decides");
     }
 
     /**

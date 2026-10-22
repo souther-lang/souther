@@ -293,7 +293,6 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
     private static Read readOf(String source) {
         Compilation compilation =
                 Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

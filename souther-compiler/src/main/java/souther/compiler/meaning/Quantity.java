@@ -1,21 +1,31 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.Extreme;
+import souther.compiler.core.EnteredArm;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.CodePointClass;
+import souther.compiler.semantics.ResultRange;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Predicate;
 
 /**
@@ -29,9 +39,85 @@ import java.util.function.Predicate;
  * and only the second leaves a comparison over it with nothing to say.
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
-        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
+        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent,
+        Quantity.HowManyDifferentBelow, Quantity.HowManyDifferentAcross, Quantity.SumOver,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
-        Quantity.WhatAnOperationAnswers {
+        Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
+        Quantity.HowManyCarried, Quantity.APieceOf, Quantity.IsAmongThePieces {
+
+    /**
+     * What a recursion carries, whatever that is: how many what a walk carried into the step
+     * being read holds, the number a walk over the elements of an answer carried into its step, or
+     * how many what a call of a search answers one node down holds.
+     *
+     * <p>Made only while the step or the body is read for how many it answers, which a reading does
+     * to show it is that many and a number of the element or the node, for every number there is:
+     * a form over a number standing for any says so of each by its weight. What the reading
+     * concludes has none of these in it, so no reader of what a condition states is handed one.
+     */
+    record HowManyCarried(ACarriedValue value) implements Quantity {
+
+        public HowManyCarried {
+            Objects.requireNonNull(value, "what is carried is some walk's");
+        }
+
+        /** Whether {@code form} reads this anywhere, in a number it is over or in one inside it. */
+        public boolean isIn(LinearForm<Quantity> form) {
+            return form.coefs().keySet().stream().anyMatch(this::isIn);
+        }
+
+        /** Whether {@code number} is this, or is made of a number or a statement that reads it. */
+        public boolean isIn(Quantity number) {
+            return switch (number) {
+                case HowManyCarried other -> equals(other);
+                case DecisionAtom.OfTheInput _, DecisionAtom.TakenOfAnAnswer _,
+                     DecisionAtom.ComputedOverAnAnswer _,
+                     DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
+                     RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
+                     HowManyDifferent _, HowManyDifferentBelow _, HowManyDifferentAcross _ -> false;
+                case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
+                case APieceOf piece -> isIn(piece.string());
+                case IsAmongThePieces among -> isIn(among.value()) || isIn(among.string());
+                case SumOver sum -> isIn(sum.ofTheElement());
+                case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
+                case HowManyMeet count -> isIn(count.ofTheElement());
+            };
+        }
+
+        /** Whether {@code stated} compares a number that reads this, or holds a statement that
+         *  does. */
+        public boolean isIn(Proposition stated) {
+            return switch (stated) {
+                case Proposition.Compared compared -> switch (compared.relation()) {
+                    case Relation.Affine affine -> isIn(affine.form());
+                    case Relation.Ordered ordered -> isIn(ordered.term());
+                };
+                case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Carried _, Proposition.Unread _ -> false;
+                case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
+                     Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _,
+                     Proposition.WhereItAnswers _ ->
+                        stated.partsHeld().stream().anyMatch(this::isIn);
+            };
+        }
+
+        /** What a reader handed one of these is told: it is no number of anything it reads. */
+        public IllegalStateException reachedAReader() {
+            return new IllegalStateException(spelled() + " stands for any number inside a"
+                    + " recursion's step, and reaches no reader of a condition");
+        }
+
+        @Override
+        public String spelled() {
+            return "#" + value;
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
 
     /**
      * What an operation the library declares answers of values of the input, where nothing here
@@ -105,6 +191,140 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     }
 
     /**
+     * One piece of the string {@code string} that {@code operation} parts: the value a statement
+     * about some piece of it compares with another value.
+     *
+     * <p>A piece stands at no position a row writes, and it is whichever one the statement it is
+     * read inside is about ({@link CodePointsOfAPiece}): a variable that statement binds, and one
+     * that leaves it only as what the statement comes to for the string. A comparison of a piece
+     * with a value is a statement about that piece alone, and "some piece is the value" is not
+     * "the piece is the value" held once — nor is its denial "the piece is another value" — so
+     * what leaves the statement is {@link IsAmongThePieces}, which says it of all the pieces.
+     * Told apart by the string, the separator and {@code within}, which is how many statements
+     * about some piece it is read inside of: two pieces of one string read in two statements are
+     * two values, and one read in a single statement is one.
+     *
+     * @param operation the library's operation that parts the string
+     * @param separator the code point it is parted at, or none where it parts into characters
+     * @param string    the string, a number of the input or what an operation answers of one
+     * @param within    how many statements about some piece this one is read inside of
+     * @param among     how many of the first pieces it is one of, or nought where it is one of
+     *                  all of them: the piece of the first one and the piece of the first two
+     *                  are two values, as a string can hold the value in its second piece alone
+     */
+    record APieceOf(ValueName.Stdlib operation, OptionalInt separator, Quantity string,
+                    int within, int among) implements Quantity {
+
+        public APieceOf {
+            Objects.requireNonNull(operation, "a piece is of what some operation parts");
+            Objects.requireNonNull(separator, "parted at a code point, or into characters");
+            if (!(string instanceof DecisionAtom.OfTheInput)
+                    && !(string instanceof WhatAnOperationAnswers)) {
+                throw new IllegalArgumentException(
+                        "a piece read here is of a string of the input: " + string);
+            }
+            if (within < 0) {
+                throw new IllegalArgumentException(
+                        "a piece is of a statement some number of statements in: " + within);
+            }
+            if (among < 0) {
+                throw new IllegalArgumentException(
+                        "a piece is one of some number of the first pieces: " + among);
+            }
+        }
+
+        /** The numbers of the input the string is made of, each once. */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            return switch (string) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                default -> throw new IllegalStateException("held out by the constructor");
+            };
+        }
+
+        @Override
+        public String spelled() {
+            return "a piece " + within + " in"
+                    + (among > 0 ? " among the first " + among : "") + " of "
+                    + operation.qualified() + "("
+                    + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
+                            + ", " : "") + string.spelled() + ")";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * Whether a value is one of the pieces of a string, as the number one where it is and nought
+     * where it is not: the whole of what "some piece is the value" says, and the whole of what its
+     * denial says, which is that no piece is.
+     *
+     * <p>A number, so it is held against one as any other is, and its denial is the other number.
+     * The statement that some piece is not the value is not this one's denial and is not this at
+     * all: it says which piece, and a string with two pieces has one that is the value and one that
+     * is not. Compared with a value of the input it relates that value to the string, and divides
+     * neither where the string has a piece for every value to be or not to be — which is why it is
+     * made only of what always has one ({@code operation}'s answer is never empty).
+     *
+     * @param value     the value, a number of the input or what an operation answers of one
+     * @param operation the library's operation that parts the string
+     * @param separator the code point it is parted at, or none where it parts into characters
+     * @param string    the string, a number of the input or what an operation answers of one
+     * @param among     how many of the first pieces it is one of, or nought where it is one of
+     *                  all of them
+     */
+    record IsAmongThePieces(Quantity value, ValueName.Stdlib operation, OptionalInt separator,
+                            Quantity string, int among) implements Quantity {
+
+        public IsAmongThePieces {
+            Objects.requireNonNull(operation, "the pieces are what some operation parts");
+            Objects.requireNonNull(separator, "parted at a code point, or into characters");
+            for (Quantity each : List.of(value, string)) {
+                if (!(each instanceof DecisionAtom.OfTheInput)
+                        && !(each instanceof WhatAnOperationAnswers)) {
+                    throw new IllegalArgumentException(
+                            "a piece is compared here with a value of the input: " + each);
+                }
+            }
+            if (among < 0) {
+                throw new IllegalArgumentException(
+                        "the value is one of some number of the first pieces: " + among);
+            }
+        }
+
+        /** The numbers of the input the value and the string are made of, each once. */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            List<NumericTerm> out = new ArrayList<>();
+            for (Quantity each : List.of(value, string)) {
+                List<NumericTerm> these = switch (each) {
+                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                    case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                    default -> throw new IllegalStateException("held out by the constructor");
+                };
+                these.stream().filter(term -> !out.contains(term)).forEach(out::add);
+            }
+            return List.copyOf(out);
+        }
+
+        @Override
+        public String spelled() {
+            return "[" + value.spelled() + " is among the pieces"
+                    + (among > 0 ? " (the first " + among + ")" : "") + " of "
+                    + operation.qualified() + "("
+                    + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
+                            + ", " : "") + string.spelled() + ")]";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
      * What a division by a written number leaves of a form of the input's numbers: the remainder of
      * {@code a - d} by seven, of the length of a list by eleven.
      *
@@ -116,18 +336,40 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>Whole numbers throughout. A form that weighs a number by a fraction, or is moved by one, is
      * no dividend of a remainder, and nothing here reads it as one.
      *
+     * @param operation the library's floor remainder that answers it
      * @param dividend the form the division is of, constant included
      * @param divisor the number it is divided by, above nought
      */
-    record RemainderOfADividend(LinearForm<NumericTerm> dividend, BigInteger divisor)
-            implements Quantity {
+    record RemainderOfADividend(ValueName operation, LinearForm<NumericTerm> dividend,
+                                BigInteger divisor) implements Quantity {
 
         public RemainderOfADividend {
-            if (dividend == null || dividend.coefs().isEmpty() || divisor == null
-                    || divisor.signum() <= 0) {
-                throw new IllegalArgumentException("a remainder is of a form of some numbers and"
-                        + " by a divisor above nought: " + dividend + " by " + divisor);
+            if (operation == null || dividend == null || dividend.coefs().isEmpty()
+                    || divisor == null || divisor.signum() <= 0
+                    || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
+                            .isEmpty()) {
+                throw new IllegalArgumentException("a remainder is a floor remainder of a form of"
+                        + " some numbers by a divisor above nought: " + operation + " of "
+                        + dividend + " by " + divisor);
             }
+        }
+
+        /** What the operation was handed beside the dividend: the divisor, where it takes it. */
+        public TakenArguments arguments() {
+            return TakenArguments.at(
+                    DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
+                            .getAsInt(), new BigDecimal(divisor));
+        }
+
+        /**
+         * Where the operation states its answers lie by this divisor, whatever the dividend comes
+         * to — the same account a remainder of one place is bounded by
+         * ({@link NumericTerm.TakenOf#whatTheOperationStates}).
+         */
+        public NumericDomain.Bounds whatTheOperationStates() {
+            TakenArguments given = arguments();
+            return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
+                    argument -> Optional.ofNullable(given.at(argument.position())));
         }
 
         @Override
@@ -140,6 +382,107 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 out.append(" + ").append(dividend.constant().spelled());
             }
             return out.append(", ").append(divisor).append(')').toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * What a division of one whole number of the input by another leaves: the remainder of the
+     * eaches in a delivery by the pack size a product carries.
+     *
+     * <p>A number of its own and no form over the two. Fixing the divisor leaves a remainder by a
+     * constant of the dividend, whose period is that divisor's, so a rule about the remainder
+     * relates the two positions and draws no line on either: where the divisor stands, the
+     * dividend that divides by it comes round at a distance it sets. Which values of a position
+     * still leave the rule both ways is asked of what the other reaches
+     * ({@link souther.compiler.inputs.WhatARelationLeavesUndivided}).
+     *
+     * <p>The dividend and the divisor are told apart, and two of one position are no relation
+     * between two. A divisor of nought stops the run, so no row has a remainder there.
+     *
+     * @param operation the library's floor remainder that answers it
+     * @param dividend  the number divided
+     * @param divisor   the number it is divided by
+     */
+    record RemainderByAnInput(ValueName operation, NumericTerm.FromOnePosition dividend,
+                              NumericTerm.FromOnePosition divisor) implements Quantity {
+
+        public RemainderByAnInput {
+            if (operation == null || dividend == null || divisor == null
+                    || dividend.position().equals(divisor.position())
+                    || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
+                            .isEmpty()) {
+                throw new IllegalArgumentException("a remainder by an input is a floor remainder"
+                        + " of one number of the input by another of a different position: "
+                        + operation + " of " + dividend + " by " + divisor);
+            }
+        }
+
+        /** Both numbers, the dividend first. */
+        public List<NumericTerm.FromOnePosition> operands() {
+            return List.of(dividend, divisor);
+        }
+
+        @Override
+        public String spelled() {
+            return "floorMod(" + dividend + ", " + divisor + ")";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * What two whole numbers of the input come to multiplied, where neither is a constant and each
+     * is the number of one position: a price times a quantity.
+     *
+     * <p>Whole numbers, which the reading that makes one sees to: a product of two is worked out at
+     * a row and drawn a line on as a product of two whole numbers, and of decimals it is not made.
+     *
+     * <p>A number of its own and no form over the two. Fixing either factor leaves a form over the
+     * other, weighed by the value fixed, so a rule about the product relates the two positions and
+     * divides neither of them by a line of its own: where one stands, the other can be anywhere
+     * the value fixed lets it be. Which values of a factor still leave the rule both ways is asked
+     * of what the other reaches ({@link souther.compiler.inputs.WhatARelationLeavesUndivided}).
+     *
+     * <p>The factors in one order whichever was written first, so {@code q * p} is {@code p * q}.
+     * Two of one position are a square, which no factor fixed turns into a form of the other, and
+     * are not one of these.
+     *
+     * @param one   the factor first in the order of terms
+     * @param other the other factor
+     */
+    record ProductOfTwo(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other)
+            implements Quantity {
+
+        public ProductOfTwo {
+            if (one == null || other == null) {
+                throw new IllegalArgumentException("a product is of two numbers");
+            }
+            if (one.position().equals(other.position())) {
+                throw new IllegalArgumentException("a product of two numbers of one position is no"
+                        + " relation between two: " + one + " and " + other);
+            }
+            List<NumericTerm> ordered = NumericTerms.inOrder(List.of(one, other));
+            NumericTerm.FromOnePosition first = (NumericTerm.FromOnePosition) ordered.get(0);
+            other = first == one ? other : one;
+            one = first;
+        }
+
+        /** Both factors, in their order. */
+        public List<NumericTerm.FromOnePosition> factors() {
+            return List.of(one, other);
+        }
+
+        @Override
+        public String spelled() {
+            return one + " * " + other;
         }
 
         @Override
@@ -186,6 +529,115 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     }
 
     /**
+     * How many different values stand at {@code ofTheOccurrence} over every container inside the
+     * elements of the container at {@code container}: each element holds a container of them, and
+     * two of them are one value where they are equal, whichever elements hold them.
+     *
+     * <p>Not a number of the elements: one element holds as many of them as its container does,
+     * so it may be more than there are elements, and it is nought where every inner container
+     * holds nothing, which a container holding elements may. That is why it is no
+     * {@link HowManyDifferent}, which is never more than the elements.
+     *
+     * @param container       where the elements stand
+     * @param ofTheOccurrence a value of each element of a container inside the elements, which is
+     *                        one container further in than the elements
+     */
+    record HowManyDifferentAcross(DecisionSubject container, DecisionSubject ofTheOccurrence)
+            implements Quantity {
+
+        public HowManyDifferentAcross {
+            if (container == null || ofTheOccurrence == null) {
+                throw new IllegalArgumentException("the values are of containers inside elements");
+            }
+            if (!ofTheOccurrence.isAtOrUnder(container.element())
+                    || ofTheOccurrence.howManyContainersHoldIt()
+                            != container.howManyContainersHoldIt() + 2) {
+                throw new IllegalArgumentException(ofTheOccurrence + " is no value of a container"
+                        + " inside the elements of " + container);
+            }
+        }
+
+        @Override
+        public String spelled() {
+            return "#different across " + container + " [" + ofTheOccurrence + "]";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * How many different values a search down the tree at {@code root} collects, where each node
+     * it reaches — the root, and the nodes in the lists at {@code through} of every node reached —
+     * adds the value at {@code valueAt} of the entry of the map at {@code map} that the key at
+     * {@code keyAt} of the node names, and adds nothing where the map holds no entry under it.
+     *
+     * <p>A number about the nodes the search reaches and the entries their keys pick, so it is no
+     * number of the map's entries: an entry no node's key names is not collected, whatever its
+     * value. Two nodes naming one entry collect one value, and two entries with one value are one
+     * value. Nought exactly where no node reached has an entry.
+     *
+     * @param root    where the node the search starts from stands
+     * @param through the fields of a node the search goes down, each once
+     * @param map     where the map the entries are looked up in stands
+     * @param keyAt   the fields from a node to the key it looks its entry up by
+     * @param valueAt the fields from an entry to the value collected, none for the entry itself
+     */
+    record HowManyDifferentBelow(TermPath root, List<String> through, TermPath map,
+                                 List<String> keyAt, List<String> valueAt) implements Quantity {
+
+        public HowManyDifferentBelow {
+            Objects.requireNonNull(root, "a search starts from some node");
+            Objects.requireNonNull(map, "entries are looked up in some map");
+            through = List.copyOf(through);
+            keyAt = List.copyOf(keyAt);
+            valueAt = List.copyOf(valueAt);
+            if (through.isEmpty()) {
+                throw new IllegalArgumentException("a search down a tree goes down some field");
+            }
+            if (new HashSet<>(through).size() != through.size()) {
+                throw new IllegalArgumentException(
+                        "a search goes down each field once: " + through);
+            }
+            if (map.isAtOrUnder(root) || root.isAtOrUnder(map)) {
+                throw new IllegalArgumentException(
+                        "the map is apart from the tree it is looked up for: " + map + ", " + root);
+            }
+        }
+
+        /** Where the key a node looks its entry up by stands, taken of the root. */
+        public TermPath keyOfTheRoot() {
+            TermPath at = root;
+            for (String field : keyAt) {
+                at = at.then(field);
+            }
+            return at;
+        }
+
+        /** Where the value collected of an entry stands, taken of the entries of the map. */
+        public TermPath valueOfAnEntry() {
+            TermPath at = map.element();
+            for (String field : valueAt) {
+                at = at.then(field);
+            }
+            return at;
+        }
+
+        @Override
+        public String spelled() {
+            return "#different below " + root + " through " + through + " [" + map + "["
+                    + keyAt + "]" + valueAt + "]";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
      * How many different values stand at {@code ofTheElement} over the elements of the container
      * at {@code container}: the element itself, a position inside it, or the key it is filed under
      * — two of them one value where they are equal. Never more than the container holds, and
@@ -201,11 +653,24 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (container == null || ofTheElement == null) {
                 throw new IllegalArgumentException("the values are of a container's elements");
             }
-            if (!ofTheElement.isAtOrUnder(container.element())
-                    && !ofTheElement.isAtOrUnder(container.key())) {
-                throw new IllegalArgumentException(ofTheElement + " is no part of an element of "
-                        + container);
+            if (!oneOfEach(container, ofTheElement)) {
+                throw new IllegalArgumentException(ofTheElement + " is no one value of each"
+                        + " element of " + container);
             }
+        }
+
+        /**
+         * Whether {@code ofTheElement} is one value of each element of the container at
+         * {@code container}: the element, a place inside it, or the key it is filed under, and no
+         * place inside another container inside it. A place in a container inside the element is
+         * as many values as that container holds, and how many differ among those is no number of
+         * the elements — it may be more of them than there are elements.
+         */
+        public static boolean oneOfEach(DecisionSubject container, DecisionSubject ofTheElement) {
+            return (ofTheElement.isAtOrUnder(container.element())
+                    || ofTheElement.isAtOrUnder(container.key()))
+                    && ofTheElement.howManyContainersHoldIt()
+                            == container.howManyContainersHoldIt() + 1;
         }
 
         @Override
@@ -303,9 +768,9 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * them hold — said that way where it is compared ({@link Proposition#compared}). Of statements
      * none of which is settled: one that is settled is already a number, and is added beside this.
      *
-     * <p>How many choices a comparison of it is written out as is held to a figure by the reading
-     * that compares it ({@link Proposition#compared(Relation, boolean, long)}), and is no part of
-     * what is counted.
+     * <p>Whether a comparison of it is written out as its choices or held as the count turns on how
+     * many choices and parts those come to ({@link Proposition.SoManyHold}), and is no part of what
+     * is counted.
      */
     record HowManyHold(List<Proposition> each) implements Quantity {
 
@@ -317,6 +782,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (each.stream().anyMatch(one -> one instanceof Proposition.Always)) {
                 throw new IllegalArgumentException("a settled statement is a number, and not one"
                         + " of these: " + each);
+            }
+            if (each.stream().anyMatch(Proposition::mayAnswerNothing)) {
+                throw new IllegalArgumentException("a count is of statements answering on every"
+                        + " row: " + each);
             }
         }
 
@@ -361,6 +830,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException("a count of " + ofTheElement
                         + " is the same for every element of " + container);
             }
+            if (Proposition.mayAnswerNothing(ofTheElement)) {
+                throw new IllegalArgumentException("a count is of a statement answering on every"
+                        + " element: " + ofTheElement);
+            }
             if (Proposition.leavesSomethingUnread(ofTheElement)) {
                 throw new IllegalArgumentException("a count is of a statement read through, and "
                         + ofTheElement + " was not");
@@ -398,6 +871,98 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     String spelled();
 
     /**
+     * What a walk whose step keeps one end of what it carried and a value of the element
+     * ({@code SeededWalk.endKept}) carries into the step on an element: that end of its seed and
+     * of the value on every element before it.
+     *
+     * <p>So it lies between the seed and the furthest value an element may hold past it, and is
+     * the seed on the first element. It is no value of the element the step is applied to, which
+     * is why it is apart from that element's numbers where nothing ties the elements of the
+     * container to one another, nor the seed to them.
+     *
+     * @param extreme   which end the step keeps
+     * @param seed      what the walk starts from
+     * @param container the container the walk walks
+     * @param ofEach    the number of the element the step keeps an end of
+     * @param howMany   how many the container holds, or null where that is no number read
+     */
+    record KeptSoFar(Extreme extreme, Seed seed, TermPath container,
+                     NumericTerm.FromOnePosition ofEach, NumericTerm.FromOnePosition howMany) {
+
+        public KeptSoFar {
+            Objects.requireNonNull(extreme, "a walk keeps one end");
+            Objects.requireNonNull(seed, "a walk starts from something");
+            Objects.requireNonNull(container, "a walk walks some container");
+            Objects.requireNonNull(ofEach, "and keeps an end of some number of the element");
+            if (!ofEach.placesReadOff().stream()
+                    .allMatch(place -> place.isAtOrUnder(container.element()))) {
+                throw new IllegalArgumentException("what is kept is read off the elements: "
+                        + ofEach + " of " + container);
+            }
+            if (seed instanceof Seed.OfTheInput(var at) && at.placesReadOff().stream()
+                    .anyMatch(place -> place.isAtOrUnder(container))) {
+                throw new IllegalArgumentException("a seed is one value of the run, and no"
+                        + " element of what is walked: " + at + " of " + container);
+            }
+            if (seed instanceof Seed.OfTheKey(var key, var _)
+                    && !key.isAtOrUnder(container.element())) {
+                throw new IllegalArgumentException("a key is read off the elements: " + key
+                        + " of " + container);
+            }
+            if (seed instanceof Seed.OfTheKey(var key, var _) && Seed.OfTheKey.holdsTheNumber(
+                    key, ofEach)) {
+                throw new IllegalArgumentException("the elements of one key hold one number,"
+                        + " and what was kept of them is no other value: " + key + " and "
+                        + ofEach);
+            }
+        }
+
+        /** What a walk keeping an end starts from: a number written out, one number of the
+         *  input, which is one value on a run whatever the elements are, or nothing — the first
+         *  element of a key files its own value. */
+        public sealed interface Seed {
+
+            /** A number written out. */
+            record Written(ExactRatio number) implements Seed {}
+
+            /** A number of the input outside what is walked. */
+            record OfTheInput(NumericTerm.FromOnePosition number) implements Seed {}
+
+            /**
+             * Nothing: the walk files what each element holds under its key, so the end kept is of
+             * the elements before it that have the same key, and an element with a key no earlier
+             * element has is compared with nothing.
+             *
+             * @param key       where the key stands in an element
+             * @param reachedBy the arm of the match on a lookup of the key that finds the end,
+             *                  which is entered only where an earlier element has the key — or
+             *                  none where the walk hands a closure the value found. The name
+             *                  already tells this end from the end found by another expansion of
+             *                  the same code, and so does this
+             */
+            record OfTheKey(TermPath key, Optional<EnteredArm> reachedBy)
+                    implements Seed {
+
+                public OfTheKey {
+                    Objects.requireNonNull(key, "a key stands somewhere in an element");
+                    Objects.requireNonNull(reachedBy, "an arm, or none");
+                }
+
+                /**
+                 * Whether the key and the number are one place, or one holds the other. Elements
+                 * with the same key then hold the same number, so the end kept of the earlier ones
+                 * is the number of the one compared and no value beside it.
+                 */
+                public static boolean holdsTheNumber(TermPath key,
+                                                     NumericTerm.FromOnePosition number) {
+                    return number.placesReadOff().stream()
+                            .anyMatch(place -> place.isAtOrUnder(key) || key.isAtOrUnder(place));
+                }
+            }
+        }
+    }
+
+    /**
      * The number at {@code steps} below the value bound at {@code binding}: one value, by the
      * binding that names it and nothing else.
      *
@@ -415,21 +980,31 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * could not read. Empty where nothing of the value was read to stop — an answer a dependency
      * gave, what an attempt built — since there is nothing it is made of to read.
      *
+     * <p>Where the value is what a walk keeping an end carried into its step, which end it is of
+     * what is carried beside it ({@link KeptSoFar}). That says where the value may lie and which of
+     * those values it is shown to take, and still nothing of which value it is on a run.
+     *
      * @param binding which binding names the value
      * @param steps   the steps read off it that go somewhere, outermost first
      * @param type    what stands there, which is how its numbers are spaced
      * @param madeOf  why what the value was made from is no number of the input, where the
      *                reading met it and stopped
+     * @param kept    the end a walk has kept by the element its step is applied to, where the
+     *                value is what the walk carried into the step
      */
     record OfABinding(BindingId binding, List<TermPath.Step> steps, Type type,
-                      Optional<WhyUnread> madeOf)
+                      Optional<WhyUnread> madeOf, Optional<KeptSoFar> kept)
             implements Quantity {
 
         public OfABinding {
-            if (binding == null || type == null || madeOf == null) {
+            if (binding == null || type == null || madeOf == null || kept == null) {
                 throw new IllegalArgumentException("a bound number is some binding's, of some type");
             }
             steps = List.copyOf(steps);
+            if (kept.isPresent() && (madeOf.isPresent() || !steps.isEmpty())) {
+                throw new IllegalArgumentException("what a walk carried is the value itself, and"
+                        + " nothing of it was read to stop: " + binding);
+            }
         }
 
         @Override

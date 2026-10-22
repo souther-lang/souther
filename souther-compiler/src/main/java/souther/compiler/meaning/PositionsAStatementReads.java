@@ -43,14 +43,15 @@ public final class PositionsAStatementReads {
             case Proposition.InCases cases -> reads(cases.of(), out);
             case Proposition.Present present -> reads(present.of(), out);
             case Proposition.SameValue same -> reads(same.one(), out) && reads(same.other(), out);
-            case Proposition.LastToHold last -> {
-                out.add(last.container());
-                out.add(last.position());
-                yield true;
-            }
+            case Proposition.LastToHold last ->
+                    reads(last.container(), out) && reads(last.position(), out);
             case Proposition.All all -> all.parts().stream().allMatch(part -> reads(part, out));
+            case Proposition.WhereItAnswers where ->
+                    reads(where.answers(), out) && reads(where.states(), out);
             case Proposition.Any any -> any.parts().stream().allMatch(part -> reads(part, out));
             case Proposition.OnAnApplication applications -> applications.each().stream()
+                    .allMatch(one -> reads(one, out));
+            case Proposition.SoManyHold counted -> counted.statements().stream()
                     .allMatch(one -> reads(one, out));
             case Proposition.Some some -> reads(some.container(), out)
                     && reads(some.ofTheElement(), out);
@@ -61,22 +62,40 @@ public final class PositionsAStatementReads {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(var term) -> reads(term, out);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
-                 Quantity.OfABinding _ -> false;
+                 DecisionAtom.ComputedOverAnAnswer _,
+                 Quantity.OfABinding _, Quantity.HowManyCarried _ -> false;
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(each -> reads(each, out));
             // A piece of a string is whatever the statement it is read inside says it is, and the
             // string that statement is about is no part of this quantity to collect.
             case Quantity.CodePointsOfAPiece _ -> false;
+            case Quantity.APieceOf piece -> reads(piece.string(), out);
+            case Quantity.IsAmongThePieces among ->
+                    reads(among.value(), out) && reads(among.string(), out);
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     reads(counted, out) && reads(each, out);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .allMatch(one -> reads(one, out));
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject each) ->
                     reads(counted, out) && reads(each, out);
+            case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject each) ->
+                    reads(counted, out) && reads(each, out);
+            case Quantity.HowManyDifferentBelow below -> {
+                out.add(below.root());
+                out.add(below.keyOfTheRoot());
+                out.add(below.map());
+                out.add(below.map().key());
+                out.add(below.valueOfAnEntry());
+                yield true;
+            }
             case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
                     reads(summed, out) && reads(each, out);
-            case Quantity.RemainderOfADividend(var dividend, var _) -> dividend.coefs().keySet()
-                    .stream().allMatch(term -> reads(term, out));
+            case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
+                    dividend.coefs().keySet().stream().allMatch(term -> reads(term, out));
+            case Quantity.RemainderByAnInput remainder -> remainder.operands().stream()
+                    .allMatch(term -> reads(term, out));
+            case Quantity.ProductOfTwo product -> product.factors().stream()
+                    .allMatch(term -> reads(term, out));
         };
     }
 

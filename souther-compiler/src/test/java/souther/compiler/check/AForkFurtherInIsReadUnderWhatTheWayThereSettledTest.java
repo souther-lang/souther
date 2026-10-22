@@ -84,8 +84,50 @@ class AForkFurtherInIsReadUnderWhatTheWayThereSettledTest {
                 | South -> 3
             """;
 
+    private static final String SHORT_CIRCUITS = """
+            module circuits
+
+            behavior andAtTheGreatest : (a: Int, b: Int) -> Int
+            let andAtTheGreatest (a, b) = {
+                guard a == 9223372036854775807 else 0
+                if b > 0 && a + 1 > 0 then 1 else 0
+            }
+
+            behavior orAtTheGreatest : (a: Int, b: Int) -> Int
+            let orAtTheGreatest (a, b) = {
+                guard a == 9223372036854775807 else 0
+                if b <= 0 || a + 1 <= 0 then 1 else 0
+            }
+
+            behavior andBelowTheGreatest : (a: Int, b: Int) -> Int
+            let andBelowTheGreatest (a, b) = {
+                guard a == 9223372036854775806 else 0
+                if b > 0 && a + 1 > 0 then 1 else 0
+            }
+            """;
+
     private static final Read ONE_OF_READ = Read.of(ONE_OF, "oneof");
     private static final Read CASES_READ = Read.of(CASES, "cases");
+    private static final Read SHORT_CIRCUITS_READ = Read.of(SHORT_CIRCUITS, "circuits");
+
+    /**
+     * Where a short circuit's right side answers nothing, the arm for the value the right decides is
+     * the one no run enters, and the other is entered by the runs the left settled.
+     */
+    @Test
+    void theArmForTheValueTheRightDecidesIsTheOneNoRunEnters() {
+        List<Reachability> and = SHORT_CIRCUITS_READ.arms("andAtTheGreatest", "IF", 0);
+        assertInstanceOf(Reachability.Unreachable.class, and.get(0), () -> "" + and);
+        assertFalse(and.get(1) instanceof Reachability.Unreachable, () -> "" + and);
+
+        List<Reachability> or = SHORT_CIRCUITS_READ.arms("orAtTheGreatest", "IF", 0);
+        assertFalse(or.get(0) instanceof Reachability.Unreachable, () -> "" + or);
+        assertInstanceOf(Reachability.Unreachable.class, or.get(1), () -> "" + or);
+
+        List<Reachability> answering = SHORT_CIRCUITS_READ.arms("andBelowTheGreatest", "IF", 0);
+        assertFalse(answering.stream().anyMatch(Reachability.Unreachable.class::isInstance),
+                () -> "the right answers here, so both values come out: " + answering);
+    }
 
     @Test
     void aDisjunctionEveryPartOfWhichIsRuledOutReachesNothing() {

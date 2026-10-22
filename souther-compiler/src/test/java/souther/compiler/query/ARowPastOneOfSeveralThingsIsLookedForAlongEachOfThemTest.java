@@ -102,8 +102,17 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
             }
             """;
 
-    /** One condition of seventeen ways on one position, every way of which but the last a rule
-     *  closes: more ways than are looked along, and the one that reaches past them. */
+    /**
+     * One condition of seventeen ways on one position, every way of which but the last the
+     * declarations close — a level past what {@code N} holds, which the statements of the way do
+     * not contradict: more ways than are looked along, and the one that reaches past them.
+     *
+     * <p>That the ways stay open rests on the walk not reading the declarations. That more ways
+     * than are looked along are looked along whole is held without it, by
+     * {@code AChoiceTheNumbersContradictIsNoOpenWayTest}, and this holds what the account says of
+     * it: were the walk to read the declarations, these ways would need closing by something it
+     * does not read.
+     */
     private static final String PAST_THE_FIGURE = """
             module example.either
 
@@ -116,7 +125,6 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
             behavior f : (a: N, n: N) -> Yes | No
 
             let f (a, n) = {
-                guard a == 0 else No
                 guard ALTERNATIVES else No
                 if n > 5 then Yes else No
             }
@@ -124,11 +132,12 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
 
     private static final Count BEHIND_THE_FORK = Count.of(5);
 
-    /** {@code a} at each of one up to as many ways as are looked along, and then at nought. */
+    /** {@code a} at as many levels past the top of {@code N} as ways are looked along, and then at
+     *  nought. */
     private static String alternatives() {
         List<String> out = new ArrayList<>();
         for (int each = 1; each <= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(); each++) {
-            out.add("a == " + each);
+            out.add("a == " + (100 + each));
         }
         out.add("a == 0");
         return String.join(" || ", out);
@@ -217,7 +226,6 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
     private static List<ItemAssessment.Owed> pointsOfTheInnerLine(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         List<BorderAssessment> edges = compilation.db()
                 .ask(new Adequacy.BoundarySearch("example.either", "f")).value();
         assertNotNull(edges, "the lines of this behavior were searched");

@@ -3,7 +3,8 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -38,18 +39,32 @@ public record ClausesInOrder(List<OneClause> inOrder, boolean everyRuleReached) 
         Clause.Ref clause();
 
         /**
-         * The clause read with each field it reads given what the construction hands it.
+         * The clause, and what the construction hands each field it reads.
          *
-         * @param states what it states, as an expression of the body that builds the value
-         * @param parts  the rules its author wrote it as
+         * <p>The two are kept apart because they are written in different trees. The term is the
+         * one the declaration's own analysis reads, which keeps the language's operations standing
+         * as calls; the values are expressions of the body that builds the value, in whichever
+         * tree that body is read. A reader that reads the two in one tree asks for
+         * {@link #substituted}; one that reads them in their own trees hands each value to the
+         * field it is for.
+         *
+         * @param term  what the clause states, over the declaration's fields
+         * @param given what the construction hands each field, in the order it writes them
+         * @param parts the rules its author wrote it as
          */
-        record Stated(Clause.Ref clause, Core states, ClauseMeaning.Parts parts)
-                implements OneClause {
+        record Stated(Clause.Ref clause, Core term, Map<BindingId, Core> given,
+                      ClauseMeaning.Parts parts) implements OneClause {
 
             public Stated {
                 Objects.requireNonNull(clause, "a clause read is some clause");
-                Objects.requireNonNull(states, "a clause read states something");
+                Objects.requireNonNull(term, "a clause read states something");
                 Objects.requireNonNull(parts, "a clause is written as some rules");
+                given = Collections.unmodifiableMap(new LinkedHashMap<>(given));
+            }
+
+            /** The term with each field replaced by the value it is handed, as one expression. */
+            public Core substituted() {
+                return Clauses.substituted(term, given);
             }
         }
 
@@ -82,7 +97,7 @@ public record ClausesInOrder(List<OneClause> inOrder, boolean everyRuleReached) 
     public static ClausesInOrder at(Core.Construct construct, RuleReadingSource source) {
         Clauses clauses = new Clauses(source);
         Map<String, BindingId> fields = clauses.bindingsOf(construct.typeName());
-        Map<BindingId, Core> given = new HashMap<>();
+        Map<BindingId, Core> given = new LinkedHashMap<>();
         for (Core.FieldValue value : construct.values()) {
             BindingId field = fields.get(value.field());
             if (field != null) {

@@ -46,6 +46,18 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
             let mix (order) =
                 if Int.add(order.straw.value, order.choco.value) <= 150 then Ok else No
 
+            data LooseParcel = { length: Int, width: Int }
+                invariant Int.add(length, width) <= 150
+
+            behavior quoteLoose : (parcel: LooseParcel) -> Ok | No
+            let quoteLoose (parcel) = Ok
+
+            data Loose = { straw: Int, choco: Int }
+
+            behavior mixLoose : (order: Loose) -> Ok | No
+            let mixLoose (order) =
+                if Int.add(order.straw, order.choco) <= 150 then Ok else No
+
             data Pair = { x: Int, y: Int }
                 invariant x < y + 1
 
@@ -65,6 +77,12 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
 
             behavior byGuardAboutOne : (b: Bare) -> Ok | No
             let byGuardAboutOne (b) = if b.x < b.x + 1 then Ok else No
+
+            data Floored = { x: Int, y: Int }
+                invariant x < y + 1 && x >= 0
+
+            behavior byRuleWithAFloor : (f: Floored) -> Ok | No
+            let byRuleWithAFloor (f) = Ok
             """;
 
     /**
@@ -111,13 +129,23 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         return block.toString();
     }
 
-    /** The {@code guard}, which always said it, at both the positions it compares. */
+    /**
+     * The {@code guard}, which reads the rule to the end: with both positions at nought or more,
+     * either one past a hundred and fifty fails it whatever the other is, which divides each of
+     * them there, and neither is left a word of a rule not read. Where nothing bounds the two,
+     * nothing settles it alone, and the guard names both positions.
+     */
     @Test
     void aGuardNamesBothPositionsItCompares() {
         String block = blockOf("mix");
 
-        assertTrue(notReadAbout(block, "order.straw"), block);
-        assertTrue(notReadAbout(block, "order.choco"), block);
+        assertTrue(block.contains("partition   axes 2 "), block);
+        assertFalse(notReadAbout(block, "order.straw"), block);
+        assertFalse(notReadAbout(block, "order.choco"), block);
+
+        String loose = blockOf("mixLoose");
+        assertTrue(notReadAbout(loose, "order.straw"), loose);
+        assertTrue(notReadAbout(loose, "order.choco"), loose);
     }
 
     /** And the {@code invariant} of the same shape, at both the positions it compares. */
@@ -129,11 +157,12 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         assertTrue(notReadAbout(block, "parcel.width"), block);
     }
 
-    /** In the same words, since what stopped each of them is the same fact about this compiler. */
+    /** In the same words as the guard of the same rule over the same {@code Int}s, since what
+     *  each says of its positions is the same fact about this compiler. */
     @Test
     void andInTheSameWords() {
-        assertEquals(saidAbout(blockOf("mix"), "order.straw"),
-                saidAbout(blockOf("quote"), "parcel.length"));
+        assertEquals(saidAbout(blockOf("mixLoose"), "order.straw"),
+                saidAbout(blockOf("quoteLoose"), "parcel.length"));
     }
 
     /**
@@ -150,6 +179,24 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         assertEquals(saidAbout(blockOf("byGuard"), "b.x"),
                 saidAbout(blockOf("byRule"), "p.x"));
         assertTrue(blockOf("byRule").contains("relates the value here to another value"), blockOf("byRule"));
+    }
+
+    /**
+     * And both leave the two undivided: {@code x} and {@code y} take every value of one type, the
+     * rule is about how far apart they are, and moved together they stay as far apart. A second
+     * rule holding {@code x} at nought or more keeps it from values of its own, and the rule beside
+     * it is no longer shown to leave either undivided.
+     */
+    @Test
+    void andForARuleAboutHowFarApartTheTwoAreBothLeaveThemUndivided() {
+        String undivided = "rather than dividing the values here";
+        assertTrue(saidAbout(blockOf("byRule"), "p.x").contains(undivided), blockOf("byRule"));
+        assertTrue(saidAbout(blockOf("byRule"), "p.y").contains(undivided), blockOf("byRule"));
+        assertTrue(saidAbout(blockOf("byGuard"), "b.x").contains(undivided), blockOf("byGuard"));
+        String floored = blockOf("byRuleWithAFloor");
+        assertTrue(saidAbout(floored, "f.y").contains("not shown to reach every value here"),
+                floored);
+        assertFalse(floored.contains(undivided), floored);
     }
 
     /**

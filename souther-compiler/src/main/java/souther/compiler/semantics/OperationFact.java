@@ -1,5 +1,6 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -144,6 +145,25 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the number at {@code value} rounded to a whole one, the way the rounding
+     * policy at {@code mode} says.
+     *
+     * <p>A rounded number is a step of what was rounded, so the answer is no form of it. What a
+     * comparison of the answer with a whole number states is exact all the same: each policy puts
+     * the least number rounding to at least {@code k} at {@code k}, at {@code k - 1} or at
+     * {@code k - 1/2}, and says whether that number is itself one of them. Which of these a policy
+     * does is the compiler's to know, and this says only which argument is the policy and which the
+     * number.
+     */
+    record RoundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) implements OperationFact {
+
+        public RoundsToAWholeNumber {
+            Objects.requireNonNull(mode, "a number is rounded some way");
+            Objects.requireNonNull(value, "and a number is rounded");
+        }
+    }
+
+    /**
      * Something that holds of the number the operation answers, wherever it is called.
      *
      * <p>One fact per bound rather than a list in one: an operation with two bounds carries two
@@ -253,20 +273,32 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The operation answers the elements of {@code list} from the index {@code count} names on, in
-     * the order they stand there: each of them once, and nothing else. All of them where the count
-     * is nought or less, and none where it is past the last.
+     * The operation answers the elements of {@code list} whose index stands to the number
+     * {@code count} names as {@code kept} says, in the order they stand there: each of them once,
+     * and nothing else. {@link Rel#LT} is the elements before that index, every one of them where
+     * the count is past the last and none where it is nought or less; {@link Rel#GE} is the
+     * elements from it on, all of them where the count is nought or less and none where it is past
+     * the last.
      *
      * <p>Which of the source's elements, and not only that they came from it. What is left out is
-     * the run before the index, so some element of the answer meeting a statement is some element of
-     * the source at that index or after it meeting it — and of a list holding something, what the
-     * answer from index one holds and the element at nought are all it holds.
+     * the run on the other side of the index, so some element of the answer meeting a statement is
+     * some element of the source on the kept side meeting it — and of a list holding something,
+     * what the answer from index one holds and the element at nought are all it holds.
+     *
+     * <p>One kind for the two sides, because they are one statement about the index each element
+     * stands at and differ only in the relation: a reader totalling the kept elements reads that
+     * relation as a test of the position, and a reader that needs one side asks for it.
      */
-    record HoldsTheElementsFrom(ArgumentRef count, ArgumentRef list) implements OperationFact {
+    record HoldsTheElementsByIndex(ArgumentRef count, ArgumentRef list, Rel kept)
+            implements OperationFact {
 
-        public HoldsTheElementsFrom {
-            Objects.requireNonNull(count, "the index the elements are kept from is some argument");
+        public HoldsTheElementsByIndex {
+            Objects.requireNonNull(count, "the index the elements are kept by is some argument");
             Objects.requireNonNull(list, "and they are some list's");
+            if (kept != Rel.LT && kept != Rel.GE) {
+                throw new IllegalArgumentException("the elements kept by an index are those before"
+                        + " it or those from it on, and not those standing " + kept + " to it");
+            }
         }
     }
 
@@ -313,8 +345,10 @@ public sealed interface OperationFact {
      * a question about the call and is asked where it is read, as what a constant argument reads
      * as.
      *
-     * <p>Nothing here counts the pieces. How many there are is the number of times the separator
-     * stands in the string and is no number the language says.
+     * <p>So there is one more piece than the times the separator stands in the string, which for
+     * one code point is how many of the string's code points are that one. That is a number of
+     * the call, the class counted being its separator, and the operation's own size stays unsaid:
+     * for a longer separator it is no number the language says.
      *
      * <p>With no separator each piece is one code point of the string, every one of them in order:
      * the characters it is taken apart into.
@@ -325,6 +359,23 @@ public sealed interface OperationFact {
         public HoldsThePiecesOf {
             Objects.requireNonNull(separator, "this one says where the pieces part, if anywhere");
             Objects.requireNonNull(string, "and the string they are of");
+        }
+    }
+
+    /**
+     * The operation answers the code points of {@code string}, each as the number it is, in order:
+     * every one of them once, and nothing else.
+     *
+     * <p>The values and not only how many. A size law says the answer is as long as the string, and
+     * {@code [1, 2]} is as long as {@code "AB"}; what a total of the answer comes to is a number of
+     * the string only where each element is the code point standing at its place. So a number an
+     * operation answers of the list — a total — is that number of the string, read off the string
+     * a row holds.
+     */
+    record ListsTheCodePointsOf(ArgumentRef string) implements OperationFact {
+
+        public ListsTheCodePointsOf {
+            Objects.requireNonNull(string, "this one names the string whose code points it lists");
         }
     }
 
@@ -715,4 +766,17 @@ public sealed interface OperationFact {
      * building.
      */
     record EveryAnswerItCanGiveHasASourceValue() implements OperationFact {}
+
+    /**
+     * The least and the greatest number the operation answers are where what it is read out of
+     * stops, not where a part of it does.
+     *
+     * <p>The year of a date ends where a date can be written, so a comparison that a year at one
+     * of its ends settles is a comparison the representation settles and not one the model draws.
+     * A month ends at twelve whatever the date is, and a length at nought: those ends are lines
+     * of the operation, and a value at one settles a comparison for a reason of its own. So only
+     * an operation whose ends are the first kind declares this, and a reading that passes over
+     * the ends of the values it compares asks for it.
+     */
+    record EndsAreWhereTheRepresentationStops() implements OperationFact {}
 }

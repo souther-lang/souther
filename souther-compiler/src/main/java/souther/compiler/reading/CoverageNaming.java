@@ -30,6 +30,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * The conditions along a path, said of the input positions they are about and of the places a run
@@ -124,19 +125,16 @@ final class CoverageNaming implements Naming<Outcome> {
         if (compared == null && drawn == null) {
             return null;
         }
-        // Which construct of the model the decision is of. An application answering here comes
-        // first: the comparison is then the code of the operation it applies, which the model
-        // states nothing of, and the rule the author wrote — and drew a line by — is the
-        // application. Where none does, the comparison is the construct.
-        ControlPlace.Outcome outcome = plan.applicationAnsweringAt(comparison)
-                .flatMap(application -> plan.outcomeOf(application, held))
-                .or(() -> outcomeAt(plan, comparison, held))
-                .orElse(null);
+        // Which construct of the model the decision is of: the application answering here where
+        // one does, which is the rule the author wrote and drew a line by, and otherwise the
+        // comparison, which the plan answers (Plan.outcomeAt).
+        ControlPlace.Outcome outcome = plan.outcomeAt(comparison, held).orElse(null);
         if (outcome == null) {
             return null;
         }
         Condition condition = compared != null ? casesLeft(compared, held)
-                : new Condition.Side(drawn.term(), outcome.occurrence(), held, lineOf(drawn));
+                : new Condition.Side(drawn.term(), outcome.occurrence(), OptionalInt.empty(), held,
+                        lineOf(drawn));
         if (condition == null) {
             return null;
         }
@@ -148,6 +146,51 @@ final class CoverageNaming implements Naming<Outcome> {
         return ControlClaim.of(outcome)
                 .map(claim -> one(new Decision(condition, claim)))
                 .orElse(null);
+    }
+
+    /**
+     * That {@code stated}, a comparison, came out {@code held} on the {@code visit}th time a run
+     * visits it, or on whichever visit where {@code visit} is empty, said of the number it compares
+     * in the names the application that visit is hands over; or why this cannot say which position
+     * that is or where no run through it could be recorded.
+     *
+     * <p>Which application a visit is, is not decided here: the caller has shown it, and this puts
+     * the two halves of a decision together. A comparison a run visits once has no visit to name,
+     * and is a decision as any other comparison is. Two comparisons: {@code stated} is the one the
+     * closure's body is read by, standing in the tree the language's operations stand in, and
+     * {@code run} is the same construct in the tree that runs, where a run is recorded. The number
+     * is read of the first in {@code at}, and the place a claim is made at is the second's.
+     */
+    OnVisit sideOnVisit(Core.Binary stated, Core.Binary run, InputReads at, OptionalInt visit,
+                        boolean held) {
+        if (numbers.caseOfOneApplication(stated, at) != null) {
+            return new OnVisit.Unnamed(WhyNotJoined.A_COMPARISON_OF_CASES);
+        }
+        ComparedNumber drawn = numbers.ofOneApplication(stated, at);
+        if (drawn == null) {
+            return new OnVisit.Unnamed(WhyNotJoined.A_NUMBER_NO_INPUT_HOLDS);
+        }
+        ControlPlace.Outcome outcome = plan.outcomeAt(run, held).orElse(null);
+        if (outcome == null) {
+            return new OnVisit.Unnamed(WhyNotJoined.NO_RUN_IS_RECORDED_AT_IT);
+        }
+        Condition condition = new Condition.Side(drawn.term(), outcome.occurrence(), visit, held,
+                lineOf(drawn));
+        ControlClaim claim = visit.isPresent()
+                ? ControlClaim.onVisit(outcome, visit.getAsInt())
+                : new ControlClaim(outcome, ControlClaim.Visit.ANY);
+        return new OnVisit.Named(one(new Decision(condition, claim)));
+    }
+
+    /** A decision about one visit to a comparison, or why none could be named: a comparison this
+     *  reading cannot place is not one that is not there. */
+    sealed interface OnVisit {
+
+        /** The decision, said as what it takes of the input and what a run that made it did. */
+        record Named(Outcome outcome) implements OnVisit { }
+
+        /** No decision could be named, for this reason. */
+        record Unnamed(WhyNotJoined why) implements OnVisit { }
     }
 
     /**
@@ -164,20 +207,6 @@ final class CoverageNaming implements Naming<Outcome> {
         List<TypeSymbol> left = compared.leavesWhere(held);
         return left.isEmpty() ? null : new Condition.Case(compared.at(),
                 left.stream().map(TypeSymbol::name).toList());
-    }
-
-    /**
-     * The place {@code comparison} coming out {@code held} is recorded at, or empty where the plan
-     * records no run through it.
-     *
-     * <p>The one way from a comparison of the tree that runs to where a run is seen making it, for
-     * every naming of a body that says what a run would be seen doing.
-     */
-    static Optional<ControlPlace.Outcome> outcomeAt(CoverageSites.Plan plan,
-                                                    Core.Binary comparison, boolean held) {
-        return plan.comparisons().occurrenceAt(comparison)
-                .filter(plan::instruments)
-                .flatMap(site -> plan.outcomeOf(site, held));
     }
 
     /** What {@code drawn} places on its number, where its other side is a value the number's order
@@ -218,7 +247,7 @@ final class CoverageNaming implements Naming<Outcome> {
             case PathResolution.NotAPosition _ -> null;
             // A name that only may stand at a position names no one position for a fork to be on,
             // and a name built out of the ones it may be would be a place no reader could look up.
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
         if (at == null) {
             return null;

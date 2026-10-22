@@ -8,6 +8,7 @@ import souther.compiler.numeric.LinearForm;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a row has to satisfy to stand at one coverage item, in the words a search can solve.
@@ -29,6 +30,65 @@ import java.util.Map;
  * beside what the model admits.
  */
 public sealed interface Standing {
+
+    /**
+     * What one whole number of a row leaves of another divided by it, at a remainder or in a run of
+     * them.
+     *
+     * <p>A row at a remainder is a divisor that can leave it and a dividend that is that remainder
+     * more than a whole number of turns of the divisor: the divisor is fixed first, at a value
+     * whose size is above the remainder's and whose sign is the remainder's where it has one, and
+     * the dividend is then held to a class of values, a constraint the search already answers.
+     * Which divisors are tried is the search's walk over those the rules leave; the remainder is
+     * the item.
+     *
+     * @param dividend the number divided
+     * @param divisor  the number it is divided by
+     * @param on       the order each number stands on
+     * @param levels   the remainders it can leave, which is what the criterion is about
+     */
+    record OfARemainderByAnInput(NumericTerm.FromOnePosition dividend,
+                                 NumericTerm.FromOnePosition divisor, Map<NumericTerm, Carrier> on,
+                                 LevelSpace levels, Criterion where) implements Standing {
+
+        public OfARemainderByAnInput {
+            on = Map.copyOf(on);
+            if (dividend == null || divisor == null || dividend.equals(divisor)
+                    || !on.keySet().equals(Set.of(dividend, divisor))) {
+                throw new IllegalArgumentException("a remainder by an input is of two numbers,"
+                        + " each on one order: " + dividend + " by " + divisor + " against "
+                        + on.keySet());
+            }
+        }
+    }
+
+    /**
+     * What two whole numbers of a row come to multiplied, at a value of the product or in a run of
+     * them.
+     *
+     * <p>A row at a level is a pair whose product is the level, so one factor is fixed at a value
+     * that divides it and the other is held where the level over that value is: a form of one
+     * number, which is a constraint the search already answers. Which value of the first is fixed
+     * is the search's walk over what divides the level; the product is the item.
+     *
+     * @param one    the factor fixed first
+     * @param other  the factor the level is then a form of
+     * @param on     the order each factor stands on
+     * @param levels the values the product takes, which is what the criterion is about
+     */
+    record OfAProduct(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other,
+                      Map<NumericTerm, Carrier> on, LevelSpace levels, Criterion where)
+            implements Standing {
+
+        public OfAProduct {
+            on = Map.copyOf(on);
+            if (one == null || other == null || one.equals(other)
+                    || !on.keySet().equals(Set.of(one, other))) {
+                throw new IllegalArgumentException("a product is of two numbers, each on one"
+                        + " order: " + one + " and " + other + " against " + on.keySet());
+            }
+        }
+    }
 
     /**
      * One position's own value, at a level of its carrier or anywhere in a side of it.
@@ -130,6 +190,42 @@ public sealed interface Standing {
                 throw new IllegalArgumentException("a remainder is of a form over the numbers it"
                         + " names, each on one order, and by a divisor above nought: " + dividend
                         + " against " + on.keySet() + " by " + divisor);
+            }
+        }
+    }
+
+    /**
+     * What a division by a written number leaves of a form of several positions, together with
+     * what a form of other positions comes to, at a level of the two added up.
+     *
+     * <p>Two things a row has to be at: the form leaving a remainder, and the other numbers
+     * standing where they add up to what the level leaves of that remainder. Neither is the item
+     * alone. The two forms name no position in common, so the remainder is chosen and the added
+     * numbers are met against what it leaves.
+     *
+     * @param dividend the form the division is of, with the constant it is moved by
+     * @param on       the order each number of the dividend stands on
+     * @param divisor  the number it is divided by, above nought
+     * @param added    what is added to the remainder, with no constant
+     * @param addedOn  the order each number added stands on
+     * @param levels   the levels the sum takes
+     */
+    record OfARemainderAndAForm(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
+                                BigInteger divisor, LinearForm<NumericTerm> added,
+                                Map<NumericTerm, Carrier> addedOn, LevelSpace levels,
+                                Criterion where) implements Standing {
+
+        public OfARemainderAndAForm {
+            on = Map.copyOf(on);
+            addedOn = Map.copyOf(addedOn);
+            if (dividend.coefs().isEmpty() || !on.keySet().equals(dividend.coefs().keySet())
+                    || divisor.signum() <= 0 || added.coefs().isEmpty()
+                    || !addedOn.keySet().equals(added.coefs().keySet())
+                    || added.coefs().keySet().stream().anyMatch(number -> dividend.coefs()
+                            .keySet().stream().anyMatch(number::sharesAPlaceWith))) {
+                throw new IllegalArgumentException("a remainder is added to a form over other"
+                        + " numbers than its own, each on one order, and divided by a divisor"
+                        + " above nought: " + dividend + " by " + divisor + " plus " + added);
             }
         }
     }

@@ -67,25 +67,71 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
         return entries.getOrDefault(key, 0L) >= q;
     }
 
+    /**
+     * Nothing is left unread, the threshold included. On the way to the entry the lookup asks
+     * which key the map holds an entry under, which says nothing of the value under it, so the
+     * entry's value reaches every threshold — written with the default or with the match spelled
+     * out, and with the value moved by a constant before it is compared.
+     */
     @Test
     void aLookupWithADefaultIsReadToTheEnd() {
-        String report = report(measured(WITH_DEFAULT));
+        for (String source : List.of(WITH_DEFAULT, WRITTEN_OUT, """
+                module p
+                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+                let f (k, m, q) =
+                    (Map.get(k, m) |> Option.map(v -> v + 1) |> Option.withDefault(0)) >= q
+                """)) {
+            String report = report(measured(source));
 
-        assertTrue(readSaveForWhatTheOtherValueReaches(report), report);
+            assertEquals(List.of(), notRead(report), report);
+        }
     }
 
     /**
-     * Whether everything {@code report} says went unread is that a relation is not shown to reach
-     * every value of a place.
-     *
-     * <p>The entry's line decides where the default's line does not, and that is a case over the
-     * threshold: along each way to it the threshold runs over only some of its values, so along
-     * neither is it shown to reach every entry. What the two ways reach together is not shown
-     * either, and the comparison itself was read.
+     * A condition on the value under the key still holds it back: past the entry's value at ten
+     * or more, a threshold of ten or below is met by every entry, and is not reached.
      */
-    private static boolean readSaveForWhatTheOtherValueReaches(String report) {
-        return report.lines().filter(line -> line.strip().startsWith("· not read"))
-                .allMatch(line -> line.contains("not shown to reach every value here"));
+    @Test
+    void aConditionOnTheEntrysValueStillHoldsItBack() {
+        String report = report(measured("""
+                module p
+                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+                let f (k, m, q) = (Map.get(k, m) |> Option.withDefault(0)) >= 10
+                    && (Map.get(k, m) |> Option.withDefault(0)) >= q
+                """));
+
+        assertEquals(1, notRead(report).size(), report);
+        assertTrue(notRead(report).getFirst().contains("not shown to reach every value here")
+                && notRead(report).getFirst().endsWith("about `q`"), report);
+    }
+
+    /** The lines {@code report} says were not read. */
+    private static List<String> notRead(String report) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.startsWith("· not read")).toList();
+    }
+
+    /**
+     * The entry's line decides wherever an entry is filed under the key, whatever the default is
+     * against the threshold: where none is, the entry's comparison is not what the statement
+     * says. Read so, the threshold runs over every value on the way to the entry, and what the
+     * entry's value is said to be is what the match written out says of it.
+     */
+    @Test
+    void theDefaultsLineDoesNotDivideWhereTheEntrysLineDecides() {
+        String called = report(measured(WITH_DEFAULT));
+        String written = report(measured(WRITTEN_OUT));
+
+        assertEquals(partitionAbout(written, "m[*]"), partitionAbout(called, "m[*]"), called);
+        assertTrue(partitionAbout(called, "m[*]").startsWith("· no line:"), called);
+    }
+
+    /** The partition line about {@code place}, without where its comparison stands. */
+    private static String partitionAbout(String report, String place) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.endsWith("about `" + place + "`"))
+                .map(line -> line.replaceFirst("comparison@\\d+:\\d+", "comparison"))
+                .findFirst().orElse("");
     }
 
     /**
@@ -153,8 +199,7 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
                 () -> examples + report(answered));
         assertFalse(report(answered).contains("adequacy: not satisfied"),
                 () -> report(answered));
-        assertTrue(readSaveForWhatTheOtherValueReaches(report(answered)),
-                () -> report(answered));
+        assertEquals(List.of(), notRead(report(answered)), () -> report(answered));
         assertEquals(8, offered(WITH_DEFAULT).size(), () -> report(offered));
     }
 

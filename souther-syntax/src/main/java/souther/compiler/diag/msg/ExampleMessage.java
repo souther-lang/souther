@@ -45,6 +45,9 @@ public sealed interface ExampleMessage extends Message {
     /** Which cases it does answer with. */
     record TheResultCasesAre(String cases) implements ExampleMessage, Supporting {}
 
+    /** That what it answers with is made of no case a row can name. */
+    record ItAnswersWithNoCase(String answers) implements ExampleMessage, Supporting {}
+
     /** The row does not hold. */
     @Code(DiagnosticCode.E1905)
     record TheRowDoesNotHold() implements ExampleMessage, Reported {}
@@ -52,6 +55,11 @@ public sealed interface ExampleMessage extends Message {
     /** Where the two are not of one type, which reading the two values does not say: an encoder
      *  writes a newtype as the base it wraps, so both sides read alike. */
     record TheTwoAreOfDifferentTypes(String at, String expected, String actual)
+            implements ExampleMessage, Supporting {}
+
+    /** The row states a value nothing the behavior answers with can be, where no answer was there
+     *  to compare it with. */
+    record NoAnswerIsWhatTheRowStates(String stated, String answers)
             implements ExampleMessage, Supporting {}
 
     /** What the row said and what came back. */

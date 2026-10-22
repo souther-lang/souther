@@ -1,6 +1,7 @@
 package souther.compiler.conformance;
 
 import souther.test.CheckedInObservation;
+import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
 
@@ -29,6 +30,7 @@ import java.util.List;
  * <p>What it does not claim is that the answers are good ones. It records what they are.
  */
 @CheckedInObservation
+@ReadsTheRepositorysModels
 class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
 
     /**
@@ -67,7 +69,7 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
         }
         List<Document> out = new ArrayList<>();
         for (ConformanceCorpus corpus : corpora) {
-            ConformanceCorpus.Analysed analysed = corpus.analyse();
+            ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
             out.add(new Document(corpus.name(), corpus.name() + "/expected.report.json",
                     ConformanceSnapshot.report(analysed)));
             out.add(new Document(corpus.name(), corpus.name() + "/expected.diagnostics.txt",

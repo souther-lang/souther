@@ -2,9 +2,12 @@ package souther.compiler.diag;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.RowRef;
 import souther.compiler.source.SourceId;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
@@ -16,11 +19,14 @@ import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -96,6 +102,14 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
      */
     private static final Set<Class<?>> OPEN = Set.of();
 
+    /** How a class file spells a source identity. */
+    private static final byte[] A_SOURCE =
+            SourceId.class.getName().replace('.', '/').getBytes(StandardCharsets.UTF_8);
+
+    /** The name of every class read, whether or not it names a source identity. */
+    private static final List<String> READ = new ArrayList<>();
+
+    /** Every class read that names a source identity, loaded. Filled with {@link #READ}. */
     private static final List<Class<?>> COMPILED = compiled();
 
     @Test
@@ -153,16 +167,22 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
      *  the code did, so this holds it to seeing the values this rule was written about. */
     @Test
     void theScanReachesTheValuesThisRuleIsAbout() {
-        assertTrue(COMPILED.size() > 500, "the compiler and its syntax, not a handful: " + COMPILED.size());
+        assertTrue(READ.size() > 500, "the compiler and its syntax, not a handful: " + READ.size());
         for (Class<?> named : List.of(SourcePos.class, Region.class, Citation.class,
                 Spot.InSource.class, Spot.InTextBeingRead.class, Diagnostic.class, Located.class,
                 souther.compiler.query.Db.Found.class,
                 DiagnosticPlace.InSource.class, souther.compiler.observe.RowOutcome.class,
                 souther.compiler.observe.Incompleteness.class,
                 souther.compiler.query.Output.Examples.class)) {
-            assertTrue(COMPILED.contains(named), named + " is not among what was read");
+            assertTrue(READ.contains(named.getName()), named + " is not among what was read");
         }
-        assertFalse(OPEN.stream().anyMatch(open -> !COMPILED.contains(open)),
+        // And what names a source is loaded and asked, in the syntax and in the compiler alike.
+        for (Class<?> naming : List.of(QuotedFrom.ASourceThisCompileHolds.class,
+                RowRef.class)) {
+            assertTrue(COMPILED.contains(naming),
+                    naming + " holds a source identity and is not among what was asked");
+        }
+        assertFalse(OPEN.stream().anyMatch(open -> !READ.contains(open.getName())),
                 "an open case nothing reads is an exception to nothing");
     }
 
@@ -266,27 +286,35 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
      *
      * <p>Not initialised: a class is loaded for what it declares, and running its static
      * initialisers would make this test depend on what they touch.
+     *
+     * <p>And loaded only where its class file names a source identity. Every type a class declares
+     * a field, a component or a parameter of — its type arguments included — is spelled in the
+     * class file, and a source identity is one record with nothing beneath it, so a class whose file
+     * never spells it holds none and takes none, and is read and not loaded.
      */
     private static List<Class<?>> compiled() {
         List<Class<?>> found = new ArrayList<>();
-        for (String entry : System.getProperty("java.class.path").split(java.io.File.pathSeparator)) {
+        for (String entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
             if (!entry.contains("souther-")) {
                 continue;
             }
             Path root = Path.of(entry);
             if (Files.isDirectory(root)) {
                 try (Stream<Path> walk = Files.walk(root)) {
-                    walk.filter(each -> each.toString().endsWith(".class"))
-                            .map(each -> root.relativize(each).toString())
-                            .forEach(name -> load(name, found));
+                    for (Path each : walk.filter(it -> it.toString().endsWith(".class")).toList()) {
+                        load(root.relativize(each).toString(), Files.readAllBytes(each), found);
+                    }
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
             } else if (entry.endsWith(".jar") && Files.isRegularFile(root)) {
-                try (java.util.jar.JarFile jar = new java.util.jar.JarFile(root.toFile())) {
-                    jar.stream().map(java.util.zip.ZipEntry::getName)
-                            .filter(name -> name.endsWith(".class"))
-                            .forEach(name -> load(name, found));
+                try (JarFile jar = new JarFile(root.toFile())) {
+                    for (JarEntry each : jar.stream()
+                            .filter(it -> it.getName().endsWith(".class")).toList()) {
+                        try (InputStream in = jar.getInputStream(each)) {
+                            load(each.getName(), in.readAllBytes(), found);
+                        }
+                    }
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
@@ -295,11 +323,15 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
         return List.copyOf(found);
     }
 
-    private static void load(String path, List<Class<?>> into) {
+    private static void load(String path, byte[] file, List<Class<?>> into) {
         String name = path.substring(0, path.length() - ".class".length())
-                .replace(java.io.File.separatorChar, '.').replace('/', '.');
+                .replace(File.separatorChar, '.').replace('/', '.');
         if (!name.startsWith("souther.") || name.endsWith("package-info")
                 || name.endsWith("module-info")) {
+            return;
+        }
+        READ.add(name);
+        if (!spells(file, A_SOURCE)) {
             return;
         }
         try {
@@ -308,5 +340,18 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
         } catch (ClassNotFoundException | LinkageError _) {
             // a class this test's path cannot resolve says nothing about the rule
         }
+    }
+
+    private static boolean spells(byte[] file, byte[] word) {
+        for (int at = 0; at + word.length <= file.length; at++) {
+            int i = 0;
+            while (i < word.length && file[at + i] == word[i]) {
+                i++;
+            }
+            if (i == word.length) {
+                return true;
+            }
+        }
+        return false;
     }
 }

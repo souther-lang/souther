@@ -32,6 +32,9 @@ public enum CompositionRepertoire {
      * equal share each as the order allows — and the arrangements of more than one element are
      * many. Which of them a rule tells apart is the rule's own business, so no reading of the two
      * says anything about the rest.
+     *
+     * <p>Elements the total leaves out — those at positions a total of some of them does not take —
+     * are written at one value each, which is one of the values they could hold.
      */
     WAYS_A_TOTAL_IS_SPREAD,
 
@@ -59,8 +62,10 @@ public enum CompositionRepertoire {
      * and one read off a value the group already asks for is read off the values that demand
      * admits, and one it is composed out of is composed for. Which groups those are is the
      * realizer's to say and is not spelled out here; what this names is the values left over, whose
-     * numbers are reached none of those ways — two totals of one container are two spreadings of
-     * one list of elements at once, and nothing here writes that.
+     * numbers are reached none of those ways. Totals of the fields of their own of one container's
+     * elements are composed together, one share of each for each element; what is left over is
+     * totals that read one field, a total computed of several fields beside another, and a choice
+     * among forms of a field solved for beside another total.
      *
      * <p>So a group nothing built a value for is not a group no value answers. Raising anything
      * reaches none of them; what would is somebody writing the solving.
@@ -94,20 +99,122 @@ public enum CompositionRepertoire {
     ELEMENTS_CHOSEN_FOR_A_COUNT,
 
     /**
+     * The keys placed beside the number their own elements come to, where the key is a field that
+     * number is made of.
+     *
+     * <p>The key is another parameter's and is fixed before the elements are composed, while the
+     * elements of a key come to a number that turns on the key. Where each element adds the key
+     * itself, the key is placed at the number asked for and a row holds one element of it; a key
+     * that divides the number, with that many elements, is one of the others, and so is a size
+     * of the container that asks for more elements than one. Where the number is made of the
+     * key and something more, the key is a value the rules leave and nothing relates it to the
+     * number. All of them are written by none of these. Raising no figure reaches them; what
+     * would is a way of choosing the key and the elements of it together.
+     */
+    KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
+
+    /**
+     * The keys of one fold asked for together, at the values and with the numbers this tries.
+     *
+     * <p>Each key is another parameter's and is fixed before the elements are composed. Two keys
+     * are held at different values where they can be, and a key only counted — asked how many
+     * elements have it, with no number asked of them — is written to come to the number the first
+     * total of the group asks, since the composer of counts stops at a figure of its own where the
+     * elements are the fields of a record. A key counted beside a number it need not come to, and
+     * a count that asks more of a key than that number allows, are written by none of these.
+     * Raising no figure reaches them; what would is a way of choosing the keys and the elements
+     * of each together.
+     */
+    KEYS_OF_ONE_FOLD_ASKED_TOGETHER,
+
+    /**
+     * The elements of a key whose least or greatest value is asked for, written as one element.
+     *
+     * <p>One element is its own least and its own greatest, so an end is written as one. A
+     * container that must hold more of that key's elements — its type holds two, or a count of the
+     * key's elements asks for more than one — has the end among several, and so does a key whose
+     * end is not any one element's number; they are written by none of these. Raising no figure
+     * reaches them; what would is a way of writing the end with the other elements of the key
+     * around it.
+     */
+    ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
+
+    /**
      * The elements whose computed number is made of the fields of one element in ways this
      * compiler solves for.
      *
      * <p>A total of what a walk computed of each element is written by choosing one field of every
      * element and solving for it, where the computation is a form of that one field alone. A form of
      * several fields, or a choice between two by a flag, has more than one value to choose in an
-     * element, and nothing here chooses the others so that the first can be solved for. Raising
+     * element, and nothing here chooses the others so that the first can be solved for. A choice by
+     * the element's case none of whose arms is a form of one field of its case is the same, and so
+     * is a weight made of the position or a choice by it between two forms of the field, which
+     * weigh the positions apart. Raising
      * anything reaches none of them; what would is a way of choosing the rest of an element.
      *
      * <p>So a total of such a number is not a total no row comes to. Read as a figure, an author is
      * told to raise a number that changes nothing; read as an answer about the model, they are told
      * the rules admit no row when what happened is that this compiler wrote none.
      */
-    ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR;
+    ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
+
+    /**
+     * The containers a total of what was computed of each element by its case is spread over,
+     * where they mix the cases.
+     *
+     * <p>Such a total is solved for through one arm, which is a form of one field of the case it
+     * takes, so every element written is of that case. A container mixing it with another case
+     * comes to a total no container of one case does — twice an amount is even, and an odd fee
+     * beside it is not — and is written by none of these. What would reach it is a way of sharing a
+     * total out among the arms, and raising no figure does.
+     */
+    MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+
+    /**
+     * The trees written for how many nodes, or values inside the nodes, a tree holds.
+     *
+     * <p>Written as a root and nodes below it holding nothing below them. A tree of that many
+     * nodes is one of those wherever a node may hold as many below it as the count leaves; where
+     * the rules hold how many a node holds below it to fewer — one each, a chain — a tree of that
+     * many is deeper, and none of these. A count of values inside the nodes is written by none of
+     * them. Neither is a count no tree comes to: what would reach it is a way of writing deeper
+     * trees, and raising no figure does.
+     */
+    TREES_WRITTEN_FOR_A_COUNT,
+
+    /**
+     * The strings written for how many code points of a class what a case conversion makes of them
+     * holds.
+     *
+     * <p>A string is written out of the code points of the class itself, and offered where the
+     * run time's answer holds the count asked for. A string whose answer holds it by other code
+     * points — the capitals a lowercase counts as letters, a digit where the plain letters are
+     * tried first, a letter composed with a mark after it — is found by none of them. Neither is
+     * a count no string comes to: what would reach it is a way of writing strings backwards through
+     * the conversion, and raising no figure does.
+     */
+    STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR;
+
+    /**
+     * Whether a row that meets this for one value of a point meets it for every other: the
+     * population is of the number and not of the value it was asked at.
+     *
+     * <p>A computed total with no field to solve for is one, since which way solves it is read off
+     * the computation and never off the total asked for, so a second value is written by nothing
+     * the first was not. The others are walks of what one value admits — the ways it is spread,
+     * the places a pair stands, the elements chosen — and another value admits others.
+     */
+    public boolean metWhateverTheValue() {
+        return switch (this) {
+            case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR -> true;
+            case WAYS_A_TOTAL_IS_SPREAD, PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
+                 VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
+                 ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
+                 KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
+                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                 TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
+        };
+    }
 
     /**
      * Whether a wider run could reach the rest: never, since raising anything reaches none of it.

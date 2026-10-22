@@ -61,7 +61,7 @@ class AnAbsenceIsNotSaidOverABodyNobodyReadTest {
         return new Partitions.Partitioning(
                 List.of(new PositionMeasurements(answeredFor(), List.of(),
                         new BodyCutInspection.Exhausted())),
-                List.of(), Set.of(), List.of(), List.of(), List.of(), Map.of(),
+                List.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), Map.of(),
                 ReachingCuts.NONE, closure.partition(), closure.border(), null,
                 WhereTheOperationsStand.NONE)
                 .undivided();

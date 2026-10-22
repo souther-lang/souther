@@ -2,17 +2,20 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.numeric.AffineConstraint.Read;
+import souther.compiler.numeric.RulesAsWritten.Written;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.compiler.numeric.RulesAsWritten.admits;
+import static souther.compiler.numeric.RulesAsWritten.boxed;
+import static souther.compiler.numeric.RulesAsWritten.everyOrder;
+import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
+import static souther.compiler.numeric.RulesAsWritten.rules;
+import static souther.compiler.numeric.RulesAsWritten.twice;
 
 /**
  * Everything the closure says is checked against the points themselves.
@@ -38,25 +41,68 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>And the same answers whatever order the rules arrived in, which is the property this whole
  * arrangement exists to restore.
+ *
+ * <p>The systems are the ones the closure has a step for ({@link #SYSTEMS}): a bound carried onto a
+ * position along differences above and below, through more than one position between; a difference
+ * read through nought; ends that meet at one value beside ends that cross; a cycle summing to nought
+ * beside one summing below it; two rules on one edge with the looser said last; a difference said
+ * outright looser than the path to it through a third position, which a closure keeping the first
+ * bound it found for an edge leaves loose; and the weights and
+ * strict comparisons a rule is read down to the same edges from.
  */
 class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
 
-    private static final List<String> POSITIONS = List.of("a", "b", "c");
     private static final int LOW = -4;
     private static final int HIGH = 4;
-    private static final int CASES = 300;
 
-    private record Written(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {}
+    /** Each system with what it is for; every position it names is held to the range. */
+    private static final List<List<Written>> SYSTEMS = List.of(
+            // A bound above carried onto a through two differences.
+            rules("a - b <= 1", "b - c <= 1", "c <= 0"),
+            // A bound below carried onto a through two differences.
+            rules("c - b <= -1", "b - a <= -1", "c >= 1"),
+            // No difference between a and b, so theirs is read through nought.
+            rules("a <= 1", "b >= 2"),
+            // Two ends at one value, which leave it.
+            rules("a >= 3", "a <= 3"),
+            // Two ends that have crossed.
+            rules("a >= 3", "a <= 2"),
+            // A cycle summing to nought, which leaves a and b equal.
+            rules("a - b <= 0", "b - a <= 0"),
+            // A cycle summing below nought.
+            rules("a - b <= -1", "b - a <= 0"),
+            // Ends crossed only once a bound is carried along a difference.
+            rules("a - b <= -3", "b <= -2", "c - a <= 0"),
+            // Two bounds on one difference, the looser said last.
+            rules("a - b <= 1", "a - b <= 3"),
+            // A difference said outright looser than the path to it through a third position.
+            rules("a - c <= 3", "a - b <= 0", "b - c <= 0"),
+            // Weights of two and strict comparisons, which are read down to edges of one.
+            rules("2a - 2b <= 3", "2c >= 3", "a < 0", "b - c < 2"),
+            // A bound carried onto a through three positions between.
+            rules("a - b <= 0", "b - c <= 0", "c - d <= 0", "d <= 1"));
+
+    private static List<String> positionsOf(List<Written> system) {
+        return List.copyOf(RulesAsWritten.positionsOf(system));
+    }
+
+    private static List<Written> bounded(List<Written> system) {
+        return boxed(system, positionsOf(system), LOW, HIGH);
+    }
+
+    private static DifferenceBounds<String> closed(List<Written> written) {
+        return DifferenceBounds.over(RulesAsWritten.read(written, atom -> Granularity.DISCRETE),
+                CanonicalOrder.asTheyAreSpelled());
+    }
 
     @Test
     void everyClosureAgreesWithTheePointsItIsAbout() {
-        Random dice = new Random(891);
         int empties = 0;
-        for (int round = 0; round < CASES; round++) {
-            List<Written> written = aSystem(dice);
-            List<AffineConstraint<String>> stated = read(written);
-            DifferenceBounds<String> closed = DifferenceBounds.over(stated, CanonicalOrder.asTheyAreSpelled());
-            List<Map<String, Integer>> admitted = pointsSatisfying(written);
+        for (List<Written> system : SYSTEMS) {
+            List<Written> written = bounded(system);
+            List<String> positions = positionsOf(system);
+            DifferenceBounds<String> closed = closed(written);
+            List<Map<String, Integer>> admitted = pointsSatisfying(written, positions, LOW, HIGH);
 
             if (admitted.isEmpty()) {
                 empties++;
@@ -66,37 +112,34 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
             if (admitted.isEmpty()) {
                 continue;   // nothing is left, so there is no bound to be sound or tight about
             }
-            assertSoundAndTight(written, closed, admitted);
+            assertSoundAndTight(written, positions, closed, admitted);
         }
-        assertTrue(empties > 20 && empties < CASES - 20,
-                "the systems have to come out both ways to check both, and " + empties
-                        + " of " + CASES + " were empty");
+        int empty = empties;
+        assertTrue(empties > 0 && empties < SYSTEMS.size(),
+                () -> "the systems have to come out both ways to check both, and " + empty
+                        + " of " + SYSTEMS.size() + " were empty");
     }
 
-    /** The same rules in any order are the same answers. */
+    /**
+     * The same rules in any order are the same answers.
+     *
+     * <p>Every order of a system's own rules, said after the range and before it. The range holds a
+     * position each and nothing between two, so where it stands against the rules is the one thing
+     * about its order a reader could answer differently for.
+     */
     @Test
     void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
-        Random dice = new Random(1016);
-        for (int round = 0; round < CASES; round++) {
-            List<AffineConstraint<String>> stated = read(aSystem(dice));
-            DifferenceBounds<String> asWritten = DifferenceBounds.over(stated, CanonicalOrder.asTheyAreSpelled());
-            List<AffineConstraint<String>> shuffled = new ArrayList<>(stated);
-            Collections.shuffle(shuffled, dice);
-            DifferenceBounds<String> reordered = DifferenceBounds.over(shuffled, CanonicalOrder.asTheyAreSpelled());
-
-            assertEquals(asWritten.holdsNothing(), reordered.holdsNothing());
-            if (asWritten.holdsNothing()) {
-                continue;   // where nothing is left there is no tightest bound to compare
-            }
-            for (String position : POSITIONS) {
-                assertEquals(asWritten.upperBoundOf(position), reordered.upperBoundOf(position),
-                        () -> "upper bound of " + position + " moved when the rules were reordered");
-                assertEquals(asWritten.lowerBoundOf(position), reordered.lowerBoundOf(position),
-                        () -> "lower bound of " + position + " moved when the rules were reordered");
-                for (String other : POSITIONS) {
-                    assertEquals(asWritten.differenceBound(position, other),
-                            reordered.differenceBound(position, other));
-                }
+        for (List<Written> system : SYSTEMS) {
+            List<Written> written = bounded(system);
+            DifferenceBounds<String> asWritten = closed(written);
+            List<Written> range = written.subList(0, written.size() - system.size());
+            for (List<Written> order : everyOrder(system)) {
+                List<Written> rangeFirst = new ArrayList<>(range);
+                rangeFirst.addAll(order);
+                List<Written> rangeLast = new ArrayList<>(order);
+                rangeLast.addAll(range);
+                assertSameAnswers(rangeFirst, asWritten, closed(rangeFirst));
+                assertSameAnswers(rangeLast, asWritten, closed(rangeLast));
             }
         }
     }
@@ -104,28 +147,36 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     /** And asserting a rule twice says what asserting it once says. */
     @Test
     void sayingARuleTwiceSaysWhatSayingItOnceSays() {
-        Random dice = new Random(4800);
-        for (int round = 0; round < CASES; round++) {
-            List<AffineConstraint<String>> stated = read(aSystem(dice));
-            List<AffineConstraint<String>> doubled = new ArrayList<>(stated);
-            doubled.addAll(stated);
-            DifferenceBounds<String> once = DifferenceBounds.over(stated, CanonicalOrder.asTheyAreSpelled());
-            DifferenceBounds<String> twice =
-                    DifferenceBounds.over(doubled, CanonicalOrder.asTheyAreSpelled());
-            assertEquals(once.holdsNothing(), twice.holdsNothing());
-            if (once.holdsNothing()) {
-                continue;
-            }
-            for (String position : POSITIONS) {
-                assertEquals(once.upperBoundOf(position), twice.upperBoundOf(position));
-                assertEquals(once.lowerBoundOf(position), twice.lowerBoundOf(position));
+        for (List<Written> system : SYSTEMS) {
+            List<Written> written = bounded(system);
+            assertSameAnswers(written, closed(written), closed(twice(written)));
+        }
+    }
+
+    private static void assertSameAnswers(List<Written> written, DifferenceBounds<String> one,
+                                          DifferenceBounds<String> other) {
+        assertEquals(one.holdsNothing(), other.holdsNothing(), written::toString);
+        if (one.holdsNothing()) {
+            return;   // where nothing is left there is no tightest bound to compare
+        }
+        List<String> positions = positionsOf(written);
+        for (String position : positions) {
+            assertEquals(one.upperBoundOf(position), other.upperBoundOf(position),
+                    () -> "upper bound of " + position + " moved under " + written);
+            assertEquals(one.lowerBoundOf(position), other.lowerBoundOf(position),
+                    () -> "lower bound of " + position + " moved under " + written);
+            for (String apart : positions) {
+                assertEquals(one.differenceBound(position, apart),
+                        other.differenceBound(position, apart),
+                        () -> position + " - " + apart + " moved under " + written);
             }
         }
     }
 
-    private static void assertSoundAndTight(List<Written> written, DifferenceBounds<String> closed,
+    private static void assertSoundAndTight(List<Written> written, List<String> positions,
+                                            DifferenceBounds<String> closed,
                                             List<Map<String, Integer>> admitted) {
-        for (String position : POSITIONS) {
+        for (String position : positions) {
             ExactCut high = closed.upperBoundOf(position);
             ExactCut low = closed.lowerBoundOf(position);
             int most = admitted.stream().mapToInt(point -> point.get(position)).max().orElseThrow();
@@ -142,7 +193,7 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
             assertEquals(ExactCut.inclusive(ExactRatio.of(least)), low,
                     () -> "not tight below at " + position + " for " + written);
 
-            for (String other : POSITIONS) {
+            for (String other : positions) {
                 if (position.equals(other)) {
                     continue;
                 }
@@ -157,102 +208,5 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
                         () -> "not tight on " + position + " - " + other + " for " + written);
             }
         }
-    }
-
-    private static boolean admits(ExactCut cut, ExactRatio value, boolean above) {
-        if (cut == null) {
-            return true;
-        }
-        int order = value.compareTo(cut.at());
-        int outside = above ? 1 : -1;
-        return order != outside * 1 && (order != 0 || cut.inclusive());
-    }
-
-    /**
-     * A handful of rules of this fragment's shapes, over positions every one of which is bounded to
-     * the range the points are enumerated over — so the points are all the points there are.
-     */
-    private static List<Written> aSystem(Random dice) {
-        List<Written> out = new ArrayList<>();
-        for (String position : POSITIONS) {
-            out.add(new Written(Map.of(position, ExactRatio.ONE),
-                    ExactRatio.of(-LOW), Rel.GE));
-            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(-HIGH), Rel.LE));
-        }
-        int howMany = 2 + dice.nextInt(4);
-        for (int i = 0; i < howMany; i++) {
-            String one = POSITIONS.get(dice.nextInt(POSITIONS.size()));
-            long threshold = LOW + (long) dice.nextInt(HIGH - LOW + 1);
-            boolean strict = dice.nextBoolean();
-            if (dice.nextBoolean()) {
-                Rel rel = dice.nextBoolean()
-                        ? (strict ? Rel.LT : Rel.LE) : (strict ? Rel.GT : Rel.GE);
-                // A weight of two as often as one, so the shape canonicalisation brought in is
-                // exercised rather than assumed.
-                long weight = dice.nextBoolean() ? 1 : 2;
-                out.add(new Written(Map.of(one, ExactRatio.of(weight)),
-                        ExactRatio.of(-threshold * weight), rel));
-            } else {
-                String other = POSITIONS.get(dice.nextInt(POSITIONS.size()));
-                if (one.equals(other)) {
-                    continue;
-                }
-                long weight = dice.nextBoolean() ? 1 : 2;
-                Map<String, ExactRatio> coefs = new LinkedHashMap<>();
-                coefs.put(one, ExactRatio.of(weight));
-                coefs.put(other, ExactRatio.of(-weight));
-                out.add(new Written(coefs, ExactRatio.of(-threshold * weight),
-                        strict ? Rel.LT : Rel.LE));
-            }
-        }
-        return out;
-    }
-
-    private static List<AffineConstraint<String>> read(List<Written> written) {
-        List<AffineConstraint<String>> out = new ArrayList<>();
-        for (Written each : written) {
-            Read<String> read = AffineConstraint.of(each.coefs(), each.constant(), each.rel(),
-                    atom -> Granularity.DISCRETE);
-            if (read instanceof Read.Stated<String> stated) {
-                out.add(stated.constraint());
-            }
-        }
-        return out;
-    }
-
-    /** Every whole-numbered point in the range that satisfies every rule as it was written. */
-    private static List<Map<String, Integer>> pointsSatisfying(List<Written> written) {
-        List<Map<String, Integer>> out = new ArrayList<>();
-        for (int a = LOW; a <= HIGH; a++) {
-            for (int b = LOW; b <= HIGH; b++) {
-                for (int c = LOW; c <= HIGH; c++) {
-                    Map<String, Integer> point = new LinkedHashMap<>();
-                    point.put("a", a);
-                    point.put("b", b);
-                    point.put("c", c);
-                    if (written.stream().allMatch(rule -> holdsAt(rule, point))) {
-                        out.add(point);
-                    }
-                }
-            }
-        }
-        return out;
-    }
-
-    private static boolean holdsAt(Written rule, Map<String, Integer> point) {
-        ExactRatio total = rule.constant();
-        for (Map.Entry<String, ExactRatio> each : rule.coefs().entrySet()) {
-            total = each.getValue().times(ExactRatio.of(point.get(each.getKey())))
-                    .flatMap(total::plus).orNull();
-        }
-        int sign = total.signum();
-        return switch (rule.rel()) {
-            case LE -> sign <= 0;
-            case LT -> sign < 0;
-            case GE -> sign >= 0;
-            case GT -> sign > 0;
-            case EQ -> sign == 0;
-            case NE -> sign != 0;
-        };
     }
 }

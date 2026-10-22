@@ -6,7 +6,7 @@
 
     <groupId>org.souther-lang</groupId>
     <artifactId>souther-parent</artifactId>
-    <version>0.4.0</version>
+    <version>0.4.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Souther</name>
@@ -156,7 +156,7 @@
              release and of a snapshot alike. -->
         <souther.publish.skip>false</souther.publish.skip>
         <!-- The Enforcer the release and snapshot profiles check with. -->
-        <enforcer.version>3.5.0</enforcer.version>
+        <enforcer.version>3.6.3</enforcer.version>
         <!-- What the build copies into an artifact from outside every module's own src, as paths
              from the root. A publication refuses an ignored file in any of them, as each module
              refuses one in its src (bin/require-clean-checkout.sh), because a copy would carry it
@@ -378,7 +378,7 @@
                 <plugin>
                     <groupId>org.sonatype.central</groupId>
                     <artifactId>central-publishing-maven-plugin</artifactId>
-                    <version>0.11.0</version>
+                    <version>0.12.0</version>
                     <configuration>
                         <publishingServerId>central</publishingServerId>
                         <autoPublish>true</autoPublish>
@@ -436,7 +436,7 @@
             <plugin>
                 <groupId>io.github.git-commit-id</groupId>
                 <artifactId>git-commit-id-maven-plugin</artifactId>
-                <version>9.0.1</version>
+                <version>10.0.1</version>
                 <executions>
                     <execution>
                         <id>read-revision</id>
@@ -771,12 +771,31 @@
                          untracked files and, in a linked worktree, answers for the main checkout.
                          The tree as a whole, and what the build reads from outside every module's
                          src, are asked once; each module asks of its own src; and each module is
-                         cleaned before it is built, so nothing an earlier build wrote is in it. -->
+                         cleaned before it is built, so nothing an earlier build wrote is in it.
+                         The commit the plugin read is asked to be this tree's HEAD, since in a
+                         linked worktree it reads the main checkout's, and the tag asked about
+                         below is that commit's. -->
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
-                        <version>3.5.1</version>
+                        <version>3.6.4</version>
                         <executions>
+                            <execution>
+                                <id>require-revision-is-head</id>
+                                <!-- After initialize, where the commit is read: the plugins of
+                                     one phase run in an order this pom does not choose. -->
+                                <phase>generate-sources</phase>
+                                <inherited>false</inherited>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-revision-is-head.sh</executable>
+                                    <arguments>
+                                        <argument>${git.commit.id.full}</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
                             <execution>
                                 <id>require-clean-checkout</id>
                                 <phase>initialize</phase>
@@ -903,8 +922,9 @@
              repository keeps one coordinate per version and every publication overwrites it, so
              what the coordinate holds is whatever was published last; this profile is what makes
              that the tip of develop. It refuses a version that is not a snapshot, a change HEAD
-             does not record, an ignored file where the build reads, and a HEAD that is not the
-             commit develop points at on origin, and it cleans every module before building it. A
+             does not record, an ignored file where the build reads, a HEAD that is not the
+             commit develop points at on origin, and a commit read for the manifest that is not
+             HEAD, and it cleans every module before building it. A
              snapshot may depend on snapshots: it is overwritten by the next publication anyway. Sources, javadoc and signatures are a
              release's and are not made. -->
         <profile>
@@ -935,7 +955,7 @@
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
-                        <version>3.5.1</version>
+                        <version>3.6.4</version>
                         <executions>
                             <execution>
                                 <id>require-clean-checkout</id>
@@ -971,6 +991,22 @@
                                 </goals>
                                 <configuration>
                                     <executable>${project.basedir}/bin/require-develop-tip.sh</executable>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>require-revision-is-head</id>
+                                <!-- After initialize, where the commit is read: the plugins of
+                                     one phase run in an order this pom does not choose. -->
+                                <phase>generate-sources</phase>
+                                <inherited>false</inherited>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-revision-is-head.sh</executable>
+                                    <arguments>
+                                        <argument>${git.commit.id.full}</argument>
+                                    </arguments>
                                 </configuration>
                             </execution>
                         </executions>

@@ -79,6 +79,8 @@ public final class WrittenLines {
     private final ExpansionLineage comparison;
     private final Conclusion concluded;
     private final Map<Derivation, Set<String>> made = new IdentityHashMap<>();
+    /** What each step whose relations were gathered concludes. */
+    private final Map<Derivation, Proposition> conclusions = new IdentityHashMap<>();
     private final Map<Derivation, Set<Under>> walked = new IdentityHashMap<>();
     private final Map<String, Map<WrittenLine, Seen>> seen = new LinkedHashMap<>();
     /** The lines some relation of the comparison's own was made under. */
@@ -152,6 +154,10 @@ public final class WrittenLines {
                 madeHere(step, List.of(read), under);
                 walk(read, WrittenChoice.of(at, comparison).isPresent()
                         ? under.inAnotherComparison() : under.outside());
+            }
+            case Derivation.Restated(var read) -> {
+                madeHere(step, List.of(read), under);
+                walk(read, under.inAnotherComparison());
             }
             default -> {
                 if (step instanceof Derivation.ACutThatCutsNothing && !under.decidedOutside()) {
@@ -273,11 +279,16 @@ public final class WrittenLines {
         // reading read off them. A comparison written inside it faces the sides it wrote itself,
         // and so does what a count of statements about values written out was written out as: the
         // reading faces the count, and the statements it counts are no side of the comparison's.
+        // Nor are the statements counts held against nought come to, which some element of what
+        // they count meeting them is: the reading's relation is its own only where it is what the
+        // reading concludes, and not where the statements a count was read as come to one.
         Derivation.AComparisonRead.Facing facing = null;
         String own = null;
-        if (step instanceof Derivation.AComparisonRead read && !under.inAnother()) {
+        if (step instanceof Derivation.AComparisonRead read && !under.inAnother()
+                && conclusionOf(step) instanceof Proposition.Compared compared
+                && compared.relation().equals(read.relation())) {
             facing = read.facing();
-            own = new Proposition.Compared(read.relation(), true).heldKey();
+            own = compared.heldKey();
         }
         if (!under.decidedOutside()) {
             drawn.add(under.line());
@@ -320,10 +331,18 @@ public final class WrittenLines {
         Set<String> known = made.get(step);
         if (known == null) {
             known = new LinkedHashSet<>();
-            gather(concluded.of(step), known);
+            Proposition out = concluded.of(step);
+            conclusions.put(step, out);
+            gather(out, known);
             made.put(step, known);
         }
         return known;
+    }
+
+    /** What {@code step} concludes, concluded once with its relations. */
+    private Proposition conclusionOf(Derivation step) {
+        relationsOf(step);
+        return conclusions.get(step);
     }
 
     private void gather(Proposition stated, Set<String> into) {
@@ -334,8 +353,16 @@ public final class WrittenLines {
             }
             case Proposition.All all -> all.parts().forEach(each -> gather(each, into));
             case Proposition.Any any -> any.parts().forEach(each -> gather(each, into));
+            case Proposition.WhereItAnswers where -> {
+                gather(where.answers(), into);
+                gather(where.states(), into);
+            }
             case Proposition.Some some -> gather(some.ofTheElement(), into);
             case Proposition.OnAnApplication each -> each.each().forEach(one -> gather(one, into));
+            // The relations its statements hold, each one way round whichever way a choice of
+            // them holds it.
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(one -> gather(one, into));
             case Proposition.SomeReachable reachable -> {
                 gather(reachable.atANode(), into);
                 reachable.noneBelow().ifPresent(none -> gather(none, into));
@@ -347,7 +374,7 @@ public final class WrittenLines {
     }
 
     /** The steps {@code step} is concluded from. */
-    private static List<Derivation> premisesOf(Derivation step) {
+    static List<Derivation> premisesOf(Derivation step) {
         return switch (step) {
             case Derivation.ThroughABinding(var value) -> List.of(value);
             case Derivation.OfWhatWasKept(var element, var kept) -> with(element, kept);
@@ -356,6 +383,9 @@ public final class WrittenLines {
             case Derivation.OnEachValueWrittenOut(var each) -> each;
             case Derivation.AChoiceAt(var _, var choice) -> List.of(choice);
             case Derivation.AComparisonAt(var _, var read) -> List.of(read);
+            case Derivation.Restated(var read) -> List.of(read);
+            case Derivation.WhereItAnswers(var answers, var read) -> List.of(answers, read);
+            case Derivation.WhereItIsAnswered(var of) -> List.of(of);
             case Derivation.IfThenElse(var condition, var then, var otherwise) ->
                     List.of(condition, then, otherwise);
             case Derivation.MatchArms(var arms) -> ofTheArms(arms);
@@ -376,11 +406,12 @@ public final class WrittenLines {
             case Derivation.ALawQuantifies(var _, var meeting) -> List.of(meeting);
             case Derivation.AnOrderOfItsArguments(var _, var _, var arguments) ->
                     List.of(arguments);
-            case Derivation.OverElementsWrittenOut(var each, var _) -> each;
+            case Derivation.OverElementsWrittenOut(var each, var _, var _) -> each;
             case Derivation.OnEachApplication(var each) -> each;
-            case Derivation.SomeElementMeeting(var _, var element, var _, var holds) ->
+            case Derivation.SomeElementMeeting(var _, var element, var _, var holds, var _) ->
                     holds.map(something -> List.of(element, something))
                             .orElseGet(() -> List.of(element));
+            case Derivation.SomeElementEqualToAKey some -> List.of(some.atLeastOne());
             case Derivation.AcrossAWalk(var seed, var walked, var keeps, var _) ->
                     List.of(seed, walked, keeps);
             case Derivation.ATreeSearched(var _, var _, var atANode, var below, var once,
@@ -400,6 +431,7 @@ public final class WrittenLines {
                     List.of(element);
             case Derivation.SomePieceMeeting(var _, var _, var _, var string, var piece) ->
                     string.map(held -> List.of(held, piece)).orElseGet(() -> List.of(piece));
+            case Derivation.SomePieceEqualling(var piece, var _) -> List.of(piece);
             case Derivation.EveryElementMeetsIt(var _, var element, var holds, var _) ->
                     List.of(element, holds);
             case Derivation.ALawJoinsWithoutWhatImpliesAnother(var _, var each) -> each.stream()
@@ -413,8 +445,9 @@ public final class WrittenLines {
             case Derivation.ALawSettles _, Derivation.TheSameValue _,
                  Derivation.ALawComparison _, Derivation.ASignItsBoundsSettle _,
                  Derivation.WrittenOut _, Derivation.NoRunTakesIt _,
-                 Derivation.WhatAWalkCarried _, Derivation.Folded _,
+                 Derivation.TheRunStopsHere _, Derivation.WhatAWalkCarried _, Derivation.Folded _,
                  Derivation.ATruthOfASubject _, Derivation.PresentInASubject _,
+                 Derivation.UnderOneOfItsOwnKeys _,
                  Derivation.CasesOfASubject _, Derivation.CasesWrittenOut _,
                  Derivation.SizeAboveNought _, Derivation.ACharacterInAClass _,
                  Derivation.OfAnElementOfAnAnswer _, Derivation.AComparisonRead _,

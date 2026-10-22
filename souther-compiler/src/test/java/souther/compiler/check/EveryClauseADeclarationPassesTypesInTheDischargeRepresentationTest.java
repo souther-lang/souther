@@ -102,7 +102,6 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
             // it compiles at all — a clause of a declaration this compiler refused says nothing
             assertFalse(Compiler.compile(source).isEmpty(), "this program is supposed to compile");
             Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.answerEverything();
 
             String module = compilation.modules().get(0);
             Symbols symbols = Scopes.derived(compilation.db(), module).value();

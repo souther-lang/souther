@@ -12,9 +12,11 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
+import souther.compiler.query.UnderABudget;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,24 +44,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AGroupTooWideToWalkSaysSoTest {
 
     /**
-     * As many decisions meeting on one value as it takes to go past the walk.
+     * As many decisions meeting on one value as it takes to go past {@link #FOUR}.
      *
      * <p>Each parameter is matched by its own helper and every result is added into one {@code Fee},
-     * so the thirteen meet at one operator and the group's choices are two to the thirteenth. The
-     * standard budget is a capacity of four thousand and ninety-six, so twelve decisions are exactly
-     * it and are offered, and the thirteenth is the first width that is not.
+     * so the three meet at one operator and the group's choices are two to the third.
      */
-    private static final String THIRTEEN = model(13);
-
-    /** The widest model still offered under the standard budget: twelve decisions are four thousand
-     *  and ninety-six choices, which is the capacity exactly. Without it, a group not offered would
-     *  be as good an account of a model this cannot read at all. */
-    private static final String TWELVE = model(12);
+    private static final String THREE = model(3);
 
     /** Two decisions, which is four choices — small enough that a budget written here can be put
-     *  either side of it exactly. Two to the thirteenth is where the default falls, and a default
-     *  can only be reached at a power of two; a budget the caller names can be reached anywhere. */
+     *  either side of it exactly, and a budget the caller names can be reached anywhere. Without a
+     *  width that is offered, a group not offered would be as good an account of a model this
+     *  cannot read at all. */
     private static final String TWO = model(2);
+
+    /** A budget of four choices: two decisions are offered under it and three are not. Which
+     *  width the standard budget falls at is its number, which is not what is asked here. */
+    private static final AdequacyPolicy.OfTheGeneration FOUR = atMost(4);
 
     /** The same behavior with rows, so a compilation can be asked what it is still owed. Each row
      *  settles every parameter the same way, which takes one arm of each helper. */
@@ -132,9 +132,9 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void aGroupPastTheLimitIsHeldBackAndSaidSo() {
-        Model model = Model.of(THIRTEEN);
+        Model model = Model.of(THREE);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), FOUR.cellsPerGroup());
 
         assertEquals(List.of(), offered.groups(),
                 "the group is not offered, which is what the limit is for");
@@ -144,31 +144,13 @@ class AGroupTooWideToWalkSaysSoTest {
                 "carrying what a run through it would have been seen to do");
     }
 
-    /** And one decision fewer is offered, so the answer above is the limit's and not the model's. */
-    @Test
-    void andUnderTheLimitTheGroupIsOffered() {
-        Model model = Model.of(TWELVE);
-        InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
-
-        assertEquals(List.of(), offered.notOffered(),
-                "nothing is held back");
-        assertFalse(offered.groups().isEmpty(),
-                "and the group is there to be walked");
-    }
-
     /**
-     * A group of exactly the budget is offered, and one choice more is not.
+     * A group of exactly the budget is offered, and one choice more is not — so the answer above
+     * is the limit's and not the model's.
      *
-     * <p>The point on the line, which the pair either side of it does not establish. Twelve
-     * decisions and thirteen are four thousand and ninety-six choices and eight thousand and
-     * one hundred and ninety-two, so the default can say which side of the limit a model falls on
-     * and never what happens at it — a default is reached only at a power of two, and the boundary
-     * is a single number.
-     *
-     * <p>Written by naming the budget instead, which is what having one as an input is for. Four
-     * choices against a capacity of four is the group being offered <em>at</em> the limit, and the
-     * same four against three is the first thing past it. Read the other way round, this is the
+     * <p>The point on the line, which the pair either side of it does not establish. Four choices
+     * against a capacity of four is the group being offered <em>at</em> the limit, and the same
+     * four against three is the first thing past it. Read the other way round, this is the
      * assertion that {@code cellsPerGroup} is a capacity and not a cutoff: under a cutoff the first
      * of these two would be held back.
      */
@@ -176,11 +158,11 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupOfExactlyTheBudgetIsOffered() {
         Model model = Model.of(TWO);
         assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes(),
-                        atMost(4).cellsPerGroup()).groups().get(0).size(),
+                        FOUR.cellsPerGroup()).groups().get(0).size(),
                 "two decisions of two outcomes are four choices");
 
         assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes(),
-                        atMost(4).cellsPerGroup()).notOffered(),
+                        FOUR.cellsPerGroup()).notOffered(),
                 "a group of exactly the budget is offered");
         assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes(),
                         atMost(3).cellsPerGroup()).notOffered().size(),
@@ -201,13 +183,13 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void theArmsBehindItAreStillArmsTheCombinationsTake() {
-        Model wide = Model.of(THIRTEEN);
-        Model narrow = Model.of(TWELVE);
+        Model wide = Model.of(THREE);
+        Model narrow = Model.of(TWO);
 
         Set<ArmProbe> fromWide =
-                GenerationFixtures.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(wide.subject(), wide.groups(), FOUR);
         Set<ArmProbe> fromNarrow =
-                GenerationFixtures.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), FOUR);
 
         assertFalse(fromWide.isEmpty(),
                 "the arms behind the group the limit held back are still named");
@@ -230,10 +212,10 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void anArmBehindTheHeldGroupIsAnsweredFromTheWayIntoIt() {
-        Model model = Model.of(THIRTEEN);
+        Model model = Model.of(THREE);
 
         FillResult composed = GenerationFixtures.fill(model.subject(), List.of(),
-                Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, Budgets.generation());
+                Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, FOUR);
 
         assertFalse(GenerationFixtures.arms(composed.discharge()).values().isEmpty(), () -> "the arms are answered: " + GenerationFixtures.arms(composed.discharge()).values());
         assertTrue(GenerationFixtures.arms(composed.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
@@ -260,11 +242,11 @@ class AGroupTooWideToWalkSaysSoTest {
      */
     @Test
     void aGroupNothingWasAskedForBehindIsNotReported() {
-        Model model = Model.of(THIRTEEN);
+        Model model = Model.of(THREE);
 
         FillResult asked = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
-                List.of(), List.of(), List.of(), Budgets.generation());
+                List.of(), List.of(), List.of(), FOUR);
 
         assertEquals(List.of(), asked.reasons().stream()
                         .filter(GenerationReason.GroupsNotOffered.class::isInstance).toList(),
@@ -281,38 +263,47 @@ class AGroupTooWideToWalkSaysSoTest {
      * differing, so what the two answers are is the rows' and not the model's — and the group is
      * past the budget in both, which is what says the difference is the obligation and not the
      * limit.
+     *
+     * <p>Two decisions under a budget one choice short of their four: the group past the limit is
+     * what is asked, and not how wide a group the standard budget holds, which the tests above ask
+     * without a compilation.
      */
     @Test
     void whatIsOwedIsAnsweredWhateverTheLimitDidToTheGroup() {
-        List<ArmDisposition> owed = armsFor(modelWithRows(13, false));
+        Adequacy.Filling oneRow = fillingFor(modelWithRows(2, false));
+        List<ArmDisposition> owed = armsIn(oneRow);
         assertFalse(owed.isEmpty(),
                 "one row leaves the other arm of each helper owed, and each is answered");
         assertTrue(owed.stream().allMatch(ArmDisposition.Built.class::isInstance),
                 () -> "with a row through it, from the way in the reading has for it: " + owed);
-        assertEquals(1, groupsNotOfferedFor(modelWithRows(13, false)).size(),
+        assertEquals(1, groupsNotOfferedIn(oneRow).size(),
                 "and the group the limit held back is named, its combinations not being looked in");
 
-        assertEquals(List.of(), armsFor(modelWithRows(13, true)),
+        Adequacy.Filling twoRows = fillingFor(modelWithRows(2, true));
+        assertEquals(List.of(), armsIn(twoRows),
                 "two rows take every arm, so nothing is owed at all");
-        assertEquals(List.of(), groupsNotOfferedFor(modelWithRows(13, true)),
+        assertEquals(List.of(), groupsNotOfferedIn(twoRows),
                 "and the group costs this run nothing, so it is not named");
     }
 
     /** What the compilation's own generation came to at each arm it was owed one at. */
-    private static List<ArmDisposition> armsFor(String source) {
-        return List.copyOf(
-                GenerationFixtures.arms(fillingFor(source).composed().discharge()).values());
+    private static List<ArmDisposition> armsIn(Adequacy.Filling filling) {
+        return List.copyOf(GenerationFixtures.arms(filling.composed().discharge()).values());
     }
 
-    private static List<GenerationReason.GroupsNotOffered> groupsNotOfferedFor(String source) {
-        return fillingFor(source).composed().reasons().stream()
+    private static List<GenerationReason.GroupsNotOffered> groupsNotOfferedIn(
+            Adequacy.Filling filling) {
+        return filling.composed().reasons().stream()
                 .filter(GenerationReason.GroupsNotOffered.class::isInstance)
                 .map(GenerationReason.GroupsNotOffered.class::cast).toList();
     }
 
-    private static souther.compiler.query.Adequacy.Filling fillingFor(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
+    /** What the generation of {@code source} came to, under a budget one choice short of the four
+     *  two decisions make. */
+    private static Adequacy.Filling fillingFor(String source) {
+        Compilation compilation = UnderABudget.of(Compilation.ofSource(source, "Main"),
+                new AdequacyPolicy(Budgets.measures(), atMost(3)));
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         // The rows have to have run for what is owed to be what the arms established. A model whose
         // examples failed is owed nothing for a reason of its own, and an empty answer from one of
@@ -321,10 +312,10 @@ class AGroupTooWideToWalkSaysSoTest {
                         .filter(found -> found.report().isError())
                         .map(found -> found.report().diagnostic().code().toString()).toList(),
                 "the model compiles and its rows run");
-        Map<String, souther.compiler.query.Adequacy.Filling> filling =
-                souther.compiler.query.Adequacy.generatedOf(compilation.db(), "example.wide");
+        Map<String, Adequacy.Filling> filling =
+                Adequacy.generatedOf(compilation.db(), "example.wide");
         assertNotNull(filling, "the module was asked for rows");
-        souther.compiler.query.Adequacy.Filling total = filling.get("total");
+        Adequacy.Filling total = filling.get("total");
         assertNotNull(total, "the behavior was asked for rows");
         return total;
     }
@@ -439,7 +430,7 @@ class AGroupTooWideToWalkSaysSoTest {
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals("total")).findFirst().orElseThrow();
             InputDomain inputs = compilation.db()
-                    .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("total");
+                    .ask(new Adequacy.Inputs(module)).value().get("total");
             assertNotNull(inputs, "the behavior's inputs were read");
             Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs.reading(rules),
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

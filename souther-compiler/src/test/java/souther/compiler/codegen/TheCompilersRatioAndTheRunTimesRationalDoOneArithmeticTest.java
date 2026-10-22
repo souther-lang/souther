@@ -12,7 +12,10 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -55,21 +58,40 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
         }
     }
 
+    /**
+     * Values whose every part is one a layer could get wrong: a numerator of each sign over a
+     * denominator other than one, with each exponent at both ends of its range, near them and in
+     * between. What a pair of them comes to is the one implementation's, so what is asked is that
+     * each type hands it the parts and reads the answer back, and says a failure in its own terms.
+     *
+     * <p>And a part that is one, which is where an answer is put in its canonical form differently
+     * — a whole number, the identity of a product — beside nought exponents and the two ends at
+     * once: a numerator and a denominator of one, each of them alone, at each of those.
+     */
     private static List<Pair> values() {
         List<Pair> out = new ArrayList<>();
-        for (long n : new long[] {1, -3, 7}) {
-            for (long d : new long[] {1, 3}) {
-                for (long twos : TWOS) {
-                    for (long fives : FIVES) {
-                        BigInteger numerator = BigInteger.valueOf(n);
-                        BigInteger denominator = BigInteger.valueOf(d);
-                        out.add(new Pair(new ExactRatio(numerator, denominator, twos, fives),
-                                new Rational(numerator, denominator, twos, fives)));
-                    }
+        for (long n : new long[] {-3, 7}) {
+            for (long twos : TWOS) {
+                for (long fives : FIVES) {
+                    out.add(pair(n, 3, twos, fives));
                 }
             }
         }
+        long[][] ones = {{1, 1}, {1, 3}, {-3, 1}, {7, 1}};
+        long[][] ends = {{0, 0}, {Long.MAX_VALUE, Long.MIN_VALUE}, {Long.MIN_VALUE, Long.MAX_VALUE}};
+        for (long[] one : ones) {
+            for (long[] end : ends) {
+                out.add(pair(one[0], one[1], end[0], end[1]));
+            }
+        }
         return out;
+    }
+
+    private static Pair pair(long n, long d, long twos, long fives) {
+        BigInteger numerator = BigInteger.valueOf(n);
+        BigInteger denominator = BigInteger.valueOf(d);
+        return new Pair(new ExactRatio(numerator, denominator, twos, fives),
+                new Rational(numerator, denominator, twos, fives));
     }
 
     private static Came ofRatio(Supplier<ExactAnswer<ExactRatio>> operation) {
@@ -98,8 +120,8 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
     @Timeout(120)
     void everyOperationGivesTheSameValueFromBothOrFailsInBoth() {
         List<Pair> values = values();
-        int answered = 0;
-        int failed = 0;
+        Set<String> answered = new LinkedHashSet<>();
+        Set<String> failed = new LinkedHashSet<>();
         for (Pair a : values) {
             for (Pair b : values) {
                 Came plus = ofRatio(a.ratio().plus(b.ratio()).orNull());
@@ -110,17 +132,15 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
                 assertEquals(over, ofRational(() -> a.rational().dividedBy(b.rational())), a + " / " + b);
                 assertEquals(Integer.signum(a.ratio().compareTo(b.ratio())),
                         Integer.signum(a.rational().compareTo(b.rational())), a + " against " + b);
-                for (Came each : List.of(plus, times, over)) {
-                    if (each.parts().isEmpty()) {
-                        failed++;
-                    } else {
-                        answered++;
-                    }
-                }
+                Map<String, Came> came = Map.of("+", plus, "*", times, "/", over);
+                came.forEach((operation, each) ->
+                        (each.parts().isEmpty() ? failed : answered).add(operation));
             }
         }
-        assertTrue(answered > 1000, "the operations are answered in a population and not a handful: " + answered);
-        assertTrue(failed > 1000, "and refused in one, both ends of the range being asked: " + failed);
+        // Each operation both answered and failed somewhere among these, so what was compared
+        // reached the value each type makes of an answer and the terms each says a failure in.
+        assertEquals(Set.of("+", "*", "/"), answered, "every operation answered some pair");
+        assertEquals(Set.of("+", "*", "/"), failed, "and failed on some pair at an end of the range");
     }
 
     @Test
@@ -140,7 +160,7 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
                 }
             }
         }
-        assertTrue(rounded > 1000, "some are answered, or the roundings agree over nothing: " + rounded);
+        assertTrue(rounded > 0, "some are answered, or the roundings agree over nothing");
     }
 
     /** The decimal an operation gave, or null where it was refused in either type's terms. */

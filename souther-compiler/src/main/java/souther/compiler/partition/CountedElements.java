@@ -76,8 +76,8 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
         for (NumericTerm each : perElement.numbers()) {
             TermOrders orders = quantities.ordersOf(each);
-            if (orders != null && orders.observed() != null) {
-                on.put(each, orders.observed());
+            if (orders != null && orders.observed() != null && orders.answered() != null) {
+                on.put(each, orders.answered());
             }
         }
         Identity identity = identityOf(behavior, count);

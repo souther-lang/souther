@@ -247,6 +247,21 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     }
 
     /**
+     * The same calls, the second made only where the first holds.
+     *
+     * <p>Past {@code fits(p, q, g)} every row holds {@code q} at or below {@code g}, along whichever
+     * of {@code Int.max}'s two cases it holds by. So the rows reaching the second call never cross
+     * its line on {@code x} at {@code q}, and the line is read there at no place; its line on
+     * {@code y} is read at {@code s}, beside the first call's at {@code q}.
+     */
+    @Test
+    void aHelpersLineTheCallBeforeItSettlesIsReadOnlyWhereItIsCrossed() {
+        assertEquals(Set.of(Set.of("p = g"), Set.of("q = g", "s = g")),
+                readingsOfEachDebt(CALLS_ONE_PAST_THE_OTHER),
+                "the line for x read at p alone, and the one for y at q and s");
+    }
+
+    /**
      * The same, where the relation is what a closure states on each value it is applied to.
      *
      * <p>The author wrote {@code v <= g} once, and every application of it, at every call, is a
@@ -571,7 +586,8 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                                         new WrittenOwner.Body("example.banding", "caller"),
                                         occurrence, SourceConstruct.CALL)))),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE.outcome(occurrence)), ElementsMetOn.EVERY),
+                        List.of(WHERE.outcome(occurrence)), ElementsMetOn.EVERY,
+                        LineOrigin.NOTHING_ON_THE_WAY),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
@@ -826,8 +842,25 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 | "a" : (Task { owner = UserId("x") }) -> Ok
             """;
 
-    /** One helper stating two relations, called twice with one argument in common. */
+    /**
+     * One helper stating two relations, called twice with one argument in common.
+     *
+     * <p>The second call is made where the first does not hold, so the rows that reach it hold
+     * {@code q} on both sides of {@code g}. Made where the first holds, every row reaching it holds
+     * {@code q} at or below {@code g}, and its line on {@code x} is one those rows never cross
+     * ({@code CALLS_ONE_PAST_THE_OTHER}).
+     */
     private static final String OVERLAPPING_CALLS = """
+            module example.overlap
+
+            behavior admit : (p: Int, q: Int, s: Int, g: Int) -> Bool
+            let admit (p, q, s, g) = fits(p, q, g) || fits(q, s, g)
+
+            let fits (x: Int, y: Int, g: Int): Bool = Int.max(x, y) <= g
+            """;
+
+    /** The same two calls, the second made only where the first holds. */
+    private static final String CALLS_ONE_PAST_THE_OTHER = """
             module example.overlap
 
             behavior admit : (p: Int, q: Int, s: Int, g: Int) -> Bool
@@ -841,7 +874,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
             module example.overlap
 
             behavior admit : (p: Int, q: Int, s: Int, g: Int) -> Bool
-            let admit (p, q, s, g) = fits(p, q, g) && fits(q, s, g)
+            let admit (p, q, s, g) = fits(p, q, g) || fits(q, s, g)
 
             let fits (x: Int, y: Int, g: Int): Bool = List.all(v -> v <= g, [x, y])
             """;

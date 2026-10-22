@@ -29,11 +29,13 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * What a border is a border <em>of</em>: the quantity a rule cuts.
@@ -58,7 +60,8 @@ import java.util.Set;
  * an arm.
  */
 public sealed interface BorderQuantity
-        permits LinearQuantity, BorderQuantity.HowMany, BorderQuantity.RemainderOfAForm {
+        permits LinearQuantity, BorderQuantity.HowMany, BorderQuantity.RemainderOfAForm,
+        BorderQuantity.RemainderOfAPair, BorderQuantity.ProductOfAPair {
 
     /**
      * The number one position holds, which is the position's own values.
@@ -917,21 +920,28 @@ public sealed interface BorderQuantity
         public Stands standsAt(Criterion where, Observation row) {
             OverAForm added = addedForm();
             ExactAnswer<ExactRatio> rest = ExactAnswer.held(ExactRatio.ZERO);
+            // Whatever stopped the numbers added to the count, kept to be said beside what stopped
+            // the count: a row is not read for either, and a reader told one would fix it and be
+            // told the other next.
+            Set<ReadingGap> stopped = new LinkedHashSet<>();
             if (added != null) {
                 switch (added.valuesOf(added.read(row))) {
                     case ValuesAtARow.NoneHere _ -> {
                         return Stands.NO;
                     }
-                    case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> {
-                        return Stands.couldNotTell(why);
-                    }
+                    case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> stopped.addAll(why);
                     case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
                             rest = OrderedAffineBoundary.at(against, values);
                 }
             }
             AStatementAtARow.HowManyAtARow counted = perElement.howManyMeetIn(container, row);
             if (counted == null) {
-                return Stands.couldNotTell(ReadingGap.COULD_NOT_WALK);
+                stopped.add(ReadingGap.COULD_NOT_WALK);
+            } else if (!stopped.isEmpty()) {
+                stopped.addAll(counted.why());
+            }
+            if (!stopped.isEmpty()) {
+                return Stands.couldNotTell(stopped);
             }
             ExactAnswer<ExactRatio> addedUp = rest;
             return switch (counted.whether(count -> addedUp.flatMap(sum -> ExactRatio.of(count)
@@ -989,9 +999,9 @@ public sealed interface BorderQuantity
             return switch (stated) {
                 case Proposition.Always(boolean holds) -> String.valueOf(holds);
                 case Proposition.All all -> all.parts().stream().map(HowMany::grouped)
-                        .collect(java.util.stream.Collectors.joining(" && "));
+                        .collect(Collectors.joining(" && "));
                 case Proposition.Any any -> any.parts().stream().map(HowMany::grouped)
-                        .collect(java.util.stream.Collectors.joining(" || "));
+                        .collect(Collectors.joining(" || "));
                 case Proposition.Some some -> (some.holds() ? "some " : "no ") + some.container()
                         + " [" + said(some.ofTheElement()) + "]";
                 case Proposition.Compared compared -> switch (compared.relation()) {
@@ -1005,37 +1015,58 @@ public sealed interface BorderQuantity
                         if (form == null && count != null) {
                             ExactRatio weight = affine.form().coefs().get(count);
                             yield "#" + count.container() + " [" + said(count.ofTheElement())
-                                    + "] " + written(rel) + " "
+                                    + "] " + rel.written() + " "
+                                    + affine.form().constant().negated().dividedBy(weight)
+                                            .map(ExactRatio::spelled).orNull();
+                        }
+                        // What two numbers come to multiplied, against the level it is held at,
+                        // which is how a line on the product writes it.
+                        Quantity.ProductOfTwo product = AStatementAtARow.productIn(affine);
+                        if (form == null && product != null) {
+                            ExactRatio weight = affine.form().coefs().get(product);
+                            yield product.spelled() + " "
+                                    + (weight.signum() < 0 ? rel.turned() : rel).written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
                         yield form == null ? stated.key()
-                                : OrderedAffineBoundary.spelled(form.coefs()) + " " + written(rel)
+                                : OrderedAffineBoundary.spelled(form.coefs()) + " " + rel.written()
                                         + " " + form.constant().negated().spelled();
                     }
                     case Relation.Ordered ordered -> ordered.term().spelled() + " "
-                            + written(compared.holds() ? ordered.proposition()
-                                    : ordered.proposition().denied())
+                            + (compared.holds() ? ordered.proposition()
+                                    : ordered.proposition().denied()).written()
                             + " " + ordered.at().spelled();
                 };
-                default -> stated.key();
+                // How many of the statements hold, each as many times as it was written, and the
+                // counts that holds at.
+                case Proposition.SoManyHold counted -> {
+                    List<String> each = new ArrayList<>();
+                    for (int one = 0; one < counted.statements().size(); one++) {
+                        each.addAll(Collections.nCopies(counted.weights().get(one),
+                                said(counted.statements().get(one))));
+                    }
+                    yield "#[" + String.join(", ", each) + "] " + (counted.admitted().size() == 1
+                            ? "== " + counted.admitted().getFirst()
+                            : "in " + counted.admitted());
+                }
+                case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> stated.key();
             };
         }
 
         /** A part of a joined statement, bracketed where it is a join itself. */
         private static String grouped(Proposition part) {
-            return part instanceof Proposition.All || part instanceof Proposition.Any
-                    ? "(" + said(part) + ")" : said(part);
-        }
-
-        private static String written(Rel rel) {
-            return switch (rel) {
-                case EQ -> "==";
-                case NE -> "/=";
-                case LT -> "<";
-                case LE -> "<=";
-                case GT -> ">";
-                case GE -> ">=";
+            return switch (part) {
+                case Proposition.All _, Proposition.Any _ -> "(" + said(part) + ")";
+                // A count is written as a comparison, which binds tighter than a join.
+                case Proposition.SoManyHold _, Proposition.Always _, Proposition.Some _,
+                     Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> said(part);
             };
         }
 
@@ -1083,19 +1114,53 @@ public sealed interface BorderQuantity
      * and moving the dividend by one moves every remainder by one. So it is held beside the form,
      * which carries none.
      *
+     * <p>With a form of other numbers of the input added to it, the quantity is the remainder plus
+     * that form: what a rule holds a remainder against another number of the input cuts. The
+     * remainder is still a remainder and runs from nought, and the sum runs wherever the added
+     * numbers do.
+     *
      * @param dividend the form the division is of, with no constant
      * @param shift what is added to the form before it is divided, as a whole number
      * @param divisor the number it is divided by, above nought
+     * @param added the form of other numbers of the input added to the remainder, with no
+     *              constant and no number of the dividend
+     * @param addedOn the orders each number added is read and written on
      */
     record RemainderOfAForm(String behavior, OverAForm dividend, BigInteger shift,
-                            BigInteger divisor) implements BorderQuantity {
+                            BigInteger divisor, LinearForm<NumericTerm> added,
+                            Map<NumericTerm, TermOrders> addedOn) implements BorderQuantity {
 
         public RemainderOfAForm {
             if (behavior == null || dividend == null || shift == null || divisor == null
-                    || divisor.signum() <= 0) {
+                    || divisor.signum() <= 0 || added == null || addedOn == null) {
                 throw new IllegalArgumentException("a remainder is of a form, by a divisor above"
                         + " nought: " + dividend + " by " + divisor);
             }
+            if (added.constant().signum() != 0) {
+                throw new IllegalArgumentException(
+                        "a quantity carries no constant; it belongs to the level: " + added);
+            }
+            if (!addedOn.keySet().equals(added.coefs().keySet())) {
+                throw new IllegalArgumentException("a form is over the positions it names, and each"
+                        + " of them is read on one order: " + added + " against "
+                        + addedOn.keySet());
+            }
+            for (NumericTerm term : added.coefs().keySet()) {
+                for (NumericTerm of : dividend.form().coefs().keySet()) {
+                    if (term.sharesAPlaceWith(of)) {
+                        throw new IllegalArgumentException("a number added to a remainder is read"
+                                + " off no place the form it is the remainder of is: " + term);
+                    }
+                }
+            }
+            addedOn.forEach((term, orders) -> {
+                orders.areOf(term);
+                if (!orders.answered().counts()) {
+                    throw new IllegalArgumentException("a remainder is added to numbers, and this"
+                            + " order has no number under it: " + orders.answered());
+                }
+            });
+            addedOn = Map.copyOf(addedOn);
             ExactRatio weights = dividend.form().coefs().values().stream()
                     .filter(each -> !each.isWhole()).findFirst().orElse(null);
             if (weights != null) {
@@ -1104,10 +1169,41 @@ public sealed interface BorderQuantity
             }
         }
 
-        /** What the remainder runs between whatever the form comes to. */
+        /** What the quantity runs between whatever the form comes to: nought to one below the
+         *  divisor for the remainder alone, and wherever the added numbers do with some added. */
         NumericDomain.Bounds runs() {
+            if (!added.coefs().isEmpty()) {
+                return NumericDomain.Bounds.OPEN;
+            }
             return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
                     Endpoint.inclusive(new Count(new BigDecimal(divisor.subtract(BigInteger.ONE)))));
+        }
+
+        /** The numbers added to the remainder, as a quantity read off a row; null where there are
+         *  none. */
+        private OverAForm addedForm() {
+            return added.coefs().isEmpty() ? null : new OverAForm(behavior, added, addedOn);
+        }
+
+        /** The remainder and the numbers added to it, in the order a row is read at them. */
+        List<NumericTerm> allNumbers() {
+            List<NumericTerm> out = new ArrayList<>(dividend.terms());
+            NumericTerms.inOrder(added.coefs().keySet()).forEach(out::add);
+            return List.copyOf(out);
+        }
+
+        /**
+         * What the quantity comes to of numbers read at a row: the remainder the dividend leaves,
+         * plus the added form — none where the dividend does not come to a whole number.
+         */
+        ExactAnswer<Optional<ExactRatio>> comesTo(Map<NumericTerm, Place> values) {
+            return switch (OrderedAffineBoundary.remainderAt(wholeDividend(), divisor, values)) {
+                case ExactAnswer.Unheld<Optional<ExactRatio>> unheld -> unheld;
+                case ExactAnswer.Held<Optional<ExactRatio>>(var left) -> left.isEmpty()
+                        ? ExactAnswer.held(Optional.<ExactRatio>empty())
+                        : OrderedAffineBoundary.at(added, values).flatMap(
+                                rest -> left.get().plus(rest)).map(Optional::of);
+            };
         }
 
         /** The dividend with its constant, which is the form a rule wrote. */
@@ -1115,10 +1211,27 @@ public sealed interface BorderQuantity
             return new LinearForm<>(ExactRatio.of(shift), dividend.form().coefs());
         }
 
-        /** Every remainder a divisor leaves: nought to one below it, one apart. */
+        /** What a row is asked to work this remainder out of. */
+        DividedForm dividedForm() {
+            return new DividedForm(dividend, wholeDividend(), divisor);
+        }
+
+        /** Every remainder a divisor leaves: nought to one below it, one apart. With numbers added,
+         *  what the remainder's step and the form's together generate. */
         @Override
         public LevelSpace levels() {
-            return LevelSpace.steppingBy(ExactRatio.ONE);
+            if (added.coefs().isEmpty()) {
+                return LevelSpace.steppingBy(ExactRatio.ONE);
+            }
+            List<ExactRatio> weights = new ArrayList<>(added.coefs().values());
+            weights.add(ExactRatio.ONE);
+            ExactRatio step = LevelSpace.stepOf(weights);
+            List<Carrier> orders = new ArrayList<>();
+            addedOn.values().forEach(each -> orders.add(each.answered()));
+            orders.add(Carrier.WHOLE);
+            return LevelSpace.addedUpOver(orders) == Granularity.DISCRETE
+                    ? LevelSpace.steppingBy(step)
+                    : LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(step));
         }
 
         /**
@@ -1134,12 +1247,13 @@ public sealed interface BorderQuantity
          */
         @Override
         public Stands standsAt(Criterion where, Observation row) {
-            return switch (dividend.valuesOf(dividend.read(row))) {
+            OverAForm both = new OverAForm(behavior, new LinearForm<>(ExactRatio.ZERO,
+                    allWeights()), allOn());
+            return switch (both.valuesOf(both.read(row))) {
                 case ValuesAtARow.NoneHere _ -> Stands.NO;
                 case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
                 case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
-                        switch (OrderedAffineBoundary.remainderAt(wholeDividend(), divisor,
-                                values)) {
+                        switch (comesTo(values)) {
                             case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
                                     Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
                             case ExactAnswer.Held<Optional<ExactRatio>>(var left) ->
@@ -1150,15 +1264,36 @@ public sealed interface BorderQuantity
             };
         }
 
+        /** The dividend's weights and the added form's, for reading a row at all of them. */
+        private Map<NumericTerm, ExactRatio> allWeights() {
+            Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>(dividend.form().coefs());
+            out.putAll(added.coefs());
+            return out;
+        }
+
+        private Map<NumericTerm, TermOrders> allOn() {
+            Map<NumericTerm, TermOrders> out = new LinkedHashMap<>(dividend.on());
+            out.putAll(addedOn);
+            return out;
+        }
+
         @Override
         public void lookAt(Observation row) {
             dividend.lookAt(row);
+            OverAForm rest = addedForm();
+            if (rest != null) {
+                rest.lookAt(row);
+            }
         }
 
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfARemainder(wholeDividend(),
-                    LinearQuantity.answeredOn(dividend.on()), levels(), divisor, where);
+            return added.coefs().isEmpty()
+                    ? new Standing.OfARemainder(wholeDividend(),
+                            LinearQuantity.answeredOn(dividend.on()), levels(), divisor, where)
+                    : new Standing.OfARemainderAndAForm(wholeDividend(),
+                            LinearQuantity.answeredOn(dividend.on()), divisor, added,
+                            LinearQuantity.answeredOn(addedOn), levels(), where);
         }
 
         @Override
@@ -1177,7 +1312,13 @@ public sealed interface BorderQuantity
             String form = OrderedAffineBoundary.spelled(dividend.form().coefs());
             String moved = shift.signum() == 0 ? form
                     : shift.signum() > 0 ? form + " + " + shift : form + " - " + shift.negate();
-            return "Int.floorMod(" + moved + ", " + divisor + ")";
+            String remainder = "Int.floorMod(" + moved + ", " + divisor + ")";
+            if (added.coefs().isEmpty()) {
+                return remainder;
+            }
+            String rest = OrderedAffineBoundary.spelled(added.coefs());
+            return rest.startsWith("-") ? remainder + " - " + rest.substring(1)
+                    : remainder + " + " + rest;
         }
 
         @Override
@@ -1195,8 +1336,382 @@ public sealed interface BorderQuantity
         }
     }
 
+    /**
+     * What two whole numbers of a row come to multiplied: a price times a quantity.
+     *
+     * <p>No form over the row's numbers and no line on either of them. A row at a level of it is a
+     * pair whose product is the level, and which pair that is turns on both: where one factor is
+     * fixed, the other is held to a run its sign sets the direction of, and where it is nought the
+     * product is nought whatever the other holds. So a border on it says where the product is and
+     * nothing of where either factor is.
+     *
+     * <p>The factors are read as a form of the two, each weighed by one, which is what reads a
+     * row's numbers; the quantity is what the two read values come to multiplied.
+     *
+     * @param factors the two factors, each weighed by one and on an order of whole numbers
+     */
+    record ProductOfAPair(String behavior, OverAForm factors) implements BorderQuantity {
+
+        public ProductOfAPair {
+            if (behavior == null || factors == null || factors.form().coefs().size() != 2
+                    || !factors.form().coefs().values().stream()
+                            .allMatch(weight -> weight.compareTo(ExactRatio.ONE) == 0)) {
+                throw new IllegalArgumentException("a product is of two factors, each read as"
+                        + " itself: " + factors);
+            }
+            for (TermOrders each : factors.on().values()) {
+                if (!(each.answered() instanceof Carrier.Whole)) {
+                    throw new IllegalArgumentException("a product read here is of whole numbers,"
+                            + " and this order is not one of them: " + each.answered());
+                }
+            }
+        }
+
+        /** The two factors, in the order of the terms. */
+        List<NumericTerm> terms() {
+            return factors.terms();
+        }
+
+        /** The factor at {@code at} in that order, as a form of itself alone. */
+        LinearForm<NumericTerm> alone(int at) {
+            return new LinearForm<>(ExactRatio.ZERO, Map.of(terms().get(at), ExactRatio.ONE));
+        }
+
+        /**
+         * A run holding every product of a value of {@code one} and a value of {@code other}, each
+         * end inclusive and open where the products have no end — or open throughout where an end
+         * of either is no number.
+         *
+         * <p>Where the products lie and nothing about which of them a row comes to: a run of each
+         * factor multiplies to the run between the products of their ends, and every product of a
+         * value of each lies between those, whatever lies between them.
+         */
+        static NumericDomain.Bounds across(NumericDomain.Bounds one, NumericDomain.Bounds other) {
+            OnALine[] first = {OnALine.of(one.min(), -1), OnALine.of(one.max(), 1)};
+            OnALine[] second = {OnALine.of(other.min(), -1), OnALine.of(other.max(), 1)};
+            OnALine least = null;
+            OnALine most = null;
+            for (OnALine a : first) {
+                for (OnALine b : second) {
+                    OnALine product = a == null || b == null ? null : a.times(b);
+                    if (product == null) {
+                        return NumericDomain.Bounds.OPEN;
+                    }
+                    least = least == null || product.compareTo(least) < 0 ? product : least;
+                    most = most == null || product.compareTo(most) > 0 ? product : most;
+                }
+            }
+            return new NumericDomain.Bounds(least.asAnEnd(), most.asAnEnd());
+        }
+
+        /**
+         * A number, or one of the two ends of the line no number reaches.
+         *
+         * @param past   which end it is, below or above every number, or nought where it is a number
+         * @param number the number, where it is one
+         */
+        private record OnALine(int past, ExactRatio number) implements Comparable<OnALine> {
+
+            /** {@code end} as a place on the line, past it on the {@code side} it is open to — or
+             *  null where the end is no number. */
+            static OnALine of(Endpoint end, int side) {
+                if (end == null) {
+                    return new OnALine(side, null);
+                }
+                return end.at() instanceof Count count ? new OnALine(0, count.exactly()) : null;
+            }
+
+            /** The two multiplied, or null where the product could not be held. A number past an
+             *  end times nought is nought, which is what the products of a run beside nought come
+             *  near and not past. */
+            OnALine times(OnALine other) {
+                if (past == 0 && other.past == 0) {
+                    return number.times(other.number) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio product) ? new OnALine(0, product) : null;
+                }
+                int sign = signum() * other.signum();
+                return sign == 0 ? new OnALine(0, ExactRatio.ZERO) : new OnALine(sign, null);
+            }
+
+            private int signum() {
+                return past != 0 ? past : number.signum();
+            }
+
+            /** This as an inclusive end, or none where it is past every number. */
+            Endpoint asAnEnd() {
+                if (past != 0) {
+                    return null;
+                }
+                return number.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                        && number.isWhole()
+                        ? Endpoint.inclusive(Count.of(new BigDecimal(whole))) : null;
+            }
+
+            @Override
+            public int compareTo(OnALine other) {
+                if (past != 0 || other.past != 0) {
+                    return Integer.compare(past, other.past);
+                }
+                return number.compareTo(other.number);
+            }
+        }
+
+        /** Every whole number, each a product of itself and one. */
+        @Override
+        public LevelSpace levels() {
+            return LevelSpace.steppingBy(ExactRatio.ONE);
+        }
+
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            return switch (factors.valuesOf(factors.read(row))) {
+                case ValuesAtARow.NoneHere _ -> Stands.NO;
+                case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
+                case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                        switch (OrderedAffineBoundary.productAt(terms(), values)) {
+                            case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
+                                    Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                            // A row whose product passes where the type stops has none, and
+                            // stands on neither side of the line.
+                            case ExactAnswer.Held<Optional<ExactRatio>>(Optional<ExactRatio> product)
+                                    -> product.isPresent()
+                                    && where.holds(new Level.OfTheQuantity(product.get()))
+                                    ? Stands.YES : Stands.NO;
+                        };
+            };
+        }
+
+        @Override
+        public void lookAt(Observation row) {
+            factors.lookAt(row);
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            List<NumericTerm> both = terms();
+            return new Standing.OfAProduct(both.get(0).atOnePosition(),
+                    both.get(1).atOnePosition(), LinearQuantity.answeredOn(factors.on()),
+                    levels(), where);
+        }
+
+        @Override
+        public String behavior() {
+            return behavior;
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /** The product as an author would write it, the factors in their order. */
+        @Override
+        public String left() {
+            List<NumericTerm> both = terms();
+            return both.get(0) + " * " + both.get(1);
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity product)) {
+                throw new IllegalStateException(
+                        "a product was asked to write a level that is not a number: " + level);
+            }
+            return product.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.PRODUCT_OF_TWO;
+        }
+    }
+
+    /**
+     * What one whole number of a row leaves of another divided by it: the eaches left over when a
+     * delivery is packed in the pack size a product carries.
+     *
+     * <p>No form over the row's numbers and no line on either of them. A row at a remainder is a
+     * pair whose divisor is above it (below it, for a negative remainder) and whose dividend is
+     * that remainder more than a whole number of turns of the divisor: which pair that is turns on
+     * both, and a divisor of nought has no remainder at all. So a border on it says what the
+     * remainder is and nothing of where either number is.
+     *
+     * <p>The two numbers are read as a form of them, each weighed by one, which is what reads a
+     * row's numbers; the quantity is what the first leaves divided by the second.
+     *
+     * @param both     the two numbers, each weighed by one and on an order of whole numbers
+     * @param dividend the number divided, one of the two
+     * @param divisor  the number it is divided by, the other
+     */
+    record RemainderOfAPair(String behavior, OverAForm both, NumericTerm dividend,
+                            NumericTerm divisor) implements BorderQuantity {
+
+        public RemainderOfAPair {
+            if (behavior == null || both == null || dividend == null || divisor == null
+                    || dividend.equals(divisor) || both.form().coefs().size() != 2
+                    || !both.form().coefs().keySet().equals(Set.of(dividend, divisor))
+                    || !both.form().coefs().values().stream()
+                            .allMatch(weight -> weight.compareTo(ExactRatio.ONE) == 0)) {
+                throw new IllegalArgumentException("a remainder by an input is of two numbers,"
+                        + " each read as itself: " + both + " with " + dividend + " by " + divisor);
+            }
+            for (TermOrders each : both.on().values()) {
+                if (!(each.answered() instanceof Carrier.Whole)) {
+                    throw new IllegalArgumentException("a remainder read here is of whole numbers,"
+                            + " and this order is not one of them: " + each.answered());
+                }
+            }
+        }
+
+        /** The two numbers, in the order of the terms. */
+        List<NumericTerm> terms() {
+            return both.terms();
+        }
+
+        /** The divisor as a form of itself alone. */
+        LinearForm<NumericTerm> divisorAlone() {
+            return new LinearForm<>(ExactRatio.ZERO, Map.of(divisor, ExactRatio.ONE));
+        }
+
+        /**
+         * A run holding every remainder by a divisor in {@code divisors}, each end inclusive and
+         * open where the divisors have no end: nought to one below a divisor above nought, and one
+         * above a divisor below nought to nought.
+         */
+        static NumericDomain.Bounds across(NumericDomain.Bounds divisors) {
+            ExactRatio least = divisors.min() != null && divisors.min().at() instanceof Count count
+                    ? count.exactly() : null;
+            ExactRatio most = divisors.max() != null && divisors.max().at() instanceof Count count
+                    ? count.exactly() : null;
+            if ((divisors.min() != null && least == null)
+                    || (divisors.max() != null && most == null)) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            BigInteger below = least == null ? null : least.floor().orNull();
+            BigInteger above = most == null ? null : most.ceiling().orNull();
+            if ((least != null && below == null) || (most != null && above == null)) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            return new NumericDomain.Bounds(
+                    below == null ? null : endAt(below.add(BigInteger.ONE).min(BigInteger.ZERO)),
+                    above == null ? null : endAt(above.subtract(BigInteger.ONE)
+                            .max(BigInteger.ZERO)));
+        }
+
+        private static Endpoint endAt(BigInteger whole) {
+            return Endpoint.inclusive(Count.of(new BigDecimal(whole)));
+        }
+
+        /** Every whole number, each a remainder by some divisor. */
+        @Override
+        public LevelSpace levels() {
+            return LevelSpace.steppingBy(ExactRatio.ONE);
+        }
+
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            return switch (both.valuesOf(both.read(row))) {
+                case ValuesAtARow.NoneHere _ -> Stands.NO;
+                case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
+                case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                        switch (OrderedAffineBoundary.remainderByAnInputAt(dividend, divisor,
+                                values)) {
+                            case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
+                                    Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                            // A row with a divisor of nought has no remainder, and stands on
+                            // neither side of a line on it.
+                            case ExactAnswer.Held<Optional<ExactRatio>>(
+                                    Optional<ExactRatio> left) -> left.isPresent()
+                                    && where.holds(new Level.OfTheQuantity(left.get()))
+                                    ? Stands.YES : Stands.NO;
+                        };
+            };
+        }
+
+        @Override
+        public void lookAt(Observation row) {
+            both.lookAt(row);
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            return new Standing.OfARemainderByAnInput(dividend.atOnePosition(),
+                    divisor.atOnePosition(), LinearQuantity.answeredOn(both.on()), levels(),
+                    where);
+        }
+
+        @Override
+        public String behavior() {
+            return behavior;
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /** The call as an author would write it. */
+        @Override
+        public String left() {
+            return "Int.floorMod(" + dividend + ", " + divisor + ")";
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity remainder)) {
+                throw new IllegalStateException(
+                        "a remainder was asked to write a level that is not a number: " + level);
+            }
+            return remainder.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.REMAINDER_BY_AN_INPUT;
+        }
+    }
+
     /** How this quantity's own values are ordered, and which of them it can take. */
     LevelSpace levels();
+
+    /**
+     * What a line on this at {@code at}, holding as {@code relation}, states as a relation of the
+     * input's numbers, which is what each term it relates is asked of ({@link UndividedByARelation})
+     * — one that shows nothing where this is neither a form of them nor a product of two.
+     *
+     * <p>A form is held against nought, which is the level taken over to the form's side: a
+     * counted level is that number, and a level on a carrier the number its place counts to where
+     * it counts to one — and no number where it does not, a string being ordered and counting to
+     * nothing. A product is held against the level as it is, and relates its two factors.
+     */
+    default UndividedByARelation relationAt(Level at, Rel relation) {
+        return switch (this) {
+            case LinearQuantity linear -> UndividedByARelation.ofTheInputsNumbers(
+                    linear.direction(), switch (at) {
+                        case Level.OfTheQuantity(ExactRatio level) -> level.negated();
+                        case Level.OnACarrier(Carrier _, Place place) ->
+                                place instanceof Count count ? count.exactly().negated() : null;
+                    }, relation);
+            case ProductOfAPair product -> at instanceof Level.OfTheQuantity(ExactRatio level)
+                    ? UndividedByARelation.ofAProduct(product.terms().get(0).atOnePosition(),
+                            product.terms().get(1).atOnePosition(), level, relation)
+                    : UndividedByARelation.SHOWING_NOTHING;
+            // The remainder held against nought, which is a number dividing the other.
+            case RemainderOfAPair remainder -> at instanceof Level.OfTheQuantity(
+                    ExactRatio level) && level.signum() == 0
+                    ? UndividedByARelation.ofADivisibility(remainder.dividend.atOnePosition(),
+                            remainder.divisor.atOnePosition(), relation)
+                    : UndividedByARelation.SHOWING_NOTHING;
+            // The remainder with numbers added to it relates the form to those numbers; the
+            // remainder alone is a line on a number of its own and shows nothing of the places.
+            case RemainderOfAForm remainder -> !remainder.added().coefs().isEmpty()
+                    && at instanceof Level.OfTheQuantity(ExactRatio level)
+                    ? UndividedByARelation.ofARemainderOfAForm(remainder.dividend().form(),
+                            remainder.divisor(), remainder.added(), level, relation)
+                    : UndividedByARelation.SHOWING_NOTHING;
+            case HowMany _ -> UndividedByARelation.SHOWING_NOTHING;
+        };
+    }
 
     /**
      * Whether a bound on this quantity is what stops the range the rules leave it.
@@ -1218,6 +1733,10 @@ public sealed interface BorderQuantity
             // What a remainder runs between is nought to one below its divisor, whatever any rule
             // about it says.
             case RemainderOfAForm _ -> false;
+            // And a product between what its factors' ranges multiply to.
+            case ProductOfAPair _ -> false;
+            // And a remainder by an input's number between what the divisors' range allows.
+            case RemainderOfAPair _ -> false;
         };
     }
 
@@ -1242,7 +1761,8 @@ public sealed interface BorderQuantity
     default NumbersAskedFor asksOfEachTerm(Criterion where) {
         return switch (this) {
             case OfACoordinate _ -> NumbersAskedFor.of(where.region());
-            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _ ->
+            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
+                 ProductOfAPair _ ->
                     NumbersAskedFor.onlyTogether(new QuantityInRegion(this, where.region()));
         };
     }
@@ -1284,6 +1804,8 @@ public sealed interface BorderQuantity
             }
             case HowMany count -> count.left();
             case RemainderOfAForm remainder -> remainder.left();
+            case RemainderOfAPair remainder -> remainder.left();
+            case ProductOfAPair product -> product.left();
         };
     }
 
@@ -1294,7 +1816,8 @@ public sealed interface BorderQuantity
     default ExactRatio per() {
         return switch (this) {
             case LinearQuantity form -> QuantityKey.per(form.direction());
-            case HowMany _, RemainderOfAForm _ -> ExactRatio.ONE;
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ ->
+                    ExactRatio.ONE;
         };
     }
 
@@ -1309,7 +1832,9 @@ public sealed interface BorderQuantity
         return switch (this) {
             case LinearQuantity form -> form.terms();
             case HowMany count -> count.allNumbers();
-            case RemainderOfAForm remainder -> remainder.dividend().terms();
+            case RemainderOfAForm remainder -> remainder.allNumbers();
+            case RemainderOfAPair remainder -> remainder.terms();
+            case ProductOfAPair product -> product.terms();
         };
     }
 
@@ -1320,6 +1845,11 @@ public sealed interface BorderQuantity
             case LinearQuantity form -> quantities.runsBetween(form.direction());
             case HowMany count -> count.runs();
             case RemainderOfAForm remainder -> remainder.runs();
+            case RemainderOfAPair remainder -> RemainderOfAPair.across(
+                    quantities.runsBetween(remainder.divisorAlone()));
+            case ProductOfAPair product -> ProductOfAPair.across(
+                    quantities.runsBetween(product.alone(0)),
+                    quantities.runsBetween(product.alone(1)));
         };
     }
 
@@ -1337,6 +1867,37 @@ public sealed interface BorderQuantity
             // Whatever the rules leave the form, a remainder stays below its divisor.
             case RemainderOfAForm remainder ->
                     new NumericDomain.FormProjection.Within(remainder.runs());
+            // What the region leaves the divisor, and nothing where it leaves the dividend none.
+            case RemainderOfAPair remainder -> {
+                NumericDomain.FormProjection dividend = region.projectionOf(remainder.dividend);
+                if (dividend instanceof NumericDomain.FormProjection.NothingIsLeft nothing) {
+                    yield nothing;
+                }
+                yield switch (region.projectionOf(remainder.divisor)) {
+                    case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                            new NumericDomain.FormProjection.Within(RemainderOfAPair.across(
+                                    held == null ? NumericDomain.Bounds.OPEN : held));
+                    case NumericDomain.FormProjection.NothingIsLeft nothing -> nothing;
+                    case null -> new NumericDomain.FormProjection.Within(
+                            NumericDomain.Bounds.OPEN);
+                };
+            }
+            // What the region leaves each factor, multiplied: nothing where it leaves either none.
+            case ProductOfAPair product -> {
+                NumericDomain.Bounds[] each = new NumericDomain.Bounds[2];
+                for (int i = 0; i < 2; i++) {
+                    switch (region.projectionOf(product.terms().get(i))) {
+                        case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                                each[i] = held == null ? NumericDomain.Bounds.OPEN : held;
+                        case NumericDomain.FormProjection.NothingIsLeft nothing -> {
+                            yield nothing;
+                        }
+                        case null -> each[i] = NumericDomain.Bounds.OPEN;
+                    }
+                }
+                yield new NumericDomain.FormProjection.Within(ProductOfAPair.across(each[0],
+                        each[1]));
+            }
         };
     }
 
@@ -1361,8 +1922,12 @@ public sealed interface BorderQuantity
                             .at(apart.direction(), values).map(Optional::of))
                     : HeldValues.NONE;
             case RemainderOfAForm remainder -> HeldValues.OfAForm.of(region,
-                    remainder.dividend().terms(), values -> OrderedAffineBoundary.remainderAt(
-                            remainder.wholeDividend(), remainder.divisor(), values));
+                    remainder.allNumbers(), remainder::comesTo);
+            case RemainderOfAPair remainder -> HeldValues.OfAForm.of(region, remainder.terms(),
+                    values -> OrderedAffineBoundary.remainderByAnInputAt(remainder.dividend,
+                            remainder.divisor, values));
+            case ProductOfAPair product -> HeldValues.OfAForm.of(region, product.terms(),
+                    values -> OrderedAffineBoundary.productAt(product.terms(), values));
             case HowMany _ -> HeldValues.NONE;
         };
     }
@@ -1374,7 +1939,8 @@ public sealed interface BorderQuantity
     default List<FilingCoordinate> filedAt() {
         return switch (this) {
             case LinearQuantity form -> AffineReading.filedAt(form.direction().coefs().keySet());
-            case HowMany _, RemainderOfAForm _ -> AffineReading.filedAt(numbers());
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ ->
+                    AffineReading.filedAt(numbers());
         };
     }
 
@@ -1395,7 +1961,8 @@ public sealed interface BorderQuantity
         return switch (this) {
             case Apart apart -> apart.counts();
             case OfACoordinate coordinate -> coordinate.of().answered().counts();
-            case OverAForm _, HowMany _, RemainderOfAForm _ -> true;
+            case OverAForm _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
+                 ProductOfAPair _ -> true;
         };
     }
 
@@ -1409,22 +1976,38 @@ public sealed interface BorderQuantity
      */
     default BlockReason.ReadToEndWithoutLine whyItDividesNoPosition() {
         return switch (this) {
-            case RemainderOfAForm _ -> new BlockReason.ComparisonOnARemainder();
+            case RemainderOfAForm remainder -> remainder.added().coefs().isEmpty()
+                    ? new BlockReason.ComparisonOnARemainder()
+                    : new BlockReason.ComparisonRelatingTwoValues();
+            // Two numbers of the input multiplied, which relates the two.
+            case ProductOfAPair _ -> new BlockReason.ComparisonRelatingTwoValues();
+            // And what one leaves of another divided by it.
+            case RemainderOfAPair _ -> new BlockReason.ComparisonRelatingTwoValues();
             case LinearQuantity _, HowMany _ -> readOverARun()
                     ? new BlockReason.ComparisonOverARun()
                     : new BlockReason.ComparisonRelatingTwoValues();
         };
     }
 
-    /** Whether this is a number read over a run of values rather than a form over positions,
-     *  which is a different thing to tell a reader who found no partition. */
+    /**
+     * Whether this is a number read over a run of values rather than a form over positions, which
+     * is a different thing to tell a reader who found no partition.
+     *
+     * <p>A form, or a count with a form added, is that only where every number of it is read over
+     * a run. A position's number beside a total is related to the total, and which of its values
+     * settle the rule on their own turns on where the total can come to — what the relation is
+     * asked ({@link UndividedByARelation}), and not something the run says of every place beside
+     * it.
+     */
     private boolean readOverARun() {
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().keySet().stream()
-                    .anyMatch(term -> term.atOnePosition() == null);
-            case HowMany _ -> true;
+                    .allMatch(term -> term.atOnePosition() == null);
+            case HowMany count -> count.against().coefs().keySet().stream()
+                    .allMatch(term -> term.atOnePosition() == null);
             case RemainderOfAForm remainder -> remainder.dividend().direction().coefs().keySet()
                     .stream().anyMatch(term -> term.atOnePosition() == null);
+            case ProductOfAPair _, RemainderOfAPair _ -> false;
         };
     }
 
@@ -1436,7 +2019,7 @@ public sealed interface BorderQuantity
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().size() == 1
                     ? form.carrierOf(form.direction().coefs().keySet().iterator().next()) : null;
-            case HowMany _, RemainderOfAForm _ -> null;
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ -> null;
         };
     }
 
@@ -1530,6 +2113,10 @@ public sealed interface BorderQuantity
             case HowMany _ -> true;
             // What a division leaves, which is the call's and not a position's.
             case RemainderOfAForm _ -> true;
+            // What two numbers come to multiplied, which is the product's and not a position's.
+            case ProductOfAPair _ -> true;
+            // What one number leaves of another, which is the call's and not a position's.
+            case RemainderOfAPair _ -> true;
         };
     }
 
@@ -1661,11 +2248,25 @@ public sealed interface BorderQuantity
          *
          * <p>Of the reading and not of the row, as {@link #lastToHold} is; a walk that cannot
          * tell the elements of the container apart could not walk to an answer. Nothing is read
-         * of the elements here: every reading of a row asks this, and a reader keeps what the
-         * elements of one occurrence came to by what this answers ({@link #elementsOf}).
+         * of the elements here: every reading of a row asks this, and what the elements of one
+         * occurrence came to is kept by {@link #keptOf}.
          */
         default WalkResult<Among> among(TermPath container) {
             return WalkResult.couldNotWalk();
+        }
+
+        /**
+         * What {@code asked} reads at this reading, read once for every reading of the row that
+         * chose alike wherever reading it asked what was chosen.
+         *
+         * <p>For a number, a count or a prefix of the elements of one occurrence of a container:
+         * every reading of the row that chose an element of that occurrence would otherwise read
+         * all of them again, and a row has a reading per element. Kept by the walk over the row
+         * and for as long as the row is read, so nothing read of one row answers another; a walk
+         * that keeps nothing reads it afresh, which is the same answer.
+         */
+        default <T> T keptOf(ReadAlike<T> asked) {
+            return asked.readAt(this);
         }
 
         /**
@@ -1687,25 +2288,26 @@ public sealed interface BorderQuantity
     }
 
     /**
-     * Which occurrence of one container a reading of a row is read in, and which element of it the
-     * reading chose.
+     * Something read of a row that every reading of the row answers alike wherever they chose
+     * alike in the containers reading it asks what was chosen in.
      *
-     * @param walk   what every reading of the row shares, by identity: what tells two readings of
-     *               one row from readings of two rows that wrote the same values, which a reader
-     *               keeping what it worked out of a row's elements keys on
-     * @param beside what the reading chose of every other container, which says which occurrence
-     *               of the container this is — the items of the second order and not of the first
+     * <p>Two of these are one question where they are equal, so what they are equal by is what
+     * the answer is of. Which choices the answer turns on is not said here: reading it asks them,
+     * and the walk that keeps it hears what was asked.
+     */
+    interface ReadAlike<T> {
+
+        /** What this reads at {@code reading}. */
+        T readAt(Observation reading);
+    }
+
+    /**
+     * Which element of the occurrence of one container a reading of a row is read in the reading
+     * chose.
+     *
      * @param chosen the element the reading chose, or null where it chose none
      */
-    record Among(Object walk, Map<TermPath, Integer> beside, Integer chosen) {
-
-        public Among {
-            beside = Map.copyOf(beside);
-            if (walk == null) {
-                throw new IllegalArgumentException("an occurrence is of some row's walk");
-            }
-        }
-    }
+    record Among(Integer chosen) {}
 
     /**
      * One element of a container a row wrote, and the row read with it chosen.

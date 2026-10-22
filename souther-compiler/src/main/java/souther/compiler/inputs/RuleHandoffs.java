@@ -28,8 +28,8 @@ import java.util.Set;
  * <p><b>Handing the rules over is not the same as reading them.</b> A reading that was opened and
  * then came back short of something reports that shortfall itself, at its own position. The handoff
  * above it is discharged all the same: the rules reached a reader, and saying so twice would report
- * one gap at two positions. What leaves a handoff standing is that no reading was opened at all —
- * a shape this compiler cannot enter, or a recipient the descent named and nothing opened.
+ * one gap at two positions. What leaves a handoff standing is a recipient the descent named and
+ * nothing opened.
  *
  * <p>A depth this walk stops at is not one of them, though it reads like one. A stop at the depth
  * leaves the rules under it unread and hands nothing on
@@ -54,7 +54,7 @@ final class RuleHandoffs {
     /** The handoffs made, in the order the walk made them. */
     private final Set<Handoff> owed = new LinkedHashSet<>();
     /** Which positions are supposed to take the rules over, for the handoffs a descent has reached.
-     *  Absent for one nothing has reached, which is what leaves it standing. */
+     *  Absent for one nothing has reached, which {@link #standingAt} refuses. */
     private final Map<Handoff, Set<TermPath>> expected = new LinkedHashMap<>();
     /** And which of them a reading was actually opened at. */
     private final Map<Handoff, Set<TermPath>> accepted = new LinkedHashMap<>();
@@ -65,7 +65,7 @@ final class RuleHandoffs {
      *
      * <p>Refuses a second reading owing one at the same position. Which reading answers for a
      * position is settled by where the descent last crossed an ownership boundary, so it is a
-     * function of the path and there is one of them — and {@link #unresolvedAt} leans on that,
+     * function of the path and there is one of them — and {@link #standingAt} leans on that,
      * asking by position alone because a position has one owner to ask about.
      *
      * <p>Written down as a refusal because the projection is the whole risk. Every other step here
@@ -133,12 +133,19 @@ final class RuleHandoffs {
     }
 
     /**
-     * How the reading that ended at {@code at} was left with rules under it that nothing took over,
-     * or null where nothing is standing.
+     * Whether the reading that ended at {@code at} was left with rules under it that nothing took
+     * over.
      *
      * <p>Every position the rules were passed to has to have been opened, and not merely some of
      * them: a sum whose second case nothing walked has left the rules of that case unread however
      * well the first went.
+     *
+     * <p>Refused where a handing over was owed and the descent past the position named no
+     * recipient at all. A handing over is owed at a container, an optional or a choice between
+     * declarations, and the descent past each of them names who takes the rules over; one that
+     * names nobody is the walk contradicting itself, and not a state of the model to be reported.
+     * Read as a shortfall, the absence of an entry would be taken for evidence that something was
+     * left unread, which is what #1072 was about.
      *
      * <p>Asked by position and not by the pair the handoffs are held under, which is safe because
      * {@link #owes} refuses a second reading at one position. Left to be true rather than made so, a
@@ -148,42 +155,20 @@ final class RuleHandoffs {
      * <p>The first standing handoff answers. Two of them at one position would be two readings
      * answering for it, which {@link #owes} has already refused.
      */
-    Shortfall unresolvedAt(TermPath at) {
+    boolean standingAt(TermPath at) {
         for (Handoff handoff : owed) {
             if (!handoff.at().equals(at)) {
                 continue;
             }
             Set<TermPath> supposed = expected.get(handoff);
             if (supposed == null) {
-                return new Shortfall.NothingExpected();
+                throw new IllegalStateException("the rules handed on at " + at + " by "
+                        + handoff.by() + " were passed to nobody");
             }
             if (!accepted.getOrDefault(handoff, Set.of()).containsAll(supposed)) {
-                return new Shortfall.NotFullyAccepted();
+                return true;
             }
         }
-        return null;
-    }
-
-    /**
-     * How a handing over was left standing, in this ledger's own words.
-     *
-     * <p><b>Why the descent got no further is not said here.</b> This knows that no recipient was
-     * ever named, and that is a fact about the entries it holds; whether the walk was stopped by a
-     * shape it cannot enter or went on and left a recipient unopened is a fact about the structural
-     * reading, which this has never seen. Answered here, the ledger would be deciding what a
-     * traversal means from the absence of an entry — the same reading of silence as evidence that
-     * #1072 was about.
-     *
-     * <p>Whoever holds both readings joins them ({@code InputDomain}), and it is there that
-     * {@link RulesLeftUnread.HandoffUnread} is settled.
-     */
-    sealed interface Shortfall {
-
-        /** No recipient was ever named for the handing over: the descent past this position made no
-         *  entry at all. */
-        record NothingExpected() implements Shortfall {}
-
-        /** Recipients were named and a reading was not opened at every one of them. */
-        record NotFullyAccepted() implements Shortfall {}
+        return false;
     }
 }

@@ -186,10 +186,17 @@ class TheSchemaAClientReadsIsTheOneTheServerEnforcesTest {
                 "{\"name\":\"stdlib_api_search\",\"arguments\":{\"term\":\"map\"}}",
                 "{\"name\":\"stdlib_api_source\",\"arguments\":{\"name\":\"String\"}}");
 
-        for (String call : admitted) {
-            JsonNode answer = serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
-                    + "\"params\":" + call + "}").getFirst();
-
+        // Asked of one server, as a client asks: each request carries its own id and is answered
+        // under it.
+        String[] requests = new String[admitted.size()];
+        for (int i = 0; i < admitted.size(); i++) {
+            requests[i] = "{\"jsonrpc\":\"2.0\",\"id\":" + (i + 1) + ",\"method\":\"tools/call\","
+                    + "\"params\":" + admitted.get(i) + "}";
+        }
+        List<JsonNode> answers = serve(requests);
+        assertEquals(admitted.size(), answers.size(), "one answer for every request: " + answers);
+        for (JsonNode answer : answers) {
+            String call = admitted.get(answer.get("id").asInt() - 1);
             assertTrue(answer.has("result"), call + " fits the published schema: " + answer);
             assertFalse(answer.get("result").get("isError").asBoolean(), call + " -> " + answer);
         }

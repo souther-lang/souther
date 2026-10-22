@@ -41,17 +41,16 @@ class OneOfSeveralThingsSaysWhatStoppedEachTest {
             data Order = { x: Int, y: Int, floor: Int, lines: List<Line> }
 
             behavior written : (o: Order) -> Bool
-            let written (o) = o.x * o.y > 4 || List.all(l -> l.price > o.floor, o.lines)
+            let written (o) = 2 * o.x * o.y > 8 || List.all(l -> l.price > o.floor, o.lines)
 
             behavior denied : (o: Order) -> Bool
             let denied (o) =
-                Bool.not(o.x * o.y <= 4 && List.any(l -> l.price <= o.floor, o.lines))
+                Bool.not(2 * o.x * o.y <= 8 && List.any(l -> l.price <= o.floor, o.lines))
             """;
 
     /** What the walk declined, and why, in the order it met them. */
     private static List<WhyNotTaken> whys(String behavior, boolean holding) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().getFirst();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -73,8 +72,9 @@ class OneOfSeveralThingsSaysWhatStoppedEachTest {
 
     @Test
     void aDisjunctionSaysWhatStoppedEachPart() {
-        // The product stopped the reading; every line above a floor beside it was read to the end
-        // and is taken, as a statement the run decides, so it is no reason anything stopped.
+        // The product, a factor of which is weighed before it is taken, stopped the reading; every
+        // line above a floor beside it was read to the end and is taken, as a statement the run
+        // decides, so it is no reason anything stopped.
         WhyNotTaken product = new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment(
                 NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES));
         assertEquals(List.of(product), whys("written", true));

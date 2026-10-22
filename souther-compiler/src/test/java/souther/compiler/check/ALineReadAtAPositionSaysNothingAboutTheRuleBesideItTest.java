@@ -38,7 +38,6 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
 
     private static FieldDomains readingOf(String source, String type) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model under test compiles");
@@ -72,9 +71,10 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * separates the two is one {@code invariant value >= 0} on the fields' own type, which is not a
      * fact about this clause.
      *
-     * <p>What it is named as is a relation of the two, with neither shown to reach every value of
-     * the other: a sum held against a number has a length at the least {@code Int} that needs a
-     * width past the greatest. A form over two fields says nothing about where either of them stops
+     * <p>What it is named as is a relation of the two, each reaching every value of the other: a
+     * length near the least {@code Int} holds the sum below the number whatever the width is, only
+     * because no width is past the greatest, which is where the type stops and no line the model
+     * draws. A form over two fields says nothing about where either of them stops
      * on its own — counted a side at a time, a rule naming both of its positions on one side came
      * back as a form nobody could read.
      */
@@ -82,9 +82,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     void aClauseNoEndCameOutOfIsNamedAtEveryFieldItCompares() {
         FieldDomains read = readingOf(BARE, "Parcel");
 
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "width"));
     }
 
@@ -338,10 +338,11 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * And where a field's own type holds it to some of those values, the clause is not said to
      * divide the other field by nothing.
      *
-     * <p>{@code high} is never below nought, so it is never below a {@code low} at nought either:
-     * {@code high} at nought is refused whatever {@code low} is. And a rule beside the clause naming
-     * a field — here the one on its type — is what keeps the field from being shown to take every
-     * value, so neither field is said to be left undivided.
+     * <p>{@code low} is never below nought, so it is never below a {@code high} at nought either:
+     * {@code high} at nought is refused whatever {@code low} is, which narrows {@code high} without
+     * stating an end. {@code low} is refused at no value: what the rule on its type leaves
+     * {@code high} is every value from nought on, which holds one above any {@code low} and, at
+     * every {@code low} but nought, one at or below it.
      */
     @Test
     void aClauseRelatingTwoFieldsAFieldsTypeHoldsSaysTheOtherIsNotShownToReachIt() {
@@ -355,10 +356,114 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant low < high
                 """, "Span");
 
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "low"));
         assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "high"));
+    }
+
+    /**
+     * A value of a field the clause comes out true at whatever the other field is, is one it
+     * refuses nothing at.
+     *
+     * <p>{@code total} at nought is at or below every {@code subtotal}, so there is no row there for
+     * the clause to refuse; every other {@code total} has a {@code subtotal} on each side. A
+     * comparison in a body would part a total of nought from the rest, and an invariant draws no
+     * class at what it refuses — so neither field is divided. Beside the clause above, which is the
+     * same pair with the run at nought coming out false.
+     */
+    @Test
+    void aValueAClauseHoldsAtWhateverTheOtherIsIsOneItRefusesNothingAt() {
+        FieldDomains read = readingOf("""
+                module example.prices
+
+                data Yen = Int
+                    invariant value >= 0
+
+                data Priced = { total: Yen, subtotal: Yen }
+                    invariant total.value <= subtotal.value
+                """, "Priced");
+
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+                reasonsAt(read, "total"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+                reasonsAt(read, "subtotal"));
+    }
+
+    /**
+     * And a field the clause comes out true at for some values and false at for others, whatever
+     * the other field is, is not said to be undivided.
+     *
+     * <p>With {@code subtotal} held to a hundred, a {@code total} of nought is still refused nothing,
+     * but a {@code total} past a hundred is refused at every row.
+     */
+    @Test
+    void aValueAClauseFailsAtWhateverTheOtherIsKeepsTheFieldFromIt() {
+        FieldDomains read = readingOf("""
+                module example.prices
+
+                data Yen = Int
+                    invariant value >= 0
+
+                data Capped = Int
+                    invariant value >= 0 && value <= 100
+
+                data Priced = { total: Yen, subtotal: Capped }
+                    invariant total.value <= subtotal.value
+                """, "Priced");
+
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "total"));
+    }
+
+    /**
+     * A field the other clauses tie to a third is still apart from the field it is compared with.
+     *
+     * <p>Under {@code low <= mid && mid <= high}, what the second clause leaves {@code mid} is every
+     * amount, whatever {@code high} has to be for it, and nothing but the first clause ties it to
+     * {@code low}. So each clause is asked of what the other leaves its two fields, and divides
+     * none of them.
+     */
+    @Test
+    void aFieldTheOtherClausesTieOnlyToAThirdIsApartFromTheOneItIsComparedWith() {
+        FieldDomains read = readingOf("""
+                module example.prices
+
+                data Yen = Int
+                    invariant value >= 0
+
+                data Chained = { low: Yen, mid: Yen, high: Yen }
+                    invariant low.value <= mid.value && mid.value <= high.value
+                """, "Chained");
+
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "low"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues(),
+                new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "mid"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "high"));
+    }
+
+    /**
+     * And two fields the other clauses tie together through a third are not asked apart.
+     *
+     * <p>{@code b <= c} and {@code c <= a} hold {@code b} at or below {@code a}, though neither
+     * names both, so under {@code a + b >= 3} an {@code a} of nought or one has no row. What the
+     * two leave each of them is every amount, and asked apart, the first clause would be shown to
+     * leave {@code a} with a {@code b} on each side of every value.
+     */
+    @Test
+    void twoFieldsTheOtherClausesTieThroughAThirdAreNotAskedApart() {
+        FieldDomains read = readingOf("""
+                module example.prices
+
+                data Yen = Int
+                    invariant value >= 0
+
+                data Tied = { a: Yen, b: Yen, c: Yen }
+                    invariant a.value + b.value >= 3 && b.value <= c.value && c.value <= a.value
+                """, "Tied");
+
+        assertFalse(reasonsAt(read, "a").contains(new BlockReason.ComparisonRelatingTwoValues()),
+                () -> "no clause is shown to leave `a` undivided: " + reasonsAt(read, "a"));
     }
 
     /**
@@ -369,8 +474,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * as {@code x < y} is, and the arithmetic is on the far side of the relation rather than in
      * place of it. Read off whether a side <em>is</em> a coordinate, {@code y + 1} named nothing and
      * this came back as a form nobody could read — which is not what a {@code guard} writing the
-     * same comparison is told. Moved by one, neither reaches the other at its end: the least
-     * {@code x} is below every {@code y + 1}.
+     * same comparison is told. Moved by one, the two are still about how far apart they are, and
+     * moved together they stay as far apart: neither is divided, as under {@code low < high}.
      */
     @Test
     void andSoDoesOneWhereTheSecondPositionIsInsideAnExpression() {
@@ -381,10 +486,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant x < y + 1
                 """, "Pair");
 
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
-                reasonsAt(read, "x"));
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
-                reasonsAt(read, "y"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "x"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "y"));
     }
 
     /**
@@ -392,9 +495,10 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      *
      * <p>What a clause counting two dates apart relates is the two dates: the operation states what
      * it answers in the counts of its arguments, so the quantity it cuts is over both positions.
-     * Held within thirty days, neither date is shown to reach the other at the ends: no date is
-     * thirty days before the first. Arithmetic written outside the call moves the threshold and
-     * not the quantity, so each spelling is the same rule and is said the same way.
+     * Held within thirty days, the two are about how far apart they are, which moving both by any
+     * number of days leaves as it was, so neither is divided. Arithmetic written outside the call
+     * moves the threshold and not the quantity, so each spelling is the same rule and is said the
+     * same way.
      *
      * <p>Read off the shape of the whole side rather than off the quantity, one token of arithmetic
      * outside the call is the difference between two sentences for one rule.
@@ -411,9 +515,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                         invariant within = %s
                     """.formatted(clause), "Span");
 
-            assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                     reasonsAt(read, "from"), clause);
-            assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                     reasonsAt(read, "to"), clause);
         }
     }

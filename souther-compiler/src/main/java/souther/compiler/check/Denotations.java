@@ -59,15 +59,37 @@ record Denotations(Map<BindingId, Means> bound) {
      *                was computed to make it are apart, and the arm of a {@code match} is where they
      *                come apart furthest — it opens a number a library operation computed, and the
      *                value it stands for is the union that operation answered
+     * @param readIn  where {@code value} is read, or null where it is read where the name is. A
+     *                binding entered as the walk goes is read where the name is, since nothing is
+     *                taken away and nothing bound later answers for a name this one holds; a value
+     *                written somewhere the walk never entered — inside a value's definition, or
+     *                where a container was written before its element was handed to a step — is
+     *                read there
      */
     record Means(Core value, FactSubject subject, Location location, Term term,
-                 NumericMeaning numeric) {
+                 Terms.Computed numeric, Denotations readIn) {
 
         Means {
             // Every binding this holds is one something is known about. A binding entered without a
             // subject would be read back as one nothing entered, which takes an atom per occurrence
             // — so one value read twice would be two subjects, which is what a subject is for.
             java.util.Objects.requireNonNull(subject, "a binding entered is a binding to be about");
+        }
+
+        // By identity. What a binding stands for is one object every environment it was carried
+        // into holds (standingOf), and an environment is told from another by which objects it
+        // holds. Compared by what they hold, two of them would each walk the environments readIn
+        // and the arithmetic carry, which nest as deep as the names a value was built from, and
+        // hash and compare once per path through them.
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
         }
     }
 
@@ -98,16 +120,39 @@ record Denotations(Map<BindingId, Means> bound) {
     }
 
 
-    /** Which arithmetic {@code binding} is, or null where it is not arithmetic this reads. */
-    NumericMeaning numericOf(BindingId binding) {
+    /**
+     * What {@code binding} stands for here, as an object every environment it was carried into
+     * holds the same — or null where nothing entered it.
+     *
+     * <p>A binding's value is read where the name is read, and that is a different environment at
+     * every read further down; what it is read as is the same in all of them, since what the value
+     * names was entered before it. So this is what a reader keeping an answer for each name keys it
+     * on ({@link ValueStanding.Names#standingOf}).
+     */
+    Object standingOf(BindingId binding) {
+        return bound.get(binding);
+    }
+
+    /** Which arithmetic {@code binding} is and where its operands are read, or null where it is not
+     *  arithmetic this reads. */
+    Terms.Computed numericOf(BindingId binding) {
         Means given = bound.get(binding);
         return given == null ? null : given.numeric();
     }
 
-    /** The value {@code binding} was given, or null where nothing recorded one. */
-    Core valueOf(BindingId binding) {
+    /**
+     * The value {@code binding} was given and where that value is read, or null where nothing
+     * recorded one.
+     *
+     * <p>The two together and never the value alone: a value stands for the name in the
+     * environment it was written in (ADR-0111), and a reader handed the expression without it would
+     * read its names wherever it happened to be standing.
+     */
+    ValueStanding.ReadThrough<Denotations> givenTo(BindingId binding) {
         Means given = bound.get(binding);
-        return given == null ? null : given.value();
+        return given == null || given.value() == null ? null
+                : new ValueStanding.ReadThrough<>(given.value(),
+                        given.readIn() != null ? given.readIn() : this);
     }
 
     /** {@code binding} entered as a place: somewhere the seeding can write about, standing for no
@@ -120,7 +165,7 @@ record Denotations(Map<BindingId, Means> bound) {
      * binding is ({@link Terms#placeSubject}); an arm opening an optional hands what that optional
      * holds. */
     Denotations location(BindingId binding, FactSubject subject, Term term) {
-        return with(binding, new Means(null, subject, Location.of(binding), term, null));
+        return with(binding, new Means(null, subject, Location.of(binding), term, null, null));
     }
 
     /**
@@ -139,8 +184,8 @@ record Denotations(Map<BindingId, Means> bound) {
      * {@code match} over what an outer arm bound could not find the call underneath it.
      */
     Denotations opened(BindingId binding, Core value, FactSubject subject, Term term,
-                       NumericMeaning numeric) {
-        return with(binding, new Means(value, subject, Location.of(binding), term, numeric));
+                       Terms.Computed numeric) {
+        return with(binding, new Means(value, subject, Location.of(binding), term, numeric, null));
     }
 
     /** The same, for bindings that stand for themselves rather than for a value the walk reached —
@@ -157,10 +202,34 @@ record Denotations(Map<BindingId, Means> bound) {
     /** {@code binding} entered as the name of {@code value}: what a {@code let} introduces. What
      * the name means is what it was given, in every one of these answers — which arithmetic it is
      * included, since a name given a quotient is that quotient and naming a value does not change
-     * what is known of it (spec §invariant-discharge-terms). */
-    Denotations binding(BindingId binding, Core value, FactSubject subject, Location location,
-                        Term term, NumericMeaning numeric) {
-        return with(binding, new Means(value, subject, location, term, numeric));
+     * what is known of it (spec §invariant-discharge-terms). {@code readIn} is where the value is
+     * read, or null where it is read where the name is ({@link Means#readIn}). */
+    Denotations binding(BindingId binding, Core value, Denotations readIn, FactSubject subject,
+                        Location location, Term term, Terms.Computed numeric) {
+        return with(binding, new Means(value, subject, location, term, numeric, readIn));
+    }
+
+    /**
+     * Whether {@code other} holds the same bindings meaning the same things, so that a name read in
+     * either is read the same.
+     *
+     * <p>The same entry and not an equal one: a binding entered again replaces what it meant, and
+     * the two entries may read equal by shape while one of them is read where the other is not.
+     * The keys alone say which names exist and nothing of what they mean.
+     */
+    boolean meansWhatItMeansIn(Denotations other) {
+        if (bound == other.bound) {
+            return true;
+        }
+        if (bound.size() != other.bound.size()) {
+            return false;
+        }
+        for (Map.Entry<BindingId, Means> each : bound.entrySet()) {
+            if (other.bound.get(each.getKey()) != each.getValue()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Denotations with(BindingId binding, Means means) {

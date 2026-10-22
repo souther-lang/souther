@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -35,12 +36,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * starts filing a stop where it used to file a statement, fails here rather than taking a measure
  * quietly with it.
  *
- * <p>Over the models this repository carries and over the ones written here for the readers the
- * corpora do not exercise, since what is being checked is a property of the readers rather than of
- * any one model.
+ * <p>Over the models this repository carries and over the ones written here, since what is being
+ * checked is a property of the readers rather than of any one model: a model for the stop the
+ * readers file — a rule of a record relating two of its fields, read where the record is an input
+ * and where it is an element of one — and one for each reader that says instead that nothing
+ * classifies a rule, which the corpora do not exercise.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class ARuleWhoseReadingStoppedLeavesAQuestionTest {
+
+    /** A rule of a record relating two of its fields, which the accounting of the record's
+     *  clauses stops reading, at an input and at an element of one. */
+    private static final String A_RELATION_BETWEEN_TWO_FIELDS = """
+            module probe.relation
+
+            data Amount = Decimal
+                invariant value >= 0.0m
+
+            data Offer = { ask: Amount, floor: Amount }
+                invariant Decimal.compare(floor.value, ask.value) <= 0
+
+            behavior one : (offer: Offer) -> Bool
+            let one (offer) = true
+
+            behavior many : (offers: List<Offer>) -> Int
+            let many (offers) = List.length(offers)
+            """;
 
     /** A comparison in a body that no reading takes apart. */
     private static final String A_COMPARISON_NOBODY_READS = """
@@ -120,11 +142,12 @@ class ARuleWhoseReadingStoppedLeavesAQuestionTest {
         assertTrue(stopped > 0, "no reading stopped anywhere, so this checked nothing");
     }
 
-    /** The models this repository carries, and the readers they do not exercise. */
+    /** The models this repository carries, a model for the stop the readers file, and one for
+     *  each reader that files none. */
     private static List<Compilation> every() {
         List<Compilation> out = new ArrayList<>(RepositoryModels.all());
-        for (String each : List.of(A_COMPARISON_NOBODY_READS, AN_ENSURES_NOBODY_READS,
-                A_PREDICATE_OVER_A_MADE_VALUE)) {
+        for (String each : List.of(A_RELATION_BETWEEN_TWO_FIELDS, A_COMPARISON_NOBODY_READS,
+                AN_ENSURES_NOBODY_READS, A_PREDICATE_OVER_A_MADE_VALUE)) {
             Compilation one = Compilation.ofSource(each, "Main");
             one.measure(Adequacy.Asked.fullReport());
             one.answerEverything();

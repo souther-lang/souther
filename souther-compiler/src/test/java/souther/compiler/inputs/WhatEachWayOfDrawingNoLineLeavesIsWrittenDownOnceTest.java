@@ -199,6 +199,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // Read to the end. Whatever the rule places has been placed, and there is none to be owed —
         // and no measurement is weakened, so from here down there is no sensitivity to answer.
         table.put("ComparisonCuttingNothing", "RULE_CUTS_NOTHING/-");
+        // Its own word beside that one: a run gets past a rule that cuts nothing, and none gets
+        // past this.
+        table.put("ComparisonAnswersNowhere", "RULE_ANSWERS_NOWHERE/-");
         table.put("ComparisonCuttingOutsideDomain",
                 "RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS/-");
         // Its own word beside the one above. There the declarations never run as far as the line,
@@ -207,6 +210,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // the line would make hold nothing that arrives, which is a fact about the model.
         table.put("ComparisonNothingArrivesAtItsLine",
                 "NOTHING_ARRIVES_AT_THE_RULES_LINE/-");
+        // The same fact of a relation, which has no line for the rows to miss.
+        table.put("ComparisonRelationNothingArrivesAt", "NOTHING_ARRIVES_AT_THE_RELATION/-");
         // And its own word beside that one: rows arrive at the line, and the rest of the statement
         // it is a line of decides the outcome wherever they do. Nothing is owed there either.
         table.put("ComparisonLineTurningNothing", "RULE_NEVER_TURNS_ON_THIS_LINE/-");
@@ -255,8 +260,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     private static Map<String, String> theStopsAtAPosition() {
         Map<String, String> table = new LinkedHashMap<>();
         table.put("TypeUnresolved", "TYPE_UNRESOLVED/UNAFFECTED");
-        table.put("RecursiveExpansion",
-                "RETURNS_TO_A_DECLARATION_ALREADY_READ/UNAFFECTED");
         table.put("ValueRulesNotReached", "RULES_NOT_READ_AT_ALL/UNAFFECTED");
         // The two rows this pair is for. One word out there and two reasons in here: a document
         // promises a reader the hole under the position and not which figure this compiler stopped
@@ -528,8 +531,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.WhereALineDecidesNotWorkedOut(AT_A_FIGURE),
                 new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.ComparisonCuttingNothing(),
+                new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),
+                new BlockReason.ComparisonRelationNothingArrivesAt(),
                 new BlockReason.ComparisonLineTurningNothing(),
                 new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.ComparisonOverARun(),
@@ -538,10 +543,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.PredicateTellingNothingApart(),
                 new BlockReason.ClassesNotComposed(),
                 new BlockReason.TypeUnresolved(),
-                new BlockReason.RecursiveExpansion(
-                        souther.compiler.types.TypeSymbols.declared(
-                                new souther.compiler.types.TypeKey("g", "Chain")),
-                        TermPath.of("c")),
                 new BlockReason.ValueRulesNotReached(),
                 new BlockReason.ValueRulesNotReachedPastDepthLimit()));
         // One of each reason a statement is no line for, which a row is written for apiece.
@@ -592,10 +593,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         java.util.Set<String> aPosition = new java.util.LinkedHashSet<>(
                 projected(everyRuleWithoutALine()));
         aPosition.addAll(projected(everyStopAtAPosition()));
-        // The walk stopping after a count of steps, which nothing writes any more. A word of this
-        // surface and of no other: documents of this version carry it where a position's reading
-        // ran out, and the question's vocabulary is new in this version and never carried it.
+        // The walk stopping after a count of steps, and the input returning to a declaration
+        // already read, which nothing writes any more. Words of this surface and of no other:
+        // documents of this version carry them where a position's reading ran out, and the
+        // question's vocabulary is new in this version and never carried them.
         aPosition.add("depth_limit");
+        aPosition.add("returns_to_a_declaration_already_read");
 
         assertEquals(aPosition, words(schema, "notReadReason"),
                 "an entry about a position admits what a position's readings can be short of");

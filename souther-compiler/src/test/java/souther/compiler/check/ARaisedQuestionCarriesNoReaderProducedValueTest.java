@@ -102,6 +102,11 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * counts of one string two numbers, and it is the whitespace the library trims at and one
      * separator the author wrote.
      *
+     * <p>{@code CaseMapping} belongs to that count too, taken of what the author's own
+     * {@code String.lowercase} or {@code String.uppercase} made of the string: which of them it is
+     * is what makes the count of the answer another number of the place than the count of the
+     * string, and it names the call and nothing a reading produced.
+     *
      * <p>{@code ValueTransformation} and {@code DateTranslation} belong to the year of a date moved
      * by days: which number of one place it is turns on the days the date was moved by and the
      * dates the move is defined at, which are whole numbers the author's own calls wrote and
@@ -110,6 +115,15 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * <p>{@code OfItsMultiplicity} belongs to how often an element's value occurs among the
      * elements beside it, which carries nothing: the place says which value, and the container it
      * stands inside says which elements are counted.
+     *
+     * <p>{@code OfItsOccurrencesInEveryContainer} is the same for the lists of an outer list put
+     * end to end, and carries nothing for the same reason.
+     *
+     * <p>{@code OfTheExtremeOfItsKey} and {@code Extreme} belong to the least or greatest of the
+     * values the elements of a key hold: which end and which field of the element the key is are
+     * what make it one number of the place, and both are what the author's fold wrote — the end
+     * its closure keeps, and the field it files under, carried as the field names read from the
+     * element.
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",
@@ -120,7 +134,14 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOwnValue",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatAnOperationAnswers",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfHowManyCodePointsAreIn",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatItsCodePointsComeTo",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsMultiplicity",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOccurrencesInEveryContainer",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfTheOccurrencesOfAKey",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfTheExtremeOfItsKey",
+            "souther/compiler/check/Extreme",
+            "souther/compiler/check/Extreme$Least",
+            "souther/compiler/check/Extreme$Greatest",
             "souther/compiler/check/RuleKey",
             "souther/compiler/inputs/InputQuestion",
             "souther/compiler/inputs/InputQuestion$AboutAPosition",
@@ -130,6 +151,10 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/semantics/CodePointClass$NotWhitespace",
             "souther/compiler/semantics/CodePointClass$NotWhitespaceNorEqualTo",
             "souther/compiler/semantics/CodePointClass$OneOf",
+            "souther/compiler/semantics/CaseMapping",
+            "souther/compiler/semantics/CaseMapping$None",
+            "souther/compiler/semantics/CaseMapping$Lowercase",
+            "souther/compiler/semantics/CaseMapping$Uppercase",
             "souther/compiler/semantics/TakenArguments",
             "souther/compiler/numeric/ValueTransformation",
             "souther/compiler/numeric/ValueTransformation$Identity",

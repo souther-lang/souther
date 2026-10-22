@@ -3,11 +3,13 @@ package souther.compiler.numeric;
 import souther.compiler.values.InOneOrder;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.ToIntFunction;
 
 /**
  * One order over the positions of an atom domain, for a walk that has to take them in one.
@@ -64,11 +66,34 @@ public interface CanonicalOrder<A> extends Comparator<A> {
      */
     default <T> List<T> walking(Collection<T> these, Function<T, A> at) {
         List<T> out = new ArrayList<>(these);
-        out.sort(Comparator.comparing(at, this));
+        ToIntFunction<A> placed = placeOf();
+        int[] places = null;
+        if (placed == null) {
+            out.sort(Comparator.comparing(at, this));
+        } else {
+            // Each position's place read once, and the sort made over the places: the same order,
+            // with no position looked up again at every comparison it takes part in.
+            int[] place = new int[out.size()];
+            Integer[] index = new Integer[out.size()];
+            for (int i = 0; i < out.size(); i++) {
+                place[i] = placed.applyAsInt(at.apply(out.get(i)));
+                index[i] = i;
+            }
+            Arrays.sort(index, Comparator.comparingInt(i -> place[i]));
+            List<T> sorted = new ArrayList<>(out.size());
+            places = new int[out.size()];
+            for (int i = 0; i < index.length; i++) {
+                sorted.add(out.get(index[i]));
+                places[i] = place[index[i]];
+            }
+            out = sorted;
+        }
         for (int next = 1; next < out.size(); next++) {
             A before = at.apply(out.get(next - 1));
             A here = at.apply(out.get(next));
-            if (compare(before, here) == 0 && !before.equals(here)) {
+            boolean tied = places != null ? places[next - 1] == places[next]
+                    : compare(before, here) == 0;
+            if (tied && !before.equals(here)) {
                 // The pair named in one order, which is not the order it happened to arrive in. A
                 // sort leaves a tie where it found it, so naming them as they lie would tell two
                 // callers that wrote one thing two ways two different things about one pair — the
@@ -78,6 +103,18 @@ public interface CanonicalOrder<A> extends Comparator<A> {
             }
         }
         return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * Where each position stands in this order, as a number two positions compare by exactly as
+     * this compares them — or null where this order is no such number.
+     *
+     * <p>For an order read off places already worked out, so that a walk reads each position's
+     * place once rather than at every comparison of its sort ({@link #walking}). An order giving
+     * one gives the comparison it is: {@code compare} and this never disagree.
+     */
+    default ToIntFunction<A> placeOf() {
+        return null;
     }
 
     /**

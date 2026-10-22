@@ -5,6 +5,7 @@ import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.reach.WhatMayStopARun;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -229,6 +230,32 @@ public sealed interface ObligationDisposition {
             record NothingShowedIt() implements WhetherARowCanBeWritten {}
 
             /**
+             * Something worked out on the way to the point may stop a run on operands nothing here
+             * says, so what showed a value can stand at the point does not show a run getting
+             * there with it.
+             *
+             * <p>What arrives at the comparison is what has to hold for a run to be there, and is
+             * read; that a run holding it gets there is not, where an operator or a call before it
+             * answers on operands this compiler holds to no region — a product of two values
+             * nothing holds, a sum of decimals, a call to another behavior. Not the model refusing
+             * the point, which is a proof; not a showing stopped by a figure of this compiler's,
+             * which a wider run might finish. The obligation stays owed and counted, and stays open
+             * until a run there is seen or what was worked out is read.
+             *
+             * @param at what kind of thing each of those is, each kind once. Never empty
+             */
+            record TheWayThereMayStop(CanonicalSelection<WhatMayStopARun> at)
+                    implements WhetherARowCanBeWritten {
+
+                public TheWayThereMayStop {
+                    if (at == null || at.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "a way that may stop does so somewhere");
+                    }
+                }
+            }
+
+            /**
              * Every row that would meet the obligation reaches an {@code unreachable}, and nothing
              * here proves the inputs there do not arise.
              *
@@ -267,9 +294,28 @@ public sealed interface ObligationDisposition {
      * is said, once.
      */
     static CanonicalSelection<Uncertainty> openOn(List<WhereNothingIsAnswered.Premise> premises) {
-        return PublicationOrders.OPEN_QUESTIONS.keep(premises.isEmpty() ? List.of()
-                : List.of(new Uncertainty.WhetherARowCanBeWritten.EveryRowReachesAnUnreachable(
-                        premises)));
+        return openOn(premises, List.of());
+    }
+
+    /**
+     * The same, where a run getting to the obligation's place may stop on the way at each kind of
+     * thing in {@code mayStop} for what nothing here says: what is open then is whether a row there
+     * can be written ({@link Uncertainty.WhetherARowCanBeWritten.TheWayThereMayStop}).
+     *
+     * <p>The body saying every such row aborts is the stronger of the two, and is said in place of
+     * it: a premise the body states is what an author proves or answers, and a stop nothing reads
+     * is one more thing between a row and the place.
+     */
+    static CanonicalSelection<Uncertainty> openOn(List<WhereNothingIsAnswered.Premise> premises,
+                                                  List<WhatMayStopARun> mayStop) {
+        if (!premises.isEmpty()) {
+            return PublicationOrders.OPEN_QUESTIONS.keep(List.of(
+                    new Uncertainty.WhetherARowCanBeWritten.EveryRowReachesAnUnreachable(
+                            premises)));
+        }
+        return PublicationOrders.OPEN_QUESTIONS.keep(mayStop.isEmpty() ? List.of()
+                : List.of(new Uncertainty.WhetherARowCanBeWritten.TheWayThereMayStop(
+                        PublicationOrders.WHAT_MAY_STOP_A_RUN.keep(mayStop))));
     }
 
     /** The parts of the body every row of an obligation open as {@code open} would reach, where that
@@ -372,6 +418,8 @@ public sealed interface ObligationDisposition {
                      Weakening.MeetingsNotWalked _,
                      // And one the classes do not place, for the same reason.
                      Weakening.MeetingsNotPlaced _,
+                     // And a sum of kept elements whose decisions were not joined to evaluations.
+                     Weakening.MeetingsNotJoined _,
                      // And a decision whose ways could not all be written down, which is about
                      // what obligations there are and not about a point of a line.
                      Weakening.DecisionReadingIncomplete _,
@@ -380,6 +428,7 @@ public sealed interface ObligationDisposition {
                      // And the order a map's repeated keys were filed in, which is about the rows
                      // this compiler writes and not about where a value stands against a line.
                      Weakening.KeyedOverwriteCasesUnmeasured _,
+                     Weakening.ReachableNodeCasesUnmeasured _,
                      // And a rewrite of the body nothing decided about, which is whether the rows
                      // depend on what the body says and not where a value stands.
                      Weakening.RewriteUndecided _,
@@ -429,6 +478,9 @@ public sealed interface ObligationDisposition {
         return switch (read) {
             case Met _, Refuted _ -> read;
             case Unmet _ -> new Undecided(open);
+            // A way there that may stop is open only on a point something showed a value at. Where
+            // the showing itself is what is open, that is the nearer answer and is kept.
+            case Undecided it when premisesIn(open).isEmpty() -> it;
             case Undecided it -> {
                 List<Uncertainty> both = new ArrayList<>();
                 for (Uncertainty each : it.because().written()) {

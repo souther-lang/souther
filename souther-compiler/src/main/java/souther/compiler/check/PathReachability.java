@@ -5,6 +5,7 @@ import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.WhyNoValueTakesTheArm;
@@ -33,6 +34,7 @@ import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.Reachability;
 import souther.compiler.reach.Witness;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.reach.WhyUnsettled;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
@@ -94,26 +96,47 @@ public final class PathReachability {
      *                   read against it later with no plan in hand. A comparison's way out and an
      *                   application's answer are both recorded there, and a row recorded there
      *                   either way came to it
+     * @param stopsBefore what a run arriving at each construct may have stopped at on the way for
+     *                   what nothing here says, for each construct where it may — an operator or a
+     *                   call worked out before it whose operands this reading does not hold to
+     *                   where it answers ({@link PathCompletion.Past#mayStop}). What
+     *                   arrives there is what has to hold for a run to get there, and a construct
+     *                   here is one where that is not all that getting there takes
      */
     public record Arrivals(Optional<NumberingIdentity> numbering,
                            Map<ConstructOccurrence, ComparisonArrival> arriving,
-                           Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt) {
+                           Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt,
+                           Map<ConstructOccurrence, List<WhatMayStopARun>> stopsBefore) {
 
         /** No reading, which goes with any plan because it says nothing about one. */
-        public static final Arrivals NONE = new Arrivals(Optional.empty(), Map.of(), Map.of());
+        public static final Arrivals NONE =
+                new Arrivals(Optional.empty(), Map.of(), Map.of(), Map.of());
 
         public Arrivals {
             if (numbering == null) {
                 throw new IllegalArgumentException(
                         "a reading either was made under some numbering or was not made");
             }
-            if (numbering.isEmpty() && !(arriving.isEmpty() && recordedAt.isEmpty())) {
+            if (numbering.isEmpty() && !(arriving.isEmpty() && recordedAt.isEmpty()
+                    && stopsBefore.isEmpty())) {
                 throw new IllegalArgumentException("a reading that answered about "
                         + arriving.size() + " constructs was made under some numbering; they are"
                         + " of a plan and nothing here would say which");
             }
             arriving = Collections.unmodifiableMap(new LinkedHashMap<>(arriving));
             recordedAt = Collections.unmodifiableMap(new LinkedHashMap<>(recordedAt));
+            Map<ConstructOccurrence, List<WhatMayStopARun>> stops = new LinkedHashMap<>();
+            stopsBefore.forEach((construct, at) -> stops.put(construct, List.copyOf(at)));
+            stopsBefore = Collections.unmodifiableMap(stops);
+        }
+
+        /**
+         * What a run arriving at {@code at} may have stopped at on the way for what nothing here
+         * says, each kind once — none where everything worked out on the way is held to where it
+         * answers, and none where this reading was not made.
+         */
+        public List<WhatMayStopARun> stopsBefore(ConstructOccurrence at) {
+            return stopsBefore.getOrDefault(at, List.of());
         }
 
         /** That the constructs {@code of} names are the ones this reading answered about — see
@@ -166,7 +189,7 @@ public final class PathReachability {
             }
             Map<ConstructOccurrence, ComparisonArrival> out = new LinkedHashMap<>(arriving);
             takenBack.forEach(construct -> out.put(construct, new ComparisonArrival.NoProjection()));
-            return new Arrivals(numbering, out, recordedAt);
+            return new Arrivals(numbering, out, recordedAt, stopsBefore);
         }
     }
 
@@ -469,11 +492,10 @@ public final class PathReachability {
                                 Map.of()));
         walker.entry = in.known();
         walker.entered = in.at();
-        walker.walk(body, in.known(), in.at(),
+        walker.walk(body, Walked.entering(in.known()), in.at(),
                         InputReads.ofParameters(read.parameterReads(),
                                 read.declared(ruleReading.source()), elements, values,
-                                read.dependencies()),
-                        List.of(), true);
+                                read.dependencies()));
         // A walk that ran to the end and made none of the answers it is written to produce. Its own
         // limit and said as one: the analysis this borrows is open about what it reads, so a
         // comparison it reached and settled nothing about leaves the obligation standing. A failure
@@ -489,7 +511,8 @@ public final class PathReachability {
         arriving.keySet().forEach(construct -> plan.outcomeOf(construct, true)
                 .ifPresent(way -> recordedAt.put(construct, way.at())));
         Optional<NumberingIdentity> numbering = Optional.of(plan.identity());
-        return new Answers(numbering, out, new Arrivals(numbering, arriving, recordedAt));
+        return new Answers(numbering, out,
+                new Arrivals(numbering, arriving, recordedAt, walker.stopsBefore));
     }
 
     /**
@@ -581,6 +604,8 @@ public final class PathReachability {
     }
 
     private final PathEngine engine;
+    /** What a run past each evaluation holds, read as the invariant check reads it. */
+    private final PathCompletion completion;
     private final CoverageSites.Plan plan;
     /** What the declarations leave each position, which is what a {@code match} arm is held
      *  against. A condition narrows a path; a case is refused or left by the rules themselves. */
@@ -597,6 +622,10 @@ public final class PathReachability {
     private final Map<ControlPlace, Reachability> out;
     private final Map<ConstructOccurrence,
             souther.compiler.reach.ComparisonArrival> arriving;
+    /** Where a run arriving at each construct may have stopped on the way for what nothing here
+     *  says ({@link #mayStopBefore}), for the ones where it may. */
+    private final Map<ConstructOccurrence, List<WhatMayStopARun>> stopsBefore =
+            new LinkedHashMap<>();
     /**
      * What holds where the body begins: the inputs entered and seeded, and no condition taken.
      *
@@ -620,6 +649,7 @@ public final class PathReachability {
                                      souther.compiler.reach.ComparisonArrival> arriving,
                              MeaningsOfABody meanings, MeaningAssumptions.InputPlaces places) {
         this.engine = engine;
+        this.completion = new PathCompletion(engine.terms(), engine.predicates());
         this.entry = engine.nothingKnown();
         this.plan = plan;
         // Here as well as at the ways in, so that nothing inside this class is written against a
@@ -704,56 +734,56 @@ public final class PathReachability {
      * assumed. Carried rather than recovered from where a place sits, because what a proof is
      * allowed to name is what the domains were actually given: a condition of a shape nothing could
      * take in narrowed nothing and is not on the list.
+     *
+     * <p>{@code mayStop} is what, worked out on the way here, may stop a run on operands nothing
+     * here says ({@link PathCompletion.Past#mayStop}): what holds here is what has to
+     * hold for a run to get here, and no more than that.
      */
-    private void walk(Core e, Known k, Denotations at, InputReads reads,
-                      List<PathDecision> decided, boolean nothingAbove) {
+    private Walked walk(Core e, Walked here, Denotations at, InputReads reads) {
         if (e == null) {
-            return;
+            return here;
         }
-        // Every comparison this plan numbers is answered for, and answered under what holds where it
-        // stands. Before the reach test below, because a comparison in a region nothing arrives at
-        // is a comparison nothing arrives at — which is the fact, and the fact a boundary drawn on
-        // it is dropped by.
-        if (e instanceof Core.Binary comparison) {
-            outcomesAt(comparison, k, at, reads, decided);
-        }
-        answeredAt(e, k);
+        Known k = here.known();
         if (k.reachesNothing()) {
-            // Nothing stands here, so nothing below is a place anything arrives at either. The arms
-            // under this are left absent, which reads as unsettled: the arm that made it so was
-            // answered where it was entered, and saying it again at every fork inside would be the
-            // same finding several times over.
+            // Nothing stands here, so nothing below is a place anything arrives at either. Where an
+            // arm on the way made it so, the arms under this are left absent, which reads as
+            // unsettled: that arm was answered where it was entered, and saying it again at every
+            // fork inside would be the same finding several times over. Where something worked out
+            // made it so, no arm was, and the first fork past it is filed for that.
             //
             // The comparisons are not. What this reading owes is one answer per comparison the plan
             // numbered, and a comparison nothing arrives at is exactly a comparison nothing arrives
             // at — so the walk goes on for those and stops for everything else.
-            unreached(e, k, at, reads, decided);
-            return;
+            unreached(e, here, at, reads);
+            return here;
         }
-        switch (e) {
+        Walked operands = switch (e) {
             // A short circuit runs its right side only where the left settled nothing, so the two
             // sides do not stand under the same conditions. Threaded here rather than in a walk of
             // its own over a fork's condition: a chain is a chain wherever it is written, and one
             // read only under the fork it was written into left the same operators unread a line
             // above.
-            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
-                walk(binary.left(), k, at, reads, decided, nothingAbove);
-                // Which way the left has to come out for the right to run is the operator's own
-                // answer, and the same answer says there is a right side that runs only sometimes.
-                // Read the other way round, a comparison guarded by its neighbour would be read
-                // against conditions nothing on the way to it established.
-                boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
-                Predicates.Assumed reaching = assuming(binary.occurrence(),
-                        MeaningsOfABody.Part.Asked.LEFT, binary.left(), k, at, reads,
-                        reachedWhen);
-                walk(binary.right(), reaching.known(), at, reads,
-                        with(decided, reaching, binary.left().pos(), reachedWhen), nothingAbove);
-            }
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
+                    shortCircuitOperands(binary, here, at, reads).completed();
             case Core.If iff -> {
-                walk(iff.cond(), k, at, reads, decided, nothingAbove);
+                Exits exits = exitsOf(iff.cond(), here, at, reads);
+                Walked cond = exits.completed();
                 ControlPlace.Arm[] arms = plan.armsOf(iff);
-                enterArm(arms, 0, iff, iff.then(), k, at, reads, decided, true);
-                enterArm(arms, 1, iff, iff.els(), k, at, reads, decided, false);
+                if (cond.known().reachesNothing()) {
+                    // No run gets past the condition, so neither arm is entered. An arm the
+                    // condition shuts where the fork stands is proven by the condition, as it is
+                    // anywhere; the other by what the way to it answered nothing at. What is inside
+                    // both is a place nothing arrives at.
+                    Optional<Proof> noRunPast = cond.whyNothingArrives();
+                    enterArm(arms, 0, iff, iff.then(), here, noRunPast, at, reads, true);
+                    enterArm(arms, 1, iff, iff.els(), here, noRunPast, at, reads, false);
+                    yield cond;
+                }
+                Walked then = enterArm(arms, 0, iff, iff.then(), exits.whenTrue(), Optional.empty(),
+                        at, reads, true);
+                Walked els = enterArm(arms, 1, iff, iff.els(), exits.whenFalse(), Optional.empty(),
+                        at, reads, false);
+                yield leaving(cond, List.of(then, els));
             }
             case Core.IfConstructed ic -> {
                 // The construction's own arguments, then the arms. Reaching the success branch is
@@ -764,31 +794,59 @@ public final class PathReachability {
                 // One decision entered in both environments: what the binder denotes and which
                 // position of the input it is are two readings of the same name, and a `then` that
                 // entered it in one of them only would be read with the name meaning two things.
-                ic.construct().values().forEach(given ->
-                        walk(given.value(), k, at, reads, decided, nothingAbove));
-                Choice.Decides.ItWasBuilt held = Choice.Decides.ofBuilt(ic);
-                PathEngine.Entered built = engine.enteringBuilt(held, k, at);
-                walk(ic.then(), built.known(), built.at(),
-                        reads.choosing(held, symbols, newtypes), decided, false);
-                for (Core.ElseArm arm : ic.els()) {
-                    walk(arm.body(), k, at,
-                            reads.choosing(Choice.Decides.ofDeparture(ic, arm), symbols, newtypes),
-                            decided, false);
+                Walked given = here;
+                for (Core.FieldValue value : ic.construct().values()) {
+                    given = walk(value.value(), given, at, reads);
                 }
+                Choice.Decides.ItWasBuilt held = Choice.Decides.ofBuilt(ic);
+                PathEngine.Entered built = engine.enteringBuilt(held, given.known(), at);
+                List<Walked> ways = new ArrayList<>();
+                ways.add(walk(ic.then(), given.enteringAWay(built.known(), given.decided()),
+                        built.at(), reads.choosing(held, symbols, newtypes)));
+                for (Core.ElseArm arm : ic.els()) {
+                    ways.add(walk(arm.body(), given.enteringAWay(given.known(), given.decided()),
+                            at, reads.choosing(Choice.Decides.ofDeparture(ic, arm), symbols,
+                                    newtypes)));
+                }
+                // No run gets past the arguments where they leave nothing, and then why is theirs
+                // and not the ways'.
+                if (given.known().reachesNothing()) {
+                    given.whyNothingArrives().ifPresent(why -> noneEnters(plan.armsOf(ic), why));
+                    yield given;
+                }
+                yield leaving(given, ways);
             }
             case Core.LetIn li -> {
-                walk(li.value(), k, at, reads, decided, nothingAbove);
-                PathEngine.Entered in = engine.bindLet(li, k, at);
+                Walked value = walk(li.value(), here, at, reads);
+                PathEngine.Entered in = engine.bindLet(li, value.known(), at);
                 // Inside what the `let` binds, so an arm of an expanded helper is read against the
                 // position the call handed it. A binding is not a fork, so what stands above the
                 // body is what stood above the binding.
-                walk(li.body(), in.known(), in.at(),
-                        reads.entering(new ScopeStep.Let(li), symbols, newtypes), decided,
-                        nothingAbove);
+                yield walk(li.body(), value.at(in.known(), value.decided()), in.at(),
+                        reads.entering(new ScopeStep.Let(li), symbols, newtypes));
             }
             case Core.Match match -> {
-                walk(match.scrutinee(), k, at, reads, decided, nothingAbove);
-                cases(match, k, at, reads, decided, nothingAbove);
+                Walked scrutinee = walk(match.scrutinee(), here, at, reads);
+                Known before = scrutinee.known();
+                if (before.reachesNothing()) {
+                    // No run gets past the value matched on, so no arm is entered. An arm the
+                    // rules shut where the match stands is proven by the rules, as it is anywhere;
+                    // the others by what the way to them answered nothing at. What is inside each
+                    // is a place nothing arrives at.
+                    cases(match, k, at, reads, here.decided(), false);
+                    scrutinee.whyNothingArrives()
+                            .ifPresent(why -> noneEnters(plan.armsOf(match), why));
+                    for (Core.Case arm : match.cases()) {
+                        PathEngine.Entered in =
+                                engine.enteringArm(arm, match.scrutinee(), before, at);
+                        walk(arm.body(), scrutinee.enteringAWay(in.known(), scrutinee.decided()),
+                                in.at(), reads.choosing(Choice.Decides.ofCase(match, arm), symbols,
+                                        newtypes));
+                    }
+                    yield scrutinee;
+                }
+                List<PathDecision> on = scrutinee.decided();
+                cases(match, before, at, reads, on, scrutinee.nothingAbove());
                 // The scrutinee once and then the arms, written out rather than left to the generic
                 // walk. A `Match`'s children are its scrutinee as well as its arm bodies, so
                 // walking them all reads the scrutinee a second time — under a fork this time,
@@ -802,15 +860,18 @@ public final class PathReachability {
                 // Under an arm, this fork stands above whatever is inside it. Which arm was taken
                 // is recorded as a decision where taking it settled which cases the value matched
                 // may be, since a fork further in on the same value is read under that.
+                List<Walked> ways = new ArrayList<>();
                 for (Core.Case arm : match.cases()) {
-                    PathEngine.Entered in = engine.enteringArm(arm, match.scrutinee(), k, at);
+                    PathEngine.Entered in = engine.enteringArm(arm, match.scrutinee(), before, at);
                     // And the name the arm binds stands for the scrutinee's position narrowed to
                     // the case it selects, which is where a comparison written inside the arm draws
                     // its line.
-                    walk(arm.body(), in.known(), in.at(),
-                            reads.choosing(Choice.Decides.ofCase(match, arm), symbols, newtypes),
-                            taking(decided, arm, !in.known().cases().equals(k.cases())), false);
+                    ways.add(walk(arm.body(), scrutinee.enteringAWay(in.known(),
+                                    taking(on, arm, !in.known().cases().equals(before.cases()))),
+                            in.at(),
+                            reads.choosing(Choice.Decides.ofCase(match, arm), symbols, newtypes)));
                 }
+                yield leaving(scrutinee, ways);
             }
             case Core.Block block -> {
                 // A closure operations apply over containers of the input runs only where one of
@@ -823,18 +884,332 @@ public final class PathReachability {
                         reads.containersAppliedOver(block), reading);
                 Known inside = applied.isEmpty() ? k
                         : engine.holding(applied.get().holdingSomething(), k, at, places).known();
+                WhyNone why = WhyNone.BY_THE_WAY;
                 if (inside.reachesNothing()) {
-                    appliedToNothing(block.body(), Proof.itsClosureIsAppliedToNothing(
+                    Proof none = Proof.itsClosureIsAppliedToNothing(
                             applied.orElseThrow().containers().stream()
-                                    .map(TermPath::toString).toList(), decided));
+                                    .map(TermPath::toString).toList(), here.decided());
+                    appliedToNothing(block.body(), none);
+                    why = new WhyNone.Because(none);
                 }
-                walk(block.body(), inside, at,
-                        reads.entering(new ScopeStep.Block(block), symbols, newtypes), decided,
-                        nothingAbove && applied.isEmpty());
+                Walked body = walk(block.body(), new Walked(inside, here.decided(),
+                                here.mayStop(), here.nothingAbove() && applied.isEmpty(), true,
+                                why, inside.reachesNothing()), at,
+                        reads.entering(new ScopeStep.Block(block), symbols, newtypes));
+                // Making the function value runs nothing of its body, so nothing it holds is
+                // carried on. What stopped a run in it is: the call that applies it is worked out
+                // before what follows, and no state here holds where each application got past.
+                yield inside.reachesNothing() ? here : here.pastAnApplicationOf(body);
             }
-            default -> ScopeStep.forEachChild(e, (child, step) ->
-                    walk(child, k, at, reads.entering(step, symbols, newtypes), decided,
-                            nothingAbove));
+            // Every other node evaluates its parts whichever run it is on, one after another and
+            // each under what the one before it left — so a run that stopped in one of them is no
+            // run reaching the next.
+            default -> {
+                Walked part = here;
+                for (Evaluated.Step step : Evaluated.inOrder(e)) {
+                    part = walk(step.expression(), part, at,
+                            reads.entering(ScopeStep.SAME, symbols, newtypes));
+                }
+                yield part;
+            }
+        };
+        return pastOperands(e, operands, at, reads);
+    }
+
+    /**
+     * What a run holds past {@code e}, given what it held once its operands were worked out.
+     */
+    private Walked pastOperands(Core e, Walked operands, Denotations at, InputReads reads) {
+        // Every comparison this plan numbers is answered for, and answered under what holds once
+        // its sides have answered: a run that stopped working a side out is no run arriving at it.
+        if (e instanceof Core.Binary comparison) {
+            outcomesAt(comparison, operands, at, reads);
+        }
+        answeredAt(e, operands.known());
+        mayStopBefore(e, operands);
+        if (operands.known().reachesNothing()) {
+            // No run worked the operands out, so none makes this evaluation either.
+            return operands;
+        }
+        // What a run past this evaluation holds is what its operands left with what its operator
+        // asks of them, or nothing where it answers nothing. What is taken in there is a step on
+        // the way like a condition, and a proof that leans on it names it.
+        PathCompletion.Past past = completion.past(e, operands.known(), at, operands.mayStop());
+        boolean narrowed = past.known() != operands.known();
+        if (!narrowed && past.mayStop().equals(operands.mayStop())) {
+            return operands;
+        }
+        List<PathDecision> answered = operands.decided();
+        if (narrowed) {
+            answered = new ArrayList<>(answered);
+            answered.add(PathDecision.ofAnAnswer(e.pos()));
+        }
+        // Some run reaching here may not get past it, so what follows has something above it.
+        return new Walked(past.known(), answered, past.mayStop(), false, false,
+                WhyNone.BY_THE_WAY, false);
+    }
+
+    /**
+     * What a run leaving a condition holds, and what it holds having got {@code true} out of it
+     * and having got {@code false}.
+     *
+     * <p>Each is what the runs that worked the condition out and got that value hold: where a
+     * short circuit's right answers nothing, no run gets {@code true} out of {@code &&} and the
+     * state for it is empty, while the {@code false} left by the left side is not.
+     */
+    private record Exits(Walked completed, Walked whenTrue, Walked whenFalse) {
+
+        /** A condition read as one step: both values are got from where it left. */
+        static Exits of(Walked completed) {
+            return new Exits(completed, completed, completed);
+        }
+
+        Walked when(boolean value) {
+            return value ? whenTrue : whenFalse;
+        }
+    }
+
+    /**
+     * {@code e} worked out, with what each value it gets leaves. Only a short circuit has exits of
+     * its own; any other condition leaves what it left whichever value it got.
+     */
+    private Exits exitsOf(Core e, Walked here, Denotations at, InputReads reads) {
+        if (here.known().reachesNothing()) {
+            return Exits.of(walk(e, here, at, reads));
+        }
+        // A value standing as a wider type is the value it holds, with what the widening itself
+        // makes of it on top; the exits are the held value's.
+        Exits operands = switch (e) {
+            case Core.Widen widen -> exitsOf(widen.value(), here, at,
+                    reads.entering(ScopeStep.SAME, symbols, newtypes));
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
+                    shortCircuitOperands(binary, here, at, reads);
+            default -> null;
+        };
+        if (operands == null) {
+            return Exits.of(walk(e, here, at, reads));
+        }
+        Walked past = pastOperands(e, operands.completed(), at, reads);
+        return past == operands.completed() ? operands : Exits.of(past);
+    }
+
+    /**
+     * The operands of a short circuit worked out, with the exits their order gives it.
+     *
+     * <p>The value the operator reaches its right side for is got only by a run that worked the
+     * right out and got it there; the other value is got by a run the left settled or by one that
+     * worked the right out and got it. A run that did not get past the right gets neither.
+     */
+    private Exits shortCircuitOperands(Core.Binary binary, Walked here, Denotations at,
+                                       InputReads reads) {
+        Exits left = exitsOf(binary.left(), here, at, reads);
+        if (left.completed().known().reachesNothing()) {
+            // No run gets past the left, so the right is a place nothing arrives at.
+            walk(binary.right(), left.completed(), at, reads);
+            return Exits.of(left.completed());
+        }
+        // Which way the left has to come out for the right to run is the operator's own
+        // answer, and the same answer says there is a right side that runs only sometimes.
+        // Read the other way round, a comparison guarded by its neighbour would be read
+        // against conditions nothing on the way to it established.
+        boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
+        Walked before = left.when(reachedWhen);
+        Predicates.Assumed reaching = assuming(binary.occurrence(),
+                MeaningsOfABody.Part.Asked.LEFT, binary.left(), before.known(), at, reads,
+                reachedWhen);
+        Exits right = exitsOf(binary.right(), before.at(reaching.known(),
+                with(before.decided(), reaching, binary.left().pos(), reachedWhen)), at, reads);
+        // A run leaves the operator having run the right, or with the left settling it.
+        // Which the left settling holds is asked only where no run leaves having run the
+        // right: otherwise a run leaving holds what held after the left either way, and
+        // the left is what stands for that way.
+        // The left's own exit for that value and not what it left whichever value it got: where
+        // the left gets the value from no run, nothing settles it here either.
+        Walked settled = left.when(!reachedWhen);
+        if (right.completed().known().reachesNothing()) {
+            Predicates.Assumed settling = assuming(binary.occurrence(),
+                    MeaningsOfABody.Part.Asked.LEFT, binary.left(), settled.known(), at,
+                    reads, !reachedWhen);
+            settled = settled.at(settling.known(),
+                    with(settled.decided(), settling, binary.left().pos(), !reachedWhen));
+        }
+        Walked completed = leaving(left.completed(), List.of(right.completed(), settled));
+        Walked other = alternatives(left.completed(), List.of(settled, right.when(!reachedWhen)));
+        return reachedWhen
+                ? new Exits(completed, right.whenTrue(), other)
+                : new Exits(completed, other, right.whenFalse());
+    }
+
+    /**
+     * What a run holds that left by any of {@code ways}: the one way where a single way leaves
+     * anything, since there is nothing to join it with.
+     */
+    private static Walked alternatives(Walked fork, List<Walked> ways) {
+        Walked joined = leaving(fork, ways);
+        List<Walked> left = ways.stream().filter(way -> !way.known().reachesNothing()).toList();
+        return left.size() == 1 ? joined.at(left.get(0).known(), left.get(0).decided()) : joined;
+    }
+
+    /**
+     * What a walk leaves once it has worked a node out.
+     *
+     * @param known        what a run past it holds
+     * @param decided      the steps on the way to it that were taken in
+     * @param mayStop      what on the way may stop a run for what nothing here says
+     * @param nothingAbove whether nothing on the way decided anything or may have stopped a run —
+     *                     which a part of a fork read with nothing above it reads a witness off
+     * @param noneStopped  whether every run that got to where this walk began got past all it
+     *                     worked out, as far as anything shows: false where something it worked out
+     *                     answered on some runs only, said or not. What a fork's ways leave is
+     *                     read off it ({@link #leaving}), since each way begins with a fork above it
+     *                     and so with {@code nothingAbove} false
+     * @param whyNoneLeft  why no run gets here, where none does ({@link #whyNothingArrives})
+     * @param filedAbove   where no run gets here, whether an arm on the way was filed as one
+     *                     nothing enters — which is then the finding, and no arm below is filed
+     *                     again. False where what left nothing was something worked out, which
+     *                     files no arm, so the first fork past it is filed ({@link #noneEnters})
+     */
+    private record Walked(Known known, List<PathDecision> decided, List<WhatMayStopARun> mayStop,
+                          boolean nothingAbove, boolean noneStopped, WhyNone whyNoneLeft,
+                          boolean filedAbove) {
+
+        /** Where a body's walk begins: nothing decided and nothing worked out yet. */
+        static Walked entering(Known known) {
+            return new Walked(known, List.of(), List.of(), true, true, WhyNone.BY_THE_WAY, false);
+        }
+
+        /** The same way on, under {@code known} and with the steps {@code decided}. */
+        Walked at(Known known, List<PathDecision> decided) {
+            return new Walked(known, decided, mayStop, nothingAbove, noneStopped, whyNoneLeft,
+                    filedAbove);
+        }
+
+        /**
+         * One way out of a fork decided here, under {@code known} and with {@code decided} —
+         * where {@code known} leaves nothing, the fork has filed the arm the way is.
+         */
+        Walked enteringAWay(Known known, List<PathDecision> decided) {
+            return new Walked(known, decided, mayStop, false, true, WhyNone.BY_THE_WAY,
+                    known.reachesNothing());
+        }
+
+        /** This, below an arm filed as one nothing enters. */
+        Walked filed() {
+            return new Walked(known, decided, mayStop, nothingAbove, noneStopped, whyNoneLeft,
+                    true);
+        }
+
+        /**
+         * This, past a call that applies a closure whose body walked to {@code body}: where
+         * anything in it answered on some runs only, the call may stop a run, and nothing here
+         * holds which.
+         */
+        Walked pastAnApplicationOf(Walked body) {
+            if (body.noneStopped()) {
+                return this;
+            }
+            Set<WhatMayStopARun> stops = new LinkedHashSet<>(mayStop);
+            stops.add(new WhatMayStopARun.ACall());
+            return new Walked(known, decided, List.copyOf(stops), false, false, whyNoneLeft,
+                    filedAbove);
+        }
+
+        /**
+         * Why no run gets here, where none does and something here says why. Empty where nothing
+         * does — no step taken in on the way names what left nothing — and then nothing is filed
+         * on it.
+         */
+        Optional<Proof> whyNothingArrives() {
+            return switch (whyNoneLeft) {
+                case WhyNone.Because(Proof proof) -> Optional.of(proof);
+                case WhyNone.Unsaid _ -> Optional.empty();
+                case WhyNone.ByTheWay _ -> decided.isEmpty() ? Optional.empty()
+                        : Optional.of(Proof.conditionsThatCannotAllHold(decided));
+            };
+        }
+    }
+
+    /** Why no run gets to where a walk stands, as far as anything here says it. */
+    private sealed interface WhyNone {
+
+        /** The steps taken in on the way, where they name anything. */
+        WhyNone BY_THE_WAY = new ByTheWay();
+
+        /** The steps taken in on the way. */
+        record ByTheWay() implements WhyNone {}
+
+        /** This, and not the steps on the way: every way out of a fork left nothing for its own
+         *  reason, or the closure the walk is in is applied to nothing. */
+        record Because(Proof proof) implements WhyNone {}
+
+        /** Every way out of a fork left nothing, and not every way says why. */
+        record Unsaid() implements WhyNone {}
+    }
+
+    /**
+     * What a run leaving a fork holds, from {@code fork} where it was decided and what each of
+     * {@code ways} out of it left.
+     *
+     * <p>Nothing where no way out leaves anything, and then why is every way's reason together.
+     * Otherwise what held at the fork: a way is read in an environment of its own and two ways have
+     * no join here, so what held at the fork is what they agree on. What may stop a run is what
+     * may stop one on a way some run leaves by, since a way nothing leaves is no way a run past the
+     * fork came. Something is above what follows where any way stopped a run — one nothing leaves
+     * among them, where something it worked out answered nothing — and a way the fork shut is not
+     * one: no run stopped there, they went the other way.
+     */
+    private static Walked leaving(Walked fork, List<Walked> ways) {
+        List<Walked> left = ways.stream().filter(way -> !way.known().reachesNothing()).toList();
+        if (left.isEmpty()) {
+            List<Proof> each = new ArrayList<>();
+            for (Walked way : ways) {
+                way.whyNothingArrives().ifPresent(each::add);
+            }
+            WhyNone why = each.size() == ways.size()
+                    ? new WhyNone.Because(Proof.everyAlternativeRuledOut(each))
+                    : new WhyNone.Unsaid();
+            return new Walked(fork.known().reachingNothing(), fork.decided(), fork.mayStop(),
+                    false, false, why, false);
+        }
+        Set<WhatMayStopARun> stops = new LinkedHashSet<>(fork.mayStop());
+        left.forEach(way -> stops.addAll(way.mayStop()));
+        boolean through = ways.stream().allMatch(Walked::noneStopped);
+        return new Walked(fork.known(), fork.decided(), List.copyOf(stops),
+                fork.nothingAbove() && through, fork.noneStopped() && through,
+                WhyNone.BY_THE_WAY, false);
+    }
+
+    /**
+     * That a run arriving at {@code e} — a comparison a line is drawn at, or an application whose
+     * answer states one — may have stopped on the way for what nothing here says, where it may.
+     *
+     * <p>Filed beside what arrives and not inside it. What arrives is what has to hold for a run to
+     * be there; this is whether that is all there is to getting there, which a reader asking whether
+     * a row at the line is one some run makes needs, and one dropping a line does not.
+     */
+    private void mayStopBefore(Core e, Walked operands) {
+        if (operands.mayStop().isEmpty() || operands.known().reachesNothing()) {
+            return;
+        }
+        ConstructOccurrence comparison = e instanceof Core.Binary binary
+                ? numbered(binary, plan) : null;
+        if (comparison != null) {
+            stopsBefore.put(comparison, operands.mayStop());
+        }
+        plan.applicationAnsweringAt(e).ifPresent(application ->
+                stopsBefore.put(application, operands.mayStop()));
+    }
+
+    /** Every arm of a fork in {@code arms} the walk has not proven otherwise, as one nothing enters
+     *  for {@code why}. */
+    private void noneEnters(ControlPlace.Arm[] arms, Proof why) {
+        if (arms == null) {
+            return;
+        }
+        for (ControlPlace.Arm arm : arms) {
+            if (!(out.get(arm) instanceof Reachability.Unreachable)) {
+                out.put(arm, new Reachability.Unreachable(why));
+            }
         }
     }
 
@@ -862,15 +1237,20 @@ public final class PathReachability {
      * {@code A && (B || C)} with {@code A} ruled out stops at the operator, which is numbered
      * nowhere, and left {@code B} and {@code C} unanswered — the shape of a claim nothing made.
      */
-    private void unreached(Core e, Known k, Denotations at, InputReads reads,
-                           List<PathDecision> decided) {
-        Core.forEachChild(e, child -> {
-            if (child instanceof Core.Binary comparison) {
-                outcomesAt(comparison, k, at, reads, decided);
-            }
-            answeredAt(child, k);
-            unreached(child, k, at, reads, decided);
-        });
+    private void unreached(Core e, Walked here, Denotations at, InputReads reads) {
+        if (e instanceof Core.Binary comparison) {
+            outcomesAt(comparison, here, at, reads);
+        }
+        answeredAt(e, here.known());
+        Walked below = here;
+        ControlPlace.Arm[] arms = plan.armsOf(e);
+        Optional<Proof> why = here.whyNothingArrives();
+        if (arms != null && !here.filedAbove() && why.isPresent()) {
+            noneEnters(arms, why.get());
+            below = here.filed();
+        }
+        Walked under = below;
+        Core.forEachChild(e, child -> unreached(child, under, at, reads));
     }
 
     /**
@@ -903,14 +1283,15 @@ public final class PathReachability {
      * <p>Empty is an ordinary answer here: the node is not a comparison, or is one this plan
      * numbered nothing at, and either way there is no place a run through it would be recorded.
      */
-    private void outcomesAt(Core.Binary comparison, Known k, Denotations at, InputReads reads,
-                            List<PathDecision> decided) {
+    private void outcomesAt(Core.Binary comparison, Walked here, Denotations at,
+                            InputReads reads) {
         // What arrives is about the comparison and not about either way out of it, so it is filed
         // under the comparison the plan names and asked of the plan directly.
         ConstructOccurrence which = numbered(comparison, plan);
         if (which == null) {
             return;
         }
+        Known k = here.known();
         arriving.put(which, arrivalAt(comparison, k, at, reads));
         for (boolean result : new boolean[] {true, false}) {
             Optional<ControlPlace.Outcome> where =
@@ -918,11 +1299,17 @@ public final class PathReachability {
             if (where.isEmpty()) {
                 continue;
             }
+            Optional<Proof> none = k.reachesNothing() ? here.whyNothingArrives() : Optional.empty();
+            if (none.isPresent()) {
+                // Neither way is one a run comes out of, for the reason nothing arrives.
+                out.put(where.get(), new Reachability.Unreachable(none.get()));
+                continue;
+            }
             Predicates.Assumed taken = assuming(comparison.occurrence(),
                     MeaningsOfABody.Part.Asked.ITSELF, comparison, k, at, reads, result);
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
-                            with(decided, taken, comparison.pos(), result)))
+                            with(here.decided(), taken, comparison.pos(), result)))
                     : new Reachability.Unsettled(whyNot(taken, comparison)));
         }
     }
@@ -1023,7 +1410,7 @@ public final class PathReachability {
             // is prove a branch unreachable by what the rules leave at the position — a proof about
             // one place — so a name that stands at one of two places on two runs is one no such
             // proof can be made about, whichever of them it turns out to be.
-            case PathResolution.MayStandAt _ -> null;
+            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
     }
 
@@ -1111,23 +1498,33 @@ public final class PathReachability {
      * <p>The answer is filed at the arm and the walk goes on inside it. Where the condition leaves
      * nothing, the arm is proven and what is under it is not walked: everything there is unreachable
      * for the same reason, and one finding is what an author is owed.
+     *
+     * <p>Where {@code noRunPast} says no run got past working the condition out, {@code fork} is
+     * where the condition began, and the arm is still held to what the condition states there,
+     * which is what proves an arm the rules shut. Any other arm is proven by {@code noRunPast},
+     * and what is inside it is walked as a place nothing arrives at.
+     *
+     * @param fork what holds where the arm is decided: once the condition is worked out, or before
+     *             it where {@code noRunPast} is given
+     * @return what a run leaving the arm holds
      */
-    private void enterArm(ControlPlace.Arm[] arms, int index, Core.If iff, Core arm,
-                          Known k, Denotations at, InputReads reads, List<PathDecision> decided,
-                          boolean holds) {
+    private Walked enterArm(ControlPlace.Arm[] arms, int index, Core.If iff, Core arm,
+                           Walked fork, Optional<Proof> noRunPast, Denotations at,
+                           InputReads reads, boolean holds) {
         Predicates.Assumed taken = assuming(iff.place().occurrence(),
-                MeaningsOfABody.Part.Asked.CONDITION, iff.cond(), k, at, reads, holds);
+                MeaningsOfABody.Part.Asked.CONDITION, iff.cond(), fork.known(), at, reads, holds);
         Known inside = taken.known();
-        List<PathDecision> under = with(decided, taken, iff.cond().pos(), holds);
+        List<PathDecision> under = with(fork.decided(), taken, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
-                    ? new Reachability.Unreachable(
-                            why(iff, holds, under, reads))
-                    : new Reachability.Unsettled(whyNot(taken, iff.cond())));
+                    ? new Reachability.Unreachable(why(iff, holds, under, reads))
+                    : noRunPast.<Reachability>map(Reachability.Unreachable::new)
+                            .orElseGet(() -> new Reachability.Unsettled(
+                                    whyNot(taken, iff.cond()))));
         }
-        walk(arm, inside, at,
-                reads.choosing(Choice.Decides.ofCondition(iff, holds), symbols, newtypes),
-                under, false);
+        return walk(arm, fork.enteringAWay(
+                        noRunPast.isPresent() ? inside.reachingNothing() : inside, under), at,
+                reads.choosing(Choice.Decides.ofCondition(iff, holds), symbols, newtypes));
     }
 
     /**

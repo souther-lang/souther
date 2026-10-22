@@ -1,7 +1,9 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.ConditionGap;
+import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
@@ -100,6 +102,31 @@ public record SearchOutcomes(List<Made> made) {
         return made.stream().map(Made::attempt).toList();
     }
 
+    /**
+     * Whether every search here wrote some of a population this compiler writes the same of at
+     * every value ({@link CompositionRepertoire#metWhateverTheValue}): then another value put to
+     * the point is written as short of it, and comes to what these did.
+     *
+     * <p>Every one, since a search that came to anything else may come to something else again at
+     * another value. A figure met beside the population changes nothing of this: the row is not
+     * written at any value, whatever the figure would have let through.
+     */
+    public boolean shortWhateverTheValue() {
+        return !made.isEmpty() && each().stream().allMatch(it -> switch (it) {
+            case ItemAssessment.Attempt.Unexhausted some -> shortWhateverTheValue(some.notAllOf());
+            case ItemAssessment.Attempt.Limited some -> shortWhateverTheValue(some.notAllOf());
+            // A row built, a figure alone, or nothing composed for a reason of this value's.
+            case ItemAssessment.Attempt.Certified _, ItemAssessment.Attempt.Unverified _,
+                 ItemAssessment.Attempt.Stopped _, ItemAssessment.Attempt.Unplanned _,
+                 ItemAssessment.Attempt.Unresolved _, ItemAssessment.Attempt.Unavailable _ ->
+                    false;
+        });
+    }
+
+    private static boolean shortWhateverTheValue(CanonicalSelection<CompositionRepertoire> notAllOf) {
+        return notAllOf.written().stream().anyMatch(CompositionRepertoire::metWhateverTheValue);
+    }
+
     /** Whether anybody searched here at all. */
     public boolean ran() {
         return !made.isEmpty();
@@ -129,6 +156,15 @@ public record SearchOutcomes(List<Made> made) {
      */
     public boolean certified() {
         return each().stream().anyMatch(it -> it instanceof ItemAssessment.Attempt.Certified);
+    }
+
+    /**
+     * Whether a row was composed, read back standing where it was composed for, and seen run to
+     * the comparison the line is drawn at ({@link ItemAssessment.Attempt.Certified#ranThere}).
+     */
+    public boolean ranThere() {
+        return each().stream().anyMatch(it ->
+                it instanceof ItemAssessment.Attempt.Certified made && made.ranThere());
     }
 
     /**

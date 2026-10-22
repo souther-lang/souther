@@ -6,6 +6,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -138,5 +139,23 @@ class AChoiceReadsTheRuleAndNotTheTreeItIsWrittenAsTest {
                 "and a branch that stands beside them reads the same rule either way");
         assertTrue(IMPOSSIBLE.or(ALSO_IMPOSSIBLE).dead(),
                 "a choice is dead where every alternative of it is");
+    }
+
+    /**
+     * A reading without a join that has no word for either alternative has no word for the
+     * choice, and every connective above it keeps the one account of nothing. That is most
+     * choices for such a reading — most values hold no derived number and no rule about their
+     * elements — so an account made afresh at each would be made at every connective of every
+     * clause.
+     */
+    @Test
+    void aChoiceOfTwoClausesNoWordIsHadForIsTheAccountOfNothing() {
+        Adoption<String, ReadingLanguage.Elements> nothing = Adoption.nothing();
+        Adoption<String, ReadingLanguage.Elements> read =
+                Adoption.at(Set.of("xs"), Set.of("xs"), false);
+
+        assertSame(nothing, nothing.eitherWithoutAJoin(nothing));
+        assertSame(read, read.both(nothing.eitherWithoutAJoin(nothing)),
+                "a conjunct beside such a choice is the account it was");
     }
 }

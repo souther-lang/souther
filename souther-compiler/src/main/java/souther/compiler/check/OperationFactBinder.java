@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.ExactRatio;
@@ -348,6 +349,8 @@ final class OperationFactBinder {
             case OperationFact.ShiftsBy shifts -> holdShift(stdlib, declaration, shifts);
             case OperationFact.CountsWholeUnitsBetween counts ->
                     holdCountOfWholeUnits(declaration, counts);
+            case OperationFact.RoundsToAWholeNumber rounds ->
+                    holdRounding(stdlib, declaration, rounds);
             case OperationFact.BoundsItsResult bounded ->
                     new BoundOperationFact.BoundsItsResult(operation,
                             holdBound(declaration, bounded.bound()));
@@ -361,7 +364,7 @@ final class OperationFactBinder {
                     new BoundOperationFact.HoldsTheImageOfEveryElement(operation,
                             holdTheImage(declaration, holds));
             case OperationFact.HoldsThePiecesOf pieces -> {
-                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_TEXT,
                         "the pieces a string falls into");
                 yield new BoundOperationFact.HoldsThePiecesOf(operation,
                         pieces.separator().map(separator -> holdToTheDeclaration(declaration,
@@ -369,6 +372,13 @@ final class OperationFactBinder {
                                 "where the pieces are parted")),
                         holdToTheDeclaration(declaration, pieces.string(), null,
                                 TypeRequirement.TEXT, "the string that falls into pieces"));
+            }
+            case OperationFact.ListsTheCodePointsOf listed -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_INTS,
+                        "the code points of a string");
+                yield new BoundOperationFact.ListsTheCodePointsOf(operation,
+                        holdToTheDeclaration(declaration, listed.string(), null,
+                                TypeRequirement.TEXT, "the string whose code points are listed"));
             }
             // An option of what the closure answers, made of an option of what it is handed.
             case OperationFact.AnswersTheClosureOnWhatItHolds answers -> {
@@ -514,16 +524,17 @@ final class OperationFactBinder {
                 yield new BoundOperationFact.AssemblesPieces(operation, source, closure,
                         assembles.piece());
             }
-            // The elements of a list from an index on are a list's, and the index is a number.
-            case OperationFact.HoldsTheElementsFrom from -> {
+            // The elements of a list kept by an index are a list's, and the index is a number.
+            case OperationFact.HoldsTheElementsByIndex byIndex -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
-                        "what holds the elements of a list from an index on");
-                yield new BoundOperationFact.HoldsTheElementsFrom(operation,
-                        holdToTheDeclaration(declaration, from.count(), from.count(),
-                                TypeRequirement.NUMBER, "the index the elements are kept from"),
-                        holdToTheDeclaration(declaration, from.list(),
+                        "what holds the elements of a list kept by an index");
+                yield new BoundOperationFact.HoldsTheElementsByIndex(operation,
+                        holdToTheDeclaration(declaration, byIndex.count(), byIndex.count(),
+                                TypeRequirement.NUMBER, "the index the elements are kept by"),
+                        holdToTheDeclaration(declaration, byIndex.list(),
                                 new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
-                                "the list the elements are kept of"));
+                                "the list the elements are kept of"),
+                        byIndex.kept());
             }
             // What a value is put in answers a container like it, and what is put in is one of what
             // such a container holds.
@@ -571,6 +582,11 @@ final class OperationFactBinder {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                         "what every answer of it has a value for");
                 yield new BoundOperationFact.EveryAnswerItCanGiveHasASourceValue(operation);
+            }
+            case OperationFact.EndsAreWhereTheRepresentationStops _ -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
+                        "what the ends of its answers are");
+                yield new BoundOperationFact.EndsAreWhereTheRepresentationStops(operation);
             }
             case OperationFact.AnswersANumberTakenOfAValueItIsGiven taken ->
                     holdTakenOf(declaration, taken.how());
@@ -755,6 +771,66 @@ final class OperationFactBinder {
                 counts.perUnit());
     }
 
+    /**
+     * As {@link #holdToTheDeclaration}, for a rounding to a whole number: the answer is an
+     * {@code Int}, what is rounded is a number, and the policy is the one the library declares —
+     * each of whose cases is one way of rounding the compiler knows, and each way of rounding one of
+     * its cases.
+     *
+     * <p>The cases are matched to the ways by name here and nowhere else, and both ways round: a
+     * case the library adds is one whose lines nothing here knows, and a way no case is called is
+     * one the library no longer has.
+     */
+    static BoundOperationFact.RoundsToAWholeNumber holdRounding(
+            Stdlib stdlib, CompleteSignature declaration, OperationFact.RoundsToAWholeNumber rounds) {
+        if (declaration.result() != Type.Prim.INT) {
+            throw new IllegalStateException("what " + declaration.declaring().operation()
+                    + " rounds to is " + Type.show(declaration.result())
+                    + ", and a rounding to a whole number answers an Int");
+        }
+        DeclaredArgument value = holdToTheDeclaration(declaration, rounds.value(), null,
+                TypeRequirement.EXACT, "the number that is rounded");
+        DeclaredArgument mode = holdToTheDeclaration(declaration, rounds.mode(), null,
+                TypeRequirement.ANY, "the policy it is rounded by");
+        Type policy = mode.stands();
+        if (!heldBy(stdlib, Arithmetic.Reads.A_ROUNDING_MODE, policy, declaration.result())) {
+            throw new IllegalStateException(declaration.declaring().operation()
+                    + " is rounded by " + Type.show(policy)
+                    + ", which is not the rounding policy the library declares");
+        }
+        if (!(policy instanceof Type.Ref(TypeSymbol.AtModule declared))
+                || !(stdlib.languageDeclaration(declared.key()) instanceof Hir.SumData sum)) {
+            throw new IllegalStateException("the rounding policy " + Type.show(policy)
+                    + " is no sum the library declares, so it has no cases to round by");
+        }
+        Map<TypeSymbol, WholeRounding> ways = new HashMap<>();
+        for (Hir.Name each : sum.cases()) {
+            TypeSymbol named = each instanceof Hir.Name.Denoting denoting ? denoting.type() : null;
+            WholeRounding way = named == null ? null : wayCalled(named.name());
+            if (way == null || ways.containsValue(way)) {
+                throw new IllegalStateException("the rounding policy's case " + each
+                        + " is no way of rounding the compiler knows, or one it knows twice");
+            }
+            ways.put(named, way);
+        }
+        if (ways.size() != WholeRounding.values().length) {
+            throw new IllegalStateException("the rounding policy has the cases " + ways.keySet()
+                    + ", and the compiler knows the ways " + List.of(WholeRounding.values()));
+        }
+        return new BoundOperationFact.RoundsToAWholeNumber(declaration.declaring(), mode, value,
+                ways);
+    }
+
+    /** The way of rounding a case of the policy called {@code name} is, or null where none is. */
+    private static WholeRounding wayCalled(String name) {
+        for (WholeRounding way : WholeRounding.values()) {
+            if (way.name().equals(name)) {
+                return way;
+            }
+        }
+        return null;
+    }
+
     /** As {@link #holdToTheDeclaration}, for the arguments a case names: the ones the number it
      *  answers is written in, and the ones each side of each condition it is reached under is. */
     private static DefinitionCase<DeclaredArgument> holdCase(CompleteSignature declaration,
@@ -786,13 +862,16 @@ final class OperationFactBinder {
 
     /** As {@link #holdToTheDeclaration}, for the arguments a bound names: the one the result is
      *  bounded against, and the one a condition on the rule reads. Each is a separate claim about a
-     *  separate argument. */
+     *  separate argument. The first is any number with an exact value, which is what a form of it
+     *  is arithmetic over: a narrowing of a Rational is within one of the quotient it was given,
+     *  and where that quotient is a form the bound is a line on it. */
     private static ResultBound<DeclaredArgument> holdBound(CompleteSignature declaration,
                                                            ResultBound<ArgumentRef> bound) {
         holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                 "what a bound on the result holds of");
         DeclaredArgument against = bound.against() == null ? null
-                : holdBoundArgument(declaration, bound.against());
+                : holdToTheDeclaration(declaration, bound.against(), null, TypeRequirement.EXACT,
+                        "the argument a bound on the result is held against");
         ResultBound.Provided<DeclaredArgument> provided = switch (bound.provided()) {
             case ResultBound.Provided.Always<ArgumentRef> _ -> new ResultBound.Provided.Always<>();
             case ResultBound.Provided.ConstantAboveZero<ArgumentRef> constant ->

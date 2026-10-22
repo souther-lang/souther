@@ -185,7 +185,6 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     private static Core.Case armSelecting(String source) {
         Compilation compilation =
                 Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Core body = compilation.db().ask(new Bodies.Checked(module)).value()
                 .behaviorBodies().get("visit");

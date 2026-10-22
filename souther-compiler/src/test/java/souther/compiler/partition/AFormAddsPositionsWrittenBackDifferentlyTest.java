@@ -241,7 +241,6 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
 
     private static SearchRegion region() {
         Compilation compilation = Compilation.ofSource(A_DECIMAL_AN_INT_AND_A_DATE, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

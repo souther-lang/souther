@@ -200,7 +200,13 @@ final class StandingImpossibility {
             case Standing.OfACount _, Standing.OfACountAndAForm _ -> null;
             // Nor of what a division leaves of a form: the region's relations are about the form
             // and the remainder is one the walk of its values settles ({@link LevelRealizer}).
-            case Standing.OfARemainder _ -> null;
+            case Standing.OfARemainder _, Standing.OfARemainderAndAForm _ -> null;
+            // Nor of a product: the region's relations are forms of the factors, and which pairs
+            // multiply to a level is the walk of its divisors' ({@link LevelRealizer}).
+            case Standing.OfAProduct _ -> null;
+            // Nor of a remainder by an input's number: the divisors that leave a remainder are the
+            // walk of them ({@link LevelRealizer}).
+            case Standing.OfARemainderByAnInput _ -> null;
         };
     }
 }

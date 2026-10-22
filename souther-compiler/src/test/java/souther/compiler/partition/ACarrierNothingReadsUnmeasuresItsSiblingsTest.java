@@ -120,7 +120,6 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
 
     private static Read read(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

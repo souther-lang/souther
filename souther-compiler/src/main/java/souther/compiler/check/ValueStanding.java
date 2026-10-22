@@ -111,6 +111,17 @@ public final class ValueStanding {
         }
 
         /**
+         * What tells what {@code read}'s name stands for in {@code at} apart from what it stands for
+         * elsewhere — what a reader holding an answer for each name keys it on. {@code at} itself
+         * unless the environment can say less: two environments in which the name stands for the
+         * one thing, read the one way, give it one answer, and a reader keyed on each environment
+         * would work that answer out again in every one of them.
+         */
+        default Object standingOf(Core.Read read, E at) {
+            return at;
+        }
+
+        /**
          * These answers with no plurality in them, which is what the values a name stands for are
          * read with.
          *

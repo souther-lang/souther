@@ -15,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A condition on the size or the emptiness of what {@code Set.union}, {@code Set.intersection},
@@ -77,7 +78,7 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
      * What a row writes says whether an element of one set is equal to an element of the other, so
      * the size of the union is the size of one set and how many elements of the other are in none
      * of its: a count over the row, which is a line, and only the size of the set it is added to is
-     * left said as a rule about a run.
+     * left, related to that count, which is not shown to reach every value beside it.
      */
     @Test
     void theSizeOfAUnionIsTheSizeOfOneSetAndHowManyOfTheOthersElementsAreNotInIt() {
@@ -86,8 +87,9 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                 let f (a, b) = if Set.size(Set.union(a, b)) <= 1 then 1 else 0
                 """, "f");
 
-        assertEquals(List.of("Set.size(a) RULE_ABOUT_A_RUN"), said.notRead());
-        assertFalse(said.weakening().contains("rule_unread"), said.weakening().toString());
+        assertEquals(List.of("Set.size(a) RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE"),
+                said.notRead());
+        assertTrue(said.weakening().contains("rule_unread"), said.weakening().toString());
     }
 
     /**

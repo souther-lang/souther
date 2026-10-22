@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
@@ -59,7 +59,7 @@ class AGapNamesEveryFigureItReachedTest {
                 new ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why.MORE_READINGS_THAN_ARE_MADE)
                         .figures());
         assertEquals(List.of(WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(
-                        WrittenOutElements.MOST_WALKED)),
+                        ElementsWrittenOut.MOST_WALKED)),
                 new ReadingGap.ReachNotRead(
                         ReadingGap.ReachNotRead.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT).figures());
         assertEquals(List.of(DEPTH), ReadingGap.ofAComparisonOf(new ObservedValue.Sequence(

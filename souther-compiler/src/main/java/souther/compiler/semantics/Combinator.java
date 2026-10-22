@@ -24,6 +24,9 @@ package souther.compiler.semantics;
  * @param keyParam   the closure parameter the key arrives on, or {@link #NO_KEY} where the closure
  *                   is handed none — the container is not a map, or the closure takes the value
  *                   alone
+ * @param positionParam the closure parameter the element's position in the container arrives on,
+ *                   counted from nought in the order the container holds its elements, or
+ *                   {@link #NO_POSITION} where the closure is shown to be handed none
  * @param applied    how far the operation goes applying the closure
  * @param startsFrom the argument holding the index of the first element the closure is handed, or
  *                   {@link #FROM_THE_FIRST} where it is handed them from the first. What is said of
@@ -31,7 +34,7 @@ package souther.compiler.semantics;
  *                   nought
  */
 public record Combinator(int closureArg, int elementParam, int containerArg, int keyParam,
-                         HowAClosureIsApplied applied, int startsFrom) {
+                         int positionParam, HowAClosureIsApplied applied, int startsFrom) {
 
     public Combinator {
         if (applied == null) {
@@ -45,9 +48,17 @@ public record Combinator(int closureArg, int elementParam, int containerArg, int
     /** The closure is handed the container's elements from the first. */
     public static final int FROM_THE_FIRST = -1;
 
+    /** No parameter of the closure is shown to be handed the element's position. */
+    public static final int NO_POSITION = -1;
+
     /** Whether the closure is handed the key the value is filed under. */
     public boolean handsAKey() {
         return keyParam != NO_KEY;
+    }
+
+    /** Whether the closure is shown to be handed the element's position beside the element. */
+    public boolean handsAPosition() {
+        return positionParam != NO_POSITION;
     }
 
     /** Where the arguments are, which is all a signature says. */

@@ -28,6 +28,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -36,6 +37,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -231,9 +233,11 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
 
     private static void collect(DemandReading.Read read, List<WhyNotTaken> out) {
         switch (read) {
-            case DemandReading.Read.Unread(var whys) -> out.addAll(whys);
+            case DemandReading.Read.Unread(var whys, var _) -> out.addAll(whys);
             case DemandReading.Read.OneOf oneOf -> oneOf.alternatives()
                     .forEach(each -> each.forEach(one -> collect(one, out)));
+            case DemandReading.Read.Counted counted ->
+                    counted.parts().forEach(one -> collect(one, out));
             case DemandReading.Read.Demands _, DemandReading.Read.Settled _,
                  DemandReading.Read.Narrows _ -> { }
         }
@@ -268,12 +272,17 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         out.put("two values being one", new Proposition.SameValue(
                 new DecisionSubject.AnInput(TermPath.of("n")),
                 new DecisionSubject.AnInput(TermPath.of("s")), true));
-        out.put("the last of its value", new Proposition.LastToHold(TermPath.of("xs"),
-                TermPath.of("xs").element(), true));
+        out.put("the last of its value", new Proposition.LastToHold(
+                new DecisionSubject.AnInput(TermPath.of("xs")),
+                new DecisionSubject.AnInput(TermPath.of("xs").element()), true));
+        out.put("where an operation answers", new Proposition.WhereItAnswers(truth, above));
         out.put("both", new Proposition.All(List.of(above, truth)));
         out.put("either", new Proposition.Any(List.of(above, truth)));
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")), element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
+        out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
+                .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
+                List.of(1)));
         TermPath node = TermPath.of("t");
         out.put("some node a search reaches", new Proposition.SomeReachable(node, node,
                 List.of("below"), new Proposition.Compared(new Relation.Affine(

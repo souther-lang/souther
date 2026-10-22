@@ -5,9 +5,12 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,27 +36,36 @@ final class TermOrdering {
      */
     static TermOrders of(NumericTerm term, Type positionType, Symbols symbols,
                          DeclarationAccess declarations) {
-        return of(term, positionType, Map.of(), symbols, declarations);
+        return of(term, positionType, Map.of(), Map.of(), symbols, declarations);
     }
 
     /**
-     * The same, for a term over what a walk computed of each element, whose value is read on the
-     * type the computation stands as and whose fields are read on their own.
+     * The same, for a term read off the places of an element: one over what a walk computed of
+     * each element, whose value is read on the type the computation stands as and whose fields are
+     * read on their own, and one read among an element's neighbours.
      *
-     * @param fieldTypes what stands at each field the computation reads
+     * @param fieldTypes what stands at each field whose number is read
+     * @param onTheWay   what stands at each place on the way to every place read of an element,
+     *                   the element itself among them, which says the names a value there is
+     *                   written inside
      */
     static TermOrders of(NumericTerm term, Type positionType,
-                         Map<ElementProjection, Type> fieldTypes, Symbols symbols,
+                         Map<ElementProjection, Type> fieldTypes,
+                         Map<ElementProjection, Type> onTheWay, Symbols symbols,
                          DeclarationAccess declarations) {
         Carrier observed = observedOn(positionType, declarations);
         // One construction and not one per arm. A term that is a location's own content answers on
         // the order its value is read on, which is that order twice rather than a second way of
         // making a pair — and a second way is a second place a pair can come from.
         Carrier answered = switch (term) {
-            case NumericTerm.ValueOf _ -> observed;
+            // The end of a key's values is one of the values, so it is measured where they are;
+            // and what a key's numbers come to is measured on what each of them stands as.
+            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> observed;
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                 NumericTerm.Multiplicity _, NumericTerm.TakenOver _ ->
-                    answeredOn(term, positionType, symbols, declarations);
+                 NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.TakenOver _ -> answeredOn(term, positionType, symbols, declarations);
         };
         Map<ElementProjection, Carrier> fields = new LinkedHashMap<>();
         fieldTypes.forEach((field, type) -> {
@@ -62,7 +74,23 @@ final class TermOrdering {
                 fields.put(field, on);
             }
         });
-        return new TermOrders(term, observed, answered, fields);
+        Map<ElementProjection, List<TypeSymbol>> worn = new LinkedHashMap<>();
+        for (Map.Entry<ElementProjection, Type> each : onTheWay.entrySet()) {
+            List<TypeSymbol> names = namesWorn(each.getValue(), declarations.inners());
+            if (!names.isEmpty()) {
+                worn.put(each.getKey(), names);
+            }
+        }
+        return new TermOrders(term, observed, answered, fields, worn);
+    }
+
+    /**
+     * Every name a value of {@code type} is written inside, outermost first: what a reader of an
+     * observed element takes off, by name, before each step it takes into it.
+     */
+    private static List<TypeSymbol> namesWorn(Type type, NewtypeInners inners) {
+        return TypeOps.newtypeSpine(type, inners).layers().stream()
+                .map(TypeOps.Layer::named).toList();
     }
 
     /**
@@ -83,7 +111,9 @@ final class TermOrdering {
                                       DeclarationAccess declarations) {
         NewtypeInners inners = declarations.inners();
         return switch (term) {
-            case NumericTerm.ValueOf _ -> positionType == null ? null
+            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->
+                    positionType == null ? null
                     : Carrier.ofValue(positionType, declarations);
             case NumericTerm.TakenOf taken -> {
                 Type answers =
@@ -93,8 +123,11 @@ final class TermOrdering {
             // How many code points there are is a whole number whatever they are code points of,
             // as how many a container holds is.
             case NumericTerm.CodePointClassCount _ -> Carrier.ofValue(Type.Prim.INT, declarations);
+            // What the code points come to is the whole number the list of them adds up to.
+            case NumericTerm.CodePointValueSum _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // How often a value occurs is a whole number whatever the value is.
-            case NumericTerm.Multiplicity _ -> Carrier.ofValue(Type.Prim.INT, declarations);
+            case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
+                 NumericTerm.OccurrencesOfAKey _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // Asked of the operation as a taking is, and asked of what it was given: a run is a
             // container of the values standing at the place it is read from, so what the operation
             // answers of one is what it answers of a container of them. Written out here as the

@@ -1,0 +1,657 @@
+package souther.compiler.reading;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.UnaryOperator;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static souther.compiler.reading.ReadInteractions.readAll;
+import static souther.compiler.reading.ReadInteractions.shape;
+
+/**
+ * One total of two choices, written the ways the language lets it be written, is read the same way
+ * or is said not to be, and is never read as if it decided nothing.
+ *
+ * <p>The ways are the places a choice can be made and a list can come from: the operands of an
+ * operator, the elements of a list written in the body, a list a name holds, a closure that is a
+ * name, a closure that hands its argument on, a choice made when the element is written and one
+ * made when its worth is. A reading that knows only some of them answers for the rest by finding
+ * nothing, and finding nothing reads as a behavior whose decisions meet nowhere. So this holds the
+ * whole table to one question: for every way of writing a total that is a function of two
+ * decisions, is there a meeting, or is there a reason there is not.
+ */
+class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
+
+    private static final String HEAD = """
+            module example.ways
+
+            data Row = { days: Int, pay: Int }
+
+            behavior total : (first: Row, second: Row) -> Int
+
+            """;
+
+    private static final String WORTH = HEAD
+            + "let worth (r: Row): Int = if r.days >= 17 then r.pay else 0\n\n";
+
+    private static final String A = "if first.days >= 17 then first.pay else 0";
+
+    private static final String B = "if second.days >= 17 then second.pay else 0";
+
+    /** A body that is an expression, in a model with no helper. */
+    private static String body(String expression) {
+        return HEAD + "let total (first, second) =\n    " + expression + "\n";
+    }
+
+    /** What each way of writing the total reads as: one meeting of two decisions, or none. */
+    private static final Map<String, String> SOURCES = new LinkedHashMap<>();
+
+    static {
+        SOURCES.put("two ifs added", body("(" + A + ") + (" + B + ")"));
+        SOURCES.put("a list of two ifs", body("List.sum([ " + A + ", " + B + " ])"));
+        SOURCES.put("a list a name holds",
+                body("{ let xs = [ " + A + ", " + B + " ]\n    List.sum(xs) }"));
+        SOURCES.put("each choice named",
+                body("{ let a = " + A + "\n    let b = " + B + "\n    List.sum([ a, b ]) }"));
+        SOURCES.put("each choice named, added",
+                body("{ let a = " + A + "\n    let b = " + B + "\n    a + b }"));
+        SOURCES.put("a closure that hands its argument on",
+                body("List.sum(List.map(x -> x, [ " + A + ", " + B + " ]))"));
+        SOURCES.put("a closure that chooses",
+                body("List.sum(List.map(r -> if r.days >= 17 then r.pay else 0,"
+                        + " [ first, second ]))"));
+        SOURCES.put("a closure that chooses under its own let",
+                body("List.sum(List.map(r -> { let s = if r.days >= 17 then r.pay else 0\n"
+                        + "    s }, [ first, second ]))"));
+        SOURCES.put("a filter",
+                body("List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17,"
+                        + " [ first, second ])))"));
+        SOURCES.put("a count of what a filter keeps",
+                body("List.length(List.filter(r -> r.days >= 17, [ first, second ]))"));
+        SOURCES.put("a helper that chooses, added",
+                WORTH + "let total (first, second) = worth(first) + worth(second)\n");
+        SOURCES.put("a helper that chooses, in a list",
+                WORTH + "let total (first, second) = List.sum([ worth(first), worth(second) ])\n");
+        SOURCES.put("a helper that chooses, as the closure",
+                WORTH + "let total (first, second) = List.sum(List.map(worth, [ first, second ]))\n");
+        SOURCES.put("a helper that filters", HEAD
+                + "let kept (a: Row, b: Row): List<Row> = List.filter(r -> r.days >= 17, [ a, b ])\n\n"
+                + "let total (first, second) = List.sum(List.map(r -> r.pay, kept(first, second)))\n");
+        SOURCES.put("a helper that totals", HEAD
+                + "let pays (a: Row, b: Row): Int =\n"
+                + "    List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ a, b ])))\n\n"
+                + "let total (first, second) = pays(first, second)\n");
+    }
+
+    /** Ways whose decisions are made among elements another closure made, which no application
+     *  number of this one is. They are said not to be joined. */
+    private static final Map<String, String> NOT_JOINED = new LinkedHashMap<>();
+
+    static {
+        NOT_JOINED.put("a choice made, then written out again",
+                body("List.sum(List.flatMap(r -> [ r, r ], List.map(r -> if r.days >= 17"
+                        + " then r.pay else 0, [ first, second ])))"));
+    }
+
+    @Test
+    void everyWayOfWritingTheTotalIsOneMeetingOfTwoDecisions() {
+        SOURCES.forEach((way, source) -> {
+            CoverageRead.Read read = readAll(source, "total");
+            assertEquals(List.of(List.of(2, 2)), shape(read.interactions()), way);
+            assertEquals(List.of(), read.notJoined(), way);
+        });
+    }
+
+    @Test
+    void aTotalThatDecidesNothingIsReadAsNone() {
+        CoverageRead.Read read = readAll(body("List.sum(List.map(r -> r.pay,"
+                + " [ first, second ]))"), "total");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(), read.notJoined());
+    }
+
+    @Test
+    void whereTheChoiceWasMadeAmongElementsAnotherClosureMadeItIsSaidNotJoined() {
+        NOT_JOINED.forEach((way, source) -> {
+            CoverageRead.Read read = readAll(source, "total");
+            assertEquals(List.of(), read.interactions(), way);
+            assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_NUMBERED), read.notJoined(), way);
+        });
+    }
+
+    private static final String ACTIVE = """
+            module example.ways
+
+            data Row = { days: Int, pay: Int, active: Bool }
+
+            behavior total : (first: Row, second: Row) -> Int
+
+            let total (first, second) =
+                %s
+            """;
+
+    private static CoverageRead.Read readActive(String expression) {
+        return readAll(ACTIVE.formatted(expression), "total");
+    }
+
+    /**
+     * A count and a total of the same elements are made of the same decisions. What keeps an
+     * element and is not one comparison is said not to be joined for both, however the two are
+     * written.
+     */
+    @Test
+    void aCountIsNoMoreSilentThanATotalOfTheSameKeptElements() {
+        String kept = "List.filter(r -> r.active, [ first, second ])";
+
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON),
+                readActive("List.length(" + kept + ")").notJoined());
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON),
+                readActive("List.sum(List.map(r -> 1, " + kept + "))").notJoined());
+    }
+
+    /**
+     * Only a count that a comparison is made of, kept by a quantifier, is the statements' to read.
+     * The same count handed back as the answer is no comparison of statements, and the decisions
+     * that keep its elements are still met.
+     */
+    @Test
+    void aQuantifierKeepingIsLeftToTheStatementsOnlyWhereTheCountIsCompared() {
+        String kept = "List.length(List.filter(r -> List.all(x -> x.days >= r.days,"
+                + " [ first, second ]), [ first, second ]))";
+
+        assertEquals(List.of(),
+                readActive("if " + kept + " == 1 then 1 else 2").notJoined());
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON), readActive(kept).notJoined());
+        assertEquals(List.of(WhyNotJoined.NOT_ONE_COMPARISON),
+                readActive("{ let n = " + kept + "\n    if n == 1 then 1 else 2 }").notJoined());
+    }
+
+    private static final String FLAGGED = """
+            module example.ways
+
+            data Row = { days: Int, pay: Int, active: Bool }
+
+            behavior total : (first: Row, second: Row, flag: Bool, threshold: Int) -> Int
+
+            let total (first, second, flag, threshold) =
+                %s
+            """;
+
+    private static CoverageRead.Read readFlagged(String expression) {
+        return readAll(FLAGGED.formatted(expression), "total");
+    }
+
+    /**
+     * A condition that is the same on every run is no decision, kept or not: a filter that keeps
+     * everything is the list written without it, and one that keeps nothing leaves no element to
+     * decide anything. Neither is a meeting that went unmeasured.
+     */
+    @Test
+    void aConditionThatIsSettledDecidesNothing() {
+        for (String settled : List.of("true", "false")) {
+            String kept = "List.filter(r -> " + settled + ", [ first, second ])";
+
+            assertEquals(List.of(), readFlagged("List.sum(List.map(r -> r.pay, " + kept + "))")
+                    .notJoined(), settled);
+            assertEquals(List.of(), readFlagged("List.length(" + kept + ")").notJoined(), settled);
+        }
+    }
+
+    /**
+     * Whether there are two decisions is settled before anything is read of them, so a decision
+     * that cannot be read is no more a meeting than one that can: one comparison whose number no
+     * input holds is one decision.
+     */
+    @Test
+    void oneDecisionThatCannotBeReadIsStillOnlyOne() {
+        CoverageRead.Read read = readFlagged(
+                "List.sum(List.map(r -> if r.days * r.days > 10 then 5 else 0, [ first ]))");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(), read.notJoined());
+    }
+
+    /**
+     * A choice made once and named is one decision however often its name is used, and a choice
+     * made again on each application of a closure is as many as there are applications. What the
+     * reading cannot place it counts as its own, so it never counts fewer than there are.
+     */
+    @Test
+    void aChoiceIsCountedAsOftenAsItIsMade() {
+        assertEquals(List.of(), readFlagged("{ let chosen = if flag then 1 else 0\n"
+                + "    List.sum(List.map(x -> x, [ chosen, chosen ])) }").notJoined());
+        assertEquals(List.of(), readFlagged("{ let chosen = if flag then 1 else 0\n"
+                + "    List.sum(List.map(x -> x + 0, [ chosen, chosen ])) }").notJoined());
+
+        assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
+                "List.sum(List.flatMap(a -> { let c = if a.active then 1 else 0\n"
+                        + "    List.map(x -> x, [ c ]) }, [ first, second ]))").notJoined());
+        assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
+                "List.sum(List.flatMap(a -> [ if a.active then 1 else 0 ], [ first, second ]))")
+                .notJoined());
+        assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
+                "{ let a = if flag then 1 else 0\n    let b = if second.active then 1 else 0\n"
+                        + "    List.sum(List.map(x -> x + 0, [ a, b ])) }").notJoined());
+    }
+
+    /** The ways the list a total is over can be handed to it without changing what it holds. */
+    private static final Map<String, UnaryOperator<String>> HANDED =
+            new LinkedHashMap<>();
+
+    static {
+        HANDED.put("as written", list -> list);
+        HANDED.put("past a filter that keeps all", list -> "List.filter(r -> true, " + list + ")");
+        HANDED.put("past a map that hands on", list -> "List.map(x -> x, " + list + ")");
+    }
+
+    /** What a total of two choices is made of, over a list: the choice made by a condition the
+     *  reading can name, and by one it cannot. */
+    private static final Map<String, UnaryOperator<String>> CHOOSING =
+            new LinkedHashMap<>();
+
+    static {
+        CHOOSING.put("a closure that chooses", list -> "List.sum(List.map(r -> if r.days >= 17"
+                + " then r.pay else 0, " + list + "))");
+        CHOOSING.put("a closure that chooses under its own let", list -> "List.sum(List.map(r -> {"
+                + " let s = if r.days >= 17 then r.pay else 0\n    s }, " + list + "))");
+        CHOOSING.put("a filter", list -> "List.sum(List.map(r -> r.pay, List.filter("
+                + "r -> r.days >= 17, " + list + ")))");
+    }
+
+    /** Choices made on each application by what the reading cannot name: the total is a function
+     *  of as many decisions as there are applications. */
+    private static final Map<String, UnaryOperator<String>> UNNAMED =
+            new LinkedHashMap<>();
+
+    static {
+        UNNAMED.put("a closure that chooses", list -> "List.sum(List.map(r -> if flag then 1"
+                + " else 0, " + list + "))");
+        UNNAMED.put("a closure that chooses under its own let", list -> "List.sum(List.map(r -> {"
+                + " let c = if flag then 1 else 0\n    c }, " + list + "))");
+        UNNAMED.put("a closure that writes a choice out", list -> "List.sum(List.flatMap(r -> {"
+                + " let c = if flag then 1 else 0\n    [ c ] }, " + list + "))");
+        UNNAMED.put("a closure that writes a choice out by a field", list ->
+                "List.sum(List.flatMap(r -> [ if r.active then 1 else 0 ], " + list + "))");
+    }
+
+    private static final String LIST = "[ first, second ]";
+
+    /**
+     * Nothing about how the list reaches the total changes what the total is made of: every way of
+     * choosing is the same meeting of two decisions however the list is handed on. The ways are
+     * crossed rather than listed, so that a way added to either side is tried with every one of
+     * the other.
+     */
+    @Test
+    void howAListIsHandedOnChangesNothingAboutTheMeeting() {
+        List<String> differing = new ArrayList<>();
+        CHOOSING.forEach((choosing, total) -> HANDED.forEach((handed, hand) -> {
+            CoverageRead.Read read = readFlagged(total.apply(hand.apply(LIST)));
+            if (!List.of(List.of(2, 2)).equals(shape(read.interactions()))
+                    || !read.notJoined().isEmpty()) {
+                differing.add(choosing + ", " + handed + ": " + shape(read.interactions())
+                        + " " + read.notJoined());
+            }
+        }));
+        assertEquals(List.of(), differing);
+    }
+
+    /**
+     * A total of choices made on each application is never read as if it decided nothing: it is a
+     * meeting or it is said not to be joined, however the list reaches it.
+     */
+    @Test
+    void aChoiceMadeOnEachApplicationIsNeverSilentHoweverTheListIsHandedOn() {
+        List<String> silent = new ArrayList<>();
+        UNNAMED.forEach((choosing, total) -> HANDED.forEach((handed, hand) -> {
+            CoverageRead.Read read = readFlagged(total.apply(hand.apply(LIST)));
+            if (read.interactions().isEmpty() && read.notJoined().isEmpty()) {
+                silent.add(choosing + ", " + handed);
+            }
+        }));
+        assertEquals(List.of(), silent);
+    }
+
+    /**
+     * What a filter takes out on every run is no application of the step after it, wherever in the
+     * list it stands, and the applications after it are numbered as a run counts them.
+     */
+    @Test
+    void anElementAlwaysTakenOutLeavesTheOtherApplicationsNumbered() {
+        List<String> lists = List.of("[ 1, 2 ]", "List.filter(x -> x > 0, [ 0, 1, 2 ])",
+                "List.filter(x -> x > 0, [ 1, 0, 2 ])", "List.filter(x -> x > 0, [ 1, 2, 0 ])",
+                "List.map(x -> x, List.filter(x -> x > 0, [ 0, 1, 2 ]))");
+        List<String> differing = new ArrayList<>();
+        for (String list : lists) {
+            CoverageRead.Read read = readFlagged("List.sum(List.map(x ->"
+                    + " if threshold >= 17 then x else 0, " + list + "))");
+            if (!List.of(List.of(2, 2)).equals(shape(read.interactions()))
+                    || !read.notJoined().isEmpty()) {
+                differing.add(list + ": " + shape(read.interactions()) + " " + read.notJoined());
+            }
+        }
+        assertEquals(List.of(), differing);
+    }
+
+    /** The visit each decision of each meeting claims, in the order they are met. */
+    private static List<Object> visitsClaimed(List<Interaction> found) {
+        return found.stream().<Object>map(group -> group.factors().stream()
+                .map(factor -> factor.outcomes().stream()
+                        .map(outcome -> outcome.holds().stream()
+                                .map(decision -> decision.claims().visit()).toList())
+                        .toList())
+                .toList()).toList();
+    }
+
+    /** Lists of the same two numbers, with what is taken out on every run before, between and
+     *  after them, and the ways of handing a list on that change nothing. */
+    private static final Map<String, String> TWO_NUMBERS = new LinkedHashMap<>();
+
+    static {
+        TWO_NUMBERS.put("as written", "[ 1, 2 ]");
+        TWO_NUMBERS.put("one taken out first", "List.filter(x -> x > 0, [ 0, 1, 2 ])");
+        TWO_NUMBERS.put("one taken out between", "List.filter(x -> x > 0, [ 1, 0, 2 ])");
+        TWO_NUMBERS.put("one taken out last", "List.filter(x -> x > 0, [ 1, 2, 0 ])");
+        TWO_NUMBERS.put("two taken out", "List.filter(x -> x > 0, [ 0, 1, 0, 2 ])");
+        TWO_NUMBERS.put("past a filter that keeps all", "List.filter(x -> true, [ 1, 2 ])");
+        TWO_NUMBERS.put("past a map that hands on", "List.map(x -> x, [ 1, 2 ])");
+        TWO_NUMBERS.put("past a flatMap that hands on", "List.flatMap(x -> [ x ], [ 1, 2 ])");
+        TWO_NUMBERS.put("taken out, then handed on",
+                "List.map(x -> x, List.filter(x -> x > 0, [ 0, 1, 2 ]))");
+    }
+
+    /**
+     * The visits a meeting claims are the visits a run makes, so they are the same however the
+     * elements came to be the list: what a filter before takes out on every run is no visit of
+     * the comparison after it. Shape alone does not say so, since a claim on a visit no run makes
+     * has the same shape as one on a visit it does.
+     */
+    @Test
+    void theVisitsClaimedAreTheRunsOwnWhateverWasTakenOutBefore() {
+        List<String> totals = List.of(
+                "List.length(List.filter(x -> threshold > x, %s))",
+                "List.sum(List.map(x -> if threshold >= 17 then x else 0, %s))",
+                "List.sum(List.map(x -> x, List.filter(x -> threshold > x, %s)))");
+        List<String> differing = new ArrayList<>();
+        for (String total : totals) {
+            List<Object> plain = visitsClaimed(
+                    readFlagged(total.formatted(TWO_NUMBERS.get("as written"))).interactions());
+            if (plain.isEmpty()) {
+                differing.add(total + ": claims nothing as written");
+            }
+            TWO_NUMBERS.forEach((way, list) -> {
+                CoverageRead.Read read = readFlagged(total.formatted(list));
+                if (!plain.equals(visitsClaimed(read.interactions()))
+                        || !read.notJoined().isEmpty()) {
+                    differing.add(total + " " + way + ": " + visitsClaimed(read.interactions())
+                            + " " + read.notJoined());
+                }
+            });
+        }
+        assertEquals(List.of(), differing);
+    }
+
+    /**
+     * What a closure does with a value it is handed, and what else it writes, change nothing about
+     * the choice the value came from: a choice is evaluated once for each application of the
+     * closure it is written in, however its result is used, transformed or passed through, and
+     * whatever else the closures it passes through choose and do not use.
+     */
+    private static final List<String> STAGES = List.of(
+            "List.flatMap(x -> [ x ], %s)",
+            "List.map(x -> x, %s)",
+            "List.flatMap(x -> [ x * 2 ], %s)",
+            "List.flatMap(x -> [ x + 0 ], %s)",
+            "List.map(x -> x * 2, %s)",
+            "List.flatMap(x -> [ x, x ], %s)",
+            "List.flatMap(x -> { let ignored = if flag then 1 else 0\n    [ x ] }, %s)",
+            "List.map(x -> { let ignored = if flag then 1 else 0\n    x }, %s)");
+
+    /**
+     * Every pipeline of up to two such stages after a choice made once and used twice is one
+     * decision, and the same after a choice made in each of two applications is two.
+     *
+     * <p>Each stage alone, and each stage handed on by a map and by a flatMap, and each stage after
+     * one that writes every element out twice. A stage past another is where an element carries
+     * more than one application beside the one that wrote the choice, and a map and a flatMap are
+     * the two ways a stage adds its own to them; what a stage before it does to the elements is
+     * whether it keeps them one for one or writes them out again, so a stage that keeps them and
+     * one that does not are what each stage is tried after.
+     */
+    @Test
+    void whatIsDoneWithAChoiceAfterItIsMadeChangesNoDecisionCount() {
+        String writes = "List.flatMap(r -> { let chosen = if r.active then 1 else 0\n"
+                + "    [ chosen, chosen ] }, %s)";
+        List<String> handingOn = List.of(STAGES.get(0), STAGES.get(1));
+        String writtenOutTwice = STAGES.get(5);
+        Set<List<String>> pipelines = new LinkedHashSet<>();
+        pipelines.add(List.of());
+        for (String stage : STAGES) {
+            pipelines.add(List.of(stage));
+            handingOn.forEach(after -> pipelines.add(List.of(stage, after)));
+            pipelines.add(List.of(writtenOutTwice, stage));
+        }
+        List<String> differing = new ArrayList<>();
+        for (List<String> stages : pipelines) {
+            String once = writes.formatted("[ first ]");
+            String twice = writes.formatted("[ first, second ]");
+            for (String stage : stages) {
+                once = stage.formatted(once);
+                twice = stage.formatted(twice);
+            }
+            List<WhyNotJoined> one = readFlagged("List.sum(" + once + ")").notJoined();
+            List<WhyNotJoined> two = readFlagged("List.sum(" + twice + ")").notJoined();
+            if (!one.isEmpty() || !List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ).equals(two)) {
+                differing.add(stages + ": one " + one + ", two " + two);
+            }
+        }
+        assertEquals(List.of(), differing);
+    }
+
+    /**
+     * What a decision is does not depend on how many times it is used or where: a choice made once
+     * and named is one decision however often the name is written, and two choices are two. The
+     * three come out the same in every way a total can use a list of them — the elements of a
+     * list written in the body, an identity map over it, a map that computes on each, and the
+     * operands of an operator — and whether or not the comparison can be read.
+     */
+    @Test
+    void aDecisionIsCountedOnceHoweverOftenItIsUsedAndWhicheverWayTheTotalUsesIt() {
+        // a choice, another that is not it, and whether the comparison of each is one a row can
+        // steer
+        List<String[]> choices = List.of(
+                new String[] {"if first.days >= 17 then 1 else 0",
+                        "if second.days >= 17 then 1 else 0", "readable"},
+                new String[] {"if first.days * first.days > 10 then 1 else 2",
+                        "if second.days * second.days > 10 then 1 else 2", "not readable"},
+                new String[] {"if flag then 1 else 0", "if first.active then 1 else 0",
+                        "not a comparison"});
+        List<String> uses = List.of("List.sum(%s)", "List.sum(List.map(x -> x, %s))",
+                "List.sum(List.map(x -> x * 2, %s))");
+        List<String> differing = new ArrayList<>();
+        for (String[] choice : choices) {
+            String lets = "{ let chosen = " + choice[0] + "\n    let other = " + choice[1] + "\n    ";
+            for (String use : uses) {
+                for (String names : List.of("[ chosen, chosen ]", "[ chosen, chosen, chosen ]")) {
+                    CoverageRead.Read one = readFlagged(lets + use.formatted(names) + " }");
+                    if (!one.interactions().isEmpty() || !one.notJoined().isEmpty()) {
+                        differing.add(choice[2] + " " + use + " " + names + ": one decision read as "
+                                + shape(one.interactions()) + " " + one.notJoined());
+                    }
+                }
+                CoverageRead.Read two = readFlagged(lets + use.formatted("[ chosen, other ]") + " }");
+                if (two.interactions().isEmpty() && two.notJoined().isEmpty()) {
+                    differing.add(choice[2] + " " + use + ": two decisions read as none");
+                }
+            }
+            CoverageRead.Read same = readFlagged(lets + "chosen + chosen + chosen }");
+            if (!same.interactions().isEmpty() || !same.notJoined().isEmpty()) {
+                differing.add(choice[2] + " operands: one decision read as "
+                        + shape(same.interactions()) + " " + same.notJoined());
+            }
+            CoverageRead.Read operands = readFlagged(lets + "chosen + other }");
+            if (operands.interactions().isEmpty() && operands.notJoined().isEmpty()) {
+                differing.add(choice[2] + " operands: two decisions read as none");
+            }
+        }
+        assertEquals(List.of(), differing);
+
+        for (String use : List.of("List.sum(%s)", "List.sum(List.map(x -> x, %s))")) {
+            assertEquals(List.of(List.of(2, 2)), shape(readFlagged("{ let chosen = if first.days >= 17"
+                    + " then 1 else 0\n    let other = if second.days >= 17 then 1 else 0\n    "
+                    + use.formatted("[ chosen, other ]") + " }").interactions()), use);
+        }
+    }
+
+    /**
+     * One value decided by several choices has all of them, wherever they are written in it: side
+     * by side, nested in an arm, in both arms, or each under a name. It is a meeting that this
+     * cannot join and says so, as the same choices written as the elements of a list are one it
+     * joins. A choice named once and used twice is the one choice, and a value that does
+     * arithmetic on one choice is decided by that one.
+     */
+    @Test
+    void aValueDecidedByManyChoicesHasEachOfThem() {
+        String sum = "List.sum(List.map(r -> %s, [ first ]))";
+        for (String many : List.of(
+                "(if r.active then 1 else 0) + (if flag then 1 else 0)",
+                "{ let a = if r.active then 1 else 0\n    let b = if flag then 1 else 0\n"
+                        + "    a + b }",
+                "if r.active then (if flag then 2 else 1) else 0",
+                "if r.days > 3 then (if flag then 2 else 1) else (if r.active then 5 else 0)",
+                "(if r.active then 1 else 0) * (if flag then 3 else 2)")) {
+            assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ),
+                    readFlagged(sum.formatted(many)).notJoined(), many);
+        }
+        for (String one : List.of(
+                "{ let a = if flag then 1 else 0\n    a + a }",
+                "(if r.active then 1 else 0) * 2",
+                "(if r.active then 1 else 0) + 1")) {
+            assertEquals(List.of(), readFlagged(sum.formatted(one)).notJoined(), one);
+        }
+
+        CoverageRead.Read written = readFlagged(
+                "List.sum([ if first.active then 1 else 0, if flag then 1 else 0 ])");
+        assertEquals(List.of(List.of(2, 2)), shape(written.interactions()));
+        assertEquals(List.of(), written.notJoined());
+    }
+
+    /**
+     * Decisions that meet in code a run may come back to are not offered, and are not absent
+     * either: a total written inside a closure is said not to be joined, the same as the choices
+     * added in the closure.
+     */
+    @Test
+    void decisionsMeetingInCodeRunAgainAreSaidSo() {
+        for (String inside : List.of(
+                "(if flag then 1 else 0) + (if threshold > 3 then 1 else 0)",
+                "List.sum([ if flag then 1 else 0, if threshold > 3 then 1 else 0 ])")) {
+            CoverageRead.Read read = readFlagged(
+                    "List.sum(List.map(x -> " + inside + ", [ 1, 2 ]))");
+
+            assertEquals(List.of(), read.interactions(), inside);
+            assertFalse(read.notJoined().isEmpty(), inside);
+        }
+    }
+
+    /**
+     * A closure that chooses again adds the decisions it makes to those it was handed, so a total
+     * through it is never read as the one choice it started from.
+     */
+    @Test
+    void aClosureThatChoosesAgainAddsItsDecisions() {
+        String chosen = "List.flatMap(r -> { let chosen = if r.active then 1 else 0\n"
+                + "    [ chosen, chosen ] }, [ first ])";
+        for (String again : List.of("List.flatMap(x -> [ if flag then x else 0 ], %s)",
+                "List.map(x -> if flag then x else 0, %s)",
+                "List.flatMap(x -> [ x, if flag then 1 else 0 ], %s)")) {
+            CoverageRead.Read read = readFlagged("List.sum(" + again.formatted(chosen) + ")");
+
+            assertFalse(read.interactions().isEmpty() && read.notJoined().isEmpty(), again);
+        }
+    }
+
+    /**
+     * A choice written once in an application and used twice there is one decision, and the same
+     * written in two applications is two: what is counted is the evaluations of the choice, and
+     * not the occurrences of its value.
+     */
+    @Test
+    void aChoiceUsedTwiceInOneApplicationIsOneDecision() {
+        String writes = "List.sum(List.flatMap(r -> { let chosen = if %s then 1 else 0\n"
+                + "    [ chosen, chosen ] }, %s))";
+
+        for (String condition : List.of("r.active", "flag")) {
+            assertEquals(List.of(), readFlagged(writes.formatted(condition, "[ first ]"))
+                    .notJoined(), condition + " in one application");
+            assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_READ), readFlagged(
+                    writes.formatted(condition, "[ first, second ]")).notJoined(),
+                    condition + " in two");
+        }
+    }
+
+    /** A decision that nothing else is decided beside meets nothing, read or not. */
+    @Test
+    void oneDecisionAloneIsNoMeetingToLeaveUnjoined() {
+        CoverageRead.Read read = readActive(
+                "List.sum(List.map(r -> r.pay, List.filter(r -> r.active, [ first ])))");
+
+        assertEquals(List.of(), read.interactions());
+        assertEquals(List.of(), read.notJoined());
+    }
+
+    /** The same element written out twice is one decision made twice, not two. */
+    @Test
+    void anElementWrittenOutTwiceIsStillOneDecision() {
+        CoverageRead.Read read = readActive("List.sum(List.map(r -> r.pay, List.flatMap("
+                + "r -> [ r, r ], List.filter(r -> r.active, [ first ]))))");
+
+        assertEquals(List.of(), read.notJoined());
+    }
+
+    /**
+     * Branches that come to the same value are still a choice. A meeting is of the decisions that
+     * settle a value, and a path through a body is one whatever the value at its end: the operands
+     * of an operator, the elements of a list and the closure that chooses all count them alike.
+     */
+    @Test
+    void branchesThatComeToTheSameValueAreCountedAlikeWhereverTheyAreWritten() {
+        String same = "if %s.days >= 17 then 5 else 5";
+        String plus = "(" + same.formatted("first") + ") + (" + same.formatted("second") + ")";
+        String list = "List.sum([ " + same.formatted("first") + ", " + same.formatted("second") + " ])";
+        String map = "List.sum(List.map(r -> if r.days >= 17 then 5 else 5, [ first, second ]))";
+
+        for (String expression : List.of(plus, list, map)) {
+            assertEquals(List.of(List.of(2, 2)),
+                    shape(readAll(body(expression), "total").interactions()), expression);
+        }
+    }
+
+    /**
+     * An element worth what an empty total is worth does not change a total, kept or not, and what
+     * keeps it is no decision of the total's. The others still are.
+     */
+    @Test
+    void anElementWorthNothingIsNoDecisionOfTheTotal() {
+        String source = """
+                module example.ways
+
+                behavior total : (first: Int, second: Int) -> Int
+
+                let total (first, second) = List.sum(List.filter(x -> x > 0, [ 0, first, second ]))
+                """;
+        CoverageRead.Read read = readAll(source, "total");
+
+        assertEquals(List.of(List.of(2, 2)), shape(read.interactions()),
+                "the two elements that can be worth something");
+        assertEquals(List.of(), read.notJoined());
+    }
+}

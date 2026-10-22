@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
@@ -32,14 +33,24 @@ class TheScanMovesOnEveryCharacterTest {
      *  one does not take the build with it. */
     private static final Duration BEFORE_IT_IS_STUCK = Duration.ofSeconds(5);
 
+    /**
+     * Every text read under one watch rather than one each. A watch is a thread of its own, and one
+     * per text costs more than the reading it watches; what a stuck scan needs is to be stopped and
+     * named, and the text it is on when the watch runs out is the one it is stuck on.
+     */
     @Test
     void andEveryCharacterOfWhatItReadIsInATokenOfIt() {
+        AtomicReference<String> reading = new AtomicReference<>();
+        assertTimeoutPreemptively(BEFORE_IT_IS_STUCK, () -> readEach(reading),
+                () -> "the scan did not finish on " + shown(reading.get()));
+    }
+
+    private static void readEach(AtomicReference<String> reading) {
         List<String> stuck = new ArrayList<>();
         List<String> empty = new ArrayList<>();
         for (String written : written()) {
-            CstLexer.Result lexed = assertTimeoutPreemptively(BEFORE_IT_IS_STUCK,
-                    () -> CstLexer.lex(written),
-                    () -> "the scan did not finish on " + shown(written));
+            reading.set(written);
+            CstLexer.Result lexed = CstLexer.lex(written);
             StringBuilder back = new StringBuilder();
             for (GreenToken token : lexed.tokens()) {
                 back.append(token.text());

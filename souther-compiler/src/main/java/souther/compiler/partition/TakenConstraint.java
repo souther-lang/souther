@@ -118,9 +118,33 @@ public sealed interface TakenConstraint {
     record Affine(LinearForm<NumericTerm> form, Rel rel)
             implements TakenConstraint, JointDemand {
 
+        /**
+         * Every number of the form, and the value a count of how often a key occurs, or a total
+         * of what its elements come to, is for, ahead of the number: the number is composed once
+         * that value stands somewhere, so it is a number the condition is about though no
+         * coefficient names it.
+         */
         @Override
         public java.util.Set<NumericTerm> terms() {
-            return form.coefs().keySet();
+            if (form.coefs().keySet().stream().noneMatch(term ->
+                    term instanceof NumericTerm.OccurrencesOfAKey
+                            || term instanceof NumericTerm.GatheredUnderAKey)) {
+                return form.coefs().keySet();
+            }
+            Set<NumericTerm> out = new LinkedHashSet<>();
+            for (NumericTerm term : form.coefs().keySet()) {
+                switch (term) {
+                    case NumericTerm.OccurrencesOfAKey asked ->
+                            out.add(new NumericTerm.ValueOf(asked.key()));
+                    case NumericTerm.GatheredUnderAKey asked ->
+                            out.add(new NumericTerm.ValueOf(asked.asked()));
+                    case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
+                         NumericTerm.OfAnElementsNeighbours _, NumericTerm.OccurrencesOfItsValue _,
+                         NumericTerm.GatheredUnderItsKey _ -> { }
+                }
+                out.add(term);
+            }
+            return out;
         }
     }
 

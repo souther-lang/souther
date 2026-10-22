@@ -4,6 +4,7 @@ import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
@@ -247,7 +248,9 @@ final class PathEngine {
      * nothing could read and one read to no effect leave it identical.
      */
     Predicates.Assumed assuming(Core cond, Known k, Denotations at, boolean positive) {
-        return predicates.assumeCond(cond, k, at, positive);
+        Predicates.Assumed assumed = predicates.assumeCond(cond, k, at, positive);
+        return new Predicates.Assumed(settled(assumed.known()), assumed.taken(),
+                assumed.shapeRead(), assumed.notTaken());
     }
 
     /** The same, of a condition whose meaning was read already: what it states coming out
@@ -283,7 +286,40 @@ final class PathEngine {
         Entered taken = whatTakingThisCaseSays(arm, scrutinee,
                 assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
                         guard -> impliedBy(guard, arm.pattern()), in));
-        return new Entered(takingItsCases(arm, scrutinee, taken.known(), at), taken.at());
+        Known lawful = whatItsLawSaysOfTheArm(arm, scrutinee, taken.known(), at);
+        return new Entered(takingItsCases(arm, scrutinee, lawful, at), taken.at());
+    }
+
+    /**
+     * {@code k} with what the law of the operation that answered the optional {@code scrutinee}
+     * says of its arguments, where {@code arm} is taken where it holds a value or where it holds
+     * none: {@code List.max(xs)} holds one exactly where {@code xs} holds something, so its absent
+     * arm is taken only where {@code xs} is empty.
+     *
+     * <p>The law as {@link LawOverAtoms} names it, which is the law the reading of an input takes
+     * an arm by ({@link LawAtACall}); and of it only what is certain on the arm. Read where the
+     * scrutinee was written, which is where the call's arguments mean something.
+     */
+    private Known whatItsLawSaysOfTheArm(Core.Case arm, Core scrutinee, Known k, Denotations at) {
+        Boolean present = LawAtACall.presentWhereTaken(arm);
+        Terms.Given called = present == null ? null
+                : terms.originating(scrutinee, at, new HashSet<>());
+        Derivation.HoldsSomethingWhere.Holding law = called == null ? null
+                : LawOverAtoms.whereItHolds(AnOperationApplied.of(called.value()),
+                        AnswerAspect.PRESENCE, called.at(), terms);
+        if (law == null) {
+            return k;
+        }
+        List<NumericConstraint> certain = LawOverAtoms.certain(law, present);
+        if (certain == null) {
+            return k.reachingNothing();
+        }
+        Known out = k;
+        for (NumericConstraint each : certain) {
+            out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                    terms.kindsOf(each.form()));
+        }
+        return out;
     }
 
     /**
@@ -300,7 +336,16 @@ final class PathEngine {
     Known takingItsCases(Core.Case arm, Core scrutinee, Known k, Denotations at) {
         CasesLeft selected = arm.pattern() == null ? null : CasesLeft.selectedBy(arm.pattern());
         FactSubject value = selected == null ? null : terms.subjectOf(scrutinee, at);
-        return value == null ? k : k.inCases(value, selected);
+        return value == null ? k : settled(k.inCases(value, selected));
+    }
+
+    /**
+     * {@code k} with the choices it leaves undecided taken again over what it knows. Every act of
+     * this engine that takes a fact in ends here, since a choice a condition could not settle is
+     * settled by whatever the walk learns after it, not only by the next condition.
+     */
+    private Known settled(Known k) {
+        return MeaningAssumptions.settled(k, terms);
     }
 
     /**
@@ -327,9 +372,9 @@ final class PathEngine {
      * have is a rule about nothing.
      */
     private Entered whatTakingThisCaseSays(Core.Case arm, Core scrutinee, Entered in) {
-        Core called = terms.originating(scrutinee, in.at(), new HashSet<>());
-        Core condition = TheOtherCase.conditionAt(called);
-        Type answersIn = TheOtherCase.theCaseItAnswersIn(called);
+        Terms.Given called = terms.originating(scrutinee, in.at(), new HashSet<>());
+        Core condition = called == null ? null : TheOtherCase.conditionAt(called.value());
+        Type answersIn = called == null ? null : TheOtherCase.theCaseItAnswersIn(called.value());
         if (condition == null || answersIn == null) {
             return in;
         }
@@ -337,7 +382,10 @@ final class PathEngine {
         if (answered == null) {
             return in;
         }
-        return new Entered(assuming(condition, in.known(), in.at(), !answered).known(), in.at());
+        // The condition is over the call's arguments, which mean something where the call was
+        // written.
+        return new Entered(assuming(condition, in.known(), called.at(), !answered).known(),
+                in.at());
     }
 
     /** Whether {@code arm} was taken because the union came back carrying the number, or because it
@@ -411,8 +459,8 @@ final class PathEngine {
             return call;
         }
         if (value instanceof Core.Read read && seen.add(read.binding())) {
-            Core given = at.valueOf(read.binding());
-            return given == null ? null : originatingCall(given, at, seen);
+            ValueStanding.ReadThrough<Denotations> given = at.givenTo(read.binding());
+            return given == null ? null : originatingCall(given.value(), given.at(), seen);
         }
         return null;
     }
@@ -550,7 +598,7 @@ final class PathEngine {
         Core.IfConstructed ic = built.attempt();
         Core.Read root = Terms.read(ic.binder(), ic.construct().type(), ic.pos());
         Denotations next = terms.choosing(built, at);
-        return new Entered(builtFrom(ic, root, seedAt(root, k, next), next), next);
+        return new Entered(settled(builtFrom(ic, root, seedAt(root, k, next), next)), next);
     }
 
     /**
@@ -634,8 +682,8 @@ final class PathEngine {
             seeded(e);
             out = seedAt(e, out, at);
         }
-        return assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
-                new Entered(out, at)).known();
+        return settled(assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
+                new Entered(out, at)).known());
     }
 
     /** Records an answer this read a guarantee off, where a test is reading them. */
@@ -677,9 +725,9 @@ final class PathEngine {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at) {
-        return seedAt(root, RuleKey.THE_VALUE, k, at,
+        return settled(seedAt(root, RuleKey.THE_VALUE, k, at,
                 new GuaranteeWalk.Extent.AsFarAs(GuaranteeWalk.FIELDS_SEEDED), null,
-                InvariantChecker.Reach.EVERYTHING);
+                InvariantChecker.Reach.EVERYTHING));
     }
 
     /**

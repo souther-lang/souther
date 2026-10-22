@@ -70,6 +70,7 @@ record WhatAnAnswerTakesUp(DecisionSubjects subjects) {
      * around the answer with it.
      */
     boolean part(Core part, InputReads reads) {
-        return subjects.isTheTruthOfAnAnswer(part, reads);
+        return subjects.isTheTruthOfAnAnswer(part, reads)
+                || reads.holdsAnEntryOfAnAnswer(part, subjects.symbols(), subjects.newtypes());
     }
 }

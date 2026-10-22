@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -45,7 +46,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
 
     private static final String INPUT = """
-            data Box = { xs: List<Int>, ys: List<Int>, n: Int, s: String, t: String, set: Set<Int> }
+            data Box = { xs: List<Int>, ys: List<Int>, n: Int, s: String, t: String, set: Set<Int>,
+                         m: Map<String, Int> }
             """;
 
     /** Asked for some and handed some: a disjunction over the arguments, and not a silence. */
@@ -110,9 +112,9 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     }
 
     /**
-     * Which of them meet it is read as the choices the comparison admits, and past the readings
-     * one condition is read in the count is not read — said as that, and not as a statement
-     * nothing could read. Exactly one of eighteen is a choice for each; half of them is every way
+     * Which of them meet it is read as the choices the comparison admits, written out where they
+     * are few, and held as the count where they are more than one condition is read in — read to
+     * the end either way. Exactly one of eighteen is a choice for each; half of them is every way
      * of picking nine.
      */
     @Test
@@ -124,29 +126,39 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
         String written = "[" + String.join(", ", eighteen) + "]";
         assertNull(Proposition.firstStopIn(stated(
                 "if List.length(List.filter(x -> x > 0, " + written + ")) == 1 then 1 else 0")));
-        assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
-                "if List.length(List.filter(x -> x > 0, " + written + ")) == 9 then 1 else 0")));
+        Proposition half = stated(
+                "if List.length(List.filter(x -> x > 0, " + written + ")) == 9 then 1 else 0");
+        assertNull(Proposition.firstStopIn(half), half::toString);
+        assertInstanceOf(Proposition.SoManyHold.class, half);
     }
 
     /**
-     * A count compared by an operation's law and not as written is held to the same figure: what
+     * A count compared by an operation's law and not as written is held the same way: what
      * {@code List.drop} leaves is empty by how many the list holds against how many it drops, so
      * dropping ten of thirty values written out is eleven or more of them kept, every way of
-     * picking eleven. Read where the law's comparison is made, past the readings of a condition it
-     * is said to be — and not written out however many ways that is.
+     * picking eleven. Read where the law's comparison is made, it is held as the count — and not
+     * written out however many ways that is.
      */
     @Test
     @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void aCountALawComparesIsHeldToTheFigureToo() {
+    void aCountALawComparesIsHeldTheSameWay() {
         List<String> thirty = new ArrayList<>();
         for (int i = 0; i < 30; i++) {
             thirty.add("b.n + " + i);
         }
         String kept = "List.filter(x -> x > 0, [" + String.join(", ", thirty) + "])";
-        assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
-                "if List.isEmpty(List.drop(10, " + kept + ")) then 1 else 0")));
+        Proposition dropped = stated("if List.isEmpty(List.drop(10, " + kept + ")) then 1 else 0");
+        assertNull(Proposition.firstStopIn(dropped), dropped::toString);
+        assertTrue(holdsACount(dropped), dropped::toString);
         assertNull(Proposition.firstStopIn(stated(
                 "if List.isEmpty(List.drop(0, " + kept + ")) then 1 else 0")));
+    }
+
+    /** Whether {@code stated} or some part of it is a count of statements held as the count. */
+    private static boolean holdsACount(Proposition stated) {
+        return stated instanceof Proposition.SoManyHold
+                || stated.partsHeld().stream()
+                        .anyMatch(AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest::holdsACount);
     }
 
     /** What a set holds once a value is taken out is some other value, read as the quantifier over
@@ -237,6 +249,23 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                 + " == 1, b.xs) then 1 else 0");
         assertInstanceOf(WhyUnread.TwoElementsOfOneContainer.class,
                 Proposition.firstStopIn(nested), nested.toString());
+    }
+
+    /**
+     * Two lookups in one map, each with a default, added in one comparison: where both keys are
+     * filed it is about two entries, which said under one quantifier over the map would be one
+     * subject, and it is not read — as the sum of two elements of one container is not, however
+     * the two were taken out of it. One lookup beside a number is read.
+     */
+    @Test
+    void twoLookupsInOneMapAreNotReadAsOneEntry() {
+        Proposition two = stated("if Option.withDefault(0, Map.get(b.s, b.m))"
+                + " + Option.withDefault(0, Map.get(b.t, b.m)) >= b.n then 1 else 0");
+        assertInstanceOf(WhyUnread.TwoElementsOfOneContainer.class,
+                Proposition.firstStopIn(two), two.toString());
+
+        Proposition one = stated("if Option.withDefault(0, Map.get(b.s, b.m)) >= b.n then 1 else 0");
+        assertFalse(Proposition.leavesSomethingUnread(one), one.toString());
     }
 
     /** How many what a mapping answers holds is how many it was handed, read as that one's size. */
@@ -378,13 +407,18 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
      * Characters of a string lowercased are not characters of a string at a position: the case
      * mapping, and the composition after it, can take a letter the pattern accepts into one it
      * does not — {@code J} before a combining caron is {@code ǰ} once lowercased — so which code
-     * points of the string make one is not a class of them, and it is not read.
+     * points of the string make one is not a class of them. It is read as a count of the answer,
+     * a number of the string of its own that is worked out by asking the answer, and never as the
+     * count the string's own code points have.
      */
     @Test
     void charactersOfAStringLowercasedAreNotReadAsAClassOfTheString() {
         Proposition stated = stated("if List.any(c -> String.matches(\"[a-z0-9]\", c),"
                 + " String.characters(String.lowercase(b.s))) then 1 else 0");
-        assertTrue(Proposition.leavesSomethingUnread(stated), stated.toString());
+        assertNull(Proposition.firstStopIn(stated), stated.toString());
+        assertTrue(stated.toString().contains("String.lowercase(b.s)"), stated.toString());
+        assertNotEquals(stated, stated("if List.any(c -> String.matches(\"[a-z0-9]\", c),"
+                + " String.characters(b.s)) then 1 else 0"));
     }
 
     /**
@@ -417,6 +451,92 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                     "if String.length(String.concat(List.map(" + each + ","
                             + " List.filter(c -> c == \"a\", String.characters(b.s))))) >= 1"
                             + " then 1 else 0")), each);
+        }
+    }
+
+    /** A conversion of a conversion is read as the count of what the last one answers, and is not
+     *  the count of what either alone does. */
+    @Test
+    void charactersOfAConversionOfAConversionAreCountedInWhatTheLastAnswers() {
+        String any = "if List.any(c -> String.matches(\"[a-z0-9]\", c),"
+                + " String.characters(%s)) then 1 else 0";
+        Proposition nested = stated(any.formatted("String.lowercase(String.uppercase(b.s))"));
+        assertNull(Proposition.firstStopIn(nested), nested.toString());
+        assertTrue(nested.toString().contains("String.lowercase(String.uppercase(b.s))"),
+                nested.toString());
+        assertNotEquals(nested, stated(any.formatted("String.lowercase(b.s)")));
+        assertNotEquals(nested, stated(any.formatted("String.uppercase(String.lowercase(b.s))")));
+    }
+
+    /**
+     * Some of the first piece being a value and some of the first two being it are two statements:
+     * a string split at a code point can hold the value in its second piece alone. Read as one,
+     * a body that asks both would be given a statement and its negation as the same one.
+     */
+    @Test
+    void someOfTheFirstPieceAndSomeOfTheFirstTwoAreNotTheSameStatement() {
+        String any = "if List.any(p -> p == b.t, List.take(%s, String.split(\"@\", b.s)))"
+                + " then 1 else 0";
+        Proposition first = stated(any.formatted("1"));
+        Proposition firstTwo = stated(any.formatted("2"));
+        assertNull(Proposition.firstStopIn(first), first.toString());
+        assertNotEquals(first, firstTwo);
+        assertNotEquals(first, stated("if List.any(p -> p == b.t, String.split(\"@\", b.s))"
+                + " then 1 else 0"));
+    }
+
+    /**
+     * Some piece being the value and some piece being another value are not each other's denial:
+     * {@code "a@b"} has a piece that is {@code "a"} and one that is not, so both hold of it. The
+     * first is whether the value is one of the pieces, which its denial says it is not; the second
+     * says of which piece it is, and is not read.
+     */
+    @Test
+    void somePieceBeingTheValueAndSomePieceBeingAnotherAreNotEachOthersDenial() {
+        String any = "if List.any(p -> p %s b.t, String.split(\"@\", b.s)) then 1 else 0";
+        Proposition equal = stated(any.formatted("=="));
+        assertNull(Proposition.firstStopIn(equal), equal.toString());
+        assertTrue(equal.toString().contains("is among"), equal.toString());
+        Proposition differs = stated(any.formatted("/="));
+        assertTrue(Proposition.leavesSomethingUnread(differs), differs.toString());
+        assertNotEquals(equal.denied(), differs);
+    }
+
+    /**
+     * Whether the value is one of the pieces of a string says something of the string only where
+     * the string always has a piece. A string split at a code point does, and the characters of
+     * the empty string are none: it is one the value is none of, whatever the value is, so the
+     * statement is not one that divides neither.
+     */
+    @Test
+    void theValueBeingOneOfThePiecesIsReadOnlyOfWhatAlwaysHasAPiece() {
+        String any = "if List.any(c -> c == b.t, %s) then 1 else 0";
+        assertNull(Proposition.firstStopIn(stated(any.formatted("String.split(\"@\", b.s)"))));
+        assertTrue(Proposition.leavesSomethingUnread(
+                stated(any.formatted("String.characters(b.s)"))));
+    }
+
+    /**
+     * What each quantifier over the pieces says of a value is read as the value being one of them or
+     * not, and as nothing where it says more: none of them being the value is the value being none
+     * of the pieces whichever way it is written, and every one of them being another value is the
+     * same; every piece being the value, or some piece being another, is which pieces they are.
+     */
+    @Test
+    void whatEachQuantifierOverThePiecesSaysIsWhetherTheValueIsOneOfThem() {
+        String parts = "String.split(\"@\", b.s)";
+        Proposition oneOfThem = stated("if List.any(p -> p == b.t, " + parts + ") then 1 else 0");
+        assertEquals(oneOfThem, stated("if List.any(p -> b.t == p, " + parts + ") then 1 else 0"));
+        Proposition noneOfThem = oneOfThem.denied();
+        assertEquals(noneOfThem, stated("if Bool.not(List.any(p -> p == b.t, " + parts
+                + ")) then 1 else 0"));
+        assertEquals(noneOfThem, stated("if List.all(p -> p /= b.t, " + parts
+                + ") then 1 else 0"));
+        for (String unsaid : List.of("List.any(p -> p /= b.t, " + parts + ")",
+                "List.all(p -> p == b.t, " + parts + ")",
+                "Bool.not(List.any(p -> p /= b.t, " + parts + "))")) {
+            Proposition read = stated("if " + unsaid + " then 1 else 0");
+            assertTrue(Proposition.leavesSomethingUnread(read), unsaid + ": " + read);
         }
     }
 
@@ -462,9 +582,10 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                     %s
                 """).formatted(body.indent(4).strip());
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+        // The errors of what was asked, which is the body checked: a model that does not check
+        // has no body to read, whatever it says.
+        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");

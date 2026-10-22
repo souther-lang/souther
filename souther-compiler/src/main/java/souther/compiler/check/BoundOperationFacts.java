@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -309,6 +310,11 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
     }
 
+    /** How {@code operation} rounds a number to a whole one, or null where it rounds none. */
+    public BoundOperationFact.RoundsToAWholeNumber roundsToAWholeNumber(ValueName operation) {
+        return one(BoundOperationFact.RoundsToAWholeNumber.class, operation);
+    }
+
     /** What holds of the number {@code operation} answers, wherever it is called, in the order
      *  declared. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {
@@ -357,9 +363,35 @@ public final class BoundOperationFacts {
         return held == null ? null : new Pieces(held.separator(), held.string());
     }
 
+    /**
+     * The argument of {@code operation} whose code points it answers, each the number it is — or
+     * null where it answers no such list.
+     */
+    public DeclaredArgument codePointsListedOf(ValueName operation) {
+        BoundOperationFact.ListsTheCodePointsOf held =
+                one(BoundOperationFact.ListsTheCodePointsOf.class, operation);
+        return held == null ? null : held.string();
+    }
+
     /** The separator and the string an operation answers the pieces of; with no separator, each
      *  piece is one code point. */
-    public record Pieces(Optional<DeclaredArgument> separator, DeclaredArgument string) {}
+    public record Pieces(Optional<DeclaredArgument> separator, DeclaredArgument string) {
+
+        /**
+         * How many pieces a call answers whose separator is the one code point {@code separator}:
+         * one more than the times it stands in the string. Every place it stands parts the string
+         * once and the empty pieces are answered too, so this holds of a string of separators
+         * alone and of one that has none.
+         *
+         * <p>A number of the call and not of the operation: which code points are counted is the
+         * separator the call was handed.
+         */
+        public LinearForm<LawNumber<DeclaredArgument>> howManyPartedAt(int separator) {
+            LawNumber<DeclaredArgument> standing = new LawNumber.CodePointsOf<>(
+                    new LawSubject.Argument<>(string), CodePointClass.of(CodePoints.of(separator)));
+            return new LinearForm<>(ExactRatio.ONE, Map.of(standing, ExactRatio.ONE));
+        }
+    }
 
     /**
      * The option whose value {@code operation} hands its closure, and the closure, where what it
@@ -435,11 +467,17 @@ public final class BoundOperationFacts {
     public record Assembled(DeclaredArgument source, DeclaredArgument closure,
                             PieceOfAnElement piece) {}
 
-    /** The count and the list {@code operation} answers the elements of that list from that index
-     *  on of, or null where nothing says it does. */
-    public BoundOperationFact.HoldsTheElementsFrom holdsTheElementsFrom(ValueName operation) {
-        return one(BoundOperationFact.HoldsTheElementsFrom.class, operation);
+    /** The count and the list {@code operation} answers the elements of that list kept by that
+     *  index of, and which side of it it keeps — or null where nothing says it does. */
+    public KeptByIndex holdsTheElementsByIndex(ValueName operation) {
+        BoundOperationFact.HoldsTheElementsByIndex held =
+                one(BoundOperationFact.HoldsTheElementsByIndex.class, operation);
+        return held == null ? null : new KeptByIndex(held.count(), held.list(), held.kept());
     }
+
+    /** The count an operation keeps the elements of a list by, that list, and how the index of
+     *  each element kept stands to the count. */
+    public record KeptByIndex(DeclaredArgument count, DeclaredArgument list, Rel kept) {}
 
     /** Which argument {@code operation} puts in which, or null where it puts nothing in. Read by
      *  the proofs of what the library's written operations build, and by no reader of a
@@ -606,6 +644,52 @@ public final class BoundOperationFacts {
      *  words of a walk, for the proofs of the library's written operations. */
     List<LawProposition<Slot>> relationsOf(ValueName operation) {
         return operation == null ? List.of() : relations.getOrDefault(operation, List.of());
+    }
+
+    /**
+     * What {@code operation} adds to one of its arguments beside what that argument holds
+     * ({@link AddsWhatItDoesNotHold}), where both its law of how many it answers and what is
+     * known of what its answer holds say so — or null where either says something else.
+     *
+     * <p>What its answer holds is what is stated of it beside others: declared of a kernel, or a
+     * lemma of an operation the library writes, which is here only once its body has proved it.
+     */
+    public AddsWhatItDoesNotHold addsWhatItDoesNotHold(ValueName operation) {
+        if (!(settled(operation, OperationLaw.Observed.SIZE) instanceof Settled.ByALaw(
+                OperationLaw<DeclaredArgument> law, var _))) {
+            return null;
+        }
+        List<LawProposition<Slot>> beside = new ArrayList<>(relationsOf(operation));
+        several.getOrDefault(BoundOperationFact.HasARelatedLemma.class, Map.of())
+                .getOrDefault(operation, List.of())
+                .forEach(each -> beside.add(((BoundOperationFact.HasARelatedLemma) each).holds()));
+        return AddsWhatItDoesNotHold.of(operation, law, beside, this::askedWhetherItHolds);
+    }
+
+    /**
+     * How {@code operation} asks whether a container holds a value as {@code of} says: where its
+     * settled law of truth says its answer is true exactly where some element of the container it
+     * is handed, or some key of it, is the value it is handed beside — or null where it says
+     * anything else.
+     */
+    public AddsWhatItDoesNotHold.Asked askedWhetherItHolds(ValueName.Stdlib.Operation operation,
+                                                          AddsWhatItDoesNotHold.Of of) {
+        return settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw.Observation<DeclaredArgument>(AnswerAspect aspect,
+                        LawProposition.SomeElement<DeclaredArgument>(
+                                DeclaredArgument in,
+                                LawProposition.Same<DeclaredArgument>(
+                                        LawSubject<DeclaredArgument> named,
+                                        LawSubject.Argument<DeclaredArgument>(
+                                                DeclaredArgument value),
+                                        boolean alike), boolean some)), var _)
+                && aspect == AnswerAspect.TRUTH && alike && some
+                && named.equals(switch (of) {
+                    case ELEMENTS -> new LawSubject.ElementOf<>(in);
+                    case KEYS -> new LawSubject.KeyOf<>(in);
+                })
+                && value.position() != in.position() && in.of().arity() == 2
+                ? new AddsWhatItDoesNotHold.Asked(operation, value, in) : null;
     }
 
     /**
@@ -828,6 +912,12 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.AccumulatesItsContainer.class);
     }
 
+    /** Whether {@code operation} answers how many elements the container it is given holds. */
+    public boolean answersHowManyItHolds(ValueName operation) {
+        BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven taken = numberTakenOf(operation);
+        return taken != null && taken.how() instanceof TakenAs.HowManyItHolds;
+    }
+
     /** The number {@code operation} is declared to answer, taken of which of its arguments, or
      *  null where none is declared. */
     BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven numberTakenOf(ValueName operation) {
@@ -915,5 +1005,11 @@ public final class BoundOperationFacts {
      *  answers. */
     public boolean everyAnswerItCanGiveHasASourceValue(ValueName operation) {
         return one(BoundOperationFact.EveryAnswerItCanGiveHasASourceValue.class, operation) != null;
+    }
+
+    /** Whether the least and the greatest number {@code operation} answers are where what it is
+     *  read out of stops, and not lines of the operation. */
+    public boolean endsAreWhereTheRepresentationStops(ValueName operation) {
+        return one(BoundOperationFact.EndsAreWhereTheRepresentationStops.class, operation) != null;
     }
 }

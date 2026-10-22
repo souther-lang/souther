@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.QuotientByAValue;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -19,6 +20,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A quotient by a constant is arithmetic the reading composes, and what the constant is is what the
@@ -37,7 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * <p>And the two shapes outside the fragment are here for what they are, and not as the shapes
  * somebody thought of: a divisor with a position in it, and a position the whole quotient is taken
  * under. The second is the one a scalar multiply would admit from either side, so it says that this
- * rule is not that one read symmetrically.
+ * rule is not that one read symmetrically. Neither is a form, and each held against a number is
+ * read all the same, on each sign of its divisor ({@link QuotientByAValue}).
  *
  * <p>Read off the reading itself rather than off a report below it. What a comparison cuts is what
  * this is about, and everything a reader sees is downstream of it: a line at the place next to the
@@ -78,6 +81,25 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
                 constructs Low, High
             let byAPosition (x, y) = if x / y < 30 then Low { v = 1 } else High { v = 2 }
             example byAPosition
+                | "under" : (1, 1) -> Low { v = 1 }
+
+            behavior aroundAQuotient : (x: Int, y: Int) -> Level
+                constructs Low, High
+            let aroundAQuotient (x, y) = if x / y + x < 30 then Low { v = 1 } else High { v = 2 }
+            example aroundAQuotient
+                | "under" : (1, 1) -> Low { v = 1 }
+
+            behavior aMovedQuotient : (x: Int, y: Int) -> Level
+                constructs Low, High
+            let aMovedQuotient (x, y) =
+                if 30 - 2 * (x / y + 1) > 0 then Low { v = 1 } else High { v = 2 }
+            example aMovedQuotient
+                | "under" : (1, 1) -> Low { v = 1 }
+
+            behavior itsQuotient : (x: Int, y: Int) -> Level
+                constructs Low, High
+            let itsQuotient (x, y) = if x / y < 14 then Low { v = 1 } else High { v = 2 }
+            example itsQuotient
                 | "under" : (1, 1) -> Low { v = 1 }
 
             behavior anInverse : (x: Int) -> Level
@@ -146,26 +168,53 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
     }
 
     /**
-     * A divisor with a position in it is no constant, and neither is a quotient taken under one.
+     * A divisor with a position in it is no constant, so the quotient is no form, and a value
+     * beside it with a position in it is no line.
      *
      * <p>Said as the rule being reported unread rather than as nothing being there. Those are
      * opposite facts about a model — one says this compiler fell short and the other says the model
      * draws no line — and a reading that had lost every quotient would answer the second to both.
-     *
-     * <p>The inverse is the one that says this rule is not a scalar multiply read symmetrically. A
-     * product is linear from either side and admits {@code 2 * x} as readily as {@code x * 2}; a
-     * quotient admits one side, and {@code 1 / x} is the side it does not.
      */
     @Test
     void aDivisorWithAPositionInItIsNoConstant() {
-        assertEquals(List.of(), cutsOf("byAPosition"));
-        assertEquals(List.of(), cutsOf("anInverse"));
-        assertFalse(reasonsOf("byAPosition").isEmpty(),
+        assertEquals(List.of(), cutsOf("aroundAQuotient"));
+        assertFalse(reasonsOf("aroundAQuotient").isEmpty(),
                 "a rule this could not read is reported as one");
-        assertFalse(reasonsOf("anInverse").isEmpty(),
-                "and so is a quotient taken under a position");
         assertEquals(List.of(), reasonsOf("written"),
                 "where the quotient is read there is nothing to report");
+    }
+
+    /**
+     * A quotient by a position held against a number is still read, as the comparison of the
+     * dividend with the number times the divisor on each sign of the divisor
+     * ({@link QuotientByAValue}): {@code x / y < 30} is a line on
+     * {@code x - 30 * y} and the divisor's own line at nought.
+     *
+     * <p>The inverse is the one that says this rule is not a scalar multiply read symmetrically: a
+     * quotient admits a number on one side only, and {@code 1 / x} is read by the divisor's signs
+     * and not as {@code x} weighed by anything.
+     */
+    @Test
+    void aQuotientByAPositionHeldAgainstANumberIsReadOnEachSignOfTheDivisor() {
+        // A line over two positions leaves what each settles alone unworked out, as `x < 30 * y`
+        // written out does, so what is held of that one is the line it draws. And the inverse of
+        // a whole number is below thirty on both signs of it, so its lines turn nothing.
+        assertEquals(List.of("x ComparisonLineTurningNothing[]"), reasonsOf("anInverse"));
+        assertTrue(cutsOf("byAPosition").stream().anyMatch(cut ->
+                cut.startsWith("LinearForm[constant=0, coefs={x=1, y=-30}]")), cutsOf("byAPosition")
+                .toString());
+        assertTrue(cutsOf("byAPosition").contains("y 0|1 belongs=BELOW"),
+                cutsOf("byAPosition").toString());
+    }
+
+    /**
+     * A quotient moved and weighed by numbers is the quotient against another number:
+     * {@code 30 - 2 * (x / y + 1) > 0} is {@code x / y < 14}, and draws its lines.
+     */
+    @Test
+    void aQuotientMovedAndWeighedByNumbersIsTheQuotientAgainstANumber() {
+        assertFalse(cutsOf("itsQuotient").isEmpty(), "the quotient against a number is read");
+        assertEquals(cutsOf("itsQuotient"), cutsOf("aMovedQuotient"));
     }
 
     /**
@@ -259,7 +308,7 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
     /**
      * The model, compiled once for every question put to it.
      *
-     * <p>One source and nine behaviors, and each of the readings below asks about one of them —
+     * <p>One source and twelve behaviors, and each of the readings below asks about one of them —
      * compiled where it is asked, the class pays for the whole model once per question. Read when a
      * question asks rather than in an initialiser, so a model that stopped compiling fails the
      * reading that met it instead of taking every method down with the class.
@@ -302,6 +351,8 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
                             + " on " + apart.on() + ", " + apart.against();
             case BorderQuantity.HowMany count -> count.left();
             case BorderQuantity.RemainderOfAForm remainder -> remainder.left();
+            case BorderQuantity.RemainderOfAPair remainder -> remainder.left();
+            case BorderQuantity.ProductOfAPair product -> product.left();
         };
     }
 }

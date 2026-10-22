@@ -13,6 +13,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
@@ -20,7 +21,6 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -766,7 +766,7 @@ final class Predicates {
                        boolean positive, boolean decidesFalse, Discharge discharge) {
         // What is owed is the clause, so only the readings that are it: one that only follows from
         // it, established, would discharge a clause that asks more.
-        List<StatedComparison> readings =
+        List<ComparisonReadings.Reading> readings =
                 Conditions.comparisonsStatedBy(terms, inv, at).theCondition();
         if (readings.isEmpty()) {
             return owedBy(inv, at, unnamed, positive, decidesFalse);
@@ -775,8 +775,9 @@ final class Predicates {
         // the reading order is for. Reading a predicate never takes a reading away, so a reading
         // that came to nothing leaves the next one to answer rather than answering for it.
         Owed answer = null;
-        for (StatedComparison stated : readings) {
-            answer = owedBy(stated, inv, at, unnamed, positive, decidesFalse, discharge);
+        for (ComparisonReadings.Reading read : readings) {
+            answer = owedBy(read.stated(), inv, read.at(), unnamed, positive, decidesFalse,
+                    discharge);
             if (!answer.unreadable()) {
                 return answer;
             }
@@ -819,7 +820,7 @@ final class Predicates {
             // The same clause read as the cases of whatever chooses inside it. Both readings are
             // kept: a guard may name the call itself, which the clause as it stands is what
             // settles, and reading it case by case never takes that away.
-            piecewise = piecewiseOf(numeric, stated.left(), stated.right(), at);
+            piecewise = piecewiseOf(numeric);
         }
         return owing(inv, foldOf(folded), numeric, piecewise, Conditions.polar(stated, positive),
                 unnamed, at);
@@ -932,7 +933,7 @@ final class Predicates {
      * already standing where it read a field, folded. {@code null} where it does not fold — which is
      * every clause reading anything computed at run time. */
     Boolean decidedAt(Core inv, Denotations at) {
-        Object folded = Terms.folded(inv, terms.symbols(), at);
+        Object folded = terms.folded(inv, at);
         return folded instanceof Boolean b ? b : null;
     }
 
@@ -947,8 +948,8 @@ final class Predicates {
      * states of {@code 1} and {@code 2} is settled here.
      */
     private Boolean decidedAt(StatedComparison stated, Denotations at) {
-        Object left = Terms.folded(stated.left(), terms.symbols(), at);
-        Object right = Terms.folded(stated.right(), terms.symbols(), at);
+        Object left = terms.folded(stated.left(), at);
+        Object right = terms.folded(stated.right(), at);
         return (left == null || right == null) ? null
                 : ConstEval.stands(stated.claim().statedRelation(), left, right);
     }
@@ -993,7 +994,140 @@ final class Predicates {
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
-        return new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+        Assumed read = new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+        Known after = read.known();
+        // A path that holds no choice, or one the looking was given up along, has nothing more to
+        // be asked here.
+        if (after.reachesNothing() || !after.holdsAChoice()
+                || (k.holdsAChoice() && k.wayIn() == null)) {
+            return read;
+        }
+        Known past = wayPast(rawCond, positive, at, k, after);
+        if (past != null) {
+            return new Assumed(after.throughWay(past, after.triesLeft()), read.taken(),
+                    read.shapeRead(), read.notTaken());
+        }
+        int[] tries = {after.triesLeft()};
+        return switch (aWayThrough(after, after.heldAsOneOfTheirParts(), 0, tries)) {
+            case WayFound(Known way) -> new Assumed(after.throughWay(way, tries[0]), read.taken(),
+                    read.shapeRead(), read.notTaken());
+            // Read to the end: what the conditions come to is that nothing gets past them.
+            case NoWay _ -> new Assumed(after.reachingNothing(), true, true, read.notTaken());
+            case PastTheBound _ -> new Assumed(after.throughWay(null, 0), read.taken(),
+                    read.shapeRead(), read.notTaken());
+        };
+    }
+
+    /**
+     * A way past {@code cond}, which taking it in over {@code k} came to {@code after}: the way
+     * {@code k} had through what it held, with {@code cond} taken in as well and a part taken of
+     * each condition that came to be held since — or null where that leaves nothing.
+     *
+     * <p>Where a path gets through its choices is a question about every way of choosing a part of
+     * each, and asked afresh at each condition taken in it is that many questions each time. Asked
+     * of the one way known to get through, it is one: the condition read once more, over that way.
+     * Where {@code k} held no choice the way is {@code after} itself, and nothing is read again.
+     */
+    private Known wayPast(Core cond, boolean positive, Denotations at, Known k, Known after) {
+        if (!k.holdsAChoice()) {
+            return aPartOfEachSince(after, 0);
+        }
+        Known before = k.wayIn();
+        return aPartOfEachSince(new Assuming(this).read(cond, positive, at, terms::inside)
+                .from(before).known(), before.heldCount());
+    }
+
+    /**
+     * {@code way} with a part taken in of every condition it holds past the first {@code taken} —
+     * the first of each that leaves something — or null where one of them leaves nothing.
+     *
+     * <p>Every condition, those a part taken in came to hold among them: a part may itself be a
+     * choice, and a way that took the choice it is part of and not the one inside it holds a
+     * condition none of whose parts it has taken, which a condition taken in later is not asked
+     * against. So the conditions are taken until none is left that was not, and not over the ones
+     * there were when this began.
+     */
+    private Known aPartOfEachSince(Known way, int taken) {
+        Known out = way;
+        int done = taken;
+        while (!out.reachesNothing() && out.heldCount() > done) {
+            int upTo = out.heldCount();
+            for (Known.OneOf condition : out.heldSince(done)) {
+                Known through = null;
+                for (ClauseExpr part : partsOf(condition)) {
+                    Known taking = takingPart(condition, part, out).known();
+                    if (!taking.reachesNothing()) {
+                        through = taking;
+                        break;
+                    }
+                }
+                if (through == null) {
+                    return null;
+                }
+                out = through;
+            }
+            done = upTo;
+        }
+        return out.reachesNothing() ? null : out;
+    }
+
+    /** What looking for a way through the conditions a state holds came to. */
+    private sealed interface Through permits WayFound, NoWay, PastTheBound {}
+
+    /** A state with one part taken in of every condition it holds, which reaches something. */
+    private record WayFound(Known way) implements Through {}
+
+    /** Every way of choosing a part of each condition was looked at, and none reaches anything. */
+    private record NoWay() implements Through {}
+
+    /** The ways looked at reach nothing, and the tries ran out before the rest were. */
+    private record PastTheBound() implements Through {}
+
+    /**
+     * A way through the conditions in {@code pending} from {@code next} on, over {@code k}: one
+     * condition at a time in the order they are held, one part at a time in the order it was
+     * written, and the conditions a part came to hold taken after the ones before them.
+     *
+     * <p>The first found is the answer. Each part read spends one of {@code tries}, the count this
+     * path has left across every look along it ({@link Known.Choices}); where it runs out the look
+     * stops, and says it stopped rather than that it found nothing.
+     */
+    private Through aWayThrough(Known k, List<Known.OneOf> pending, int next, int[] tries) {
+        if (next == pending.size()) {
+            return new WayFound(k);
+        }
+        Known.OneOf condition = pending.get(next);
+        List<Known> entered = new ArrayList<>();
+        for (ClauseExpr part : partsOf(condition)) {
+            if (tries[0] == 0) {
+                return new PastTheBound();
+            }
+            tries[0]--;
+            Known taking = takingPart(condition, part, k).known();
+            if (!taking.reachesNothing()) {
+                entered.add(taking);
+            }
+        }
+        if (entered.isEmpty()) {
+            return new NoWay();
+        }
+        boolean cut = false;
+        for (Known way : entered) {
+            List<Known.OneOf> inside = way.heldSince(k.heldCount());
+            Through further;
+            if (inside.isEmpty()) {
+                further = aWayThrough(way, pending, next + 1, tries);
+            } else {
+                List<Known.OneOf> rest = new ArrayList<>(pending.subList(next + 1, pending.size()));
+                rest.addAll(inside);
+                further = aWayThrough(way, rest, 0, tries);
+            }
+            if (further instanceof WayFound) {
+                return further;
+            }
+            cut |= further instanceof PastTheBound;
+        }
+        return cut ? new PastTheBound() : new NoWay();
     }
 
     /**
@@ -1016,6 +1150,106 @@ final class Predicates {
     Assumed assumeHolding(Proposition stated, Known k, Denotations at,
                           MeaningAssumptions.InputPlaces places) {
         return MeaningAssumptions.assumed(stated, true, k, terms, places, at);
+    }
+
+    /**
+     * {@code k} with {@code condition} taken apart: once with each of its two parts taken in alone,
+     * in the order they were written.
+     *
+     * <p>Every value the condition admits is admitted by one of the parts, so a question asked of
+     * each of these and answered alike by all of them is answered of {@code k}. Neither part is
+     * taken under the other's denial. The parts may overlap, and a value in both is asked about
+     * twice, which costs a reading and changes no answer that every way has to agree on.
+     *
+     * <p>Each part is taken by the reading the whole was ({@link Assuming}), under the bindings the
+     * condition stood in and over what is known here — which may be more than was known where it
+     * stood. That is the point of keeping it: a part read against a guard written after it can be
+     * one nothing enters, and the way it would have been is left out by whoever asks.
+     *
+     * <p>Each way still holds {@code condition}; which conditions a reader has taken apart is the
+     * reader's to keep.
+     *
+     * <p>And each way speaks of exactly what {@code k} does. Two questions are asked of a condition
+     * and this answers one of them: what follows from it, which is what a way is for, and what its
+     * author named, which is settled where the condition was taken in as written — a choice names
+     * the two halves it composes and nothing under them. A part taken in alone is read as though it
+     * had been written alone, and would name what its comparisons compare; kept, that would make
+     * which clauses are read at a construction turn on whether anything took the choice apart.
+     * So what a way knows of the values is the part's, and what it has named is the whole's.
+     */
+    List<Known> eachWayOf(Known.OneOf condition, Known k) {
+        List<Known> ways = new ArrayList<>();
+        for (Assumed way : takingEachPartOf(condition, k)) {
+            ways.add(way.known());
+        }
+        return ways;
+    }
+
+    /** What taking each part of {@code condition} in alone over {@code k} came to, the state and
+     *  what the reading made of the part ({@link #eachWayOf}). */
+    private List<Assumed> takingEachPartOf(Known.OneOf condition, Known k) {
+        List<Assumed> ways = new ArrayList<>();
+        for (ClauseExpr part : partsOf(condition)) {
+            ways.add(takingPart(condition, part, k));
+        }
+        return ways;
+    }
+
+    private static List<ClauseExpr> partsOf(Known.OneOf condition) {
+        return List.of(condition.of().left(), condition.of().right());
+    }
+
+    /**
+     * Where a test in this package counts the parts of held conditions read, and null everywhere
+     * else. Reading a part is the unit everything that takes a choice apart spends, so it is where
+     * how often that happens is counted.
+     */
+    static long[] COUNTING_PARTS_READ;
+
+    /** What taking {@code part} of {@code condition} in alone over {@code k} came to, speaking of
+     *  what {@code k} speaks of ({@link #eachWayOf}). */
+    private Assumed takingPart(Known.OneOf condition, ClauseExpr part, Known k) {
+        long[] counting = COUNTING_PARTS_READ;
+        if (counting != null) {
+            counting[0]++;
+        }
+        Assumed taken = new Assuming(this).read(part, condition.at(), terms::inside, null).from(k);
+        return new Assumed(taken.known().speakingAs(k), taken.taken(), taken.shapeRead(),
+                taken.notTaken());
+    }
+
+    /**
+     * {@code whole} — what taking {@code condition} in as it stands came to — with what its parts
+     * say that the whole could not.
+     *
+     * <p>Each part is taken in alone over what is known here, which is the rule a reading of a
+     * condition's meaning takes a disjunction by ({@link MeaningAssumptions}) and is decided the same
+     * way. A part that leaves nothing is no way a run comes here, and it is dropped. Where none is
+     * left, nothing is reached; where one is, the condition holds as that part and is taken in as
+     * it; where both are, the condition is held as one of them, for a reader whose question its
+     * parts answer to take apart ({@link #eachWayOf}).
+     *
+     * <p>What the condition names is what {@code whole} named, wherever this lands: a way names
+     * nothing its whole did not, so a choice one part of which is left names its two halves as a
+     * choice both parts of which are left does.
+     *
+     * <p>And what the reading made of it is what was read. None left is read to the end, as a
+     * condition no case satisfies is; one left is that part's reading, which took the part in; both
+     * left is the whole's, which took neither.
+     */
+    private Assumed takingOneOf(Known.OneOf condition, Assumed whole) {
+        List<Assumed> left = new ArrayList<>();
+        for (Assumed way : takingEachPartOf(condition, whole.known())) {
+            if (!way.known().reachesNothing()) {
+                left.add(way);
+            }
+        }
+        return switch (left.size()) {
+            case 0 -> new Assumed(whole.known().reachingNothing(), true, true);
+            case 1 -> left.getFirst().alsoRead(whole.taken(), whole.shapeRead());
+            default -> new Assumed(whole.known().holdingOneOf(condition), whole.taken(),
+                    whole.shapeRead(), whole.notTaken());
+        };
     }
 
     /**
@@ -1050,7 +1284,8 @@ final class Predicates {
          *
          * <p>One of a choice's parts holds and this cannot say which, so taking either of them in
          * would rule out values the condition admits. What is left of it is that the author named
-         * the two, which the part it is read as says.
+         * the two, which the part it is read as says, and the choice itself, held for a reader that
+         * takes it apart ({@link Known#oneOf}).
          */
         @Override
         public Descent<Assumption> at(ClauseExpr.Joined join) {
@@ -1096,16 +1331,18 @@ final class Predicates {
         // it is not asked for one. What it names is the two halves the shape composed, and without
         // saying they were named a value one of them computes is one nothing has ever spoken of.
         if (part instanceof ClauseExpr.Joined join) {
-            return taking(cond, join.writtenHalves(), k, at, positive);
+            Assumed whole = taking(cond, join.writtenHalves(), k, at, positive);
+            return join.how() != ConditionJoin.EITHER || whole.known().reachesNothing() ? whole
+                    : takingOneOf(new Known.OneOf(join, at), whole);
         }
-        List<StatedComparison> readings =
+        List<ComparisonReadings.Reading> readings =
                 Conditions.comparisonsStatedBy(terms, cond, at).holdingWhere(positive);
         if (readings.isEmpty()) {
             return taking(cond, List.of(), k, at, positive);
         }
         Assumed so = new Assumed(k, false, false);
-        for (StatedComparison stated : readings) {
-            Assumed one = taking(stated, so.known(), at, positive);
+        for (ComparisonReadings.Reading read : readings) {
+            Assumed one = taking(read.stated(), so.known(), read.at(), positive);
             so = one.alsoRead(so.taken(), so.shapeRead());
         }
         return so;
@@ -1384,40 +1621,46 @@ final class Predicates {
             return false;
         }
         Piecewise cases = piecewiseOf(
-                new NumericConstraint(between, stated.relationUnder(positive)),
-                stated.left(), stated.right(), at);
+                new NumericConstraint(between, stated.relationUnder(positive)));
         return cases != null && cases.refutedBy(k.numbers());
     }
 
     /**
-     * {@code owed} read as the cases of the one operation inside it that answers a value it was
-     * given, or null where there is no such operation, where there is more than one, or where a case
-     * could not be read.
+     * {@code owed} read as the cases of the one value inside it that is one of several, or null
+     * where there is no such value, where there is more than one, or where a case could not be read.
+     *
+     * <p>The cases are the arms of the recipe the value was recorded with ({@link Derivation.Chosen}):
+     * one of the values a call was given, what a case of a library operation's definition computes
+     * ({@code Int.abs}, {@code Int.compare}), how many a container holds case by case
+     * ({@code List.take}), or an arm of a choice the source wrote. One account of what each arm
+     * answers and what choosing it settles, so a value read case by case here and spanned over its
+     * arms there is read from the same arms.
      *
      * <p>The substitution is made in the form and not in the expression. What the clause reads may be
      * the call as written or a name that was given it, and both arrive here as the one atom the call
      * keys as — so replacing the atom answers both, where rewriting the expression would answer the
      * first and leave the second saying nothing.
      */
-    private Piecewise piecewiseOf(NumericConstraint owed, Core left, Core right, Denotations at) {
-        Map<FactSubject, Choice> choosing = new LinkedHashMap<>();
-        // One account of the names followed, over both sides: a name is the same value whichever
-        // side of the comparison read it, so following it again would put nothing new in the map.
-        Set<BindingId> following = new HashSet<>();
-        chosenCalls(left, at, choosing, following);
-        chosenCalls(right, at, choosing, following);
-        choosing.keySet().retainAll(owed.form().coefs().keySet());
-        if (choosing.size() != 1) {
+    private Piecewise piecewiseOf(NumericConstraint owed) {
+        FactSubject atom = null;
+        List<Derivation.Chosen.Arm> arms = null;
+        for (FactSubject each : owed.form().coefs().keySet()) {
+            List<Derivation.Chosen.Arm> its = armsOf(terms.knowledgeOf(each).computation());
+            if (its != null) {
+                if (atom != null) {
+                    return null;
+                }
+                atom = each;
+                arms = its;
+            }
+        }
+        if (atom == null) {
             return null;
         }
-        FactSubject atom = choosing.keySet().iterator().next();
         ExactRatio coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
-        for (Choice.Arm arm : choosing.get(atom).arms()) {
-            LinearForm<FactSubject> answered = terms.affineOf(arm.answers(), at);
-            if (answered == null) {
-                return null;
-            }
+        for (Derivation.Chosen.Arm arm : arms) {
+            LinearForm<FactSubject> answered = arm.answer();
             // The rule with the atom taken out and what this arm answers put in its place. A form
             // no ratio holds is a reading this does not make, and the clause keeps the reading it
             // has without the cases.
@@ -1442,7 +1685,7 @@ final class Predicates {
             }
             given.add(new NumericConstraint(answeredHere, Rel.EQ));
             kinds.putAll(terms.kindsOf(answeredHere));
-            for (NumericConstraint stands : Conditions.settledBy(terms, arm.decidedBy(), at)) {
+            for (NumericConstraint stands : arm.settles()) {
                 given.add(stands);
                 kinds.putAll(terms.kindsOf(stands.form()));
             }
@@ -1452,31 +1695,26 @@ final class Predicates {
         return new Piecewise(List.copyOf(cases));
     }
 
-    /** Every call inside {@code e} that answers one of the values it was given, as the choice it is,
-     * by the atom it keys as. A name is what it was given, as everywhere else a value is read.
-     *
-     * <p>Which calls those are is asked of {@link Choice} and not of the table it reads. A reader
-     * here that knew the table would be a second interpretation of it, and the two would come apart
-     * the day the library changed which argument a case answers. */
-    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Choice> out,
-                             Set<BindingId> following) {
-        if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
-            // A name followed once. What it was given is one value, so everything it holds is in
-            // the map after the first read of it; following it per occurrence walks what the names
-            // below it multiply out to, over a body that names them one more time.
-            if (following.add(r.binding())) {
-                chosenCalls(at.valueOf(r.binding()), at, out, following);
-            }
-            return;
+    /** The arms of a value recorded as one of several, alone or beside another account of it
+     *  ({@link Derivation.Each}) — or null where it was recorded as no such value. */
+    private static List<Derivation.Chosen.Arm> armsOf(AtomKnowledge.Computation how) {
+        if (!(how instanceof AtomKnowledge.Computation.Derived(Derivation recipe))) {
+            return null;
         }
-        if (e instanceof Core.PreservedCall call) {
-            Choice choice = Choice.of(call);
-            FactSubject atom = choice == null ? null : terms.atomOf(call, at);
-            if (atom != null) {
-                out.put(atom, choice);
+        return switch (recipe) {
+            case Derivation.Chosen chosen -> chosen.arms();
+            case Derivation.Each each -> {
+                for (Derivation one : each.recipes()) {
+                    if (one instanceof Derivation.Chosen chosen) {
+                        yield chosen.arms();
+                    }
+                }
+                yield null;
             }
-        }
-        Core.forEachChild(e, child -> chosenCalls(child, at, out, following));
+            case Derivation.Product _, Derivation.TruncatingQuotient _,
+                 Derivation.TruncatingRemainder _, Derivation.RoundedQuotient _,
+                 Derivation.HoldsSomethingWhere _ -> null;
+        };
     }
 
 

@@ -665,7 +665,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 return souther.compiler.partition.InteractionRequirements.NONE;
             }
             return souther.compiler.partition.InteractionRequirements.of(behavior,
-                    here.interactions(), subject.axes(),
+                    here.interactions(), here.notJoined(), subject.axes(),
                     db.ask(new Front.Adequacy()).value().measures().cellsPerGroup());
         }
 
@@ -955,7 +955,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 case Generator.Watched.Ran(var account) ->
                         combinations.met(owed, claim -> claim.satisfiedBy(account))
                                 ? new Settlement.Settles() : new Settlement.DoesNotSettle();
-                case Generator.Watched.NoAccount _ ->
+                case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ ->
                         new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
             };
         }
@@ -1014,7 +1014,7 @@ public record Settlements(List<ObligationIdentity> requested,
                             new Settlement.Undetermined(
                                     Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
                 };
-                case Generator.Watched.NoAccount _ ->
+                case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ ->
                         new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
             };
         }
@@ -1073,7 +1073,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 case Generator.Watched.Ran(var account) ->
                         target.occurrences().stream().anyMatch(account::lit)
                                 ? new Settlement.Settles() : new Settlement.DoesNotSettle();
-                case Generator.Watched.NoAccount _ ->
+                case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ ->
                         new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
             };
         }

@@ -98,13 +98,7 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
 
     /** Whether the two are one place a run passes coming out two ways. */
     private static boolean otherWayOut(ControlPlace one, ControlPlace other) {
-        return switch (one) {
-            case ControlPlace.Outcome outcome -> other instanceof ControlPlace.Outcome that
-                    && that.at().equals(outcome.at()) && that.held() != outcome.held();
-            case ControlPlace.Arm arm -> other instanceof ControlPlace.Arm that
-                    && that.arm().fork().equals(arm.arm().fork())
-                    && that.arm().part() != arm.arm().part();
-        };
+        return one.excludes(other);
     }
 
     // What a run is seen doing does not turn on what a name reads.
@@ -122,17 +116,12 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
     }
 
     /**
-     * Where a run is seen bringing {@code value} out {@code held}: at the comparison it is, or at
-     * the application of one of the language's operations whose answer it is — or empty where the
-     * plan records neither.
+     * Where a run is seen bringing {@code value} out {@code held}: at the application of one of
+     * the language's operations whose answer it is, or at the comparison it is — or empty where
+     * the plan records neither ({@link CoverageSites.Plan#outcomeAt}).
      */
     private Optional<ControlPlace.Outcome> outcomeAt(Core value, boolean held) {
-        Core e = Core.withoutStanding(value);
-        if (e instanceof Core.Binary comparison) {
-            return CoverageNaming.outcomeAt(plan, comparison, held);
-        }
-        return plan.applicationAnsweringAt(e)
-                .flatMap(application -> plan.outcomeOf(application, held));
+        return plan.outcomeAt(value, held);
     }
 
     @Override

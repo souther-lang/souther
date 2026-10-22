@@ -22,6 +22,10 @@ import java.util.Objects;
  * the ones that are the condition ({@link #theCondition}), and a reading that only follows from it
  * is never one it can turn round.
  *
+ * <p><b>A reading is read where it was derived.</b> The two values an order is of are the
+ * arguments of a call that may stand under names the comparison as written does not hold, so each
+ * reading carries the environment its sides are read in, and a reader reads them there.
+ *
  * <p><b>The order is a reading order.</b> A comparison derived from another comes before the one it
  * was derived from, so repeated composition puts the deepest reading first and the comparison as
  * written last. That is not a ranking: the two are about different values. Which one a reader takes
@@ -37,10 +41,11 @@ final class ComparisonReadings {
      * @param isTheCondition whether it holds exactly where the condition does, and not only
      *                      wherever the condition does
      */
-    record Reading(StatedComparison stated, boolean isTheCondition) {
+    record Reading(StatedComparison stated, Denotations at, boolean isTheCondition) {
 
         Reading {
             Objects.requireNonNull(stated, "a reading states a comparison");
+            Objects.requireNonNull(at, "and its sides are read somewhere");
         }
     }
 
@@ -62,10 +67,9 @@ final class ComparisonReadings {
      * the failure of a condition is no failure of what it only proves. Each is still the comparison
      * as it stands where the condition holds, and the caller states it under {@code positive}.
      */
-    List<StatedComparison> holdingWhere(boolean positive) {
+    List<Reading> holdingWhere(boolean positive) {
         return inReadingOrder.stream()
                 .filter(reading -> positive || reading.isTheCondition())
-                .map(Reading::stated)
                 .toList();
     }
 
@@ -76,10 +80,9 @@ final class ComparisonReadings {
      * <p>Not what it only proves. Established, that would discharge a clause that asks more, and a
      * clause taking the first reading it can read would take the weaker one in place of itself.
      */
-    List<StatedComparison> theCondition() {
+    List<Reading> theCondition() {
         return inReadingOrder.stream()
                 .filter(Reading::isTheCondition)
-                .map(Reading::stated)
                 .toList();
     }
 }

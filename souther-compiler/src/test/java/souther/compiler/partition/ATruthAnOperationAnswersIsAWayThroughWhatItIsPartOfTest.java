@@ -135,13 +135,14 @@ class ATruthAnOperationAnswersIsAWayThroughWhatItIsPartOfTest {
     /**
      * What a predicate over a list written out applies an operation to is a written value, so the
      * operation's answer is the same every time and is read off that value — in the tree where the
-     * operation stands, the one this is asked of.
+     * operation stands, the one this is asked of. Folded as every written value is, it is read as
+     * the marks above are: "x" contains "x", so the fork is taken whatever the flag.
      */
     @Test
     void anOperationAppliedToAWrittenElementIsTheSameEveryTime() {
-        assertEquals(2, DecisionReadings.readToTheEnd(MODEL, "writtenWords").size(),
-                "what a written word contains is the same every time, and which answer is not"
-                        + " read: neither way of it is a rule, and the way past it is one");
+        assertEquals(1, DecisionReadings.readToTheEnd(MODEL, "writtenWords").size(),
+                "what a written word contains is the same every time and is read off the word:"
+                        + " the written part holds every time, and the flag is never asked");
         assertEquals(1, DecisionReadings.readToTheEnd(MODEL, "writtenLists").size(),
                 "and one of the written lists is empty, every time");
     }

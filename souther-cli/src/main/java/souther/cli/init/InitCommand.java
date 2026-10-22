@@ -1,11 +1,13 @@
 package souther.cli.init;
 
+import souther.cli.Environment;
 import souther.cli.ProjectVersion;
 import souther.compiler.Reserved;
 import souther.compiler.diag.Messages;
 import souther.compiler.text.DisplayColumns;
 import souther.compiler.meta.ModuleMetadata;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -34,20 +36,28 @@ public final class InitCommand {
 
     private InitCommand() {}
 
-    public static int run(String[] args, Locale locale, PrintStream out, PrintStream err) {
-        return run(args, locale, out, err, Path.of("."), ModuleMetadata.releasedVersion());
+    /** Run in the directory, with the streams and the {@code PATH} that {@code environment} gives. */
+    public static int run(String[] args, Locale locale, Environment environment) {
+        return run(args, locale, environment.out(), environment.err(),
+                environment.workingDirectory(), ModuleMetadata.releasedVersion(),
+                environment.variable("PATH"));
     }
 
     /**
-     * As above, from a directory and a version the caller states.
+     * As above, from a directory, a version and a {@code PATH} the caller states; a null
+     * {@code searchPath} is a run with no {@code PATH}, on which no command is found.
      *
-     * <p>Both are the run's own facts rather than the process's, so that a test drives this command
-     * the way a shell does: in a directory of its own, and as a release that has a version. A
-     * compiler running from class files has no manifest and no version to write into a build file,
+     * <p>All three are the run's own facts rather than the process's, so that a test drives this
+     * command the way a shell does: in a directory of its own, and as a release that has a version.
+     * A compiler running from class files has no manifest and no version to write into a build file,
      * which is a refusal here and not a placeholder somebody has to find later.
+     *
+     * <p>A relative path, the directory on the line or an entry of {@code searchPath}, is read from
+     * {@code here} as {@link Environment#path} reads one, so a run in a directory other than the
+     * JVM's writes where it was told.
      */
     static int run(String[] args, Locale locale, PrintStream out, PrintStream err, Path here,
-                   String souther) {
+                   String souther, String searchPath) {
         String coordinateAsWritten = null;
         Path directory = null;
         String buildAsWritten = null;
@@ -55,7 +65,7 @@ public final class InitCommand {
         String moduleAsWritten = null;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
-                case "-d", "--dir" -> directory = Path.of(args[++i]);
+                case "-d", "--dir" -> directory = here.resolve(args[++i]);
                 case "--build" -> buildAsWritten = args[++i];
                 case "--model" -> modelAsWritten = args[++i];
                 case "--module" -> moduleAsWritten = args[++i];
@@ -186,7 +196,7 @@ public final class InitCommand {
         }
         say(out, report, locale);
         out.println();
-        next(out, project, target, here, locale, existing == null);
+        next(out, project, target, here, locale, existing == null, searchPath);
         return 0;
     }
 
@@ -380,7 +390,7 @@ public final class InitCommand {
      * those is what says the model now beside them compiles and breaks nothing.
      */
     private static void next(PrintStream out, Project project, Path target, Path here, Locale locale,
-                             boolean creating) {
+                             boolean creating, String searchPath) {
         String where = display(here, target);
         String cd = where.isEmpty() || where.equals(".") ? "" : "cd " + where + " && ";
         if (project.build() == BuildSystem.NONE) {
@@ -401,20 +411,20 @@ public final class InitCommand {
         String task = creating ? "classes" : "test";
         out.println("    " + cd
                 + (wrapper ? "./gradlew " + task : "gradle wrapper && ./gradlew " + task));
-        if (!wrapper && !onThePath("gradle")) {
+        if (!wrapper && !onThePath("gradle", searchPath, here)) {
             out.println();
             out.println("    " + Messages.get("cli.init.gradle", locale));
         }
     }
 
-    /** Whether a command of this name is on the PATH this process was started with. */
-    private static boolean onThePath(String command) {
-        String path = System.getenv("PATH");
-        if (path == null) {
+    /** Whether a command of this name is on {@code searchPath}, the {@code PATH} the run was given,
+     *  a relative entry of which is read from {@code here}. */
+    private static boolean onThePath(String command, String searchPath, Path here) {
+        if (searchPath == null) {
             return false;
         }
-        for (String entry : path.split(java.io.File.pathSeparator)) {
-            if (!entry.isBlank() && Files.isExecutable(Path.of(entry).resolve(command))) {
+        for (String entry : searchPath.split(File.pathSeparator)) {
+            if (!entry.isBlank() && Files.isExecutable(here.resolve(entry).resolve(command))) {
                 return true;
             }
         }

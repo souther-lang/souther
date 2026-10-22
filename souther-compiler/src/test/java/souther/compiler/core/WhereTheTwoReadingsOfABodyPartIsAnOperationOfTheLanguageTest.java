@@ -13,6 +13,7 @@ import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -42,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * inlining policy, which is why a tree has the expansions it has and not what any one of them is.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class WhereTheTwoReadingsOfABodyPartIsAnOperationOfTheLanguageTest {
 
     /** A comparison written in a block handed to one of the language's own operations. */

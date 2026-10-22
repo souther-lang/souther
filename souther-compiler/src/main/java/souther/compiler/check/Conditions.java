@@ -14,6 +14,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * What a condition states, read off the condition and nothing else.
@@ -167,11 +168,12 @@ final class Conditions {
         public List<NumericConstraint> whole(ClauseExpr.Part part, Denotations at) {
             boolean positive = part.positive();
             List<NumericConstraint> out = new ArrayList<>();
-            for (StatedComparison stated
+            for (ComparisonReadings.Reading read
                     : comparisonsStatedBy(terms, asSizeComparison(part.of()), at)
                             .holdingWhere(positive)) {
-                LinearForm<FactSubject> left = terms.affineOf(stated.left(), at);
-                LinearForm<FactSubject> right = terms.affineOf(stated.right(), at);
+                StatedComparison stated = read.stated();
+                LinearForm<FactSubject> left = terms.affineOf(stated.left(), read.at());
+                LinearForm<FactSubject> right = terms.affineOf(stated.right(), read.at());
                 LinearForm<FactSubject> between = Terms.add(left, right, true);
                 if (between != null) {
                     out.add(new NumericConstraint(between, stated.relationUnder(positive)));
@@ -228,14 +230,57 @@ final class Conditions {
             return ComparisonReadings.none();
         }
         List<ComparisonReadings.Reading> readings = new ArrayList<>();
-        readings.add(new ComparisonReadings.Reading(placed.stated(), true));
-        for (ComparisonReadings.Reading composed = orderStatedBy(terms, readings.getLast(), at);
+        readings.add(new ComparisonReadings.Reading(placed.stated(), at, true));
+        for (ComparisonReadings.Reading composed = orderStatedBy(terms, readings.getLast());
                 composed != null;
-                composed = orderStatedBy(terms, readings.getLast(), at)) {
+                composed = orderStatedBy(terms, readings.getLast())) {
             readings.add(composed);
         }
         Collections.reverse(readings);
         return new ComparisonReadings(readings);
+    }
+
+    /**
+     * The one comparison a clause's leaf states, or null where it states none.
+     *
+     * <p>The way into a clause for every reader that takes a single comparison of it and needs it
+     * to be the clause rather than a consequence of it: a sign of an order is the order of its
+     * arguments ({@code compare(a, b) <= 0} is {@code a <= b}), with the denial spent. Each reader
+     * recognising a leaf for itself would read the sign in some and not in others, and two readers
+     * of one leaf would be told two different things about it.
+     */
+    static StatedComparison statedBy(Terms terms, Core.Binary leaf, boolean positive,
+                                     Denotations at) {
+        StatedComparison written = StatedComparison.of(leaf, positive);
+        return written == null ? null : asTheOrderItIs(terms, written, at);
+    }
+
+    /** The same of a part of a clause, which carries its own polarity. */
+    static StatedComparison statedBy(Terms terms, ClauseExpr.Part part, Denotations at) {
+        StatedComparison written = StatedComparison.of(part);
+        return written == null ? null : asTheOrderItIs(terms, written, at);
+    }
+
+    /**
+     * {@code stated} as the comparison of the values an order is of, where it compares the sign
+     * an operation answering that order answered and is exactly where their order holds.
+     * {@code stated} itself where it is no such sign, or where the order only follows from it.
+     *
+     * <p>And only where the values are read in the environment {@code stated} is: this comparison
+     * is handed on to readers that read its sides with no environment of their own, so one whose
+     * sides name a binding made inside the sign would be read by some of them and not by others.
+     * Such a comparison stays as it was written, and keeps the reason it had.
+     */
+    private static StatedComparison asTheOrderItIs(Terms terms, StatedComparison stated,
+                                                   Denotations at) {
+        ComparisonReadings.Reading read = new ComparisonReadings.Reading(stated, at, true);
+        for (ComparisonReadings.Reading composed = orderStatedBy(terms, read);
+                composed != null && composed.isTheCondition()
+                        && composed.at().meansWhatItMeansIn(at);
+                composed = orderStatedBy(terms, composed)) {
+            read = composed;
+        }
+        return read.stated();
     }
 
     /**
@@ -260,9 +305,8 @@ final class Conditions {
      * off a reading that only follows from the condition only follows from it too.
      */
     private static ComparisonReadings.Reading orderStatedBy(Terms terms,
-                                                            ComparisonReadings.Reading from,
-                                                            Denotations at) {
-        if (!(TheSignOfAnOrder.read(from.stated(), at, sides(terms))
+                                                            ComparisonReadings.Reading from) {
+        if (!(TheSignOfAnOrder.read(from.stated(), from.at(), sides(terms))
                 instanceof TheSignOfAnOrder.Read.OfTheArguments<Denotations> ordered)) {
             return null;
         }
@@ -271,7 +315,7 @@ final class Conditions {
                 || terms.bodyKey(arguments.right(), ordered.at()) == null) {
             return null;
         }
-        return new ComparisonReadings.Reading(arguments,
+        return new ComparisonReadings.Reading(arguments, ordered.at(),
                 from.isTheCondition() && ordered.isTheCondition());
     }
 
@@ -308,8 +352,19 @@ final class Conditions {
             }
 
             @Override
+            public LinearForm<AffineForms.ACall<Denotations>> overTheCalls(
+                    Core e, Denotations at, Predicate<Core> taken) {
+                return terms.overTheCalls(e, at, taken);
+            }
+
+            @Override
             public DeclarationAccess declarations() {
                 return terms.declarations();
+            }
+
+            @Override
+            public DeclarationNewtypes newtypes() {
+                return terms.newtypes();
             }
         };
     }

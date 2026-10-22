@@ -10,6 +10,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.WrittenOwner;
 import souther.test.ClosedWorldContract;
+import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * arrival could not be projected.
  */
 @ClosedWorldContract
+@ReadsTheRepositorysModels
 class WhereARunThroughAConstructOfTheModelIsRecordedTest {
 
     /** One helper called twice: two constructs of the model, and two places a run is recorded. */

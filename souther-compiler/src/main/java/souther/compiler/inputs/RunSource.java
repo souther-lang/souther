@@ -2,8 +2,8 @@ package souther.compiler.inputs;
 
 import souther.compiler.types.Type;
 
+import java.util.List;
 import java.util.Objects;
-import java.util.function.UnaryOperator;
 
 /**
  * Where the values an operation walked came from, for a number taken over a run of them.
@@ -17,7 +17,9 @@ import java.util.function.UnaryOperator;
  * values as stand at the place named, each of them one of them: that is what a sum needs, since a
  * total does not depend on which came first. An operation that does depend on it — a first, a
  * running total, anything read by index — is not entitled to rest on this, and would need something
- * that says the walk kept the order as well.
+ * that says the walk kept the order as well. The one run here that does is a total of what was
+ * computed of each element by where it stands, and it holds that something, and the direction the
+ * elements were handed in ({@link TraversalOrder}).
  *
  * <p>Beside {@link TermPath} and not a kind of one. A path says where a location is and says
  * nothing about how many values stand there, deliberately: a rule written about a location and a
@@ -31,21 +33,64 @@ public sealed interface RunSource {
     TermPath subjectPath();
 
     /**
+     * Whether the run is the elements of one container, one value for each: then how many it holds
+     * is how many that container holds, and a count of it is a taking of the container's place.
+     */
+    default boolean isInOneContainer() {
+        return switch (this) {
+            case ProjectedOccurrences _, ComputedOccurrences _ -> true;
+            case FlattenedOccurrences _, ReachableNodes _ -> false;
+        };
+    }
+
+    /**
      * The same run, over the values read from where {@code moved} puts this one's — or null where
      * what stands there is no one run, as a run inside an element of another container is not.
      */
-    default RunSource movedTo(UnaryOperator<TermPath> moved) {
-        TermPath at = moved.apply(subjectPath());
+    default RunSource movedTo(PlacesMoved moved) {
+        TermPath at = moved.put(subjectPath());
         return switch (this) {
             case ProjectedOccurrences _ -> overTheOccurrencesAt(at);
             // Moved inside another container the run would be over some of the occurrences of the
             // path it was over every one of, so it keeps the containers it was in.
-            case FlattenedOccurrences flat -> at != null
-                    && at.containersHoldingIt().size() == flat.subjectPath().containersHoldingIt().size()
+            case FlattenedOccurrences flat -> at.containersHoldingIt().size() == flat.subjectPath().containersHoldingIt().size()
                     ? new FlattenedOccurrences(at) : null;
-            case ComputedOccurrences computed ->
-                    computedOverTheElementsAt(at, computed.computation(), computed.each());
+            // What was shown of the order was shown of the elements where they stood, and nothing
+            // says those moved to stand in it, so a run that needs the order is the same run
+            // where the move leaves them, and none anywhere else.
+            case ComputedOccurrences computed -> computed.order() == null
+                    ? computedOverTheElementsAt(at, computed.computation(), computed.each(), null)
+                    : computed.subjectPath().equals(at) ? computed : null;
+            // The nodes below a node are the same fields of it wherever it stands, and moved
+            // inside a container it is one tree of many.
+            case ReachableNodes nodes ->
+                    overTheNodesBelow(at, nodes.through(), nodes.container());
         };
+    }
+
+    /**
+     * Every node a tree holds from the node at {@code root} down through {@code through}, or the
+     * elements of the container at {@code container} in each — or null where no one tree stands
+     * there ({@link #oneTreeStandsAt}).
+     */
+    static RunSource overTheNodesBelow(TermPath root, List<String> through,
+                                       List<String> container) {
+        return root != null && oneTreeStandsAt(root)
+                ? new ReachableNodes(root, through, container) : null;
+    }
+
+    /**
+     * Whether the node at {@code root} is the root of one tree, which is what
+     * {@link ReachableNodes} says of the path it holds.
+     *
+     * <p>Not where it stands inside a container. {@code trees[*]} says a tree of every element and
+     * not which one: the nodes below every occurrence of it are every tree's, and a search down one
+     * of them, read under a statement about each element, is over some of them. As
+     * {@link #namesOneRun} is for the elements of one container, the path is the whole of what a
+     * {@link ReachableNodes} holds, so it cannot tell those two apart.
+     */
+    static boolean oneTreeStandsAt(TermPath root) {
+        return !root.insideAContainer();
     }
 
     /**
@@ -165,18 +210,39 @@ public sealed interface RunSource {
      * of {@code q * 2} is not the total of {@code q}, and what makes them different is the
      * computation, so it is part of what these are equal by.
      *
+     * <p>A computation that turns on where an element stands claims the order as well, and holds
+     * what showed it; one that does not claims nothing of the order and holds nothing. So two runs
+     * of one such computation over one position are the same run whatever the walk that reached
+     * them did to the order on the way.
+     *
      * @param elements    where each element of the walked container stands
      * @param computation what the closure made of one of them
      * @param each        what one computed value stands as, with the names it is written under
      *                    taken off
+     * @param order       the direction the walk was handed the elements in, the order the row
+     *                    writes them or its opposite, where the computation reads where they
+     *                    stand; null where it does not
      */
-    record ComputedOccurrences(TermPath elements, ElementValue computation, Type each)
-            implements RunSource {
+    record ComputedOccurrences(TermPath elements, ElementValue computation, Type each,
+                               TraversalOrder order) implements RunSource {
 
         public ComputedOccurrences {
             requireOneRun(elements);
             Objects.requireNonNull(computation, "a computed run is computed by something");
             Objects.requireNonNull(each, "and what it computes stands as some type");
+            boolean byPosition = computation.readsThePosition();
+            if (byPosition != (order != null)) {
+                throw new IllegalArgumentException(byPosition
+                        ? "{" + computation + "} turns on where each element stands, and nothing"
+                                + " showed the direction the walk was handed `" + elements
+                                + "` in"
+                        : "{" + computation + "} turns on no element's position, and claims"
+                                + " nothing of their order");
+            }
+            if (order != null && !order.elements().equals(elements)) {
+                throw new IllegalArgumentException("the order was shown of `" + order.elements()
+                        + "` and not of `" + elements + "`");
+            }
         }
 
         @Override
@@ -186,18 +252,120 @@ public sealed interface RunSource {
 
         @Override
         public String toString() {
-            return "{" + computation + " | " + elements + "}";
+            return "{" + computation + " | " + elements
+                    + (order != null && order.direction() == TraversalDirection.REVERSE
+                            ? " from the far end" : "") + "}";
+        }
+    }
+
+    /**
+     * Every node a tree holds from the node at {@code root} down, each once: that node, and the
+     * elements of the fields {@code through} of every node reached, which are nodes of the same
+     * type — or, where {@code container} names fields of a node, the elements of the container
+     * there in every one of those nodes.
+     *
+     * <p>A tree is finite however deep it goes, so these are as many values as it holds; and no
+     * path names them, since the positions below a node of a type that holds itself are not read
+     * again ({@link InputDomain}). Where the values are read from is the root, and the rest is
+     * found by walking down from it.
+     *
+     * @param through   the fields of a node whose elements are the nodes below it, in one order
+     * @param container the fields from a node to the container whose elements are the values, or
+     *                  none where the values are the nodes
+     */
+    record ReachableNodes(TermPath root, List<String> through, List<String> container)
+            implements RunSource {
+
+        public ReachableNodes {
+            Objects.requireNonNull(root, "a tree is walked from some node");
+            through = List.copyOf(through);
+            container = List.copyOf(container);
+            if (through.isEmpty()) {
+                throw new IllegalArgumentException("a tree goes below a node through something");
+            }
+            if (!oneTreeStandsAt(root)) {
+                throw new IllegalArgumentException("`" + root + "` stands inside a container, and"
+                        + " which of its trees a search went down is not said by it");
+            }
+        }
+
+        @Override
+        public TermPath subjectPath() {
+            return root;
+        }
+
+        @Override
+        public String toString() {
+            return "{" + (container.isEmpty() ? "node" : String.join(".", container) + "[*]")
+                    + " below " + root + " through " + through + "}";
+        }
+    }
+
+    /**
+     * That a walk was handed the elements at {@code elements}, every one of them once, in
+     * {@code direction}: the order the row writes them there, or from the last of them to the
+     * first.
+     *
+     * <p>Made where the reading of the input showed it ({@link InputReads#inTheOrderAt}), and so
+     * in this package and nowhere else: a run is not made to claim the order by saying so. Equal by
+     * the elements it was shown of and the direction, since that is all it says: a total weighted
+     * by where each stands is another number counted from the other end.
+     */
+    final class TraversalOrder {
+
+        private final TermPath elements;
+        private final TraversalDirection direction;
+
+        TraversalOrder(TermPath elements, TraversalDirection direction) {
+            this.elements = Objects.requireNonNull(elements, "an order is shown of some elements");
+            this.direction = Objects.requireNonNull(direction, "and handed in some direction");
+        }
+
+        public TermPath elements() {
+            return elements;
+        }
+
+        public TraversalDirection direction() {
+            return direction;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof TraversalOrder that && elements.equals(that.elements)
+                    && direction == that.direction;
+        }
+
+        @Override
+        public int hashCode() {
+            // By name: an enum's own hash differs from one run of the compiler to the next.
+            return 31 * elements.hashCode() + direction.name().hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return direction == TraversalDirection.FORWARD
+                    ? "in the order " + elements + " is written"
+                    : "from the last of " + elements + " to the first";
         }
     }
 
     /**
      * The values computed of each element of the walk over {@code elements}, or null where those
-     * elements are not one run.
+     * elements are not one run — or where the computation turns on where each element stands and
+     * {@code order} does not show the direction the walk was handed them in.
+     *
+     * @param order what showed the order, or null where nothing did
      */
     static RunSource computedOverTheElementsAt(TermPath elements, ElementValue computation,
-                                               Type each) {
-        return elements != null && computation != null && each != null && namesOneRun(elements)
-                ? new ComputedOccurrences(elements, computation, each) : null;
+                                               Type each, TraversalOrder order) {
+        if (elements == null || computation == null || each == null || !namesOneRun(elements)) {
+            return null;
+        }
+        if (!computation.readsThePosition()) {
+            return new ComputedOccurrences(elements, computation, each, null);
+        }
+        return order != null && order.elements().equals(elements)
+                ? new ComputedOccurrences(elements, computation, each, order) : null;
     }
 
     /** The one invariant of every run, said as a refusal for a run made without asking. */

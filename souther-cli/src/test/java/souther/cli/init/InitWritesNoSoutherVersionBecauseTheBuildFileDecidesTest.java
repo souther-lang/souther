@@ -27,7 +27,7 @@ class InitWritesNoSoutherVersionBecauseTheBuildFileDecidesTest {
         ByteArrayOutputStream sink = new ByteArrayOutputStream();
         PrintStream said = new PrintStream(sink, true, StandardCharsets.UTF_8);
         return InitCommand.run(new String[] {"com.example:hello", "--build", build,
-                "-d", directory.toString()}, Locale.ENGLISH, said, said, directory, "9.9.9");
+                "-d", directory.toString()}, Locale.ENGLISH, said, said, directory, "9.9.9", null);
     }
 
     @Test

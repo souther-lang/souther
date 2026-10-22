@@ -101,21 +101,24 @@ public final class RowTrial {
         RowTrials running = (behavior, sig) -> new RowTrials.OfBehavior() {
 
             @Override
-            public Optional<RowTrials.Ran> run(List<Hir.Expr> inputs,
-                                               List<RowTrials.AnsweredWith> answers) {
-                return ready(inputs, answers).flatMap(ready -> went(ready, probes, steps));
-            }
+            public Optional<RowTrials.Prepared> prepare(List<Hir.Expr> inputs,
+                                                        List<RowTrials.AnsweredWith> answers) {
+                return ready(inputs, answers).map(ready -> new RowTrials.Prepared() {
 
-            @Override
-            public Optional<AnswerObservation> runReplacing(List<Hir.Expr> inputs,
-                                                            List<RowTrials.AnsweredWith> answers,
-                                                            Map<Integer, Integer> replacing) {
-                return ready(inputs, answers).flatMap(ready -> {
-                    Intervention.begin(replacing);
-                    try {
-                        return applied(ready.applying(), ready.over(), steps, ready.reading());
-                    } finally {
-                        Intervention.end();
+                    @Override
+                    public Optional<RowTrials.Ran> run() {
+                        return went(ready, probes, steps);
+                    }
+
+                    @Override
+                    public Optional<AnswerObservation> runReplacing(
+                            Map<Integer, Integer> replacing) {
+                        Intervention.begin(replacing);
+                        try {
+                            return applied(ready.applying(), ready.over(), steps, ready.reading());
+                        } finally {
+                            Intervention.end();
+                        }
                     }
                 });
             }

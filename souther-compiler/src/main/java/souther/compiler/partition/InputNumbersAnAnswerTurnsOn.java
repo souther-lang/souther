@@ -226,7 +226,7 @@ public final class InputNumbersAnAnswerTurnsOn {
                     // composed toward: nothing here carries either on the way, and a pair whose
                     // row is not held to its values is no pair.
                     case DemandReading.Read.Narrows _, DemandReading.Read.OneOf _,
-                         DemandReading.Read.Unread _ -> {
+                         DemandReading.Read.Counted _, DemandReading.Read.Unread _ -> {
                         return null;
                     }
                 }

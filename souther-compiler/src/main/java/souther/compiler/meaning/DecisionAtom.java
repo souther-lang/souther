@@ -1,7 +1,9 @@
 package souther.compiler.meaning;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.TakenArguments;
@@ -89,6 +91,53 @@ public sealed interface DecisionAtom extends Quantity {
         @Override
         public String spelled() {
             return operation + arguments.byPosition().toString() + "(" + of.spelled() + ")";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * What {@code operation} adds up of a computation that turns on where each element of a list a
+     * dependency answered stands: {@code List.sum(List.mapIndexed((i, x) -> i * x, answer))}.
+     *
+     * <p>Held as one number and not as a form of the elements' own numbers
+     * ({@link Quantity.SumOver}), since the weight of an element is its position and no number the
+     * element holds. The position counts from nought in the order {@code direction} hands the
+     * answer's elements in — the order the answer lists them, or the opposite — so two such sums
+     * over one list that part only in the direction are two numbers.
+     *
+     * @param list        the list the dependency answered
+     * @param computation what the closure made of an element, which reads the position
+     * @param each        what one computed value stands as
+     */
+    record ComputedOverAnAnswer(ValueName.Stdlib operation, DecisionSubject.AnAnswer list,
+                                ElementValue computation, Type each,
+                                TraversalDirection direction) implements DecisionAtom {
+
+        public ComputedOverAnAnswer {
+            if (operation == null || list == null || computation == null || each == null
+                    || direction == null) {
+                throw new IllegalArgumentException("a computed total of an answer is some"
+                        + " operation's, of some list, handed in some direction");
+            }
+            if (!computation.readsThePosition()) {
+                throw new IllegalArgumentException("{" + computation + "} turns on no element's"
+                        + " position, and its total is one of the elements' own numbers");
+            }
+        }
+
+        @Override
+        public DecisionSubject.AnAnswer ofTheAnswer() {
+            return list;
+        }
+
+        @Override
+        public String spelled() {
+            return operation + "{" + computation + " | " + list.spelled()
+                    + (direction == TraversalDirection.REVERSE ? " from the far end" : "") + "}";
         }
 
         @Override

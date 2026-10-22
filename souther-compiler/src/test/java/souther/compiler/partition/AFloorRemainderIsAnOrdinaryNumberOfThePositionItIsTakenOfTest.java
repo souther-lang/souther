@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,9 +92,9 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
      */
     @Test
     void aDivisorThatIsNoConstantIsARuleAboutAValueMadeOfThePosition() {
-        assertEquals(List.of(), bordersOf("x: Int, y: Int", "Int.floorMod(x, y) == 0"));
+        assertEquals(List.of(), bordersOf("x: Int, y: Int", "Int.floorMod(x + 1, y) == 0"));
         assertEquals(List.of(), bordersOf("x: Int", "Int.floorMod(x, 0) == 0"));
-        assertFalse(reasonsOf("x: Int, y: Int", "Int.floorMod(x, y) == 0").isEmpty());
+        assertFalse(reasonsOf("x: Int, y: Int", "Int.floorMod(x + 1, y) == 0").isEmpty());
         assertFalse(reasonsOf("x: Int", "Int.floorMod(x, 0) == 0").isEmpty());
     }
 
@@ -266,9 +268,7 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                     Ok
                 }
                 """;
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measuredModel(model);
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read);
         assertEquals(List.of("0"), read.get("f").stream().map(BorderAssessment::value).toList());
@@ -345,14 +345,89 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
     }
 
     /**
-     * The remainder of a moved place, named before it is compared, is read as what it is named
-     * for and not as a remainder of the place: the comparison is of a value the position's own
-     * path holds as that number, and a remainder moved round the divisor is two stretches of the
-     * place's, which that path cannot take in a name's stead. It is said not to be read, and the
-     * same comparison written out is.
+     * The remainder of a moved place, named before it is compared, is the same rule as the one
+     * written in the comparison: lines on the place's own remainder at the same numbers, a row at
+     * the same value for each point, and nothing left unread — whether the call or the moved place
+     * is what was named.
      */
     @Test
-    void theRemainderOfAMovedPlaceNamedBeforeItIsComparedIsNotRead() {
+    void theRemainderOfAMovedPlaceNamedBeforeItIsComparedIsTheSameRule() {
+        for (String relation : List.of("== 0", "< 5", ">= 3", "/= 6")) {
+            List<String> inline = drawn("""
+                    guard Int.floorMod(x + 1, 7) %s else No
+                    """.formatted(relation));
+            assertFalse(inline.isEmpty(), relation);
+            for (String named : List.of("""
+                    let rest = Int.floorMod(x + 1, 7)
+                    guard rest %s else No
+                    """, """
+                    let next = x + 1
+                    let rest = Int.floorMod(next, 7)
+                    guard rest %s else No
+                    """)) {
+                String body = named.formatted(relation);
+                assertEquals(inline, drawn(body), body);
+                assertEquals(List.of(), measuredBody(body).notRead(), body);
+            }
+        }
+    }
+
+    /**
+     * The remainder of a moved place against another position is read as the stretches of the
+     * place's remainder with the moved remainder against the position on each, and the rows built
+     * stand on both sides of what the run time says of them.
+     */
+    @Test
+    void theRowsBuiltForAMovedRemainderAgainstAPositionStandOnBothSides() {
+        for (String relation : List.of("<", "==", ">=")) {
+            String condition = "Int.floorMod(x + 3, 7) " + relation + " y";
+            Set<Boolean> sides = new TreeSet<>();
+            for (BorderAssessment border : linesOf("x: Int, y: Int", condition)) {
+                for (ItemAssessment.Owed owed : owedItems(border)) {
+                    for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                        if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
+                            long x = Long.parseLong(certified.row().inputs().get(0).text());
+                            long y = Long.parseLong(certified.row().inputs().get(1).text());
+                            long moved = Math.floorMod(x + 3, 7L);
+                            sides.add(switch (relation) {
+                                case "<" -> moved < y;
+                                case "==" -> moved == y;
+                                default -> moved >= y;
+                            });
+                        }
+                    }
+                }
+            }
+            assertEquals(Set.of(false, true), sides, condition);
+        }
+    }
+
+    /** Each line {@code body} draws, with the value of {@code x} and the point of each row built
+     *  for it. */
+    private static List<String> drawn(String body) {
+        List<String> out = new ArrayList<>();
+        Compilation compilation = compiledBody(body);
+        for (BorderAssessment border : Adequacy.readingsOf(compilation.db(), "demo").get("f")) {
+            List<String> rows = new ArrayList<>();
+            for (ItemAssessment.Owed owed : owedItems(border)) {
+                for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                    if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
+                        rows.add(certified.row().inputs().getFirst().text() + " at "
+                                + certified.row().purposes().stream()
+                                        .flatMap(each -> each.labels().stream()).toList());
+                    }
+                }
+            }
+            out.add(border.value() + " " + rows);
+        }
+        return out;
+    }
+
+    private static PartitionEvidence measuredBody(String body) {
+        return compiledBody(body).db().ask(new Adequacy.Coverage("demo")).value().get("f");
+    }
+
+    private static Compilation compiledBody(String body) {
         String model = """
                 module demo
 
@@ -361,20 +436,10 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
 
                 behavior f : (x: Int) -> Ok | No
                 let f (x) = {
-                    let rest = Int.floorMod(x + 1, 7)
-                    guard rest == 0 else No
-                    Ok
+                %s    Ok
                 }
-                """;
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        List<String> named = Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
-                .map(BorderAssessment::value).toList();
-        assertEquals(List.of(), named);
-        assertFalse(compilation.db().ask(new Adequacy.Coverage("demo")).value()
-                .get("f").notRead().isEmpty());
-        assertFalse(bordersOf("x: Int", "Int.floorMod(x + 1, 7) == 0").isEmpty());
+                """.formatted(body.indent(4));
+        return measuredModel(model);
     }
 
     /** The place moved by a number, named before its remainder is compared, is the same rule. */
@@ -393,9 +458,7 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                     Ok
                 }
                 """;
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measuredModel(model);
         List<String> named = Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
                 .map(BorderAssessment::value).toList();
         assertEquals(bordersOf("x: Int", "Int.floorMod(x + 1, 7) < 2"), named);
@@ -576,10 +639,28 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                 }
                 """.formatted(parameters,
                 parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return measuredModel(model);
+    }
+
+    /** Each model measured once for the class: tests ask one model its lines and its classes, and
+     *  only read them. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
+    /** {@code model} measured and asked nothing else: what is read of it is the measure's, which
+     *  asks for what it reads. */
+    private static Compilation measuredModel(String model) {
+        return MEASURED.computeIfAbsent(model, source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            return compilation;
+        });
     }
 
     private static List<String> bordersOf(String parameters, String condition) {

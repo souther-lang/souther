@@ -38,10 +38,14 @@ class EveryStatementAStatementHoldsIsAPartEveryReaderMeetsTest {
     /** One of every kind that holds statements, each holding every one it can. */
     private static Map<Class<?>, Proposition> samples() {
         Map<Class<?>, Proposition> out = new LinkedHashMap<>();
+        out.put(Proposition.WhereItAnswers.class,
+                new Proposition.WhereItAnswers(truth("a"), truth("b")));
         out.put(Proposition.All.class, new Proposition.All(List.of(truth("a"), truth("b"))));
         out.put(Proposition.Any.class, new Proposition.Any(List.of(truth("a"), truth("b"))));
         out.put(Proposition.OnAnApplication.class,
                 new Proposition.OnAnApplication(List.of(truth("a"), truth("b"))));
+        out.put(Proposition.SoManyHold.class, new Proposition.SoManyHold(
+                List.of(truth("a"), truth("b")), List.of(1, 2), List.of(1)));
         out.put(Proposition.Some.class, new Proposition.Some(
                 new DecisionSubject.AnInput(TermPath.of("xs")), truth("a"), true));
         out.put(Proposition.SomeReachable.class, new Proposition.SomeReachable(TermPath.of("t"),

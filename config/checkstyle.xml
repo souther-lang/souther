@@ -21,6 +21,7 @@
     ModifierOrder          ModifierOrder
     ArrayTypeStyle         MixedArrayDimensions
     MatchXpath             NonApiType
+    MatchXpath             OperatorPrecedence
 
   What a rule here refuses is never more than what the check it mirrors refuses, because a rule
   that is stricter stops a commit CI would have accepted. It may refuse less, and where it does the
@@ -130,6 +131,7 @@
                              `INFO` lowercases to `ınfo`: pass Locale.ROOT"/>
         </module>
         <module name="MatchXpath">
+            <property name="id" value="NonApiType"/>
             <property name="query"
                       value="(//METHOD_DEF | //CTOR_DEF)[not(parent::OBJBLOCK/parent::RECORD_DEF)]
                              /(TYPE | PARAMETERS/PARAMETER_DEF[not(ELLIPSIS)]/TYPE)
@@ -142,6 +144,28 @@
                      value="a parameter or a result named for the class that holds it ties every
                             caller to that class: take or return the List, Set or Map it is
                             (Error Prone NonApiType)"/>
+        </module>
+        <!--
+          An operand that is itself an operation of another precedence, written without
+          parentheses, where the two are both among `&&`, `||`, `&`, `|` and `^`, or where an
+          arithmetic operation is an operand of a shift. A parenthesised operand is a node of its
+          own to javac and is not asked; to Checkstyle the parentheses are the operand's siblings,
+          so the one written just before it is what says it was parenthesised.
+        -->
+        <module name="MatchXpath">
+            <property name="id" value="OperatorPrecedence"/>
+            <property name="query"
+                      value="//*[self::LAND or self::LOR or self::BAND or self::BOR or self::BXOR]
+                                [parent::LAND or parent::LOR or parent::BAND or parent::BOR or parent::BXOR]
+                                [local-name() != local-name(..)]
+                                [not(preceding-sibling::*[1][self::LPAREN])]
+                             | //*[self::PLUS or self::MINUS or self::STAR or self::DIV or self::MOD]
+                                [parent::SL or parent::SR or parent::BSR]
+                                [not(preceding-sibling::*[1][self::LPAREN])]"/>
+            <message key="matchxpath.match"
+                     value="an operation of another precedence written as an operand with no
+                            parentheses reads as either grouping: write the parentheses
+                            (Error Prone OperatorPrecedence)"/>
         </module>
     </module>
 </module>

@@ -27,6 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * the operation answers is a row where nothing changes, and that is the direction this reading takes
  * everywhere — an operation this cannot name, an operand nothing bounds, a case it cannot rule out.
  *
+ * <p>An arm no run enters is one nothing reaches, and is reported as one ({@link #NOTHING_REACHES})
+ * with the evaluation the way to it has to get past pointed at. That is the whole of what is said
+ * about it: what is written under it is not judged.
+ *
  * <p><b>What runs before the abort still runs.</b> A construction among the values an aborting
  * evaluation is waiting on is one the program really builds, and it is judged. That is the whole
  * difference between an evaluation nothing leaves and a place nothing arrives at.
@@ -36,6 +40,9 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
     /** The smallest {@code Int}, written as the sum it has to be written as: the literal itself is
      * one past the largest. */
     private static final String SMALLEST = "(0 - 9223372036854775807) - 1";
+
+    /** That nothing reaches an arm, which is what an arm below an evaluation no run gets past is. */
+    private static final String NOTHING_REACHES = "E1327";
 
     private static final String DECLARATIONS = """
             module demo
@@ -92,9 +99,10 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
      */
     @Test
     void anOperationWithNoNumberAndNoOtherCaseLeavesTheArmsUnentered() {
-        assertEquals(List.of(), reported(dividing(guard("a == " + SMALLEST), "0 - 1", "q")),
+        assertEquals(List.of(NOTHING_REACHES),
+                reported(dividing(guard("a == " + SMALLEST), "0 - 1", "q")),
                 "the quotient the arm binds");
-        assertEquals(List.of(),
+        assertEquals(List.of(NOTHING_REACHES),
                 reported(dividing(guard("a == " + SMALLEST) + guard("x >= 0"), "0 - 1", "x")),
                 "a value the guards decide, which is the same arm and so the same answer");
     }
@@ -106,7 +114,7 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
      */
     @Test
     void theOtherCaseIsRuledOutByWhatIsKnownAndNotByHowItIsWritten() {
-        assertEquals(List.of(),
+        assertEquals(List.of(NOTHING_REACHES),
                 reported(dividing(guard("a == " + SMALLEST) + guard("x == 0 - 1"), "x", "q")),
                 "the divisor is held to minus one, so no case comes back");
     }
@@ -350,7 +358,7 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
      */
     @Test
     void aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered() {
-        assertEquals(List.of(), reported(atScale("4294967298")),
+        assertEquals(List.of(NOTHING_REACHES), reported(atScale("4294967298")),
                 "no run leaves the divide, so the construction the arm builds is not judged");
         assertEquals(List.of("E2010"), reported(atScale("2")),
                 "and at a scale it does take the arm is entered and the value is refused");

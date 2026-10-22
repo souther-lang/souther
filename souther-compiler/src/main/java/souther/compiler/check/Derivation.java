@@ -1,7 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +52,22 @@ sealed interface Derivation {
      * and asked by switching on the kind it is a place a recipe added later is silently left out of.
      * Answered by the recipe, so that the reader comparing two of them has every part of both.
      */
-    NumericDomain.Bounds divisorExtent();
+    DivisorExtent divisorExtent();
+
+    /**
+     * Every value the operator's divisor can take, which is what its type holds: the range its
+     * values run between, and how they are spaced along it.
+     *
+     * <p>Both, because what a divide by a range holding nought comes to is decided by the spacing
+     * and not by the ends. A whole number that is not nought is at least one away from it, so a
+     * divisor of whole numbers either side of nought divides by each side's values and no nearer;
+     * over a dense order there is no nearest value to nought, and the quotients run past every
+     * value.
+     *
+     * @param within  the range the type's values run between.
+     * @param spacing how they are spaced along it.
+     */
+    record DivisorExtent(NumericDomain.Bounds within, Granularity spacing) {}
 
     /**
      * Whether {@code other} is this recipe.
@@ -77,7 +94,7 @@ sealed interface Derivation {
 
         boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b);
 
-        boolean extents(NumericDomain.Bounds a, NumericDomain.Bounds b);
+        boolean extents(DivisorExtent a, DivisorExtent b);
     }
 
 
@@ -96,7 +113,7 @@ sealed interface Derivation {
 
 
         @Override
-        public NumericDomain.Bounds divisorExtent() {
+        public DivisorExtent divisorExtent() {
             return null;
         }
     }
@@ -213,7 +230,7 @@ sealed interface Derivation {
         }
 
         @Override
-        public NumericDomain.Bounds divisorExtent() {
+        public DivisorExtent divisorExtent() {
             return null;
         }
 
@@ -224,9 +241,9 @@ sealed interface Derivation {
      *
      * @param numerator     what is divided.
      * @param divisor       what it is divided by. A form and not a written number: a divisor the
-     *                      path bounds away from zero has the sign and the magnitude the rule needs
-     *                      as surely as a written one does, and holding it as a number was what left
-     *                      every divisor with a coefficient unread.
+     *                      path bounds has the sign and the magnitude the rule needs as surely as a
+     *                      written one does, and holding it as a number was what left every divisor
+     *                      with a coefficient unread.
      * @param divisorExtent every value the operator's divisor can take, which is what its type
      *                      holds. Not a bound the path proves — the arithmetic composed over a form
      *                      runs over numbers of any size, and the operator's divisor is a value of
@@ -235,7 +252,7 @@ sealed interface Derivation {
      *                      path.
      */
     record TruncatingQuotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                              NumericDomain.Bounds divisorExtent) implements Derivation {
+                              DivisorExtent divisorExtent) implements Derivation {
 
         @Override
         public List<LinearForm<FactSubject>> formsRead() {
@@ -263,7 +280,7 @@ sealed interface Derivation {
      * it does not (spec §stdlib-int).
      */
     record TruncatingRemainder(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                               NumericDomain.Bounds divisorExtent) implements Derivation {
+                               DivisorExtent divisorExtent) implements Derivation {
 
         @Override
         public List<LinearForm<FactSubject>> formsRead() {
@@ -295,7 +312,7 @@ sealed interface Derivation {
      * of which value this is — {@link NumericMeaning} keeps it — and not part of where it lies.
      */
     record RoundedQuotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                           NumericDomain.Bounds divisorExtent, LinearForm<FactSubject> scale)
+                           DivisorExtent divisorExtent, LinearForm<FactSubject> scale)
             implements Derivation {
 
         @Override
@@ -315,7 +332,7 @@ sealed interface Derivation {
 
     /**
      * How many a container holds, where the law of the operation that answered it says whether it
-     * holds anything by whether its arguments do: {@code a ++ b} holds something exactly where
+     * holds anything by what its arguments are: {@code a ++ b} holds something exactly where
      * {@code a} or {@code b} does.
      *
      * <p>Not a relation between the sizes. Where text is put beside text its canonical form can be
@@ -323,11 +340,16 @@ sealed interface Derivation {
      * which side of nought each argument is on is where the path puts it. So what is recorded is the
      * law, over the counts it reads, and what it comes to is read under each domain.
      *
-     * @param holds when the answer holds something, as a statement over the counts of the arguments
+     * @param holds when the answer holds something, as a statement over the counts and numbers of
+     *              the arguments
      */
     record HoldsSomethingWhere(Holding holds) implements Derivation {
 
-        /** A statement about which of some counts are above nought. */
+        /**
+         * A statement over the counts and numbers of some arguments: which counts are above nought,
+         * and how forms over them stand against nought. A form a {@link Stands} holds may be over
+         * numbers that go below nought, so it is no count and nothing about counts is said of it.
+         */
         sealed interface Holding {
 
             /** The container {@code count} counts holds something. */
@@ -349,6 +371,10 @@ sealed interface Derivation {
 
             /** {@code denied} does not hold. */
             record Not(Holding denied) implements Holding {}
+
+            /** {@code form}, over some counts and numbers, stands against nought as {@code rel}
+             *  says. */
+            record Stands(LinearForm<FactSubject> form, Rel rel) implements Holding {}
         }
 
         @Override
@@ -364,7 +390,7 @@ sealed interface Derivation {
         }
 
         @Override
-        public NumericDomain.Bounds divisorExtent() {
+        public DivisorExtent divisorExtent() {
             return null;
         }
 
@@ -374,6 +400,7 @@ sealed interface Derivation {
                 case Holding.AnyOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
                 case Holding.AllOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
                 case Holding.Not(Holding denied) -> counts(denied, out);
+                case Holding.Stands(LinearForm<FactSubject> form, Rel _) -> out.add(form);
             }
         }
 
@@ -387,6 +414,9 @@ sealed interface Derivation {
                         b instanceof Holding.AllOf it && same(ways, it.ways(), same);
                 case Holding.Not(Holding denied) ->
                         b instanceof Holding.Not it && same(denied, it.denied(), same);
+                case Holding.Stands(LinearForm<FactSubject> form, Rel rel) ->
+                        b instanceof Holding.Stands it && rel == it.rel()
+                                && same.forms(form, it.form());
             };
         }
 
@@ -400,6 +430,57 @@ sealed interface Derivation {
                 }
             }
             return true;
+        }
+    }
+
+    /**
+     * A value every one of {@code recipes} says something of, each on its own: it lies wherever all
+     * of them put it.
+     *
+     * <p>Where the library states two things of one answer — how many a container holds case by
+     * case, and when it holds anything — and neither says all the other does. Recorded as one
+     * recipe because a value is reached one way, and these are two accounts of that one way.
+     */
+    record Each(List<Derivation> recipes) implements Derivation {
+
+        public Each {
+            recipes = List.copyOf(recipes);
+            if (recipes.size() < 2) {
+                throw new IllegalArgumentException("a value is said of by every one of several"
+                        + " recipes, and was given " + recipes.size());
+            }
+        }
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            List<LinearForm<FactSubject>> out = new ArrayList<>();
+            recipes.forEach(each -> out.addAll(each.formsRead()));
+            return List.copyOf(out);
+        }
+
+        /** Recipe by recipe and in order. */
+        @Override
+        public boolean sameAs(Derivation other, Same same) {
+            if (!(other instanceof Each it) || recipes.size() != it.recipes().size()) {
+                return false;
+            }
+            for (int i = 0; i < recipes.size(); i++) {
+                if (!recipes.get(i).sameAs(it.recipes().get(i), same)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** What the first of them that divides divides by. */
+        @Override
+        public DivisorExtent divisorExtent() {
+            for (Derivation each : recipes) {
+                if (each.divisorExtent() != null) {
+                    return each.divisorExtent();
+                }
+            }
+            return null;
         }
     }
 }

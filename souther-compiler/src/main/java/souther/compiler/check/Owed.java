@@ -83,8 +83,16 @@ public sealed interface Owed {
                         taken.operation() + taken.arguments().writtenWith(
                                 taken.from().writtenAround(where));
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
-                        "#(" + count.counted() + ")(" + where + ")";
+                        "#(" + count.counted() + ")(" + count.through().writtenAround(where) + ")";
+                case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
+                        "List.sum(String.codePoints(" + where + "))";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + where + ")";
+                case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
+                        "occurrences(" + where + ")";
+                case NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey asked ->
+                        "occurrences(" + where + " equal to " + asked.key() + ")";
+                case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
+                        extreme.spelledAt(where);
             };
         }
     }

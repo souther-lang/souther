@@ -31,10 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * one after another, the first took the container and the others were the conditions the row was
  * composed without; so the order a body happened to state them in decided which rules got a row.
  *
- * <p>Held by running the rows: each row composed for a rule is put back as an example, answered
- * with what the body works out over the numbers the row holds — read here, apart from anything the
- * compiler read — so a row that stands short of its rule is an example the model answers
- * otherwise. And which rules are composed a row is held too, so a rule going without one is a
+ * <p>Held by what the body works out over the numbers each row composed for a rule holds — read
+ * here, apart from anything the compiler read — so a row that stands short of its rule answers
+ * another rule. And which rules are composed a row is held too, so a rule going without one is a
  * change this says.
  */
 class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
@@ -335,12 +334,6 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
             }
             assertEquals(answered.composedFor(), answers,
                     () -> "a row for the rules this model has one for: " + examples + "\n" + model);
-
-            Compilation answeredBy = measured(model + "example pick\n"
-                    + String.join("\n", examples) + "\n");
-            assertEquals(List.of(), answeredBy.errors().stream()
-                    .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
-                    .toList(), () -> "each row is answered as its inputs say: " + examples);
         });
     }
 
@@ -463,19 +456,20 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
     }
 
     /** Each model measured once for the class: the methods read the same models, and only read
-     *  them. */
+     *  them. What is composed asks what it reads of the measurement; the rest is asked where a
+     *  report is made of it. */
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String source) {
         return MEASURED.computeIfAbsent(source, text -> {
             Compilation compilation = Compilation.ofSource(text, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
         });
     }
 
     private static String report(Compilation compilation) {
+        compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }

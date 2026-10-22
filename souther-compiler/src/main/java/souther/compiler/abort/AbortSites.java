@@ -132,7 +132,11 @@ public final class AbortSites {
 
     /** The one place a construction's abort is decided, for a site this walks and for one it does not. */
     private static AbortSet ordinaryConstruction(Constructible type) {
-        return type.holdsInvariants()
+        return ordinaryConstruction(type.holdsInvariants());
+    }
+
+    private static AbortSet ordinaryConstruction(boolean holdsInvariants) {
+        return holdsInvariants
                 ? AbortSet.of(AbortKind.INVARIANT_NOT_HELD)
                 : AbortSet.NONE;
     }
@@ -221,9 +225,9 @@ public final class AbortSites {
     private static AbortSet localAbortOf(Core node, KernelContracts kernels,
                                          Map<TypeSymbol.AtModule, Constructible> constructible) {
         return switch (node) {
-            case Core.Unreachable _ -> AbortSet.of(AbortKind.UNREACHABLE_REACHED);
+            case Core.Unreachable unreachable -> ofAnUnreachable(unreachable);
             case Core.Binary b -> arithmetic(b);
-            case Core.Neg n -> negation(n);
+            case Core.Neg n -> negation(n.type());
             case Core.Call c -> callAborts(c, kernels);
             case Core.Construct c -> ordinaryConstruction(declared(c, constructible));
             // A node the checker never lets carry a clause of its own to break, and never a
@@ -257,14 +261,98 @@ public final class AbortSites {
             case Core.Reached.OfDeclaration _ -> AbortSet.NONE;
             case Core.Reached.OfValue _ -> AbortSet.NONE;
             case Core.Reached.OfPublishedValue _ -> AbortSet.NONE;
-            // Minted by a Core-to-Core pass for a fold the backend lowers as a whole. The walk
-            // itself ends with nothing of its own; the write its step makes into the builder is
-            // where a collection grows, and a fold can write more than one element per step, so
-            // that write can reach the most elements a collection holds (`Capacity`).
-            case Core.Emitted emitted -> switch (emitted) {
-                case BUILD_LIST, BUILD_MAP -> AbortSet.NONE;
-                case GROW_LIST, PUT_MAP -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
-            };
+            case Core.Emitted emitted -> ofAnEmittedCall(emitted);
+        };
+    }
+
+    /**
+     * What {@code binary} itself can end a run without a value for, wherever it stands: for a reader
+     * of a tree this was not built over, which asks the one reading of an operator rather than
+     * making a second.
+     */
+    public static AbortSet ofAnOperator(Core.Binary binary) {
+        return arithmetic(binary);
+    }
+
+    /** The same, of a unary minus. */
+    public static AbortSet ofANegation(Core.Neg neg) {
+        return negation(neg.type());
+    }
+
+    /** The same, of an {@code unreachable} the model wrote. */
+    public static AbortSet ofAnUnreachable(Core.Unreachable unreachable) {
+        return ofAnUnreachableWherever();
+    }
+
+    /** What an {@code unreachable} ends a run for, which is the same wherever it is written. */
+    public static AbortSet ofAnUnreachableWherever() {
+        return AbortSet.of(AbortKind.UNREACHABLE_REACHED);
+    }
+
+    /** The plain numbers arithmetic takes (spec §an-operator-takes-the-types-it-is-defined-for). */
+    private static final List<Type> NUMBERS = List.of(Type.INT, Type.DECIMAL, Type.RATIONAL);
+
+    /**
+     * What the sites {@code op} is written as may end a run for, over every typing the checker
+     * admits it at: for a reader of a tree whose operands carry no type. Each typing is written as
+     * one or more sites — an operator, and a construction where the typing builds a value — and
+     * this is every reason any of them ends a run for on its own, as {@link #at} answers each,
+     * which may be more than the sites of one typing do.
+     *
+     * <p>Worked out by asking the typed reading of every typing the operator is admitted at, and not
+     * read off the operator a second time. {@code + - * /} take two numbers of one type, or a
+     * {@code Rational} beside any number, which answers a {@code Rational}
+     * (spec §an-operator-takes-the-types-it-is-defined-for). {@code + - *} take a numeric newtype
+     * too, and answer it by building it again around the arithmetic on what it wraps: a
+     * construction of a type that may hold an invariant, answered as an ordinary one is. What the
+     * invariant it runs works out is the declaration's own sites, as a callee's body is.
+     * {@code /} over two of one newtype answers the {@code Rational} the quotient of what they wrap
+     * is, and builds nothing.
+     */
+    public static AbortSet ofAnOperatorOfAnyType(BinOp op) {
+        return switch (op) {
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> {
+                AbortSet out = ordinaryConstruction(true);
+                for (Type answer : NUMBERS) {
+                    out = out.union(arithmeticType(op, answer));
+                }
+                yield out;
+            }
+            case BinOp.DIV -> {
+                AbortSet out = AbortSet.NONE;
+                for (Type left : NUMBERS) {
+                    for (Type right : NUMBERS) {
+                        if (left.equals(right) || left == Type.RATIONAL || right == Type.RATIONAL) {
+                            out = out.union(divide(Type.RATIONAL, left, right));
+                        }
+                    }
+                }
+                yield out;
+            }
+            case BinOp.CONCAT, BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE,
+                 BinOp.AND, BinOp.OR -> whateverItsTypes(op);
+        };
+    }
+
+    /** The same, of a unary minus: over every number it is admitted to. */
+    public static AbortSet ofANegationOfAnyType() {
+        AbortSet out = AbortSet.NONE;
+        for (Type operand : NUMBERS) {
+            out = out.union(negation(operand));
+        }
+        return out;
+    }
+
+    /**
+     * The same, of a call a Core-to-Core pass minted for a fold the backend lowers as a whole. The
+     * walk itself ends with nothing of its own; the write its step makes into the builder is where
+     * a collection grows, and a fold can write more than one element per step, so that write can
+     * reach the most elements a collection holds ({@code Capacity}).
+     */
+    public static AbortSet ofAnEmittedCall(Core.Emitted emitted) {
+        return switch (emitted) {
+            case BUILD_LIST, BUILD_MAP -> AbortSet.NONE;
+            case GROW_LIST, PUT_MAP -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
         };
     }
 
@@ -289,13 +377,24 @@ public final class AbortSites {
      */
     private static AbortSet arithmetic(Core.Binary binary) {
         return switch (binary.op()) {
-            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> arithmeticType(binary);
-            case BinOp.DIV -> divide(binary);
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> arithmeticType(binary.op(), binary.type());
+            case BinOp.DIV ->
+                    divide(binary.type(), binary.left().type(), binary.right().type());
+            case BinOp.CONCAT, BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE,
+                 BinOp.AND, BinOp.OR -> whateverItsTypes(binary.op());
+        };
+    }
+
+    /** What an operator whose answer turns on no type ends a run for. */
+    private static AbortSet whateverItsTypes(BinOp op) {
+        return switch (op) {
             // `++` joins two strings or two lists, and the join can be longer than a `String` or a
             // `List` holds though neither side is (`Strings.append`, `Capacity`).
             case BinOp.CONCAT -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
             case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND, BinOp.OR ->
                     AbortSet.NONE;
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL, BinOp.DIV -> throw new IllegalArgumentException(
+                    "what `" + op + "` ends a run for turns on what it is handed");
         };
     }
 
@@ -304,16 +403,16 @@ public final class AbortSites {
      *  rather than answered with {@link AbortSet#NONE}, so a primitive the checker admits to
      *  arithmetic later and this has not been told about fails loudly instead of silently reading
      *  as total. */
-    private static AbortSet arithmeticType(Core.Binary binary) {
-        if (!(binary.type() instanceof Type.Prim prim)) {
+    private static AbortSet arithmeticType(BinOp op, Type answer) {
+        if (!(answer instanceof Type.Prim prim)) {
             throw new IllegalStateException(
-                    "`" + binary.op() + "` answers " + Type.show(binary.type())
+                    "`" + op + "` answers " + Type.show(answer)
                             + ", which no arithmetic the checker admits answers with");
         }
         return switch (prim) {
             case INT, DECIMAL, RATIONAL -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
             case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> throw new IllegalStateException(
-                    "`" + binary.op() + "` answers " + prim.shown()
+                    "`" + op + "` answers " + prim.shown()
                             + ", which no arithmetic the checker admits answers with");
         };
     }
@@ -334,10 +433,10 @@ public final class AbortSites {
      * checked {@code Core} and is refused the same way {@link #arithmeticType} refuses one, rather
      * than answered with {@link AbortSet#NONE}.
      */
-    private static AbortSet negation(Core.Neg neg) {
-        if (!(neg.type() instanceof Type.Prim prim)) {
+    private static AbortSet negation(Type answer) {
+        if (!(answer instanceof Type.Prim prim)) {
             throw new IllegalStateException(
-                    "unary minus answers " + Type.show(neg.type())
+                    "unary minus answers " + Type.show(answer)
                             + ", which no negation the checker admits answers with");
         }
         return switch (prim) {
@@ -382,15 +481,14 @@ public final class AbortSites {
      * exponents from arithmetic earlier in the program, and dividing can still ask for more than
      * {@code Rational} holds.
      */
-    private static AbortSet divide(Core.Binary binary) {
-        if (binary.type() != Type.RATIONAL) {
+    private static AbortSet divide(Type answer, Type left, Type right) {
+        if (answer != Type.RATIONAL) {
             throw new IllegalStateException(
-                    "`/` answers " + Type.show(binary.type()) + ", and the exact operator's answer"
+                    "`/` answers " + Type.show(answer) + ", and the exact operator's answer"
                             + " is always Rational (spec §stdlib-rational)");
         }
         AbortSet zeroDivisor = AbortSet.of(AbortKind.DIVISION_BY_ZERO);
-        boolean anOperandIsAlreadyRational =
-                binary.left().type() == Type.RATIONAL || binary.right().type() == Type.RATIONAL;
+        boolean anOperandIsAlreadyRational = left == Type.RATIONAL || right == Type.RATIONAL;
         return anOperandIsAlreadyRational
                 ? zeroDivisor.union(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE))
                 : zeroDivisor;

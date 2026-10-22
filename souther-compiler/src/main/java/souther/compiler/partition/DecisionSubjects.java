@@ -11,22 +11,27 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -89,9 +94,52 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
      */
     DecisionSubject.AnAnswer anAnswer(Core e, InputReads at) {
         InputReads.AnAnswerAt found = at.answerAt(e, symbols, newtypes);
-        if (found == null) {
-            return null;
-        }
+        return found == null ? null : subjectOf(found);
+    }
+
+    /**
+     * What a dependency answered, or a place inside it, whose every element {@code e} holds, each
+     * as often — {@code e} itself, or what puts them in another order or answers each as it is —
+     * or null where it is no such thing.
+     */
+    DecisionSubject.AnAnswer anAnswerWhoseEveryElementIsHeldBy(Core e, InputReads at) {
+        InputReads.AnAnswerAt found = at.answerWhoseEveryElementIsHeldBy(e, symbols, newtypes);
+        return found == null ? null : subjectOf(found);
+    }
+
+    /** A list a dependency answered, and the direction the elements are handed in relative to the
+     *  order the answer lists them. */
+    record AnAnswerInOrder(DecisionSubject.AnAnswer list, TraversalDirection direction) {}
+
+    /**
+     * The answer whose elements {@code e} holds once each, with the direction it holds them in,
+     * or null where it holds no answer's in an order that is shown
+     * ({@link InputReads#answerHandedInOrder}).
+     */
+    AnAnswerInOrder anAnswerHandedInOrder(Core e, InputReads at) {
+        InputReads.AnAnswerInOrder found = at.answerHandedInOrder(e, symbols, newtypes);
+        return found == null ? null
+                : new AnAnswerInOrder(subjectOf(found.answer()), found.direction());
+    }
+
+    /**
+     * {@code form}, a form of places inside one element, as a form of the numbers the answer
+     * {@code list} holds at those places of its element.
+     */
+    static LinearForm<Quantity> overTheElementsOf(DecisionSubject.AnAnswer list,
+                                                  LinearForm<ElementProjection> form) {
+        DecisionSubject.AnAnswer element = (DecisionSubject.AnAnswer) list.element();
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+        form.coefs().forEach((projection, weight) -> {
+            List<TermPath.Step> steps = new ArrayList<>(element.steps());
+            steps.addAll(projection.steps());
+            coefs.put(new DecisionAtom.OfAnAnswer(
+                    new DecisionSubject.AnAnswer(element.answered(), steps)), weight);
+        });
+        return new LinearForm<>(form.constant(), coefs);
+    }
+
+    private DecisionSubject.AnAnswer subjectOf(InputReads.AnAnswerAt found) {
         // What a report names the answer by is what it was asked about.
         List<DecisionArgument> arguments = new ArrayList<>();
         for (Core argument : found.arguments()) {
@@ -102,22 +150,35 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     }
 
     /**
-     * The number an operation takes of what a dependency answered that {@code e} is, or null where
-     * it is no such number.
+     * The number {@code e} takes of one value, or null where it takes none or no answer is held
+     * where it is read.
      *
-     * <p>Which calls take a number of a value is {@link NumericMeasures#takenIn}'s answer, the one
-     * the input's numbers are read by, so a count of a list is one wherever the list stands. What
-     * this adds is only whose value it is taken of.
+     * <p>Asked of every number a comparison names, so a body with no answer in it is not asked
+     * what an operation takes of one. Which calls take a number of a value is
+     * {@link NumericMeasures#takenIn}'s answer, the one the input's numbers are read by, so a
+     * count of a list is one wherever the list stands.
      */
-    DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(Core e, InputReads at) {
-        // Asked of every number a comparison names, so a body with no answer in it is not asked
-        // what an operation takes of one.
-        if (!at.mayHoldAnAnswer()) {
-            return null;
+    NumericMeasures.Measured measureWhereAnAnswerMayBeHeld(Core e, InputReads at) {
+        return at.mayHoldAnAnswer() ? NumericMeasures.takenIn(e, symbols,
+                each -> at.folded(each, symbols, newtypes)) : null;
+    }
+
+    /**
+     * The number {@code measured} takes of what a dependency answered, or null where the value it
+     * is taken of is no answer. What this adds to the measure is only whose value it is taken of.
+     *
+     * <p>A number that does not turn on the order of the elements is the number of the answer
+     * whose every element the value holds, each as often, as the input's is of the container
+     * ({@code inputs.InputNumber}): what {@code List.reverse} answered of a list adds up to what the
+     * list does.
+     */
+    DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(NumericMeasures.Measured measured,
+                                                 InputReads at) {
+        DecisionSubject.AnAnswer answer = anAnswer(measured.of(), at);
+        if (answer == null && measured.takenAs().theSameInEveryOrder()) {
+            answer = anAnswerWhoseEveryElementIsHeldBy(measured.of(), at);
         }
-        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
-        if (measured == null || !(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer
-                answer)) {
+        if (answer == null) {
             return null;
         }
         return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),

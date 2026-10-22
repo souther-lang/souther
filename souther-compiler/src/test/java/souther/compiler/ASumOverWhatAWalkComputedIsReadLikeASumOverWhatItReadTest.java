@@ -7,10 +7,15 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -48,16 +53,71 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
                 """.formatted(closure, threshold);
     }
 
-    /** The number is the computation, whichever way an author wrote it. */
+    /**
+     * The number is the computation, whichever way an author wrote it; and two computations over
+     * one list are two numbers, read beside the spellings of the one so that a reading that took
+     * every total of the field for one number is told apart.
+     */
     @Test
     void aFormOfOneFieldIsTheSameNumberHoweverItIsWritten() {
-        for (String spelled : List.of("a.q * 2", "2 * a.q", "a.q + a.q")) {
-            String report = report(model(spelled, 4));
+        Map<String, String> read = readEach(List.of("a.q * 2", "2 * a.q", "a.q + a.q", "a.q * 3"));
+        String thrice = read.remove("a.q * 3");
+        read.forEach((spelled, report) -> {
             assertTrue(report.contains("List.sum({2·q + 0 | xs[*]})"),
                     () -> spelled + " is twice the field: " + report);
             assertFalse(report.contains("not read"), () -> spelled + " is read: " + report);
-        }
+        });
+        assertTrue(thrice.contains("List.sum({3·q + 0 | xs[*]})"), thrice);
+        assertFalse(thrice.contains("{2·q"), thrice);
     }
+
+    /**
+     * What the report says of each of {@code closures}, each summed over the list and compared
+     * against four in a behavior of its own: the behaviors are one module, measured once, and each
+     * closure is read off its own behavior's part of the report.
+     */
+    private static Map<String, String> readEach(List<String> closures) {
+        StringBuilder module = new StringBuilder("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, p: Int, debit: Bool }
+                """);
+        for (int at = 0; at < closures.size(); at++) {
+            module.append("""
+
+                    behavior decide%d : (xs: List<A>) -> Many | Few
+
+                    let decide%d (xs) =
+                        if List.sum(List.map(a -> %s, xs)) >= 4
+                        then Many else Few
+                    """.formatted(at, at, closures.get(at)));
+        }
+        String report = report(module.toString());
+        Map<String, StringBuilder> parts = new LinkedHashMap<>();
+        StringBuilder part = null;
+        for (String line : report.lines().toList()) {
+            Matcher behavior = BEHAVIOR.matcher(line);
+            if (behavior.find()) {
+                part = parts.computeIfAbsent(closures.get(Integer.parseInt(behavior.group(1))),
+                        _ -> new StringBuilder());
+            } else if (line.isBlank()) {
+                part = null;
+            }
+            if (part != null) {
+                part.append(line).append('\n');
+            }
+        }
+        assertEquals(new LinkedHashSet<>(closures), parts.keySet(), report);
+        Map<String, String> out = new LinkedHashMap<>();
+        parts.forEach((closure, said) -> out.put(closure, said.toString()));
+        return out;
+    }
+
+    /** The line a behavior's part of the report opens with. */
+    private static final Pattern BEHAVIOR = Pattern.compile("^  decide(\\d+) ");
 
     /** A name given the computation, and a helper that computes it, are the same number. */
     @Test
@@ -82,14 +142,6 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertTrue(report.contains("List.sum({2·q + 0 | xs[*]})"), report);
     }
 
-    /** Two computations over one list are two numbers. */
-    @Test
-    void twoComputationsOverOneListAreTwoNumbers() {
-        String report = report(model("a.q * 3", 4));
-        assertTrue(report.contains("List.sum({3·q + 0 | xs[*]})"), report);
-        assertFalse(report.contains("{2·q"), report);
-    }
-
     /** More than one field, and a choice by a flag the element holds, are read. */
     @Test
     void severalFieldsAndAChoiceByAFlagAreRead() {
@@ -102,6 +154,154 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertFalse(chosen.contains("not read"), chosen);
     }
 
+    /** Arithmetic over a choice by a flag is the choice of the arithmetic, in each branch. */
+    @Test
+    void arithmeticOverAChoiceIsTheChoiceOfTheArithmetic() {
+        String weighed = report(model("(if a.debit then a.q else 0 - a.q) * 2 + a.p", 3));
+        assertTrue(weighed.contains("List.sum({if debit then 1·p + 2·q + 0 else 1·p + -2·q + 0"
+                + " | xs[*]})"), weighed);
+        assertFalse(weighed.contains("not read"), weighed);
+    }
+
+    /**
+     * Choices added up are held side by side, each made for the element on its own, and are one
+     * number whichever is written first.
+     */
+    @Test
+    void twoChoicesInOneSumAreHeldSideBySideInEitherOrder() {
+        String first = "(if a.debit then a.q else 0)";
+        String second = "(if a.first then a.p else 0)";
+        String one = report(twoFlags(first + " + " + second + " + 1"));
+        String other = report(twoFlags("1 + " + second + " + " + first));
+        String read = "List.sum({1·(if debit then 1·q + 0 else 0) + 1·(if first then 1·p + 0"
+                + " else 0) + 1 | xs[*]})";
+        assertTrue(one.contains(read), one);
+        assertTrue(other.contains(read), other);
+    }
+
+    /**
+     * As many choices as are written, and no more: a sum of three of them, each on a flag of its
+     * own, is three choices and not the eight ways they can fall out together.
+     *
+     * <p>Three and not more, because what is asked is the shape and not the size: the ways they
+     * fall out together, written as choices, would each name a flag more than once, which the
+     * count below tells from one choice a flag at any number of them from two up.
+     */
+    @Test
+    void aSumOfManyChoicesIsAsLargeAsWhatWasWritten() {
+        int many = 3;
+        StringBuilder fields = new StringBuilder("q: Int");
+        List<String> terms = new ArrayList<>();
+        for (int i = 1; i <= many; i++) {
+            fields.append(", f").append(i).append(": Bool");
+            terms.add("(if a.f" + i + " then a.q else 0)");
+        }
+        String report = report("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { %s }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.sum(List.map(a -> %s, xs)) >= 3
+                    then Many else Few
+                """.formatted(fields, String.join(" + ", terms)));
+        int from = report.indexOf("List.sum({");
+        int to = report.indexOf(" | xs[*]})", from);
+        assertTrue(from >= 0 && to > from, report);
+        String computed = report.substring(from, to);
+        for (int i = 1; i <= many; i++) {
+            assertTrue(computed.contains("1·(if f" + i + " then 1·q + 0 else 0)"), computed);
+        }
+        assertEquals(many, computed.split("if f", -1).length - 1,
+                () -> "each choice once: " + computed);
+    }
+
+    /**
+     * What a sum of choices can come to is what each of them can, added: at or above nought where
+     * every part is, and open below where one part reaches there.
+     */
+    @Test
+    void aSumOfChoicesIsBoundedByWhatEachPartCanComeTo() {
+        String held = report(boundedChoices("Amount"));
+        assertTrue(held.contains("no OUT point is owed at List.sum({1·(if debit then 1·q + 0"
+                + " else 0) + 1·(if first then 1·p + 0 else 0) + 0 | xs[*]}) = 0"), held);
+
+        String open = report(boundedChoices("Credit"));
+        assertTrue(open.contains("List.sum({1·(if debit then 1·q + 0 else 0)"), open);
+        assertFalse(open.contains("no OUT point is owed at List.sum("), open);
+    }
+
+    /** {@code q} at or above nought, and {@code p} of {@code pType}. */
+    private static String boundedChoices(String pType) {
+        return """
+                module example.computed
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data Credit = Int
+                    invariant value >= -5
+
+                data Ok = { n: Int }
+                data Bad
+
+                data A = { q: Amount, p: %s, debit: Bool, first: Bool }
+
+                behavior settle : (xs: List<A>) -> Ok | Bad
+                    constructs Ok
+
+                let settle (xs) = {
+                    guard List.sum(List.map(a -> (if a.debit then a.q.value else 0)
+                        + (if a.first then a.p.value else 0), xs)) > 0 else Bad
+                    Ok { n = 1 }
+                }
+                """.formatted(pType);
+    }
+
+    private static String twoFlags(String closure) {
+        return """
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, p: Int, debit: Bool, first: Bool }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.sum(List.map(a -> %s, xs)) >= 3
+                    then Many else Few
+                """.formatted(closure);
+    }
+
+    /** A fold whose step adds a choice of the element is the total of that choice. */
+    @Test
+    void aFoldAddingAChoiceIsTheTotalOfTheChoice() {
+        String folded = report("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, p: Int, debit: Bool }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.fold((acc, a) -> acc + (if a.debit then a.q else 0 - a.q), 0, xs) >= 3
+                    then Many else Few
+                """);
+        assertTrue(folded.contains("List.sum({if debit then 1·q + 0 else -1·q + 0 | xs[*]})"),
+                folded);
+        assertFalse(folded.contains("not read"), folded);
+    }
+
     /**
      * A closure that is the field and nothing made of it is the place, whichever way it is spelled.
      *
@@ -111,11 +311,11 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
      */
     @Test
     void aClosureThatIsTheFieldIsTheFieldWhateverItIsSpelledAs() {
-        for (String spelled : List.of("a.q", "a.q * 1", "a.q + 0", "if a.debit then a.q else a.q")) {
-            String report = report(model(spelled, 4));
-            assertTrue(report.contains("List.sum(xs[*].q)"), () -> spelled + ": " + report);
-            assertFalse(report.contains("List.sum({"), () -> spelled + ": " + report);
-        }
+        readEach(List.of("a.q", "a.q * 1", "a.q + 0", "if a.debit then a.q else a.q"))
+                .forEach((spelled, report) -> {
+                    assertTrue(report.contains("List.sum(xs[*].q)"), () -> spelled + ": " + report);
+                    assertFalse(report.contains("List.sum({"), () -> spelled + ": " + report);
+                });
     }
 
     /**
@@ -279,7 +479,8 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     void aFormOfSeveralFieldsIsReadAndNoRowIsWrittenForIt() {
         String model = model("a.q + a.p", 3);
         String report = report(model);
-        assertTrue(report.contains("made of several fields or chosen by a flag"), report);
+        assertTrue(report.contains("made of several fields, chosen by a flag, chosen by their"
+                + " case or chosen by where they stand"), report);
         String rows = rowsOf(model);
         assertTrue(rows.contains("no row for"), rows);
     }
@@ -311,14 +512,28 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
 
     private static String report(String model) {
         Compilation compilation = compiled(model);
+        compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** Each model measured once for the class: some are asked for their report and for their
+     *  rows. The rows ask what they read of the measurement; the rest is asked where a report is
+     *  made. */
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(model, each -> {
+            Compilation compilation = Compilation.ofSource(each, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            return compilation;
+        });
+    }
+
+    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 }

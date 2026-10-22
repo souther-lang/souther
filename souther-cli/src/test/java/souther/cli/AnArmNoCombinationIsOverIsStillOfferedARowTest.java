@@ -2,9 +2,8 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import souther.cli.CliProcess.Ran;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -110,6 +109,7 @@ class AnArmNoCombinationIsOverIsStillOfferedARowTest {
     void anArmInsideABlockIsSaidNothingAboutWhereAnOfferedRowGoesThroughIt() throws Exception {
         Run run = examples(IN_A_BLOCK, "--generate");
 
+        assertEquals(0, run.code(), run.out() + run.err());
         assertTrue(run.out().contains("no row goes through `case Off`"), run.out());
         assertTrue(run.out().contains("// fills case Off")
                         && run.out().contains("// fills flags[*]=Off")
@@ -129,20 +129,7 @@ class AnArmNoCombinationIsOverIsStillOfferedARowTest {
         args[1] = file.toString();
         System.arraycopy(extraArgs, 0, args, 2, extraArgs.length);
 
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        int code;
-        try {
-            code = Main.dispatch(args);
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
-        return new Run(code, out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+        Ran ran = CliInProcess.run(args);
+        return new Run(ran.code(), ran.out(), ran.err());
     }
 }

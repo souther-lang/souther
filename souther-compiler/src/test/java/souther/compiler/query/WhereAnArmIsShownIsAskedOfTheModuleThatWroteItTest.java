@@ -65,9 +65,7 @@ class WhereAnArmIsShownIsAskedOfTheModuleThatWroteItTest {
     }
 
     private static Compilation started(String limits) {
-        Compilation c = Compilation.ofDocuments(workspace(limits), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return Compilation.ofDocuments(workspace(limits), Set.of(), ModulePath.EMPTY);
     }
 
     /** The arms `shop.orders` reaches that `shop.limits` wrote. */

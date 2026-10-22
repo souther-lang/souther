@@ -1,7 +1,16 @@
 package souther.compiler.values;
 
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.WholeNumberRuns;
+import net.unit8.notation199x.pattern.Meter;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -26,7 +35,8 @@ import java.util.Set;
  *
  * <p><b>A set, and nothing about what it cost.</b> Two of these are put together by {@link Sets},
  * which is where the allowance for building a machine lives — so a set is a value wherever it came
- * from, and two equal sets are equal. Written here, a meet would be an operation with no answer for
+ * from, and two equal sets are equal, but for the spellings {@link WholeRuns} says it keeps, which
+ * {@link #holdsTheSameValuesAs} answers for. Written here, a meet would be an operation with no answer for
  * the case where the exact one is too much work, and the only thing left to do would be to fail in
  * the middle of a method that is supposed to be total.
  */
@@ -77,6 +87,45 @@ public sealed interface ValueSet {
         public Matching {
             if (language == null) {
                 throw new IllegalArgumentException("a pattern admits the strings of some language");
+            }
+        }
+    }
+
+    /**
+     * The whole numbers in some runs, which comparisons of one number leave it.
+     *
+     * <p>A fourth shape because a choice between comparisons is a fourth kind of answer.
+     * {@code r < 4 || r == 6} over a remainder by a thousand million leaves it a run of four numbers
+     * and one more, and leaves out the run between, of nearly a thousand million: written as
+     * {@link Finite} or {@link Cofinite} it is every one of them, and written as neither a reading
+     * would have to answer that the comparisons admit everything. Held by the ends of its runs, what
+     * it costs is how many comparisons made it ({@link WholeNumberRuns}).
+     *
+     * <p><b>Never empty, never everything, and never numbers apart or all numbers but some apart.</b>
+     * Runs of one number each are a {@link Finite} of those numbers, and runs leaving out one number
+     * at a time are a {@link Cofinite} of the numbers left out; {@link #wholeNumbers} is where that is
+     * settled, and it is the only way to one of these.
+     *
+     * <p><b>One set, and sometimes two spellings of it.</b> A set of whole numbers some of which are
+     * neighbours — {@code {1, 2}}, or every whole number but {@code 0} and {@code 1} — is a
+     * {@link Finite} or a {@link Cofinite} where a rule named its values one by one, and one of these
+     * where comparisons left it: counting runs out into values is the cost this shape is there to
+     * avoid, so neither spelling is turned into the other. What is the same either way is every
+     * question about the set — {@link #has}, {@link #sharesAnythingWith}, what it is met or joined
+     * with ({@link Sets}) and whether it holds the same values as another
+     * ({@link #holdsTheSameValuesAs}). {@code equals} is the spelling, and a reader asking whether
+     * two sets are one set asks the last of those and not it.
+     *
+     * <p>Over the whole numbers, as every set here is over one carrier: a value that is no whole
+     * number is in none of these.
+     */
+    record WholeRuns(WholeNumberRuns numbers) implements ValueSet {
+
+        public WholeRuns {
+            if (numbers == null || numbers.isNone() || numbers.isEvery()
+                    || numbers.isNumbersApart() || numbers.others().isNumbersApart()) {
+                throw new IllegalArgumentException(
+                        "runs of whole numbers are no shape the others already hold: " + numbers);
             }
         }
     }
@@ -139,6 +188,51 @@ public sealed interface ValueSet {
     }
 
     /**
+     * The whole numbers {@code numbers} holds.
+     *
+     * <p>The one way to a {@link WholeRuns}, and where runs that are one of the other shapes become
+     * that shape: none and every number are {@link #NONE} and {@link #ANY}, numbers apart are the
+     * {@link Finite} of them and every number but some apart is the {@link Cofinite} of those. Each
+     * of the last two lists as many values as there are runs.
+     */
+    static ValueSet wholeNumbers(WholeNumberRuns numbers) {
+        if (numbers.isNone()) {
+            return NONE;
+        }
+        if (numbers.isEvery()) {
+            return ANY;
+        }
+        if (numbers.isNumbersApart()) {
+            return new Finite(numbersOf(numbers));
+        }
+        WholeNumberRuns left = numbers.others();
+        if (left.isNumbersApart()) {
+            return new Cofinite(numbersOf(left));
+        }
+        return new WholeRuns(numbers);
+    }
+
+    /** The one number of each run of {@code apart}, as values. */
+    private static Set<Value> numbersOf(WholeNumberRuns apart) {
+        Set<Value> out = new LinkedHashSet<>();
+        apart.runs().forEach(run -> out.add(Value.number(new BigDecimal(run.from()))));
+        return out;
+    }
+
+    /**
+     * The whole number {@code value} is, or null where it is none: a number with nothing after the
+     * point, which is what a run of whole numbers holds.
+     */
+    static BigInteger wholeNumberOf(Value value) {
+        if (!(value instanceof Value.Number(BigDecimal number))) {
+            return null;
+        }
+        ExactRatio exactly = ExactRatio.of(number);
+        return exactly.isWhole() && exactly.floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
+                ? whole : null;
+    }
+
+    /**
      * Whether {@code value} is one of these.
      *
      * <p>Here, so that a reader wanting it does not answer it by asking which shape a set is. Every
@@ -152,6 +246,8 @@ public sealed interface ValueSet {
             case Cofinite it -> !it.excluded().contains(value);
             // A language is a set of strings, so nothing that is not one is in it.
             case Matching it -> value instanceof Value.Text text && it.language().has(text.value());
+            case WholeRuns it -> wholeNumberOf(value) instanceof BigInteger whole
+                    && it.numbers().holds(whole);
         };
     }
 
@@ -176,9 +272,58 @@ public sealed interface ValueSet {
         if (other instanceof Finite) {
             return other.sharesAnythingWith(this);
         }
+        // Runs against anything is what the two leave together, which is read off the ends and the
+        // values written out and builds nothing.
+        if (this instanceof WholeRuns || other instanceof WholeRuns) {
+            return !Sets.metUnder(this, other, Meter.refusing()).isEmpty();
+        }
         // Neither is finite, so each admits values without end and no finite thing either of them
         // holds out can be the whole of what the other has.
         return true;
+    }
+
+    /**
+     * Whether this and {@code other} hold the same values, however each is spelled.
+     *
+     * <p>{@code equals} where neither is runs of whole numbers, since each set has one spelling
+     * there. Where one is, the other is read as runs if it can be one — a set naming whole numbers,
+     * or every value but some whole numbers — which is the values already written out put in order,
+     * and the runs are never counted out. Runs hold whole numbers and nothing else, so a set naming
+     * anything else, or a language, holds other values than they do.
+     */
+    default boolean holdsTheSameValuesAs(ValueSet other) {
+        if (!(this instanceof WholeRuns) && !(other instanceof WholeRuns)) {
+            return equals(other);
+        }
+        WholeNumberRuns mine = runsOf(this);
+        return mine != null && mine.equals(runsOf(other));
+    }
+
+    /** The whole numbers {@code set} holds as runs, or null where it holds some other value or
+     *  is no set of whole numbers runs can say. */
+    private static WholeNumberRuns runsOf(ValueSet set) {
+        return switch (set) {
+            case WholeRuns it -> it.numbers();
+            case Finite it -> wholeNumbersAmong(it.values());
+            case Cofinite it -> {
+                WholeNumberRuns excluded = wholeNumbersAmong(it.excluded());
+                yield excluded == null ? null : excluded.others();
+            }
+            case Matching _ -> null;
+        };
+    }
+
+    /** {@code values} as runs of one number each, or null where one of them is no whole number. */
+    private static WholeNumberRuns wholeNumbersAmong(Set<Value> values) {
+        List<BigInteger> numbers = new ArrayList<>();
+        for (Value each : values) {
+            BigInteger whole = wholeNumberOf(each);
+            if (whole == null) {
+                return null;
+            }
+            numbers.add(whole);
+        }
+        return WholeNumberRuns.of(numbers);
     }
 
     /** Whether no value is admitted, which is what refuses a declaration. */

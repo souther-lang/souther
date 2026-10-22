@@ -77,6 +77,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
+                                List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
@@ -93,7 +94,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(
             PartitionDerivation.noSubject(),
-            PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
+            PairSpace.NONE, List.of(), List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of());
 
     /**
@@ -120,7 +121,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         return new PartitionEvidence(
                 why.failed(behavior),
                 PairSpace.notMeasurable(why, behavior), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of());
+                List.of(), List.of(), List.of());
     }
 
     /** Whether this is what a behavior missing something its boundary is made of comes to. */
@@ -131,6 +132,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         rulesWithoutALine = List.copyOf(rulesWithoutALine);
+        rulesWhereARunMayStop = List.copyOf(rulesWhereARunMayStop);
         notSeparated = List.copyOf(notSeparated);
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);
@@ -259,9 +261,18 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                                         taken.from().writtenAround(at()));
                                 case NumberAt.OfWhatNumber
                                         .OfHowManyCodePointsAreIn count ->
-                                        "#(" + count.counted() + ")(" + at() + ")";
+                                        "#(" + count.counted() + ")("
+                                                + count.through().writtenAround(at()) + ")";
+                                case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
+                                        "List.sum(String.codePoints(" + at() + "))";
                                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ ->
                                         "multiplicity(" + at() + ")";
+                                case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
+                                        "occurrences(" + at() + ")";
+                                case NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey asked ->
+                                        "occurrences(" + at() + " equal to " + asked.key() + ")";
+                                case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
+                                        extreme.spelledAt(at());
                             };
                 };
                 // The number the walk had named when it stopped, where it named one. Not what the
@@ -344,6 +355,18 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         boolean readingStopped();
 
         /**
+         * Every figure of this compiler's the reading was compared against and stopped at, which is
+         * none for a reading that stopped at no figure and for a rule read to the end.
+         *
+         * <p>Beside the word and not inside it. The word is what a document promises a reader can
+         * tell apart, and several figures stop a reading under one of them; told the word alone, a
+         * reader cannot say which figure to raise. What stopped it carries the figures from where
+         * the comparison was made ({@link BlockReason.ReadingStopReason#figures}), so this hands
+         * them on and works none of them out.
+         */
+        List<Figure> figures();
+
+        /**
          * Every handle a reader was offered for what this is about, which is nothing for an entry
          * about no rule.
          *
@@ -369,6 +392,13 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public boolean readingStopped() {
                 return finding.why() instanceof BlockReason.RuleReadingStopped;
+            }
+
+            /** A rule read to the end stopped at nothing, so it met no figure. */
+            @Override
+            public List<Figure> figures() {
+                return finding.why() instanceof BlockReason.ReadingStopReason stopped
+                        ? stopped.figures() : List.of();
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */
@@ -412,6 +442,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 return true;
             }
 
+            @Override
+            public List<Figure> figures() {
+                return finding.why().figures();
+            }
+
             /** Which rule, which is what tells this finding from the one beside it. */
             public RuleRef rule() {
                 return finding.rule();
@@ -443,6 +478,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public boolean readingStopped() {
                 return true;
+            }
+
+            @Override
+            public List<Figure> figures() {
+                return finding.why().figures();
             }
 
             /** None: this entry is about the position and names no rule of the model. */

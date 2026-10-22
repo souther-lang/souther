@@ -553,6 +553,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 yield Optional.of(point.side() == comparisonHolds ? authorsHolds
                         : authorsHolds.opposite());
             }
+            // A line naming a value fails alike on its two sides, so each side is the author's
+            // side of that name.
+            case ComparisonClaim.Singled _
+                    when origin.lineFacts().claim() instanceof ComparisonClaim.Singled ->
+                    Optional.of(point.side());
             default -> Optional.empty();
         };
         return side.map(towards -> sideOf(point, towards));
@@ -1158,18 +1163,6 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 }
             };
         }
-    }
-
-    /**
-     * Whether a row stands on each side of the line, where {@link #reaches} asks whether the values
-     * run to it on either.
-     *
-     * <p>What a line is asked where it has to be crossed and not only met: a row on each side, so
-     * that two rows differing in this line alone are there to be written.
-     */
-    static boolean reachesBothSides(Level cut, ExactAnswer<Seam> parts, Values values) {
-        return standsBeside(cut, parts, Towards.BELOW, values)
-                && standsBeside(cut, parts, Towards.ABOVE, values);
     }
 
     /**

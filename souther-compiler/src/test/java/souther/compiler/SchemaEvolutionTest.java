@@ -214,6 +214,141 @@ class SchemaEvolutionTest {
     }
 
     /**
+     * A branch added to a {@code oneOf} narrows nothing where no other branch can take what it
+     * takes, and narrows where one can; a branch taken out narrows.
+     */
+    @Test
+    void aBranchIsAddedOnlyWhereNoOtherBranchCanShareADocument() {
+        String toldApart = """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "properties": { "kind": { "const": "a" } } },
+                    { "properties": { "kind": { "const": "b" } } }
+                  ]
+                }""";
+        assertEquals(List.of(), narrowings(toldApart, """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "properties": { "kind": { "const": "a" } } },
+                    { "properties": { "kind": { "const": "b" } } },
+                    { "properties": { "kind": { "const": "c" } } }
+                  ]
+                }"""), "a document of kind a or b is refused by a branch of kind c");
+        assertEquals(List.of("/oneOf/2: added where another branch can take what it takes"),
+                narrowings(toldApart, """
+                        {
+                          "required": ["kind"],
+                          "oneOf": [
+                            { "properties": { "kind": { "const": "a" } } },
+                            { "properties": { "kind": { "const": "b" } } },
+                            { "properties": { "kind": { "const": "a" } } }
+                          ]
+                        }"""), "a document of kind a matched one branch and now matches two");
+        assertEquals(List.of("/oneOf/2: added where another branch can take what it takes"),
+                narrowings(toldApart, """
+                        {
+                          "required": ["kind"],
+                          "oneOf": [
+                            { "properties": { "kind": { "const": "a" } } },
+                            { "properties": { "kind": { "const": "b" } } },
+                            { "properties": { "v": { "enum": ["x"] } } }
+                          ]
+                        }"""), "a branch that says no kind takes documents of every kind");
+        assertEquals(List.of("/oneOf: 2 branches shipped and 1 now"), narrowings(toldApart, """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "properties": { "kind": { "const": "a" } } }
+                  ]
+                }"""), "a document of kind b is refused now");
+    }
+
+    /**
+     * A branch added to an {@code anyOf} narrows nothing where what stands there accepting more is
+     * the whole accepting more: a document a shipped branch took is taken by it still. Under a
+     * {@code not} it is the whole refusing more, and a branch added to an {@code allOf} is one more
+     * thing every document is asked; both narrow.
+     */
+    @Test
+    void aBranchIsAddedToAnAnyOfWhereGrowingThereGrowsTheWhole() {
+        String twoWords = """
+                {
+                  "properties": { "kind": { "anyOf": [
+                    { "const": "a" },
+                    { "const": "b" }
+                  ] } }
+                }""";
+        assertEquals(List.of(), narrowings(twoWords, """
+                {
+                  "properties": { "kind": { "anyOf": [
+                    { "const": "a" },
+                    { "const": "b" },
+                    { "const": "c" }
+                  ] } }
+                }"""), "a document of kind a or b is taken by the branch that took it");
+        assertEquals(List.of("/not: changed where a part accepting more can make the whole accept"
+                        + " less"), narrowings("""
+                {
+                  "not": { "anyOf": [ { "required": ["a"] } ] }
+                }""", """
+                {
+                  "not": { "anyOf": [ { "required": ["a"] }, { "required": ["b"] } ] }
+                }"""), "a document holding b alone was taken and is refused now");
+        assertEquals(List.of("/allOf/1: added where another branch can take what it takes"),
+                narrowings("""
+                        {
+                          "allOf": [ { "required": ["a"] } ]
+                        }""", """
+                        {
+                          "allOf": [ { "required": ["a"] }, { "required": ["b"] } ]
+                        }"""), "a document holding a alone was taken and is refused now");
+    }
+
+    /**
+     * A branch of a {@code oneOf} may grow where it takes objects alone and requires a key no other
+     * branch lets an object hold — every other one admitting no keys but the ones it names, and not
+     * that one, however deep its own branches are — and a definition it reaches grows with it. One
+     * other branch that admits any key is one that can share a document, and nothing grows.
+     */
+    @Test
+    void aBranchGrowsWhereItRequiresAKeyNoOtherBranchAdmits() {
+        String twoBranches = """
+                {
+                  "properties": { "id": { "oneOf": [
+                    { "$ref": "#/$defs/rule" },
+                    %s,
+                    { "$ref": "#/$defs/row" }
+                  ] } },
+                  "$defs": {
+                    "rule": { "type": "object", "required": ["conditions"],
+                              "additionalProperties": false,
+                              "properties": { "conditions": { "$ref": "#/$defs/reason" } } },
+                    "reason": { "enum": ["x"] },
+                    "row": { "type": "object", "oneOf": [
+                      { "required": ["name"], "additionalProperties": false,
+                        "properties": { "name": { "type": "string" } } },
+                      { "required": ["ordinal"], "additionalProperties": false,
+                        "properties": { "ordinal": { "type": "integer" } } }
+                    ] }
+                  }
+                }""";
+        String shipped = twoBranches.formatted("""
+                { "type": "object", "required": ["line"], "additionalProperties": false,
+                  "properties": { "line": { "type": "string" } } }""");
+        assertEquals(List.of(), narrowings(shipped, shipped.replace("\"enum\": [\"x\"]",
+                "\"enum\": [\"x\", \"y\"]")), "no other branch takes an object holding conditions");
+
+        String open = twoBranches.formatted("""
+                { "type": "object", "required": ["line"] }""");
+        assertEquals(List.of("/$defs/reason: changed where a part accepting more can make the"
+                        + " whole accept less"),
+                narrowings(open, open.replace("\"enum\": [\"x\"]", "\"enum\": [\"x\", \"y\"]")),
+                "{\"line\": \"a\", \"conditions\": \"y\"} matched one branch and now matches two");
+    }
+
+    /**
      * A definition a {@code not} reaches is as it shipped, even where it is reached elsewhere as
      * well; one reached only where things may grow may grow.
      */
@@ -297,6 +432,86 @@ class SchemaEvolutionTest {
                 narrowings("""
                         { "not": { "properties": { "description": { "const": 1 } } } }""", """
                         { "not": { "properties": { "description": { "const": 2 } } } }"""));
+    }
+
+    private static final String KINDS = """
+            {
+              "properties": { "kind": { "enum": ["a", "b"] } },
+              "allOf": [
+                {
+                  "if": { "properties": { "kind": { "const": "a" } }, "required": ["kind"] },
+                  "then": { "required": ["x"] },
+                  "else": { "not": { "required": ["x"] } }
+                }
+              ]
+            }""";
+
+    private static String kindsWith(String words, String wrapped) {
+        return """
+                {
+                  "properties": { "kind": { "enum": %s } },
+                  "allOf": [
+                    {
+                      "if": { "properties": { "kind": { "const": "a" } }, "required": ["kind"] },
+                      "then": { "required": ["x"] },
+                      "else": %s
+                    }
+                  ]
+                }""".formatted(words, wrapped);
+    }
+
+    private static String onKind(String word) {
+        return """
+                { "if": { "properties": { "kind": { "const": "%s" } }, "required": ["kind"] },
+                  "then": { "required": ["x"] },
+                  "else": { "not": { "required": ["x"] } } }""".formatted(word);
+    }
+
+    /**
+     * A new kind may be asked more of than the others: no document of it shipped, so none is held
+     * to more than it was.
+     */
+    @Test
+    void aConditionOnAKindThatDidNotShipNarrowsNothing() {
+        assertEquals(List.of(),
+                narrowings(KINDS, kindsWith("[\"a\", \"b\", \"c\"]", onKind("c"))));
+    }
+
+    /** A kind that shipped is held to what it was held to. */
+    @Test
+    void aConditionOnAKindThatShippedIsANarrowing() {
+        assertEquals(false,
+                narrowings(KINDS, kindsWith("[\"a\", \"b\"]", onKind("b"))).isEmpty());
+    }
+
+    /** Where the discriminator was held to no enum, any word was taken, and the new one was too. */
+    @Test
+    void aConditionOnAWordNothingRefusedIsANarrowing() {
+        String open = KINDS.replace("{ \"enum\": [\"a\", \"b\"] }", "{ \"type\": \"string\" }");
+        assertEquals(false,
+                narrowings(open, kindsWith("[\"a\", \"b\", \"c\"]", onKind("c"))).isEmpty());
+    }
+
+    /** What stands in the wrapper is the branch that shipped, and nothing else may have changed. */
+    @Test
+    void aWrapperThatAlsoChangesTheBranchIsANarrowing() {
+        String changed = onKind("c").replace("{ \"not\": { \"required\": [\"x\"] } }",
+                "{ \"not\": { \"required\": [\"y\"] } }");
+        assertEquals(false,
+                narrowings(KINDS, kindsWith("[\"a\", \"b\", \"c\"]", changed)).isEmpty());
+    }
+
+    /** A key beside the conditional asks every document more, the shipped kinds included. */
+    @Test
+    void aWrapperWithAConstraintBesideItIsANarrowing() {
+        for (String beside : List.of("\"required\": [\"y\"]",
+                "\"not\": { \"required\": [\"z\"] }",
+                "\"allOf\": [{ \"required\": [\"y\"] }]")) {
+            String wrapped = onKind("c").replaceFirst("\\}$", ", " + beside + " }");
+            assertEquals(false,
+                    narrowings(KINDS, kindsWith("[\"a\", \"b\", \"c\"]", wrapped)).isEmpty(),
+                    beside);
+        }
     }
 
     private static List<String> narrowings(String current) {

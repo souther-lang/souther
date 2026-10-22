@@ -50,7 +50,9 @@ more, and both existed only because develop had been made to claim a number it w
 
    The release workflow runs on the tag: it builds, attaches `souther`, `souther.jar`,
    `souther-lsp.jar`, `souther.tmLanguage.json`, the Windows distributions and `SHA256SUMS` to the
-   GitHub Release, and gives the Release `docs/releases/<version>.md` as its text. A version
+   GitHub Release, and gives the Release `docs/releases/<version>.md` as its text, with each
+   paragraph on one line (`bin/release-notes.sh`), since a Release renders a line break inside a
+   paragraph as a break. A version
    with a hyphen in it is published as a prerelease, which the workflow reads off the tag rather
    than being told.
 
@@ -66,8 +68,11 @@ more, and both existed only because develop had been made to claim a number it w
    from the jar without going through the tag. What makes that true is checked rather than
    assumed. `-Prelease` fails on a change HEAD does not record, on a file git ignores in a place the
    build reads (`bin/require-clean-checkout.sh`: each module's `src`, and what the root pom lists as
-   `souther.build.reads`), unless the commit is a full object id, and unless `v<version>` points at
-   it; and it cleans every module before building it, so nothing an earlier build wrote goes in.
+   `souther.build.reads`), unless the commit is a full object id, unless `v<version>` points at
+   it, and unless it is HEAD of the tree being built (`bin/require-revision-is-head.sh`: the
+   plugin that reads it takes a linked worktree for the main checkout, so publish from the main
+   checkout or a clone); and it cleans every module before building it, so nothing an earlier
+   build wrote goes in.
    An ignored file the build never reads, an editor's settings or `.DS_Store`, is no reason to
    refuse.
 

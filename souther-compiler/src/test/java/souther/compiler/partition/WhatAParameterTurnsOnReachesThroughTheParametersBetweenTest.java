@@ -26,7 +26,7 @@ class WhatAParameterTurnsOnReachesThroughTheParametersBetweenTest {
             new ContentsAsked.Asked(TermPath.of("outer").then("held"),
                     TermPath.of("box").then("held"), true, false, Optional.empty()),
             new ContentsAsked.Asked(TermPath.of("box").then("held"), TermPath.of("n"), true,
-                    false, Optional.empty())), List.of());
+                    false, Optional.empty())), List.of(), List.of());
 
     private static final List<String> DECLARED = List.of("outer", "box", "n");
 
@@ -53,7 +53,7 @@ class WhatAParameterTurnsOnReachesThroughTheParametersBetweenTest {
                 new ContentsAsked.Asked(TermPath.of("b").then("xs"), TermPath.of("a").then("v"),
                         true, false, Optional.empty()),
                 new ContentsAsked.Asked(TermPath.of("a").then("ys"), TermPath.of("b").then("w"),
-                        true, false, Optional.empty())), List.of());
+                        true, false, Optional.empty())), List.of(), List.of());
         CompositionOrder.Result.Circular said = assertInstanceOf(
                 CompositionOrder.Result.Circular.class,
                 CompositionOrder.of(List.of("a", "b", "c"), circular));
@@ -69,7 +69,8 @@ class WhatAParameterTurnsOnReachesThroughTheParametersBetweenTest {
     void ofTwoParametersHeldToOneValueTheSecondComposedTurnsOnTheFirst() {
         for (boolean same : List.of(true, false)) {
             ContentsAsked held = new ContentsAsked(List.of(), List.of(RowDemand.OneValueAtBoth.of(
-                    TermPath.of("n").then("v"), TermPath.of("outer").then("v"), same)));
+                    TermPath.of("n").then("v"), TermPath.of("outer").then("v"), same)),
+                    List.of());
             CompositionOrder order = ordered(held);
 
             assertEquals(List.of(0, 1, 2), order.order(), "held adds no order of its own");
