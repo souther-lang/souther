@@ -3115,93 +3115,112 @@ public final class InputReads {
                                              DeclarationNewtypes newtypes) {
         Denotation made = at.standing(e, symbols, newtypes);
         InputReads there = made.at();
-        switch (Core.withoutStanding(made.value())) {
+        return switch (Core.withoutStanding(made.value())) {
             case Core.ListLit written when written.elements().size() <= 1 -> {
                 out.add(new AnArmAnswered(written.elements().isEmpty() ? null
                         : written.elements().getFirst(), Map.copyOf(held), standing,
                         choices.onlyCase()));
-                return true;
+                yield true;
             }
             case Core.LetIn let when let.binder() != null && let.binder().binding() != null -> {
                 held.put(let.binder().binding(), let.value());
-                return oneOrNoneAnswered(let.body(), there.and(let.binder(), let.value()), held,
+                yield oneOrNoneAnswered(let.body(), there.and(let.binder(), let.value()), held,
                         standing, choices, outer, out, symbols, newtypes);
             }
-            // Each arm read where choosing it puts the reading, which is this reading's own answer
-            // (choosing); the name an arm of a match binds stands at the place it narrowed, inside
-            // the element.
-            case Core.Match match -> {
-                for (Core.Case taken : match.cases()) {
-                    InputReads inside = there.choosing(Choice.Decides.ofCase(match, taken),
-                            symbols, newtypes);
-                    Map<BindingId, ElementProjection> bound = standing;
-                    ElementProjection narrowed = null;
-                    if (taken.binder() != null && taken.binder().binding() != null) {
-                        if (!(inside.names.roleOf(taken.binder().binding())
-                                instanceof BindingRole.Root(TermPath path))
-                                || !(ElementProjection.below(outer, path)
-                                        instanceof ElementProjection projection)) {
-                            return false;
-                        }
-                        Map<BindingId, ElementProjection> wider = new LinkedHashMap<>(standing);
-                        wider.put(taken.binder().binding(), projection);
-                        bound = Map.copyOf(wider);
-                        narrowed = projection.narrowing() == null ? null : projection;
-                    }
-                    if (!oneOrNoneAnswered(taken.body(), inside, held, bound,
-                            choices.then(narrowed), outer, out, symbols, newtypes)) {
-                        return false;
-                    }
-                }
-                return true;
-            }
+            case Core.Match match -> everyCaseAnswersOneOrNone(match, there, held, standing,
+                    choices, outer, out, symbols, newtypes);
             // A condition chooses by no case of the element and binds no name.
             case Core.If iff -> {
                 for (Choice.Arm arm : Choice.of(iff).arms()) {
                     if (!oneOrNoneAnswered(arm.answers(),
                             there.choosing(arm.decidedBy(), symbols, newtypes), held, standing,
                             choices.then(null), outer, out, symbols, newtypes)) {
-                        return false;
+                        yield false;
                     }
                 }
-                return true;
+                yield true;
             }
             case Core value when AnOperationApplied.of(value) instanceof AnOperationApplied(
-                    ValueName operation, List<Core> args) -> {
-                // A map of a list of one value or none is a list of one or none of what its
-                // closure answers of that value.
-                BuiltFrom<DeclaredArgument> built =
-                        DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
-                int mapped = built == null || built.mapsEachElementOf() == null ? -1
-                        : CallArguments.positionOf(built.mapsEachElementOf(), operation);
-                Core.Block closure = mapped < 0 || mapped >= args.size() ? null
-                        : AnIdentityMap.closureBeside(args, mapped,
-                                each -> blockOf(there, each, symbols, newtypes));
-                if (closure == null || closure.params().size() != 1
-                        || closure.params().getFirst().binding() == null) {
+                    ValueName operation, List<Core> args) -> aMapOfOneOrNone(operation, args,
+                    there, held, standing, choices, outer, out, symbols, newtypes);
+            default -> false;
+        };
+    }
+
+    /**
+     * Whether every arm of {@code match} answers a list of one value or of none, each arm read
+     * where choosing it puts the reading — which is this reading's own answer ({@link
+     * #choosing}) — and the name it binds standing at the place it narrowed, inside the element.
+     */
+    private static boolean everyCaseAnswersOneOrNone(Core.Match match, InputReads there,
+                                                     Map<BindingId, Core> held,
+                                                     Map<BindingId, ElementProjection> standing,
+                                                     ChoicesOnTheWay choices, TermPath outer,
+                                                     List<AnArmAnswered> out, Symbols symbols,
+                                                     DeclarationNewtypes newtypes) {
+        for (Core.Case taken : match.cases()) {
+            InputReads inside = there.choosing(Choice.Decides.ofCase(match, taken), symbols,
+                    newtypes);
+            Map<BindingId, ElementProjection> bound = standing;
+            ElementProjection narrowed = null;
+            if (taken.binder() != null && taken.binder().binding() != null) {
+                if (!(inside.names.roleOf(taken.binder().binding())
+                        instanceof BindingRole.Root(TermPath path))
+                        || !(ElementProjection.below(outer, path)
+                                instanceof ElementProjection projection)) {
                     return false;
                 }
-                List<AnArmAnswered> given = new ArrayList<>();
-                if (!oneOrNoneAnswered(args.get(mapped), there, held, standing, choices, outer,
-                        given, symbols, newtypes)) {
-                    return false;
-                }
-                for (AnArmAnswered each : given) {
-                    if (each.value() == null) {
-                        out.add(each);
-                        continue;
-                    }
-                    Map<BindingId, Core> handed = new LinkedHashMap<>(each.held());
-                    handed.put(closure.params().getFirst().binding(), each.value());
-                    out.add(new AnArmAnswered(closure.body(), Map.copyOf(handed),
-                            each.standing(), each.taken()));
-                }
-                return true;
+                Map<BindingId, ElementProjection> wider = new LinkedHashMap<>(standing);
+                wider.put(taken.binder().binding(), projection);
+                bound = Map.copyOf(wider);
+                narrowed = projection.narrowing() == null ? null : projection;
             }
-            default -> {
+            if (!oneOrNoneAnswered(taken.body(), inside, held, bound, choices.then(narrowed),
+                    outer, out, symbols, newtypes)) {
                 return false;
             }
         }
+        return true;
+    }
+
+    /**
+     * Whether {@code operation} applied to {@code args} is a map of a list of one value or none,
+     * which is a list of one or none of what its closure answers of that value — each such answer
+     * added to {@code out}.
+     */
+    private static boolean aMapOfOneOrNone(ValueName operation, List<Core> args, InputReads there,
+                                           Map<BindingId, Core> held,
+                                           Map<BindingId, ElementProjection> standing,
+                                           ChoicesOnTheWay choices, TermPath outer,
+                                           List<AnArmAnswered> out, Symbols symbols,
+                                           DeclarationNewtypes newtypes) {
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        int mapped = built == null || built.mapsEachElementOf() == null ? -1
+                : CallArguments.positionOf(built.mapsEachElementOf(), operation);
+        Core.Block closure = mapped < 0 || mapped >= args.size() ? null
+                : AnIdentityMap.closureBeside(args, mapped,
+                        each -> blockOf(there, each, symbols, newtypes));
+        if (closure == null || closure.params().size() != 1
+                || closure.params().getFirst().binding() == null) {
+            return false;
+        }
+        List<AnArmAnswered> given = new ArrayList<>();
+        if (!oneOrNoneAnswered(args.get(mapped), there, held, standing, choices, outer, given,
+                symbols, newtypes)) {
+            return false;
+        }
+        for (AnArmAnswered each : given) {
+            if (each.value() == null) {
+                out.add(each);
+                continue;
+            }
+            Map<BindingId, Core> handed = new LinkedHashMap<>(each.held());
+            handed.put(closure.params().getFirst().binding(), each.value());
+            out.add(new AnArmAnswered(closure.body(), Map.copyOf(handed), each.standing(),
+                    each.taken()));
+        }
+        return true;
     }
 
     /**
