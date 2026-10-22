@@ -303,7 +303,7 @@ final class OperationFactBinder {
 
     /** Whether {@code a} and {@code b} are containers of one kind: both lists, both sets, or both
      *  maps. */
-    static boolean sameKind(Type a, Type b) {
+    private static boolean sameKind(Type a, Type b) {
         return (a instanceof Type.ListOf && b instanceof Type.ListOf)
                 || (a instanceof Type.SetOf && b instanceof Type.SetOf)
                 || (a instanceof Type.MapOf && b instanceof Type.MapOf);

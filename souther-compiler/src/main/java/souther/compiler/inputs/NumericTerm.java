@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.UnaryOperator;
 
 /**
  * The number a rule compares, and where that number is read from.
@@ -119,15 +118,15 @@ public sealed interface NumericTerm
         /** The same number, of the one value standing where {@code moved} puts {@link
          *  #position()}: never null, since one place moved is one place. */
         @Override
-        FromOnePosition movedTo(UnaryOperator<TermPath> moved);
+        FromOnePosition movedTo(PlacesMoved moved);
     }
 
     /** The number a location holds: a numeric parameter, a field of one, a numeric newtype's value. */
     record ValueOf(TermPath position) implements FromOnePosition {
 
         @Override
-        public ValueOf movedTo(UnaryOperator<TermPath> moved) {
-            return new ValueOf(moved.apply(position));
+        public ValueOf movedTo(PlacesMoved moved) {
+            return new ValueOf(moved.put(position));
         }
 
         @Override
@@ -304,7 +303,7 @@ public sealed interface NumericTerm
          *  there is a value of the same type, so the account the operation is taken by holds of it
          *  as it did here. */
         @Override
-        public TakenOf movedTo(UnaryOperator<TermPath> moved) {
+        public TakenOf movedTo(PlacesMoved moved) {
             return new TakenOf(operation, source.movedTo(moved), arguments);
         }
 
@@ -441,8 +440,8 @@ public sealed interface NumericTerm
         }
 
         @Override
-        public CodePointClassCount movedTo(UnaryOperator<TermPath> moved) {
-            return new CodePointClassCount(moved.apply(position), counted, through);
+        public CodePointClassCount movedTo(PlacesMoved moved) {
+            return new CodePointClassCount(moved.put(position), counted, through);
         }
 
         @Override
@@ -500,8 +499,8 @@ public sealed interface NumericTerm
         }
 
         @Override
-        public CodePointValueSum movedTo(UnaryOperator<TermPath> moved) {
-            return new CodePointValueSum(moved.apply(position));
+        public CodePointValueSum movedTo(PlacesMoved moved) {
+            return new CodePointValueSum(moved.put(position));
         }
 
         @Override
@@ -590,8 +589,8 @@ public sealed interface NumericTerm
         /** The same number of where {@code moved} puts its places, or null where the place moved is
          *  no longer one value of each element of the container moved. */
         @Override
-        public Multiplicity movedTo(UnaryOperator<TermPath> moved) {
-            return of(moved.apply(container), moved.apply(place));
+        public Multiplicity movedTo(PlacesMoved moved) {
+            return of(moved.put(container), moved.put(place));
         }
 
         @Override
@@ -728,8 +727,8 @@ public sealed interface NumericTerm
         /** The same number of where {@code moved} puts its places, or null where the places moved
          *  are no longer one value of each element of the container moved. */
         @Override
-        public ExtremeOfItsKey movedTo(UnaryOperator<TermPath> moved) {
-            return of(moved.apply(container), moved.apply(key), moved.apply(value), extreme);
+        public ExtremeOfItsKey movedTo(PlacesMoved moved) {
+            return of(moved.put(container), moved.put(key), moved.put(value), extreme);
         }
 
         @Override
@@ -830,7 +829,7 @@ public sealed interface NumericTerm
          *  the move takes a place the selection reads elsewhere
          *  ({@link NumericTerm#selectionStays}). */
         @Override
-        public OccurrencesOfItsValue movedTo(UnaryOperator<TermPath> moved) {
+        public OccurrencesOfItsValue movedTo(PlacesMoved moved) {
             RunSource at = run.movedTo(moved);
             return NumericTerm.selectionStays(selection, moved) ? of(at, selection) : null;
         }
@@ -903,9 +902,9 @@ public sealed interface NumericTerm
         /** The same number read from where {@code moved} puts the run and the key — or null where
          *  that is no run of every occurrence, or the key stands inside a container. */
         @Override
-        public OccurrencesOfAKey movedTo(UnaryOperator<TermPath> moved) {
+        public OccurrencesOfAKey movedTo(PlacesMoved moved) {
             return run.movedTo(moved) instanceof RunSource.FlattenedOccurrences flat
-                    ? of(flat, moved.apply(key)) : null;
+                    ? of(flat, moved.put(key)) : null;
         }
 
         @Override
@@ -1142,9 +1141,9 @@ public sealed interface NumericTerm
          *  they are not in as many containers there, or the move takes a place the selection
          *  reads elsewhere ({@link NumericTerm#selectionStays}). */
         @Override
-        public GatheredUnderItsKey movedTo(UnaryOperator<TermPath> moved) {
-            TermPath at = moved.apply(elements);
-            return NumericTerm.selectionStays(selection, moved) && at != null
+        public GatheredUnderItsKey movedTo(PlacesMoved moved) {
+            TermPath at = moved.put(elements);
+            return NumericTerm.selectionStays(selection, moved)
                     && at.containersHoldingIt().size() == elements.containersHoldingIt().size()
                     ? underAnyKey(at, key, value, each, gathering, selection) : null;
         }
@@ -1279,9 +1278,9 @@ public sealed interface NumericTerm
          *  or null where the elements are not in as many containers there, or the key stands
          *  inside one. */
         @Override
-        public GatheredUnderAKey movedTo(UnaryOperator<TermPath> moved) {
+        public GatheredUnderAKey movedTo(PlacesMoved moved) {
             GatheredUnderItsKey at = gathered.movedTo(moved);
-            return at == null ? null : over(at, moved.apply(asked));
+            return at == null ? null : over(at, moved.put(asked));
         }
 
         @Override
@@ -1403,7 +1402,7 @@ public sealed interface NumericTerm
          *  where what stands there is no one run, as a run inside an element of another container
          *  is not. */
         @Override
-        public TakenOver movedTo(UnaryOperator<TermPath> moved) {
+        public TakenOver movedTo(PlacesMoved moved) {
             RunSource at = source.movedTo(moved);
             return at == null ? null : new TakenOver(operation, at);
         }
@@ -1456,8 +1455,11 @@ public sealed interface NumericTerm
      * The same number, of the value standing where {@code moved} puts each place it is read from —
      * or null where that is no such number. What a behavior states of a number of its parameter is
      * what it states of the same number of whatever a call handed that parameter.
+     *
+     * <p>The move puts every place somewhere ({@link PlacesMoved}); that the number is none where
+     * they are put is this answer's to say, and only this one's.
      */
-    NumericTerm movedTo(UnaryOperator<TermPath> moved);
+    NumericTerm movedTo(PlacesMoved moved);
 
     /**
      * Whether {@code selection}, which keeps some of the occurrences a number is of, is the same
@@ -1469,13 +1471,13 @@ public sealed interface NumericTerm
      * is that number under a move leaving its places where they stand, and no number under one
      * taking them elsewhere.
      */
-    static boolean selectionStays(KeptOccurrences selection, UnaryOperator<TermPath> moved) {
+    static boolean selectionStays(KeptOccurrences selection, PlacesMoved moved) {
         if (selection == null) {
             return true;
         }
         boolean stays = true;
         for (TermPath read : selection.placesRead()) {
-            stays &= moved.apply(read).equals(read);
+            stays &= moved.leaves(read);
         }
         return stays;
     }
@@ -1486,10 +1488,10 @@ public sealed interface NumericTerm
      */
     default List<TermPath> placesReadOff() {
         List<TermPath> places = new ArrayList<>();
-        if (movedTo(at -> {
+        if (movedTo(PlacesMoved.by(at -> {
             places.add(at);
             return at;
-        }) == null) {
+        })) == null) {
             throw new IllegalStateException(this + " moved nowhere is no number, and is one");
         }
         return List.copyOf(places);

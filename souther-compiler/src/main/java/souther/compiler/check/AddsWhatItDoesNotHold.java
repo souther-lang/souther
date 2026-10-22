@@ -9,7 +9,6 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -98,29 +97,23 @@ public sealed interface AddsWhatItDoesNotHold {
      * the holder held — and the count is then the count of those, which the law of how many says
      * in the same words.
      *
-     * @param asking how whether a container of a type holds a value as an element or as a key is
-     *               asked, or null where no operation's law says it is
+     * <p>Which operation the law of membership asks is the law's to say, and nothing here names
+     * one: it is read as asking whether a container holds a value only where that operation's own
+     * law of truth says so ({@code asking}). The law was held to the operations' declarations when
+     * it was bound, so the operation it names takes the containers it is handed.
+     *
+     * @param asking how {@code in} asks whether a container holds a value as {@code of} says, or
+     *               null where its law of truth says no such thing
      */
     static AddsWhatItDoesNotHold of(ValueName operation, OperationLaw<DeclaredArgument> law,
                                     List<LawProposition<Slot>> statedBeside,
-                                    BiFunction<Type, Of, Asked> asking) {
+                                    BiFunction<ValueName.Stdlib.Operation, Of, Asked> asking) {
         AddsWhatItDoesNotHold counted = countedBy(law);
         if (counted == null) {
             return null;
         }
-        Asked inTheHolder = asking.apply(counted.holder().stands(), switch (counted) {
-            case OneValue one -> one.of();
-            case TheElementsOf _ -> Of.ELEMENTS;
-        });
-        Asked inWhatIsAdded = switch (counted) {
-            case OneValue _ -> inTheHolder;
-            case TheElementsOf elements -> asking.apply(elements.from().stands(), Of.ELEMENTS);
-        };
-        if (inTheHolder == null || inWhatIsAdded == null) {
-            return null;
-        }
         for (LawProposition<Slot> each : statedBeside) {
-            if (holdsExactly(counted, operation, each, inTheHolder, inWhatIsAdded)) {
+            if (holdsExactly(counted, operation, each, asking)) {
                 return counted;
             }
         }
@@ -142,14 +135,10 @@ public sealed interface AddsWhatItDoesNotHold {
      * {@code adds} adds or one its holder holds: {@code in(y, answer) ⇔ in(y, added) ∨ in(y,
      * holder)}, as an equivalence is written ({@code any(all(a, b), all(¬a, ¬b))}, the parts of
      * each in either order).
-     *
-     * @param inTheHolder   how whether the holder, or the answer, holds a value is asked
-     * @param inWhatIsAdded how whether the container added holds one is asked; for one value, the
-     *                      same, unused
      */
     private static boolean holdsExactly(AddsWhatItDoesNotHold adds, ValueName operation,
-                                        LawProposition<Slot> stated, Asked inTheHolder,
-                                        Asked inWhatIsAdded) {
+                                        LawProposition<Slot> stated,
+                                        BiFunction<ValueName.Stdlib.Operation, Of, Asked> asking) {
         if (!(stated instanceof LawProposition.Any<Slot>(List<LawProposition<Slot>> either))
                 || either.size() != 2) {
             return false;
@@ -163,7 +152,7 @@ public sealed interface AddsWhatItDoesNotHold {
                             both.getLast().denied()))) {
                 for (List<LawProposition<Slot>> sides : List.of(both, both.reversed())) {
                     if (saysTheAnswerHolds(adds, operation, sides.getFirst(), sides.getLast(),
-                            inTheHolder, inWhatIsAdded)) {
+                            asking)) {
                         return true;
                     }
                 }
@@ -176,9 +165,15 @@ public sealed interface AddsWhatItDoesNotHold {
      *  arguments, and {@code where} says exactly where the value is one added or one held. */
     private static boolean saysTheAnswerHolds(AddsWhatItDoesNotHold adds, ValueName operation,
                                               LawProposition<Slot> inTheAnswer,
-                                              LawProposition<Slot> where, Asked inTheHolder,
-                                              Asked inWhatIsAdded) {
-        List<LawSubject<Slot>> asked = membershipIn(inTheHolder, inTheAnswer);
+                                              LawProposition<Slot> where,
+                                              BiFunction<ValueName.Stdlib.Operation, Of, Asked>
+                                                      asking) {
+        Asked inTheHolder = askedBy(inTheAnswer, switch (adds) {
+            case OneValue one -> one.of();
+            case TheElementsOf _ -> Of.ELEMENTS;
+        }, asking);
+        List<LawSubject<Slot>> asked = inTheHolder == null ? null
+                : membershipIn(inTheHolder, inTheAnswer);
         if (asked == null
                 || !(asked.getLast() instanceof LawSubject.AnswerOf<Slot>(
                         ValueName.Stdlib.Operation answered, List<LawSubject<Slot>> args))
@@ -190,13 +185,31 @@ public sealed interface AddsWhatItDoesNotHold {
         LawSubject<Slot> any = asked.getFirst();
         LawProposition<Slot> held = membership(inTheHolder, any,
                 new LawSubject.Argument<>(new Slot.Place(adds.holder().position())));
+        if (!parts.contains(held)) {
+            return false;
+        }
+        LawProposition<Slot> other = parts.getFirst().equals(held) ? parts.getLast()
+                : parts.getFirst();
         LawProposition<Slot> added = switch (adds) {
             case OneValue one -> new LawProposition.Same<>(any,
                     new LawSubject.Argument<>(new Slot.Place(one.value().position())), true);
-            case TheElementsOf elements -> membership(inWhatIsAdded, any,
-                    new LawSubject.Argument<>(new Slot.Place(elements.from().position())));
+            case TheElementsOf elements -> {
+                Asked inWhatIsAdded = askedBy(other, Of.ELEMENTS, asking);
+                yield inWhatIsAdded == null ? null : membership(inWhatIsAdded, any,
+                        new LawSubject.Argument<>(new Slot.Place(elements.from().position())));
+            }
         };
-        return Set.copyOf(parts).equals(Set.of(held, added));
+        return other.equals(added);
+    }
+
+    /** How the operation whose answer {@code stated} observes asks whether a container holds a
+     *  value as {@code of} says — or null where it observes none, or that operation's law of
+     *  truth says no such thing. */
+    private static Asked askedBy(LawProposition<Slot> stated, Of of,
+                                 BiFunction<ValueName.Stdlib.Operation, Of, Asked> asking) {
+        return stated instanceof LawProposition.Observed<Slot>(
+                LawSubject.AnswerOf<Slot>(ValueName.Stdlib.Operation in, var _), var _)
+                ? asking.apply(in, of) : null;
     }
 
     /** That {@code value} is in {@code container}, as a law says it: {@code in}'s answer, handed

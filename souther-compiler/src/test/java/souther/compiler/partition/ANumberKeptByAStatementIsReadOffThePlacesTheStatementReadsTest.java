@@ -6,6 +6,7 @@ import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
@@ -14,11 +15,11 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.Type;
 
 import java.util.List;
-import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -71,7 +72,7 @@ class ANumberKeptByAStatementIsReadOffThePlacesTheStatementReadsTest {
     @Test
     void aKeptNumberMovedWhereItStandsIsTheSameNumber() {
         for (NumericTerm kept : List.of(COUNTED, GATHERED)) {
-            assertEquals(kept, kept.movedTo(UnaryOperator.identity()), kept::toString);
+            assertEquals(kept, kept.movedTo(PlacesMoved.nowhere()), kept::toString);
         }
     }
 
@@ -82,12 +83,44 @@ class ANumberKeptByAStatementIsReadOffThePlacesTheStatementReadsTest {
      */
     @Test
     void aKeptNumberMovedOffThePlacesItsStatementReadsIsNoNumber() {
-        UnaryOperator<TermPath> moved = at -> at.head().equals("orders")
-                ? new TermPath("other", at.steps()) : at;
+        PlacesMoved moved = PlacesMoved.by(at -> at.head().equals("orders")
+                ? new TermPath("other", at.steps()) : at);
         for (NumericTerm kept : List.of(COUNTED, GATHERED)) {
             assertNull(kept.movedTo(moved), kept::toString);
         }
         assertNotNull(NumericTerm.OccurrencesOfItsValue.of(new RunSource.FlattenedOccurrences(LINE))
                 .movedTo(moved), "the run moves");
+    }
+
+    /** One place the statement reads taken elsewhere and the others left is no number either:
+     *  the statement is one, and is moved whole or not at all. */
+    @Test
+    void aKeptNumberWithSomeOfItsStatementsPlacesMovedIsNoNumber() {
+        PlacesMoved oneMoved = PlacesMoved.by(at -> at.equals(QTY) ? LINE.then("amount") : at);
+        for (NumericTerm kept : List.of(COUNTED, GATHERED)) {
+            assertNull(kept.movedTo(oneMoved), kept::toString);
+        }
+    }
+
+    /** Elements moved inside one more container are some of the occurrences there and not every
+     *  one, so the number is no number there whatever its statement reads. */
+    @Test
+    void aKeptNumberWhoseElementsAreMovedInsideAnotherContainerIsNoNumber() {
+        PlacesMoved deeper = PlacesMoved.by(at -> at.equals(LINE)
+                ? TermPath.of("shelves").element().then("orders").element().then("lines")
+                        .element() : at);
+        for (NumericTerm kept : List.of(COUNTED, GATHERED)) {
+            assertNull(kept.movedTo(deeper), kept::toString);
+        }
+    }
+
+    /** A move that puts a place nowhere is stopped where it does so, and builds no number. */
+    @Test
+    void aMovePuttingAPlaceNowhereIsStoppedWhereItDoesSo() {
+        PlacesMoved nowhere = PlacesMoved.by(_ -> null);
+        for (NumericTerm kept : List.of(COUNTED, GATHERED)) {
+            assertThrows(IllegalStateException.class, () -> kept.movedTo(nowhere),
+                    kept::toString);
+        }
     }
 }

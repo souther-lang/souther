@@ -29,7 +29,6 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -668,39 +667,29 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * How whether a container of {@code container}'s kind holds a value as {@code of} says is
-     * asked: by the one operation whose settled law of truth says its answer is true exactly
-     * where some element of such a container, or some key of it, is the value it was handed — or
-     * null where no operation's law says so, or more than one does.
+     * How {@code operation} asks whether a container holds a value as {@code of} says: where its
+     * settled law of truth says its answer is true exactly where some element of the container it
+     * is handed, or some key of it, is the value it is handed beside — or null where it says
+     * anything else.
      */
-    public AddsWhatItDoesNotHold.Asked askedWhetherItHolds(Type container,
+    public AddsWhatItDoesNotHold.Asked askedWhetherItHolds(ValueName.Stdlib.Operation operation,
                                                           AddsWhatItDoesNotHold.Of of) {
-        AddsWhatItDoesNotHold.Asked found = null;
-        for (Map.Entry<ValueName, Map<OperationLaw.Observed, Settled>> each : settled.entrySet()) {
-            if (each.getKey() instanceof ValueName.Stdlib.Operation operation
-                    && each.getValue().get(OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
-                            OperationLaw.Observation<DeclaredArgument>(AnswerAspect aspect,
-                                    LawProposition.SomeElement<DeclaredArgument>(
-                                            DeclaredArgument in,
-                                            LawProposition.Same<DeclaredArgument>(
-                                                    LawSubject<DeclaredArgument> named,
-                                                    LawSubject.Argument<DeclaredArgument>(
-                                                            DeclaredArgument value),
-                                                    boolean alike), boolean some)), var _)
-                    && aspect == AnswerAspect.TRUTH && alike && some
-                    && OperationFactBinder.sameKind(in.stands(), container)
-                    && named.equals(switch (of) {
-                        case ELEMENTS -> new LawSubject.ElementOf<>(in);
-                        case KEYS -> new LawSubject.KeyOf<>(in);
-                    })
-                    && value.position() != in.position() && in.of().arity() == 2) {
-                if (found != null) {
-                    return null;
-                }
-                found = new AddsWhatItDoesNotHold.Asked(operation, value, in);
-            }
-        }
-        return found;
+        return settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw.Observation<DeclaredArgument>(AnswerAspect aspect,
+                        LawProposition.SomeElement<DeclaredArgument>(
+                                DeclaredArgument in,
+                                LawProposition.Same<DeclaredArgument>(
+                                        LawSubject<DeclaredArgument> named,
+                                        LawSubject.Argument<DeclaredArgument>(
+                                                DeclaredArgument value),
+                                        boolean alike), boolean some)), var _)
+                && aspect == AnswerAspect.TRUTH && alike && some
+                && named.equals(switch (of) {
+                    case ELEMENTS -> new LawSubject.ElementOf<>(in);
+                    case KEYS -> new LawSubject.KeyOf<>(in);
+                })
+                && value.position() != in.position() && in.of().arity() == 2
+                ? new AddsWhatItDoesNotHold.Asked(operation, value, in) : null;
     }
 
     /**

@@ -14,6 +14,7 @@ import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ObservationSource;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
@@ -39,7 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -159,7 +159,7 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
     @Test
     void aNumberMovedWhereItStandsIsTheNumberItIs() {
         for (NumericTerm number : numbers()) {
-            assertEquals(number, number.movedTo(UnaryOperator.identity()), number::toString);
+            assertEquals(number, number.movedTo(PlacesMoved.nowhere()), number::toString);
             assertFalse(number.placesReadOff().isEmpty(), number::toString);
         }
     }

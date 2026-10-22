@@ -3,7 +3,6 @@ package souther.compiler.inputs;
 import souther.compiler.numeric.ValueTransformation;
 
 import java.util.Objects;
-import java.util.function.UnaryOperator;
 
 /**
  * The value an operation takes its number of: the one at a position, and what it was turned into
@@ -31,7 +30,7 @@ public record ObservationSource(TermPath position, ValueTransformation transform
     }
 
     /** The same value, standing where {@code moved} puts the position. */
-    ObservationSource movedTo(UnaryOperator<TermPath> moved) {
-        return new ObservationSource(moved.apply(position), transformation);
+    ObservationSource movedTo(PlacesMoved moved) {
+        return new ObservationSource(moved.put(position), transformation);
     }
 }

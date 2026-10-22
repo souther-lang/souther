@@ -138,10 +138,10 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
                 Type.Prim.INT,
                 new RunSource.TraversalOrder(ELEMENTS, TraversalDirection.FORWARD));
         TermPath moved = TermPath.of("ys").element();
-        assertNull(byPosition.movedTo(_ -> moved));
+        assertNull(byPosition.movedTo(PlacesMoved.by(_ -> moved)));
         RunSource alike = RunSource.computedOverTheElementsAt(ELEMENTS, weighed(3), Type.Prim.INT,
                 null);
-        assertEquals(moved, alike.movedTo(_ -> moved).subjectPath());
+        assertEquals(moved, alike.movedTo(PlacesMoved.by(_ -> moved)).subjectPath());
     }
 
     /**

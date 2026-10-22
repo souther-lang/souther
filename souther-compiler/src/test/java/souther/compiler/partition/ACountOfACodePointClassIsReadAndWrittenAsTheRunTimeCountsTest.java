@@ -13,6 +13,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
@@ -27,7 +28,6 @@ import souther.compiler.values.AsACompilationAllows;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -87,7 +87,7 @@ class ACountOfACodePointClassIsReadAndWrittenAsTheRunTimeCountsTest {
         assertNotEquals(counting(NOT_WHITESPACE), counting(NOT_WHITESPACE_NOR_COMMA));
         assertNotEquals(counting(NOT_WHITESPACE_NOR_COMMA),
                 counting(new CodePointClass.NotWhitespaceNorEqualTo(';')));
-        UnaryOperator<TermPath> there = path -> path.then("name");
+        PlacesMoved there = PlacesMoved.by(path -> path.then("name"));
         assertEquals(TermPath.of("t").then("name"),
                 counting(NOT_WHITESPACE).movedTo(there).position());
         assertEquals(counting(NOT_WHITESPACE_NOR_COMMA).counted(),

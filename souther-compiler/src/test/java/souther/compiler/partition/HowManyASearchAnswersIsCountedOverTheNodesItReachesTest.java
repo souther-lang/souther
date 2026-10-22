@@ -10,6 +10,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
@@ -149,8 +150,8 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
         TermPath other = TermPath.of("j").then("t");
         TermPath everyTree = TermPath.of("i").then("ts").element();
         assertEquals(new RunSource.ReachableNodes(other, List.of("below"), List.of()),
-                nodes.movedTo(_ -> other));
-        assertNull(nodes.movedTo(_ -> everyTree));
+                nodes.movedTo(PlacesMoved.by(_ -> other)));
+        assertNull(nodes.movedTo(PlacesMoved.by(_ -> everyTree)));
         assertThrows(IllegalArgumentException.class,
                 () -> new RunSource.ReachableNodes(everyTree, List.of("below"), List.of()));
     }

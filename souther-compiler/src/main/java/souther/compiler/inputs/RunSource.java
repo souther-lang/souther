@@ -4,7 +4,6 @@ import souther.compiler.types.Type;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.function.UnaryOperator;
 
 /**
  * Where the values an operation walked came from, for a number taken over a run of them.
@@ -48,14 +47,13 @@ public sealed interface RunSource {
      * The same run, over the values read from where {@code moved} puts this one's — or null where
      * what stands there is no one run, as a run inside an element of another container is not.
      */
-    default RunSource movedTo(UnaryOperator<TermPath> moved) {
-        TermPath at = moved.apply(subjectPath());
+    default RunSource movedTo(PlacesMoved moved) {
+        TermPath at = moved.put(subjectPath());
         return switch (this) {
             case ProjectedOccurrences _ -> overTheOccurrencesAt(at);
             // Moved inside another container the run would be over some of the occurrences of the
             // path it was over every one of, so it keeps the containers it was in.
-            case FlattenedOccurrences flat -> at != null
-                    && at.containersHoldingIt().size() == flat.subjectPath().containersHoldingIt().size()
+            case FlattenedOccurrences flat -> at.containersHoldingIt().size() == flat.subjectPath().containersHoldingIt().size()
                     ? new FlattenedOccurrences(at) : null;
             // What was shown of the order was shown of the elements where they stood, and nothing
             // says those moved to stand in it, so a run that needs the order is the same run
