@@ -548,29 +548,49 @@ public final class WhatARelationLeavesUndivided {
         if (!arithmetic.stopsAtASize() || constant == null) {
             return terms;
         }
+        // What each term weighed comes to at least on each side of nought, and the sum of those and
+        // the constant's, so that what the others come to is the sum less the term's own. A term
+        // whose values are no run of numbers leaves every other term uncut, and is itself cut by
+        // what the rest come to.
+        int size = terms.size();
+        ExactRatio[] leastPositive = new ExactRatio[size];
+        ExactRatio[] leastNegative = new ExactRatio[size];
+        ExactRatio totalPositive = constant.signum() > 0 ? constant : ExactRatio.ZERO;
+        ExactRatio totalNegative = constant.signum() < 0 ? constant.negated() : ExactRatio.ZERO;
+        int unread = -1;
+        int unreadCount = 0;
+        for (int j = 0; j < size && totalPositive != null && totalNegative != null; j++) {
+            Interval holds = Interval.of(terms.get(j).holds());
+            Interval weighed = holds == null ? null : holds.times(terms.get(j).weight());
+            if (weighed == null) {
+                unread = j;
+                unreadCount++;
+                continue;
+            }
+            leastPositive[j] = weighed.low() != null && weighed.low().signum() > 0
+                    ? weighed.low() : ExactRatio.ZERO;
+            leastNegative[j] = weighed.high() != null && weighed.high().signum() < 0
+                    ? weighed.high().negated() : ExactRatio.ZERO;
+            totalPositive = totalPositive.plus(leastPositive[j]).orNull();
+            totalNegative = totalNegative == null ? null
+                    : totalNegative.plus(leastNegative[j]).orNull();
+        }
+        if (unreadCount > 1 || totalPositive == null || totalNegative == null) {
+            return terms;
+        }
         ExactRatio greatest = ExactRatio.of(arithmetic.greatest());
         List<Term<P>> cut = new ArrayList<>(terms);
-        for (int i = 0; i < terms.size(); i++) {
-            ExactRatio positive = constant.signum() > 0 ? constant : ExactRatio.ZERO;
-            ExactRatio negative = constant.signum() < 0 ? constant.negated() : ExactRatio.ZERO;
-            for (int j = 0; j < terms.size() && positive != null && negative != null; j++) {
-                if (j == i) {
-                    continue;
-                }
-                Interval weighed = Interval.of(terms.get(j).holds()) == null ? null
-                        : Interval.of(terms.get(j).holds()).times(terms.get(j).weight());
-                if (weighed == null) {
-                    positive = null;
-                } else {
-                    positive = weighed.low() != null && weighed.low().signum() > 0
-                            ? positive.plus(weighed.low()).orNull() : positive;
-                    negative = weighed.high() != null && weighed.high().signum() < 0
-                            ? negative.plus(weighed.high().negated()).orNull() : negative;
-                }
-            }
+        for (int i = 0; i < size; i++) {
             Term<P> term = terms.get(i);
-            if (positive == null || negative == null || term.spacing() != Granularity.DISCRETE
+            if ((unreadCount == 1 && unread != i) || term.spacing() != Granularity.DISCRETE
                     || !endsAtNumbers(term.holds())) {
+                continue;
+            }
+            ExactRatio positive = unreadCount == 1 ? totalPositive
+                    : totalPositive.minus(leastPositive[i]).orNull();
+            ExactRatio negative = unreadCount == 1 ? totalNegative
+                    : totalNegative.minus(leastNegative[i]).orNull();
+            if (positive == null || negative == null) {
                 continue;
             }
             ExactRatio most = greatest.minus(positive).orNull();
@@ -1304,8 +1324,13 @@ public final class WhatARelationLeavesUndivided {
                 || !run.high().isWhole()) {
             return false;
         }
+        BigInteger first = run.low().floor().orNull();
+        BigInteger last = run.high().floor().orNull();
+        if (first == null || last == null) {
+            return false;
+        }
         TreeSet<BigInteger> starts = new TreeSet<>();
-        starts.add(run.low().floor().orNull());
+        starts.add(first);
         for (int other = 0; other < terms.size(); other++) {
             if (!free[other] || terms.get(other).holds() == null) {
                 continue;
@@ -1329,8 +1354,7 @@ public final class WhatARelationLeavesUndivided {
                 }
                 for (int beside = -1; beside <= 2; beside++) {
                     BigInteger start = floor.add(BigInteger.valueOf(beside));
-                    if (start.compareTo(run.low().floor().orNull()) > 0
-                            && start.compareTo(run.high().floor().orNull()) <= 0) {
+                    if (start.compareTo(first) > 0 && start.compareTo(last) <= 0) {
                         starts.add(start);
                     }
                 }
@@ -1341,8 +1365,7 @@ public final class WhatARelationLeavesUndivided {
         }
         List<BigInteger> from = List.copyOf(starts);
         for (int i = 0; i < from.size(); i++) {
-            BigInteger to = i + 1 < from.size() ? from.get(i + 1).subtract(BigInteger.ONE)
-                    : run.high().floor().orNull();
+            BigInteger to = i + 1 < from.size() ? from.get(i + 1).subtract(BigInteger.ONE) : last;
             Interval piece = new Interval(ExactRatio.of(from.get(i)), ExactRatio.of(to));
             boolean reached = false;
             for (int other = 0; other < terms.size() && !reached; other++) {
