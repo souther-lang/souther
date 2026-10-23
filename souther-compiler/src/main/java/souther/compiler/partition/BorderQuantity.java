@@ -934,7 +934,7 @@ public sealed interface BorderQuantity
                             rest = OrderedAffineBoundary.at(against, values);
                 }
             }
-            AStatementAtARow.HowManyAtARow counted = perElement.howManyMeetIn(container, row);
+            AStatementAtARow.HowManyAtARow counted = this.counted.at(row);
             if (counted == null) {
                 stopped.add(ReadingGap.COULD_NOT_WALK);
             } else if (!stopped.isEmpty()) {
@@ -982,16 +982,28 @@ public sealed interface BorderQuantity
             return new AxisId(behavior, left()).toString();
         }
 
-        /** The count as an author would read it: the container, and what its elements meet. */
+        /** The count as an author would read it: the container, and what its elements meet — and
+         *  where the values counted once each stand, where it is a count of those. */
         @Override
         public String left() {
-            String count = "#" + container + " [" + said(meeting) + "]";
+            String count = spelled(container, counted.differentAt(), said(meeting));
             if (against.coefs().isEmpty()) {
                 return count;
             }
             String added = OrderedAffineBoundary.spelled(against.coefs());
             return added.startsWith("-") ? count + " - " + added.substring(1)
                     : count + " + " + added;
+        }
+
+        /**
+         * A count as it is written: {@code #container [statement]}, and, where it is how many
+         * different values stand at {@code differentAt} over the elements meeting the statement,
+         * {@code #different container [place] where [statement]}.
+         */
+        static String spelled(TermPath container, Optional<TermPath> differentAt,
+                              String statement) {
+            return differentAt.map(at -> "#different " + container + " [" + at + "] where ")
+                    .orElse("#" + container + " ") + "[" + statement + "]";
         }
 
         /** A statement over the input's own numbers, written the way a comparison is. */
@@ -1010,12 +1022,14 @@ public sealed interface BorderQuantity
                                 WhatTheDeclarationsLeave.ofTheInput(affine.form());
                         Rel rel = compared.holds() ? affine.proposition()
                                 : affine.proposition().denied();
-                        Quantity.HowManyMeet count = AStatementAtARow.countIn(affine);
+                        Quantity count = AStatementAtARow.countIn(affine);
                         // The count's weight is above nought, a relation facing the one way.
                         if (form == null && count != null) {
                             ExactRatio weight = affine.form().coefs().get(count);
-                            yield "#" + count.container() + " [" + said(count.ofTheElement())
-                                    + "] " + rel.written() + " "
+                            Quantity.HowManyMeet elements = AStatementAtARow.elementsOf(count);
+                            yield spelled(elements.container().inputPosition(),
+                                    AStatementAtARow.differentAt(count),
+                                    said(elements.ofTheElement())) + " " + rel.written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
@@ -1081,7 +1095,9 @@ public sealed interface BorderQuantity
 
         @Override
         public BoundaryTarget.Shape shape() {
-            return BoundaryTarget.Shape.COUNT_OF_ELEMENTS;
+            return counted.differentAt().isPresent()
+                    ? BoundaryTarget.Shape.COUNT_OF_DIFFERENT_VALUES
+                    : BoundaryTarget.Shape.COUNT_OF_ELEMENTS;
         }
 
         @Override

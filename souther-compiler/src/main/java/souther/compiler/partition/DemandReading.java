@@ -1749,14 +1749,14 @@ final class DemandReading {
             // writes and is composed for: the count is held against the one number the form
             // weighs it against, and its weight is above nought, as a relation's first weight is.
             case Relation.Affine affine
-                    when AStatementAtARow.countIn(affine) instanceof Quantity.HowManyMeet count
-                    && AStatementAtARow.askable(count.ofTheElement()) -> {
+                    when AStatementAtARow.countIn(affine) instanceof Quantity count
+                    && AStatementAtARow.askable(AStatementAtARow.meetingOf(count)) -> {
                 ExactRatio weight = affine.form().coefs().values().iterator().next();
                 yield affine.form().constant().negated().dividedBy(weight)
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
                         ? new Read.Demands(new RowDemand.SoMany(count, met, level,
                                 new LinearForm<>(ExactRatio.ZERO, Map.of()),
-                                anElementMeeting(count, read)))
+                                anElementMeeting(AStatementAtARow.elementsOf(count), read)))
                         : forTheRun(compared, RowDemand.NoComposer.A_COUNT_AGAINST_A_NUMBER_NOT_HELD);
             }
             // The same count with numbers of the input added to it. Scaled to weigh the count by
@@ -1806,15 +1806,15 @@ final class DemandReading {
      * relation: one count a row is composed for, and nothing but numbers a row writes at one place
      * each beside it.
      */
-    private static Quantity.HowManyMeet countAndNumbers(Relation.Affine affine,
-                                                        InputReading read) {
+    private static Quantity countAndNumbers(Relation.Affine affine, InputReading read) {
         if (affine.form().coefs().size() < 2) {
             return null;
         }
-        Quantity.HowManyMeet count = null;
+        Quantity count = null;
         for (Quantity each : affine.form().coefs().keySet()) {
-            if (each instanceof Quantity.HowManyMeet counted && count == null) {
-                count = counted;
+            if ((each instanceof Quantity.HowManyMeet
+                    || each instanceof Quantity.HowManyDifferentMeet) && count == null) {
+                count = each;
             } else if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)
                     && term.atOnePosition() != null) {
                 TermOrders orders = read.quantities().ordersOf(term);
@@ -1826,7 +1826,8 @@ final class DemandReading {
                 return null;
             }
         }
-        return count != null && AStatementAtARow.askable(count.ofTheElement()) ? count : null;
+        return count != null && AStatementAtARow.askable(AStatementAtARow.meetingOf(count))
+                ? count : null;
     }
 
     /**
@@ -1836,7 +1837,7 @@ final class DemandReading {
      */
     private static Read soManyAgainstNumbers(Proposition.Compared compared,
                                              Relation.Affine affine, Rel met, InputReading read) {
-        Quantity.HowManyMeet count = countAndNumbers(affine, read);
+        Quantity count = countAndNumbers(affine, read);
         ExactRatio weight = affine.form().coefs().get(count);
         if (!(ExactRatio.ONE.dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
                 ExactRatio scale))
@@ -1852,7 +1853,8 @@ final class DemandReading {
         });
         return new Read.Demands(new RowDemand.SoMany(count,
                 scale.signum() < 0 ? met.turned() : met, scaled.constant().negated(),
-                new LinearForm<>(ExactRatio.ZERO, added), anElementMeeting(count, read)));
+                new LinearForm<>(ExactRatio.ZERO, added),
+                anElementMeeting(AStatementAtARow.elementsOf(count), read)));
     }
 
     /**
@@ -1877,7 +1879,8 @@ final class DemandReading {
                      DecisionAtom.ComputedOverAnAnswer _ -> {
                     return anAnswerARowStandsIn(compared);
                 }
-                case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;
+                case Quantity.HowManyMeet _, Quantity.HowManyHold _,
+                     Quantity.HowManyDifferentMeet _ -> counted = true;
                 case Quantity.HowManyDifferent _, Quantity.HowManyDifferentBelow _,
                      Quantity.HowManyDifferentAcross _, Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _ -> overElements = true;

@@ -43,17 +43,25 @@ import java.util.Set;
  * @param handedOn         what another container is asked about an element meeting
  *                         {@code meeting}, where that is all it is: the one demand an element
  *                         meets by what that container holds ({@link ACountHandedOn})
+ * @param differentAt      where the value each element holds stands, where what is counted is
+ *                         how many different values the elements meeting {@code meeting} hold
+ *                         there rather than how many of them there are
+ *                         ({@link Quantity.HowManyDifferentMeet})
  */
 record CountedElements(String behavior, TermPath container, Proposition meeting,
                        AStatementAtARow perElement, Map<NumericTerm, Carrier> on,
                        Optional<List<TakenConstraint>> anElementMeeting,
-                       Optional<RowDemand.WithinIt> handedOn) {
+                       Optional<RowDemand.WithinIt> handedOn, Optional<TermPath> differentAt) {
 
     CountedElements {
         if (behavior == null || container == null || meeting == null || perElement == null
-                || anElementMeeting == null || handedOn == null) {
+                || anElementMeeting == null || handedOn == null || differentAt == null) {
             throw new IllegalArgumentException("a count is a behavior's count of the elements of"
                     + " some container meeting something");
+        }
+        if (differentAt.isPresent() && !differentAt.get().isAtOrUnder(container.element())) {
+            throw new IllegalArgumentException("the values counted are of the elements of "
+                    + container + ", and " + differentAt.get() + " is none of theirs");
         }
         on = Map.copyOf(on);
         anElementMeeting = anElementMeeting.map(List::copyOf);
@@ -61,7 +69,10 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
 
     /**
      * How many elements of {@code count}'s container meet its statement, as {@code behavior} reads
-     * it, for a statement {@link AStatementAtARow#askable} says a row can be asked.
+     * it, for a statement {@link AStatementAtARow#askable} says a row can be asked — or, where
+     * {@code count} is how many different values those hold ({@link
+     * Quantity.HowManyDifferentMeet}), the count of those elements with each value counted once.
+     * {@code count} is one {@link AStatementAtARow#countIn} answers.
      *
      * <p>The one way one of these is made, wherever the count is met: a line drawn on it and a
      * condition on the way to another are the same count where they count the same thing.
@@ -69,10 +80,11 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      * @param anElementMeeting what an element meeting the statement asks, as the reading of a
      *                         condition that some element meets it comes to
      */
-    static CountedElements of(String behavior, Quantity.HowManyMeet count, Quantities quantities,
+    static CountedElements of(String behavior, Quantity count, Quantities quantities,
                               AnElementMeeting anElementMeeting) {
+        Identity identity = identityOf(behavior, count);
         AStatementAtARow perElement =
-                AStatementAtARow.of(count.ofTheElement(), behavior, quantities);
+                AStatementAtARow.of(identity.meeting(), identity.behavior(), quantities);
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
         for (NumericTerm each : perElement.numbers()) {
             TermOrders orders = quantities.ordersOf(each);
@@ -80,9 +92,19 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
                 on.put(each, orders.answered());
             }
         }
-        Identity identity = identityOf(behavior, count);
-        return new CountedElements(behavior, identity.container(), identity.meeting(), perElement,
-                on, anElementMeeting.heldTo(), anElementMeeting.handedOn());
+        return new CountedElements(identity.behavior(), identity.container(), identity.meeting(),
+                perElement, on, anElementMeeting.heldTo(), anElementMeeting.handedOn(),
+                identity.differentAt());
+    }
+
+    /**
+     * What this counts at {@code row}: how many elements meet the statement, or how many
+     * different values those elements hold where that is what is counted.
+     *
+     * @return null where the walk could not reach the container
+     */
+    AStatementAtARow.HowManyAtARow at(BorderQuantity.Observation row) {
+        return perElement.howManyIn(container, differentAt, row);
     }
 
     /** Every number of a row the statement reads, the element's own among them. */
@@ -102,17 +124,28 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      * element meeting it is held to and another does not — and they are still one count. What a
      * row is asked of a count is gathered by this, and never by what a reading made of it.
      */
-    record Identity(String behavior, TermPath container, Proposition meeting) {}
+    record Identity(String behavior, TermPath container, Proposition meeting,
+                    Optional<TermPath> differentAt) {}
 
     /** Which count this is ({@link Identity}). */
     Identity identity() {
-        return new Identity(behavior, container, meeting);
+        return new Identity(behavior, container, meeting, differentAt);
     }
 
-    /** Which count {@code count} read in {@code behavior} is, with nothing about it worked out —
-     *  the identity {@link #of} would give it. */
-    static Identity identityOf(String behavior, Quantity.HowManyMeet count) {
-        return new Identity(behavior, count.container().inputPosition(), count.ofTheElement());
+    /**
+     * Which count {@code count}, one {@link AStatementAtARow#countIn} answers, read in
+     * {@code behavior} is, with nothing about it worked out — the identity {@link #of} would give
+     * it.
+     *
+     * <p>Of how many different values the elements meeting a statement hold whatever the statement
+     * was asked of. One asked of what the elements holding a value come to answers alike for each
+     * of them, so a value is counted where some element holding it meets it, which is the count of
+     * it asked of each element.
+     */
+    static Identity identityOf(String behavior, Quantity count) {
+        Quantity.HowManyMeet elements = AStatementAtARow.elementsOf(count);
+        return new Identity(behavior, elements.container().inputPosition(),
+                elements.ofTheElement(), AStatementAtARow.differentAt(count));
     }
 
     /**
@@ -140,7 +173,7 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         // One statement handed on is one demand however it was read; a reading that found it is
         // the one kept.
         return new CountedElements(behavior, container, meeting, perElement, on, both,
-                handedOn.isPresent() ? handedOn : other.handedOn);
+                handedOn.isPresent() ? handedOn : other.handedOn, differentAt);
     }
 
     /**
@@ -234,6 +267,6 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
 
     @Override
     public String toString() {
-        return "#" + container + " [" + meeting.key() + "]";
+        return BorderQuantity.HowMany.spelled(container, differentAt, meeting.key());
     }
 }

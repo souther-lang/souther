@@ -148,8 +148,8 @@ final class AStatementAtARow {
                         || productIn(affine) != null
                         || remainderByAnInputIn(affine) != null
                         || remainderOfADividendIn(affine) != null
-                        || (countIn(affine) instanceof Quantity.HowManyMeet count
-                                && askable(count.ofTheElement()));
+                        || (countIn(affine) instanceof Quantity count
+                                && askable(meetingOf(count)));
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;
@@ -161,11 +161,43 @@ final class AStatementAtARow {
         };
     }
 
-    /** The one count {@code affine} weighs where it weighs one and nothing else, or null. */
-    static Quantity.HowManyMeet countIn(Relation.Affine affine) {
-        return affine.form().coefs().size() == 1
-                && affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.HowManyMeet count ? count : null;
+    /**
+     * The one count {@code affine} weighs where it weighs one and nothing else, or null: how many
+     * elements of a container meet a statement, or how many different values those hold
+     * ({@link Quantity.HowManyDifferentMeet}).
+     */
+    static Quantity countIn(Relation.Affine affine) {
+        if (affine.form().coefs().size() != 1) {
+            return null;
+        }
+        Quantity only = affine.form().coefs().keySet().iterator().next();
+        return only instanceof Quantity.HowManyMeet || only instanceof Quantity.HowManyDifferentMeet
+                ? only : null;
+    }
+
+    /** What an element of {@code count}, one {@link #countIn} answers, is counted for meeting. */
+    static Proposition meetingOf(Quantity count) {
+        return elementsOf(count).ofTheElement();
+    }
+
+    /**
+     * How many elements meet what {@code count}, one {@link #countIn} answers, counts them for,
+     * each of them counted: the count itself, or the count of the elements whose different values
+     * it is.
+     */
+    static Quantity.HowManyMeet elementsOf(Quantity count) {
+        return switch (count) {
+            case Quantity.HowManyMeet meeting -> meeting;
+            case Quantity.HowManyDifferentMeet different -> different.elementsMeetingIt();
+            default -> throw new IllegalArgumentException(count + " is no count of elements");
+        };
+    }
+
+    /** Where the values {@code count}, one {@link #countIn} answers, counts once each stand, where
+     *  it counts values rather than elements. */
+    static Optional<TermPath> differentAt(Quantity count) {
+        return count instanceof Quantity.HowManyDifferentMeet different
+                ? Optional.of(different.ofTheElement().inputPosition()) : Optional.empty();
     }
 
     /** The one remainder by an input's number {@code affine} weighs where it weighs one and
@@ -274,13 +306,13 @@ final class AStatementAtARow {
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
-                            of(some.ofTheElement(), behavior, quantities)));
+                            of(some.ofTheElement(), behavior, quantities), Optional.empty()));
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
+                    && countIn(affine) instanceof Quantity count ->
                     elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
-                            count.container().inputPosition(),
-                            of(count.ofTheElement(), behavior, quantities)));
+                            elementsOf(count).container().inputPosition(),
+                            of(meetingOf(count), behavior, quantities), differentAt(count)));
             case Proposition.Compared compared when askable(compared) ->
                     into.computeIfAbsent(compared.relation(),
                             relation -> OneRelation.of(relation, behavior, quantities));
@@ -315,8 +347,8 @@ final class AStatementAtARow {
             case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
-                    gatherNumbers(count.ofTheElement(), into);
+                    && countIn(affine) instanceof Quantity count ->
+                    gatherNumbers(meetingOf(count), into);
             case Proposition.Compared compared -> {
                 switch (compared.relation()) {
                     case Relation.Affine affine -> {
@@ -353,9 +385,12 @@ final class AStatementAtARow {
         return some.container() + " [" + some.ofTheElement().key() + "]";
     }
 
-    /** What a count of the elements of a container meeting a statement is read as. */
-    private static String keyOf(Quantity.HowManyMeet count) {
-        return count.container() + " [" + count.ofTheElement().key() + "]";
+    /** What a count of the elements of a container meeting a statement is read as, or of the
+     *  different values they hold. */
+    private static String keyOf(Quantity count) {
+        Quantity.HowManyMeet elements = elementsOf(count);
+        return differentAt(count).map(at -> "different " + at + " of ").orElse("")
+                + elements.container() + " [" + elements.ofTheElement().key() + "]";
     }
 
     /**
@@ -481,6 +516,61 @@ final class AStatementAtARow {
     }
 
     /**
+     * How many elements of {@code container} the row wrote meet this statement, as
+     * {@link #howManyMeetIn} counts them — or, where {@code differentAt} names a place of each,
+     * how many different values the elements meeting it hold there: the least it can be, and how
+     * many more it may be where an element, or its value, could not be read.
+     *
+     * <p>A value one meeting element holds is counted once however many others hold it. An element
+     * nothing could say of adds one more at most, and none where its value is one a meeting element
+     * already holds.
+     *
+     * @return null where the walk could not reach the container
+     */
+    HowManyAtARow howManyIn(TermPath container, Optional<TermPath> differentAt,
+                            BorderQuantity.Observation row) {
+        return differentAt.isPresent()
+                ? row.keptOf(new DifferentMeetingIn(this, container, differentAt.get()))
+                : howManyMeetIn(container, row);
+    }
+
+    /** How many different values the elements of a container meeting one statement hold, by the
+     *  statement, the container and where the value stands. */
+    private record DifferentMeetingIn(AStatementAtARow statement, TermPath container, TermPath at)
+            implements BorderQuantity.ReadAlike<HowManyAtARow> {
+
+        @Override
+        public HowManyAtARow readAt(BorderQuantity.Observation row) {
+            if (!(row.eachElementOf(container)
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+                return null;
+            }
+            Set<ObservedValue> meeting = new HashSet<>();
+            Set<ObservedValue> maybe = new HashSet<>();
+            int unreadValues = 0;
+            Set<ReadingGap> why = new LinkedHashSet<>();
+            for (BorderQuantity.Observation element : reached.value()) {
+                Answer answer = statement.at(element);
+                if (answer instanceof Answer.Fails) {
+                    continue;
+                }
+                if (answer instanceof Answer.CouldNotTell(var stopped)) {
+                    why.addAll(stopped);
+                }
+                if (!(element.at(at) instanceof WalkResult.Reached<ObservationAtPoint>(
+                        ObservationAtPoint.Value(ObservedValue value)))) {
+                    why.add(ReadingGap.COULD_NOT_WALK);
+                    unreadValues++;
+                    continue;
+                }
+                (answer instanceof Answer.Holds ? meeting : maybe).add(value);
+            }
+            maybe.removeAll(meeting);
+            return new HowManyAtARow(meeting.size(), maybe.size() + unreadValues, why);
+        }
+    }
+
+    /**
      * How many elements meet a statement at one row.
      *
      * <p>An element the statement could not be read at is neither counted nor left out: the count
@@ -580,9 +670,8 @@ final class AStatementAtARow {
             }
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count -> {
-                OverTheElements over = elements.get(keyOf(count));
-                HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
+                    && countIn(affine) instanceof Quantity count -> {
+                HowManyAtARow counted = elements.get(keyOf(count)).howManyIn(row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
                 }
@@ -659,9 +748,13 @@ final class AStatementAtARow {
                     read) && readsOf(some.ofTheElement(), about, read);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
-                    overElementsOf(count.container().inputPosition(), about, read)
-                            && readsOf(count.ofTheElement(), about, read);
+                    && countIn(affine) instanceof Quantity count -> {
+                if (differentAt(count).isPresent()) {
+                    read.add(differentAt(count).get());
+                }
+                yield overElementsOf(elementsOf(count).container().inputPosition(), about, read)
+                        && readsOf(meetingOf(count), about, read);
+            }
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) -> {
                 read.add(at);
                 yield true;
@@ -1298,8 +1391,20 @@ final class AStatementAtARow {
         return out;
     }
 
-    /** A statement about the elements of a container: the container, and what each is asked. */
-    private record OverTheElements(TermPath container, AStatementAtARow ofTheElement) {}
+    /**
+     * A statement about the elements of a container: the container, what each is asked, and,
+     * where how many different values those meeting it hold is what is counted, where the values
+     * stand.
+     */
+    private record OverTheElements(TermPath container, AStatementAtARow ofTheElement,
+                                   Optional<TermPath> differentAt) {
+
+        /** How many elements meet what each is asked at {@code row}, or how many different values
+         *  they hold; null where the walk could not reach the container. */
+        HowManyAtARow howManyIn(BorderQuantity.Observation row) {
+            return ofTheElement.howManyIn(container, differentAt, row);
+        }
+    }
 
     /** One relation, as the quantity a row is read at and what its numbers have to come to. */
     private sealed interface OneRelation {

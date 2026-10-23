@@ -5,6 +5,8 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
@@ -26,6 +28,8 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -122,7 +126,21 @@ final class CardinalityComposer {
                 return none("nothing says how many elements of `" + container + "` are to meet `"
                         + each + "`");
             }
-            asked.add(new Asked.SoManyMeeting(each.count().perElement(), at.about().values()));
+            asked.add(new Asked.SoManyMeeting(each.count().perElement(), at.about().values(),
+                    each.count().differentAt()));
+        }
+        // Where a count is of the different values the elements meeting a statement hold, every
+        // element is chosen apart from the others at that place: then each counts once, and the
+        // sharings, which count elements, count the values.
+        TermPath apartAt = null;
+        for (RealizationTarget.ACount each : counts) {
+            TermPath at = each.count().differentAt().orElse(null);
+            if (at != null && apartAt != null && !apartAt.equals(at)) {
+                return notChosen("the values the elements of `" + container + "` hold are counted"
+                        + " at `" + apartAt + "` and at `" + at + "`, and no elements are chosen"
+                        + " apart at both");
+            }
+            apartAt = at != null ? at : apartAt;
         }
         NumericSet size = null;
         if (manyItHolds != null) {
@@ -147,12 +165,15 @@ final class CardinalityComposer {
         if (!stated.isEmpty()) {
             return container.steps().isEmpty()
                     ? amongItsValues(asked, stated, standingAt, demands, container, size,
-                            sourceType, view, holding, keptApart, measuring, within, reading)
+                            sourceType, view, holding, keptApart, apartAt, measuring, within,
+                            reading)
                     : notChosen("`" + container + "` is not a parameter its elements are written"
                             + " at");
         }
-        if (standingAt.isEmpty() && counts.stream().allMatch(each -> ACountHandedOn.of(
-                each.count()).isPresent())) {
+        // What another container is made to hold for the elements chooses none of their values,
+        // so none are chosen apart that way.
+        if (standingAt.isEmpty() && apartAt == null && counts.stream().allMatch(
+                each -> ACountHandedOn.of(each.count()).isPresent())) {
             List<ACountHandedOn> handed = new ArrayList<>();
             List<OptionalInt> meeting = new ArrayList<>();
             for (RealizationTarget.ACount each : counts) {
@@ -169,10 +190,15 @@ final class CardinalityComposer {
             // whole, where the container is the parameter a row is read from.
             if (container.steps().isEmpty()) {
                 return amongItsValues(asked, List.of(), standingAt, demands, container, size,
-                        sourceType, view, holding, keptApart, measuring, within, reading);
+                        sourceType, view, holding, keptApart, apartAt, measuring, within,
+                        reading);
             }
             return notChosen("an element of `" + container + "` is not one number the statements"
                     + " read");
+        }
+        if (apartAt != null && !apartAt.equals(container.element())) {
+            return notChosen("an element of `" + container + "` is one number, and the values"
+                    + " counted stand at `" + apartAt + "` inside it");
         }
         for (RealizationTarget.OfANumber each : standingAt) {
             AskedAt at = demands.get(each);
@@ -201,8 +227,10 @@ final class CardinalityComposer {
             case null -> NumericDomain.Bounds.OPEN;
         };
         // The element is the one number chosen, so elements kept apart at any run of it — a set's,
-        // or a list's its rules keep apart — are elements holding no number twice.
-        boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
+        // or a list's its rules keep apart, or the elements whose different values are counted —
+        // are elements holding no number twice.
+        boolean distinct = apartAt != null
+                || !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         int perPart = distinct ? MOST_ELEMENTS : 1;
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
@@ -439,6 +467,7 @@ final class CardinalityComposer {
                                                                TypeView view,
                                                                Shape.Sequence holding,
                                                                List<List<String>> keptApart,
+                                                               TermPath apartAt,
                                                                Quantities measuring,
                                                                SearchRegion within,
                                                                RuleReadingContext reading) {
@@ -463,7 +492,7 @@ final class CardinalityComposer {
                 Integer index = saidOfAnElement.get(key);
                 if (index == null) {
                     index = asked.size();
-                    asked.add(new Asked.SoManyMeeting(perElement, ANY_COUNT));
+                    asked.add(new Asked.SoManyMeeting(perElement, ANY_COUNT, Optional.empty()));
                     saidOfAnElement.put(key, index);
                 }
                 at.put(key, index);
@@ -481,7 +510,12 @@ final class CardinalityComposer {
                         "an element standing in a set is one number, and is chosen as one");
             });
         }
-        boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
+        // Elements its rules keep apart are chosen among more than one value of each part; elements
+        // chosen apart at one place, among more than one value there. The values of a part are
+        // listed against every value of the others, so more of them anywhere else would fill the
+        // listing before the place they are chosen apart at had a second value.
+        boolean keptApartByItsRules = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
+        boolean distinct = apartAt != null || keptApartByItsRules;
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         // The numbers the statements read beside an element, each at the one value the row was
@@ -489,8 +523,12 @@ final class CardinalityComposer {
         Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
         Map<NumericTerm, Place> beside = settledOutside(asked, measuring, within, written);
         ElementValues ofTheElement = ElementValues.of(container, holding.element(), reading,
-                (at, part) -> numbersAt(at, OfTheType.of(part, reading), asked, measuring, within,
-                        beside, distinct ? MOST_ELEMENTS : 1, unheld, unnamed));
+                (at, part) -> at.equals(apartAt)
+                        ? numbersAt(at, OfTheType.manyOf(part, reading), asked, apartAt,
+                                measuring, within, beside, MOST_ELEMENTS, unheld, unnamed)
+                        : numbersAt(at, OfTheType.of(part, reading), asked, apartAt, measuring,
+                                within, beside, keptApartByItsRules ? MOST_ELEMENTS : 1, unheld,
+                                unnamed));
         if (ofTheElement == null) {
             return notChosen("an element of `" + container + "` has a part whose values are"
                     + " neither one of so many nor numbers the statements part");
@@ -498,9 +536,19 @@ final class CardinalityComposer {
         ValuesOfAnElement.Listed listed = ofTheElement.listed();
         Groups<ObservedValue> every = new Groups<>(new ArrayList<>(), new ArrayList<>(),
                 new LinkedHashSet<>());
+        // What each value holds where the elements are chosen apart, read off the value as a row
+        // holding it alone reads it; a value that place could not be read at is chosen for none.
+        Map<ObservedValue, ObservedValue> apart = new HashMap<>();
         for (ObservedValue value : listed.values()) {
             BorderQuantity.Observation row = withNumbersBeside(
                     ofTheElement.holding(sourceType, List.of(value)), written);
+            if (apartAt != null) {
+                ObservedValue at = heldAt(row, container, apartAt);
+                if (at == null) {
+                    continue;
+                }
+                apart.put(value, at);
+            }
             every.add(value, i -> ofAnElement.get(i).apply(row), asked.size());
         }
         Groups<ObservedValue> groups = every.keptBy(asked);
@@ -519,7 +567,11 @@ final class CardinalityComposer {
                 if (built.size() == MOST_OFFERED) {
                     return false;
                 }
-                List<ObservedValue> values = groups.drawn(share, distinct);
+                List<ObservedValue> values = apartAt == null ? groups.drawn(share, distinct)
+                        : groups.drawnApart(share, apart::get);
+                if (values == null) {
+                    return true;
+                }
                 BorderQuantity.Observation whole = withNumbersBeside(
                         ofTheElement.holding(sourceType, values), written);
                 for (Asked each : asked) {
@@ -593,13 +645,54 @@ final class CardinalityComposer {
     }
 
     /**
+     * {@code term}, a number of an element, and every number {@code asked} reads that comes to
+     * it where the elements are chosen apart at {@code apartAt}: a total or an end of it gathered
+     * under the value there, of every element, which over the one element of each value is that
+     * element's number.
+     */
+    private static List<NumericTerm> standingFor(NumericTerm term, TermPath apartAt,
+                                                 List<Asked> asked) {
+        List<NumericTerm> out = new ArrayList<>(List.of(term));
+        if (apartAt == null) {
+            return out;
+        }
+        for (Asked one : asked) {
+            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _))) {
+                continue;
+            }
+            for (NumericTerm number : perElement.numbers()) {
+                if (number instanceof NumericTerm.GatheredUnderItsKey gathered
+                        && gathered.selection() == null
+                        && (gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey
+                                .Gathering.Total
+                                || gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey
+                                        .Gathering.End)
+                        && gathered.key() instanceof ElementKey.At(ElementProjection way)
+                        && way.from(gathered.elements()).equals(apartAt)
+                        && gathered.value().asAPlace() instanceof ElementProjection place
+                        && place.from(gathered.elements()).equals(term.subjectPath())
+                        && !out.contains(number)) {
+                    out.add(number);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
      * The values of the number at {@code at} inside an element that are read for {@code asked}:
      * each place a statement turns over at, and {@code each} values of every run between them,
      * inside what the rules leave it and values of {@code part} — or null where the number is on
      * no order, or where a statement turns over at it could not be worked out.
+     *
+     * <p>Where the elements are chosen apart at {@code apartAt}, each is the one element of its
+     * value there, so what the elements of a value come to is what that one element holds: a
+     * total or an end of the number at {@code at} gathered under that value turns over where the
+     * number does ({@link #standingFor}).
      */
     private static List<ObservedValue> numbersAt(TermPath at, OfTheType part, List<Asked> asked,
-                                                 Quantities measuring, SearchRegion within,
+                                                 TermPath apartAt, Quantities measuring,
+                                                 SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
                                                  Set<CompositionRepertoire> unnamed) {
         NumericTerm term = new NumericTerm.ValueOf(at);
@@ -617,25 +710,30 @@ final class CardinalityComposer {
         if (run == null) {
             return List.of();
         }
+        List<NumericTerm> standing = standingFor(term, apartAt, asked);
         List<Place> places;
         if (carrier.counts()) {
             List<ExactRatio> turns = new ArrayList<>();
             for (Asked one : asked) {
-                List<ExactRatio> where = one.turnsAt(term, beside);
-                if (where == null) {
-                    return null;
+                for (NumericTerm number : standing) {
+                    List<ExactRatio> where = one.turnsAt(number, beside);
+                    if (where == null) {
+                        return null;
+                    }
+                    turns.addAll(where);
                 }
-                turns.addAll(where);
             }
             places = valuesAlong(carrier, run, turns, each, unheld, unnamed);
         } else {
             List<Place> turns = new ArrayList<>();
             for (Asked one : asked) {
-                List<Place> where = one.placesTurnedAt(term, beside);
-                if (where == null) {
-                    return null;
+                for (NumericTerm number : standing) {
+                    List<Place> where = one.placesTurnedAt(number, beside);
+                    if (where == null) {
+                        return null;
+                    }
+                    turns.addAll(where);
                 }
-                turns.addAll(where);
             }
             places = valuesAlongAnOrder(carrier, run, turns, each, part, unnamed);
         }
@@ -1174,6 +1272,19 @@ final class CardinalityComposer {
                             .filter(strings::admits).toList());
         }
 
+        /**
+         * The same, where as many different values of it as elements are to be offered: with
+         * the strings written for a value of the type offered whatever its rules leave, since
+         * the order names one string where nothing bounds it and elements apart at a place hold
+         * a different one each.
+         */
+        static OfTheType manyOf(TypeView view, RuleReadingContext reading) {
+            Partitions.StringsTheRulesLeave strings = Partitions.stringsTheRulesLeave(view, reading);
+            return new OfTheType(strings,
+                    Witnesses.stringsOf(view.declared(), MOST_ELEMENTS + 1, reading).stream()
+                            .filter(each -> strings == null || strings.admits(each)).toList());
+        }
+
         /** Whether {@code place} is a value of the type: a string its rules admit, or any place
          *  of an order that holds no strings. */
         boolean admits(Place place) {
@@ -1182,15 +1293,15 @@ final class CardinalityComposer {
 
         /** Up to {@code many} strings the type admits between {@code low} and {@code high}. */
         List<Place> inside(Endpoint low, Endpoint high, int many) {
-            if (strings == null) {
-                return List.of();
-            }
             NumericDomain.Bounds run = new NumericDomain.Bounds(low, high);
             List<Place> out = new ArrayList<>();
             for (String each : written) {
                 if (out.size() < many && run.admits(Text.of(each))) {
                     out.add(Text.of(each));
                 }
+            }
+            if (strings == null) {
+                return out;
             }
             for (String each : strings.inside(low, high, many - out.size())) {
                 if (out.stream().noneMatch(Text.of(each)::sameAs)) {
@@ -1279,18 +1390,21 @@ final class CardinalityComposer {
                                      BorderQuantity.Observation row);
 
         /** How many elements meet {@code perElement}: one of the counts {@code wanted} holds. */
-        record SoManyMeeting(AStatementAtARow perElement, LevelRegion wanted) implements Asked {
+        record SoManyMeeting(AStatementAtARow perElement, LevelRegion wanted,
+                             Optional<TermPath> differentAt) implements Asked {
 
             @Override
             public AStatementAtARow.Answer at(Place value, BorderQuantity.Observation row) {
                 return perElement.at(row);
             }
 
-            /** Read the way the row's own reading reads the count. */
+            /** Read the way the row's own reading reads the count: of the elements, or of the
+             *  different values they hold where that is what is counted. */
             @Override
             public AStatementAtARow.Answer over(TermPath container, List<Place> values,
                                                 BorderQuantity.Observation row) {
-                AStatementAtARow.HowManyAtARow counted = perElement.howManyMeetIn(container, row);
+                AStatementAtARow.HowManyAtARow counted =
+                        perElement.howManyIn(container, differentAt, row);
                 return counted == null
                         ? new AStatementAtARow.Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK))
                         : counted.whether(n -> ExactAnswer.held(asMany(n)));
@@ -1494,7 +1608,7 @@ final class CardinalityComposer {
                                                           Map<TermPath, ObservedValue> written) {
         Map<NumericTerm, Place> out = new LinkedHashMap<>();
         for (Asked one : asked) {
-            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _))) {
+            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _))) {
                 continue;
             }
             for (NumericTerm term : perElement.numbers()) {
@@ -1509,6 +1623,16 @@ final class CardinalityComposer {
             }
         }
         return out;
+    }
+
+    /** What the one element of {@code container} {@code row} holds stands for at {@code at}, or
+     *  null where the row holds no one element there or nothing could be read at it. */
+    private static ObservedValue heldAt(BorderQuantity.Observation row, TermPath container,
+                                        TermPath at) {
+        return row.eachElementOf(container) instanceof WalkResult.Reached<
+                List<BorderQuantity.Observation>>(var elements) && elements.size() == 1
+                && elements.getFirst().at(at) instanceof WalkResult.Reached<ObservationAtPoint>(
+                        ObservationAtPoint.Value(ObservedValue value)) ? value : null;
     }
 
     /** {@code row}, with {@code written} in it where there is any: a row asked once for each way
@@ -1929,6 +2053,32 @@ final class CardinalityComposer {
             for (int g = 0; g < share.length; g++) {
                 for (int n = 0; n < share[g]; n++) {
                     out.add(values.get(g).get(distinct ? n : 0));
+                }
+            }
+            return out;
+        }
+
+        /**
+         * The values a share draws with no two holding one value where {@code apart} reads it —
+         * so many from each group, the first of each that holds a value none drawn before it
+         * holds — or null where some group has too few for that.
+         */
+        List<V> drawnApart(int[] share, Function<V, ObservedValue> apart) {
+            List<V> out = new ArrayList<>();
+            Set<ObservedValue> taken = new HashSet<>();
+            for (int g = 0; g < share.length; g++) {
+                int left = share[g];
+                for (V value : values.get(g)) {
+                    if (left == 0) {
+                        break;
+                    }
+                    if (taken.add(apart.apply(value))) {
+                        out.add(value);
+                        left--;
+                    }
+                }
+                if (left > 0) {
+                    return null;
                 }
             }
             return out;

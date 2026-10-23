@@ -391,13 +391,21 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     }
 
     /**
-     * Which of the elements a filter kept is a number of those, which no quantity of the
-     * container says; and what a closure worked out of an element is no place of the input.
+     * What a closure worked out of an element is no place of the input, so how many different
+     * values it comes to is no number of the container. Of the elements a filter kept, how many
+     * different values they hold is the container's number of those meeting what kept them, and a
+     * row is composed for it as for a count of the elements.
      */
     @Test
-    void aNumberOfSomeOfTheElementsOrOfAValueWorkedOutOfThemIsNoNumberOfTheContainer() {
-        assertEquals(List.of(), numbersAsked("variedOfSome"));
+    void aNumberOfAValueWorkedOutOfTheElementsIsNoNumberOfTheContainer() {
         assertEquals(List.of(), numbersAsked("variedWorkedOut"));
+        List<OnTheWay> stated = statedAll("variedOfSome");
+        assertEquals(1, stated.size(), () -> "one statement: " + stated);
+        RowDemand.SoMany count = assertInstanceOf(RowDemand.SoMany.class,
+                assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst()).demand());
+        assertEquals("#different items [items[*].code] where [Affine[form=LinearForm["
+                + "constant=0, coefs={items[*].code=1}], proposition=GT]]",
+                count.count().spelled());
     }
 
     /**

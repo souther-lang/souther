@@ -371,7 +371,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 || of instanceof BorderQuantity.RemainderOfAPair
                 || of instanceof BorderQuantity.ProductOfAPair) {
             for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
-                if ((each.getKey() instanceof Quantity.HowManyMeet
+                if (((each.getKey() instanceof Quantity.HowManyMeet
+                        || each.getKey() instanceof Quantity.HowManyDifferentMeet)
                         && of instanceof BorderQuantity.HowMany)
                         || (each.getKey() instanceof Quantity.RemainderOfADividend
                                 && of instanceof BorderQuantity.RemainderOfAForm)
@@ -668,8 +669,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return onACountAndNumbers(behavior, affine, holds, read);
         }
         Map.Entry<Quantity, ExactRatio> only = affine.form().coefs().entrySet().iterator().next();
-        if (!(only.getKey() instanceof Quantity.HowManyMeet count)
-                || !AStatementAtARow.askable(count.ofTheElement())) {
+        CountedElements counted = countedAs(behavior, only.getKey(), read);
+        if (counted == null) {
             return null;
         }
         // The constant over the count's weight is where the line is. The weight is above nought: a
@@ -681,12 +682,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
-        CountedElements counted = CountedElements.of(behavior, count, read.quantities(),
-                DemandReading.anElementMeeting(count, read));
         BorderQuantity.HowMany of =
                 new BorderQuantity.HowMany(counted, HowManyCanMeet.of(counted, read));
         Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
+    }
+
+    /**
+     * What {@code quantity} counts, as {@code behavior} reads it at rows — or null where it is no
+     * count a row can be asked: how many elements meet a statement, or how many different values
+     * the elements meeting one hold, of a statement a row's own numbers answer.
+     *
+     * <p>What an element meeting the statement is held to is the same for either count: it is a
+     * statement about one element, whatever is counted of the elements meeting it. One asked of
+     * what the elements holding a value come to is asked of each of them alike.
+     */
+    private static CountedElements countedAs(String behavior, Quantity quantity,
+                                             InputReading read) {
+        return (quantity instanceof Quantity.HowManyMeet
+                || quantity instanceof Quantity.HowManyDifferentMeet)
+                && AStatementAtARow.askable(AStatementAtARow.meetingOf(quantity))
+                ? CountedElements.of(behavior, quantity, read.quantities(),
+                        DemandReading.anElementMeeting(AStatementAtARow.elementsOf(quantity),
+                                read))
+                : null;
     }
 
     /** {@code first} where it drew a line, and what {@code otherwise} draws where it did not. */
@@ -882,14 +901,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read onACountAndNumbers(String behavior, Relation.Affine affine,
                                            boolean holds, InputReading read) {
-        Quantity.HowManyMeet count = null;
+        Quantity count = null;
         ExactRatio weight = null;
         for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
-            if (each.getKey() instanceof Quantity.HowManyMeet counted) {
+            if (each.getKey() instanceof Quantity.HowManyMeet
+                    || each.getKey() instanceof Quantity.HowManyDifferentMeet) {
                 if (count != null) {
                     return null;
                 }
-                count = counted;
+                count = each.getKey();
                 weight = each.getValue();
             } else if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
                 TermOrders orders = read.quantities().ordersOf(term);
@@ -900,7 +920,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 return null;
             }
         }
-        if (count == null || !AStatementAtARow.askable(count.ofTheElement())) {
+        CountedElements counted = count == null ? null : countedAs(behavior, count, read);
+        if (counted == null) {
             return null;
         }
         if (!(ExactRatio.ONE.dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
@@ -919,8 +940,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
-        BorderQuantity.HowMany of = new BorderQuantity.HowMany(CountedElements.of(behavior, count,
-                read.quantities(), DemandReading.anElementMeeting(count, read)),
+        BorderQuantity.HowMany of = new BorderQuantity.HowMany(counted,
                 new LinearForm<>(ExactRatio.ZERO, added), on, Optional.empty());
         Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
                 scale.signum() < 0 ? claim.turned() : claim, read.quantities());
@@ -1221,6 +1241,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                      DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
                      Quantity.HowManyMeet _,
                      Quantity.HowManyHold _, Quantity.HowManyDifferent _,
+                     Quantity.HowManyDifferentMeet _,
                      Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
                      Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
