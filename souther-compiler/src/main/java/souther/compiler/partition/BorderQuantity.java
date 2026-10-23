@@ -986,24 +986,14 @@ public sealed interface BorderQuantity
          *  where the values counted once each stand, where it is a count of those. */
         @Override
         public String left() {
-            String count = spelled(container, counted.differentAt(), said(meeting));
+            String count = CountedElements.spelled(container, counted.differentAt(),
+                    said(meeting));
             if (against.coefs().isEmpty()) {
                 return count;
             }
             String added = OrderedAffineBoundary.spelled(against.coefs());
             return added.startsWith("-") ? count + " - " + added.substring(1)
                     : count + " + " + added;
-        }
-
-        /**
-         * A count as it is written: {@code #container [statement]}, and, where it is how many
-         * different values stand at {@code differentAt} over the elements meeting the statement,
-         * {@code #different container [place] where [statement]}.
-         */
-        static String spelled(TermPath container, Optional<TermPath> differentAt,
-                              String statement) {
-            return differentAt.map(at -> "#different " + container + " [" + at + "] where ")
-                    .orElse("#" + container + " ") + "[" + statement + "]";
         }
 
         /** A statement over the input's own numbers, written the way a comparison is. */
@@ -1027,7 +1017,7 @@ public sealed interface BorderQuantity
                         if (form == null && count != null) {
                             ExactRatio weight = affine.form().coefs().get(count);
                             Quantity.HowManyMeet elements = AStatementAtARow.elementsOf(count);
-                            yield spelled(elements.container().inputPosition(),
+                            yield CountedElements.spelled(elements.container().inputPosition(),
                                     AStatementAtARow.differentAt(count),
                                     said(elements.ofTheElement())) + " " + rel.written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)

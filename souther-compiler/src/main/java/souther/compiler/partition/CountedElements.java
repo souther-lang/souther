@@ -265,8 +265,18 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         return NumericWitness.of(region, placed, on::get, looking);
     }
 
+    /**
+     * A count as it is written: {@code #container [statement]}, and, where it is how many
+     * different values stand at {@code differentAt} over the elements meeting the statement,
+     * {@code #different container [place] where [statement]}.
+     */
+    static String spelled(TermPath container, Optional<TermPath> differentAt, String statement) {
+        return differentAt.map(at -> "#different " + container + " [" + at + "] where ")
+                .orElse("#" + container + " ") + "[" + statement + "]";
+    }
+
     @Override
     public String toString() {
-        return BorderQuantity.HowMany.spelled(container, differentAt, meeting.key());
+        return spelled(container, differentAt, meeting.key());
     }
 }
