@@ -2694,7 +2694,11 @@ public final class FieldDomains {
      * and a day and a month the rules leave one at a time may still be no date together.
      *
      * <p>Every part is a comparison of its own, whose forms are over that number alone and are the
-     * part as the bounds hold it, so what the run leaves is what the part admits.
+     * part as the bounds hold it, so what the run leaves is what the part admits. And every part is
+     * written as the call held against a whole number and nothing besides
+     * ({@link #comparesACallWithAWholeNumber}): the forms are what the part comes to, and say
+     * nothing of whether a value gets through working it out. {@code Date.day(value) + M > 0}
+     * comes to a day above nought less the greatest {@code Int}, and no date is one it holds of.
      */
     private boolean answeredOfIt(RuleKey at) {
         FactSubject place = atomAt.get(at);
@@ -2712,7 +2716,8 @@ public final class FieldDomains {
             }
             for (InvariantChecker.PartAsRead each : parts.values()) {
                 InvariantChecker.PartRead said = each.said();
-                if (!(each.of() instanceof ClauseExpr.Leaf)
+                if (!(each.of() instanceof ClauseExpr.Leaf leaf)
+                        || !comparesACallWithAWholeNumber(leaf.of())
                         || said.narrowable().size() != 1
                         || said.stated().isEmpty()) {
                     return false;
@@ -2739,6 +2744,34 @@ public final class FieldDomains {
         return operation != null
                 && DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(operation)
                 && run != null && run.holdsAValue();
+    }
+
+    /**
+     * Whether {@code part} is written as a call on places held against a whole number, either way
+     * round, with nothing worked out beside them: the comparison of two whole numbers answers, so
+     * the part is worked out wherever the call is.
+     */
+    private static boolean comparesACallWithAWholeNumber(Core part) {
+        Comparison compared = Core.withoutStanding(part) instanceof Core.Binary binary
+                ? Comparison.of(binary).orElse(null) : null;
+        if (compared == null) {
+            return false;
+        }
+        Core left = Core.withoutStanding(compared.left());
+        Core right = Core.withoutStanding(compared.right());
+        return (aCallOnPlaces(left) && right instanceof Core.Int)
+                || (left instanceof Core.Int && aCallOnPlaces(right));
+    }
+
+    /** Whether {@code e} is a call each argument of which is a place read as it is: one written
+     *  to a function, or one kept as the library operation it calls. */
+    private static boolean aCallOnPlaces(Core e) {
+        List<Core> args = switch (Core.withoutStanding(e)) {
+            case Core.Call call -> call.args();
+            case Core.PreservedCall kept -> kept.args();
+            default -> null;
+        };
+        return args != null && args.stream().allMatch(FieldDomains::readOffAsItStands);
     }
 
     /** The reading {@code opened}, or null where none of this value's readings is. */

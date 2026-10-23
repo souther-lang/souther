@@ -268,6 +268,27 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A rule working something out beside the part it takes is not shown to leave the field a
+     * value, whatever it comes to: what the bounds read of {@code Date.day(value) + M > 0} is a day
+     * above nought less the greatest {@code Int}, and no date gets through working it out. Cancelled
+     * away, as in {@code + M - M}, it is still worked out. A part held against a number as it is
+     * written — the length of a string, the year of a date — leaves one.
+     */
+    @Test
+    void aRuleWorkingSomethingOutBesideThePartIsNotShownToLeaveAValue() {
+        for (String rule : List.of("Date.day(value) + 9223372036854775807 > 0",
+                "Date.day(value) + 9223372036854775807 - 9223372036854775807 == 1",
+                "Date.day(value) + 1 == 2")) {
+            assertEquals(Map.of("g", NOT_SHOWN), leftAt("g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "g.value >= r.d.value", 24), rule);
+        }
+        assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
+                besideAHeld("String", "String.length(value) == 3"), "g.value >= r.d.value", 24));
+        assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
+                besideAHeld("Date", "Date.year(value) == 99999"), "g.value >= r.d.value", 24));
+    }
+
+    /**
      * Parts no date has leave the field no value, and the record with it: no row reaches the
      * comparison, and nothing is said of the amount or drawn on the gross.
      */

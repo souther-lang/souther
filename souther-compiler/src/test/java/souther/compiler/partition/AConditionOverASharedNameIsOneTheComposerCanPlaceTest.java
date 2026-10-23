@@ -19,6 +19,7 @@ import souther.compiler.query.Shapes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -158,7 +159,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, TruthsAsked.NONE,
                         List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(taken))),
-                        Reachability.Ways.ONE, List.of()),
+                        Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 

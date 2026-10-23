@@ -24,6 +24,7 @@ import souther.compiler.query.Shapes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -173,7 +174,7 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
                         domain("decide").quantities(rules()).ordersOf(gate.term()).answered(),
                         Count.of(1)))),
                 new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE,
-                        List.copyOf(way), Reachability.Ways.ONE, List.of()),
+                        List.copyOf(way), Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 

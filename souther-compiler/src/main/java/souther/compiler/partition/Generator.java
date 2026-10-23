@@ -5586,7 +5586,7 @@ public final class Generator {
                     reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure,
                             var _)
                             ? new Reachability.Ways.Whole(unsplit, figure, List.of())
-                            : Reachability.Ways.ONE, reaching.declined());
+                            : Reachability.Ways.ONE, reaching.declined(), reaching.narrowedBy());
             WalkedInOrder came = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents(), taking)
                     .from(0, ValuesHandedOn.NONE);
