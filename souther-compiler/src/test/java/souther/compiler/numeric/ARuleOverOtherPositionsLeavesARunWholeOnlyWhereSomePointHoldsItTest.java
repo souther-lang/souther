@@ -153,8 +153,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
 
     private static Written ruleOverAAndB(Random random) {
         Map<String, Long> coefs = new LinkedHashMap<>();
-        long a = random.nextInt(7) - 3;
-        long b = random.nextInt(7) - 3;
+        long a = random.nextInt(7) - 3L;
+        long b = random.nextInt(7) - 3L;
         if (a != 0) {
             coefs.put("a", a);
         }
@@ -162,7 +162,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
             coefs.put("b", b == 0 ? 1 : b);
         }
         Rel rel = List.of(Rel.LE, Rel.LT, Rel.GE, Rel.EQ, Rel.NE).get(random.nextInt(5));
-        return new Written(coefs, random.nextInt(31) - 15, rel);
+        return new Written(coefs, random.nextInt(31) - 15L, rel);
     }
 
     /** Whether some whole point of the box holds every one of {@code rules}. */
