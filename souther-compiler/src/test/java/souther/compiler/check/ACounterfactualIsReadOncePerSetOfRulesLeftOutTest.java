@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -124,6 +125,6 @@ class ACounterfactualIsReadOncePerSetOfRulesLeftOutTest {
         return FieldDomains.of(of,
                 RuleReadingContext.unshared(
                         RuleReadings.of(compilation, compilation.modules().get(0)),
-                        ReadAs.THE_COMPILATION_DOES));
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

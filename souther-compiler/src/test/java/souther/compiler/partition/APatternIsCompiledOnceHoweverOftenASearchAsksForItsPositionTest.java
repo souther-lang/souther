@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.DeclaredSig;
@@ -278,9 +279,10 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
         assertNotNull(sigs, "the model did not compile");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext world = asked == NOTHING_KEPT
-                ? RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)
+                ? RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)
                 : RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES, asked == null
-                        ? compilation.db().readings() : asked.over(compilation.db().readings()));
+                        ? compilation.db().readings() : asked.over(compilation.db().readings()),
+                        TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get("grade"), world,
                 TypeCardinality.Counts.workedOutIn(world), Membership.none());
         Partitions.Partitioning partitioning =

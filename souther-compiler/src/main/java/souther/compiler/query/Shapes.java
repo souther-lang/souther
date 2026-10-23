@@ -1322,7 +1322,7 @@ public final class Shapes {
                 // One world for every conjunct below, since every one of them is read in it. Made
                 // per conjunct, this asked the store what a reading may spend once for each.
                 RuleReadingContext ruleReading = RuleReadingContext.of(reading.value(),
-                        db.ask(new Front.Reading()).value(), db.readings());
+                        db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
                 Map<TypeSymbol, List<ClauseDischarge>> out = new LinkedHashMap<>();
                 for (Hir.Data data : declaring.declarationsThatState()) {
                     List<ClauseDischarge> clauses = new ArrayList<>();
@@ -1383,7 +1383,7 @@ public final class Shapes {
             Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(named));
             return Answer.of(declared.present()
                     ? CardinalityPremise.of(declared.value().declares(), declared.value(),
-                            RuleReadingContext.of(reading.value(), policy.value(), db.readings()))
+                            RuleReadingContext.of(reading.value(), policy.value(), db.readings(), Front.dayOf(db)))
                     : CardinalityPremise.NOTHING);
         }
     }
@@ -1566,7 +1566,7 @@ public final class Shapes {
             }
             try {
                 RuleReadingContext world =
-                        RuleReadingContext.of(reading.value(), policy.value(), db.readings());
+                        RuleReadingContext.of(reading.value(), policy.value(), db.readings(), Front.dayOf(db));
                 return Answer.of(TypeCardinality.ofComponent(members, world,
                         cardinalityPremises(db, world), new CountedElsewhere(db)));
             } catch (CompileException e) {
@@ -1707,7 +1707,7 @@ public final class Shapes {
                 // be answered together, what each reads, and what their rules ask a collection to
                 // hold, which is what the question about who is at fault for a lack is asked of.
                 RuleReadingContext world =
-                        RuleReadingContext.of(reading.value(), policy.value(), db.readings());
+                        RuleReadingContext.of(reading.value(), policy.value(), db.readings(), Front.dayOf(db));
                 TypeCardinality.Cardinalities counted = TypeCardinality.assembled(
                         declarations, world, cardinalityPremises(db, world), counts::get);
                 // Not counted where a rule the count read could not be read at all. What makes a
@@ -2408,7 +2408,7 @@ public final class Shapes {
                 return Answer.absent();
             }
             InvariantStatements statements = InvariantStatements.of(
-                    RuleReadingContext.of(reading.value(), policy.value(), db.readings()));
+                    RuleReadingContext.of(reading.value(), policy.value(), db.readings(), Front.dayOf(db)));
             Map<TypeSymbol.AtModule, ValueShape> shapes = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.Def def : settled.value().defs()) {

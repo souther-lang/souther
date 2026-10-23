@@ -413,7 +413,8 @@ final class NumericWitness {
         // at every place it reaches, and not only at the one it starts from.
         ValueSet admits = admittedAt(term, looking, within);
         PlacesApart apart = apartAt(term, within);
-        Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter());
+        Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter(),
+                looking.startingAt(term, carrier));
         if (first == null) {
             met.leftUnwalked = true;
             return false;

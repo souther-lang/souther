@@ -437,7 +437,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/HeldClass;"
                             + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
-                            + "Ljava/util/Set;)"
+                            + "Ljava/util/Set;Lsouther/compiler/numeric/UsualPlace;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "says in what it hands back that a run held more members than it offered, by"
                             + " the figure it was cut at"),
@@ -871,7 +871,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " may take: each is handed over as what stopped it where nothing was"
                             + " found"),
             Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
-                            + "Ljava/util/List;Lsouther/compiler/check/Carrier;)"
+                            + "Ljava/util/List;Lsouther/compiler/check/Carrier;"
+                            + "Lsouther/compiler/numeric/Today;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
                     "how many years the first year asked is walked over, and whether they were all"
                             + " of them; with no year asked, one cycle of the calendar is walked,"
@@ -879,7 +880,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.TermRealizations#wholeNumbers("
                             + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
                             + "Ljava/util/function/Predicate;"
-                            + "Ljava/math/BigInteger;Ljava/math/BigInteger;I)"
+                            + "Ljava/math/BigInteger;Ljava/math/BigInteger;I"
+                            + "Lsouther/compiler/numeric/UsualPlace;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "names the figure as what left more of the set untried, where the walk filled"
                             + " what it was allowed before the window ran out"),
@@ -912,7 +914,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.TermRealizations#onMovedDates("
                             + "Ljava/util/List;Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/check/Carrier;"
-                            + "Lsouther/compiler/check/RuleReadingSource;)"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "names the figure where no date was found and the years were not all walked"),
 

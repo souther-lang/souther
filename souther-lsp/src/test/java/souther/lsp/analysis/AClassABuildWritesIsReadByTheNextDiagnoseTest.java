@@ -7,6 +7,7 @@ import souther.compiler.jvm.JvmClassName;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import souther.compiler.query.Compilation;
+import souther.test.WrittenOn;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -80,11 +81,11 @@ class AClassABuildWritesIsReadByTheNextDiagnoseTest {
         ModulesOnThePath before = new ModulesOnThePath(ModulePath.EMPTY, 1);
 
         Compilation first = probe.of(Map.of(), Set.of(), before, URI, text, cursor,
-                Abandonment.NEVER).compilation();
+                WrittenOn.DAY, Abandonment.NEVER).compilation();
         assertSame(first, probe.of(Map.of(), Set.of(), before, URI, text, cursor,
-                Abandonment.NEVER).compilation(), "nothing on the path moved");
+                WrittenOn.DAY, Abandonment.NEVER).compilation(), "nothing on the path moved");
         assertNotSame(first, probe.of(Map.of(), Set.of(), new ModulesOnThePath(ModulePath.EMPTY, 2),
-                URI, text, cursor, Abandonment.NEVER).compilation(),
+                URI, text, cursor, WrittenOn.DAY, Abandonment.NEVER).compilation(),
                 "the same place, written again");
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -45,7 +46,8 @@ class WhichNamesRulesAreReadWhenAValueIsProposedTest {
                 """ + declarations);
         TypeSymbol at = TypeSymbols.declared(new TypeKey(rules.symbols().module(), type));
         return Partitions.representativesOf(Type.ref(at),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                                TestDay.TODAY),
                         null, Set.of())
                 .values().stream().map(FixtureTemplate::text).toList();
     }

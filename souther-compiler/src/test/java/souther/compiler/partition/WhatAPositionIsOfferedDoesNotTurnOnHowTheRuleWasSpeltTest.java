@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -46,7 +47,7 @@ class WhatAPositionIsOfferedDoesNotTurnOnHowTheRuleWasSpeltTest {
         /** The world these readings are made in, with nothing to borrow from. */
         RuleReadingContext reading() {
             return RuleReadingContext.unshared(rules,
-                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         }
 
         /** How many a value of the position has to hold. */

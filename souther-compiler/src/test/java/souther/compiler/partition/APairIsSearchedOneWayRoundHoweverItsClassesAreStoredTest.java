@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
@@ -122,7 +123,7 @@ class APairIsSearchedOneWayRoundHoweverItsClassesAreStoredTest {
         Core body = checked.behaviorBodies().get("submit");
         CoverageSites.Plan plan = checked.plan();
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain read = InputDomain.of(sigs.get("submit"), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
@@ -135,7 +136,7 @@ class APairIsSearchedOneWayRoundHoweverItsClassesAreStoredTest {
                                 .get("submit"),
                         rules).thresholds(),
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 souther.compiler.values.Allowance.of(
                         souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         return MeasuredInput.of("submit", read.reading(rules), partitioning).axes();

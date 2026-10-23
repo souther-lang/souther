@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -76,7 +77,7 @@ class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
     private static long walksOver(int depth) {
         Terms terms = new Terms(Terms.Of.THE_DISCHARGE_TREE, RuleReadingContext.unshared(
                 RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
-                ReadAs.THE_COMPILATION_DOES));
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         long[] counting = {0};
         Terms.COUNTING_WALKS = counting;
         try {

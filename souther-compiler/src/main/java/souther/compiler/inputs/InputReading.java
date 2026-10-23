@@ -90,7 +90,7 @@ public final class InputReading {
      * the same rules under the same budget, borrowing what this reading's own walk made of them.
      */
     public RuleReadingContext ruleReading() {
-        return RuleReadingContext.of(rules, domain.policy(), domain.machines());
+        return RuleReadingContext.of(rules, domain.policy(), domain.machines(), domain.today());
     }
 
     /** The names the two were read against. */

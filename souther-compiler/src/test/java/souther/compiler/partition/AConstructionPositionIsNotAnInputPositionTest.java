@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.test.RepositoryLayout;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
@@ -93,7 +94,8 @@ class AConstructionPositionIsNotAnInputPositionTest {
 
     private static InputDomain reading(Read read) {
         RuleReadingContext context =
-                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES,
+                        TestDay.TODAY);
         return InputDomain.of(read.sig(), context, TypeCardinality.Counts.workedOutIn(context),
                 Membership.none());
     }

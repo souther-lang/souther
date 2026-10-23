@@ -290,7 +290,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
         RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         souther.compiler.partition.MeasuredInput subject =
                 souther.compiler.partition.MeasuredInput.of("findTodo",
                         InputDomain.of(List.of(), reading,

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Located;
@@ -64,7 +65,8 @@ class AReportAboutAnImportedClauseNamesWhereItIsNowTest {
     }
 
     private static Compilation answered(Map<String, String> sources) {
-        Compilation compilation = Compilation.ofDocuments(sources, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofDocuments(sources, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         compilation.answerEverything();
         return compilation;
     }
@@ -123,7 +125,7 @@ class AReportAboutAnImportedClauseNamesWhereItIsNowTest {
     @Test
     void aStoreThatAbsorbedTheEditSaysWhereTheClauseIsNow() {
         Compilation absorbed = answered(workspace(DECLARING));
-        absorbed.update(workspace(MOVED), Set.of());
+        absorbed.update(workspace(MOVED), Set.of(), TestDay.DATE);
         absorbed.answerEverything();
 
         assertEquals(placesElsewhere(answered(workspace(MOVED))), placesElsewhere(absorbed),

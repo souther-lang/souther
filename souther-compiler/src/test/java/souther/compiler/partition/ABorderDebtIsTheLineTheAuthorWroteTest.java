@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.meaning.AuthoredPointMapping;
@@ -766,7 +767,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 .ask(new souther.compiler.query.Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         souther.compiler.inputs.InputDomain domain =
                 InputDomain.of(sigs.get(behavior), context,
                         TypeCardinality.Counts.workedOutIn(context),

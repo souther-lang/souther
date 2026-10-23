@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -49,7 +50,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
             RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     private static final RuleReadingContext READING =
-            RuleReadingContext.unshared(NONE, ReadAs.THE_COMPILATION_DOES);
+            RuleReadingContext.unshared(NONE, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
 
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt("g",

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
@@ -92,7 +93,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Core body = checked.behaviorBodies().get("book");
         CoverageSites.Plan plan = checked.plan();
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain read = InputDomain.of(sigs.get("book"), reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
@@ -101,7 +102,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
                 ThresholdFixtures.guardsOf("book", checked.analysisBodies().get("book"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), rules).thresholds(),
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,

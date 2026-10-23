@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -84,7 +85,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("use");
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get("use"), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning axes =
@@ -98,7 +99,8 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
                     checked.plan(),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get("use"), rules);
             axes = ThresholdFixtures.withThresholds(axes, domain.quantities(rules), guards.thresholds(),
-                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                            TestDay.TODAY),
                     guards.noLine(), guards.singled(), guards.between(),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         }

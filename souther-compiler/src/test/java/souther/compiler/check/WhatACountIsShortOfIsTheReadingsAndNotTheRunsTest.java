@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
@@ -67,7 +68,8 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
                         + " and a count over it is a count of what the model states");
 
         InvariantChecker.Seeded email = InvariantChecker.seedFields(
-                named(compilation, module, "Email"), RuleReadingContext.unshared(whole, policy));
+                named(compilation, module, "Email"), RuleReadingContext.unshared(whole, policy,
+                        TestDay.TODAY));
         assertFalse(email.notGathered().isEmpty(),
                 "the model says nothing here unless a reading of it does stop somewhere");
         assertFalse(email.clausesNotExpanded(),

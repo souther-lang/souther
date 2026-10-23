@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -95,7 +96,7 @@ class ANewtypeChainIsReadOneNameAtATimeTest {
     void theWalkGoesDownALongChainWithoutTheCallStack() {
         RuleReadingSource rules = rules(LINKS);
         PathEngine engine = new PathEngine(
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Terms.Of.THE_DISCHARGE_TREE);
         GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees(),
                 DeclarationNewtypes.asWritten(rules.symbols()));
@@ -133,7 +134,7 @@ class ANewtypeChainIsReadOneNameAtATimeTest {
     void whetherARuleStandsUnderALongChainIsAnsweredFromTheBottom() {
         RuleReadingSource rules = rules(LINKS);
         PathEngine engine = new PathEngine(
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Terms.Of.THE_DISCHARGE_TREE);
 
         assertTrue(onASmallStack(() -> engine.guarantees().anyRuleUnder(top(LINKS))));

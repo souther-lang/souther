@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
@@ -69,7 +70,7 @@ class WhereANameOfAChainGoesIsAskedOnceForAReadingTest {
                 }, rules.bindings(), rules.written());
 
         FieldDomains.of(TypeSymbols.declared(new TypeKey("chain", "T" + length)),
-                RuleReadingContext.unshared(counting, policy));
+                RuleReadingContext.unshared(counting, policy, TestDay.TODAY));
         return asked.get();
     }
 }

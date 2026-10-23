@@ -11,6 +11,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
 import souther.compiler.numeric.Times;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
@@ -113,7 +114,7 @@ class EveryOrderedTypeCarriesAValueBothWaysTest {
                 out.add(end.at());
             }
         }
-        Place inside = carrier.somethingInside(extent.low(), extent.high());
+        Place inside = carrier.aPlaceInside(extent.low(), extent.high(), UsualPlace.NONE);
         if (inside != null) {
             out.add(inside);
         }

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -93,6 +94,7 @@ class WhatARuleRaisesDoesNotMoveWithWhatAReaderCanDoTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "P"));
         assertNotNull(symbols.declaredNode(named.key()), "no `P` declared");
         return FieldDomains.of(named,
-                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy));
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy,
+                        TestDay.TODAY));
     }
 }

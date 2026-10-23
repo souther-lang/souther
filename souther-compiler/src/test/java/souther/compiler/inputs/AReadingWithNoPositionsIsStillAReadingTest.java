@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -49,7 +50,7 @@ class AReadingWithNoPositionsIsStillAReadingTest {
     @Test
     void aWalkOverNoParametersIsAReadingOfAnInputWithNoPositions() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
-        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy, TestDay.TODAY);
         InputDomain read = InputDomain.of(List.of(), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());
@@ -71,7 +72,7 @@ class AReadingWithNoPositionsIsStillAReadingTest {
     @Test
     void andItSaysHowItsNamesAreRead() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
-        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy, TestDay.TODAY);
 
         assertSame(policy,
                 InputDomain.of(List.of(), reading, TypeCardinality.Counts.workedOutIn(reading),

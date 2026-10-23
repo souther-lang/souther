@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.ClassMembers;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
@@ -44,7 +45,10 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Today;
+import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
@@ -62,6 +66,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -447,7 +452,7 @@ public final class Partitions {
         // A step of it left to read a declaration for itself reads the same declaration once per
         // position that arrives at it.
         RuleReadingContext ruleReading =
-                RuleReadingContext.of(ruleSource, policy, inputs.machines());
+                RuleReadingContext.of(ruleSource, policy, inputs.machines(), inputs.today());
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         RulesWithNoLine.Gathered rulesWithoutALine = new RulesWithNoLine.Gathered();
         // What the reading could not hold together, asked of every position it read rather than of
@@ -1570,7 +1575,8 @@ public final class Partitions {
             return List.of();   // nothing here reads a number of this position at all
         }
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
-        Place held = bounds == null || bounds.saysNothing() ? null : inside(bounds, own.carrier());
+        Place held = bounds == null || bounds.saysNothing() ? null
+                : inside(bounds, own.carrier(), reading.today());
         FixtureTemplate at = held == null ? null
                 : FixtureTemplate.on(own.carrier(), held, ruleSource.symbols().scope()::reach);
         return at == null ? List.of() : List.of(at);
@@ -1618,7 +1624,7 @@ public final class Partitions {
                                                    Set<TypeSymbol> inside) {
         RuleReadingSource ruleSource = reading.source();
         return switch (view.shape()) {
-            case Shape.Scalar scalar -> Proposals.of(standsForA(scalar, within, ruleSource));
+            case Shape.Scalar scalar -> Proposals.of(standsForA(scalar, within, reading));
             // The empty one, for every collection nothing has said otherwise about. A row whose
             // collection is not what it is about should say so by carrying nothing, and where no rule
             // counts what the position holds there is nothing else to go on.
@@ -1653,14 +1659,15 @@ public final class Partitions {
     /** The value a primitive stands for, which for one whose values are counted is one the position
      *  is left able to hold and for the rest is one fixed value. */
     private static List<FixtureTemplate> standsForA(Shape.Scalar scalar, NumericDomain.Bounds within,
-                                                    RuleReadingSource ruleSource) {
+                                                    RuleReadingContext reading) {
         return switch (scalar.prim()) {
             // Where the range is entered on the order the value is compared on, which is where a
             // second value and a set's further elements are stepped from as well, so the second is
-            // beside the first. Never the clock's: a generated row is compared with the last one to
-            // see what changed, and a value that read the clock would change every time nothing had.
+            // beside the first. A date is entered nearest the day the reading was made on, which
+            // the compilation settles once: never the clock's, which would move between two rows of
+            // one block.
             case INT, DECIMAL, DATE, TIME, DATETIME, INSTANT ->
-                    countStandingFor(Carrier.ofPrimitive(scalar.prim()), within, ruleSource);
+                    countStandingFor(Carrier.ofPrimitive(scalar.prim()), within, reading);
             case STRING -> List.of(FixtureTemplate.string("x"));
             case BOOL -> List.of(FixtureTemplate.bool(true));
             // A Rational reaches no position: it has no external form, so nothing declares one and no
@@ -1673,10 +1680,10 @@ public final class Partitions {
     /** A count the position is left able to hold, or none where what is left of it holds none. */
     private static List<FixtureTemplate> countStandingFor(Carrier carrier,
                                                           NumericDomain.Bounds within,
-                                                          RuleReadingSource ruleSource) {
-        Place at = inside(within, carrier);
+                                                          RuleReadingContext reading) {
+        Place at = inside(within, carrier, reading.today());
         FixtureTemplate standing = at == null ? null
-                : FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach);
+                : FixtureTemplate.on(carrier, at, reading.source().symbols().scope()::reach);
         return standing == null ? List.of() : List.of(standing);
     }
 
@@ -2148,7 +2155,7 @@ public final class Partitions {
         }
         Carrier carrier = declared.carrier();
         NumericDomain.Bounds range = TypeBounds.admissible(declared, null);
-        Place from = inside(range, carrier);
+        Place from = inside(range, carrier, reading.today());
         if (from == null) {
             return index -> null;
         }
@@ -2158,7 +2165,7 @@ public final class Partitions {
             return index -> index == 0 ? only : null;
         }
         return index -> {
-            Place at = stepped(range, carrier, from, index);
+            Place at = stepped(range, carrier, from, index, carrier.usualPlace(reading.today()));
             return at == null ? null : standing(view, carrier, at, source);
         };
     }
@@ -2187,11 +2194,40 @@ public final class Partitions {
      * <p>Away from that end because a range bounded only above is entered at its end, and a step up
      * from there is a value the rules refuse. On the carrier's grid because a step past the end of
      * what the carrier holds — the second after the last of the day — is no value.
+     *
+     * <p>And outward from {@code from} where it is where the number is usually near, in a range left
+     * open on a side ({@link Carrier#aPlaceInside}): the {@code index}th place of the range taking
+     * the one above before the one below at each step out, as every outward walk here does. Stepped
+     * one way from there, a range whose far end is before today would hold today's nearest date and
+     * nothing else.
      */
     private static Place stepped(NumericDomain.Bounds range, Carrier carrier, Place from,
-                                 int index) {
-        boolean downwards = range != null && range.min() == null && range.max() != null;
+                                 int index, UsualPlace usual) {
         Count origin = Count.number(from);
+        if (usual instanceof UsualPlace.Near near
+                && near.leftOpenIn(range == null ? null : range.min(),
+                        range == null ? null : range.max())) {
+            int reached = 0;
+            for (long away = 0; ; away++) {
+                boolean inside = false;
+                for (Count each : away == 0 ? List.of(origin)
+                        : Arrays.asList(origin.plus(away), origin.minus(away))) {
+                    Place at = each == null ? null : carrier.onTheGrid(each);
+                    if (at != null && holdsCount(range, at)) {
+                        inside = true;
+                        if (reached++ == index) {
+                            return at;
+                        }
+                    }
+                }
+                // A range of a discrete carrier holds every place between two it holds, so one
+                // past which neither side holds a place is one past which none does.
+                if (!inside) {
+                    return null;
+                }
+            }
+        }
+        boolean downwards = range != null && range.min() == null && range.max() != null;
         Place at = carrier.onTheGrid(downwards ? origin.minus(index) : origin.plus(index));
         return at != null && holdsCount(range, at) ? at : null;
     }
@@ -2295,7 +2331,7 @@ public final class Partitions {
         }
         Carrier carrier = declared.carrier();
         NumericDomain.Bounds range = TypeBounds.admissible(declared, within);
-        Place step = displaced(range, carrier);
+        Place step = displaced(range, carrier, reading.today());
         if (step == null) {
             return base.done();
         }
@@ -2310,8 +2346,9 @@ public final class Partitions {
     }
 
     /**
-     * The member of the class {@code limits} holds the position to nearest the lower end of where
-     * it stops — or, with no lower end, nearest the order's own start — that the values the rules
+     * The member of the class {@code limits} holds the position to nearest the value standing for
+     * where it stops ({@link Carrier#aPlaceInside}) — the lower end of a run a rule closed, or
+     * where the order is usually near in one left open on a side — that the values the rules
      * admit there take in, written as the position writes it; or null where it is held to no class,
      * its order counts none, or the run holds no such member.
      *
@@ -2330,8 +2367,11 @@ public final class Partitions {
         }
         FieldDomains.ConstructionLimits.ValuesNamed named = limits.valuesNamed();
         ValueSet admits = named.asASet();
-        for (BigInteger each : held.within(TypeBounds.admissible(declared, limits.values()),
-                null, named.keptOut() + 1).values()) {
+        NumericDomain.Bounds run = TypeBounds.admissible(declared, limits.values());
+        Carrier carrier = declared.carrier();
+        ClassMembers members = held.standingIn(run, carrier, carrier.usualPlace(reading.today()),
+                named.keptOut() + 1);
+        for (BigInteger each : members.values()) {
             Place at = new Count(new BigDecimal(each));
             if (declared.carrier().admitted(admits, at)) {
                 return standing(view, declared.carrier(), at, reading.source());
@@ -2341,8 +2381,8 @@ public final class Partitions {
     }
 
     /** A second count of a range, or null where the carrier has none to give. */
-    private static Place displaced(NumericDomain.Bounds range, Carrier carrier) {
-        Place from = inside(range, carrier);
+    private static Place displaced(NumericDomain.Bounds range, Carrier carrier, Today today) {
+        Place from = inside(range, carrier, today);
         if (from == null) {
             return null;
         }
@@ -2352,11 +2392,12 @@ public final class Partitions {
             // No smallest step, so the only second count a range names is one inside both its ends —
             // and the one already on offer is that count where the range is open below.
             return min == null || max == null || !min.inclusive() ? null
-                    : carrier.somethingInside(Endpoint.exclusive(min.at()), max);
+                    : carrier.somethingInside(Endpoint.exclusive(min.at()), max, Towards.ABOVE,
+                            UsualPlace.NONE);
         }
         // The step an element of a collection takes after the first, so a position's second value and
         // a set's second element are one value.
-        return stepped(range, carrier, from, 1);
+        return stepped(range, carrier, from, 1, carrier.usualPlace(today));
     }
 
     /** Whether a range holds a count, with no range holding everything. */
@@ -2977,19 +3018,19 @@ public final class Partitions {
     }
 
     /** A count the position holds, or null where it holds none. The ends decide it, so nothing here
-     * reads one of them as a number and loses whether the range reaches it. */
-    private static Place inside(NumericDomain.Bounds within, Carrier carrier) {
-        if (within == null) {
-            return Count.ZERO;
-        }
-        Place between = carrier.somethingInside(within.min(), within.max());
+     * reads one of them as a number and loses whether the range reaches it. A value standing for
+     * the range ({@link Carrier#aPlaceInside}), as a date nobody bounded on a side is the date
+     * nearest today. */
+    private static Place inside(NumericDomain.Bounds within, Carrier carrier, Today today) {
+        Place between = carrier.aPlaceInside(within == null ? null : within.min(),
+                within == null ? null : within.max(), carrier.usualPlace(today));
         if (between == null) {
             return null;
         }
         // On the carrier's own grid, and then still inside. A number between two counts it can hold
         // is not always one of them (see Carrier#onTheGrid).
         Place held = carrier.onTheGrid(between);
-        return held != null && within.admits(held) ? held : null;
+        return held != null && (within == null || within.admits(held)) ? held : null;
     }
 
     /**
@@ -3060,7 +3101,8 @@ public final class Partitions {
      * one value out may cost is already granted. A search reaching for either would be a second
      * answer about the model beside an allowance nothing granted it.
      */
-    static WitnessSearch witnessSearch(List<PositionMeasurements> measurements, NameReach reach) {
+    static WitnessSearch witnessSearch(List<PositionMeasurements> measurements, NameReach reach,
+                                       Today today) {
         java.util.Map<TermPath, ValueSet> sets = new LinkedHashMap<>();
         for (PositionMeasurements at : measurements) {
             // Every position the reading measured, including the ones whose rules leave them
@@ -3073,7 +3115,7 @@ public final class Partitions {
         // from a position it was left short of. Worked out from the measurements alone, the two
         // would be one hole in one map.
         return new WitnessSearch(AdmittedValues.of(sets, reach),
-                PatternPlan.Budget.OF_A_WITNESS::meter);
+                PatternPlan.Budget.OF_A_WITNESS::meter, today);
     }
 
     private Partitions() {}

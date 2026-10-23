@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
@@ -119,13 +120,14 @@ class WorkARevisionLendsIsReadForWhoeverItIsLentToTest {
         assertEquals(BEFORE, db.ask(FIRST).value());
         assertEquals(BEFORE, db.ask(SECOND).value(), "lent what the first question worked out");
 
-        compilation.update(Map.of("demo.sou", AFTER), Set.of());
+        compilation.update(Map.of("demo.sou", AFTER), Set.of(), TestDay.DATE);
 
         assertEquals(AFTER, db.ask(SECOND).value(),
                 "the question lent the work is answered out of the text as it now reads");
     }
 
     private static Compilation compiled() {
-        return Compilation.ofDocuments(Map.of("demo.sou", BEFORE), Set.of(), ModulePath.EMPTY);
+        return Compilation.ofDocuments(Map.of("demo.sou", BEFORE), Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
     }
 }

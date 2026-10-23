@@ -1,6 +1,7 @@
 package souther.compiler.conformance;
 
 import souther.compiler.Compiler;
+import souther.compiler.TestDay;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.meta.ModulePath;
@@ -222,7 +223,7 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
     public Analysed analyse() {
         List<Located> warnings = new ArrayList<>();
         Compilation compilation = Compiler.analyzedModules(sources, ModulePath.EMPTY, warnings,
-                Adequacy.Asked.fullReport());
+                Adequacy.Asked.fullReport(), TestDay.DATE);
         return new Analysed(this, compilation, compilation.errors(), warnings,
                 AdequacyReport.of(compilation));
     }

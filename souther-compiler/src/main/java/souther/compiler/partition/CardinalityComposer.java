@@ -19,8 +19,10 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
@@ -237,8 +239,9 @@ final class CardinalityComposer {
                 turns.addAll(where);
             }
             if (run != null) {
-                candidates = valuesAlong(element.carrier(), run, turns, perPart, unheld,
-                        unnamed);
+                candidates = valuesAlong(element.carrier(), run, turns, perPart,
+                        UsualPlaces.of(element.term(), element.carrier(), reading.today()),
+                        unheld, unnamed);
             }
         } else {
             List<Place> turns = new ArrayList<>();
@@ -518,10 +521,12 @@ final class CardinalityComposer {
         // values would fill the listing in place of the others'.
         BiFunction<TermPath, TypeView, List<ObservedValue>> numbers = (at, part) ->
                 numbersAt(at, OfTheType.of(part, reading), asked, apartAt, measuring, within,
-                        beside, keptApartByItsRules ? MOST_ELEMENTS : 1, unheld, unnamed);
+                        beside, keptApartByItsRules ? MOST_ELEMENTS : 1, unheld, unnamed,
+                        reading.today());
         ListedByValue byValue = listedByValue(container, holding.element(), reading, apartAt,
                 numbers, (at, part) -> numbersAt(at, OfTheType.manyOf(part, reading), asked,
-                        apartAt, measuring, within, beside, MOST_ELEMENTS, unheld, unnamed));
+                        apartAt, measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
+                        reading.today()));
         if (byValue == null) {
             return notChosen("an element of `" + container + "` has a part whose values are"
                     + " neither one of so many nor numbers the statements part");
@@ -739,7 +744,7 @@ final class CardinalityComposer {
                                                  TermPath apartAt, Quantities measuring,
                                                  SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
-                                                 Set<CompositionRepertoire> unnamed) {
+                                                 Set<CompositionRepertoire> unnamed, Today today) {
         NumericTerm term = new NumericTerm.ValueOf(at);
         TermOrders orders = measuring.ordersOf(term);
         Carrier carrier = orders == null ? null : orders.observed();
@@ -782,7 +787,8 @@ final class CardinalityComposer {
                     }
                 }
             }
-            places = valuesAlong(carrier, run, turns, each, unheld, unnamed);
+            places = valuesAlong(carrier, run, turns, each,
+                    UsualPlaces.of(term, carrier, today), unheld, unnamed);
         } else {
             List<Place> turns = new ArrayList<>();
             for (Asked one : asked) {
@@ -892,14 +898,14 @@ final class CardinalityComposer {
         // only the empty string.
         OfTheType repeated = OfTheType.manyOf(ofTheElement, reading);
         List<Place> candidates = valuesToCount(kept, own, container, place, carrier, run,
-                repeated, unheld, unnamed);
+                repeated, unheld, unnamed, reading.today());
         if (candidates == null) {
             return notChosen("where `" + kept.key() + "` turns over an element of `"
                     + container + "` could not be worked out");
         }
         List<Place> beside = candidates.isEmpty() ? List.of()
                 : valuesBeside(candidates.getFirst(), candidates, kept, carrier, run, repeated,
-                        unheld, unnamed);
+                        unheld, unnamed, reading.today());
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
@@ -978,9 +984,11 @@ final class CardinalityComposer {
         List<List<String>> apart = ElementsKeptApart.at(view, keptApart, reading);
         ListedByValue byValue = listedByValue(container, holding.element(), reading, place,
                 (at, part) -> numbersAt(at, OfTheType.of(part, reading), asked, null, measuring,
-                        within, beside, apart.isEmpty() ? 1 : MOST_ELEMENTS, unheld, unnamed),
+                        within, beside, apart.isEmpty() ? 1 : MOST_ELEMENTS, unheld, unnamed,
+                        reading.today()),
                 (at, part) -> numbersAt(at, OfTheType.manyOf(part, reading), asked, null,
-                        measuring, within, beside, MOST_ELEMENTS, unheld, unnamed));
+                        measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
+                        reading.today()));
         if (byValue == null) {
             return notChosen("an element of `" + container + "` has a part whose values are"
                     + " neither one of so many nor numbers the statements part");
@@ -1133,7 +1141,7 @@ final class CardinalityComposer {
         OfTheType leaves = OfTheType.of(
                 NestedContainersAddingUp.ofTheLeaves(sourceType, place, reading), reading);
         List<Place> candidates = valuesToCount(kept, own, chain.getLast(), place, carrier, run,
-                leaves, unheld, unnamed);
+                leaves, unheld, unnamed, reading.today());
         if (candidates == null) {
             return notChosen("where `" + kept.key() + "` turns over an element of `"
                     + chain.getLast() + "` could not be worked out");
@@ -1143,7 +1151,7 @@ final class CardinalityComposer {
                     : "no value at `" + place + "` to repeat that `" + kept.key() + "` keeps");
         }
         List<Place> beside = valuesBeside(candidates.getFirst(), candidates, kept, carrier, run,
-                leaves, unheld, unnamed);
+                leaves, unheld, unnamed, reading.today());
         NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
         List<FixtureTemplate> built = new ArrayList<>();
         CompositionShortfall rest = CompositionShortfall.NONE;
@@ -1250,7 +1258,8 @@ final class CardinalityComposer {
         List<Place> beside = new ArrayList<>();
         OfTheType leaves = OfTheType.of(
                 NestedContainersAddingUp.ofTheLeaves(sourceType, place, reading), reading);
-        for (Place each : valuesTheRulesLeave(carrier, run, leaves, unheld, unnamed)) {
+        for (Place each : valuesTheRulesLeave(carrier, run, leaves, unheld, unnamed,
+                reading.today())) {
             if (values.stream().noneMatch(each::sameAs)) {
                 beside.add(each);
             }
@@ -1384,12 +1393,12 @@ final class CardinalityComposer {
                                              Carrier carrier, NumericDomain.Bounds run,
                                              OfTheType element,
                                              Set<CompositionCapacity> unheld,
-                                             Set<CompositionRepertoire> unnamed) {
+                                             Set<CompositionRepertoire> unnamed, Today today) {
         if (kept != null) {
             return keptValues(kept, own, container, place, carrier, run, element, unheld,
-                    unnamed);
+                    unnamed, today);
         }
-        return valuesTheRulesLeave(carrier, run, element, unheld, unnamed);
+        return valuesTheRulesLeave(carrier, run, element, unheld, unnamed, today);
     }
 
     /**
@@ -1400,19 +1409,22 @@ final class CardinalityComposer {
                                             Carrier carrier, NumericDomain.Bounds run,
                                             OfTheType element,
                                             Set<CompositionCapacity> unheld,
-                                            Set<CompositionRepertoire> unnamed) {
+                                            Set<CompositionRepertoire> unnamed, Today today) {
         List<Place> pool = kept == null ? toCount
-                : valuesTheRulesLeave(carrier, run, element, unheld, unnamed);
+                : valuesTheRulesLeave(carrier, run, element, unheld, unnamed, today);
         return pool.stream().filter(each -> !each.sameAs(counted)).toList();
     }
 
-    /** Values of an element of {@code element} inside {@code run}. */
+    /** Values of an element of {@code element} inside {@code run}, near where a value of the place
+     *  is usually near on {@code today}. */
     private static List<Place> valuesTheRulesLeave(Carrier carrier, NumericDomain.Bounds run,
                                                    OfTheType element,
                                                    Set<CompositionCapacity> unheld,
-                                                   Set<CompositionRepertoire> unnamed) {
+                                                   Set<CompositionRepertoire> unnamed,
+                                                   Today today) {
         return carrier.counts()
-                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
+                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1,
+                        carrier.usualPlace(today), unheld, unnamed)
                 : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, element,
                         unnamed);
     }
@@ -1510,14 +1522,15 @@ final class CardinalityComposer {
                                           TermPath container, TermPath place, Carrier carrier,
                                           NumericDomain.Bounds run, OfTheType element,
                                           Set<CompositionCapacity> unheld,
-                                          Set<CompositionRepertoire> unnamed) {
+                                          Set<CompositionRepertoire> unnamed, Today today) {
         List<Place> near;
         if (carrier.counts()) {
             List<ExactRatio> turns = kept.perElement().turnsAt(own, Map.of());
             if (turns == null) {
                 return null;
             }
-            near = valuesAlong(carrier, run, turns, MOST_ELEMENTS + 1, unheld, unnamed);
+            near = valuesAlong(carrier, run, turns, MOST_ELEMENTS + 1,
+                    UsualPlaces.of(own, carrier, today), unheld, unnamed);
         } else {
             List<Place> turns = kept.perElement().placesTurnedAt(own, Map.of());
             if (turns == null) {
@@ -2371,8 +2384,10 @@ final class CardinalityComposer {
      * Values of the element inside {@code run}: each place a relation turns at that is a value, and
      * up to {@code each} different values from every run between two of them and past the last.
      *
-     * <p>Nearest the place a run is bounded by, which is the value beside the line an author would
-     * write. A run bounded on neither side has one value taken, as a place with nothing to be near.
+     * <p>Where relations part the run, nearest the place each part is bounded by, which is the value
+     * beside the line an author would write ({@link #walked}). Where none does, the run is the
+     * values an element may hold and there is no line to be beside: the values standing for it are
+     * the ones near where the values are usually near ({@link #standingIn}).
      *
      * <p>Where a relation turns is a number and not always a value: {@code 3 * x > 1} turns at a
      * third, which no element is. The run is parted at the exact places it turns at inside it, and
@@ -2380,13 +2395,16 @@ final class CardinalityComposer {
      * Only then is a part written as decimals ({@link #inward}), and only inward, so no value is
      * dropped from a part and none from beside it is let in. A place a value can be is a value
      * besides.
+     *
+     * @param usual where the values are usually near, which a run no relation parts stands near
+     *              and a part left open on the side it is entered from is walked from
      */
     static List<Place> valuesAlong(Carrier carrier, NumericDomain.Bounds run,
-                                   List<ExactRatio> turns, int each,
+                                   List<ExactRatio> turns, int each, UsualPlace usual,
                                    Set<CompositionCapacity> unheld,
                                    Set<CompositionRepertoire> unnamed) {
         if (turns.isEmpty()) {
-            return walked(carrier, run.min(), run.max(), each, unnamed);
+            return standingIn(carrier, run.min(), run.max(), each, usual, unnamed);
         }
         ExactEnd low = ExactEnd.of(run.min());
         ExactEnd high = ExactEnd.of(run.max());
@@ -2415,7 +2433,7 @@ final class CardinalityComposer {
             }
             switch (inward(from, to)) {
                 case Part.Between(Endpoint lo, Endpoint hi) ->
-                        out.addAll(walked(carrier, lo, hi, each, unnamed));
+                        out.addAll(walked(carrier, lo, hi, each, usual, unnamed));
                 case Part.Empty _ -> { }
                 // A part this could not write leaves its values unoffered, which is a number not
                 // held and is said.
@@ -2477,7 +2495,9 @@ final class CardinalityComposer {
     private static List<Place> admitted(Carrier carrier, Endpoint low, Endpoint high, int each,
                                         OfTheType element, Set<CompositionRepertoire> unnamed) {
         Set<CompositionRepertoire> named = EnumSet.noneOf(CompositionRepertoire.class);
-        List<Place> out = new ArrayList<>(walked(carrier, low, high, each, named).stream()
+        // An order that does not count, which a string's is: no place on it is usually near.
+        List<Place> out = new ArrayList<>(walked(carrier, low, high, each, UsualPlace.NONE, named)
+                .stream()
                 .filter(element::admits).toList());
         if (out.size() < each) {
             for (Place more : element.inside(low, high, each)) {
@@ -2613,31 +2633,91 @@ final class CardinalityComposer {
     }
 
     /**
-     * Up to {@code each} different values between two ends, from the end there is.
+     * Up to {@code each} different values of a part of a run between two places a relation turns
+     * at, from the end there is: the value beside the line an author would write
+     * ({@link Carrier#somethingInside}).
+     *
+     * <p>Or from where the value is usually near, where the side the part is entered from is one
+     * nobody drew: the dates of a part open below are today's and those either side of it, above
+     * before below, as every outward walk here takes them. Walked one way only from there, a part
+     * whose far end is before today would give up today's nearest date and nothing else.
      *
      * <p>A run that holds a value and of which the carrier named none is put in {@code unnamed}:
      * a string above every string a rule wrote is there and is not one this invents, and the run
      * left without a value is this compiler's reach and no answer about the model.
      */
     private static List<Place> walked(Carrier carrier, Endpoint low, Endpoint high, int each,
-                                      Set<CompositionRepertoire> unnamed) {
-        List<Place> out = new ArrayList<>();
+                                      UsualPlace usual, Set<CompositionRepertoire> unnamed) {
         Towards from = low == null && high != null ? Towards.BELOW : Towards.ABOVE;
-        Endpoint lo = low;
-        Endpoint hi = high;
-        while (out.size() < each && Endpoint.someValueLiesBetween(lo, hi)) {
-            Place next = carrier.somethingInside(lo, hi, from);
-            if (next == null && out.isEmpty()) {
+        Place first = Endpoint.someValueLiesBetween(low, high)
+                ? carrier.somethingInside(low, high, from, usual) : null;
+        boolean outward = usual instanceof UsualPlace.Near near
+                && near.leftOpenAt(from == Towards.ABOVE ? low : high, from == Towards.ABOVE);
+        return steppedFrom(first, carrier, low, high, each, from, outward, unnamed);
+    }
+
+    /**
+     * Up to {@code each} different values standing for a run no relation parts, which no end of it
+     * is asked for ({@link Carrier#aPlaceInside}): where the value is usually near, where the run is
+     * left open on either side, and the values either side of it — and otherwise from the run's
+     * end, as {@link #walked} takes them.
+     *
+     * <p>The other question from the one a part beside a line asks. A run of the values an element
+     * may hold, bounded only by what its type admits, has no line to be beside: a set of dates from
+     * the year 2000 on is today and the days either side of it, as a single such date is today
+     * ({@link Partitions}), and not the first of January 2000 and the days after it.
+     */
+    private static List<Place> standingIn(Carrier carrier, Endpoint low, Endpoint high, int each,
+                                          UsualPlace usual, Set<CompositionRepertoire> unnamed) {
+        Towards from = low == null && high != null ? Towards.BELOW : Towards.ABOVE;
+        Place first = Endpoint.someValueLiesBetween(low, high)
+                ? carrier.aPlaceInside(low, high, usual) : null;
+        boolean outward = usual instanceof UsualPlace.Near near && near.leftOpenIn(low, high);
+        return steppedFrom(first, carrier, low, high, each, from, outward, unnamed);
+    }
+
+    /**
+     * {@code first} and the values after it, up to {@code each} of them: stepping away from the end
+     * {@code from} names, or outward from {@code first} on both sides, the one above before the one
+     * below, where {@code outward}.
+     */
+    private static List<Place> steppedFrom(Place first, Carrier carrier, Endpoint low,
+                                           Endpoint high, int each, Towards from, boolean outward,
+                                           Set<CompositionRepertoire> unnamed) {
+        List<Place> out = new ArrayList<>();
+        if (first == null) {
+            if (Endpoint.someValueLiesBetween(low, high)) {
                 unnamed.add(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
             }
-            if (next == null || out.stream().anyMatch(next::sameAs)) {
-                break;
+            return out;
+        }
+        out.add(first);
+        // Each side carried from the last place it reached: above it entered from below, below it
+        // from above, so each next value is the one beside the last on its side.
+        Endpoint lo = Endpoint.exclusive(first);
+        Endpoint hi = Endpoint.exclusive(first);
+        boolean aboveLeft = outward || from == Towards.ABOVE;
+        boolean belowLeft = outward || from == Towards.BELOW;
+        while (out.size() < each && (aboveLeft || belowLeft)) {
+            if (aboveLeft) {
+                Place next = Endpoint.someValueLiesBetween(lo, high)
+                        ? carrier.somethingInside(lo, high, Towards.ABOVE, UsualPlace.NONE) : null;
+                if (next == null || out.stream().anyMatch(next::sameAs)) {
+                    aboveLeft = false;
+                } else {
+                    out.add(next);
+                    lo = Endpoint.exclusive(next);
+                }
             }
-            out.add(next);
-            if (from == Towards.ABOVE) {
-                lo = Endpoint.exclusive(next);
-            } else {
-                hi = Endpoint.exclusive(next);
+            if (belowLeft && out.size() < each) {
+                Place next = Endpoint.someValueLiesBetween(low, hi)
+                        ? carrier.somethingInside(low, hi, Towards.BELOW, UsualPlace.NONE) : null;
+                if (next == null || out.stream().anyMatch(next::sameAs)) {
+                    belowLeft = false;
+                } else {
+                    out.add(next);
+                    hi = Endpoint.exclusive(next);
+                }
             }
         }
         return out;

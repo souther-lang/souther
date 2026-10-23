@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.KeptCalls;
+import souther.compiler.TestDay;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.query.ReadAs;
@@ -160,7 +161,7 @@ class EveryTermIsReadForWhatItSaysTest {
         PathEngine engine = new PathEngine(
                 RuleReadingContext.unshared(
                         RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
-                        ReadAs.THE_COMPILATION_DOES),
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Terms.Of.THE_DISCHARGE_TREE);
         Predicates predicates = engine.predicates();
 

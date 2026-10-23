@@ -3,6 +3,7 @@ package souther.compiler.check;
 import net.unit8.notation199x.pattern.Meter;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
@@ -193,7 +194,8 @@ class APatternPastItsFigureNamesTheFigureTest {
                 ReadAs.THE_COMPILATION_DOES.scalePlacesLimit(), admitted,
                 PatternPlan.Budget.OF_WHAT_A_RULE_LEAVES);
         FieldDomains read = FieldDomains.of(name,
-                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"), policy));
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"), policy,
+                        TestDay.TODAY));
         StoppedReading stopped = read.admits(RuleKey.THE_VALUE).whyPartial();
         assertNotNull(stopped, "a reading refused a machine is short of the rules it was about");
         return assertInstanceOf(BlockReason.ReadingStopReason.class, BlockReason.of(stopped));

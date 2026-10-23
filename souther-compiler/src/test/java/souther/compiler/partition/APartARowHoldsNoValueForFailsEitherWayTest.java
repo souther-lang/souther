@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -119,7 +120,7 @@ class APartARowHoldsNoValueForFailsEitherWayTest {
     /** A reading of an input taking two whole numbers, {@code a} and {@code b}. */
     private static Quantities quantities() {
         RuleReadingContext reading =
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(
                 List.of(new InputDomain.Parameter("a", null, Type.INT),
                         new InputDomain.Parameter("b", null, Type.INT)),

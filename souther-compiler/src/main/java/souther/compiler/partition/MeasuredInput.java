@@ -12,6 +12,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Today;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -96,6 +97,13 @@ public final class MeasuredInput {
      */
     private final RuleRoots ruleRoots;
     /**
+     * The day the reading was made on, which every value chosen for a row is chosen near.
+     *
+     * <p>Part of what makes two of these one: two readings made on different days offer different
+     * values.
+     */
+    private final Today today;
+    /**
      * What has been offered at a position, by its type and what the rules leave it.
      *
      * <p>Kept because every point a search looks for a row at composes the row again, and each
@@ -143,8 +151,9 @@ public final class MeasuredInput {
 
     private MeasuredInput(String behavior, BehaviorInputs written, Quantities quantities,
                           Partitions.Partitioning divided, DeclarationReadings machines,
-                          NameReach reach, RuleRoots ruleRoots) {
+                          NameReach reach, RuleRoots ruleRoots, Today today) {
         this.machines = machines;
+        this.today = today;
         this.behavior = behavior;
         this.written = written;
         this.quantities = quantities;
@@ -190,7 +199,8 @@ public final class MeasuredInput {
             read.quantities().ordersOf(axis.term());
         }
         return new MeasuredInput(behavior, BehaviorInputs.of(read), read.quantities(), divided,
-                read.domain().machines(), read.domain().reach(), read.domain().ruleRoots());
+                read.domain().machines(), read.domain().reach(), read.domain().ruleRoots(),
+                read.domain().today());
     }
 
     /**
@@ -212,12 +222,14 @@ public final class MeasuredInput {
                 && quantities.equals(that.quantities)
                 && divided.equals(that.divided)
                 && reach.equals(that.reach)
-                && ruleRoots.equals(that.ruleRoots);
+                && ruleRoots.equals(that.ruleRoots)
+                && today.equals(that.today);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(behavior, written, quantities, divided, reach, ruleRoots);
+        return java.util.Objects.hash(behavior, written, quantities, divided, reach, ruleRoots,
+                today);
     }
 
     @Override
@@ -333,7 +345,7 @@ public final class MeasuredInput {
      * it once.
      */
     public WitnessSearch witnessSearch() {
-        return Partitions.witnessSearch(divided.measurements(), reach);
+        return Partitions.witnessSearch(divided.measurements(), reach, today);
     }
 
     /**
@@ -457,7 +469,7 @@ public final class MeasuredInput {
      * position that arrives at one.
      */
     public RuleReadingContext ruleReading() {
-        return RuleReadingContext.of(rules(), written.policy(), machines);
+        return RuleReadingContext.of(rules(), written.policy(), machines, today);
     }
 
     /**

@@ -866,7 +866,7 @@ public final class Adequacy {
             return Answer.of(InputDomain.of(declared.value(),
                     implemented == null ? List.of() : implemented.declaredInputs(),
                     RuleReadingContext.of(reading.value(), db.ask(new Front.Reading()).value(),
-                            db.readings()),
+                            db.readings(), Front.dayOf(db)),
                     new Shapes.CountedElsewhere(db),
                     named.value().demand(),
                     dependenciesOf(spec.value())));
@@ -1383,7 +1383,7 @@ public final class Adequacy {
             Map<String, souther.compiler.check.PathReachability.Answers> out = new LinkedHashMap<>();
             // One world for every behavior of the module, since every walk below reads in it.
             RuleReadingContext ruleReading = RuleReadingContext.of(reading.value(),
-                    db.ask(new Front.Reading()).value(), db.readings());
+                    db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 // A composition has no body of its own and so no places of its own, and a behavior
                 // whose input this compilation could not read is one nothing here is measured
@@ -3660,7 +3660,7 @@ public final class Adequacy {
         }
         souther.compiler.inputs.InputReading read = souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(ANSWER, null, answers)),
-                RuleReadingContext.of(reading, policy, beside.machines()),
+                RuleReadingContext.of(reading, policy, beside.machines(), Front.dayOf(db)),
                 new Shapes.CountedElsewhere(db), InputDemand.NONE,
                 // An answer, which no row stands anything in for.
                 Membership.none()).reading(reading);
@@ -3895,6 +3895,10 @@ public final class Adequacy {
         if (points == null || ruleReading == null || policy == null) {
             return new BorderAccount(module, scope, resolved);
         }
+        // One world for every point below, since every declaration a point is owed to is read in
+        // it.
+        RuleReadingContext declaring =
+                RuleReadingContext.of(ruleReading, policy, db.readings(), Front.dayOf(db));
         // What the declarations wrote their lines on, for the points that have a declaration.
         // Reading a declaration costs no search, so an account of one behavior pays nothing here
         // for the rest of the module; what it would pay for is asking the declarations' own
@@ -3916,8 +3920,7 @@ public final class Adequacy {
             resolved.put(debt.point(), new BorderAccount.Answer(debt,
                     debt.id().owedToTheDeclaration().isPresent()
                             ? axisOf(debt.id(), declarations, Shapes.publishedDeclarations(db),
-                                    Shapes.declarationCitations(db),
-                                    RuleReadingContext.of(ruleReading, policy, db.readings()))
+                                    Shapes.declarationCitations(db), declaring)
                             : null,
                     PointResolver.resolveAt(debt.owed(), List.copyOf(debt.met().keySet()),
                             reading -> readingOf(db, module, scope, debt, reading))));
@@ -7866,7 +7869,7 @@ public final class Adequacy {
                     new LinkedHashMap<>();
             PublishedDeclarations published = Shapes.publishedDeclarations(db);
             DeclarationCitations citations = Shapes.declarationCitations(db);
-            RuleReadingContext context = RuleReadingContext.of(ruleReading, policy, db.readings());
+            RuleReadingContext context = RuleReadingContext.of(ruleReading, policy, db.readings(), Front.dayOf(db));
             // What a line is on is the line's, so every debt on it and the line itself are named
             // by one answer, worked out once.
             Map<BorderObligationId, String> axes = new HashMap<>();

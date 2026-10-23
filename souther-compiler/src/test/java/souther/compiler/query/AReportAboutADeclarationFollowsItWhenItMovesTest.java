@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.LabeledRegion;
@@ -77,14 +78,14 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
     @Test
     void movingTheDeclarationMovesTheCaretUnderIt() {
         Compilation c = Compilation.ofDocuments(Map.of("empty.sou", EMPTY), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         int before = whereItIsReported(c);
 
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("empty.sou", EMPTY.replace("data Impossible",
                 "// two lines written above it\n// which move it down the file\ndata Impossible"));
-        c.update(edited, Set.of());
+        c.update(edited, Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotEquals(before, whereItIsReported(c),
@@ -163,7 +164,7 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", prices);
         edited.put("cart.sou", BUILDING);
-        c.update(edited, Set.of());
+        c.update(edited, Set.of(), TestDay.DATE);
         c.answerEverything();
     }
 
@@ -171,7 +172,8 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", prices);
         byId.put("cart.sou", BUILDING);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertEquals(List.of(), c.errors(), "this workspace is supposed to compile");
         return c;
