@@ -10,8 +10,11 @@ import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PublishedRules;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -2633,10 +2636,39 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link TakenAs.TheSumOfWhatItHolds}), so it is counted on the order they are.
      */
     private static NumericTerm.FromOnePosition summedAs(NumericTerm number) {
-        return number instanceof NumericTerm.TakenOver over
-                && over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
-                && over.source() instanceof RunSource.ProjectedOccurrences
-                ? new NumericTerm.ValueOf(over.subjectPath()) : null;
+        if (!(number instanceof NumericTerm.TakenOver over)
+                || !(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        List<NumericTerm.ValueOf> values = valuesOfOneElement(over);
+        return values.isEmpty() ? null : values.getFirst();
+    }
+
+    /**
+     * The value one element of the run {@code over} sums comes to, at each place it may stand: the
+     * place itself for a run of a field, and for a run of what a {@code match} on the element
+     * answers, the field each case answers. Empty where it is any other run, or a {@code match}
+     * that answers something other than a field of the case it took, or leaves a case to a rest.
+     */
+    private static List<NumericTerm.ValueOf> valuesOfOneElement(NumericTerm.TakenOver over) {
+        return switch (over.source()) {
+            case RunSource.ProjectedOccurrences _ ->
+                    List.of(new NumericTerm.ValueOf(over.subjectPath()));
+            case RunSource.ComputedOccurrences computed
+                    when computed.computation() instanceof ElementValue.OfItsCase choice
+                    && choice.rest() == null -> {
+                List<NumericTerm.ValueOf> out = new ArrayList<>();
+                for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
+                    ElementProjection place = arm.value().asAPlace();
+                    if (place == null) {
+                        yield List.of();
+                    }
+                    out.add(new NumericTerm.ValueOf(place.from(computed.elements())));
+                }
+                yield out;
+            }
+            default -> List.of();
+        };
     }
 
     /** Starting from nought and adding, which is the accumulation a sum declares. */
@@ -2666,8 +2698,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                              SearchRegion region,
                                                              List<OnAWay> conditions,
                                                              boolean heldWhole, Carrier carrier) {
-        if (!heldWhole || carrier == null
-                || !(over.source() instanceof RunSource.ProjectedOccurrences)
+        List<NumericTerm.ValueOf> elements = valuesOfOneElement(over);
+        if (!heldWhole || carrier == null || elements.isEmpty()
                 || !SUMMED.equals(DefaultBoundOperationFacts.get().accumulation(over.operation()))) {
             return null;
         }
@@ -2675,13 +2707,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (containers.size() != 1) {
             return null;
         }
-        NumericTerm.ValueOf element = new NumericTerm.ValueOf(over.subjectPath());
-        Source source = sourceOf(element, read);
-        if (source == null
-                || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
-            return null;
+        // One element comes to the value at whichever place its case puts it, so a value is a
+        // total where the element may stand at it at each of them: the runs of the places are one
+        // run only where they are alike.
+        NumericDomain.Bounds each = null;
+        for (NumericTerm.ValueOf element : elements) {
+            Source source = sourceOf(element, read);
+            if (source == null
+                    || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
+                return null;
+            }
+            NumericDomain.Bounds here = realized(element, source, region, Way.UNTOUCHED);
+            if (here == null || (each != null && !each.equals(here))) {
+                return null;
+            }
+            each = here;
         }
-        NumericDomain.Bounds each = realized(element, source, region, Way.UNTOUCHED);
         NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
         if (each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))) {
             return null;
@@ -2811,6 +2852,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                  Shape.Optional _ -> true;
             case Shape.Product(TypeSymbol.AtModule record, var _) ->
                     FieldDomains.of(record, read.ruleReading()).shownToHoldAValue();
+            // A sum holds a value where a case of it does and nothing of its own rules the value
+            // out: the case is a value of the sum.
+            case Shape.Sum(var _, SumCases.Cases reaches, var _) ->
+                    reaches.cases().stream().anyMatch(each ->
+                            each instanceof TypeSymbol.AtModule member
+                            && aValueIsShownToExist(Type.ref(member), read));
             case null, default -> false;
         };
     }
