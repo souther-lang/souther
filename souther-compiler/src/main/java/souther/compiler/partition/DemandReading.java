@@ -748,8 +748,8 @@ final class DemandReading {
 
     /**
      * What a run's working out every operator of a part asks of a row ({@code answers}, where
-     * {@link Pullback#whereItsOperatorsAnswer} says it), as far as one number of one place says
-     * it.
+     * {@link Pullback#whereItsOperatorsAnswer} says it), as far as the numbers of places outside
+     * a container say it.
      *
      * <p>Not the way's entries and not a condition: an operator answering is a fact about the run
      * and no statement of a row's values, so it is kept apart from what a condition coming out a
@@ -769,11 +769,15 @@ final class DemandReading {
             if (endsOfTheInts(constraint)) {
                 continue;
             }
-            if (constraint.terms().size() == 1
-                    && constraint.terms().iterator().next() instanceof NumericTerm.ValueOf value
-                    && !value.position().insideAContainer()) {
+            // What a region carries it is told, and whatever it ties more than one place to is
+            // told as well: the region says how far each number runs given the others, and not
+            // that the numbers are no longer free of one another.
+            if (constraint.terms().stream().allMatch(term ->
+                    term instanceof NumericTerm.ValueOf value
+                            && !value.position().insideAContainer())) {
                 narrowing.add(constraint);
-            } else {
+            }
+            if (constraint.terms().size() != 1 || !narrowing.contains(constraint)) {
                 Set<TermPath> places = new LinkedHashSet<>();
                 constraint.terms().forEach(term -> places.add(term.subjectPath()));
                 tied.add(places);
@@ -785,11 +789,13 @@ final class DemandReading {
     /**
      * What a run's working out the operators of a part asks of a row.
      *
-     * @param narrowing what one number of one place says, which a region carries
-     * @param tied      the places each of the rest names, which a region cannot say, and the
-     *                  places of the numbers an operator not said may stop the run on
+     * @param narrowing what the numbers of places outside a container say, which a region carries
+     * @param tied      the places each condition of more than one place names, or one a region
+     *                  cannot carry, and the places of the numbers an operator not said may stop
+     *                  the run on: places the run no longer leaves free of one another, which a
+     *                  reader that takes two places to take any pair of values asks
      * @param unsaid    whether an operator not said may stop the run on something that is no
-     *                  number of a place: nothing is then known free of what the run works out
+     *                  number of a place: no two places are then known free of one another
      */
     record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid) {
 

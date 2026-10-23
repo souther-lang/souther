@@ -1024,13 +1024,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
-        TiedOnTheWay tied = TiedOnTheWay.of(conditions, read);
+        TiedOnTheWay tied = TiedOnTheWay.of(conditions, past.tied(), read);
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             tiedTo.add(tiedTo(i, tied, conditions, sources, read));
         }
         WhatARelationLeavesUndivided.Independence independent =
-                (one, other) -> apartByTheDeclarations(one, other, sources, read)
+                (one, other) -> !past.unsaid()
+                        && apartByTheDeclarations(one, other, sources, read)
                         && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
         if (kind == Kind.PRODUCT) {
             for (int at = 0; at < 2; at++) {
@@ -2535,12 +2536,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return out;
         }
 
-        static TiedOnTheWay of(List<OnAWay> conditions, InputReading read) {
+        static TiedOnTheWay of(List<OnAWay> conditions, List<Set<TermPath>> ofTheRun,
+                               InputReading read) {
             TiedOnTheWay out = new TiedOnTheWay();
             Set<TermPath> places = new LinkedHashSet<>();
-            for (OnAWay each : conditions) {
+            List<Collection<TermPath>> tying = new ArrayList<>();
+            conditions.forEach(each -> tying.add(each.positions()));
+            tying.addAll(ofTheRun);
+            for (Collection<TermPath> each : tying) {
                 TermPath first = null;
-                for (TermPath at : each.positions()) {
+                for (TermPath at : each) {
                     if (first == null) {
                         first = at;
                     } else {

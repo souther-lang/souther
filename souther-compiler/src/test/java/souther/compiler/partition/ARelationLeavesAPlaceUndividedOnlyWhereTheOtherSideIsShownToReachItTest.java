@@ -379,6 +379,55 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A sum the run worked out ties its two numbers: {@code a + b} is an {@code Int} only where
+     * {@code b} is nought or one, for an {@code a} one below the greatest, so a {@code b} above
+     * it is no row of the comparison {@code a < b} and no line is drawn there. Two amounts the
+     * sum cannot stop on are tied by nothing, and the comparison divides each as it does without
+     * the sum.
+     */
+    @Test
+    void aSumTheRunWorkedOutTiesItsTwoNumbers() {
+        String almost = "data AlmostMax = Int invariant value == 9223372036854775806\n"
+                + "data NonNegative = Int invariant value >= 0";
+        String body = "{\n    let unused = a.value + b.value\n    a.value < b.value\n}";
+        assertEquals(List.of(),
+                classesAt("a: AlmostMax, b: NonNegative", almost, body, "b"));
+        String small = "data Yen = Int invariant value >= 0 && value <= 1000000";
+        assertEquals(classesAt("a: Yen, b: Yen", small,
+                        "{\n    let unused = 0\n    a.value < b.value\n}", "b"),
+                classesAt("a: Yen, b: Yen", small, body, "b"));
+    }
+
+    /**
+     * And a run that may stop on something no place names ties every place to every other: the
+     * body of a closure applied by the library reads a name only its application gives a value,
+     * so nothing is shown to take any pair of values.
+     */
+    @Test
+    void aRunThatMayStopOnWhatNoPlaceNamesLeavesNoPairIndependent() {
+        String small = "data Yen = Int invariant value >= 0 && value <= 1000000";
+        String plain = "{\n    let unused = 0\n    a.value + b.value >= 30\n}";
+        String closure = "{\n    let unused = List.map(x -> Int.floorMod(x, 7), [1, 2])\n"
+                + "    a.value + b.value >= 30\n}";
+        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED), leftWithClasses("a: Yen, b: Yen", small, plain));
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+                leftWithClasses("a: Yen, b: Yen", small, closure));
+    }
+
+    private static Map<String, String> leftWithClasses(String inputs, String declarations,
+                                                       String body) {
+        int col = body.lines().toList().get(2).indexOf(">=") + 1;
+        Map<String, String> out = new LinkedHashMap<>(left(inputs, declarations, body, "6:" + col));
+        for (String place : List.of("a", "b")) {
+            List<String> classes = classesAt(inputs, declarations, body, place);
+            if (classes.size() == 2 && classes.get(0).equals(place + "/0 <= x < 30")) {
+                out.putIfAbsent(place, DIVIDED);
+            }
+        }
+        return out;
+    }
+
+    /**
      * A closure handed to an operation of the library is applied by it, so what its body may stop
      * on is what the run may stop on: {@code Int.floorMod(x, p)} applied to each of two numbers
      * stops at {@code p} nought, as it does written out.
