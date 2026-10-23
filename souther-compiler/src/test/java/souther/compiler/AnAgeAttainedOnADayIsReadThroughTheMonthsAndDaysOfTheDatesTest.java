@@ -17,7 +17,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.IntPredicate;
+import java.util.function.IntFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -146,14 +146,15 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     @Test
     void theRowsOfferedForTwoComparisonsOfOneAgeAreAnsweredAsTheCalendarWorksTheAgeOut() {
         assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(BETWEEN_FORTY_AND_SIXTY_FIVE,
-                age -> age >= 40 && age < 65, 39, 40, 64, 65);
+                age -> String.valueOf(age >= 40 && age < 65), 39, 40, 64, 65);
     }
 
     /**
-     * @param reached the ages the rows offered must include, one at each side of each line
+     * @param expected the answer written for a row, by the age the calendar gives it
+     * @param reached  the ages the rows offered must include, one at each side of each line
      */
     private static void assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(
-            String behavior, IntPredicate expected, Integer... reached) {
+            String behavior, IntFunction<String> expected, Integer... reached) {
         Compilation offering = compiled(behavior);
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("p")),
@@ -174,7 +175,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
             ages.add(ageAttained(dates.get(0), dates.get(1)));
             examples.append("    | (Date(\"").append(dates.get(0)).append("\"), Date(\"")
                     .append(dates.get(1)).append("\")) -> ")
-                    .append(expected.test(ageAttained(dates.get(0), dates.get(1)))).append('\n');
+                    .append(expected.apply(ageAttained(dates.get(0), dates.get(1)))).append('\n');
             rows++;
         }
         assertTrue(rows > 0, offered);
@@ -395,6 +396,57 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
                 points.toString());
         assertTrue(points.contains("70 on or after true") && points.contains("70 on or after false"),
                 points.toString());
+    }
+
+    private static final String BANDED = AGE.replace(
+            "behavior f : (birthday: Date, on: Date) -> Bool\n",
+            "behavior f : (birthday: Date, on: Date) -> Int\n");
+
+    /** Bands of the age at {@code lines}, the age computed by {@code age}: one arm below each
+     *  line, answering the band's number, and the last arm past them all. */
+    private static String bands(String age, int... lines) {
+        StringBuilder out = new StringBuilder(BANDED).append("let f (birthday, on) = {\n")
+                .append("    let age = ").append(age).append("(birthday, on)\n    ");
+        for (int at = 0; at < lines.length; at++) {
+            out.append("if age < ").append(lines[at]).append(" then ").append(at)
+                    .append("\n    else ");
+        }
+        return out.append(lines.length).append("\n}\n").toString();
+    }
+
+    /** The band of {@code age} at {@code lines}, as {@link #bands} is meant to put it. */
+    private static String bandOf(int age, int... lines) {
+        int at = 0;
+        while (at < lines.length && age >= lines[at]) {
+            at++;
+        }
+        return String.valueOf(at);
+    }
+
+    /**
+     * Every comparison of a chain of bands of one age is read, however many arms come before it:
+     * a comparison past four arms as one past three. The arms before a comparison are the denials
+     * of comparisons of the age, each a choice of the months and days before the day and on or
+     * after it, and those are the same two cases in each.
+     */
+    @Test
+    void everyBandOfAnAgeIsReadHoweverManyArmsComeBeforeIt() {
+        String four = report(bands("attainedAgeOn", 30, 35, 45, 60));
+        assertFalse(four.contains(NOT_REACHED), four);
+
+        String five = report(bands("attainedAgeOn", 30, 35, 45, 60, 65));
+        assertFalse(five.contains(NOT_REACHED), five);
+    }
+
+    /**
+     * What each row offered for five bands of an age is answered, worked out apart from the
+     * reading and put to the program, with a row at each side of each line.
+     */
+    @Test
+    void theRowsOfferedForFiveBandsAreAnsweredAsTheCalendarWorksTheBandOut() {
+        int[] lines = {30, 35, 45, 60, 65};
+        assertRowsAreAnsweredAsTheCalendarWorksTheAgeOut(bands("attainedAgeOn", lines),
+                age -> bandOf(age, lines), 29, 30, 34, 35, 44, 45, 59, 60, 64, 65);
     }
 
     /**
