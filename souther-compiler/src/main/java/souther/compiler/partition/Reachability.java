@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -99,8 +100,8 @@ public sealed interface Reachability {
 
     /** {@code way} with what a run to the border got past working out
      *  ({@link Reaching#gettingPast}) taken in, where it is a way a row reaches. */
-    static Reachability gettingPast(Reachability way, List<TakenConstraint> these) {
-        return way instanceof Reaching reaching ? reaching.gettingPast(these) : way;
+    static Reachability gettingPast(Reachability way, DemandReading.Answered answered) {
+        return way instanceof Reaching reaching ? reaching.gettingPast(answered) : way;
     }
 
     /** {@code way}, one the walk found holds together, as a composer reads it. */
@@ -289,12 +290,13 @@ public sealed interface Reachability {
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                     List<OnTheWay.Declined> declined,
                     Optional<List<TakenConstraint>> narrowedBy,
-                    List<TakenConstraint> gotPast)
+                    List<TakenConstraint> gotPast, List<Set<TermPath>> tied)
             implements Reachability {
 
         public Reaching {
             if (region == null || requirements == null || truths == null || ways == null
-                    || declined == null || narrowedBy == null || gotPast == null) {
+                    || declined == null || narrowedBy == null || gotPast == null
+                    || tied == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
@@ -302,15 +304,16 @@ public sealed interface Reachability {
             declined = List.copyOf(declined);
             narrowedBy = narrowedBy.map(List::copyOf);
             gotPast = List.copyOf(gotPast);
+            tied = List.copyOf(tied);
         }
 
-        /** A way a run has got past nothing on that a region says. */
+        /** A way a run has got past nothing on that a region says or that ties places. */
         public Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                         List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                         List<OnTheWay.Declined> declined,
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
-                    List.of());
+                    List.of(), List.of());
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -342,7 +345,7 @@ public sealed interface Reachability {
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
-                    narrowedBy, gotPast);
+                    narrowedBy, gotPast, tied);
         }
 
         /** Whether taking {@code each} in moves where a number it names runs or what is held
@@ -364,12 +367,12 @@ public sealed interface Reachability {
          * region of it and of each way it is split into. A way they leave no input is kept as it
          * is: that is a proof for the walk to make, not one made here.
          */
-        Reaching gettingPast(List<TakenConstraint> these) {
+        Reaching gettingPast(DemandReading.Answered answered) {
             // Only what narrows: a bound the region already holds is nothing a reader of this
             // way is to be told of.
             List<TakenConstraint> narrowing = new ArrayList<>();
             SearchRegion narrowed = region;
-            for (TakenConstraint each : these) {
+            for (TakenConstraint each : answered.narrowing()) {
                 SearchRegion next = each.narrowing(narrowed);
                 if (movesAny(each, narrowed, next)) {
                     narrowing.add(each);
@@ -384,23 +387,25 @@ public sealed interface Reachability {
             Ways split = switch (ways) {
                 case Ways.One one -> one;
                 case Ways.Each each -> new Ways.Each(each.along().stream()
-                        .map(one -> one.gettingPast(these)).toList());
+                        .map(one -> one.gettingPast(answered)).toList());
                 // Read again from the declarations narrowed by what the run got past, so that a
                 // reader reading the way again is as narrow as this one.
                 case Ways.Whole whole -> new Ways.Whole(whole.unsplit(), whole.figure(),
-                        whole.along().stream().map(one -> one.gettingPast(these)).toList(),
+                        whole.along().stream().map(one -> one.gettingPast(answered)).toList(),
                         new ReadFrom(whole.from().way(),
                                 TakenConstraint.narrowedBy(narrowing,
                                         whole.from().declarations())));
             };
+            List<Set<TermPath>> ties = new ArrayList<>(tied);
+            ties.addAll(answered.tied());
             if (narrowed.emptiness().isPresent()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
-                        declined, narrowedBy, gotPast);
+                        declined, narrowedBy, gotPast, ties);
             }
             List<TakenConstraint> past = new ArrayList<>(gotPast);
             past.addAll(narrowing);
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
-                    by, past);
+                    by, past, ties);
         }
 
         /**

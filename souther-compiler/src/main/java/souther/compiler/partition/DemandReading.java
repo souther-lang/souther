@@ -755,20 +755,56 @@ final class DemandReading {
      * and no statement of a row's values, so it is kept apart from what a condition coming out a
      * way asks, and no reader of that — a count, a composer — is handed it. What a region can
      * carry of it narrows the region and what it cannot is left out, which is wider and never
-     * narrower than the rows that get through.
+     * narrower than the rows that get through — and the places that is left tying together are
+     * told apart from it, for a reader asking whether a number is free of what the run works out.
      */
-    static List<TakenConstraint> regionAnswered(Proposition answers, InputReading read) {
-        List<TakenConstraint> out = new ArrayList<>();
+    static Answered regionAnswered(Proposition answers, InputReading read) {
+        List<TakenConstraint> narrowing = new ArrayList<>();
+        List<Set<TermPath>> tied = new ArrayList<>();
         for (Read each : projected(answers, read)) {
-            if (each instanceof Read.Demands(RowDemand.Relational(TakenConstraint constraint))
-                    && constraint.terms().size() == 1
+            if (!(each instanceof Read.Demands(RowDemand.Relational(
+                    TakenConstraint constraint)))) {
+                continue;
+            }
+            if (endsOfTheInts(constraint)) {
+                continue;
+            }
+            if (constraint.terms().size() == 1
                     && constraint.terms().iterator().next() instanceof NumericTerm.ValueOf value
-                    && !value.position().insideAContainer()
-                    && !endsOfTheInts(constraint)) {
-                out.add(constraint);
+                    && !value.position().insideAContainer()) {
+                narrowing.add(constraint);
+            } else {
+                Set<TermPath> places = new LinkedHashSet<>();
+                constraint.terms().forEach(term -> places.add(term.subjectPath()));
+                tied.add(places);
             }
         }
-        return List.copyOf(out);
+        return new Answered(narrowing, tied);
+    }
+
+    /**
+     * What a run's working out the operators of a part asks of a row.
+     *
+     * @param narrowing what one number of one place says, which a region carries
+     * @param tied      the places each of the rest names, which a region cannot say
+     */
+    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied) {
+
+        static final Answered NOTHING = new Answered(List.of(), List.of());
+
+        Answered {
+            narrowing = List.copyOf(narrowing);
+            tied = List.copyOf(tied);
+        }
+
+        /** This and {@code other}, both. */
+        Answered and(Answered other) {
+            List<TakenConstraint> narrows = new ArrayList<>(narrowing);
+            narrows.addAll(other.narrowing);
+            List<Set<TermPath>> places = new ArrayList<>(tied);
+            places.addAll(other.tied);
+            return new Answered(narrows, places);
+        }
     }
 
     /** Whether {@code constraint} holds one number at or below a level at or above the greatest
