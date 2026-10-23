@@ -1362,15 +1362,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // The values it takes are those the run leaves it: a number the run narrows is taken at
         // the values the run lets a row hold, whatever the declarations leave it.
-        SearchRegion left =
-                TakenConstraint.narrowedBy(past.narrowing(), read.quantities().region());
-        if (left.emptiness().isPresent()) {
-            return false;
+        // Each narrowing is of one number alone, so only those naming this one move its values.
+        List<TakenConstraint> ofIt = past.narrowing().stream()
+                .filter(each -> each.terms().contains(number)).toList();
+        SearchRegion left = read.quantities().region();
+        if (!ofIt.isEmpty()) {
+            left = TakenConstraint.narrowedBy(ofIt, left);
+            if (left.emptiness().isPresent()) {
+                return false;
+            }
         }
-        boolean narrowed = past.narrowing().stream()
-                .anyMatch(each -> each.terms().contains(number));
         NumericDomain.Bounds takes = realized(number, source, left,
-                narrowed ? Way.NARROWED : Way.UNTOUCHED);
+                ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
     }
 

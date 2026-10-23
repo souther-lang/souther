@@ -376,6 +376,9 @@ public sealed interface Reachability {
          * be one more reader's account of it.
          */
         Reaching gettingPast(DemandReading.Answered answered) {
+            if (answered.equals(DemandReading.Answered.NOTHING)) {
+                return this;
+            }
             // Only what narrows: a bound the region already holds is nothing a reader of this
             // way is to be told of.
             List<TakenConstraint> narrowing = new ArrayList<>();
@@ -407,7 +410,8 @@ public sealed interface Reachability {
             List<Set<TermPath>> ties = new ArrayList<>(tied);
             ties.addAll(answered.tied());
             boolean unsaidNow = unsaid || answered.unsaid();
-            if (narrowed.emptiness().isPresent()) {
+            // A region nothing moved is the one the way already had, which is asked nothing again.
+            if (!narrowing.isEmpty() && narrowed.emptiness().isPresent()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
                         declined, narrowedBy, gotPast, ties, unsaidNow);
             }
