@@ -198,6 +198,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Deque;Ljava/util/Map;Ljava/lang/Object;)Z",
                     "stops a group's walk at the choices looked at or at the ways handed on, and"
                             + " records which, which the walk says in what it comes back with"),
+            // A way past the figure read again for a relation: a choice whose alternatives,
+            // taken together where they ask of a value apart, are more ways than are looked
+            // along is kept as it stands, which is read exactly; a way read again that is still
+            // past the figure comes back looked along whole, saying the figure it stopped at.
+            Map.entry("souther.compiler.partition.AWayReadForARelation$Part#met("
+                            + "Ljava/util/List;)Z",
+                    "keeps a choice as it stands past the ways looked along, and the way read"
+                            + " again carries the figure where it is still past it"),
             Map.entry("souther.compiler.partition.WayToTheBorder#walked("
                             + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;)"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",

@@ -31,7 +31,7 @@ class AStatementIsWorkedOutAtTheValuesItIsGivenTest {
 
     @Test
     void aStatementHoldsWhereItsNumbersStandAsItAsks() {
-        assertTrue(UndividedByARelation.holdsAt(UNDER_HALF,
+        assertTrue(AWayReadForARelation.holdsAt(UNDER_HALF,
                 Map.of(REVENUE, ExactRatio.ZERO, INSURED, ExactRatio.ONE)));
     }
 
@@ -39,12 +39,12 @@ class AStatementIsWorkedOutAtTheValuesItIsGivenTest {
      *  together not a row the statement lets through. */
     @Test
     void valuesEachWhereTheirRunPutsThemNeedNotMeetTheStatementTogether() {
-        assertFalse(UndividedByARelation.holdsAt(UNDER_HALF,
+        assertFalse(AWayReadForARelation.holdsAt(UNDER_HALF,
                 Map.of(REVENUE, ExactRatio.ZERO, INSURED, ExactRatio.ZERO)));
     }
 
     @Test
     void aStatementOfANumberGivenNoValueIsNotShownToHold() {
-        assertFalse(UndividedByARelation.holdsAt(UNDER_HALF, Map.of(REVENUE, ExactRatio.ZERO)));
+        assertFalse(AWayReadForARelation.holdsAt(UNDER_HALF, Map.of(REVENUE, ExactRatio.ZERO)));
     }
 }
