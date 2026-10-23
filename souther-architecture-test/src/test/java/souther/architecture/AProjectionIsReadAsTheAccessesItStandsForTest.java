@@ -567,6 +567,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, an operator or a call: a name read off a"
                         + " value ends none, so what a projection may end one for is what its base"
                         + " may");
+        row(out, c + "partition/Pullback", "chosenField", "(" + core + reads + ")L" + c
+                        + "partition/Pullback$ChosenField;", Reading.STRUCTURE,
+                "takes the field accesses over the call of a walk one at a time, and asks of the"
+                        + " call what its step answers: a projection over the call is a field"
+                        + " taken of a field, which is no walk to ask it of, and it is not read");
         row(out, c + "partition/Pullback", "measuredByCases", "(L" + c + "inputs/Denotation;"
                 + "Ljava/util/Map;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
