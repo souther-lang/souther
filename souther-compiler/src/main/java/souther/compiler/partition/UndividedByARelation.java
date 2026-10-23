@@ -518,14 +518,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return nothingShown;
             }
         }
+        // Ways stating alike are read once. A way's region is what the declarations leave narrowed
+        // by what it states, so where every statement narrows it only by its relation, what a way
+        // states is the whole of what it is read by: a choice the body works out after reading
+        // its input splits the way into as many ways as it has arms, and each states the same.
+        Map<Along, WhatItLeaves> alike = new HashMap<>();
+        List<Carrier> carried = carriers;
         WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
-            WhatItLeaves along = leftAlong(read, sources, carriers, each.region(),
-                    conditionsOf(each), nothingUnreadBearsOnIt(each), witnesses);
+            List<OnAWay> conditions = conditionsOf(each);
+            boolean heldWhole = nothingUnreadBearsOnIt(each);
+            WhatItLeaves along = narrowsByItsRelationsAlone(conditions)
+                    ? alike.computeIfAbsent(new Along(conditions, heldWhole), _ -> leftAlong(read,
+                            sources, carried, each.region(), conditions, heldWhole, witnesses))
+                    : leftAlong(read, sources, carried, each.region(), conditions, heldWhole,
+                            witnesses);
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
     }
+
+    /** What a way is read by where its statements say all it is. */
+    private record Along(List<OnAWay> conditions, boolean heldWhole) {}
 
     /**
      * Whether the way left nothing unread that bears on this relation: it declined no condition,
@@ -1132,15 +1146,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * meet something, of every element — narrows nothing there, and nothing here.
      */
     private static SearchRegion narrowedBy(List<OnAWay> conditions, InputReading read) {
+        if (!narrowsByItsRelationsAlone(conditions)) {
+            return null;
+        }
         List<TakenConstraint> relations = new ArrayList<>();
         for (OnAWay each : conditions) {
             if (each.relation() != null) {
                 relations.add(each.relation());
-            } else if (each.whatStands() || each.elementsOf() != null) {
-                return null;
             }
         }
         return TakenConstraint.narrowedBy(relations, read.quantities().region());
+    }
+
+    /** Whether each of {@code conditions} narrows a way's region by its relation or not at all,
+     *  so that they say all the region is ({@link #narrowedBy}). */
+    private static boolean narrowsByItsRelationsAlone(List<OnAWay> conditions) {
+        return conditions.stream().allMatch(each -> each.relation() != null
+                || (!each.whatStands() && each.elementsOf() == null));
     }
 
     /** Whether {@code run} holds two values or more: some value, and its ends not one value. */

@@ -59,6 +59,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -370,19 +371,49 @@ public final class Partitions {
          * is one line, whatever a level was spelled as or what order a run's ends were listed in.
          */
         public Border held(Border asked) {
+            return heldEach(List.of(asked)).getFirst();
+        }
+
+        /**
+         * This reading's own line where it read each of {@code asked}, in that order, each null
+         * where it read none ({@link #held}).
+         *
+         * <p>For a caller reading every line it holds. Met one at a time against every line drawn,
+         * reading all of them walks the lines once per line; here the lines are filed once by where
+         * each was drawn and what drew it — two of what {@link Border#sameReadingAs} asks to be one
+         * — and a line is looked for among those filed with it, in the order they were drawn, so
+         * the line found is the first a walk of all of them meets.
+         */
+        public List<Border> heldEach(List<Border> asked) {
+            Map<DrawnAt, List<Border>> drawn = new HashMap<>();
             for (Border each : between) {
-                if (each.sameReadingAs(asked)) {
-                    return each;
-                }
+                drawn.computeIfAbsent(DrawnAt.of(each), _ -> new ArrayList<>()).add(each);
             }
             for (List<Border> lines : along.values()) {
                 for (Border each : lines) {
-                    if (each.sameReadingAs(asked)) {
-                        return each;
-                    }
+                    drawn.computeIfAbsent(DrawnAt.of(each), _ -> new ArrayList<>()).add(each);
                 }
             }
-            return null;
+            List<Border> out = new ArrayList<>(asked.size());
+            for (Border one : asked) {
+                Border found = null;
+                for (Border each : drawn.getOrDefault(DrawnAt.of(one), List.of())) {
+                    if (each.sameReadingAs(one)) {
+                        found = each;
+                        break;
+                    }
+                }
+                out.add(found);
+            }
+            return out;
+        }
+
+        /** Where a line was drawn and what drew it. */
+        private record DrawnAt(BoundaryTarget cut, LineOrigin origin) {
+
+            static DrawnAt of(Border line) {
+                return new DrawnAt(line.cut(), line.origin());
+            }
         }
     }
 

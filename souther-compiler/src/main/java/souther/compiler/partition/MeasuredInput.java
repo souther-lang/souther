@@ -394,12 +394,25 @@ public final class MeasuredInput {
      * of it — and a line this measurement never drew is not one it can read a row at.
      */
     public BorderReading at(Border asked) {
-        Border held = divided.held(asked);
-        if (held == null) {
-            throw new IllegalArgumentException("the measurement of " + behavior
-                    + " read no line where this one is: " + asked.cut());
+        return atEach(List.of(asked)).getFirst();
+    }
+
+    /**
+     * This measurement's readings of the lines it read where each of {@code asked} is, in that
+     * order ({@link #at}). For a caller reading every line it holds, which asking one at a time
+     * would make a walk of the lines once per line ({@link Partitions.Partitioning#heldEach}).
+     */
+    public List<BorderReading> atEach(List<Border> asked) {
+        List<Border> held = divided.heldEach(asked);
+        List<BorderReading> out = new ArrayList<>(asked.size());
+        for (int i = 0; i < asked.size(); i++) {
+            if (held.get(i) == null) {
+                throw new IllegalArgumentException("the measurement of " + behavior
+                        + " read no line where this one is: " + asked.get(i).cut());
+            }
+            out.add(new BorderReading(this, held.get(i)));
         }
-        return new BorderReading(this, held);
+        return out;
     }
 
     /**

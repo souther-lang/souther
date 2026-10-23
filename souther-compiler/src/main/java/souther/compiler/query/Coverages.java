@@ -50,6 +50,7 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
+import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.RealizationTarget;
 import souther.compiler.partition.CompositionBudget;
@@ -971,8 +972,10 @@ final class Coverages {
         // a row for it may be composed out of is the reading's and is settled while the readings are
         // still apart. They are brought together by {@link #merged}, after that.
         List<BorderAssessment> out = new ArrayList<>();
-        for (Border each : lines) {
-            out.add(assessed(each, reading(subject.at(each), projection, elsewhere(lines, each),
+        List<MeasuredInput.BorderReading> read = subject.atEach(lines);
+        for (int i = 0; i < lines.size(); i++) {
+            Border each = lines.get(i);
+            out.add(assessed(each, reading(read.get(i), projection, elsewhere(lines, each),
                             wayTo(each, reaching), subject.quantities().region()),
                     observed, put));
         }
@@ -1027,9 +1030,12 @@ final class Coverages {
                                  Probe probe, ReachingCuts reaching) {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
-        for (BorderAssessment border : measured.each()) {
-            OneSearchOfABorder search = searching(border.border(), input, probe, realizer,
-                    wayTo(border.border(), reaching));
+        List<MeasuredInput.BorderReading> read =
+                input.atEach(measured.each().stream().map(BorderAssessment::border).toList());
+        for (int i = 0; i < measured.each().size(); i++) {
+            BorderAssessment border = measured.each().get(i);
+            OneSearchOfABorder search = searching(border.border(), read.get(i), input, probe,
+                    realizer, wayTo(border.border(), reaching));
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
                 ItemAssessment item = border.at(point);
@@ -1510,11 +1516,10 @@ final class Coverages {
      * other: what the rows already established is read whatever anybody asked for, and building a
      * value is work somebody asked for and pays for.
      */
-    private static OneSearchOfABorder searching(Border border,
-                                                souther.compiler.partition.MeasuredInput input,
+    private static OneSearchOfABorder searching(Border border, MeasuredInput.BorderReading line,
+                                                MeasuredInput input,
                                                 Probe probe, LevelRealizer realizer,
                                                 souther.compiler.partition.WayToTheBorder within) {
-        souther.compiler.partition.MeasuredInput.BorderReading line = input.at(border);
         souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = line.quantity();
         List<ConditionOutcomeSite> site =
@@ -2290,8 +2295,10 @@ final class Coverages {
         // line come to is one answer, and it is put together where the last thing that is a
         // reading's own has been asked ({@link #merged}).
         List<BorderAssessment> out = new ArrayList<>();
-        for (Border each : partitioning.between()) {
-            out.add(assessed(each, reading(subject.at(each),
+        List<MeasuredInput.BorderReading> read = subject.atEach(partitioning.between());
+        for (int i = 0; i < partitioning.between().size(); i++) {
+            Border each = partitioning.between().get(i);
+            out.add(assessed(each, reading(read.get(i),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                             elsewhere(partitioning.between(), each), wayTo(each, reaching),
                             subject.quantities().region()),
