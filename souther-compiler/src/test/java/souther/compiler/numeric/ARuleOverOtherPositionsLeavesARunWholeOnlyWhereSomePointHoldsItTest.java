@@ -42,7 +42,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                 rules.add(ruleOverAAndB(random));
             }
             NumericDomain<String> domain = domainOf(rules);
-            NumericDomain.Bounds run = domain.wholeRunOf("c", Map.of());
+            NumericDomain.Bounds run = domain.heldInsideTheirOrders(endless("a", "b", "c"))
+                    .wholeRunOf("c");
             boolean somePoint = somePointHolds(rules);
             if (!somePoint) {
                 leftNothing++;
@@ -75,14 +76,47 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         coefs.put("b", -3L);
         Map<String, Granularity> spacing = Map.of("a", Granularity.DENSE,
                 "b", Granularity.DENSE, "c", Granularity.DISCRETE);
-        NumericDomain<String> domain = domainOf(List.of(new Written(coefs, 0, Rel.LT)), spacing);
+        NumericDomain<String> domain = domainOf(List.of(new Written(coefs, 0, Rel.LT)), spacing)
+                .heldInsideTheirOrders(endless("a", "b", "c"));
 
         assertEquals(new ProjectionCertification.NotEveryRuleIsProven(),
                 domain.projectionCertification());
         assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(LOW)),
-                Endpoint.inclusive(Count.of(HIGH))), domain.wholeRunOf("c", Map.of()));
-        assertNull(domain.wholeRunOf("a", Map.of()),
+                Endpoint.inclusive(Count.of(HIGH))), domain.wholeRunOf("c"));
+        assertNull(domain.wholeRunOf("a"),
                 "a rule nothing proves leaves its own positions no run");
+    }
+
+    /**
+     * A system the domain was not told where every atom's order stops is not shown to leave a
+     * row, whatever point of the rules holds it: {@code a + b <= 7}, held at nought, beside
+     * {@code c} leaves {@code c} its run only where {@code a} and {@code b} were told of, and a
+     * domain met with one that was told is told too.
+     */
+    @Test
+    void aSystemWithAnAtomTheDomainWasNotToldTheOrderOfLeavesNoRow() {
+        Map<String, Long> coefs = new LinkedHashMap<>();
+        coefs.put("a", 1L);
+        coefs.put("b", 1L);
+        NumericDomain<String> domain = domainOf(List.of(new Written(coefs, -HIGH, Rel.LE)));
+
+        assertNull(domain.heldInsideTheirOrders(endless("a", "c")).wholeRunOf("c"));
+        assertEquals(run(LOW, HIGH),
+                domain.heldInsideTheirOrders(endless("a", "b", "c")).wholeRunOf("c"));
+        NumericDomain<String> told = NumericDomain.<String>top(CanonicalOrder.asTheyAreSpelled())
+                .heldInsideTheirOrders(endless("a", "b", "c"));
+        assertEquals(run(LOW, HIGH), domain.meet(told).wholeRunOf("c"));
+        assertEquals(run(LOW, HIGH), domain.heldInsideTheirOrders(endless("a", "b", "c"))
+                .over(each -> each + "'", CanonicalOrder.asTheyAreSpelled()).wholeRunOf("c'"));
+    }
+
+    /** Each of {@code atoms} on an order with no end either way. */
+    private static Map<String, NumericDomain.Bounds> endless(String... atoms) {
+        Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
+        for (String atom : atoms) {
+            out.put(atom, NumericDomain.Bounds.OPEN);
+        }
+        return out;
     }
 
     private static final long GREATEST = Long.MAX_VALUE;
@@ -94,8 +128,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
     /**
      * A month and a day of one date held before another's — {@code d - e + 100m - 100n <= -1}, the
      * parts nothing else bounds — is held by a point inside where the parts stop, a month of one
-     * and of two: the run of {@code c} beside it is shown, as it is with nothing said of where
-     * they stop.
+     * and of two: the run of {@code c} beside it is shown, as it is on orders with no end.
      */
     @Test
     void aRuleOverPartsOfDatesIsHeldInsideWhereThePartsStop() {
@@ -108,15 +141,17 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         NumericDomain.Bounds day = run(1, 31);
         NumericDomain.Bounds month = run(1, 12);
 
-        assertEquals(run(LOW, HIGH), domain.wholeRunOf("c",
-                Map.of("d", day, "e", day, "m", month, "n", month)));
-        assertEquals(run(LOW, HIGH), domain.wholeRunOf("c", Map.of()));
+        Map<String, NumericDomain.Bounds> parts = new LinkedHashMap<>(endless("c"));
+        parts.putAll(Map.of("d", day, "e", day, "m", month, "n", month));
+        assertEquals(run(LOW, HIGH), domain.heldInsideTheirOrders(parts).wholeRunOf("c"));
+        assertEquals(run(LOW, HIGH), domain.heldInsideTheirOrders(endless("c", "d", "e", "m", "n"))
+                .wholeRunOf("c"));
     }
 
     /**
      * {@code a - 2b >= M - 1} beside {@code b >= 1}, the greatest {@code Int} at {@code M}, holds
-     * only an {@code a} past it: a point of the rules, and no row. Told where the two stop, the
-     * run of {@code c} beside them is not shown; told nothing, the rules' point stands for one.
+     * only an {@code a} past it: a point of the rules, and no row. On {@code Int}s, the run of
+     * {@code c} beside them is not shown; on orders with no end, the rules' point stands for one.
      * Held a step lower, at {@code M - 2}, {@code a} at {@code M} beside {@code b} at one holds it
      * inside, and the run is shown.
      */
@@ -129,9 +164,18 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         NumericDomain<String> past = beside(new Written(weighed, -(GREATEST - 1), Rel.GE), b);
         NumericDomain<String> inside = beside(new Written(weighed, -(GREATEST - 2), Rel.GE), b);
 
-        assertNull(past.wholeRunOf("c", Map.of("a", AN_INT, "b", AN_INT)));
-        assertEquals(run(LOW, HIGH), past.wholeRunOf("c", Map.of()));
-        assertEquals(run(LOW, HIGH), inside.wholeRunOf("c", Map.of("a", AN_INT, "b", AN_INT)));
+        assertNull(past.heldInsideTheirOrders(onInts()).wholeRunOf("c"));
+        assertEquals(run(LOW, HIGH),
+                past.heldInsideTheirOrders(endless("a", "b", "c")).wholeRunOf("c"));
+        assertEquals(run(LOW, HIGH), inside.heldInsideTheirOrders(onInts()).wholeRunOf("c"));
+    }
+
+    /** {@code a} and {@code b} on the {@code Int}s, beside {@code c} on an order with no end. */
+    private static Map<String, NumericDomain.Bounds> onInts() {
+        Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>(endless("c"));
+        out.put("a", AN_INT);
+        out.put("b", AN_INT);
+        return out;
     }
 
     /**
@@ -146,8 +190,9 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         NumericDomain<String> domain = beside(new Written(apart, -GREATEST, Rel.GE),
                 new Written(Map.of("b", 1L), -1, Rel.GE));
 
-        assertNull(domain.wholeRunOf("c", Map.of("a", AN_INT, "b", AN_INT)));
-        assertEquals(run(LOW, HIGH), domain.wholeRunOf("c", Map.of()));
+        assertNull(domain.heldInsideTheirOrders(onInts()).wholeRunOf("c"));
+        assertEquals(run(LOW, HIGH),
+                domain.heldInsideTheirOrders(endless("a", "b", "c")).wholeRunOf("c"));
     }
 
     /** {@code rules} over whole numbers nothing bounds, beside {@code c} from nought to seven. */
@@ -204,7 +249,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
             }
         }
 
-        assertNull(domain.wholeRunOf("c", Map.of()));
+        assertNull(domain.heldInsideTheirOrders(endless("a", "b", "c", "d")).wholeRunOf("c"));
     }
 
     /** {@code a·a + b·b + d·d + constant  rel  0}. */

@@ -2631,6 +2631,30 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * And of a behavior over such a declaration: no {@code D} is held by two lists further apart
+     * than the greatest {@code Int}, so it is refused, and nothing the body compares is said to
+     * reach anything. One less apart, a list of the greatest length beside one of one holds it,
+     * and the amounts relate.
+     */
+    @Test
+    void aDeclarationOnlyLengthsPastWhereAnIntStopsHoldLeavesABehaviorNoRowToReachAnything() {
+        for (String apart : List.of("9223372036854775807", "9223372036854775806")) {
+            String declared = """
+                    data Yen = Int invariant value >= 0
+                    data D = { g: Yen, d: Yen, ys: List<Int>, zs: List<Int> }
+                        invariant List.length(zs) >= 1
+                            && List.length(ys) - List.length(zs) >= %s""".formatted(apart);
+            String body = "v.g.value >= v.d.value";
+            boolean none = apart.endsWith("7");
+            assertEquals(none ? List.of("E1013") : List.of(), measured("v: D", declared, "Bool",
+                    body).diagnostics().values().stream().flatMap(List::stream)
+                    .map(each -> each.diagnostic().code().toString()).toList(), apart);
+            assertEquals(none ? Map.of() : Map.of("v.g", RELATES), left("v: D", declared, body,
+                    atThe(">=", declared, "v: D", body)), apart);
+        }
+    }
+
+    /**
      * The same of a declaration's rules over lengths, since a length is an {@code Int} and stops
      * where one does: {@code List.length(ys) - List.length(zs) >= M} beside
      * {@code List.length(zs) >= 1} is held by no two lists, so the amounts the rule beside it

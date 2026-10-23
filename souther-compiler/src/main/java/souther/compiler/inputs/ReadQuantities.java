@@ -1099,7 +1099,8 @@ final class ReadQuantities implements Quantities {
         // the state is not narrowed by — an unheld sum is a step short, and the sound answer with
         // less is not to take a step at all.
         LinearForm<InputAtom> over = over(each.form(), under);
-        return over == null ? made : made.taking(over, each.rel(), spacing);
+        return over == null ? made : insideItsOrder(made.taking(over, each.rel(), spacing),
+                each.form().coefs().keySet(), under);
     }
 
     /**
@@ -1496,7 +1497,8 @@ final class ReadQuantities implements Quantities {
         if (spaced == null) {
             return rules;
         }
-        return rules.taking(atom, numbersOf(runs), Map.of(atom, spaced));
+        return insideItsOrder(rules.taking(atom, numbersOf(runs), Map.of(atom, spaced)),
+                Set.of(term), under);
     }
 
     /** A range with only the ends the arithmetic has a number for. */
@@ -1636,32 +1638,42 @@ final class ReadQuantities implements Quantities {
      * what was taken in, no row gives it a value, so it runs nowhere and no run is shown whole.
      *
      * <p>A row is values the terms' orders hold, so the rows are asked for inside where the order
-     * of the term and of every term taken in stops ({@link Carrier#whereItStops}).
+     * of every number the rules speak of stops: those the declarations' readings carry in with
+     * their rules, and each term this reading puts on, the asked one among them
+     * ({@link #insideItsOrder}).
      */
     NumericDomain.Bounds wholeRunOf(NumericTerm term) {
         if (!(asking(List.of(term))
                 instanceof StructuralContext.Merge.Together(StructuralContext under))) {
             return null;
         }
-        ConstraintState<InputAtom> rules = holding(effectiveConstraints(under), term, under);
-        return rules.numbers().wholeRunOf(called(term, under), whereTheOrdersStop(term, under));
+        ConstraintState<InputAtom> rules = insideItsOrder(
+                holding(effectiveConstraints(under), term, under), Set.of(term), under);
+        return rules.numbers().wholeRunOf(called(term, under));
     }
 
-    /** Where the order of {@code term} and of each term taken in stops, by what this input calls
-     *  each under {@code under}; a term no order is known for has no entry. */
-    private Map<InputAtom, NumericDomain.Bounds> whereTheOrdersStop(NumericTerm term,
-                                                                   StructuralContext under) {
-        Set<NumericTerm> terms = new LinkedHashSet<>(List.of(term));
-        assumed.forEach(each -> terms.addAll(each.terms()));
-        Map<InputAtom, NumericDomain.Bounds> out = new LinkedHashMap<>();
-        for (NumericTerm each : terms) {
+    /**
+     * {@code rules} with where the order each of {@code terms} is counted on stops recorded, by
+     * what this input calls it under {@code under} ({@link Carrier#whereItStops}).
+     *
+     * <p>Said where a term is put on the rules, as its spacing is, and not gathered where a
+     * question is asked: what was put on by a reading made before this one is carried in its
+     * rules, and a question that listed the terms again would know only the ones it was handed. A
+     * term whose order is not known has none recorded, and a system it is in is not shown to leave
+     * a row.
+     */
+    private ConstraintState<InputAtom> insideItsOrder(ConstraintState<InputAtom> rules,
+                                                      Set<NumericTerm> terms,
+                                                      StructuralContext under) {
+        Map<InputAtom, NumericDomain.Bounds> stops = new LinkedHashMap<>();
+        for (NumericTerm each : NumericTerms.inOrder(terms)) {
             TermOrders orders = ordersOf(each);
             Carrier order = orders == null ? null : orders.answered();
             if (order != null) {
-                out.putIfAbsent(called(each, under), order.whereItStops());
+                stops.put(called(each, under), order.whereItStops());
             }
         }
-        return out;
+        return rules.heldInsideTheirOrders(stops);
     }
 
     /**

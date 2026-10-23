@@ -223,9 +223,6 @@ public final class FieldDomains {
     /** The atom a range is taken of at each name: what stands there, and the count of it where a
      *  count is taken. A name with neither has no range to be exact about. */
     private final Map<RuleKey, FactSubject> atomAt;
-    /** Where the order each value {@link #atomAt} names is counted on stops, worked out on the
-     *  first question that needs it ({@link #whereTheOrdersStop}). */
-    private Map<FactSubject, NumericDomain.Bounds> stops;
     private final Map<RuleKey, Counted> countAt;
     /** What the reading that builds the bounds made of each part of each rule. Per part, because a
      *  rule is represented where every part of it is. */
@@ -387,15 +384,20 @@ public final class FieldDomains {
      * the domain it asked had never heard of the rules.
      *
      * <p>And of the classes a place is held to, which that state holds as atoms of their own
-     * ({@link #classLeavingNothing}).
+     * ({@link #classLeavingNothing}), and of where the numbers' orders stop: a value holds each
+     * number inside its order, so rules only numbers past an end hold leave no value
+     * ({@link NumericDomain#leavesNoRow}). Asked here, of a value, and not of the state wherever it
+     * is read: a region a reading narrowed to nothing reads as a region nothing is said of.
      */
     public boolean infeasible() {
-        return constraints.isBottom() || classLeavingNothing() != null;
+        return constraints.isBottom() || classLeavingNothing() != null
+                || constraints.numbers().leavesNoRow();
     }
 
     /** The same, borrowing what {@code machines} has already made where deciding takes one. */
     public boolean infeasible(StringMachineAnswers machines) {
-        return constraints.isBottom(machines) || classLeavingNothing() != null;
+        return constraints.isBottom(machines) || classLeavingNothing() != null
+                || constraints.numbers().leavesNoRow();
     }
 
     /**
@@ -409,12 +411,21 @@ public final class FieldDomains {
      * subject, and what this value's rules call the place it is at is known here and nowhere else.
      */
     public Optional<Emptiness> holdsNothing() {
-        return constraints.holdsNothing(spelled(namedBy)).or(this::aClassHoldsNothing);
+        return constraints.holdsNothing(spelled(namedBy)).or(this::aClassHoldsNothing)
+                .or(this::noRowOfTheNumbers);
     }
 
     /** The same, borrowing what {@code machines} has already made where deciding takes one. */
     public Optional<Emptiness> holdsNothing(StringMachineAnswers machines) {
-        return constraints.holdsNothing(spelled(namedBy), machines).or(this::aClassHoldsNothing);
+        return constraints.holdsNothing(spelled(namedBy), machines).or(this::aClassHoldsNothing)
+                .or(this::noRowOfTheNumbers);
+    }
+
+    /** The rules contradicting where the numbers' orders stop, as the general sentence: what
+     *  they leave holds no number inside its order ({@link NumericDomain#leavesNoRow}). */
+    private Optional<Emptiness> noRowOfTheNumbers() {
+        return constraints.numbers().leavesNoRow()
+                ? Optional.of(new Emptiness.ConflictingRules()) : Optional.empty();
     }
 
     /**
@@ -2505,63 +2516,7 @@ public final class FieldDomains {
     NumericDomain.Bounds wholeRunAt(RuleKey path) {
         FactSubject atom = atomAt.get(path);
         return atom == null || !projectionAt(path).isCertified() ? null
-                : constraints.numbers().wholeRunOf(atom, whereTheOrdersStop());
-    }
-
-    /**
-     * Where the order each number this reads is counted on stops, by the atom it is held as — the
-     * values a row of this declaration holds, which a run shown whole is shown inside
-     * ({@link NumericDomain#wholeRunOf}).
-     *
-     * <p>The value at each place and each count taken of one ({@link #atomAt}, {@link #countAt}):
-     * a system of rules over two lengths is as much a part of whether a row is left as one over
-     * two fields. A place's value is on its type's order, and a count on the order of the type its
-     * operation answers, so {@code List.length(xs)} stops where an {@code Int} does. A number whose
-     * type orders nothing has no entry.
-     */
-    private Map<FactSubject, NumericDomain.Bounds> whereTheOrdersStop() {
-        Map<FactSubject, NumericDomain.Bounds> had = stops;
-        if (had != null) {
-            return had;
-        }
-        Map<FactSubject, NumericDomain.Bounds> out = new LinkedHashMap<>();
-        atomAt.forEach((path, atom) -> stopsOn(out, atom, typeAt(path)));
-        countAt.forEach((path, counted) ->
-                stopsOn(out, counted.atom(), answeredOf(counted.by(), path)));
-        had = Map.copyOf(out);
-        stops = had;
-        return had;
-    }
-
-    /** Where the order of {@code type} stops, put down for {@code atom} where it orders anything
-     *  and nothing was put down for the atom before. */
-    private void stopsOn(Map<FactSubject, NumericDomain.Bounds> out, FactSubject atom, Type type) {
-        Carrier order = type == null ? null : Carrier.ofValue(type, source.declarations());
-        if (order != null) {
-            out.putIfAbsent(atom, order.whereItStops());
-        }
-    }
-
-    /** The type of the number {@code operation} answers of the value at {@code at}, or null where
-     *  it answers none this can name ({@link NumericAnswers#typeOf}). */
-    private Type answeredOf(ValueName operation, RuleKey at) {
-        return NumericAnswers.typeOf(operation, typeAt(at), source.inners(), source.symbols());
-    }
-
-    /** The type of the value at {@code at}, reached through fields from this declaration, or
-     *  null where it is reached otherwise. */
-    private Type typeAt(RuleKey at) {
-        Type here = new Type.Ref(named);
-        for (String step : at.steps()) {
-            if (!(source.inners().terminal(here) instanceof Type.Ref(TypeSymbol.AtModule record))) {
-                return null;
-            }
-            here = source.fieldTypes().of(record).get(step);
-            if (here == null) {
-                return null;
-            }
-        }
-        return here;
+                : constraints.numbers().wholeRunOf(atom);
     }
 
     /**
@@ -2716,7 +2671,7 @@ public final class FieldDomains {
         }
         Counted counted = countAt.get(at);
         NumericDomain.Bounds sizes = counted == null ? NumericDomain.Bounds.OPEN
-                : constraints.numbers().wholeRunOf(counted.atom(), whereTheOrdersStop());
+                : constraints.numbers().wholeRunOf(counted.atom());
         if (sizes == null) {
             return false;
         }
@@ -2804,8 +2759,7 @@ public final class FieldDomains {
             return false;
         }
         ValueName operation = answered.identity().calledOperation();
-        NumericDomain.Bounds run = constraints.numbers().wholeRunOf(answered,
-                whereTheOrdersStop());
+        NumericDomain.Bounds run = constraints.numbers().wholeRunOf(answered);
         return operation != null
                 && DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(operation)
                 && run != null && run.holdsAValue();
@@ -2931,9 +2885,15 @@ public final class FieldDomains {
     /** The declaration the elements of the list or set at {@code at} are of, or null where they are
      *  not of one, or {@code at} is not reached through fields. */
     private TypeSymbol.AtModule elementOf(RuleKey at) {
-        Type here = typeAt(at);
-        if (here == null) {
-            return null;
+        Type here = new Type.Ref(named);
+        for (String step : at.steps()) {
+            if (!(source.inners().terminal(here) instanceof Type.Ref(TypeSymbol.AtModule record))) {
+                return null;
+            }
+            here = source.fieldTypes().of(record).get(step);
+            if (here == null) {
+                return null;
+            }
         }
         Type element = switch (source.inners().terminal(here)) {
             case Type.ListOf list -> list.element();
