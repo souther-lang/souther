@@ -31,6 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Clock;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -120,7 +121,7 @@ public final class LspServer {
     private final Abandonment abandonment = new Abandonment(this::stopNow);
 
     public LspServer(MessageConnection conn) {
-        this(conn, Clock.systemDefaultZone());
+        this(conn, Clock.system(ZoneId.systemDefault()));
     }
 
     /** A server whose rows are written on the day {@code clock} says as each message arrives. */

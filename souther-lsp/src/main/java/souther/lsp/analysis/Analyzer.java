@@ -94,6 +94,7 @@ import souther.lsp.protocol.WorkspaceSymbol;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -185,7 +186,7 @@ public final class Analyzer {
 
     /** An analyzer whose rows are written on the day where it runs. */
     public Analyzer() {
-        this(Clock.systemDefaultZone());
+        this(Clock.system(ZoneId.systemDefault()));
     }
 
     /** An analyzer whose rows are written on the day {@code clock} says, as each request arrives. */
