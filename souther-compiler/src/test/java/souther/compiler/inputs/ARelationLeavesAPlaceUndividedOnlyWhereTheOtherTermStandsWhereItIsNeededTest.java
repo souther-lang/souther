@@ -11,12 +11,15 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -322,6 +325,24 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     }
 
     /**
+     * The same where {@code a} is what an operation answers and not the value at a place: every
+     * row that answers it past the greatest {@code Int} less {@code K} stands there, so those
+     * values are no end the type passes over, and nothing is shown.
+     */
+    @Test
+    void aValueNoRowIsComputedAtIsNoRunOfTheTypeWhereItIsNoPlace() {
+        long k = 9_000_000_000_000_000_000L;
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("a", 1, amounts, amounts, null, false),
+                term("b", -1, amounts, amounts, null, true));
+
+        assertNull(WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
+                ExactRatio.of(k), Rel.GT, List.of(), String::equals, GREATEST_INT));
+    }
+
+    /**
      * Read of their difference, {@code t > w} where every row holds {@code t >= w}, both from
      * nought: a {@code w} at the greatest {@code Int} has no {@code t} above it, which is where
      * the type stops and no line of the model's. The answer keeps it as the type's line, and
@@ -394,6 +415,32 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
         assertEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(),
                 WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.of(-5), Rel.GE,
                         String::equals, (one, other) -> true, Granularity.DENSE, null));
+    }
+
+    /**
+     * {@code a + c - s >= 0} over {@code Int}s, {@code c} strictly between nought and two: held
+     * still at one, the whole number inside its ends, {@code c} leaves {@code a} against
+     * {@code s}. Where nothing says how the values of {@code c} are spaced, no value is shown
+     * between those ends — whole, it would take none strictly between nought and one — and the
+     * end it leaves out is no row to hold it at.
+     */
+    @Test
+    void aTermWhoseSpacingIsNotSaidIsHeldAtNoValue() {
+        List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
+        for (Granularity spacing : Arrays.asList(Granularity.DISCRETE, null)) {
+            long high = spacing == null ? 1 : 2;
+            NumericDomain.Bounds between = new NumericDomain.Bounds(
+                    Endpoint.exclusive(Count.of(0)), Endpoint.exclusive(Count.of(high)));
+            List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                    term("a", 1, run(0, 10), run(0, 10), null, true),
+                    new WhatARelationLeavesUndivided.Term<>(List.of("c"), ExactRatio.ONE, between,
+                            between, null, true, spacing, INTS),
+                    term("s", -1, INTS, INTS, null, true));
+            leaves.add(WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.ZERO, Rel.GE,
+                    String::equals, (one, other) -> true, Granularity.DISCRETE, GREATEST_INT));
+        }
+        assertEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(), leaves.get(0));
+        assertNotEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(), leaves.get(1));
     }
 
     /** A decimal term at its place, taking every value of {@code run}, on an order with no end. */

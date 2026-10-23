@@ -509,9 +509,7 @@ public final class WhatARelationLeavesUndivided {
             }
             List<SettledRun> past = pastTheRows(free.held(), bounded.held(), terms.get(at),
                     asking.holding());
-            // An end of the type is one value only at a place; what an operation answers stands
-            // there at every row that answers it so, which is no end passed over.
-            if (!past.isEmpty() && !terms.get(at).itsPlace()) {
+            if (past == null) {
                 return null;
             }
             return past.isEmpty() ? new Leaves.Undivided()
@@ -528,6 +526,10 @@ public final class WhatARelationLeavesUndivided {
      * to settle {@code relation} the way it comes out far out on that side: the term weighed takes
      * the form up there, or down there. No row is there either way, so the run's line is the
      * arithmetic's, and which way it is said to settle the relation only names it.
+     *
+     * <p>Null where some value is past them and the term is not the value at its place. Only a
+     * place has no row past them: what an operation answers stands there at every row that
+     * answers it so, which is no end passed over.
      */
     private static <P> List<SettledRun> pastTheRows(WholeRun held, WholeRun computed,
                                                     Term<P> term, Rel relation) {
@@ -542,7 +544,7 @@ public final class WhatARelationLeavesUndivided {
             out.add(SettledRun.whole(computed.high.add(BigInteger.ONE), held.high,
                     farOut(relation, up)));
         }
-        return out;
+        return out.isEmpty() || term.itsPlace() ? out : null;
     }
 
     /** How {@code relation} comes out where the form is far above nought, {@code up} positive,
@@ -1648,7 +1650,7 @@ public final class WhatARelationLeavesUndivided {
         }
         for (int other = 0; other < terms.size(); other++) {
             if (free[other] && (reaches(terms, other, at, within, constant, relation,
-                    List.of(), arithmetic)
+                    theConstantAlone(constant), arithmetic)
                     || reachesWithTheRestHeld(terms, other, at, within, constant, relation,
                             free, arithmetic))) {
                 return true;
@@ -1729,7 +1731,7 @@ public final class WhatARelationLeavesUndivided {
             boolean reached = false;
             for (int other = 0; other < terms.size() && !reached; other++) {
                 reached = free[other] && (reaches(terms, other, at, piece, constant, relation,
-                        List.of(), arithmetic)
+                        theConstantAlone(constant), arithmetic)
                         || reachesWithTheRestHeld(terms, other, at, piece, constant, relation,
                                 free, arithmetic));
             }
@@ -2475,7 +2477,11 @@ public final class WhatARelationLeavesUndivided {
         List<SettledRun> model = new ArrayList<>();
         // The values the type keeps from an outcome: past the rows computed, and kept from one
         // by the order's ends alone.
-        List<SettledRun> ofTheType = new ArrayList<>(pastTheRows(holds, rows, it, relation));
+        List<SettledRun> past = pastTheRows(holds, rows, it, relation);
+        if (past == null) {
+            return null;
+        }
+        List<SettledRun> ofTheType = new ArrayList<>(past);
         boolean byTheEnds = false;
         List<BigInteger> from = new ArrayList<>(starts);
         for (int i = -1; i < from.size(); i++) {
@@ -2705,9 +2711,9 @@ public final class WhatARelationLeavesUndivided {
      * <p>A witness is a row that is computed ({@link #aWitnessComputes}), asked last, of an
      * answer that would otherwise be yes: most terms are refused by something cheaper first.
      *
-     * @param beside     the addends the row holds besides the two — the constant the terms held
-     *                   still beside them were moved from, and those terms, each weighed — or
-     *                   none, where the row holds the constant alone beside them
+     * @param beside     the addends the row holds besides the two: the constant, or where terms
+     *                   are held still beside them, the constant they were moved from and those
+     *                   terms, each weighed ({@link #theConstantAlone})
      * @param arithmetic where the arithmetic of the form stops
      */
     private static <P> boolean reaches(List<Term<P>> terms, int by, int of, Interval within,
@@ -2976,8 +2982,7 @@ public final class WhatARelationLeavesUndivided {
      * <p>Two terms standing at each other's value with nothing besides are compared and not
      * added, and are asked nothing of it.
      *
-     * @param beside the addends a row holds besides the two, as {@link #reaches} takes them — or
-     *               none, where it holds the constant alone beside them
+     * @param beside the addends a row holds besides the two, as {@link #reaches} takes them
      */
     private static <P> boolean aWitnessComputes(List<Term<P>> terms, int by, int of,
                                                 Interval within, ExactRatio constant,
@@ -2992,9 +2997,6 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         List<ExactRatio> fixed = new ArrayList<>(beside);
-        if (beside.isEmpty()) {
-            fixed.add(constant);
-        }
         for (int i = 0; i < terms.size(); i++) {
             if (i != by && i != of) {
                 fixed.add(weighedAt(heldNearestNought(terms.get(i)), terms.get(i).weight()));
@@ -3052,12 +3054,17 @@ public final class WhatARelationLeavesUndivided {
     /**
      * The value {@code term} may hold nearest nought: one its spacing places inside an end its
      * run leaves out ({@link NumericDomain.Bounds#aValueNearestNought}), so that a row standing it
-     * there is a row it has — or, where its spacing is not said, the end of the run or nought as
-     * the numbers stand.
+     * there is a row it has — or null where its spacing is not said, since an end the run leaves
+     * out is then no value shown to be one of its.
      */
     private static <P> ExactRatio heldNearestNought(Term<P> term) {
-        return term.spacing() != null ? term.holds().aValueNearestNought(term.spacing())
-                : nearestValue(Interval.of(term.holds()));
+        return term.holds().aValueNearestNought(term.spacing());
+    }
+
+    /** The addends a row holds besides two terms where nothing else is held beside them: the
+     *  constant, where it is a number. */
+    private static List<ExactRatio> theConstantAlone(ExactRatio constant) {
+        return constant == null ? List.of() : List.of(constant);
     }
 
     /** The value of {@code run} nearest nought, or null where the run is no run of numbers: its
