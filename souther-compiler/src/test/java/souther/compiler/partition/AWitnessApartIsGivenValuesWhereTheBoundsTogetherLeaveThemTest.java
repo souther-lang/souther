@@ -119,8 +119,8 @@ class AWitnessApartIsGivenValuesWhereTheBoundsTogetherLeaveThemTest {
         for (int each = 0; each < 3000; each++) {
             List<TakenConstraint.Affine> statements = new ArrayList<>();
             for (int count = 2 + random.nextInt(3); count > 0; count--) {
-                long a = random.nextInt(7) - 3;
-                long b = random.nextInt(7) - 3;
+                int a = random.nextInt(7) - 3;
+                int b = random.nextInt(7) - 3;
                 if (a != 0 || b != 0) {
                     statements.add(ofA(random.nextInt(13) - 6, a, b, rels[random.nextInt(5)]));
                 }
