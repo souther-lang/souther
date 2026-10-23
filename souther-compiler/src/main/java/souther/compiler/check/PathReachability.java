@@ -6,6 +6,7 @@ import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.WhyNoValueTakesTheArm;
@@ -626,6 +627,8 @@ public final class PathReachability {
      *  says ({@link #mayStopBefore}), for the ones where it may. */
     private final Map<ConstructOccurrence, List<WhatMayStopARun>> stopsBefore =
             new LinkedHashMap<>();
+    /** The steps the walk is inside, the innermost last. */
+    private final List<StepEntered> steps = new ArrayList<>();
     /**
      * What holds where the body begins: the inputs entered and seeded, and no condition taken.
      *
@@ -892,10 +895,18 @@ public final class PathReachability {
                     appliedToNothing(block.body(), none);
                     why = new WhyNone.Because(none);
                 }
+                StepEntered step = inside.reachesNothing() ? null : entering(block, reads);
+                if (step != null) {
+                    steps.add(step);
+                }
                 Walked body = walk(block.body(), new Walked(inside, here.decided(),
                                 here.mayStop(), here.nothingAbove() && applied.isEmpty(), true,
                                 why, inside.reachesNothing()), at,
                         reads.entering(new ScopeStep.Block(block), symbols, newtypes));
+                if (step != null) {
+                    steps.removeLast();
+                    pastTheApplicationsBefore(step, body);
+                }
                 // Making the function value runs nothing of its body, so nothing it holds is
                 // carried on. What stopped a run in it is: the call that applies it is worked out
                 // before what follows, and no state here holds where each application got past.
@@ -1188,16 +1199,66 @@ public final class PathReachability {
      * a row at the line is one some run makes needs, and one dropping a line does not.
      */
     private void mayStopBefore(Core e, Walked operands) {
-        if (operands.mayStop().isEmpty() || operands.known().reachesNothing()) {
+        if (operands.known().reachesNothing()) {
             return;
         }
-        ConstructOccurrence comparison = e instanceof Core.Binary binary
-                ? numbered(binary, plan) : null;
-        if (comparison != null) {
-            stopsBefore.put(comparison, operands.mayStop());
+        List<ConstructOccurrence> at = new ArrayList<>(2);
+        if (e instanceof Core.Binary binary && numbered(binary, plan) != null) {
+            at.add(numbered(binary, plan));
         }
-        plan.applicationAnsweringAt(e).ifPresent(application ->
-                stopsBefore.put(application, operands.mayStop()));
+        plan.applicationAnsweringAt(e).ifPresent(at::add);
+        if (at.isEmpty()) {
+            return;
+        }
+        for (StepEntered step : steps) {
+            if (WhatABodyReads.anyOf(e, step.madeBefore())) {
+                step.reading().addAll(at);
+            }
+        }
+        if (!operands.mayStop().isEmpty()) {
+            at.forEach(each -> stopsBefore.put(each, operands.mayStop()));
+        }
+    }
+
+    /**
+     * A step some operation applies, entered by the walk: what its applications before one make
+     * of what that one is handed ({@link ClosureUses.Application#madeByTheApplicationsBefore}),
+     * with every name the step binds to a value of it, and the constructs in it that read any of
+     * that.
+     */
+    private record StepEntered(Set<BindingId> madeBefore, List<ConstructOccurrence> reading) {}
+
+    /** {@code block} entered as a step, or null where no operation alone applies it or it is
+     *  handed nothing the applications before one make. */
+    private static StepEntered entering(Core.Block block, InputReads reads) {
+        ClosureUses uses = reads.usesOf(block);
+        if (uses == null) {
+            return null;
+        }
+        Set<BindingId> made = new LinkedHashSet<>();
+        uses.applications().forEach(each -> made.addAll(each.madeByTheApplicationsBefore()));
+        return made.isEmpty() ? null
+                : new StepEntered(WhatABodyReads.namesMadeOf(block.body(), made),
+                        new ArrayList<>());
+    }
+
+    /**
+     * What a run arriving at a construct reading what the applications before one make passed:
+     * an application of the whole step at every element before, where whatever in the step answers
+     * on some runs only — before the construct, after it, or in an arm it does not take — may
+     * stop the walk. That is the call applying the step, to what follows it, and a construct read
+     * past the first element is past it as well.
+     */
+    private void pastTheApplicationsBefore(StepEntered step, Walked body) {
+        if (body.noneStopped() && !body.known().reachesNothing()) {
+            return;
+        }
+        for (ConstructOccurrence each : step.reading()) {
+            Set<WhatMayStopARun> stops = new LinkedHashSet<>(
+                    stopsBefore.getOrDefault(each, List.of()));
+            stops.add(new WhatMayStopARun.ACall());
+            stopsBefore.put(each, List.copyOf(stops));
+        }
     }
 
     /** Every arm of a fork in {@code arms} the walk has not proven otherwise, as one nothing enters

@@ -15,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * One condition on the way to a comparison, and what became of it.
@@ -452,31 +453,35 @@ public sealed interface OnTheWay {
      *                  it, or none where it is no arm's. Beside the name and not in place of it: a
      *                  reader asking whether a condition is the entering of one particular arm
      *                  asks here, and the name is what tells the conditions apart
-     * @param ofAnAnswerAlone whether the condition names nothing but what a dependency answered.
-     *                  An answer is an unknown value no number of the input is related to, so such
-     *                  a condition narrows the way without relating any numbers of the input
+     * @param besideAnAnswer where the condition is about what a dependency answered, the positions
+     *                  of the input it names beside the answer — empty where it is about no answer
+     *                  or names something else. An answer is an unknown value no number of the
+     *                  input is related to, so such a condition narrows the way without relating
+     *                  any numbers of the input but those at the positions it names
      */
     record Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
-                    List<WhyNotTaken> whys, Optional<EnteredArm> arm, boolean ofAnAnswerAlone)
+                    List<WhyNotTaken> whys, Optional<EnteredArm> arm,
+                    Optional<List<TermPath>> besideAnAnswer)
             implements OnTheWay {
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         WhyNotTaken why) {
-            this(condition, anchor, List.of(why), Optional.empty(), false);
+            this(condition, anchor, List.of(why), Optional.empty(), Optional.empty());
         }
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         List<WhyNotTaken> whys) {
-            this(condition, anchor, whys, Optional.empty(), false);
+            this(condition, anchor, whys, Optional.empty(), Optional.empty());
         }
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         List<WhyNotTaken> whys, Optional<EnteredArm> arm) {
-            this(condition, anchor, whys, arm, false);
+            this(condition, anchor, whys, arm, Optional.empty());
         }
 
         public Declined {
             Objects.requireNonNull(arm, "an arm, or none");
+            Objects.requireNonNull(besideAnAnswer, "the positions beside an answer, or none");
             if (condition == null) {
                 throw new IllegalArgumentException(
                         "a condition this reading declined is some condition it met");
@@ -494,6 +499,23 @@ public sealed interface OnTheWay {
                 throw new IllegalArgumentException("a condition declined here is reported here: "
                         + condition + " reported at " + anchored);
             }
+        }
+
+        /**
+         * Whether the condition is about what a dependency answered and names no position of the
+         * input under any of {@code parameters}: then it narrows which answer a row stands the
+         * dependency in with, and leaves the values of those parameters as they were. No
+         * declaration relates one parameter to another, so the places it names leave theirs alone.
+         */
+        public boolean namesNoneOf(Set<String> parameters) {
+            return besideAnAnswer.isPresent() && besideAnAnswer.get().stream()
+                    .noneMatch(at -> parameters.contains(at.head()));
+        }
+
+        /** Whether the condition is about what a dependency answered and names no position of the
+         *  input at all. */
+        public boolean namesNothingOfTheInput() {
+            return besideAnAnswer.map(List::isEmpty).orElse(false);
         }
     }
 }

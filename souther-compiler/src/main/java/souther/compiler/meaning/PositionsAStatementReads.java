@@ -18,71 +18,92 @@ import java.util.Set;
  *
  * <p>Empty where any part reads something no position is — an answer, a value the body bound, what
  * a walk carried, a part nothing read — since the fork may then turn on any position at all.
+ *
+ * <p>Or the positions it names beside what a dependency answered ({@link #besideAnAnswer}): an
+ * answer is a value nothing relates to the input, so a statement about it narrows which answer a
+ * row stands the dependency in with and leaves the input's values as they were, but at the
+ * positions it names beside the answer.
  */
 public final class PositionsAStatementReads {
 
-    private PositionsAStatementReads() {}
+    /** Where the positions go, and whether an answer is read as naming nothing of the input. */
+    private final Set<TermPath> out = new LinkedHashSet<>();
+    private final boolean answersNameNothing;
+
+    private PositionsAStatementReads(boolean answersNameNothing) {
+        this.answersNameNothing = answersNameNothing;
+    }
 
     /** The positions {@code stated} reads, in the order it names them, or empty where it reads
      *  something else as well. */
     public static Optional<List<TermPath>> of(Proposition stated) {
-        Set<TermPath> out = new LinkedHashSet<>();
-        return reads(stated, out) ? Optional.of(List.copyOf(out)) : Optional.empty();
+        PositionsAStatementReads reading = new PositionsAStatementReads(false);
+        return reading.reads(stated) ? Optional.of(List.copyOf(reading.out)) : Optional.empty();
     }
 
-    private static boolean reads(Proposition stated, Set<TermPath> out) {
+    /**
+     * The positions of the input {@code stated} names beside what a dependency answered, in the
+     * order it names them — or empty where it reads something that is neither, or is about no
+     * answer at all.
+     */
+    public static Optional<List<TermPath>> besideAnAnswer(Proposition stated) {
+        if (!Proposition.aboutAnAnswer(stated)) {
+            return Optional.empty();
+        }
+        PositionsAStatementReads reading = new PositionsAStatementReads(true);
+        return reading.reads(stated) ? Optional.of(List.copyOf(reading.out)) : Optional.empty();
+    }
+
+    private boolean reads(Proposition stated) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Carried _, Proposition.Unread _, Proposition.SomeReachable _ -> false;
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
-                        .allMatch(quantity -> reads(quantity, out));
-                case Relation.Ordered ordered -> reads(ordered.term(), out);
+                        .allMatch(this::reads);
+                case Relation.Ordered ordered -> reads(ordered.term());
             };
-            case Proposition.Truth truth -> reads(truth.of(), out);
-            case Proposition.InCases cases -> reads(cases.of(), out);
-            case Proposition.Present present -> reads(present.of(), out);
-            case Proposition.SameValue same -> reads(same.one(), out) && reads(same.other(), out);
-            case Proposition.LastToHold last ->
-                    reads(last.container(), out) && reads(last.position(), out);
-            case Proposition.All all -> all.parts().stream().allMatch(part -> reads(part, out));
+            case Proposition.Truth truth -> reads(truth.of());
+            case Proposition.InCases cases -> reads(cases.of());
+            case Proposition.Present present -> reads(present.of());
+            case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
+            case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
+            case Proposition.All all -> all.parts().stream().allMatch(this::reads);
             case Proposition.WhereItAnswers where ->
-                    reads(where.answers(), out) && reads(where.states(), out);
-            case Proposition.Any any -> any.parts().stream().allMatch(part -> reads(part, out));
+                    reads(where.answers()) && reads(where.states());
+            case Proposition.Any any -> any.parts().stream().allMatch(this::reads);
             case Proposition.OnAnApplication applications -> applications.each().stream()
-                    .allMatch(one -> reads(one, out));
+                    .allMatch(this::reads);
             case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .allMatch(one -> reads(one, out));
-            case Proposition.Some some -> reads(some.container(), out)
-                    && reads(some.ofTheElement(), out);
+                    .allMatch(this::reads);
+            case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }
 
-    private static boolean reads(Quantity quantity, Set<TermPath> out) {
+    private boolean reads(Quantity quantity) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(var term) -> reads(term, out);
+            case DecisionAtom.OfTheInput(var term) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
-                 DecisionAtom.ComputedOverAnAnswer _,
-                 Quantity.OfABinding _, Quantity.HowManyCarried _ -> false;
+                 DecisionAtom.ComputedOverAnAnswer _ -> answersNameNothing;
+            case Quantity.OfABinding _, Quantity.HowManyCarried _ -> false;
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
-                    .allMatch(each -> reads(each, out));
+                    .allMatch(this::reads);
             // A piece of a string is whatever the statement it is read inside says it is, and the
             // string that statement is about is no part of this quantity to collect.
             case Quantity.CodePointsOfAPiece _ -> false;
-            case Quantity.APieceOf piece -> reads(piece.string(), out);
-            case Quantity.IsAmongThePieces among ->
-                    reads(among.value(), out) && reads(among.string(), out);
+            case Quantity.APieceOf piece -> reads(piece.string());
+            case Quantity.IsAmongThePieces among -> reads(among.value()) && reads(among.string());
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
-                    reads(counted, out) && reads(each, out);
+                    reads(counted) && reads(each);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
-                    .allMatch(one -> reads(one, out));
+                    .allMatch(this::reads);
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject each) ->
-                    reads(counted, out) && reads(each, out);
+                    reads(counted) && reads(each);
             case Quantity.HowManyDifferentMeet(DecisionSubject counted, DecisionSubject each,
                                                var meeting) ->
-                    reads(counted, out) && reads(each, out) && reads(meeting.statement(), out);
+                    reads(counted) && reads(each) && reads(meeting.statement());
             case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject each) ->
-                    reads(counted, out) && reads(each, out);
+                    reads(counted) && reads(each);
             case Quantity.HowManyDifferentBelow below -> {
                 out.add(below.root());
                 out.add(below.keyOfTheRoot());
@@ -92,28 +113,27 @@ public final class PositionsAStatementReads {
                 yield true;
             }
             case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
-                    reads(summed, out) && reads(each, out);
+                    reads(summed) && reads(each);
             case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
-                    dividend.coefs().keySet().stream().allMatch(term -> reads(term, out));
+                    dividend.coefs().keySet().stream().allMatch(this::reads);
             case Quantity.RemainderByAnInput remainder -> remainder.operands().stream()
-                    .allMatch(term -> reads(term, out));
+                    .allMatch(this::reads);
             case Quantity.ProductOfTwo product -> product.factors().stream()
-                    .allMatch(term -> reads(term, out));
+                    .allMatch(this::reads);
         };
     }
 
-    private static boolean reads(NumericTerm term, Set<TermPath> out) {
+    private boolean reads(NumericTerm term) {
         out.add(term.subjectPath());
         return true;
     }
-
-    private static boolean reads(DecisionSubject subject, Set<TermPath> out) {
+    private boolean reads(DecisionSubject subject) {
         return switch (subject) {
             case DecisionSubject.AnInput(TermPath at) -> {
                 out.add(at);
                 yield true;
             }
-            case DecisionSubject.AnAnswer _ -> false;
+            case DecisionSubject.AnAnswer _ -> answersNameNothing;
         };
     }
 }

@@ -11,9 +11,11 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -1080,6 +1082,54 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     String spelled();
 
     /**
+     * What a walk over the elements of a container hands its step beside the element, where that
+     * says where a value bound in the step lies and which of those values it takes: the end kept
+     * so far of what it carried, or where the element stands.
+     *
+     * <p>One type for every such thing, so a reader that carries one carries all of them, and one
+     * that asks which it is answers each.
+     */
+    public sealed interface HandedToTheStep permits KeptSoFar, PositionInTheWalk {}
+
+    /**
+     * Where the element a walk over every element of {@code container} hands its step stands in
+     * it, counted from nought in the order the container holds its elements: how many elements
+     * come before it.
+     *
+     * <p>So beside how many the container holds it lies from nought to one below that, and a run
+     * of a container of so many hands its step each of those values once — every one of them, in
+     * every row, since the walk is over every element. A container holding nothing hands the step
+     * nothing, and no value bound in it is read there.
+     *
+     * @param container the container the walk walks, which no other container holds
+     * @param howMany   how many the container holds
+     */
+    record PositionInTheWalk(TermPath container, NumericTerm.FromOnePosition howMany)
+            implements HandedToTheStep {
+
+        public PositionInTheWalk {
+            Objects.requireNonNull(container, "a walk walks some container");
+            if (container.insideAContainer()) {
+                throw new IllegalArgumentException("a position is counted in one container, and `"
+                        + container + "` is one of many");
+            }
+            if (!counts(howMany, container)) {
+                throw new IllegalArgumentException("a position is counted against how many the"
+                        + " container holds: " + howMany + " of " + container);
+            }
+        }
+
+        /** Whether {@code howMany} is how many the value at {@code container} holds, as it
+         *  stands. */
+        public static boolean counts(NumericTerm howMany, TermPath container) {
+            return howMany instanceof NumericTerm.TakenOf count
+                    && count.takenAs() instanceof TakenAs.HowManyItHolds
+                    && count.position().equals(container)
+                    && count.transformation() instanceof ValueTransformation.Identity;
+        }
+    }
+
+    /**
      * What a walk whose step keeps one end of what it carried and a value of the element
      * ({@code SeededWalk.endKept}) carries into the step on an element: that end of its seed and
      * of the value on every element before it.
@@ -1096,7 +1146,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param howMany   how many the container holds, or null where that is no number read
      */
     record KeptSoFar(Extreme extreme, Seed seed, TermPath container,
-                     NumericTerm.FromOnePosition ofEach, NumericTerm.FromOnePosition howMany) {
+                     NumericTerm.FromOnePosition ofEach, NumericTerm.FromOnePosition howMany)
+            implements HandedToTheStep {
 
         public KeptSoFar {
             Objects.requireNonNull(extreme, "a walk keeps one end");
@@ -1189,30 +1240,30 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * could not read. Empty where nothing of the value was read to stop — an answer a dependency
      * gave, what an attempt built — since there is nothing it is made of to read.
      *
-     * <p>Where the value is what a walk keeping an end carried into its step, which end it is of
-     * what is carried beside it ({@link KeptSoFar}). That says where the value may lie and which of
-     * those values it is shown to take, and still nothing of which value it is on a run.
+     * <p>Where the value is what a walk hands its step beside the element, what the walk hands is
+     * carried beside it ({@link HandedToTheStep}): which end the walk kept of what it carried, or
+     * where the element stands. That says where the value may lie and which of those values it is shown to
+     * take, and still nothing of which value it is on a run.
      *
      * @param binding which binding names the value
      * @param steps   the steps read off it that go somewhere, outermost first
      * @param type    what stands there, which is how its numbers are spaced
      * @param madeOf  why what the value was made from is no number of the input, where the
      *                reading met it and stopped
-     * @param kept    the end a walk has kept by the element its step is applied to, where the
-     *                value is what the walk carried into the step
+     * @param handed  what a walk hands its step, where the value is that
      */
     record OfABinding(BindingId binding, List<TermPath.Step> steps, Type type,
-                      Optional<WhyUnread> madeOf, Optional<KeptSoFar> kept)
+                      Optional<WhyUnread> madeOf, Optional<HandedToTheStep> handed)
             implements Quantity {
 
         public OfABinding {
-            if (binding == null || type == null || madeOf == null || kept == null) {
+            if (binding == null || type == null || madeOf == null || handed == null) {
                 throw new IllegalArgumentException("a bound number is some binding's, of some type");
             }
             steps = List.copyOf(steps);
-            if (kept.isPresent() && (madeOf.isPresent() || !steps.isEmpty())) {
-                throw new IllegalArgumentException("what a walk carried is the value itself, and"
-                        + " nothing of it was read to stop: " + binding);
+            if (handed.isPresent() && (madeOf.isPresent() || !steps.isEmpty())) {
+                throw new IllegalArgumentException("what a walk hands its step is the value itself,"
+                        + " and nothing of it was read to stop: " + binding);
             }
         }
 

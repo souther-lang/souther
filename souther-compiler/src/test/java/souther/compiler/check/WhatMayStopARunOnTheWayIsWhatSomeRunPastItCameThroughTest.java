@@ -6,6 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.WhatMayStopARun;
+import souther.compiler.types.SourceConstruct;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -51,6 +52,61 @@ class WhatMayStopARunOnTheWayIsWhatSomeRunPastItCameThroughTest {
         arrived.value().values().forEach(asRun -> asRun.answers().arrivals().stopsBefore()
                 .values().forEach(out::addAll));
         return out;
+    }
+
+    /** What is filed as what may stop a run on the way to the comparison {@code lines} write
+     *  first, in every copy of it. */
+    private static Set<WhatMayStopARun> stopsBeforeTheFirst(String lines) {
+        Compilation compilation = Compilation.ofSource("""
+                module w1
+
+                data Ok
+                data No
+                data Answer = Ok | No
+
+                behavior f : (xs: List<Int>, a: Int, n: Int, b: Int) -> Answer
+                let f (xs, a, n, b) = {
+                %s
+                    guard b > 3 else No
+                    Ok
+                }
+                """.formatted(lines), "Main");
+        Answer<Map<String, PathReachability.Answers.AsRun>> arrived =
+                compilation.db().ask(new Adequacy.Arrived("w1"));
+        Set<WhatMayStopARun> out = new LinkedHashSet<>();
+        arrived.value().values().forEach(asRun -> asRun.answers().arrivals().stopsBefore()
+                .forEach((at, stops) -> {
+                    if (at.origin().ordinal() == 1
+                            && at.origin().kind() == SourceConstruct.BINARY) {
+                        out.addAll(stops);
+                    }
+                }));
+        return out;
+    }
+
+    /**
+     * A comparison reading where the element stands, or what a walk carried from the element
+     * before, is reached past the first element only by a run that got through the whole step at
+     * every element before it: after the comparison, and in an arm it does not take, as well as
+     * before it. Whatever there answers on some runs only is that application, to the comparison.
+     * One reading the element alone is reached on a list of that one element, past nothing.
+     */
+    @Test
+    void whatTheStepWorksOutIsOnTheWayToAComparisonOfWhatTheApplicationsBeforeMade() {
+        assertEquals(Set.of(new WhatMayStopARun.ACall()), stopsBeforeTheFirst("""
+                    let c = List.mapIndexed((i, x) -> (if i == n then 1 else 0) + x * a, xs)"""));
+        assertEquals(Set.of(new WhatMayStopARun.ACall()), stopsBeforeTheFirst("""
+                    let c = List.mapIndexed((i, x) -> { let j = i
+                        (if j == n then 1 else 0) + x * a }, xs)"""),
+                "a name the step binds to the position is the position");
+        assertEquals(Set.of(new WhatMayStopARun.ACall()), stopsBeforeTheFirst("""
+                    let c = List.fold((w, x) -> if x > w then { let z = x * a
+                            x } else w, 0, xs)"""));
+        assertEquals(Set.of(), stopsBeforeTheFirst("""
+                    let c = List.mapIndexed((i, x) -> (if x == n then 1 else 0) + x * a, xs)"""));
+        assertEquals(Set.of(), stopsBeforeTheFirst("""
+                    let c = List.fold((w, x) -> if x > w then x else w, 0, xs)"""),
+                "a step nothing in which may stop a run");
     }
 
     @Test
