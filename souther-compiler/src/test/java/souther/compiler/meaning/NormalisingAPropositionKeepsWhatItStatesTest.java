@@ -10,6 +10,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Joining, disjoining and denying a proposition state what the connective says of the parts, on
@@ -48,6 +49,89 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
             }
         }
         assertFalse(checked == 0, "something was checked");
+    }
+
+    /**
+     * The two cases of a condition, each with its own arm, are denied as the same two cases with
+     * each arm denied, and so they are beside a third part of the same "or", as two statements
+     * joined by one are: {@code (a ∧ b) ∨ (¬a ∧ c) ∨ c} fails where {@code ((¬a ∧ ¬c) ∨ (a ∧ ¬b))
+     * ∧ ¬c} holds, one choice of the cases of {@code a} where every part failing apart would be
+     * two.
+     */
+    @Test
+    void theCasesOfAConditionBesideAThirdPartAreDeniedCaseByCase() {
+        Proposition a = truth(0, true);
+        Proposition b = truth(1, true);
+        Proposition c = truth(2, true);
+        Proposition stated = Proposition.any(List.of(Proposition.all(List.of(a, b)),
+                Proposition.all(List.of(a.denied(), c)), c));
+
+        assertEquals(Proposition.all(List.of(
+                        Proposition.any(List.of(Proposition.all(List.of(a.denied(), c.denied())),
+                                Proposition.all(List.of(a, b.denied())))),
+                        c.denied())),
+                stated.denied());
+    }
+
+    private static Proposition truth(int atom, boolean holds) {
+        return new Proposition.Truth(new DecisionSubject.AnInput(ATOMS.get(atom)), holds);
+    }
+
+    /**
+     * What a denial by cases states on every assignment is the denial's, beside a third part or
+     * not, and the denial of two cases is a disjunction each part of which holds one condition or
+     * its denial — which is what lets the choices of several such denials close where they take
+     * the condition both ways.
+     */
+    @Test
+    void theCasesOfAConditionAreDeniedCaseByCase() {
+        List<Proposition> pool = pool();
+        Proposition condition = truth(0, true);
+        List<Proposition> beside = new ArrayList<>();
+        beside.add(null);
+        for (int atom = 1; atom < ATOMS.size(); atom++) {
+            beside.add(truth(atom, true));
+            beside.add(truth(atom, false));
+        }
+        int kept = 0;
+        for (Proposition third : beside) {
+            for (Proposition one : pool) {
+                for (Proposition other : pool) {
+                    List<Proposition> parts = new ArrayList<>(List.of(
+                            Proposition.all(List.of(condition, one)),
+                            Proposition.all(List.of(condition.denied(), other))));
+                    if (third != null) {
+                        parts.add(third);
+                    }
+                    Proposition cases = Proposition.any(parts);
+                    Proposition denied = cases.denied();
+                    for (Map<TermPath, Boolean> values : assignments()) {
+                        assertEquals(!value(cases, values), value(denied, values),
+                                () -> "the denial of " + cases.key() + " under " + values);
+                    }
+                    if (third == null && casesOfOneCondition(denied)) {
+                        kept++;
+                    }
+                }
+            }
+        }
+        assertTrue(kept > 0, "some denial of two cases is kept as two cases");
+    }
+
+    /** Whether {@code stated} is a disjunction each part of which holds one condition or its
+     *  denial. */
+    private static boolean casesOfOneCondition(Proposition stated) {
+        if (!(stated instanceof Proposition.Any any)) {
+            return false;
+        }
+        List<Proposition> disjuncts = any.parts();
+        return conjunctsOf(disjuncts.getFirst()).stream().anyMatch(each -> disjuncts.stream()
+                .allMatch(part -> conjunctsOf(part).contains(each)
+                        || conjunctsOf(part).contains(each.denied())));
+    }
+
+    private static List<Proposition> conjunctsOf(Proposition stated) {
+        return stated instanceof Proposition.All all ? all.parts() : List.of(stated);
     }
 
     /** Both truth values, each atom both ways round, and every pair of those joined either way. */

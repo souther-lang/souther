@@ -136,8 +136,8 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
             assertEquals(some, stated("List.any(i -> i.price >= 1, " + chosen + ")"), chosen);
         }
         assertEquals(stated("""
-                        (Bool.not(b.open) || List.all(i -> i.price >= 1, b.items))
-                            && (b.open || List.all(i -> i.price >= 1, b.others))"""),
+                        (b.open && List.all(i -> i.price >= 1, b.items))
+                            || (Bool.not(b.open) && List.all(i -> i.price >= 1, b.others))"""),
                 stated("List.all(i -> i.price >= 1, if b.open then b.items else b.others)"),
                 "the element handed the closure in each case is one of the list that case chose");
     }
