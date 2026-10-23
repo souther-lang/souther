@@ -220,6 +220,9 @@ public final class FieldDomains {
     /** The atom a range is taken of at each name: what stands there, and the count of it where a
      *  count is taken. A name with neither has no range to be exact about. */
     private final Map<RuleKey, FactSubject> atomAt;
+    /** Where the order each value {@link #atomAt} names is counted on stops, worked out on the
+     *  first question that needs it ({@link #whereTheOrdersStop}). */
+    private Map<FactSubject, NumericDomain.Bounds> stops;
     private final Map<RuleKey, Counted> countAt;
     /** What the reading that builds the bounds made of each part of each rule. Per part, because a
      *  rule is represented where every part of it is. */
@@ -2497,7 +2500,46 @@ public final class FieldDomains {
     NumericDomain.Bounds wholeRunAt(RuleKey path) {
         FactSubject atom = atomAt.get(path);
         return atom == null || !projectionAt(path).isCertified() ? null
-                : constraints.numbers().wholeRunOf(atom);
+                : constraints.numbers().wholeRunOf(atom, whereTheOrdersStop());
+    }
+
+    /**
+     * Where the order the value at each place this reads is counted on stops, by the atom it is
+     * held as — the values a row of this declaration holds, which a run shown whole is shown inside
+     * ({@link NumericDomain#wholeRunOf}). A place whose type orders nothing has no entry.
+     */
+    private Map<FactSubject, NumericDomain.Bounds> whereTheOrdersStop() {
+        Map<FactSubject, NumericDomain.Bounds> had = stops;
+        if (had != null) {
+            return had;
+        }
+        Map<FactSubject, NumericDomain.Bounds> out = new LinkedHashMap<>();
+        atomAt.forEach((path, atom) -> {
+            Type type = typeAt(path);
+            Carrier order = type == null ? null : Carrier.ofValue(type, source.declarations());
+            if (order != null) {
+                out.putIfAbsent(atom, order.whereItStops());
+            }
+        });
+        had = Map.copyOf(out);
+        stops = had;
+        return had;
+    }
+
+    /** The type of the value at {@code at}, reached through fields from this declaration, or
+     *  null where it is reached otherwise. */
+    private Type typeAt(RuleKey at) {
+        Type here = new Type.Ref(named);
+        for (String step : at.steps()) {
+            if (!(source.inners().terminal(here) instanceof Type.Ref(TypeSymbol.AtModule record))) {
+                return null;
+            }
+            here = source.fieldTypes().of(record).get(step);
+            if (here == null) {
+                return null;
+            }
+        }
+        return here;
     }
 
     /**
@@ -2652,7 +2694,7 @@ public final class FieldDomains {
         }
         Counted counted = countAt.get(at);
         NumericDomain.Bounds sizes = counted == null ? NumericDomain.Bounds.OPEN
-                : constraints.numbers().wholeRunOf(counted.atom());
+                : constraints.numbers().wholeRunOf(counted.atom(), whereTheOrdersStop());
         if (sizes == null) {
             return false;
         }
@@ -2740,7 +2782,8 @@ public final class FieldDomains {
             return false;
         }
         ValueName operation = answered.identity().calledOperation();
-        NumericDomain.Bounds run = constraints.numbers().wholeRunOf(answered);
+        NumericDomain.Bounds run = constraints.numbers().wholeRunOf(answered,
+                whereTheOrdersStop());
         return operation != null
                 && DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(operation)
                 && run != null && run.holdsAValue();
@@ -2866,15 +2909,9 @@ public final class FieldDomains {
     /** The declaration the elements of the list or set at {@code at} are of, or null where they are
      *  not of one, or {@code at} is not reached through fields. */
     private TypeSymbol.AtModule elementOf(RuleKey at) {
-        Type here = new Type.Ref(named);
-        for (String step : at.steps()) {
-            if (!(source.inners().terminal(here) instanceof Type.Ref(TypeSymbol.AtModule record))) {
-                return null;
-            }
-            here = source.fieldTypes().of(record).get(step);
-            if (here == null) {
-                return null;
-            }
+        Type here = typeAt(at);
+        if (here == null) {
+            return null;
         }
         Type element = switch (source.inners().terminal(here)) {
             case Type.ListOf list -> list.element();

@@ -1634,6 +1634,9 @@ final class ReadQuantities implements Quantities {
      * <p>About the run and nothing else. A value taken out of it, or a class of whole numbers it is
      * held to, are asked of the region beside this. Where no one value has the term together with
      * what was taken in, no row gives it a value, so it runs nowhere and no run is shown whole.
+     *
+     * <p>A row is values the terms' orders hold, so the rows are asked for inside where the order
+     * of the term and of every term taken in stops ({@link Carrier#whereItStops}).
      */
     NumericDomain.Bounds wholeRunOf(NumericTerm term) {
         if (!(asking(List.of(term))
@@ -1641,7 +1644,24 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         ConstraintState<InputAtom> rules = holding(effectiveConstraints(under), term, under);
-        return rules.numbers().wholeRunOf(called(term, under));
+        return rules.numbers().wholeRunOf(called(term, under), whereTheOrdersStop(term, under));
+    }
+
+    /** Where the order of {@code term} and of each term taken in stops, by what this input calls
+     *  each under {@code under}; a term no order is known for has no entry. */
+    private Map<InputAtom, NumericDomain.Bounds> whereTheOrdersStop(NumericTerm term,
+                                                                   StructuralContext under) {
+        Set<NumericTerm> terms = new LinkedHashSet<>(List.of(term));
+        assumed.forEach(each -> terms.addAll(each.terms()));
+        Map<InputAtom, NumericDomain.Bounds> out = new LinkedHashMap<>();
+        for (NumericTerm each : terms) {
+            TermOrders orders = ordersOf(each);
+            Carrier order = orders == null ? null : orders.answered();
+            if (order != null) {
+                out.putIfAbsent(called(each, under), order.whereItStops());
+            }
+        }
+        return out;
     }
 
     /**

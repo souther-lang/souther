@@ -914,7 +914,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // apart by, each in the run the declarations leave it.
         if (!out.containsAll(places()) && !offItsLine) {
             List<WhatARelationLeavesUndivided.Leaves> apart =
-                    leftByTheirDifference(sources, carriers, stating, heldWhole, read);
+                    leftByTheirDifference(sources, carriers, stating, heldWhole, read, along);
             for (int at = 0; at < apart.size(); at++) {
                 if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                     continue;
@@ -1873,19 +1873,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link WhatARelationLeavesUndivided#leavesByTheirDifference}) — each null where nothing is
      * shown, and none where they are not two such sides.
      *
-     * <p>What each side takes is what the declarations leave it, and not what the way does: the
-     * way's statements are the differences, and the two together take what both leave.
+     * <p>What each side takes is asked of the way's region: the way's statements are the
+     * differences, which the region holds the two to together and each alone to nothing narrower
+     * than they imply, and whatever else the way states, of other places, is a row's to hold as
+     * well — so a way no row takes inside where the types stop leaves each side no run
+     * ({@link SearchRegion#wholeRunOf}).
      */
     private List<WhatARelationLeavesUndivided.Leaves> leftByTheirDifference(
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
-            boolean heldWhole, InputReading read) {
+            boolean heldWhole, InputReading read, SearchRegion along) {
         if (!heldWhole || sides.size() != 2 || carriers.get(0) == null
                 || !carriers.get(0).equals(carriers.get(1))
                 || !apartByTheDeclarations(0, 1, sources, read)) {
             return List.of();
         }
         Carrier on = carriers.get(0);
-        SearchRegion declared = read.quantities().region();
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
@@ -1894,8 +1896,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return List.of();
             }
             NumericDomain.Bounds realizes = asARelationReadsIt(
-                    realized(value, source, declared, Way.UNTOUCHED), on);
-            NumericDomain.Bounds holds = asARelationReadsIt(declared.projectionOf(value)
+                    realized(value, source, along, Way.UNTOUCHED), on);
+            NumericDomain.Bounds holds = asARelationReadsIt(along.projectionOf(value)
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
                     ? within : NumericDomain.Bounds.OPEN, on);
             if (realizes == null) {
@@ -1911,7 +1913,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Leaves> out = new ArrayList<>();
         for (int at = 0; at < sides.size(); at++) {
             out.add(WhatARelationLeavesUndivided.leavesByTheirDifference(terms, at, constant,
-                    relation, held, UndividedByARelation::overlap));
+                    relation, held, UndividedByARelation::overlap, greatestOf(on)));
         }
         return out;
     }

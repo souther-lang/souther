@@ -2222,8 +2222,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * how far apart they are, and the earlier one keeps them nought apart or more. A tax of nought
      * has only a withholding of nought, and fails; every other has one below it and one at it, and
      * every withholding has a tax at it and one above. Held apart by anything but their difference
-     * the two are not read so. And a tax past what the withholding can reach is one no row
-     * arrives at, which is no value left either way.
+     * the two are not read so. And along {@code w >= t} with {@code w} held to ten, the way
+     * holds {@code t} to ten as well: a tax past it takes the other way, and the one at ten has
+     * no withholding above it. The earlier comparison draws its own lines on the tax beside
+     * that: at nought, below which no withholding is, and from eleven, where every one is below.
      */
     @Test
     void aComparisonUnderTheArmOfAnEarlierOneOfTheSameTwoIsReadOfTheirDifference() {
@@ -2238,8 +2240,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left(inputs, yen, twice, atThe("> w.value", yen, inputs, twice)));
         String small = yen + "\ndata Small = Int invariant value >= 0 && value <= 10";
         String kept = "if w.value < t.value then false else w.value > t.value";
-        assertEquals(NOT_SHOWN, left("t: Yen, w: Small", small, kept,
-                atThe("> t.value", small, "t: Yen, w: Small", kept)).get("t"));
+        assertEquals(Map.of(), left("t: Yen, w: Small", small, kept,
+                atThe("> t.value", small, "t: Yen, w: Small", kept)));
+        assertEquals(List.of("t/0 <= x <= 0", "t/0 < x < 10", "t/10 <= x < 11", "t/11 <= x"),
+                classesAt("t: Yen, w: Small", small, kept, "t"));
     }
 
     /**
@@ -2286,6 +2290,44 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             assertEquals(Map.of(), left(inputs, declared, body,
                     atThe("< 88000", declared, inputs, body)), premise);
         }
+    }
+
+    /**
+     * A way only values past the greatest {@code Int} take leaves no row to the comparison behind
+     * it, so the amounts there are not shown to reach each other: {@code a - b >= M} beside
+     * {@code b >= 1}, which the box and its differences prove, and {@code a - 2b >= M - 1} beside
+     * it, which nothing proves, are each held by an {@code a} past {@code M} alone. A way some
+     * pair of {@code Int}s holds leaves the amounts every value they take.
+     */
+    @Test
+    void aWayOnlyValuesPastTheirTypeTakeLeavesNoRowToReachAnything() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String inputs = "a: Int, b: Int, x: Yen, y: Yen";
+        for (String way : List.of("b >= 1 && a - b >= 9223372036854775807",
+                "b >= 1 && a - 2 * b >= 9223372036854775806")) {
+            String body = "if " + way + " then x.value >= y.value else false";
+            assertEquals(NOT_SHOWN, left(inputs, yen, body,
+                    atThe(">= y.value", yen, inputs, body)).get("x"), way);
+        }
+        String some = "if b >= 1 && a - 2 * b >= 9223372036854775805 then x.value >= y.value"
+                + " else false";
+        assertEquals(RELATES, left(inputs, yen, some, atThe(">= y.value", yen, inputs, some))
+                .get("x"));
+    }
+
+    /**
+     * Over decimals from nought, {@code a >= s + 5}: every {@code s} has an {@code a} at five
+     * above it and one below, the {@code a} needed running on without end on an order that has
+     * none, and an {@code a} below five holds it for no {@code s}.
+     */
+    @Test
+    void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
+        String amount = "data Amount = Decimal invariant value >= 0.0m";
+        String body = "a.value >= s.value + 5.0m";
+        assertEquals(Map.of("s", RELATES), left("a: Amount, s: Amount", amount, body,
+                atThe(">=", amount, "a: Amount, s: Amount", body)));
+        assertEquals(List.of("a/0 <= x < 5", "a/5 <= x"),
+                classesAt("a: Amount, s: Amount", amount, body, "a"));
     }
 
     /** The places some comparison at {@code at} of a model written out whole is not read about. */

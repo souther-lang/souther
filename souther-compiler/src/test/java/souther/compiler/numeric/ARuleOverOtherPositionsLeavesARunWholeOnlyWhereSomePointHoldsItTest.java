@@ -42,7 +42,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                 rules.add(ruleOverAAndB(random));
             }
             NumericDomain<String> domain = domainOf(rules);
-            NumericDomain.Bounds run = domain.wholeRunOf("c");
+            NumericDomain.Bounds run = domain.wholeRunOf("c", Map.of());
             boolean somePoint = somePointHolds(rules);
             if (!somePoint) {
                 leftNothing++;
@@ -80,30 +80,95 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         assertEquals(new ProjectionCertification.NotEveryRuleIsProven(),
                 domain.projectionCertification());
         assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(LOW)),
-                Endpoint.inclusive(Count.of(HIGH))), domain.wholeRunOf("c"));
-        assertNull(domain.wholeRunOf("a"), "a rule nothing proves leaves its own positions no run");
+                Endpoint.inclusive(Count.of(HIGH))), domain.wholeRunOf("c", Map.of()));
+        assertNull(domain.wholeRunOf("a", Map.of()),
+                "a rule nothing proves leaves its own positions no run");
+    }
+
+    private static final long GREATEST = Long.MAX_VALUE;
+
+    /** Where an {@code Int} stops. */
+    private static final NumericDomain.Bounds AN_INT = new NumericDomain.Bounds(
+            Endpoint.inclusive(Count.of(Long.MIN_VALUE)), Endpoint.inclusive(Count.of(GREATEST)));
+
+    /**
+     * A month and a day of one date held before another's — {@code d - e + 100m - 100n <= -1}, the
+     * parts nothing else bounds — is held by a point inside where the parts stop, a month of one
+     * and of two: the run of {@code c} beside it is shown, as it is with nothing said of where
+     * they stop.
+     */
+    @Test
+    void aRuleOverPartsOfDatesIsHeldInsideWhereThePartsStop() {
+        Map<String, Long> coefs = new LinkedHashMap<>();
+        coefs.put("d", 1L);
+        coefs.put("e", -1L);
+        coefs.put("m", 100L);
+        coefs.put("n", -100L);
+        NumericDomain<String> domain = beside(new Written(coefs, 1, Rel.LE));
+        NumericDomain.Bounds day = run(1, 31);
+        NumericDomain.Bounds month = run(1, 12);
+
+        assertEquals(run(LOW, HIGH), domain.wholeRunOf("c",
+                Map.of("d", day, "e", day, "m", month, "n", month)));
+        assertEquals(run(LOW, HIGH), domain.wholeRunOf("c", Map.of()));
     }
 
     /**
-     * A rule over two whole numbers nothing bounds, {@code a + 100b <= -1}, as a month and a day
-     * of a date stand beside another date's before it: at nought both fail it, and {@code a} runs
-     * down without end, so it is moved to where the rule holds and the point holds it.
+     * {@code a - 2b >= M - 1} beside {@code b >= 1}, the greatest {@code Int} at {@code M}, holds
+     * only an {@code a} past it: a point of the rules, and no row. Told where the two stop, the
+     * run of {@code c} beside them is not shown; told nothing, the rules' point stands for one.
+     * Held a step lower, at {@code M - 2}, {@code a} at {@code M} beside {@code b} at one holds it
+     * inside, and the run is shown.
      */
     @Test
-    void aRuleOverPositionsWithNoEndIsHeldAtAPointMovedPastItsBound() {
-        Map<String, Long> coefs = new LinkedHashMap<>();
-        coefs.put("a", 1L);
-        coefs.put("b", 100L);
-        Map<String, Granularity> whole = Map.of("a", Granularity.DISCRETE,
-                "b", Granularity.DISCRETE, "c", Granularity.DISCRETE);
+    void aRuleOnlyAValuePastWhereItsOrderStopsHoldsLeavesNoRun() {
+        Map<String, Long> weighed = new LinkedHashMap<>();
+        weighed.put("a", 1L);
+        weighed.put("b", -2L);
+        Written b = new Written(Map.of("b", 1L), -1, Rel.GE);
+        NumericDomain<String> past = beside(new Written(weighed, -(GREATEST - 1), Rel.GE), b);
+        NumericDomain<String> inside = beside(new Written(weighed, -(GREATEST - 2), Rel.GE), b);
+
+        assertNull(past.wholeRunOf("c", Map.of("a", AN_INT, "b", AN_INT)));
+        assertEquals(run(LOW, HIGH), past.wholeRunOf("c", Map.of()));
+        assertEquals(run(LOW, HIGH), inside.wholeRunOf("c", Map.of("a", AN_INT, "b", AN_INT)));
+    }
+
+    /**
+     * The same of a difference the box and its differences prove, {@code a - b >= M} beside
+     * {@code b >= 1}: proven, and still held only past where an {@code Int} stops.
+     */
+    @Test
+    void aProvenRuleOnlyAValuePastWhereItsOrderStopsHoldsLeavesNoRun() {
+        Map<String, Long> apart = new LinkedHashMap<>();
+        apart.put("a", 1L);
+        apart.put("b", -1L);
+        NumericDomain<String> domain = beside(new Written(apart, -GREATEST, Rel.GE),
+                new Written(Map.of("b", 1L), -1, Rel.GE));
+
+        assertNull(domain.wholeRunOf("c", Map.of("a", AN_INT, "b", AN_INT)));
+        assertEquals(run(LOW, HIGH), domain.wholeRunOf("c", Map.of()));
+    }
+
+    /** {@code rules} over whole numbers nothing bounds, beside {@code c} from nought to seven. */
+    private static NumericDomain<String> beside(Written... rules) {
+        Map<String, Granularity> whole = new LinkedHashMap<>();
+        for (String atom : List.of("a", "b", "c", "d", "e", "m", "n")) {
+            whole.put(atom, Granularity.DISCRETE);
+        }
+        List<Written> system = new ArrayList<>(List.of(new Written(Map.of("c", 1L), -LOW, Rel.GE),
+                new Written(Map.of("c", 1L), -HIGH, Rel.LE)));
+        system.addAll(List.of(rules));
         NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
-        for (Written each : List.of(new Written(Map.of("c", 1L), -LOW, Rel.GE),
-                new Written(Map.of("c", 1L), -HIGH, Rel.LE), new Written(coefs, 1, Rel.LE))) {
+        for (Written each : system) {
             domain = domain.assume(formOf(each), each.rel(), whole);
         }
+        return domain;
+    }
 
-        assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(LOW)),
-                Endpoint.inclusive(Count.of(HIGH))), domain.wholeRunOf("c"));
+    private static NumericDomain.Bounds run(long low, long high) {
+        return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(low)),
+                Endpoint.inclusive(Count.of(high)));
     }
 
     /**
@@ -139,7 +204,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
             }
         }
 
-        assertNull(domain.wholeRunOf("c"));
+        assertNull(domain.wholeRunOf("c", Map.of()));
     }
 
     /** {@code a·a + b·b + d·d + constant  rel  0}. */

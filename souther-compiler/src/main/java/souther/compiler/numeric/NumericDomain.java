@@ -1046,9 +1046,18 @@ public final class NumericDomain<A> {
      * an end that is not taken only where they are dense, so that some value lies as near it as any
      * other value asked of. An atom whose spacing nothing recorded is a value the arithmetic does
      * not count, and no run of it is shown.
+     *
+     * <p>A row is values the atoms' orders hold, and a point of the rules past where an order
+     * stops is no row: {@code a - b >= M} beside {@code b >= 1}, the greatest {@code Int} at
+     * {@code M}, holds only an {@code a} past it. So whether the rules leave any row is asked
+     * inside {@code stops}. The run answered is the rules' own and runs on past an order's end as
+     * before; a caller reads that end as the order it is counted on says.
+     *
+     * @param stops where the order each atom's values are counted on stops, by atom — an atom it
+     *              has no entry for is taken as the rules leave it
      */
-    public Bounds wholeRunOf(A atom) {
-        if (!leavesTheWholeOfItsRun(atom) || !endsAreWrittenExactly(atom)
+    public Bounds wholeRunOf(A atom, Map<A, Bounds> stops) {
+        if (!leavesTheWholeOfItsRun(atom, stops) || !endsAreWrittenExactly(atom)
                 || !(projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
                         Bounds run))) {
             return null;
@@ -1067,20 +1076,21 @@ public final class NumericDomain<A> {
      *
      * <p>Positions no chain of rules relates to the atom are another system written beside its
      * own, which bounds nothing of it but whether any value is left at all. So such a system is
-     * shown to hold a value, by the box and its differences where they prove each of its rules,
-     * and otherwise by a point of its box each of its rules holds at ({@link #aPointOfTheBoxHolds}).
-     * {@code 4h - 3s < 0} over two decimals running nought to 168 is no difference and is not
-     * proven, and leaves a whole number apart from both the whole of its run, since {@code h} at
-     * nought and {@code s} at 168 hold it.
+     * shown to hold a value inside where its atoms' orders stop: by the box and its differences
+     * where they prove each of its rules, those ends taken in, and otherwise by a point of its
+     * box inside those ends each of its rules holds at ({@link #aPointOfTheBoxHolds}). The atom's
+     * own system is proven so too. {@code 4h - 3s < 0} over two decimals running nought to 168 is
+     * no difference and is not proven, and leaves a whole number apart from both the whole of its
+     * run, since {@code h} at nought and {@code s} at 168 hold it.
      *
-     * <p>What each system is shown to be is the domain's alone, worked out where an atom first
-     * asks it and kept for every other atom, and asked no further than the first system that
-     * keeps the run from being shown.
+     * <p>What each system is shown to be is the domain's alone under one set of stops, worked out
+     * where an atom first asks it and kept for every other atom, and asked no further than the
+     * first system that keeps the run from being shown.
      */
-    private boolean leavesTheWholeOfItsRun(A atom) {
+    private boolean leavesTheWholeOfItsRun(A atom, Map<A, Bounds> stops) {
         Systems<A> had = systems;
-        if (had == null) {
-            had = systemsOf();
+        if (had == null || !had.stops().equals(stops)) {
+            had = systemsOf(stops);
             systems = had;
         }
         if (!had.anyShown()) {
@@ -1098,8 +1108,8 @@ public final class NumericDomain<A> {
         return true;
     }
 
-    /** What one system of the rules is shown to leave: its runs whole, some point, or neither
-     *  shown. */
+    /** What one system of the rules is shown to leave inside where its atoms' orders stop: its
+     *  runs whole, some point, or neither shown. */
     private enum Shown { PROVEN, A_POINT, NOTHING }
 
     /** What the system of {@code group} is shown to leave, worked out once. */
@@ -1109,10 +1119,46 @@ public final class NumericDomain<A> {
             List<AffineConstraint<A>> rules = systems.rulesOf().get(key);
             if (systems.spacedAlike().contains(key)
                     && rules.stream().allMatch(rule -> proven(rule, false))) {
-                return Shown.PROVEN;
+                return leavesAValueInside(atoms, systems.stops()) ? Shown.PROVEN : Shown.NOTHING;
             }
-            return aPointOfTheBoxHolds(atoms, rules) ? Shown.A_POINT : Shown.NOTHING;
+            return aPointOfTheBoxHolds(atoms, rules, systems.stops()) ? Shown.A_POINT
+                    : Shown.NOTHING;
         });
+    }
+
+    /**
+     * Whether the rules, proven by the box and its differences, leave a value inside where the
+     * orders of {@code atoms} stop: where every box lies inside its atom's order, the closure
+     * holding something already says so; otherwise the ends are taken in and asked again.
+     */
+    private boolean leavesAValueInside(List<A> atoms, Map<A, Bounds> stops) {
+        NumericDomain<A> inside = this;
+        for (A atom : atoms) {
+            Bounds stop = stops.get(atom);
+            Bounds box = boxOf(atom);
+            if (stop == null || (box != null && box.liesWithin(stop))) {
+                continue;
+            }
+            if (spacingOf(atom) == null) {
+                return false;
+            }
+            Map<A, Granularity> spaced = Map.of(atom, spacingOf(atom));
+            if (stop.min() != null && stop.min().at() instanceof Count least) {
+                inside = inside.assume(LinearForm.atomMinusConstant(atom, least.exactly()),
+                        stop.min().inclusive() ? Rel.GE : Rel.GT, spaced);
+            }
+            if (stop.max() != null && stop.max().at() instanceof Count most) {
+                inside = inside.assume(LinearForm.atomMinusConstant(atom, most.exactly()),
+                        stop.max().inclusive() ? Rel.LE : Rel.LT, spaced);
+            }
+        }
+        return !inside.isBottom();
+    }
+
+    /** Where the rules leave {@code atom}, or null where they leave it no run of numbers. */
+    private Bounds boxOf(A atom) {
+        return projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
+                Bounds within) ? within : null;
     }
 
     /**
@@ -1125,14 +1171,15 @@ public final class NumericDomain<A> {
      * @param atomsOf     the atoms of each group
      * @param rulesOf     the rules of each group
      * @param spacedAlike the groups whose atoms are spaced alike
+     * @param stops       where each atom's order stops, which every system is asked inside
      * @param shown       what each system asked of is shown to leave
      */
     private record Systems<A>(boolean anyShown, Map<A, A> groupOf, Map<A, List<A>> atomsOf,
                               Map<A, List<AffineConstraint<A>>> rulesOf, Set<A> spacedAlike,
-                              Map<A, Shown> shown) {
+                              Map<A, Bounds> stops, Map<A, Shown> shown) {
 
-        static <A> Systems<A> none() {
-            return new Systems<>(false, Map.of(), Map.of(), Map.of(), Set.of(),
+        static <A> Systems<A> none(Map<A, Bounds> stops) {
+            return new Systems<>(false, Map.of(), Map.of(), Map.of(), Set.of(), stops,
                     new ConcurrentHashMap<>());
         }
 
@@ -1141,12 +1188,13 @@ public final class NumericDomain<A> {
             atomsOf = Map.copyOf(atomsOf);
             rulesOf = Collections.unmodifiableMap(new LinkedHashMap<>(rulesOf));
             spacedAlike = Set.copyOf(spacedAlike);
+            stops = Map.copyOf(stops);
         }
     }
 
-    private Systems<A> systemsOf() {
+    private Systems<A> systemsOf(Map<A, Bounds> stops) {
         if (isBottom() || !closed().everyBoundWasComposed()) {
-            return Systems.none();
+            return Systems.none(stops);
         }
         Map<A, A> reaches = related();
         Map<A, List<AffineConstraint<A>>> byGroup = new LinkedHashMap<>();
@@ -1154,7 +1202,7 @@ public final class NumericDomain<A> {
             List<A> atoms = rule.form().atomsIn(order);
             if (atoms.isEmpty()) {
                 if (!proven(rule, false)) {
-                    return Systems.none();
+                    return Systems.none(stops);
                 }
                 continue;
             }
@@ -1178,31 +1226,46 @@ public final class NumericDomain<A> {
         atomsOf.forEach((group, each) -> atoms.put(group, List.copyOf(each)));
         Map<A, List<AffineConstraint<A>>> rules = new LinkedHashMap<>();
         byGroup.forEach((group, each) -> rules.put(group, List.copyOf(each)));
-        return new Systems<>(true, groups, atoms, rules, alike, new ConcurrentHashMap<>());
+        return new Systems<>(true, groups, atoms, rules, alike, stops, new ConcurrentHashMap<>());
     }
 
     /**
-     * Whether some point of the box over {@code atoms} holds each of {@code rules}: for one of their
-     * half-spaces, each atom it weighs at the end of its run that takes the sum lowest, and each
-     * other at the value of its run nearest nought. An atom whose run has no end that way is moved
-     * instead, once the rest stand, to a whole number past where the half-space holds. Tried for
-     * each half-space in turn. Every value the point stands at is one its atom takes there: an end
-     * the run holds, a whole number where the values are whole.
+     * Whether some point of the box over {@code atoms}, inside where each atom's order stops,
+     * holds each of {@code rules}: for one of their half-spaces, each atom it weighs at the value
+     * of its run nearest the end that takes the sum lowest, and each other at the value of its run
+     * nearest nought ({@link Bounds#aValueNearestItsEnd}, {@link Bounds#aValueNearestNought}). An
+     * atom whose run has no end that way is moved instead, once the rest stand, to a whole number
+     * past where the half-space holds. Tried for each half-space in turn. Every value the point
+     * stands at is one its atom takes inside its run.
      */
-    private boolean aPointOfTheBoxHolds(List<A> atoms, List<AffineConstraint<A>> rules) {
+    private boolean aPointOfTheBoxHolds(List<A> atoms, List<AffineConstraint<A>> rules,
+                                        Map<A, Bounds> stops) {
+        Map<A, Bounds> runs = new LinkedHashMap<>();
+        for (A atom : atoms) {
+            Bounds box = boxOf(atom);
+            Bounds stop = stops.get(atom);
+            Bounds run = box == null ? null : stop == null ? box : box.meet(stop);
+            if (run == null || !run.holdsAValue() || spacingOf(atom) == null) {
+                return false;
+            }
+            runs.put(atom, run);
+        }
         for (AffineConstraint<A> rule : rules) {
             for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
                 Map<A, ExactRatio> point = new LinkedHashMap<>();
                 A moved = null;
                 for (A atom : atoms) {
+                    Bounds run = runs.get(atom);
                     ExactRatio weight = half.form().coefs().get(atom);
                     boolean weighed = weight != null && !weight.isZero();
-                    ExactRatio at = weighed ? endTaken(atom, weight.signum() < 0) : null;
+                    boolean greatest = weighed && weight.signum() < 0;
+                    ExactRatio at = weighed ? run.aValueNearestItsEnd(greatest, spacingOf(atom))
+                            : null;
                     if (at == null && weighed && moved == null
-                            && runsOnWithoutEnd(atom, weight.signum() < 0)) {
+                            && (greatest ? run.max() == null : run.min() == null)) {
                         moved = atom;
                     }
-                    at = at == null ? nearestNoughtTaken(atom) : at;
+                    at = at == null ? run.aValueNearestNought(spacingOf(atom)) : at;
                     if (at == null) {
                         break;
                     }
@@ -1213,7 +1276,7 @@ public final class NumericDomain<A> {
                 }
                 if (moved != null && !holdsAt(half, point)) {
                     ExactRatio to = pastWhereItHolds(half, point, moved);
-                    if (to == null) {
+                    if (to == null || !runs.get(moved).admits(to)) {
                         continue;
                     }
                     point.put(moved, to);
@@ -1224,13 +1287,6 @@ public final class NumericDomain<A> {
             }
         }
         return false;
-    }
-
-    /** Whether {@code atom}'s run has no end above, for {@code greatest}, or below. */
-    private boolean runsOnWithoutEnd(A atom, boolean greatest) {
-        Bounds run = projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
-                Bounds within) ? within : null;
-        return run != null && (greatest ? run.max() == null : run.min() == null);
     }
 
     /**
@@ -1256,45 +1312,6 @@ public final class NumericDomain<A> {
         return weight.signum() > 0
                 ? at.floor().map(whole -> ExactRatio.of(whole.subtract(BigInteger.ONE))).orNull()
                 : at.ceiling().map(whole -> ExactRatio.of(whole.add(BigInteger.ONE))).orNull();
-    }
-
-    /** The value at the end of {@code atom}'s run, its greatest or its least, where the atom takes
-     *  one there — or null where the run has no such end or the atom takes no value at it. */
-    private ExactRatio endTaken(A atom, boolean greatest) {
-        Bounds run = projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
-                Bounds within) ? within : null;
-        Endpoint end = run == null ? null : greatest ? run.max() : run.min();
-        if (end == null || !(end.at() instanceof Count)) {
-            return null;
-        }
-        return switch (spacingOf(atom)) {
-            case null -> null;
-            case DENSE -> end.inclusive() ? ((Count) end.at()).exactly() : null;
-            case DISCRETE -> wholeAt(end, !greatest) instanceof Endpoint whole
-                    && whole.at() instanceof Count count ? count.exactly() : null;
-        };
-    }
-
-    /** The value of {@code atom}'s run nearest nought that the atom takes, or null where none is
-     *  shown. */
-    private ExactRatio nearestNoughtTaken(A atom) {
-        Bounds run = projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
-                Bounds within) ? within : null;
-        if (run == null || spacingOf(atom) == null) {
-            return null;
-        }
-        Endpoint least = run.min();
-        Endpoint greatest = run.max();
-        if (least != null && least.at() instanceof Count low && (low.exactly().signum() > 0
-                || (low.exactly().signum() == 0 && !least.inclusive()))) {
-            return endTaken(atom, false);
-        }
-        if (greatest != null && greatest.at() instanceof Count high && (high.exactly().signum() < 0
-                || (high.exactly().signum() == 0 && !greatest.inclusive()))) {
-            return endTaken(atom, true);
-        }
-        return (least == null || least.at() instanceof Count)
-                && (greatest == null || greatest.at() instanceof Count) ? ExactRatio.ZERO : null;
     }
 
     /** Whether {@code rule} holds with each of its atoms at its value in {@code point}. */
@@ -1516,6 +1533,67 @@ public final class NumericDomain<A> {
                 return true;
             }
             return everyValueStands(rel.denied(), against) ? false : null;
+        }
+
+        /**
+         * A value of {@code spacing} this holds nearest nought — or null where none is shown:
+         * nought where this holds it, and otherwise the value nearest the end on nought's side
+         * ({@link #aValueNearestItsEnd}).
+         */
+        public ExactRatio aValueNearestNought(Granularity spacing) {
+            if (spacing == null) {
+                return null;
+            }
+            if (admits(ExactRatio.ZERO)) {
+                return ExactRatio.ZERO;
+            }
+            ExactRatio low = numberAt(min);
+            return aValueNearestItsEnd(low == null || low.signum() < 0, spacing);
+        }
+
+        /**
+         * The value of {@code spacing} this holds nearest its greatest end, for {@code greatest},
+         * or its least — or null where that end is absent or no value is shown near it.
+         *
+         * <p>An end it holds is that value, where the spacing takes it. An end it leaves out is
+         * passed by one step inward: the whole number past it, or a decimal one past it — or, where
+         * the other end is nearer than one, the decimal halfway to that end. A value no decimal
+         * writes is none a dense value takes, so an end at a third gives none here.
+         */
+        public ExactRatio aValueNearestItsEnd(boolean greatest, Granularity spacing) {
+            Endpoint end = greatest ? max : min;
+            ExactRatio at = numberAt(end);
+            if (spacing == null || at == null) {
+                return null;
+            }
+            int inward = greatest ? -1 : 1;
+            ExactRatio taken = switch (spacing) {
+                case DISCRETE -> (greatest ? at.floor() : at.ceiling())
+                        .map(whole -> ExactRatio.of(whole)).orNull();
+                case DENSE -> {
+                    if (end.inclusive()) {
+                        yield at;
+                    }
+                    ExactRatio other = numberAt(greatest ? min : max);
+                    ExactRatio width = other == null ? null : other.minus(at).orNull();
+                    ExactRatio step = width == null || width.abs().compareTo(ExactRatio.ONE) > 0
+                            ? ExactRatio.ONE
+                            : width.abs().dividedBy(ExactRatio.of(2)).orNull();
+                    ExactRatio move = step == null ? null
+                            : step.times(ExactRatio.of(inward)).orNull();
+                    yield move == null ? null : at.plus(move).orNull();
+                }
+            };
+            if (taken != null && spacing == Granularity.DISCRETE && !admits(taken)) {
+                taken = taken.plus(ExactRatio.of(inward)).orNull();
+            }
+            return taken != null && admits(taken)
+                    && (spacing != Granularity.DENSE || taken.fitsWrittenDecimal()) ? taken : null;
+        }
+
+        /** The number an end stands at, or null where there is no end or it is no number. */
+        private static ExactRatio numberAt(Endpoint end) {
+            return end != null && end.at() instanceof Count count ? count.exactly() : null;
         }
 
         private boolean everyValueStands(Rel rel, Count against) {
