@@ -782,8 +782,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TakenConstraint.Affine asStated = remainder == null ? askedAsAStatement() : null;
         boolean offItsLine = asStated != null && !written.isEmpty()
                 && written.stream().allMatch(each -> keepsOffTheLineOf(each, asStated));
-        List<OnAWay> stated = offItsLine ? List.of() : written;
-        SearchRegion along = offItsLine ? read.quantities().region() : region;
+        List<OnAWay> stated = offItsLine ? List.of() : withoutWhatAFreeNumberMeets(written, read);
+        // Without a statement taken away, the region is the one its rows were found in; with one,
+        // the one the rest of them leave, where the rest can be taken in again.
+        SearchRegion rest = stated.size() == written.size() ? null : narrowedBy(stated, read);
+        SearchRegion along = offItsLine ? read.quantities().region()
+                : rest != null ? rest : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
         List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
@@ -1066,6 +1070,84 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? each.leavingAlone(OnAWay.PartsLeftAlone.MONTHS_AND_DAYS) : each);
         }
         return new LeftToTheCalendar(out, years);
+    }
+
+    /**
+     * {@code conditions} without each statement holding a form unequal to nought where a number
+     * of the form is free to meet it ({@link #freeToMeet}).
+     *
+     * <p>Whatever the rest of the form comes to, it takes one value of that number away and leaves
+     * it another, so the statement takes no row away from anything else: a fixed wage held unequal
+     * to the one before it, the one before it read nowhere else, leaves the wage every value. Taken
+     * away one at a time, each against the statements still left: a number the next one is free
+     * in is chosen after every number in the statements left, which do not read it.
+     */
+    private List<OnAWay> withoutWhatAFreeNumberMeets(List<OnAWay> conditions, InputReading read) {
+        List<OnAWay> out = new ArrayList<>(conditions);
+        for (OnAWay each : conditions) {
+            TakenConstraint.Affine affine = each.affine();
+            if (affine != null && affine.rel() == Rel.NE && affine.form().coefs().keySet()
+                    .stream().anyMatch(term -> freeToMeet(term, each, out, read))) {
+                out.remove(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether {@code term} is a number no side and no statement of {@code conditions} but
+     * {@code statement} reads, which no rule of a value around it names, and which is shown to take
+     * two values or more.
+     */
+    private boolean freeToMeet(NumericTerm term, OnAWay statement, List<OnAWay> conditions,
+                               InputReading read) {
+        if (!(term instanceof NumericTerm.FromOnePosition number)) {
+            return false;
+        }
+        for (Side side : sides) {
+            for (FilingCoordinate place : placesAsked(side)) {
+                if (number.placesReadOff().stream().anyMatch(at -> overlap(place.path(), at))) {
+                    return false;
+                }
+            }
+        }
+        for (OnAWay other : conditions) {
+            if (!other.equals(statement) && touches(number, other.positions())) {
+                return false;
+            }
+        }
+        Source source = sourceOf(number, read);
+        return source != null && !source.named() && takesTwoValues(
+                realized(number, source, read.quantities().region(), Way.UNTOUCHED));
+    }
+
+    /**
+     * What the declarations leave, narrowed by {@code conditions} as a way's region is — or null
+     * where one of them narrowed it some way a statement does not carry: a case of a value taken
+     * out of its order, or a container held to an element.
+     *
+     * <p>A way's region is the declarations' with each relation on it taken in, the cases it
+     * leaves out and the containers it holds to an element ({@link WayToTheBorder#narrowing}).
+     * What else a way states — a statement of a value the body works out, of how many elements
+     * meet something, of every element — narrows nothing there, and nothing here.
+     */
+    private static SearchRegion narrowedBy(List<OnAWay> conditions, InputReading read) {
+        List<TakenConstraint> relations = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            if (each.relation() != null) {
+                relations.add(each.relation());
+            } else if (each.whatStands() || each.elementsOf() != null) {
+                return null;
+            }
+        }
+        return TakenConstraint.narrowedBy(relations, read.quantities().region());
+    }
+
+    /** Whether {@code run} holds two values or more: some value, and its ends not one value. */
+    private static boolean takesTwoValues(NumericDomain.Bounds run) {
+        return run != null && run.holdsAValue() && run.holdsOneWholeNumber() == null
+                && (run.min() == null || run.max() == null
+                        || !run.min().at().equals(run.max().at()));
     }
 
     /** The relation as a statement is held, the sides weighed and added to the constant and held

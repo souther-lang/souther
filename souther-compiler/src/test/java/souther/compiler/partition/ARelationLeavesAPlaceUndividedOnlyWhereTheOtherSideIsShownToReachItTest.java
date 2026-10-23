@@ -282,6 +282,61 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         }
     }
 
+    /** What {@code a.value + b.value >= 30} leaves {@code a} and {@code b} past a way where
+     *  {@code kept} does not hold, the behavior taking {@code inputs}. */
+    private static Map<String, String> pastAWayOffAValue(String inputs, String declarations,
+                                                         String kept) {
+        String body = "if " + kept + " then false else a.value + b.value >= 30";
+        String head = "let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ";
+        Map<String, String> out = new LinkedHashMap<>(leftAt(inputs, declarations, body,
+                head.length() + body.indexOf(">= 30") + 1));
+        for (String place : List.of("a", "b")) {
+            List<String> classes = classesAt(inputs, declarations, body, place);
+            if (classes.equals(List.of(place + "/0 <= x < 30", place + "/30 <= x"))) {
+                out.putIfAbsent(place, "divided at 30");
+            }
+        }
+        return out;
+    }
+
+    private static final String DIVIDED = "divided at 30";
+
+    /**
+     * A way keeping a sum off a number nothing else reads leaves the sum every value: whatever the
+     * sum is, the number holds some other value. So the comparison past it divides each side where
+     * it does without the way — a fixed wage held unequal to the one before it, and an amount beside
+     * the wage. A number of three terms leaves the rows' region no run it can show of a side, so the
+     * region is the one the rest of the way leaves.
+     */
+    @Test
+    void aWayKeepingASumOffAFreeNumberLeavesTheSidesAsTheyAre() {
+        String yen = "data Yen = Int invariant value >= 0";
+        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED),
+                pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen, "a.value == p.value"));
+        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED),
+                pastAWayOffAValue("p: Yen, a: Yen, b: Yen, c: Yen", yen,
+                        "a.value + c.value == p.value"));
+    }
+
+    /**
+     * And not where the number is not free: one value of it, a side of the relation, a number a
+     * rule of the record around it names, or one another statement of the way reads. Then the way
+     * may take values of the side away, and nothing is shown of either side.
+     */
+    @Test
+    void aWayKeepingASideOffANumberThatIsNotFreeKeepsTheSidesBack() {
+        String yen = "data Yen = Int invariant value >= 0";
+        Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN);
+        assertEquals(notShown, pastAWayOffAValue("p: Seven, a: Yen, b: Yen",
+                yen + "\ndata Seven = Int invariant value == 7", "a.value == p.value"));
+        assertEquals(notShown, pastAWayOffAValue("a: Yen, b: Yen", yen, "a.value == b.value"));
+        assertEquals(notShown, pastAWayOffAValue("r: R, a: Yen, b: Yen",
+                yen + "\ndata R = { p: Yen, q: Yen } invariant p.value <= q.value",
+                "a.value == r.p.value"));
+        assertEquals(notShown, pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
+                "a.value == p.value || p.value > 5"));
+    }
+
     /**
      * Two amounts held equal take the same values, however much of the rules beside one of them
      * was read: a rule of the record over another of its fields leaves the amount's ends not shown
