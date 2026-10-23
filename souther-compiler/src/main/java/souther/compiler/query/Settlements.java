@@ -532,6 +532,8 @@ public record Settlements(List<ObligationIdentity> requested,
             // point, and the module's account holds it ({@link BorderAccount}) — a behavior
             // resolving its own points beside that would be one search made twice, free to come to
             // two answers about one row.
+            // Every reading below is of this behavior's measurement, each read where it is.
+            MeasuredInput.Lines drawn = subject.lines();
             List<BorderObligationPointAssessment> points = db.ask(
                     new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior),
                             Adequacy.OFFERED_ROWS_READ_AS))
@@ -548,7 +550,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 point.met().forEach((where, at) -> {
                     if (point.seatOf(where) instanceof ReadingSeat.At(var asked)) {
                         reads.computeIfAbsent(item, _ -> new ArrayList<>())
-                                .add(AtAPoint.of(subject.at(at.border()),
+                                .add(AtAPoint.of(drawn.at(at.border()),
                                         at.owedAt(asked).criterion()));
                     }
                 });
@@ -560,7 +562,7 @@ public record Settlements(List<ObligationIdentity> requested,
                     if (at.at(point.point()) instanceof ItemAssessment.Owed owed) {
                         reads.computeIfAbsent(new ObligationIdentity.OfALine(point),
                                 _ -> new ArrayList<>())
-                                .add(AtAPoint.of(subject.at(at.border()), owed.criterion()));
+                                .add(AtAPoint.of(drawn.at(at.border()), owed.criterion()));
                     }
                 }
             });
@@ -620,7 +622,7 @@ public record Settlements(List<ObligationIdentity> requested,
                                 continue;
                             }
                             besides.computeIfAbsent(item, _ -> new ArrayList<>())
-                                    .add(new ALineBesideOne(subject.at(one.reading()),
+                                    .add(new ALineBesideOne(drawn.at(one.reading()),
                                             DrawnBoundary.of(one.reading())
                                                     .orFail("a line the rows allow beside one"
                                                             + " whose values were not worked out")

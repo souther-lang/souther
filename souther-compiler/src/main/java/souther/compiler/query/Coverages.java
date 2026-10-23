@@ -52,7 +52,6 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
-import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.RealizationTarget;
 import souther.compiler.partition.CompositionBudget;
@@ -975,10 +974,9 @@ final class Coverages {
         // still apart. What the lines beside it are is asked of every reading of it at once
         // ({@link #besideEachLine}), and the readings are brought together by {@link #merged}.
         List<ReadingOfALine> out = new ArrayList<>();
-        List<MeasuredInput.BorderReading> read = subject.atEach(lines);
-        for (int i = 0; i < lines.size(); i++) {
-            Border each = lines.get(i);
-            out.add(assessed(each, reading(read.get(i), projection, elsewhere(lines, each),
+        MeasuredInput.Lines read = subject.lines();
+        for (Border each : lines) {
+            out.add(assessed(each, reading(read.at(each), projection, elsewhere(lines, each),
                             wayTo(each, reaching), subject.quantities().region()),
                     observed, put));
         }
@@ -1033,11 +1031,10 @@ final class Coverages {
                                  Probe probe, ReachingCuts reaching) {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
-        List<MeasuredInput.BorderReading> read =
-                input.atEach(measured.each().stream().map(BorderAssessment::border).toList());
-        for (int i = 0; i < measured.each().size(); i++) {
-            BorderAssessment border = measured.each().get(i);
-            OneSearchOfABorder search = searching(border.border(), read.get(i), input, probe,
+        MeasuredInput.Lines lines = input.lines();
+        for (BorderAssessment border : measured.each()) {
+            MeasuredInput.BorderReading read = lines.at(border.border());
+            OneSearchOfABorder search = searching(border.border(), read, input, probe,
                     realizer, wayTo(border.border(), reaching));
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
@@ -1057,7 +1054,7 @@ final class Coverages {
             // readings are put together: the row that rules a line out was composed along this
             // reading's way and is read back at this reading's positions.
             ARowTellingTheLinesApart toldApart =
-                    settled(border.border(), tellingApart(border, search), read.get(i));
+                    settled(border.border(), tellingApart(border, search), read);
             out.add(new BorderAssessment(border.border(), items,
                     shownArriving(border.beside(), toldApart), toldApart,
                     border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
@@ -2471,10 +2468,9 @@ final class Coverages {
         // line come to is one answer, and it is put together where the last thing that is a
         // reading's own has been asked ({@link #merged}).
         List<ReadingOfALine> out = new ArrayList<>();
-        List<MeasuredInput.BorderReading> read = subject.atEach(partitioning.between());
-        for (int i = 0; i < partitioning.between().size(); i++) {
-            Border each = partitioning.between().get(i);
-            out.add(assessed(each, reading(read.get(i),
+        MeasuredInput.Lines read = subject.lines();
+        for (Border each : partitioning.between()) {
+            out.add(assessed(each, reading(read.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                             elsewhere(partitioning.between(), each), wayTo(each, reaching),
                             subject.quantities().region()),

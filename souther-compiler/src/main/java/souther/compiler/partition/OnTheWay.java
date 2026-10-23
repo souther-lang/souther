@@ -11,13 +11,11 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * One condition on the way to a comparison, and what became of it.
@@ -510,15 +508,8 @@ public sealed interface OnTheWay {
          * declaration relates one parameter to another, so the places it names leave theirs alone.
          */
         public boolean namesNoneOf(Set<String> parameters) {
-            return parametersNamed().map(named -> Collections.disjoint(named, parameters))
-                    .orElse(false);
-        }
-
-        /** The parameters the condition names a position of the input under, where it is about
-         *  what a dependency answered — and empty where it is not, and may name any. */
-        public Optional<Set<String>> parametersNamed() {
-            return besideAnAnswer.map(named -> named.stream().map(TermPath::head)
-                    .collect(Collectors.toUnmodifiableSet()));
+            return besideAnAnswer.isPresent() && besideAnAnswer.get().stream()
+                    .noneMatch(at -> parameters.contains(at.head()));
         }
 
         /** Whether the condition is about what a dependency answered and names no position of the

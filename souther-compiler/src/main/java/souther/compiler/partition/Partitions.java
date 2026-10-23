@@ -371,41 +371,60 @@ public final class Partitions {
          * is one line, whatever a level was spelled as or what order a run's ends were listed in.
          */
         public Border held(Border asked) {
-            return heldEach(List.of(asked)).getFirst();
+            for (Border each : between) {
+                if (each.sameReadingAs(asked)) {
+                    return each;
+                }
+            }
+            for (List<Border> lines : along.values()) {
+                for (Border each : lines) {
+                    if (each.sameReadingAs(asked)) {
+                        return each;
+                    }
+                }
+            }
+            return null;
         }
 
         /**
-         * This reading's own line where it read each of {@code asked}, in that order, each null
-         * where it read none ({@link #held}).
+         * This reading's lines filed for a caller that asks {@link #held} of many of them: asked one
+         * at a time, every line drawn is met for each line asked.
          *
-         * <p>For a caller reading every line it holds. Met one at a time against every line drawn,
-         * reading all of them walks the lines once per line; here the lines are filed once by where
-         * each was drawn and what drew it — two of what {@link Border#sameReadingAs} asks to be one
-         * — and a line is looked for among those filed with it, in the order they were drawn, so
-         * the line found is the first a walk of all of them meets.
+         * <p>Filed once, by where each line was drawn and what drew it — two of what
+         * {@link Border#sameReadingAs} asks to be one — and a line is looked for among those filed
+         * with it, in the order they were drawn, so the line found is the one {@link #held} finds.
+         * Made for the call and not kept here: this value is held in answers.
          */
-        public List<Border> heldEach(List<Border> asked) {
-            Map<DrawnAt, List<Border>> drawn = new HashMap<>();
-            for (Border each : between) {
+        public HeldLines lines() {
+            return new HeldLines(this);
+        }
+    }
+
+    /** The lines of one reading, filed by where each was drawn and what drew it
+     *  ({@link Partitioning#lines}). */
+    public static final class HeldLines {
+
+        private final Map<DrawnAt, List<Border>> drawn = new HashMap<>();
+
+        private HeldLines(Partitioning reading) {
+            for (Border each : reading.between()) {
                 drawn.computeIfAbsent(DrawnAt.of(each), _ -> new ArrayList<>()).add(each);
             }
-            for (List<Border> lines : along.values()) {
+            for (List<Border> lines : reading.along().values()) {
                 for (Border each : lines) {
                     drawn.computeIfAbsent(DrawnAt.of(each), _ -> new ArrayList<>()).add(each);
                 }
             }
-            List<Border> out = new ArrayList<>(asked.size());
-            for (Border one : asked) {
-                Border found = null;
-                for (Border each : drawn.getOrDefault(DrawnAt.of(one), List.of())) {
-                    if (each.sameReadingAs(one)) {
-                        found = each;
-                        break;
-                    }
+        }
+
+        /** The reading's own line where it read {@code asked}, or null where it read none. */
+        public Border held(Border asked) {
+            for (Border each : drawn.getOrDefault(DrawnAt.of(asked), List.of())) {
+                if (each.sameReadingAs(asked)) {
+                    return each;
                 }
-                out.add(found);
             }
-            return out;
+            return null;
         }
 
         /** Where a line was drawn and what drew it. */

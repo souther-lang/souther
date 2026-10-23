@@ -394,25 +394,33 @@ public final class MeasuredInput {
      * of it — and a line this measurement never drew is not one it can read a row at.
      */
     public BorderReading at(Border asked) {
-        return atEach(List.of(asked)).getFirst();
+        return readingOf(asked, divided.held(asked));
     }
 
     /**
-     * This measurement's readings of the lines it read where each of {@code asked} is, in that
-     * order ({@link #at}). For a caller reading every line it holds, which asking one at a time
-     * would make a walk of the lines once per line ({@link Partitions.Partitioning#heldEach}).
+     * This measurement's lines for a caller that reads many of them ({@link #at} of each): asked
+     * one at a time, every line drawn is met for each line asked
+     * ({@link Partitions.Partitioning#lines}).
      */
-    public List<BorderReading> atEach(List<Border> asked) {
-        List<Border> held = divided.heldEach(asked);
-        List<BorderReading> out = new ArrayList<>(asked.size());
-        for (int i = 0; i < asked.size(); i++) {
-            if (held.get(i) == null) {
-                throw new IllegalArgumentException("the measurement of " + behavior
-                        + " read no line where this one is: " + asked.get(i).cut());
-            }
-            out.add(new BorderReading(this, held.get(i)));
+    public Lines lines() {
+        Partitions.HeldLines held = divided.lines();
+        return asked -> readingOf(asked, held.held(asked));
+    }
+
+    /** The lines of one measurement, each read where it is ({@link #lines}). */
+    @FunctionalInterface
+    public interface Lines {
+
+        /** This measurement's reading of the line it read where {@code asked} is ({@link #at}). */
+        BorderReading at(Border asked);
+    }
+
+    private BorderReading readingOf(Border asked, Border held) {
+        if (held == null) {
+            throw new IllegalArgumentException("the measurement of " + behavior
+                    + " read no line where this one is: " + asked.cut());
         }
-        return out;
+        return new BorderReading(this, held);
     }
 
     /**
