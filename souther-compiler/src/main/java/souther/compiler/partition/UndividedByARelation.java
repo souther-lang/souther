@@ -986,11 +986,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static boolean bearsOn(Set<TermPath> positions, Set<TermPath> bearing,
                                    InputReading read) {
         for (TermPath each : positions) {
+            Set<Object> tied = null;
             for (TermPath that : bearing) {
-                if (overlap(each, that) || (each.head().equals(that.head())
-                        && !Collections.disjoint(tiedByTheDeclarations(each, read),
-                                tiedByTheDeclarations(that, read)))) {
+                if (overlap(each, that)) {
                     return true;
+                }
+                if (each.head().equals(that.head())) {
+                    if (tied == null) {
+                        tied = tiedByTheDeclarations(each, read);
+                    }
+                    if (!Collections.disjoint(tied, tiedByTheDeclarations(that, read))) {
+                        return true;
+                    }
                 }
             }
         }

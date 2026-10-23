@@ -153,8 +153,13 @@ final class FormReach<A> {
     }
 
     /**
-     * The same for the rest of {@code asking}'s own form, read while {@code asking} is being reduced
-     * — with {@code asking} itself left out of the rules.
+     * The least the rest of {@code asking}'s own form comes to, read while {@code asking} is being
+     * reduced — with {@code asking} itself left out of the rules — or null where nothing bounds it
+     * below.
+     *
+     * <p>The least and nothing more, because a rule is reduced against the least its rest comes to
+     * and nothing else ({@link AffineReduction}). The highest is a second walk over every premise,
+     * and this is asked of every position of every rule in every round of a closure.
      *
      * <p>Not a soundness measure. Every route here derives a consequence of the rules, and a
      * consequence is a sound premise however it was reached, so a rule bounding the rest of itself
@@ -169,8 +174,10 @@ final class FormReach<A> {
      * the differences afresh for every rule, which is a cost for a distinction nothing has asked
      * for.
      */
-    Reach ofTheRestOf(AffineConstraint<A> asking, Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return between(inOrder(coefs), constant, asking);
+    ExactCut leastOfTheRestOf(AffineConstraint<A> asking, Map<A, ExactRatio> coefs,
+                              ExactRatio constant) {
+        Map<A, ExactRatio> ordered = inOrder(coefs);
+        return least(ordered, constant, asking, namingAnyOf(ordered));
     }
 
     /**
@@ -193,14 +200,19 @@ final class FormReach<A> {
         // The form and its negation name the same positions, so which premises name one of them is
         // asked once for the two.
         BitSet naming = namingAnyOf(coefs);
-        ExactCut most = highest(coefs, constant, without, naming);
-        // The least a form comes to is the highest its negation comes to, on the other side of
-        // nought. Asked that way rather than derived a second time, so the two ends are one reading
-        // and cannot come apart.
+        return new Reach(least(coefs, constant, without, naming),
+                highest(coefs, constant, without, naming));
+    }
+
+    /**
+     * The least the form comes to: the highest its negation comes to, on the other side of nought.
+     * Asked that way rather than derived a second time, so the two ends are one reading and cannot
+     * come apart.
+     */
+    private ExactCut least(Map<A, ExactRatio> coefs, ExactRatio constant,
+                           AffineConstraint<A> without, BitSet naming) {
         ExactCut flipped = highest(negated(coefs), constant.negated(), without, naming);
-        ExactCut least = flipped == null ? null
-                : new ExactCut(flipped.at().negated(), flipped.inclusive());
-        return new Reach(least, most);
+        return flipped == null ? null : new ExactCut(flipped.at().negated(), flipped.inclusive());
     }
 
     private static <A> Map<A, ExactRatio> negated(Map<A, ExactRatio> coefs) {
