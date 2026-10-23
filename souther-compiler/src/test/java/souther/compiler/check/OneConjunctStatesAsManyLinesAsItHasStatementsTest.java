@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.TestDay;
 import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
@@ -398,6 +399,7 @@ class OneConjunctStatesAsManyLinesAsItHasStatementsTest {
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.forms", name));
         return DeclaredBorders.of(named, Shapes.publishedDeclarations(compilation.db()),
                 Shapes.declarationCitations(compilation.db()),
-                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy));
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy,
+                        TestDay.TODAY));
     }
 }

@@ -159,9 +159,10 @@ final class OrderedClasses {
         // written into are not two spellings of one thing. Out of what the declarations hold the
         // number to, which is a set on the order it is answered on: the strings a position is held
         // to say nothing of which lengths to try until they are read through the term, and put to
-        // the lengths as they are they admit none.
+        // the lengths as they are they admit none. Near where the number is usually near, since a
+        // value singled out is no reason for the rest to stand beside it.
         Place other = carrier.somethingOtherThan(PlacesApart.of(values), within, held.named(),
-                perWitness.get());
+                perWitness.get(), UsualPlaces.of(orders.term(), carrier, ruleReading.today()));
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
         classes.add(classAt(orders.term().atOnePosition() + "/" + label, label,

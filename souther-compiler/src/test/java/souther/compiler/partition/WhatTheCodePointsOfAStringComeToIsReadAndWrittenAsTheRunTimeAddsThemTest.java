@@ -5,6 +5,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.NewtypeInners;
@@ -52,7 +53,8 @@ class WhatTheCodePointsOfAStringComeToIsReadAndWrittenAsTheRunTimeAddsThemTest {
     private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
             AsACompilationAllows.admittedValues(), AsACompilationAllows.whatARuleLeaves());
-    private static final RuleReadingContext READING = RuleReadingContext.unshared(RULES, POLICY);
+    private static final RuleReadingContext READING =
+            RuleReadingContext.unshared(RULES, POLICY, TestDay.TODAY);
     private static final NewtypeInners INNERS = ScopedDeclarations.wrapsOf(SYMBOLS);
     private static final TermPath AT = TermPath.of("t");
 

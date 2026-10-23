@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ARuleNoReadingTakesIn;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -527,7 +528,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     private static RuleReadingContext pastTheFigures() {
         Compilation compilation = Compilation.ofSource(PAST_THE_FIGURES, "Main");
         return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
     }
 
     private static Type declared(String name) {
@@ -571,12 +572,14 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     @Test
     void anEditToTheElementMovesTheEnd() {
         Compilation compilation = Compilation.ofDocuments(
-                Map.of("s", SERVICES, "p", PICKING), Set.of(), ModulePath.EMPTY);
+                Map.of("s", SERVICES, "p", PICKING), Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 lineOf(compilation, "app.p", "3").items()
                         .get(new DomainPoint.BesideTheLine(Towards.ABOVE)));
 
-        compilation.update(Map.of("s", SERVICES_AND_ONE_MORE, "p", PICKING), Set.of());
+        compilation.update(Map.of("s", SERVICES_AND_ONE_MORE, "p", PICKING), Set.of(),
+                TestDay.DATE);
 
         assertTrue(lineOf(compilation, "app.p", "3").items()
                 .get(new DomainPoint.BesideTheLine(Towards.ABOVE)) instanceof ItemAssessment.Owed);

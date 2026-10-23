@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -49,7 +50,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     private final PathEngine engine = new PathEngine(
             RuleReadingContext.unshared(
                     RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
-                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
             Terms.Of.THE_DISCHARGE_TREE);
 
     @Test

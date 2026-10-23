@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
@@ -341,7 +342,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         FieldDomains domains = FieldDomains.of(named(symbols, "Held"),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                        ReadAs.THE_COMPILATION_DOES));
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         ConstraintState<String> handedOver = domains
                 .constraintsOver(claim -> "at:" + claim, other -> "other:" + other,
                         CanonicalOrder.asTheyAreSpelled())

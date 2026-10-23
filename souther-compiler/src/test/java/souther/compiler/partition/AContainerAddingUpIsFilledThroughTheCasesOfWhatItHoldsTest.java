@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -336,7 +337,7 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
         assertNotNull(orders.answered(), "and the order it answers on is the amounts'");
 
         return TermRealizations.at(entries, orders, SIX, NothingTheRulesSay.REGION,
-                RuleReadingContext.unshared(rules, POLICY));
+                RuleReadingContext.unshared(rules, POLICY, TestDay.TODAY));
     }
 
     private static Type named(String data) {

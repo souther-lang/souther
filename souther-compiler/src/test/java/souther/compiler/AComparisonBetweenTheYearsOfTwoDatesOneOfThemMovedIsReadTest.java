@@ -48,7 +48,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
             "Date.year(on) - Date.year(Date.addDays(0 - 1, birthday)) >= 60";
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
@@ -250,10 +250,12 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
                 .text();
 
         assertFalse(offered.contains("answer several of their own numbers"), offered);
-        // A date in the year of the line, on the month of it and on each side of it.
-        assertTrue(offered.contains("Date(\"2026-06-01\")"), offered);
-        assertTrue(offered.contains("Date(\"2026-05-01\")"), offered);
-        assertTrue(offered.contains("Date(\"2026-07-01\")"), offered);
+        // A date in the year nearest the day that the line on the year leaves, on the month of the
+        // other line and on each side of it.
+        int year = Math.max(TestDay.DATE.getYear(), 2026);
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 6, 1) + "\")"), offered);
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 5, 1) + "\")"), offered);
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 7, 1) + "\")"), offered);
     }
 
     /**

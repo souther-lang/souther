@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
@@ -162,7 +163,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         DeclaredSig declared = sigs.get("look");
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return new Read(declared.inputs().get(0).name(), declared, rules,
                 InputDomain.of(declared, context, TypeCardinality.Counts.workedOutIn(context),
                         Membership.none()));

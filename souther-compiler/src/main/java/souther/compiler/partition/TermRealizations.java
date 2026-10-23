@@ -22,6 +22,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Dates;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -29,7 +30,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
-import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
@@ -958,8 +959,7 @@ final class TermRealizations {
                     asks.add(new DatePartAsk(each.getValue(), moved.get(each.getKey()),
                             demands.get(each.getKey()).walking()));
                 }
-                return onMovedDates(asks, sourceType, rootOf(parts.keySet(), measuring),
-                        reading.source());
+                return onMovedDates(asks, sourceType, rootOf(parts.keySet(), measuring), reading);
             }
         }
 
@@ -1182,7 +1182,9 @@ final class TermRealizations {
                 RuleReadingSource ruleSource = reading.source();
                 Carrier answered = orders.answered();
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
-                        admitting(onTheOrder(stands, orders, standsAt.named(), within),
+                        admitting(onTheOrder(stands, orders, standsAt.named(), within,
+                                        UsualPlaces.of(orders.term(), orders.answered(),
+                                                reading.today())),
                                 at -> everyNumberTakenOfItReadsBack(at, orders.observed(),
                                         readOfEach)),
                         at -> writtenAt(at, sourceType, answered, ruleSource));
@@ -1253,7 +1255,8 @@ final class TermRealizations {
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                     }
                     adding.add(adds);
-                    candidates.add(onTheOrder(total, adds, comesToAt.named(), within));
+                    candidates.add(onTheOrder(total, adds, comesToAt.named(), within,
+                            UsualPlaces.of(adds.term(), adds.answered(), reading.today())));
                 }
                 ContainersAddingUp.HowManyIsAskedFor sizes = holding;
                 Together together = Together.of(candidates);
@@ -2018,7 +2021,8 @@ final class TermRealizations {
         RuleReadingSource ruleSource = reading.source();
         Carrier carrier = orders.answered();
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
-                onTheOrder(asked.walking(), orders, asked.named(), within),
+                onTheOrder(asked.walking(), orders, asked.named(), within,
+                        UsualPlaces.of(orders.term(), carrier, reading.today())),
                 chosen -> oneValue(
                         FixtureTemplate.on(carrier, chosen, ruleSource.symbols().scope()::reach),
                         sourceType, ruleSource));
@@ -2066,7 +2070,7 @@ final class TermRealizations {
             // nothing.
             case TakenAs.PartOfDate taken -> onMovedDates(
                     List.of(new DatePartAsk(taken.part(), from.translation(), wanted)),
-                    sourceType, orders.observed(), ruleSource);
+                    sourceType, orders.observed(), reading);
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
@@ -2188,7 +2192,8 @@ final class TermRealizations {
                 NestedContainersAddingUp nested = new NestedContainersAddingUp(flat.subjectPath());
                 yield firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                         wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
-                                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(),
+                                UsualPlace.NONE),
                         count -> nested.holding(count, sourceType, keptApart, orders, within,
                                 reading, inside));
             }
@@ -2198,7 +2203,8 @@ final class TermRealizations {
                         ? firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                                 wholeNumbers(asked.walking(), orders.answered(), 0,
                                         Integer.MAX_VALUE,
-                                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(),
+                                        UsualPlace.NONE),
                                 count -> nodesBelowARoot(count, sourceType, keptApart, reading))
                         : treesNotWritten("nothing here writes a tree for how many values its"
                                 + " nodes hold in `" + String.join(".", nodes.container())
@@ -2293,7 +2299,8 @@ final class TermRealizations {
         ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
                 howMany == null || oneElement != null ? some : howMany, Carrier.WHOLE, 1);
         Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
-                onTheOrder(asked.walking(), orders, asked.named(), within),
+                onTheOrder(asked.walking(), orders, asked.named(), within,
+                        UsualPlaces.of(orders.term(), orders.answered(), reading.today())),
                 number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
                         reading, elements, inside));
         // And one that is not written is not one no row has: the container may be one its type
@@ -2402,7 +2409,8 @@ final class TermRealizations {
         // and stands at no place of. Read on the order the values are written on instead, a total
         // taken over a run would be asked about a carrier the run has and the number does not.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
-                onTheOrder(asked.walking(), orders, asked.named(), within),
+                onTheOrder(asked.walking(), orders, asked.named(), within,
+                        UsualPlaces.of(orders.term(), orders.answered(), reading.today())),
                 total -> ContainersAddingUp.to(total, sourceType, keptApart, orders, within,
                         reading, inside));
     }
@@ -2437,7 +2445,8 @@ final class TermRealizations {
         // carrier's. Walked as whole numbers between figures of this compiler's instead, a quotient
         // the position holds and an int does not was a number nothing offered.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
-                onTheOrder(asked.walking(), orders, asked.named(), within),
+                // A quotient is of whole numbers, which are near nowhere in particular.
+                onTheOrder(asked.walking(), orders, asked.named(), within, UsualPlace.NONE),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
     }
 
@@ -2652,9 +2661,9 @@ final class TermRealizations {
      * whether the window ran out or the figure did.
      */
     private static Tried wholeNumbers(NumericSet wanted, Carrier on, long from, long to,
-                                      int many) {
+                                      int many, UsualPlace usual) {
         return wholeNumbers(wanted.extent(), at -> wanted.holds(at, on),
-                BigInteger.valueOf(from), BigInteger.valueOf(to), many);
+                BigInteger.valueOf(from), BigInteger.valueOf(to), many, usual);
     }
 
     /**
@@ -2664,9 +2673,17 @@ final class TermRealizations {
      * is every set's answer together, and no one of them is the question. The ends narrow the
      * walking and the membership decides it, which is the arrangement the single set has as well —
      * {@link NumericSet#extent()} beside {@link NumericSet#holds}.
+     *
+     * <p><b>Outward from where the number is usually near, where the set is left open on a
+     * side.</b> The year of a date is near today's ({@link UsualPlaces}): walked up from its low end
+     * instead, a set nothing bounds below gives the first year the calendar has. The walk takes the
+     * place a step above before the one a step below, as every outward walk here does
+     * ({@link Outwards}, {@link HeldClass#nearest}). A set a rule closed on both sides, and a number
+     * with no usual place, are walked up from the low end — which is the same walk from there.
      */
     private static Tried wholeNumbers(NumericDomain.Bounds lies, Predicate<Place> holds,
-                                      BigInteger from, BigInteger to, int many) {
+                                      BigInteger from, BigInteger to, int many,
+                                      UsualPlace usual) {
         // Narrowed to where the set lies before a step is taken. The window is as wide as the kind
         // of number goes, and stepping through the part of it the set is nowhere near is a walk
         // over the kind rather than a choice between the numbers the rules admit.
@@ -2675,15 +2692,27 @@ final class TermRealizations {
         // rule wrote to however many of them is one the step from it has to be written at.
         BigInteger first = startOf(lies.min(), from);
         BigInteger last = endOf(lies.max(), to);
+        BigInteger centre = usual instanceof UsualPlace.Near near
+                && near.leftOpenIn(lies.min(), lies.max())
+                && Count.number(near.at()).exactly().floor() instanceof ExactAnswer.Held<BigInteger> at
+                ? at.value().max(first).min(last) : first;
         List<Place> out = new ArrayList<>();
         // One past what is handed over, so that a window holding exactly as many as the figure
         // allows is a window this walked to the end of. Stopped at the figure itself, a set of
         // exactly that many numbers comes back as a search that gave something up.
-        for (BigInteger at = first; at.compareTo(last) <= 0 && out.size() <= many;
-                at = at.add(BigInteger.ONE)) {
-            Count place = new Count(new BigDecimal(at));
-            if (holds.test(place)) {
-                out.add(place);
+        for (BigInteger away = BigInteger.ZERO; out.size() <= many
+                && (centre.add(away).compareTo(last) <= 0
+                        || centre.subtract(away).compareTo(first) >= 0);
+                away = away.add(BigInteger.ONE)) {
+            List<BigInteger> asFar = away.signum() == 0 ? List.of(centre)
+                    : List.of(centre.add(away), centre.subtract(away));
+            for (BigInteger at : asFar) {
+                if (first.compareTo(at) <= 0 && at.compareTo(last) <= 0 && out.size() <= many) {
+                    Count place = new Count(new BigDecimal(at));
+                    if (holds.test(place)) {
+                        out.add(place);
+                    }
+                }
             }
         }
         return out.size() > many
@@ -2736,9 +2765,14 @@ final class TermRealizations {
      * a smallest step nothing here steps to it, and where it has none there is no step. So a caller
      * that built nothing at the one place has not walked the run, and what it may say is that, and
      * not that the run holds nothing.
+     *
+     * <p>A value standing for the run and not one beside a line, so near where the number is
+     * usually near where the run is left open ({@link Criterion.Within#standingIn}).
+     *
+     * @param usual where the number is usually near ({@link UsualPlaces})
      */
     private static Tried onTheOrder(NumericSet wanted, TermOrders orders, Place named,
-                                    SearchRegion within) {
+                                    SearchRegion within, UsualPlace usual) {
         Set<CompositionRepertoire> ofTheRun =
                 Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
         switch (wanted) {
@@ -2779,11 +2813,11 @@ final class TermRealizations {
         HeldClass members = orders.term() instanceof NumericTerm.ValueOf value && within != null
                 ? within.classAt(value) : HeldClass.NONE;
         if (!(members instanceof HeldClass.None)) {
-            return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun);
+            return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun, usual);
         }
-        Place found = Criterion.Within.somewhereIn(wanted.region(orders.answered()),
-                Towards.ABOVE, orders.answered(),
-                leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
+        Place found = Criterion.Within.standingIn(wanted.region(orders.answered()),
+                orders.answered(), leaves == null ? null : leaves.min(),
+                leaves == null ? null : leaves.max(), usual);
         return new Tried(found == null ? List.of() : List.of(found),
                 new Remainder.SomeOf(ofTheRun));
     }
@@ -2798,7 +2832,8 @@ final class TermRealizations {
      */
     private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
                                            HeldClass members, NumericDomain.Bounds leaves,
-                                           Set<CompositionRepertoire> ofTheRun) {
+                                           Set<CompositionRepertoire> ofTheRun,
+                                           UsualPlace usual) {
         Carrier carrier = orders.answered();
         List<Place> offered = new ArrayList<>();
         boolean more = false;
@@ -2808,8 +2843,8 @@ final class TermRealizations {
             if (run == null) {
                 continue;
             }
-            ClassMembers inside = members.within(
-                    new NumericDomain.Bounds(run.low(), run.high()), Towards.ABOVE,
+            ClassMembers inside = members.standingIn(
+                    new NumericDomain.Bounds(run.low(), run.high()), carrier, usual,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
             offered.addAll(inside.notApart(PlacesApart.NONE));
             more |= inside.stoppedShort();
@@ -2890,9 +2925,9 @@ final class TermRealizations {
                 && low.exactly().floor() instanceof ExactAnswer.Held<BigInteger> from
                 && high.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> to) {
             return wholeNumbers(within, holds, from.value(), to.value(),
-                    CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+                    CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), UsualPlace.NONE);
         }
-        Place found = on.somethingInside(lies.min(), lies.max());
+        Place found = on.aPlaceInside(lies.min(), lies.max(), UsualPlace.NONE);
         return new Tried(found == null || !holds.test(found) ? List.of() : List.of(found),
                 new Remainder.SomeOf(Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)));
     }
@@ -3171,7 +3206,7 @@ final class TermRealizations {
         // of what it can be asked for, so a walk that reaches the end of it has walked the set.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
-                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), UsualPlace.NONE),
                 count -> holdingExactly(sourceType, keptApart, count, reading));
     }
 
@@ -3188,7 +3223,7 @@ final class TermRealizations {
                                                        RuleReadingContext reading) {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
-                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), UsualPlace.NONE),
                 count -> stringsHoldingThatManyOf(counted, through, sourceType, count, reading));
     }
 
@@ -3611,7 +3646,8 @@ final class TermRealizations {
             long upTo = number instanceof NumberOfAString.CodePointSum ? Long.MAX_VALUE
                     : Integer.MAX_VALUE;
             Tried tried = wholeNumbers(lies, holds, BigInteger.ZERO,
-                    BigInteger.valueOf(upTo), CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+                    BigInteger.valueOf(upTo), CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(),
+                    UsualPlace.NONE);
             wanted.add(new OfAString(number, lies, holds, tried));
         }
         boolean wholeQuestion = walkIsOfTheWholeQuestion(demands.values());
@@ -4192,7 +4228,7 @@ final class TermRealizations {
             // numbers: a set that holds none of them is a set no time answers, which is a thing
             // this may say having looked at every one.
             List<Place> admitted = wholeNumbers(each.getValue(), observed,
-                    0, each.getKey().many() - 1L, 1).numbers();
+                    0, each.getKey().many() - 1L, 1, UsualPlace.NONE).numbers();
             if (admitted.isEmpty()) {
                 // Outside the parts a day has. Not this reader's to report as a refusal: what a
                 // part runs between is the operation's declared bound, and a number outside it is a
@@ -4379,12 +4415,13 @@ final class TermRealizations {
      * combination there is, and an answer of nothing is a statement about the calendar.
      */
     private static Realization onMovedDates(List<DatePartAsk> asks, Type sourceType,
-                                            Carrier observed, RuleReadingSource ruleSource) {
+                                            Carrier observed, RuleReadingContext reading) {
         if (observed == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Search found = dateAnsweringMovedParts(asks, observed);
+        RuleReadingSource ruleSource = reading.source();
+        Search found = dateAnsweringMovedParts(asks, observed, reading.today());
         if (found.on() == null) {
             return found.everyOne()
                     ? new Realization.None(
@@ -4405,19 +4442,21 @@ final class TermRealizations {
     }
 
     /**
-     * The first date every one of {@code asks} admits.
+     * The date nearest {@code today} that every one of {@code asks} admits, counted in years and
+     * then in days.
      *
-     * <p>Where a year is asked for, the years the first such ask leaves are walked, and the dates
-     * whose moved date is in one of them are a run of days.
+     * <p>Where a year is asked for, the years the first such ask leaves are walked outward from
+     * today's, and the dates whose moved date is in one of them are a run of days.
      *
-     * <p>Where none is, one cycle of the calendar is walked. The Gregorian calendar repeats every
+     * <p>Where none is, one cycle of the calendar is walked outward from today's year. The
+     * Gregorian calendar repeats every
      * four hundred years, and those are a whole number of days, so a month or a day of a date moved
      * by a count of days is the same at every date a cycle away. Every combination the asks can
      * meet at is therefore met within one cycle of days they are all defined at, or within all of
      * those days where there are fewer than a cycle of them, and the walk is over every one there
      * is.
      */
-    static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed) {
+    static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed, Today today) {
         List<PutToTheDays> put = asks.stream().map(each -> each.putToTheDays(observed)).toList();
         if (put.stream().anyMatch(PutToTheDays::leavesNothing)) {
             return new Search(null, true);
@@ -4425,11 +4464,11 @@ final class TermRealizations {
         DatePartAsk lead = asks.stream().filter(each -> each.part() == TakenAs.DatePart.YEAR)
                 .findFirst().orElse(null);
         if (lead == null) {
-            return new Search(dateInOneCycle(put), true);
+            return new Search(dateInOneCycle(put, today), true);
         }
         Tried years = wholeNumbers(lead.wanted(), observed,
                 LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
-                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), UsualPlaces.ofAYear(today));
         boolean everyOne = years.rest() instanceof Remainder.Exhausted;
         for (Place year : years.numbers()) {
             LocalDate on = dateInTheRunOf(lead, whole(year), put);
@@ -4457,11 +4496,16 @@ final class TermRealizations {
      * The first date of a cycle of the calendar that every one of {@code asks} admits, or null where
      * there is none.
      *
-     * <p>The cycle is the one from {@link #A_CYCLE_STARTS} where every ask is defined there, and
-     * otherwise the nearest one that is. It is walked a year of the date at a time, so that a date
-     * found early is found without cutting the rest of the cycle.
+     * <p>Which days are walked and in what order they are walked are two answers. The days are a
+     * cycle with the first day of today's year at its middle where every ask is defined there, and
+     * otherwise the nearest cycle that is — any day starts a cycle, and every combination the asks
+     * can meet at is met within one. The order is today's year first and then the years either side of it,
+     * the one after before the one before, as every outward walk here takes them: so a date the
+     * asks meet in today's year is found there however near the end of the calendar today is, and
+     * a twenty-ninth of February in the leap year nearest it. Each year is walked a year of the
+     * date at a time, so that a date found early is found without cutting the rest of the cycle.
      */
-    private static LocalDate dateInOneCycle(List<PutToTheDays> asks) {
+    private static LocalDate dateInOneCycle(List<PutToTheDays> asks, Today today) {
         long first = asks.stream().mapToLong(each -> each.ask().moved().first()).max()
                 .orElseThrow();
         long last = asks.stream().mapToLong(each -> each.ask().moved().last()).min()
@@ -4469,17 +4513,26 @@ final class TermRealizations {
         if (first > last) {
             return null;
         }
-        long from = Math.max(first, Math.min(A_CYCLE_STARTS.toEpochDay(),
+        // A cycle with today's year at its middle, so that the years either side of it are both
+        // in it; moved inside the days the asks are defined at where it reaches past them.
+        long from = Math.max(first, Math.min(today.firstOfItsYear() - DAYS_OF_A_CYCLE / 2,
                 last - DAYS_OF_A_CYCLE + 1));
         long to = Math.min(last, from + DAYS_OF_A_CYCLE - 1);
-        for (long start = from; start <= to; ) {
-            long end = Math.min(to,
-                    LocalDate.of(LocalDate.ofEpochDay(start).getYear(), 12, 31).toEpochDay());
-            LocalDate found = firstAdmittedIn(start, end, asks);
-            if (found != null) {
-                return found;
+        int earliest = LocalDate.ofEpochDay(from).getYear();
+        int latest = LocalDate.ofEpochDay(to).getYear();
+        int centre = Math.max(earliest, Math.min(latest, today.year()));
+        for (int away = 0; centre + away <= latest || centre - away >= earliest; away++) {
+            for (int year : away == 0 ? List.of(centre) : List.of(centre + away, centre - away)) {
+                if (year < earliest || year > latest) {
+                    continue;
+                }
+                long start = Math.max(from, LocalDate.of(year, 1, 1).toEpochDay());
+                long end = Math.min(to, LocalDate.of(year, 12, 31).toEpochDay());
+                LocalDate found = firstAdmittedIn(start, end, asks);
+                if (found != null) {
+                    return found;
+                }
             }
-            start = end + 1;
         }
         return null;
     }
@@ -4537,12 +4590,6 @@ final class TermRealizations {
     /** How many days the Gregorian calendar takes to repeat: four hundred years, of which ninety-seven
      *  are leap years. */
     private static final long DAYS_OF_A_CYCLE = 400L * 365 + 97;
-
-    /** Where the cycle walked for a month or a day of a moved date starts, where every ask is
-     *  defined there. Any day starts a cycle; this one is the first of a leap year, so the dates
-     *  offered are near the ones a reader writes, and a month and a day asked of a date as it
-     *  stands are met in the first year walked, the twenty-ninth of February among them. */
-    private static final LocalDate A_CYCLE_STARTS = LocalDate.of(2000, 1, 1);
 
     /**
      * One value, wearing every name the position declares, or the reason there is none.

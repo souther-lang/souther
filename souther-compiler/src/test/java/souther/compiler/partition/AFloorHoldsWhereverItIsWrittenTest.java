@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -37,7 +38,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
             Hir.Data data = (Hir.Data) rules.symbols().declaredNode(named.key());
             assertNotNull(data, "no `" + type + "`");
             return FieldDomains.of(named, RuleReadingContext.unshared(rules,
-                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         }
 
         Type ref(String type) {
@@ -47,7 +48,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
         /** The world these readings are made in, with nothing to borrow from. */
         RuleReadingContext reading() {
             return RuleReadingContext.unshared(rules,
-                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         }
 
         /** The floor of a position of {@code type}, read as this model's rules leave it. */

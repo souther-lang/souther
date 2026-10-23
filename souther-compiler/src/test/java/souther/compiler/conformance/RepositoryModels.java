@@ -1,5 +1,6 @@
 package souther.compiler.conformance;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -148,7 +149,8 @@ public final class RepositoryModels {
                 out.put(corpus.getKey(), analysed.compilation());
             } else {
                 Compilation compilation = Compilation.ofSources(
-                        ConformanceCorpus.sourcesOf(corpus.getKey()), ModulePath.EMPTY);
+                        ConformanceCorpus.sourcesOf(corpus.getKey()), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE);
                 compilation.answerEverything();
                 out.put(corpus.getKey(), compilation);
             }

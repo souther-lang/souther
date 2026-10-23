@@ -6,6 +6,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.ValueSet;
 
@@ -37,7 +38,7 @@ class AValueInsideARunWithNoStepIsWorkedOutOrNotOfferedTest {
     void halfwayBetweenAFineEndAndOneIsNotOffered() {
         for (Towards from : Towards.values()) {
             assertNull(DECIMALS.somethingInside(Endpoint.exclusive(FINE),
-                            Endpoint.exclusive(Count.of(1)), from),
+                            Endpoint.exclusive(Count.of(1)), from, UsualPlace.NONE),
                     () -> "halfway is no number this holds, from " + from);
         }
     }
@@ -45,7 +46,8 @@ class AValueInsideARunWithNoStepIsWorkedOutOrNotOfferedTest {
     /** Open at the fine end and unbounded at the other, so the value is one in from that end. */
     @Test
     void oneInFromAFineEndIsNotOffered() {
-        assertNull(DECIMALS.somethingInside(Endpoint.exclusive(FINE), null, Towards.ABOVE),
+        assertNull(DECIMALS.somethingInside(Endpoint.exclusive(FINE), null, Towards.ABOVE,
+                        UsualPlace.NONE),
                 "one above a fine end is no number this holds");
     }
 
@@ -53,13 +55,13 @@ class AValueInsideARunWithNoStepIsWorkedOutOrNotOfferedTest {
     @Test
     void theSameShapesOverOrdinaryEndsAreAnswered() {
         assertValue("0.5", DECIMALS.somethingInside(Endpoint.exclusive(Count.of(0)),
-                Endpoint.exclusive(Count.of(1)), Towards.ABOVE));
+                Endpoint.exclusive(Count.of(1)), Towards.ABOVE, UsualPlace.NONE));
         assertValue("0.5", DECIMALS.somethingInside(Endpoint.exclusive(Count.of(0)),
-                Endpoint.exclusive(Count.of(1)), Towards.BELOW));
+                Endpoint.exclusive(Count.of(1)), Towards.BELOW, UsualPlace.NONE));
         assertValue("1", DECIMALS.somethingInside(Endpoint.exclusive(Count.of(0)), null,
-                Towards.ABOVE));
+                Towards.ABOVE, UsualPlace.NONE));
         assertValue("-1", DECIMALS.somethingInside(null, Endpoint.exclusive(Count.of(0)),
-                Towards.BELOW));
+                Towards.BELOW, UsualPlace.NONE));
     }
 
     /**
@@ -69,7 +71,7 @@ class AValueInsideARunWithNoStepIsWorkedOutOrNotOfferedTest {
     @Test
     void aPlaceOneAwayFromAFineValueIsNotOffered() {
         Place at = DECIMALS.somethingOtherThan(PlacesApart.of(List.of(FINE)), null, ValueSet.ANY,
-                PatternPlan.Budget.OF_A_WITNESS.meter());
+                PatternPlan.Budget.OF_A_WITNESS.meter(), UsualPlace.NONE);
 
         assertTrue(at == null || !at.sameAs(FINE), () -> "the singled value was offered: " + at);
     }
@@ -79,7 +81,7 @@ class AValueInsideARunWithNoStepIsWorkedOutOrNotOfferedTest {
     void aPlaceOneAwayFromAnOrdinaryValueIsOffered() {
         assertValue("1.5", DECIMALS.somethingOtherThan(
                 PlacesApart.of(List.of(new Count(new BigDecimal("0.5")))), null, ValueSet.ANY,
-                PatternPlan.Budget.OF_A_WITNESS.meter()));
+                PatternPlan.Budget.OF_A_WITNESS.meter(), UsualPlace.NONE));
     }
 
     private static void assertValue(String expected, Place at) {

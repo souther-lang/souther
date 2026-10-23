@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -66,7 +67,7 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
         assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         return domains.projection().causes().stream()
                 .map(cause -> cause.getClass().getSimpleName())
                 .toList();

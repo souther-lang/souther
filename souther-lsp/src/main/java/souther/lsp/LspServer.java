@@ -30,6 +30,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.time.Clock;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -79,7 +81,7 @@ public final class LspServer {
 
     private final MessageConnection conn;
     private final DocumentStore documents = new DocumentStore();
-    private final Analyzer analyzer = new Analyzer();
+    private final Analyzer analyzer;
 
     /** Whether this client said it reads completion placeholders. False until it says so. */
     private boolean readsSnippets;
@@ -119,7 +121,13 @@ public final class LspServer {
     private final Abandonment abandonment = new Abandonment(this::stopNow);
 
     public LspServer(MessageConnection conn) {
+        this(conn, Clock.system(ZoneId.systemDefault()));
+    }
+
+    /** A server whose rows are written on the day {@code clock} says as each message arrives. */
+    LspServer(MessageConnection conn, Clock clock) {
         this.conn = conn;
+        this.analyzer = new Analyzer(clock);
         analyzer.abandonWhen(abandonment);
         workspace.abandonWhen(abandonment);
     }
@@ -324,6 +332,7 @@ public final class LspServer {
         if (named == null) {
             return new Outcome.Failed(METHOD_NOT_FOUND, "method not found: " + method);
         }
+        analyzer.startAnswering();
         return answer(named, body.get("id"), body.get("params"));
     }
 

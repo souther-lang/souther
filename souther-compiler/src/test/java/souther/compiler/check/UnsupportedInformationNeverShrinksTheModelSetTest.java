@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -32,7 +33,7 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return FieldDomains.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 
     private static OccurrenceCounts countsOf(String source, String name) {
@@ -40,7 +41,7 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return OccurrenceCounts.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 
     /** Two clauses that cannot both hold, both of them read. */

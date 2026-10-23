@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -173,14 +174,15 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
         RuleReadingSource rules = RuleReadings.ofSource(model);
         Type type = Type.ref(TypeSymbols.declared(new TypeKey(rules.symbols().module(), parameter)));
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain read = InputDomain.of(
                 List.of(new InputDomain.Parameter("v", null, type)),
                 reading, TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         List<String> out = new ArrayList<>();
         for (souther.compiler.inputs.Position at : read.positions()) {
             switch (LocalInspection.of(at,
-                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))) {
+                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                            TestDay.TODAY))) {
                 case LocalPartition.Divided divided -> divided.measures().forEach(each ->
                         out.add(each.term() + ": " + labelled(each)));
                 case LocalPartition.Open _ -> { }

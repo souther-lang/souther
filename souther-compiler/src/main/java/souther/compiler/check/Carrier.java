@@ -16,7 +16,9 @@ import souther.compiler.numeric.Instants;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueOrder;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.ObservedValue;
@@ -33,6 +35,7 @@ import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -807,22 +810,88 @@ public sealed interface Carrier extends ValueOrder {
      * them is a choice, and a choice made here puts a character nobody wrote into a row somebody has
      * to read.
      *
-     * <p>From the low end, which is what a range with no end named asks for.
+     * <p>From whichever end of the range the caller wants the value nearest. Which end is a
+     * question about the range and is asked here, where the arithmetic that answers it already is.
+     * Decided by the caller instead, a reader that wanted the value beside a line reached for a
+     * second way of getting one — "some value other than the line's" — and the two ways were one
+     * policy said twice, only one of them on purpose. That is the shape a run bounded at both ends
+     * was already lost to once (issue #903).
+     *
+     * <p><b>And nearest the number's usual place where the side it is entered from is one nobody
+     * drew.</b> A date is near today ({@link UsualPlace}): a range of dates with no end below, or
+     * with the calendar's first day for one, entered from below gives up the date in it nearest
+     * today and not the first day there is. A side a rule drew is the range's own and is where the
+     * value is taken, as the value beside a line is. Asked here and of every caller, so that no
+     * reader of a range chooses a date by a rule of its own.
      */
-    default Place somethingInside(Endpoint low, Endpoint high) {
-        return somethingInside(low, high, Towards.ABOVE);
+    default Place somethingInside(Endpoint low, Endpoint high, Towards from, UsualPlace usual) {
+        if (usual instanceof UsualPlace.Near near
+                && near.leftOpenAt(from == Towards.ABOVE ? low : high, from == Towards.ABOVE)) {
+            Place nearest = nearestTo(near, low, high);
+            if (nearest != null) {
+                return nearest;
+            }
+        }
+        return entered(low, high, from);
     }
 
     /**
-     * The same, from whichever end of the range the caller wants the value nearest.
+     * A value standing for the range from {@code low} to {@code high}, which no end of it is asked
+     * for: where the number is usually near, where the range is left open on either side of it,
+     * and otherwise from the low end, as {@link #somethingInside} enters it from below.
      *
-     * <p>Which end is a question about the range and is asked here, where the arithmetic that
-     * answers it already is. Decided by the caller instead, a reader that wanted the value beside a
-     * line reached for a second way of getting one — "some value other than the line's" — and the
-     * two ways were one policy said twice, only one of them on purpose. That is the shape a run
-     * bounded at both ends was already lost to once (issue #903).
+     * <p>The other question from the one beside a line. A value standing for a class has no end
+     * it wants to be beside, so a range of dates nobody bounded above is as open as one nobody
+     * bounded below, and a date standing for it is the date in it nearest today. A range a rule
+     * closed on both sides is entered from its end, so the values offered are the ones its rule
+     * names.
      */
-    default Place somethingInside(Endpoint low, Endpoint high, Towards from) {
+    default Place aPlaceInside(Endpoint low, Endpoint high, UsualPlace usual) {
+        if (usual instanceof UsualPlace.Near near && near.leftOpenIn(low, high)) {
+            Place nearest = nearestTo(near, low, high);
+            if (nearest != null) {
+                return nearest;
+            }
+        }
+        return entered(low, high, Towards.ABOVE);
+    }
+
+    /** The place from {@code low} to {@code high} nearest {@code near}: it, where the range holds
+     *  it, and the end on its side where the range stops short of it. */
+    private Place nearestTo(UsualPlace.Near near, Endpoint low, Endpoint high) {
+        Place above = entered(Endpoint.lower(low, Endpoint.inclusive(near.at())), high,
+                Towards.ABOVE);
+        return above != null ? above : entered(low, high, Towards.BELOW);
+    }
+
+    /**
+     * Where a value of this order is looked for first where no rule says, or
+     * {@link UsualPlace#NONE} where it has no such place and a value is taken from the ends of its
+     * range.
+     *
+     * <p>A date at {@code today}, and a date-time and a moment at the start of it — the moment in
+     * UTC, which is what a moment is written in. The ends of these orders are the first and the
+     * last day the calendar has, and their counts start at 1970; a row written at either is no
+     * case of anybody's domain. A time of day has no day to be near, and its order starts at
+     * midnight, which is a time a reader writes.
+     */
+    default UsualPlace usualPlace(Today today) {
+        Place at = switch (this) {
+            case Days _ -> today.day();
+            case Seconds _ -> DateTimes.secondOf(today.date().atStartOfDay());
+            case Nanos _ -> Instants.nanoOf(today.date().atStartOfDay(ZoneOffset.UTC).toInstant());
+            case Whole _, Dense _, SecondsOfDay _, Ordinal _, Text _ -> null;
+        };
+        if (at == null) {
+            return UsualPlace.NONE;
+        }
+        OrderedInterval own = extent();
+        return new UsualPlace.Near(at, own.low().at(), own.high().at());
+    }
+
+    /** The value {@code low} to {@code high} gives up from the end {@code from} names, as
+     *  {@link #somethingInside} gives it where no usual place is asked of. */
+    private Place entered(Endpoint low, Endpoint high, Towards from) {
         if (this instanceof Text) {
             return someStringInside(low, high, from);
         }
@@ -1013,9 +1082,17 @@ public sealed interface Carrier extends ValueOrder {
      *               rather than made here: whose allowance a machine is built out of is the
      *               caller's to say, and an order that named one would be spending at every
      *               position without anything having granted it
+     * @param usual  where the number is usually near ({@link #aPlaceInside}). Where a range left
+     *               open on a side holds it, the place nearest it is tried before any other:
+     *               a value singled out by a rule is no reason for the others to be chosen beside
+     *               it, and a date other than one in 2300 is a date near today
      */
     default Place somethingOtherThan(PlacesApart singled, NumericDomain.Bounds within,
-                                     ValueSet admits, Meter meter) {
+                                     ValueSet admits, Meter meter, UsualPlace usual) {
+        Endpoint low = within == null ? null : within.min();
+        Endpoint high = within == null ? null : within.max();
+        Place nearUsual = usual instanceof UsualPlace.Near near && near.leftOpenIn(low, high)
+                ? aPlaceInside(low, high, usual) : null;
         java.util.List<Place> stepped = new ArrayList<>();
         for (Place from : singled.places()) {
             if (from instanceof Count count) {
@@ -1048,19 +1125,25 @@ public sealed interface Carrier extends ValueOrder {
                     inside.add(end.at());
                 }
             }
-            inside.add(somethingInside(within.min(), within.max()));
+            // The range's own low end, as a range with no usual place is entered.
+            inside.add(aPlaceInside(within.min(), within.max(), UsualPlace.NONE));
             // Between the place singled out and each end, which is where a range with no step still
             // has room once the ends themselves are singled out too.
             for (Place from : singled.places()) {
                 for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
                     if (end != null) {
-                        inside.add(somethingInside(Endpoint.exclusive(from), end));
-                        inside.add(somethingInside(end, Endpoint.exclusive(from)));
+                        inside.add(somethingInside(Endpoint.exclusive(from), end, Towards.ABOVE,
+                                UsualPlace.NONE));
+                        inside.add(somethingInside(end, Endpoint.exclusive(from), Towards.ABOVE,
+                                UsualPlace.NONE));
                     }
                 }
             }
         }
         java.util.List<Place> tried = new ArrayList<>();
+        if (nearUsual != null) {
+            tried.add(nearUsual);
+        }
         if (spacing() == Granularity.DENSE) {
             tried.addAll(inside);
             tried.addAll(stepped);
@@ -1369,14 +1452,16 @@ public sealed interface Carrier extends ValueOrder {
                                   PlacesApart apart) {
         Endpoint from = range.low();
         for (Place at : named) {
-            Place found = heldAt(somethingInside(from, Endpoint.exclusive(at)),
+            Place found = heldAt(somethingInside(from, Endpoint.exclusive(at), Towards.ABOVE,
+                            UsualPlace.NONE),
                     range, excluded, apart);
             if (found != null) {
                 return found;
             }
             from = Endpoint.exclusive(at);
         }
-        return heldAt(somethingInside(from, range.high()), range, excluded, apart);
+        return heldAt(somethingInside(from, range.high(), Towards.ABOVE, UsualPlace.NONE), range,
+                excluded, apart);
     }
 
     /**

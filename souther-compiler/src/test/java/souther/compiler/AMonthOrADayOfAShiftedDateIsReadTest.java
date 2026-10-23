@@ -42,7 +42,7 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
 
     private static Compilation compiled(String source) {
         return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
+            Compilation compilation = Compilation.ofSource(each, "Main").writtenOn(TestDay.DATE);
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             return compilation;
@@ -191,8 +191,8 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
 
     /**
      * The rows offered for a month of a moved date are dates whose moved date is in the month of
-     * each point: the day before the first of March for the line itself, and the day before the
-     * last of January for the month below it.
+     * each point: the day before the first of March for the line itself, and the last of January
+     * for the month below it — in the year the rows are written in.
      */
     @Test
     void theRowsOfferedAreDatesWhoseMovedDateIsInTheMonthOfEachPoint() {
@@ -207,8 +207,10 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
                 .text();
 
-        assertTrue(offered.contains("Date(\"2000-02-29\")"), offered);
-        assertTrue(offered.contains("Date(\"2000-01-31\")"), offered);
+        int year = TestDay.DATE.getYear();
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 3, 1).minusDays(1) + "\")"),
+                offered);
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 1, 31) + "\")"), offered);
     }
 
     /** The day before the first of March is the twenty-ninth of February in a leap year. */

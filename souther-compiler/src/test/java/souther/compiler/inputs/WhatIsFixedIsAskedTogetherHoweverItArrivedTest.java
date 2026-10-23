@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.RuleReadingContext;
@@ -609,7 +610,8 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             Map<souther.compiler.check.RuleKey, Count> settled =
                     Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
-                    name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES),
+                    name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES,
+                            TestDay.TODAY),
                     settled);
             Quantities fixed = asked.given(X, count(at));
 
@@ -749,7 +751,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return new Read(InputDomain.of(sigs.get(behavior), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()), rules);

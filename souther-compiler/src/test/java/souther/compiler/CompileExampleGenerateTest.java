@@ -69,7 +69,7 @@ class CompileExampleGenerateTest {
      */
     private static Compilation compiledOf(String source) {
         return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
+            Compilation compilation = Compilation.ofSource(each, "Main").writtenOn(TestDay.DATE);
             // What `souther examples` asks for. A line a `guard` drew is only decidable where the
             // arms were measured, so below this the generator has nothing to say about one.
             compilation.measure(Adequacy.Asked.fullReport());
@@ -337,7 +337,7 @@ class CompileExampleGenerateTest {
                 "the class nothing covers, with an id and a prefecture the rules accept");
     }
 
-    /** And a date, which a row writes as its ISO form. */
+    /** And a date, which a row writes as its ISO form, on the day the rows are written. */
     @Test
     void aDateGetsAValueTheModelAccepts() {
         String dated = """
@@ -362,7 +362,7 @@ class CompileExampleGenerateTest {
                     | (Request { on = Date("2026-08-03"), flag = Yes }) -> Ok { n = 0 }
                 """;
 
-        assertEquals(List.of("Request { on = Date(\"1970-01-01\"), flag = No }"),
+        assertEquals(List.of("Request { on = Date(\"" + TestDay.DATE + "\"), flag = No }"),
                 inputs(generated(dated).get("take").composed()));
     }
 

@@ -8,6 +8,7 @@ import souther.compiler.sites.MemberReceiver;
 import souther.compiler.sites.SemanticSnapshot;
 import souther.lsp.analysis.SemanticProbe.Reading;
 import souther.lsp.analysis.SemanticProbe.Repair;
+import souther.test.WrittenOn;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -139,7 +140,7 @@ class WhatIsAskedOfAHalfWrittenLineIsAskedOfWhatItSaysNowTest {
         Map<String, String> joining = new LinkedHashMap<>();
         Reading reading = probe.of(joining, Set.of(), ModulesOnThePath.NONE, URI, text,
                 text.indexOf(".\n") < 0 ? text.length() : text.lastIndexOf(".\n") + 1,
-                Abandonment.NEVER);
+                WrittenOn.DAY, Abandonment.NEVER);
         assertNotNull(reading, "the half-written line is one this knows how to finish");
         return reading;
     }

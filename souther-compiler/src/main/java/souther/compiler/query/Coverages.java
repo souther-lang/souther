@@ -180,7 +180,7 @@ final class Coverages {
         // The one world the rules of this behavior's declarations are read in, which is the reading
         // this input already made of them.
         RuleReadingContext ruleReading = RuleReadingContext.of(read.rules(), policy,
-                read.domain().machines());
+                read.domain().machines(), read.domain().today());
         souther.compiler.inputs.Quantities quantities = read.quantities();
         Partitions.Partitioning partitioning =
                 Partitions.of(behavior.name(), read, policy);

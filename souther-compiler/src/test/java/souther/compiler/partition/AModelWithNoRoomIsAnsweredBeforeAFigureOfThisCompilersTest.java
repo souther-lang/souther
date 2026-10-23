@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.FieldDomains;
@@ -160,12 +161,13 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
         FieldDomains read = FieldDomains.of(
                 TypeSymbols.declared(new TypeKey("example.placing", "Box")),
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES), settled);
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
+                settled);
         return Partitions.heldRange(
                 new Type.ListOf(new Type.Ref(
                         TypeSymbols.declared(new TypeKey("example.placing", "Awkward")))),
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 read.heldAt(RuleKey.of("xs")));
     }
 

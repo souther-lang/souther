@@ -7,6 +7,7 @@ import souther.compiler.coverage.Numberings;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -285,7 +286,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                         divided("days/high", 9).ofTheNumber(atDays)),
                 List.of());
         RuleReadingContext context =
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         MeasuredInput subject = MeasuredInput.of("fee",
                 souther.compiler.inputs.InputDomain.of(
                         List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,

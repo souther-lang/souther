@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.meta.ModulePath;
 
@@ -93,7 +94,8 @@ class ABehaviorsInputDomainIsReadFromWhatThatBehaviorDeclaresTest {
     private static Compilation started(String text) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, text);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
@@ -111,7 +113,7 @@ class ABehaviorsInputDomainIsReadFromWhatThatBehaviorDeclaresTest {
     }
 
     private static void edited(Compilation c, String text) {
-        c.update(Map.of(ID, text), Set.of());
+        c.update(Map.of(ID, text), Set.of(), TestDay.DATE);
     }
 
     @Test

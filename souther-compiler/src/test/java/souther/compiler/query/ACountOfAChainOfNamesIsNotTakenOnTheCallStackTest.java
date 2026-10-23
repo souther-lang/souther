@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.TestDay;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
@@ -70,7 +71,7 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
 
     private static Compilation compiled(Map<String, String> byId) {
         Compilation c = Compilation.ofDocuments(new LinkedHashMap<>(byId), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         return c;
     }
@@ -105,7 +106,7 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
         List<String> edited = onASmallStack(() -> {
             Compilation c = compiled(chain(UNBOUNDED));
             c.answerEverything();
-            c.update(Map.of(ID, chain(BOUNDED)), Set.of());
+            c.update(Map.of(ID, chain(BOUNDED)), Set.of(), TestDay.DATE);
             c.answerEverything();
             return said(c);
         });

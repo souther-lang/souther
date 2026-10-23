@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleKey;
@@ -130,7 +131,7 @@ class AMachineMadeOfAPlanIsLentToEveryReadingThatAsksForItTest {
         // The control: a reading that has to build for itself, under an allowance that can build
         // nothing, does not come to the set the pattern admits.
         ValueSet built = FieldDomains.of(TypeSymbols.declared(CODE),
-                RuleReadingContext.unshared(source, BUILDING_NOTHING))
+                RuleReadingContext.unshared(source, BUILDING_NOTHING, TestDay.TODAY))
                 .admits(RuleKey.THE_VALUE).approximation();
         assertFalse(built instanceof ValueSet.Matching,
                 () -> "with nothing lent and nothing affordable, the set is not the language: "
@@ -139,7 +140,7 @@ class AMachineMadeOfAPlanIsLentToEveryReadingThatAsksForItTest {
         // And the claim: the same reading handed the store's answer comes to the language, which
         // it can only have borrowed.
         ValueSet borrowed = FieldDomains.of(TypeSymbols.declared(CODE),
-                RuleReadingContext.of(source, BUILDING_NOTHING, db.readings()))
+                RuleReadingContext.of(source, BUILDING_NOTHING, db.readings(), TestDay.TODAY))
                 .admits(RuleKey.THE_VALUE).approximation();
         assertTrue(borrowed instanceof ValueSet.Matching,
                 () -> "handed the declaration's answer, the reading comes to the language it"
@@ -153,14 +154,15 @@ class AMachineMadeOfAPlanIsLentToEveryReadingThatAsksForItTest {
         // answer it had and changes nothing in it.
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("f0", PATTERNED);
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         assertTrue(clean(compilation), "the model under test compiles clean before the edit");
         Db db = compilation.db();
         Map<Machines.OfDeclaration, StringFacts> before = answersIn(db);
         assertFalse(before.isEmpty(), "the declarations were read and answered");
 
         byId.put("f0", PATTERNED.replace("n = n + 1 }", "n = n + 2 }"));
-        compilation.update(byId, Set.of());
+        compilation.update(byId, Set.of(), TestDay.DATE);
         assertTrue(clean(compilation), "and after it");
 
         assertEquals(before, answersIn(db),

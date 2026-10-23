@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -127,6 +128,6 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
         return FieldDomains.of(named, RuleReadingContext.unshared(
-                RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES));
+                RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

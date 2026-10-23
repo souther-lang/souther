@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.regex.PatternPlan;
@@ -136,10 +137,10 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
         TypeSymbol.AtModule code = TypeSymbols.declared(new TypeKey("demo", "Code"));
 
         InvariantChecker.Seeded first = InvariantChecker.seedFields(code,
-                RuleReadingContext.of(source, policy, readings));
+                RuleReadingContext.of(source, policy, readings, TestDay.TODAY));
         long afterTheFirst = InvariantChecker.readingsMade();
         InvariantChecker.Seeded second = InvariantChecker.seedFields(code,
-                RuleReadingContext.of(source, policy, readings));
+                RuleReadingContext.of(source, policy, readings, TestDay.TODAY));
 
         assertSame(first, second, "the second asker is handed the reading the first was");
         assertEquals(afterTheFirst, InvariantChecker.readingsMade(),
@@ -167,7 +168,7 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
 
         RuleReadingSource asked = RuleReadings.of(compilation, "demo");
         InvariantChecker.seedFields(code,
-                RuleReadingContext.of(asked, AS_THE_COMPILE_READS, readings));
+                RuleReadingContext.of(asked, AS_THE_COMPILE_READS, readings, TestDay.TODAY));
 
         assertEquals(afterTheAnswer, InvariantChecker.readingsMade(),
                 "the reader that asked for the answer is handed the reading it was made by");
@@ -199,7 +200,8 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
         TypeSymbol.AtModule code = TypeSymbols.declared(new TypeKey("demo", "Code"));
         RuleReadingSource asTheCompilationReads = RuleReadings.of(compilation, "demo");
         InvariantChecker.seedFields(code,
-                RuleReadingContext.of(asTheCompilationReads, AS_THE_COMPILE_READS, readings));
+                RuleReadingContext.of(asTheCompilationReads, AS_THE_COMPILE_READS, readings,
+                        TestDay.TODAY));
 
         // The nearest thing a reader can assemble: the compilation's own scope, and a lookup that
         // answers for no clause anybody wrote.
@@ -208,7 +210,7 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
                 DeclarationNewtypes.NONE, ClauseLocations.NONE);
         long beforeItsOwn = InvariantChecker.readingsMade();
         InvariantChecker.seedFields(code,
-                RuleReadingContext.of(ofItsOwn, AS_THE_COMPILE_READS, readings));
+                RuleReadingContext.of(ofItsOwn, AS_THE_COMPILE_READS, readings, TestDay.TODAY));
 
         assertEquals(beforeItsOwn + 1, InvariantChecker.readingsMade(),
                 "a reader reading under a source of its own was handed the reading made under the"
@@ -223,7 +225,7 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
                 .of("demo");
         long beforeMinted = InvariantChecker.readingsMade();
         InvariantChecker.seedFields(code,
-                RuleReadingContext.of(minted, AS_THE_COMPILE_READS, readings));
+                RuleReadingContext.of(minted, AS_THE_COMPILE_READS, readings, TestDay.TODAY));
 
         assertEquals(beforeMinted + 1, InvariantChecker.readingsMade(),
                 "a reader that built sources of its own was handed the reading the compilation's"
@@ -240,13 +242,14 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
         TypeSymbol.AtModule code = TypeSymbols.declared(new TypeKey("demo", "Code"));
 
         InvariantChecker.seedFields(code,
-                RuleReadingContext.of(source, AS_THE_COMPILE_READS, readings));
+                RuleReadingContext.of(source, AS_THE_COMPILE_READS, readings, TestDay.TODAY));
         long afterTheFirst = InvariantChecker.readingsMade();
         InvariantChecker.seedFields(code,
-                RuleReadingContext.of(source, AS_THE_COMPILE_READS, readings));
+                RuleReadingContext.of(source, AS_THE_COMPILE_READS, readings, TestDay.TODAY));
         assertEquals(afterTheFirst, InvariantChecker.readingsMade(), "lent, as above");
 
-        InvariantChecker.seedFields(code, RuleReadingContext.of(source, OTHER_TERMS, readings));
+        InvariantChecker.seedFields(code, RuleReadingContext.of(source, OTHER_TERMS, readings,
+                TestDay.TODAY));
         assertEquals(afterTheFirst + 1, InvariantChecker.readingsMade(),
                 "and read again under terms the reading in hand was not made under");
     }
@@ -309,15 +312,15 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
 
         InvariantChecker.Seeded read =
                 InvariantChecker.seedFields(code,
-                RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender));
+                RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender, TestDay.TODAY));
         assertSame(read, InvariantChecker.seedFields(code,
-                RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender)),
+                RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender, TestDay.TODAY)),
                 "what was read of this world is lent while it is this world");
 
         world[0]++;
         long beforeTheNext = InvariantChecker.readingsMade();
         InvariantChecker.seedFields(code,
-                RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender));
+                RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender, TestDay.TODAY));
         assertEquals(beforeTheNext + 1, InvariantChecker.readingsMade(),
                 "and is not lent into the next, which it is not a reading of");
     }

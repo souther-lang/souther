@@ -81,18 +81,19 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
     @Test
     void aWorkspaceHandedOverUnchangedLeavesItAlone() {
         Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY);
+                Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
         ClassLoader before = compilation.loader();
-        compilation.update(Map.of("a.sou", SOURCE), Set.of());
+        compilation.update(Map.of("a.sou", SOURCE), Set.of(), TestDay.DATE);
         assertSame(before, compilation.loader(), "the loader after an update that changed nothing");
     }
 
     @Test
     void anEditThatReachesTheClassesReplacesIt() {
         Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY);
+                Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
         ClassLoader before = compilation.loader();
-        compilation.update(Map.of("a.sou", SOURCE.replace("Key(\"a\")", "Key(\"b\")")), Set.of());
+        compilation.update(Map.of("a.sou", SOURCE.replace("Key(\"a\")", "Key(\"b\")")), Set.of(),
+                TestDay.DATE);
         assertNotSame(before, compilation.loader(), "the loader after an edit");
     }
 
@@ -118,17 +119,17 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
         String edited = SOURCE.replace("Key(\"a\")", "Key(\"b\")");
         for (boolean lookingInBetween : new boolean[] {true, false}) {
             Compilation compilation = Compilation.ofDocuments(
-                    Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY);
+                    Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
             Map<String, ClassFileImage> classes = compilation.classes();
             ClassLoader loader = compilation.loader();
 
-            compilation.update(Map.of("a.sou", edited), Set.of());
+            compilation.update(Map.of("a.sou", edited), Set.of(), TestDay.DATE);
             if (lookingInBetween) {
                 classes = sameOrNot(compilation, classes, loader, "the edit");
                 loader = compilation.loader();
             }
 
-            compilation.update(Map.of("a.sou", SOURCE), Set.of());
+            compilation.update(Map.of("a.sou", SOURCE), Set.of(), TestDay.DATE);
             sameOrNot(compilation, classes, loader, "the undo, looking=" + lookingInBetween);
         }
     }
@@ -155,11 +156,12 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
     @Test
     void anEditObservedAndThenUndoneReplacesIt() {
         Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY);
+                Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
         ClassLoader first = compilation.loader();
-        compilation.update(Map.of("a.sou", SOURCE.replace("Key(\"a\")", "Key(\"b\")")), Set.of());
+        compilation.update(Map.of("a.sou", SOURCE.replace("Key(\"a\")", "Key(\"b\")")), Set.of(),
+                TestDay.DATE);
         compilation.loader();
-        compilation.update(Map.of("a.sou", SOURCE), Set.of());
+        compilation.update(Map.of("a.sou", SOURCE), Set.of(), TestDay.DATE);
         assertNotSame(first, compilation.loader(), "the loader after an edit that was undone");
     }
 
@@ -178,10 +180,11 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
     void aLoaderThatCouldNotBeBuiltDoesNotClaimTheClasses() {
         ThrowsOnceWhenAsked path = new ThrowsOnceWhenAsked(2);
         Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", SOURCE), Set.of(), path);
+                Map.of("a.sou", SOURCE), Set.of(), path).writtenOn(TestDay.DATE);
         ClassLoader beforeTheEdit = compilation.loader();
 
-        compilation.update(Map.of("a.sou", SOURCE.replace("Key(\"a\")", "Key(\"b\")")), Set.of());
+        compilation.update(Map.of("a.sou", SOURCE.replace("Key(\"a\")", "Key(\"b\")")), Set.of(),
+                TestDay.DATE);
         assertThrows(IllegalStateException.class, compilation::loader, "the ask that could not build");
 
         assertNotSame(beforeTheEdit, compilation.loader(),

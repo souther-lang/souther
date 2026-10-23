@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
@@ -59,9 +60,10 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
         List<UninhabitableTypes.UninhabitableGroup> whole = UninhabitableTypes.withNoValueOfTheirOwn(
                 declared,
                 TypeCardinality.overTheWholeGraph(declared,
-                        RuleReadingContext.of(source, policy, c.db().readings()),
+                        RuleReadingContext.of(source, policy, c.db().readings(), TestDay.TODAY),
                         TypeCardinality.Premises.read(
-                                RuleReadingContext.of(source, policy, c.db().readings()))));
+                                RuleReadingContext.of(source, policy, c.db().readings(),
+                                        TestDay.TODAY))));
 
         assertEquals(named,
                 whole.stream().map(each -> each.members().stream().map(TypeSymbol::name).toList())

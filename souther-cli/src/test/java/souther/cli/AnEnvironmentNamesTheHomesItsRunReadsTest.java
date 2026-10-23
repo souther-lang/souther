@@ -2,6 +2,7 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import souther.test.WrittenOn;
 
 import java.io.ByteArrayInputStream;
 import java.io.OutputStream;
@@ -32,7 +33,7 @@ class AnEnvironmentNamesTheHomesItsRunReadsTest {
     private Environment withProperties(Map<String, String> properties) {
         PrintStream nowhere = new PrintStream(OutputStream.nullOutputStream());
         return new Environment(Map.of(), properties, dir, new ByteArrayInputStream(new byte[0]),
-                nowhere, nowhere, false);
+                nowhere, nowhere, false, WrittenOn.DAY);
     }
 
     private Map<String, String> both() {

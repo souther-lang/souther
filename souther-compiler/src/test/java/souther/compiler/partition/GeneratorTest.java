@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Lookup;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -106,7 +107,7 @@ class GeneratorTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(sigs);
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get(behavior), reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
@@ -215,7 +216,7 @@ class GeneratorTest {
             declared.add(new souther.compiler.inputs.InputDomain.Parameter(each, null, Type.INT));
         }
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(declared, reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none())
                 .reading(rules);

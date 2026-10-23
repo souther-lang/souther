@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.TestDay;
 import souther.compiler.WhatTheRowsReached;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Membership;
@@ -73,7 +74,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
     private PartitionClass classOf(String type, String id) {
         return PartitionClasses.of(Type.ref(named(type)), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), java.util.Set.of()).stream()
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                TestDay.TODAY), java.util.Set.of()).stream()
                 .filter(each -> each.id().equals(id)).findFirst().orElseThrow();
     }
 
@@ -201,7 +203,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
     private List<String> written(PartitionClass each) {
         return Partitions.standingFor(each.representatives(), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), java.util.Set.of())
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
+                java.util.Set.of())
                 .values().stream()
                 .map(FixtureTemplate::text).toList();
     }

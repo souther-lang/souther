@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
@@ -61,7 +62,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     private final PathEngine engine = new PathEngine(
             RuleReadingContext.unshared(
                     RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
-                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
             Terms.Of.THE_DISCHARGE_TREE);
 
     @Test
@@ -195,7 +196,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         PathEngine reading = new PathEngine(
                 RuleReadingContext.unshared(
                         RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE);
 
         Denotations outer = reading.enteringArm(
@@ -300,7 +301,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Symbols symbols = symbolsOf(NESTED);
         PathEngine reading = new PathEngine(
                 RuleReadingContext.unshared(RuleReadings.ofNoClauseFiled(symbols),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Terms.Of.THE_DISCHARGE_TREE);
         TypeSymbol once = named(symbols, "OnceKind");
         TypeSymbol station = named(symbols, "Station");
@@ -323,7 +324,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Symbols symbols = symbolsOf(NESTED);
         PathEngine reading = new PathEngine(
                 RuleReadingContext.unshared(RuleReadings.ofNoClauseFiled(symbols),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Terms.Of.THE_DISCHARGE_TREE);
         TypeSymbol once = named(symbols, "OnceKind");
         TypeSymbol station = named(symbols, "Station");
