@@ -518,14 +518,31 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return nothingShown;
             }
         }
+        // Ways read alike are read once: a choice the body works out after reading its input splits
+        // the way into as many ways as it has arms, and each states the same. What a way is read by
+        // is its region, what it states and whether it is held whole, and two ways of one reading
+        // narrowed by the same are over one region ({@link Reachability.Reaching#narrowedBy}).
+        Map<Along, WhatItLeaves> alike = new HashMap<>();
+        List<Carrier> carried = carriers;
         WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
-            WhatItLeaves along = leftAlong(read, sources, carriers, each.region(),
-                    conditionsOf(each), nothingUnreadBearsOnIt(each), witnesses);
+            List<OnAWay> conditions = conditionsOf(each);
+            boolean heldWhole = nothingUnreadBearsOnIt(each);
+            WhatItLeaves along = each.narrowedBy().isPresent()
+                    ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
+                            heldWhole), _ -> leftAlong(read, sources, carried, each.region(),
+                                    conditions, heldWhole, witnesses))
+                    : leftAlong(read, sources, carried, each.region(), conditions, heldWhole,
+                            witnesses);
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
     }
+
+    /** What a way is read by: what narrowed its region, what it states and whether nothing unread
+     *  bears on the relation. */
+    private record Along(List<TakenConstraint> region, List<OnAWay> conditions,
+                         boolean heldWhole) {}
 
     /**
      * Whether the way left nothing unread that bears on this relation: it declined no condition,

@@ -21,6 +21,7 @@ import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -181,7 +182,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
                 NumbersAskedFor.of(LevelRegion.point(
                         new Level.OnACarrier(Carrier.WHOLE, Count.of(100)))),
                 new Reachability.Reaching(within, Requirements.NONE, TruthsAsked.NONE,
-                        List.of(cut), Reachability.Ways.ONE, List.of()),
+                        List.of(cut), Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 

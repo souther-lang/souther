@@ -232,6 +232,77 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "g.value >= r.d.value", 24));
     }
 
+    /** A record holding the amount beside a field of type {@code Held}, whose rule is
+     *  {@code rule}. */
+    private static String besideAHeld(String held, String rule) {
+        return """
+                data Yen = Int invariant value >= 0
+                data Held = %s invariant %s
+                data Rec = { h: Held, d: Yen }""".formatted(held, rule);
+    }
+
+    /**
+     * A rule saying only where one part of a date falls leaves the amount beside it alone: every
+     * part of a date the calendar has is a part of some date, so the first of any month is a
+     * value of the field, and the amount reaches every gross from nought on.
+     */
+    @Test
+    void aRuleOnOnePartOfADateLeavesAnAmountBesideItAlone() {
+        assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
+                besideAHeld("Date", "Date.day(value) == 1"), "g.value >= r.d.value", 24));
+    }
+
+    /**
+     * A rule asking for two parts of a date at once is not shown to leave the field a value: each
+     * part the calendar has is a part of some date, and two of them are not thereby one date. So
+     * the amount is not shown to reach every gross, whether the parts are in two comparisons or in
+     * one.
+     */
+    @Test
+    void twoPartsOfADateAreNotShownToBeOneDate() {
+        for (String rule : List.of("Date.day(value) == 1 && Date.month(value) == 2",
+                "Date.day(value) == Date.month(value)")) {
+            assertEquals(Map.of("g", NOT_SHOWN), leftAt("g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "g.value >= r.d.value", 24), rule);
+        }
+    }
+
+    /**
+     * A rule working something out beside the part it takes is not shown to leave the field a
+     * value, whatever it comes to: what the bounds read of {@code Date.day(value) + M > 0} is a day
+     * above nought less the greatest {@code Int}, and no date gets through working it out. Cancelled
+     * away, as in {@code + M - M}, it is still worked out. A part held against a number as it is
+     * written — the length of a string, the year of a date — leaves one.
+     */
+    @Test
+    void aRuleWorkingSomethingOutBesideThePartIsNotShownToLeaveAValue() {
+        for (String rule : List.of("Date.day(value) + 9223372036854775807 > 0",
+                "Date.day(value) + 9223372036854775807 - 9223372036854775807 == 1",
+                "Date.day(value) + 1 == 2")) {
+            assertEquals(Map.of("g", NOT_SHOWN), leftAt("g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "g.value >= r.d.value", 24), rule);
+        }
+        assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
+                besideAHeld("String", "String.length(value) == 3"), "g.value >= r.d.value", 24));
+        assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
+                besideAHeld("Date", "Date.year(value) == 99999"), "g.value >= r.d.value", 24));
+    }
+
+    /**
+     * Parts no date has leave the field no value, and the record with it: no row reaches the
+     * comparison, and nothing is said of the amount or drawn on the gross.
+     */
+    @Test
+    void partsNoDateHasLeaveNothingToSayOfTheAmount() {
+        for (String rule : List.of("Date.day(value) == 31 && Date.month(value) == 2",
+                "Date.year(value) == 2023 && Date.month(value) == 2 && Date.day(value) == 29")) {
+            assertEquals(Map.of(), leftAt("g: Yen, r: Rec", besideAHeld("Date", rule),
+                    "g.value >= r.d.value", 24), rule);
+            assertEquals(List.of(), classesAt("g: Yen, r: Rec", besideAHeld("Date", rule),
+                    "g.value >= r.d.value", "g"), rule);
+        }
+    }
+
     /**
      * Two amounts held equal take the same values, however much of the rules beside one of them
      * was read: a rule of the record over another of its fields leaves the amount's ends not shown

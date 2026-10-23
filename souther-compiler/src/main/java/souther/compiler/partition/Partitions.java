@@ -59,6 +59,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -380,6 +381,47 @@ public final class Partitions {
                     if (each.sameReadingAs(asked)) {
                         return each;
                     }
+                }
+            }
+            return null;
+        }
+
+        /**
+         * This reading's lines filed for a caller that asks {@link #held} of many of them: asked one
+         * at a time, every line drawn is met for each line asked.
+         *
+         * <p>Filed once, by where each line was drawn and what drew it ({@link Border#drawnAt}),
+         * which two lines {@link Border#sameReadingAs} calls one share, and a line is looked for
+         * among those filed with it, in the order they were drawn, so the line found is the one
+         * {@link #held} finds. Made for the call and not kept here: this value is held in answers.
+         */
+        public HeldLines lines() {
+            return new HeldLines(this);
+        }
+    }
+
+    /** The lines of one reading, filed by where each was drawn and what drew it
+     *  ({@link Partitioning#lines}). */
+    public static final class HeldLines {
+
+        private final Map<Border.DrawnAt, List<Border>> drawn = new HashMap<>();
+
+        private HeldLines(Partitioning reading) {
+            for (Border each : reading.between()) {
+                drawn.computeIfAbsent(each.drawnAt(), _ -> new ArrayList<>()).add(each);
+            }
+            for (List<Border> lines : reading.along().values()) {
+                for (Border each : lines) {
+                    drawn.computeIfAbsent(each.drawnAt(), _ -> new ArrayList<>()).add(each);
+                }
+            }
+        }
+
+        /** The reading's own line where it read {@code asked}, or null where it read none. */
+        public Border held(Border asked) {
+            for (Border each : drawn.getOrDefault(asked.drawnAt(), List.of())) {
+                if (each.sameReadingAs(asked)) {
+                    return each;
                 }
             }
             return null;
