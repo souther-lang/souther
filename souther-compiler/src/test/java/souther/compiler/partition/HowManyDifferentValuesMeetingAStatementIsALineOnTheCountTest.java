@@ -4,10 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -17,6 +21,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -36,9 +43,7 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private static final String HEAD = """
-            module probe
-
+    private static final String DECLARED = """
             data Forecast = { currency: String, amount: Int }
 
             let filed (cs: List<String>): Map<String, Int> =
@@ -48,6 +53,9 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                 List.fold((acc, f) -> Map.updateOrInsert(f.currency, f.amount,
                     n -> n + f.amount, acc), Map.empty, fs)
 
+            """;
+
+    private static final String HEAD = "module probe\n\n" + DECLARED + """
             behavior f : (fs: List<Forecast>) -> Int
             let f (fs) = if %s then 1 else 0
             """;
@@ -174,7 +182,8 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                 "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0, fs))))",
                 "Set.size(Set.fromList(List.map(.currency,"
                         + " List.filter(f -> f.amount > 0 && f.amount /= 5, fs))))",
-                "Map.size(Map.filterEntries((_, n) -> n > 0, totalsOf(fs)))")) {
+                "Map.size(Map.filterEntries((_, n) -> n > 0, totalsOf(fs)))",
+                "Map.size(Map.filterEntries((_, n) -> n >= 2, filed(List.map(.currency, fs))))")) {
             for (String against : List.of(" >= 2", " == 1")) {
                 JsonNode line = only(differentCounts(reportOf(HEAD.formatted(count + against))));
                 for (JsonNode item : line.path("items")) {
@@ -191,6 +200,90 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                 }
             }
         }
+    }
+
+    /**
+     * A value counted by what the elements under it come to may take more than one of them: a
+     * currency held twice, or two amounts under one currency totalling nought where no amount is
+     * nought. The rows composed for such a line hold as many as it takes, and answer as their
+     * points say.
+     */
+    @Test
+    void aValueIsComposedWithAsManyElementsUnderItAsWhatTheyComeToTakes() {
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Map.size(Map.filterEntries((_, n) -> n >= 2,
+                    filed(List.map(.currency, fs)))) == 1 then 1 else 0
+                """, "f/#different fs [fs[*].currency] where [multiplicity(fs[*].currency) >= 2]");
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if List.all(f -> f.amount /= 0, fs) then
+                    if Map.size(Map.filterEntries((_, n) -> n == 0, totalsOf(fs))) == 1 then 1
+                    else 0
+                    else 2
+                """, "f/#different fs [fs[*].currency] where"
+                + " [total(fs[*].amount by currency) == 0]");
+    }
+
+    /**
+     * How often the value at a place inside an element occurs is a number of the element, and a
+     * row at its line holds that value under as many elements as the line asks, chosen among the
+     * values each element is read at whole.
+     */
+    @Test
+    void howOftenAValueInsideAnElementOccursIsComposedWithThatManyElementsUnderIt() {
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Map.size(Map.filterEntries((_, n) -> n >= 2,
+                    filed(List.map(.currency, fs)))) >= 1 then 1 else 0
+                """, "f/multiplicity(fs[*].currency)");
+    }
+
+    /**
+     * Elements meeting the statement may share a value: where every element is above nought and
+     * one currency is counted, two elements are two of that currency. And a value some elements
+     * must not hold is held by others where only they can hold it — two currencies kept and three
+     * elements, one of them the `"x"` that only an element at or below nought is kept out at.
+     */
+    @Test
+    void aLineUnderTheCountIsComposedWithElementsSharingAValueWhereItTakesThem() {
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if List.all(f -> f.amount > 0, fs) then
+                    if Set.size(Set.fromList(List.map(.currency,
+                        List.filter(f -> f.amount > 0, fs)))) == 1 then
+                        if List.length(fs) == 2 then 1 else 0
+                    else 2
+                    else 3
+                """, "f/List.length(fs)", "0 <= List.length(fs) < 1");
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Set.size(Set.fromList(List.map(.currency,
+                    List.filter(f -> f.currency /= "x" || f.amount > 0, fs)))) == 2 then
+                    if List.length(fs) == 3 then 1 else 0
+                    else 2
+                """, "f/List.length(fs)", "0 <= List.length(fs) < 2");
+    }
+
+    /**
+     * Asked of each value, a statement has to answer alike for every element holding it. Which of
+     * them is the last to hold it reads no place but the value's, and answers differently for the
+     * first and the last of them, so it is refused; whether the value is there at all is not.
+     */
+    @Test
+    void aStatementTurningOnWhichElementHoldsAValueIsNoStatementOfEachValue() {
+        DecisionSubject.AnInput fs = new DecisionSubject.AnInput(TermPath.of("fs"));
+        DecisionSubject.AnInput currency = new DecisionSubject.AnInput(
+                TermPath.of("fs").element().then("currency"));
+        Quantity.HowManyDifferentMeet.Selection last =
+                new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
+                        new Proposition.LastToHold(fs, currency, true, "last"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Quantity.HowManyDifferentMeet(fs, currency, last));
+        assertNull(Quantity.HowManyDifferentMeet.of(fs, currency, last));
+        assertNotNull(Quantity.HowManyDifferentMeet.of(fs, currency,
+                new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
+                        new Proposition.Present(currency, true, "present"))));
     }
 
     /**
@@ -248,6 +341,92 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
         behavior.at("/partition/notRead").forEach(each -> unread.add(each.path("position")
                 .asString() + " " + each.path("reason").asString()));
         assertEquals(List.of("fs[*].amount rule_about_a_run"), unread);
+    }
+
+    /**
+     * A row this compiler composes for a point of a line answers what the point says, as the
+     * language runs it: the rows of a line on {@code compared}, the last condition before the
+     * answer is written, are each written as an example answering one above the line and nought
+     * below it, and none of them is refused.
+     *
+     * <p>The rows themselves, and not examples written beside them: what a row is composed holding
+     * is what is asked of it here, and a row the composer could not have built is never one an
+     * example stands in for.
+     *
+     * @param behavior   a behavior {@code f} answering one where {@code compared} holds and nought
+     *                   where it fails, under whatever conditions it is reached
+     * @param outOfReach the points of the line no row reaches, by where each is, which are said to
+     *                   have no row and never to have one composed
+     */
+    private static void everyRowComposedAnswersAsItsPointSays(String behavior, String compared,
+                                                              String... outOfReach) {
+        String source = "module probe\n\n" + behavior;
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        // Rendered at their places in the source, so the origin of one comparison is none of
+        // another's.
+        SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
+        JsonNode report = JSON.readTree(AdequacyReport.of(compilation).json(rendering));
+        JsonNode drawn = null;
+        for (JsonNode each : behaviorOf(report).at("/partition/boundaries")) {
+            if (compared.equals(each.path("axis").asString())) {
+                drawn = each;
+            }
+        }
+        assertTrue(drawn != null, () -> "a line on " + compared + ": " + report);
+        for (JsonNode item : drawn.path("items")) {
+            if (List.of(outOfReach).contains(item.path("against").asString())) {
+                assertFalse(item.path("knownWritable").asBoolean(),
+                        () -> "no row reaches " + item + ", and none is said to");
+                continue;
+            }
+            assertTrue(item.has("notOwed") || item.path("knownWritable").asBoolean(),
+                    () -> "a row is composed for every point of " + compared + ": " + item);
+        }
+        String origin = drawn.path("origin").asString();
+        String rows = GeneratedRows.of(compilation, "probe", null, rendering).text();
+        StringBuilder examples = new StringBuilder("\nexample f\n");
+        List<String> said = new ArrayList<>();
+        StringBuilder row = null;
+        int written = 0;
+        for (String line : rows.split("\n")) {
+            if (line.startsWith("// fills ")) {
+                said.add(line);
+                continue;
+            }
+            if (line.startsWith("    |")) {
+                row = new StringBuilder();
+            }
+            if (row == null) {
+                continue;
+            }
+            row.append(line).append('\n');
+            if (!line.contains("<?>")) {
+                continue;
+            }
+            String answer = null;
+            for (String fills : said) {
+                if (fills.endsWith(" point of " + origin)) {
+                    answer = fills.contains("fills ON ") || fills.contains("fills IN ") ? "1"
+                            : "0";
+                }
+            }
+            if (answer != null) {
+                examples.append(row.toString().replace("<?>", answer));
+                written++;
+            }
+            said.clear();
+            row = null;
+        }
+        assertTrue(written > 0, () -> "rows composed for " + compared + ": " + rows);
+        Compilation run = Compilation.ofSource(source + examples, "Main");
+        run.measure(Adequacy.Asked.fullReport());
+        run.answerEverything();
+        assertEquals(List.of(), run.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
+                () -> "every row of " + compared + " answers as its point says:" + examples
+                        + "\nout of the rows composed:\n" + rows);
     }
 
     private static JsonNode reportOf(String source) {

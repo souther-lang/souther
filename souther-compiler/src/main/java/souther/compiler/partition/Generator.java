@@ -5269,13 +5269,19 @@ public final class Generator {
         // number inside an element of it — the container is composed for how many of its elements
         // meet each statement first, its elements chosen one by one. A row of elements written
         // alike meets such a way only where one element meets everything asked of all of them.
+        //
+        // A row built with something of the way left out, as its own account says, is held back
+        // while another of these may come back with nothing left out: the run of a row short of
+        // the way settles nothing a rule is gone past by, so the first row built is not the row
+        // taken where a later one meets the whole way. Where none does, the first built is.
         boolean apartFirst = elementsMayDiffer(reaching, fixing);
         boolean counts = reaching.boundedOnTheWay().stream()
                 .anyMatch(cut -> countedOf(cut.demand()).isPresent());
+        List<BoundaryAttempt> builtShort = new ArrayList<>();
         if (apartFirst) {
             BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
                     check, stood, trial, true, null);
-            if (counted instanceof BoundaryAttempt.Built) {
+            if (builtLeavingNothingOut(counted, builtShort)) {
                 return counted;
             }
         }
@@ -5283,38 +5289,84 @@ public final class Generator {
         for (ElementsWrittenAlike.Alike one : alike.ways()) {
             BoundaryAttempt along = probeFixingAlong(subject, label, fixing, asking,
                     one.reaching(), check, stood, trial, false, one.leftBy());
-            if (along instanceof BoundaryAttempt.Built) {
+            if (builtLeavingNothingOut(along, builtShort)) {
                 return along;
             }
         }
         BoundaryAttempt whole = probeFixingAlong(subject, label, fixing, asking, reaching, check,
                 stood, trial, false, alike.stoppedBy());
+        if (builtLeavingNothingOut(whole, builtShort)) {
+            return whole;
+        }
         // And where that came to nothing, with every container a quantifier is over composed for
         // its counts. What the way as it stands came to is what is said where this comes to
         // nothing as well.
-        if (whole instanceof BoundaryAttempt.Built || apartFirst || !counts) {
-            return whole;
+        if (!apartFirst && counts) {
+            BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
+                    check, stood, trial, true, null);
+            if (builtLeavingNothingOut(counted, builtShort)) {
+                return counted;
+            }
         }
-        BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching, check,
-                stood, trial, true, null);
-        return counted instanceof BoundaryAttempt.Built ? counted : whole;
+        return builtShort.isEmpty() ? whole : builtShort.getFirst();
+    }
+
+    /**
+     * Whether {@code attempt} is a row built with nothing its own account names as left out of
+     * the way — and, where it is a row built with something, {@code attempt} put in
+     * {@code builtShort}.
+     *
+     * <p>An account naming nothing does not show nothing was left out: a condition the walk had
+     * no words for is in no account ({@link CompositionAccount}). One naming something shows that
+     * much was, which is all this asks of it.
+     */
+    private static boolean builtLeavingNothingOut(BoundaryAttempt attempt,
+                                                  List<BoundaryAttempt> builtShort) {
+        if (!(attempt instanceof BoundaryAttempt.Built built)) {
+            return false;
+        }
+        if (built.unrepresented().onTheWay().isEmpty()
+                && built.unrepresented().onAnAnswer().isEmpty()) {
+            return true;
+        }
+        builtShort.add(attempt);
+        return false;
     }
 
     /**
      * Whether the elements of some container a quantifier that is the whole of a statement is over
      * may have to differ for a row to meet the way: the quantifier asks an element one of several
-     * things, another such quantifier is over the same container, or {@code fixing} stands at a
-     * number inside one of its elements.
+     * things, another such quantifier is over the same container, a count — the item's, or one on
+     * the way — composes the container, or {@code fixing} stands at a number inside one of its
+     * elements.
+     *
+     * <p>A container a count composes is chosen element by element, so what a quantifier over it
+     * asks of every element is asked where the elements are chosen, as how many of them meet its
+     * denial; held to the region instead, what the region cannot hold of one element — that it is
+     * not some value — would never reach the elements chosen.
      */
     private static boolean elementsMayDiffer(Reachability.Reaching reaching,
                                              Map<RealizationTarget, Place> fixing) {
+        Set<TermPath> composedForCounts = new HashSet<>();
+        for (RealizationTarget each : fixing.keySet()) {
+            if (each instanceof RealizationTarget.ACount count) {
+                composedForCounts.add(count.count().container());
+            }
+        }
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            if (cut.demand() instanceof RowDemand.SoMany many) {
+                composedForCounts.add(AStatementAtARow.elementsOf(many.count()).container()
+                        .inputPosition());
+            }
+        }
         Set<TermPath> quantified = new HashSet<>();
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             if (countedOf(cut.demand()).isEmpty()) {
                 continue;
             }
             TermPath container = containerOf(cut.demand());
-            if (!RowDemand.writtenAlikeAsItStands(cut.demand()) || !quantified.add(container)) {
+            if (!RowDemand.writtenAlikeAsItStands(cut.demand()) || !quantified.add(container)
+                    || composedForCounts.contains(container)) {
                 return true;
             }
         }

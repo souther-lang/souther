@@ -841,23 +841,44 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     return alike(stated, held.element(), key);
                 }
 
+                /**
+                 * Whether {@code stated} answers alike for every element holding one value at
+                 * {@code key}, by what each kind of statement is: proved of each kind that is, and
+                 * refused of every other. Which places a statement reads is not enough — which
+                 * element holding a value is the last to, as {@link Proposition.LastToHold}
+                 * states, reads no place but the value's and turns on which element it is.
+                 */
                 private static boolean alike(Proposition stated, TermPath element, TermPath key) {
                     return switch (stated) {
+                        case Proposition.Always _ -> true;
                         case Proposition.Compared compared -> switch (compared.relation()) {
                             case Relation.Affine affine -> affine.form().coefs().keySet()
                                     .stream().allMatch(each -> alike(each, element, key));
                             case Relation.Ordered ordered -> alike(ordered.term(), element, key);
                         };
-                        case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _ ->
-                                stated.partsHeld().stream()
-                                        .allMatch(part -> alike(part, element, key));
-                        // Any other statement is about the places it reads, and is alike for
-                        // every element holding the value where none of them is inside an
-                        // element but the value's own.
-                        default -> PositionsAStatementReads.of(stated).map(places -> places
-                                .stream().noneMatch(place -> place.isAtOrUnder(element)
-                                        && !place.equals(key))).orElse(false);
+                        case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                             Proposition.SoManyHold _ -> stated.partsHeld().stream()
+                                .allMatch(part -> alike(part, element, key));
+                        case Proposition.Truth truth -> alike(truth.of(), element, key);
+                        case Proposition.Present present -> alike(present.of(), element, key);
+                        case Proposition.InCases cases -> alike(cases.of(), element, key);
+                        case Proposition.SameValue same ->
+                                alike(same.one(), element, key) && alike(same.other(), element, key);
+                        // Which element holding the value is the last to, what some element of a
+                        // container meets, what an operation answered of something: each turns on
+                        // which element it is asked of, or on what nothing here reads.
+                        case Proposition.LastToHold _, Proposition.Some _,
+                             Proposition.OnAnApplication _, Proposition.SomeReachable _,
+                             Proposition.Unread _, Proposition.Carried _ -> false;
                     };
+                }
+
+                /** Whether {@code subject} is the value itself or a place of the input outside
+                 *  the elements. */
+                private static boolean alike(DecisionSubject subject, TermPath element,
+                                             TermPath key) {
+                    return subject instanceof DecisionSubject.AnInput(TermPath at)
+                            && (at.equals(key) || !at.isAtOrUnder(element));
                 }
 
                 /** Whether {@code number} is the value itself, how often it occurs, one gathered

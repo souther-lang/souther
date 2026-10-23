@@ -163,6 +163,27 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the values an element is chosen among, at a size, at the sharings"
                             + " looked at or at the containers offered, and hands the figure over"
                             + " in the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.CardinalityComposer$HeldUnder#everyGroup("
+                            + "Ljava/util/List;Ljava/util/function/Function;"
+                            + "Lsouther/compiler/inputs/TermPath;Lsouther/compiler/inputs/TermPath;"
+                            + "Ljava/util/List;ZZLjava/util/Set;)"
+                            + "Lsouther/compiler/partition/CardinalityComposer$Groups;",
+                    "stops listing the groups of elements under one value at the values an element"
+                            + " is chosen among, and puts that figure in the set it is handed"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#alikeUnderOneValue("
+                            + "Lsouther/compiler/types/Type;Lsouther/compiler/check/TypeView;"
+                            + "Lsouther/compiler/check/Shape$Sequence;"
+                            + "Lsouther/compiler/inputs/TermPath;Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/partition/KeptOccurrences;"
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/partition/NumericSet;Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at the values an element is chosen among, at a size or at the"
+                            + " containers offered, and hands the figure over in the shortfall it"
+                            + " comes back with"),
             // The ways a way is looked along where conditions on it came out one of several
             // things: the walk stops at either figure and says which, and each caller carries it
             // on with what was looked along.
