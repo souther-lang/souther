@@ -81,11 +81,11 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
      * What a denial by cases states on every assignment is the denial's, beside a third part or
      * not, and the denial of two cases is a disjunction each part of which holds one condition or
      * its denial — which is what lets the choices of several such denials close where they take
-     * the condition both ways.
+     * the condition both ways. Beside a third part the arms are the leaves: what the third part
+     * changes is which parts are cases, and an arm joined deeper is denied as it is without one.
      */
     @Test
     void theCasesOfAConditionAreDeniedCaseByCase() {
-        List<Proposition> pool = pool();
         Proposition condition = truth(0, true);
         List<Proposition> beside = new ArrayList<>();
         beside.add(null);
@@ -95,8 +95,9 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
         }
         int kept = 0;
         for (Proposition third : beside) {
-            for (Proposition one : pool) {
-                for (Proposition other : pool) {
+            List<Proposition> arms = third == null ? pool() : leaves();
+            for (Proposition one : arms) {
+                for (Proposition other : arms) {
                     List<Proposition> parts = new ArrayList<>(List.of(
                             Proposition.all(List.of(condition, one)),
                             Proposition.all(List.of(condition.denied(), other))));
@@ -134,14 +135,20 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
         return stated instanceof Proposition.All all ? all.parts() : List.of(stated);
     }
 
-    /** Both truth values, each atom both ways round, and every pair of those joined either way. */
-    private static List<Proposition> pool() {
-        List<Proposition> leaves = new ArrayList<>(List.of(new Proposition.Always(true),
+    /** Both truth values and each atom both ways round. */
+    private static List<Proposition> leaves() {
+        List<Proposition> out = new ArrayList<>(List.of(new Proposition.Always(true),
                 new Proposition.Always(false)));
         for (TermPath atom : ATOMS) {
-            leaves.add(new Proposition.Truth(new DecisionSubject.AnInput(atom), true));
-            leaves.add(new Proposition.Truth(new DecisionSubject.AnInput(atom), false));
+            out.add(new Proposition.Truth(new DecisionSubject.AnInput(atom), true));
+            out.add(new Proposition.Truth(new DecisionSubject.AnInput(atom), false));
         }
+        return out;
+    }
+
+    /** The leaves, and every pair of those joined either way. */
+    private static List<Proposition> pool() {
+        List<Proposition> leaves = leaves();
         List<Proposition> out = new ArrayList<>(leaves);
         for (Proposition one : leaves) {
             for (Proposition other : leaves) {

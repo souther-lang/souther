@@ -13,6 +13,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -533,15 +534,27 @@ public sealed interface Proposition {
      * hold the denial of, or null where there is none.
      */
     private static Proposition deniedCaseByCase(List<Proposition> parts) {
+        List<Set<String>> conjunctsOfEach = new ArrayList<>(parts.size());
+        Set<String> anywhere = new HashSet<>();
+        for (Proposition part : parts) {
+            Set<String> keys = new HashSet<>();
+            conjunctsOf(part).forEach(each -> keys.add(each.key()));
+            conjunctsOfEach.add(keys);
+            anywhere.addAll(keys);
+        }
         for (Proposition part : parts) {
             for (Proposition condition : conjunctsOf(part)) {
                 Proposition against = condition.denied();
+                if (!anywhere.contains(against.key())) {
+                    continue;
+                }
                 List<Proposition> holding = new ArrayList<>();
                 List<Proposition> failing = new ArrayList<>();
                 List<Proposition> rest = new ArrayList<>();
-                for (Proposition each : parts) {
-                    boolean holds = holdsAConjunct(each, condition);
-                    boolean fails = holdsAConjunct(each, against);
+                for (int at = 0; at < parts.size(); at++) {
+                    Proposition each = parts.get(at);
+                    boolean holds = conjunctsOfEach.get(at).contains(condition.key());
+                    boolean fails = conjunctsOfEach.get(at).contains(against.key());
                     if (holds && !fails) {
                         holding.add(without(each, condition));
                     } else if (fails && !holds) {
@@ -564,10 +577,6 @@ public sealed interface Proposition {
 
     private static List<Proposition> conjunctsOf(Proposition stated) {
         return stated instanceof All all ? all.parts() : List.of(stated);
-    }
-
-    private static boolean holdsAConjunct(Proposition stated, Proposition conjunct) {
-        return conjunctsOf(stated).stream().anyMatch(each -> each.key().equals(conjunct.key()));
     }
 
     /** What {@code stated} holds beside {@code conjunct}, which holds where nothing else is. */
