@@ -57,6 +57,11 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
             Objects.requireNonNull(applied, "and applies the closure some way");
             Objects.requireNonNull(call, "by some call");
             Objects.requireNonNull(step, "a closure an operation applies is a block it reads");
+            if (position != null && step.params().stream()
+                    .noneMatch(param -> param != null && position.equals(param.binding()))) {
+                throw new IllegalArgumentException("the position is handed to a parameter of the"
+                        + " closure applied: " + position);
+            }
         }
     }
 

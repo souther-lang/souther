@@ -565,6 +565,37 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 atThe("<=", UNUSED, inputs, body)));
     }
 
+    /** A string of two characters that is three letters, which no value is, and which the reading
+     *  of the declarations does not refuse on its own. */
+    private static final String NO_STRING = "data Never = String invariant String.length(value) == 2"
+            + " && String.matches(\"[a-z]{3}\", value)";
+
+    /**
+     * How many a container holds is a count rows take only where an element can be written. The
+     * rules on the numbers leave a list of any length, and a list of elements no value is holds
+     * none: no row has a last element, so nothing is shown of the length, and no line is drawn on
+     * it.
+     */
+    @Test
+    void aCountOfElementsNoValueIsTakesNothingButNought() {
+        String inputs = "xs: List<Never>";
+        String body = STANDING.formatted("i == List.length(xs) - 1");
+        assertEquals(List.of(), classesAt(inputs, NO_STRING, "List<Int>", body,
+                "List.length(xs)"));
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, NO_STRING, "List<Int>",
+                body, atThe("==", NO_STRING, inputs, body)));
+    }
+
+    /** A list of one value over again, counted for how often it occurs, is no row either where the
+     *  value is none: no bar is parted by it. */
+    @Test
+    void howOftenAValueNoValueIsOccursTakesNothing() {
+        assertEquals(List.of(), classesAt("issues: List<Issue>, atLeast: Int",
+                LABELLED.replace("Set<String>", "Set<Never>")
+                        .replace("Set.toList(i.labels)", "List.map(l -> l.value, Set.toList(i.labels))")
+                        + "\n" + NO_STRING, BUSY, "atLeast"));
+    }
+
     /**
      * A way stating something of where the element stands picks some positions out as a way
      * stating something of the elements does: under {@code i > 0} a list of one never reaches the

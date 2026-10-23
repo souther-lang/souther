@@ -5,10 +5,13 @@ import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PublishedRules;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -2127,8 +2130,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return fromOne != null && fromOne.holdsAValue() ? fromOne : null;
     }
 
-    /** A run of how many {@code container} holds, every value of which some row in
-     *  {@code region} takes — or null where that is not shown. */
+    /**
+     * A run of how many {@code container} holds, every value of which some row in {@code region}
+     * takes — or null where that is not shown.
+     *
+     * <p>What the region answers is what the rules on the numbers leave the count, and a count of
+     * one or more is a row only where an element can be written: the rules of the element's own
+     * type may leave it no value, which no number says. So past nought the run is taken only where
+     * a value of the element is shown to exist ({@link #aValueIsShownToExist}).
+     */
     private static NumericDomain.Bounds howManyAreHeld(TermPath container, InputReading read,
                                                        SearchRegion region) {
         RuleReadingSource rules = read.rules();
@@ -2136,7 +2146,40 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericTerm.TakenOf count = type == null ? null
                 : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
                         container, type, rules.inners(), rules.symbols());
-        return count == null ? null : region.wholeRunOf(count);
+        NumericDomain.Bounds run = count == null ? null : region.wholeRunOf(count);
+        if (run == null || aValueIsShownToExist(read.domain().typeAt(container.element(), rules),
+                read)) {
+            return run;
+        }
+        return run.admits(Count.ZERO) ? new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO),
+                Endpoint.inclusive(Count.ZERO)) : null;
+    }
+
+    /**
+     * Whether some value of {@code type} is shown to exist: one no rule of its own is written on —
+     * a number, a string, a time, a container, which may hold nothing, an option, which may be
+     * none — or a declaration whose rules are shown to leave it one
+     * ({@link FieldDomains#shownToHoldAValue}), the name it is written under and the record it
+     * names alike. A sum, a tuple, or anything else, is not asked and shows nothing.
+     */
+    private static boolean aValueIsShownToExist(Type type, InputReading read) {
+        if (type == null) {
+            return false;
+        }
+        RuleReadingSource rules = read.rules();
+        if (TypeOps.outermost(type, rules.inners()) instanceof TypeOps.Unwrapped worn
+                && worn.layer().named() instanceof TypeSymbol.AtModule name
+                && !FieldDomains.of(name, read.ruleReading()).shownToHoldAValue()) {
+            return false;
+        }
+        return switch (TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(),
+                rules.sums())) {
+            case Shape.Scalar _, Shape.Unit _, Shape.Sequence _, Shape.Mapping _,
+                 Shape.Optional _ -> true;
+            case Shape.Product(TypeSymbol.AtModule record, var _) ->
+                    FieldDomains.of(record, read.ruleReading()).shownToHoldAValue();
+            case null, default -> false;
+        };
     }
 
     /** {@code run} with nought, where nought is in it or it starts just past nought on
