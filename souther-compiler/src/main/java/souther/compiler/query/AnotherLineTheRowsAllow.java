@@ -405,9 +405,25 @@ public sealed interface AnotherLineTheRowsAllow {
              * whatever the caller made of a sum it could not hold.
              */
             default ExactAnswer<Fold> with(DrawnBoundary drawn, Map<NumericTerm, Place> values) {
+                return read(drawn, values).map(row -> withAt(row.modelKeeps(), row.at()));
+            }
+
+            /** The same, with every one of {@code rows} folded in. */
+            default Fold withAll(List<Read> rows) {
+                Fold out = this;
+                for (Read row : rows) {
+                    out = out.withAt(row.modelKeeps(), row.at());
+                }
+                return out;
+            }
+
+            /** What a row whose positions read as {@code values} says to this line: which side of
+             *  {@code drawn} it is on, and how far along this line it is — or why either sum could
+             *  not be held. */
+            default ExactAnswer<Read> read(DrawnBoundary drawn, Map<NumericTerm, Place> values) {
                 return drawn.satisfies(values).flatMap(modelKeeps ->
                         OrderedAffineBoundary.along(direction(), values)
-                                .map(at -> withAt(modelKeeps, at)));
+                                .map(at -> new Read(modelKeeps, at)));
             }
 
             /** No row read yet against {@code direction}, beside {@code drawn}. */
@@ -415,11 +431,19 @@ public sealed interface AnotherLineTheRowsAllow {
                 return switch (drawn) {
                     case OrderedAffineBoundary order ->
                             new Ends(direction, order.satisfiedOn(), null, null);
-                    case SingledAffineBoundary singled -> new AtOneValue(direction,
-                            singled.holdsAtTheValue(), null, false, new TreeSet<>());
+                    case SingledAffineBoundary singled ->
+                            AtOneValue.none(direction, singled.holdsAtTheValue());
                 };
             }
         }
+
+        /**
+         * One row as a line beside the model's reads it.
+         *
+         * @param modelKeeps whether the model's own rule keeps the row
+         * @param at         how far along the line beside it the row is
+         */
+        record Read(boolean modelKeeps, ExactRatio at) {}
 
         /**
          * The range of thresholds the rows read so far leave on one line, by its two ends. Which
@@ -516,17 +540,42 @@ public sealed interface AnotherLineTheRowsAllow {
          * refuses the value, and every row the model refuses has to be. A second place on that
          * side, or a row of the other side at the place, leaves no line standing.
          *
+         * <p><b>What the other side is kept as is one answer once the place is known.</b> A row of
+         * the other side matters only by being at the place or not, so once a row of the naming side
+         * has put the place somewhere, the other side is one yes or no. Before that, where each of
+         * its rows stood is what has to be held, to be asked of the place when it comes; and it is
+         * folded into the yes or no then and not kept. So a line standing — which has a place —
+         * takes one more row in constant work, and the rows of a measurement are taken in together
+         * ({@link #withAll}) rather than one copy of what was held at a time.
+         *
          * @param keepsTheValue whether the model's rule keeps the value it names, which is which
          *                      side of the model's line names the place here
          * @param named         where the rows on that side stand, or null before one
          * @param apartOnIt     whether two rows on that side stand at different places
-         * @param besides       where the rows on the other side stand
+         * @param besideAtIt    whether a row of the other side stands at {@code named}, which is
+         *                      false while {@code named} is null
+         * @param before        where the rows of the other side stood before {@code named} was
+         *                      known, and nothing once it is
          */
         record AtOneValue(QuantityKey direction, boolean keepsTheValue, ExactRatio named,
-                          boolean apartOnIt, SortedSet<ExactRatio> besides) implements Fold {
+                          boolean apartOnIt, boolean besideAtIt, SortedSet<ExactRatio> before)
+                implements Fold {
 
             AtOneValue {
-                besides = Collections.unmodifiableSortedSet(new TreeSet<>(besides));
+                if (named != null && !before.isEmpty()) {
+                    throw new IllegalArgumentException("where the other side stood is asked of the"
+                            + " place once it is known, and not held beside it: " + before);
+                }
+                if (named == null && besideAtIt) {
+                    throw new IllegalArgumentException("no row stands at a place nobody put");
+                }
+                before = Collections.unmodifiableSortedSet(new TreeSet<>(before));
+            }
+
+            /** No row read yet against {@code direction}. */
+            static AtOneValue none(QuantityKey direction, boolean keepsTheValue) {
+                return new AtOneValue(direction, keepsTheValue, null, false, false,
+                        Collections.emptySortedSet());
             }
 
             @Override
@@ -536,18 +585,41 @@ public sealed interface AnotherLineTheRowsAllow {
 
             @Override
             public boolean apart() {
-                return !apartOnIt && (named == null || !besides.contains(named));
+                return !apartOnIt && !besideAtIt;
             }
 
             @Override
             public AtOneValue withAt(boolean modelKeeps, ExactRatio at) {
-                if (modelKeeps == keepsTheValue) {
-                    return new AtOneValue(direction, keepsTheValue, named == null ? at : named,
-                            apartOnIt || (named != null && named.compareTo(at) != 0), besides);
+                return withAll(List.of(new Read(modelKeeps, at)));
+            }
+
+            /** Every one of {@code rows} taken in at once, holding where the other side stood only
+             *  while no place is known. */
+            @Override
+            public AtOneValue withAll(List<Read> rows) {
+                ExactRatio place = named;
+                boolean apartThere = apartOnIt;
+                boolean besideThere = besideAtIt;
+                SortedSet<ExactRatio> stood = new TreeSet<>(before);
+                for (Read row : rows) {
+                    if (row.modelKeeps() == keepsTheValue) {
+                        if (place == null) {
+                            place = row.at();
+                        } else if (place.compareTo(row.at()) != 0) {
+                            apartThere = true;
+                        }
+                    } else if (place == null) {
+                        stood.add(row.at());
+                    } else if (place.compareTo(row.at()) == 0) {
+                        besideThere = true;
+                    }
                 }
-                SortedSet<ExactRatio> more = new TreeSet<>(besides);
-                more.add(at);
-                return new AtOneValue(direction, keepsTheValue, named, apartOnIt, more);
+                if (place != null && !stood.isEmpty()) {
+                    besideThere |= stood.contains(place);
+                    stood = Collections.emptySortedSet();
+                }
+                return new AtOneValue(direction, keepsTheValue, place, apartThere, besideThere,
+                        stood);
             }
 
             /** A row on the side naming the place is moved off it — one step either way is off
@@ -1044,15 +1116,17 @@ public sealed interface AnotherLineTheRowsAllow {
                                       List<OrderedAffineBoundary> elsewhere,
                                       WayToTheBorder way,
                                       Predicate<Map<NumericTerm, Place>> refused) {
-        Stands.Fold ends = Stands.Fold.none(boundary, other);
+        Stands.Fold none = Stands.Fold.none(boundary, other);
         Set<ReadingGap> notHeld = new LinkedHashSet<>();
+        List<Stands.Read> read = new ArrayList<>();
         for (Map<NumericTerm, Place> values : rows.each()) {
-            switch (ends.with(boundary, values)) {
-                case ExactAnswer.Held<Stands.Fold> held -> ends = held.value();
-                case ExactAnswer.Unheld<Stands.Fold> unheld ->
+            switch (none.read(boundary, values)) {
+                case ExactAnswer.Held<Stands.Read> held -> read.add(held.value());
+                case ExactAnswer.Unheld<Stands.Read> unheld ->
                         notHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
             }
         }
+        Stands.Fold ends = none.withAll(read);
         if (!ends.apart()) {
             return new RuledOut(other);
         }
