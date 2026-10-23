@@ -27,6 +27,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WrittenLines;
 import souther.compiler.types.ValueName;
@@ -260,19 +261,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   read at a call of it
      * @param saidOnTheWay which copies of the model's code put each entry on these ways, told when
      *                   the ways were walked and of these ways alone
+     * @param witnesses  where a reading of the comparison asks for a row showing a count it reads
+     *                   takes every value beside how many its container holds: kept only for a
+     *                   count every row made of the witness gets past what a run works out before
+     *                   the comparison for ({@link WhatARunWorksOutBeforeACount})
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
                    Optional<Condition> statedAsACondition, Optional<Proposition> stopsWhere,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
-                   SaidOnTheWay saidOnTheWay) {
+                   SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null
                     || metOn == null || runsAs == null || context == null
-                    || saidOnTheWay == null) {
+                    || saidOnTheWay == null || witnesses == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -355,14 +360,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         WhatConditionsState conditions, CallContext context, Core root,
                         InputReads atTheRoot, ArmsNamed.Gathered armsNamed,
                         ForkDependencies.Gathered dependencies,
-                        WithinOneApplication.Gathered oneApplication) {
+                        WithinOneApplication.Gathered oneApplication,
+                        CountWitnesses.AtComparisons witnesses) {
 
         /** The same reading, in the body of a recursive helper read at a call of it: its own
          *  tree, and the copy that call makes of each construct in it. */
         Body inside(Core helperBody, CallContext called, InputReads reads) {
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, outcomes,
                     decided, stated, conditions, called, helperBody, reads, armsNamed,
-                    dependencies, oneApplication);
+                    dependencies, oneApplication, witnesses);
         }
 
         /** That the walk met the fork at {@code occurrence} where it is now, as this reading's copy
@@ -394,9 +400,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * recorded, and what a run leaves arriving at its line, are read where the language's operations
      * are expanded — and this reads where they stand. A reading that took either would be one no
      * tree could make on its own.
+     *
+     * @param witnesses where a comparison's reading asks for a row showing a count it reads takes
+     *                  every value beside how many its container holds: found by running such a
+     *                  row, which is answered where a run is and handed in
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
-                                 InputReads reads) {
+                                 InputReads reads, CountWitnesses.AtComparisons witnesses) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -427,7 +437,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         walk(body, new Body(behavior, read, answering,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies,
-                        oneApplication),
+                        oneApplication, witnesses),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -444,7 +454,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read, answering,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, null, null, armsNamed, dependencies,
-                        oneApplication),
+                        oneApplication, witnesses),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
@@ -536,6 +546,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // Inside a helper's body read at a call, it is the copy that call makes.
             ConstructOccurrence stands = in.context().of(stated.written());
             Citation where = Citation.of(e.pos());
+            // A count is read over rows made of a witness only past what a run works out before
+            // the comparison, which is asked of the behavior's own body: a helper's names are
+            // its own, and none of them is a parameter of the behavior. Which call each count
+            // was read off is the reading of the comparison's to say; an application states no
+            // comparison read here, and names none.
+            Supplier<Map<Quantity.HowManyMeet, Core>> readOff =
+                    stated.statement() instanceof Stated.AComparison(var comparison)
+                            ? () -> in.conditions().comparison(comparison, reads, in.read())
+                                    .readOff()
+                            : Map::of;
+            CountWitnesses.Lookup witnesses = WhatARunWorksOutBeforeACount.past(
+                    in.context().equals(CallContext.OF_THE_BODY) ? in.root() : null, e, reads,
+                    readOff, in.read().domain().parameterReads(), in.witnesses().at(stands));
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
@@ -548,10 +571,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                                 in.read(), reads, applying, null,
                                                 in.answering(), false, in.conditions(),
                                                 Optional.of(stands.lineage()
-                                                        .expansionProjection()));
+                                                        .expansionProjection()),
+                                                witnesses);
                                 case Stated.AnApplication(var _, var answered) ->
                                         ComparisonAssessment.ofAnApplication(in.behavior(),
-                                                answered, where, in.read());
+                                                answered, where, in.read(), witnesses);
                             }));
             // Where a run stops in it, which is no part of the lines it draws. Only a comparison
             // the policy admits is read, and an application states no comparison to stop in.
@@ -563,7 +587,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
                     statedAsACondition(e, standing, stopsWhere, reads, in, numbering), stopsWhere,
                     applying.elementsMetOn(), stated.written(), in.context(),
-                    numbering.saidOnTheWay(List.of(assumed))));
+                    numbering.saidOnTheWay(List.of(assumed)), witnesses));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.

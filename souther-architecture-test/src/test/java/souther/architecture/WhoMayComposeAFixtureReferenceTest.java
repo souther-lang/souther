@@ -54,8 +54,8 @@ class WhoMayComposeAFixtureReferenceTest {
     /**
      * Every class that makes a minter or numbers a reference, with what it names.
      *
-     * <p>The generator makes the one minter its run hands round, and the minter is the only thing
-     * that numbers a reference. A row naming the origin's constructor from anywhere else is a
+     * <p>The generator makes the one minter its run hands round, as a search for a witness of a
+     * count does for its own run, and the minter is the only thing that numbers a reference. A row naming the origin's constructor from anywhere else is a
      * second numbering, and one naming the minter's is a second run inside a run.
      */
     private static final List<String> NAMING_A_MAKER = List.of(
@@ -68,6 +68,11 @@ class WhoMayComposeAFixtureReferenceTest {
             "souther/compiler/check/ValueEntries -> " + ORIGIN + "#<init>(I)V",
             "souther/compiler/partition/FixtureReferences -> " + ORIGIN + "#<init>(I)V",
             "souther/compiler/partition/Generator -> " + MINTER
+                    + "#<init>(Ljava/lang/String;Ljava/lang/String;)V",
+            // A search for a row showing a count reaches every value beside its container's size
+            // is a run of its own: it composes rows to try and offers none, and the values a module
+            // states that it names are numbered within that one search.
+            "souther/compiler/query/Adequacy$WitnessOfACount -> " + MINTER
                     + "#<init>(Ljava/lang/String;Ljava/lang/String;)V");
 
     /**

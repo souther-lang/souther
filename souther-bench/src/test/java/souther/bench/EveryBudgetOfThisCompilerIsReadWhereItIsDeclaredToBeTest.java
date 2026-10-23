@@ -659,10 +659,24 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/Reachability;"
                             + "Lsouther/compiler/partition/WaysToACase;"
-                            + "Ljava/util/List;ZLsouther/compiler/inputs/InputReading;)"
+                            + "Ljava/util/List;ZLsouther/compiler/inputs/InputReading;"
+                            + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
                             + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the line, as one where it decides"
                             + " in those cases was not worked out"),
+            // The search for a row showing how many elements meet a statement takes every value
+            // from none to all of a container, and what it stopped at, one consumer each.
+            Map.entry("souther.compiler.partition.CountWitnesses#<clinit>()V",
+                    "how many values of each parameter, and rows of them, a witness of a count is"
+                            + " sought among"),
+            Map.entry("souther.compiler.partition.CountWitnesses#upTo("
+                            + "Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
+                    "stops at the values of a parameter a witness is sought among, and adds the"
+                            + " figure to what the search came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses#rowsOf("
+                            + "Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
+                    "stops at the rows a witness is sought among, and adds the figure to what the"
+                            + " search came to"),
             Map.entry("souther.compiler.partition.ComparisonAssessment#partsOfARelation("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;"

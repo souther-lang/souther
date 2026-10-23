@@ -1029,11 +1029,20 @@ public final class WhatARelationLeavesUndivided {
      * That one term of a relation lies, at each value of another, at every whole number from
      * {@code least} to that value less {@code belowTheWhole} and at no other — and takes each of
      * them in some row beside that value: where a walk over every element hands its step stands
-     * beside how many the walk is over, from nought to one below.
+     * beside how many the walk is over, from nought to one below; and how many elements meet a
+     * statement stands beside how many there are, from none to all of them.
      *
      * <p>The two are read off one container, so neither is apart from the other, and what one
      * takes is not asked of it alone. A value of the whole at which the part lies nowhere — a
-     * container of none, which hands the step nothing — is one no row reaches the relation at.
+     * container of none, which hands a walk's step nothing — is one no row reaches the relation
+     * at; a container of none has none of its elements meeting anything, which is a row.
+     *
+     * <p>How a row takes the part's values differs between the two, and is not this type's to
+     * say. A walk takes every position of one container in one row, one after another; a count
+     * takes one value in each row, and each value is another row. That every value is taken is
+     * what the reader building this showed, each its own way. What is read here is the same for
+     * both: which values of the part the arithmetic computes at, which is a run from the least up
+     * whichever order the rows are in ({@link #leavesOfTheWhole}).
      *
      * @param part          the index of the term that lies within the other
      * @param whole         the index of the term it lies within
@@ -1074,10 +1083,12 @@ public final class WhatARelationLeavesUndivided {
      * the part at one value of the whole, so the rows at the part's two ends computing is every row
      * there computing. And from the least value of the whole on, no addend shrinks as the whole
      * grows, so the values whose rows all compute are a run from the least up, found by halving
-     * ({@link #computedUpTo}). Past them a row is evaluated at the part's values in order and stops
-     * at the first whose addends pass the greatest, so it compares the part from its least to an
-     * end that is a straight function of the whole — the greatest less what the whole and the
-     * constant add on the part's side — and the relation is read there over those values. Past the
+     * ({@link #computedUpTo}). Past them the part's values a row computes at are a run from its
+     * least to an end that is a straight function of the whole — the greatest less what the whole
+     * and the constant add on the part's side — since the addends on that side grow with the part
+     * and the part is never below nought: a walk evaluating the part's values in order stops at
+     * the first past that end, and a count whose each value is a row of its own computes at the
+     * values before it and at none after. The relation is read there over those values. Past the
      * values where even the part's least does not compute, no row reaches it, and nothing is said
      * there ({@link #reachedUpTo}). So the answer is of the values some row reaches the relation
      * at, every one of them; a line it draws that the model's own reading does not is the
