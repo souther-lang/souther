@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.Emitted;
+import souther.compiler.TestDay;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ModulePath;
@@ -93,7 +94,8 @@ class WhatShipsCarriesTheDeclarationsAndWhatRunsDoesNotTest {
 
     private static Compilation started() {
         Compilation compilation =
-                Compilation.ofDocuments(workspace(PRICES), Set.of(), ModulePath.EMPTY);
+                Compilation.ofDocuments(workspace(PRICES), Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE);
         compilation.answerEverything();
         assertEquals(List.of(), compilation.db().allReports().stream().map(String::valueOf).toList(),
                 "the workspace compiles to begin with");
@@ -118,7 +120,7 @@ class WhatShipsCarriesTheDeclarationsAndWhatRunsDoesNotTest {
         Answer<?> runs = compilation.db()
                 .ask(new Output.Evaluated("shop.prices", ArmObservation.OMIT));
 
-        compilation.update(workspace(REWORDED), Set.of());
+        compilation.update(workspace(REWORDED), Set.of(), TestDay.DATE);
         compilation.answerEverything();
 
         assertFalse(Arrays.equals(ships, published(compilation)),

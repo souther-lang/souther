@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.Sig;
 import souther.compiler.jvm.ClassFileImage;
@@ -49,12 +50,13 @@ class ARenamedParameterDoesNotReachWhatCrossesTheBoundaryTest {
     @Test
     void theDeclarationsAnswerChangesAndTheBoundarysDoesNot() {
         Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY);
+                Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         compilation.answerEverything();
         Map<String, DeclaredSig> declared = declarations(compilation);
         Map<String, Sig> crossing = boundaries(compilation);
 
-        compilation.update(Map.of("a.sou", written("id")), Set.of());
+        compilation.update(Map.of("a.sou", written("id")), Set.of(), TestDay.DATE);
         compilation.answerEverything();
 
         assertEquals(List.of("id"),
@@ -77,12 +79,13 @@ class ARenamedParameterDoesNotReachWhatCrossesTheBoundaryTest {
     @Test
     void whatCrossesIsTheAnswerTheStoreAlreadyHad() {
         Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY);
+                Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         compilation.answerEverything();
         Answer<?> crossing = compilation.db().ask(new Bodies.Signatures("m.a"));
         Answer<?> declaring = compilation.db().ask(new Bodies.DeclaredSignatures("m.a"));
 
-        compilation.update(Map.of("a.sou", written("id")), Set.of());
+        compilation.update(Map.of("a.sou", written("id")), Set.of(), TestDay.DATE);
         compilation.answerEverything();
 
         assertNotSame(declaring, compilation.db().ask(new Bodies.DeclaredSignatures("m.a")),
@@ -104,11 +107,12 @@ class ARenamedParameterDoesNotReachWhatCrossesTheBoundaryTest {
     @Test
     void whatTheModulePublishesIsTheDeclarationAndMovesWithIt() {
         Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY);
+                Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         compilation.answerEverything();
         Map<String, ClassFileImage> published = classes(compilation);
 
-        compilation.update(Map.of("a.sou", written("id")), Set.of());
+        compilation.update(Map.of("a.sou", written("id")), Set.of(), TestDay.DATE);
         compilation.answerEverything();
 
         assertNotEquals(published, classes(compilation),

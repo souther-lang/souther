@@ -7,6 +7,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
+import souther.test.WrittenOn;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -78,13 +79,14 @@ class SemanticProbeBenchmark {
         String module = moduleOf(edited);
         System.out.printf("workspace: %d modules, %d lines%n", byId.size(), lines(byId));
 
-        Compilation workspace = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation workspace = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(WrittenOn.DAY);
         resolve(workspace, module);
 
         double settled = medianMillis(round -> {
             Map<String, String> now = new LinkedHashMap<>(byId);
             now.put(edited, byId.get(edited) + finished(round));
-            workspace.update(now, Set.of());
+            workspace.update(now, Set.of(), WrittenOn.DAY);
             resolve(workspace, module);
         }, ROUNDS);
 
@@ -102,7 +104,8 @@ class SemanticProbeBenchmark {
         double workspaceCold = medianMillis(round -> {
             Map<String, String> now = new LinkedHashMap<>(byId);
             now.put(edited, byId.get(edited) + finished(round));
-            resolve(Compilation.ofDocuments(now, Set.of(), ModulePath.EMPTY), module);
+            resolve(Compilation.ofDocuments(now, Set.of(), ModulePath.EMPTY)
+                    .writtenOn(WrittenOn.DAY), module);
         }, ROUNDS / 4);
 
         System.out.printf("steady: workspace %6.2f ms   probe %6.2f ms%n", settled, probed);
@@ -119,7 +122,7 @@ class SemanticProbeBenchmark {
             Map<String, String> now = new LinkedHashMap<>(byId);
             now.put(edited, byId.get(edited) + finished(round));
             long opened = System.nanoTime();
-            workspace.update(now, Set.of());
+            workspace.update(now, Set.of(), WrittenOn.DAY);
             resolve(workspace, module);
             long between = System.nanoTime();
             through(alongside, byId, edited, module, round);
@@ -148,7 +151,7 @@ class SemanticProbeBenchmark {
         rest.remove(edited);
         String text = byId.get(edited) + halfWritten(round);
         SemanticProbe.Reading reading = probe.of(rest, Set.of(), ModulesOnThePath.NONE, edited, text,
-                text.length(), Abandonment.NEVER);
+                text.length(), WrittenOn.DAY, Abandonment.NEVER);
         if (reading == null) {
             throw new IllegalStateException("the half-written line is one the probe finishes off");
         }

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
@@ -189,7 +190,7 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", prices);
         edited.put("cart.sou", IMPORTING);
-        c.update(edited, Set.of());
+        c.update(edited, Set.of(), TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the edited workspace still compiles: "
                 + c.db().allReports());
@@ -199,7 +200,8 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", DECLARING);
         byId.put("cart.sou", IMPORTING);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());

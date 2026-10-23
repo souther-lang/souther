@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
@@ -160,7 +161,7 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return new Read(InputDomain.of(sigs.get("read"), reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none()), rules);
     }

@@ -952,7 +952,7 @@ class EveryFindingHasAGenerationDispositionTest {
         RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return souther.compiler.partition.MeasuredInput.of("pick",
                 InputDomain.of(List.of(), reading,
                         TypeCardinality.Counts.workedOutIn(reading),

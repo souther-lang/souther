@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -168,6 +169,6 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
         }
         Type type = sigs.get("take").inputTypes().get(0);
         return PlacedRules.of(TermPath.of(parameter), type,
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

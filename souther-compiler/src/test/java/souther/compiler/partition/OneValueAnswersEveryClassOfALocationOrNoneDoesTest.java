@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.RowsOfABlock;
+import souther.compiler.TestDay;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -26,6 +27,7 @@ import souther.compiler.report.GeneratedRows;
 import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -162,7 +164,9 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                 TermRealizations.Realization.Built.class, made,
                 () -> "a date stands at a month from February on and a day from the thirtieth on: "
                         + made).values();
-        assertEquals(List.of("Date(\"2000-03-30\")"),
+        // The thirtieth of February is no date, so the first of the year's dates that is in both
+        // is the thirtieth of March.
+        assertEquals(List.of("Date(\"" + LocalDate.of(TestDay.DATE.getYear(), 3, 30) + "\")"),
                 built.stream().map(FixtureTemplate::text).toList());
         model.readsBackIntoEveryClass(built, model.upperClasses());
     }
@@ -550,13 +554,13 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         private final Partitions.Partitioning partitioning;
 
         private Model(String source) {
-            Compilation read = Compilation.ofSource(source, "Main");
+            Compilation read = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
             read.answerEverything();
             RuleReadingSource rules = RuleReadings.of(read, read.modules().get(0));
             InputReading reading = read.db().ask(new Adequacy.Inputs(read.modules().get(0)))
                     .value().get("gate").reading(rules);
 
-            Compilation divided = Compilation.ofSource(source, "Main");
+            Compilation divided = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
             divided.measure(Adequacy.Asked.fullReport());
             divided.answerEverything();
             this.partitioning = divided.db()

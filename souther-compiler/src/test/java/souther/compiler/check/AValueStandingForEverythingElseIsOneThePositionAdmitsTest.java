@@ -9,6 +9,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
+import souther.compiler.numeric.UsualPlace;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
@@ -56,7 +57,8 @@ class AValueStandingForEverythingElseIsOneThePositionAdmitsTest {
 
     private static Place otherThan(Carrier carrier, List<Place> singled,
                                    NumericDomain.Bounds within, ValueSet admits) {
-        return carrier.somethingOtherThan(PlacesApart.of(singled), within, admits, meter());
+        return carrier.somethingOtherThan(PlacesApart.of(singled), within, admits, meter(),
+                UsualPlace.NONE);
     }
 
     /**

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
 
@@ -92,7 +93,8 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
     private static Compilation compiling(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
@@ -103,7 +105,7 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
     private static long askingsFor(String written, String edited) {
         Compilation c = compiling(written);
         long before = TypeCardinality.transfersMade();
-        c.update(Map.of(ID, edited), Set.of());
+        c.update(Map.of(ID, edited), Set.of(), TestDay.DATE);
         c.answerEverything();
         return TypeCardinality.transfersMade() - before;
     }

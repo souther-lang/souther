@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -63,14 +64,14 @@ class ThresholdNormalizationTest {
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(behavior), rules);
         List<Threshold> thresholds = guards.thresholds();
         RuleReadingContext ruleReading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get(behavior), ruleReading,
                 TypeCardinality.Counts.workedOutIn(ruleReading), Membership.none());
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning base = Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Read(ThresholdFixtures.withThresholds(base, reading, thresholds,
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS)), reading, thresholds, rules);
     }
 

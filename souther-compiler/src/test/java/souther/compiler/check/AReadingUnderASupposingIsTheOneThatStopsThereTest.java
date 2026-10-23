@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -107,12 +108,13 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
         Compilation compilation = compiled();
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
         RuleReadingContext shared = RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
-                compilation.db().readings());
+                compilation.db().readings(), TestDay.TODAY);
         // The same rules, under an origin nobody else has: no lender hands it a reading made for
         // any other declaration, and no name is read as the one beneath it.
         RuleReadingSource itsOwn = new RuleReadingSource(source.symbols(), source.invariants(),
                 source.declarations(), source.newtypes(), source.bindings(), source.written());
-        RuleReadingContext alone = RuleReadingContext.unshared(itsOwn, ReadAs.THE_COMPILATION_DOES);
+        RuleReadingContext alone = RuleReadingContext.unshared(itsOwn, ReadAs.THE_COMPILATION_DOES,
+                TestDay.TODAY);
         Map<String, Hir.Def> defs = new LinkedHashMap<>();
         compilation.module("demo").defs()
                 .forEach(each -> defs.put(each.declaration().node().name(),
@@ -167,7 +169,7 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
         Compilation compilation = compiled();
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
         RuleReadingContext reading = RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
-                compilation.db().readings());
+                compilation.db().readings(), TestDay.TODAY);
         Supposing.Across across = new Supposing.Across(source);
         List<String> backwards = new ArrayList<>(NAMES);
         Collections.reverse(backwards);
@@ -262,7 +264,8 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
             }
         };
         RuleReadingContext reading =
-                RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES, counting);
+                RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES, counting,
+                        TestDay.TODAY);
         Supposing.Across across = new Supposing.Across(source);
         // Nothing is written under either ring, so neither supposing stops a reading anywhere.
         Supposing.of(Set.of(declared("Q1")), across).readingOf(declared("Holds"), reading);

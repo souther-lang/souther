@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -97,7 +98,7 @@ class ExtendingAnEnvironmentMakesOnlyWhatTheExtensionAddsTest {
     void aDenotationsExtendedMakesTheSameWhateverItHolds() {
         Terms terms = new Terms(Terms.Of.THE_DISCHARGE_TREE, RuleReadingContext.unshared(
                 RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
-                ReadAs.THE_COMPILATION_DOES));
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         FactSubject subject = terms.placeSubject(id(0));
         Term term = terms.placeTerm(id(0));
         for (int size : new int[] {100, 400, 1600}) {

@@ -3,8 +3,11 @@ package souther.compiler.check;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -120,6 +123,24 @@ public sealed interface HeldClass {
             case OfResidues(Congruences class_) -> ClassMembers.within(class_, run, away, most);
             case OfDays(DatePartsLeft parts) -> daysWithin(parts, run, away, most);
         };
+    }
+
+    /**
+     * The members inside {@code run} that stand for it, at most {@code most} of them: those nearest
+     * the value {@code carrier} gives up for the run ({@link Carrier#aPlaceInside}) — where the
+     * number is usually near in a run left open on a side, the low end of one a rule closed.
+     *
+     * <p>The one answer to which members a value held to a class is offered, so that a reader
+     * offering one of them for a position and a reader offering it for a run of a search name the
+     * same member.
+     */
+    default ClassMembers standingIn(NumericDomain.Bounds run, Carrier carrier, UsualPlace usual,
+                                    int most) {
+        Place entered = carrier.aPlaceInside(run.min(), run.max(), usual);
+        return entered instanceof Count count
+                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> from
+                ? nearest(from.value(), run, most)
+                : within(run, Towards.ABOVE, most);
     }
 
     /**

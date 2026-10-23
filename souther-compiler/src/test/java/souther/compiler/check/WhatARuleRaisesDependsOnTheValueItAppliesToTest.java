@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -88,7 +89,7 @@ class WhatARuleRaisesDependsOnTheValueItAppliesToTest {
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
         java.util.Collection<Required> raised = FieldDomains
                 .of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        ReadAs.THE_COMPILATION_DOES)).required().values();
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).required().values();
         assertEquals(1, raised.size(), type + " is held to one rule here");
         return raised.iterator().next();
     }

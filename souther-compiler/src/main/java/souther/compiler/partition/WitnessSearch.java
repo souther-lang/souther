@@ -1,8 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import net.unit8.notation199x.pattern.Meter;
+import souther.compiler.numeric.Today;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.values.ValueSet;
 
 import java.util.function.Supplier;
@@ -25,20 +28,27 @@ import java.util.function.Supplier;
  * @param allowance what one crossing of a set with a run may cost, asked per crossing. An allowance
  *                  shared between them would have the first question spend what the second needs,
  *                  and which of them went short would depend on the order they were asked in
+ * @param today     the day a date nothing fixes is looked for near ({@link #startingAt})
  */
-public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance) {
+public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance, Today today) {
 
     public WitnessSearch {
-        if (admitted == null || allowance == null) {
+        if (admitted == null || allowance == null || today == null) {
             throw new IllegalArgumentException(
-                    "a value is composed out of what a position admits and within what looking for"
-                            + " one may cost, and a search is given both or neither");
+                    "a value is composed out of what a position admits, within what looking for"
+                            + " one may cost, and on a day, and a search is given all three");
         }
     }
 
     /** A fresh allowance, for one crossing of a set with a run. */
     public Meter meter() {
         return allowance.get();
+    }
+
+    /** Where a value for {@code term} counted on {@code carrier} is usually near on the day this
+     *  search is made on ({@link UsualPlaces}). */
+    public UsualPlace startingAt(NumericTerm term, Carrier carrier) {
+        return UsualPlaces.of(term, carrier, today);
     }
 
     /**

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.observe.Limits;
@@ -145,6 +146,6 @@ class ObservedFixturesTest {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
         return RuleReadingContext.unshared(
                 RuleReadings.of(compilation, compilation.modules().get(0)),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
     }
 }

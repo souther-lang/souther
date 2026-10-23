@@ -12,11 +12,13 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.Function;
 
 /**
  * How one {@link BorderQuantity}'s own values are ordered, and which of them the quantity can take.
@@ -99,8 +101,23 @@ public interface LevelSpace {
      * plainest one it can reach from there. Left out, a run bounded at both ends answered with the
      * end furthest from the line the point is named for, and a point that exists to be inside a
      * partition and beside its boundary was offered a row at the other side of it.
+     *
+     * <p>The end is a line's, so the value is wanted beside it however near anything else is
+     * ({@link #standingFor} is the other question).
      */
     Witness witness(LevelInterval run, Towards from);
+
+    /**
+     * One value standing for {@code run}, wanted near no end of it: where the quantity is usually
+     * near, where the run is left open on a side ({@link Carrier#aPlaceInside}), and otherwise from
+     * the low end.
+     *
+     * <p>For a value standing for a class rather than for a point beside its line. The levels of a
+     * form have no place they are usually near, so a space of them answers as from the low end.
+     */
+    default Witness standingFor(LevelInterval run, UsualPlace usual) {
+        return witness(run, Towards.ABOVE);
+    }
 
     /**
      * Whether the quantity can take this level at all — or which way the exact arithmetic could
@@ -310,6 +327,20 @@ public interface LevelSpace {
              */
             @Override
             public Witness witness(LevelInterval run, Towards from) {
+                // From the end of a line, which a rule drew: no usual place is nearer than it.
+                return foundIn(run, look -> carrier.somethingInside(look.min(), look.max(), from,
+                        UsualPlace.NONE));
+            }
+
+            @Override
+            public Witness standingFor(LevelInterval run, UsualPlace usual) {
+                return foundIn(run, look -> carrier.aPlaceInside(look.min(), look.max(), usual));
+            }
+
+            /** The first place {@code taken} gives up of the run at a scale it is looked in at,
+             *  that the run holds. */
+            private Witness foundIn(LevelInterval run,
+                                    Function<NumericDomain.Bounds, Place> taken) {
                 if (carrier == null) {
                     return Witness.NONE;
                 }
@@ -332,7 +363,7 @@ public interface LevelSpace {
                     // a range gives up is the range's own answer and the carrier holds it inside
                     // what it reaches itself; narrowed here first, a run nothing bounds below was
                     // bounded by the order and gave up the least count there is.
-                    Place at = carrier.somethingInside(look.min(), look.max(), from);
+                    Place at = taken.apply(look);
                     if (at == null) {
                         continue;
                     }

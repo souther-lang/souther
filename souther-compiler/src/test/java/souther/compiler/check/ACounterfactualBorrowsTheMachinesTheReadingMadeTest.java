@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Machines;
@@ -74,7 +75,8 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
         FieldDomains reading = FieldDomains.of(
                 TypeSymbols.declared(new TypeKey("demo", "Held")),
                 RuleReadingContext.of(RuleReadings.of(compilation, compilation.modules().get(0)),
-                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings()));
+                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings(),
+                        TestDay.TODAY));
 
         long before = StringMachineAnswers.machinesMade();
         List<TypeSymbol.AtModule> holding =
@@ -110,7 +112,8 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
         FieldDomains reading = FieldDomains.of(TypeSymbols.declared(held),
                 RuleReadingContext.of(RuleReadings.of(compilation, compilation.modules().get(0)),
                         ReadAs.THE_COMPILATION_DOES,
-                        _ -> StringMachineAnswers.borrowing(part, RevisionKnowledge.NONE)));
+                        _ -> StringMachineAnswers.borrowing(part, RevisionKnowledge.NONE),
+                        TestDay.TODAY));
         assertTrue(StringMachineAnswers.machinesMade() > beforeReading,
                 "the reading builds what the lender had nothing to say about");
 
@@ -137,7 +140,7 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
         FieldDomains.of(TypeSymbols.declared(new TypeKey("demo", "Held")),
                 RuleReadingContext.unshared(
                         RuleReadings.of(compilation, compilation.modules().get(0)),
-                        ReadAs.THE_COMPILATION_DOES));
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
 
         assertTrue(StringMachineAnswers.machinesMade() > before,
                 "a reading with nothing to borrow from builds the machines its rules come to");

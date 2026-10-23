@@ -155,7 +155,7 @@ public final class CountWitnesses {
             return Sought.NOTHING;
         }
         RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
-                read.domain().machines());
+                read.domain().machines(), read.domain().today());
         AStatementAtARow statement = AStatementAtARow.of(count.ofTheElement(), behavior,
                 read.quantities());
         Set<Figure> stopped = new LinkedHashSet<>();

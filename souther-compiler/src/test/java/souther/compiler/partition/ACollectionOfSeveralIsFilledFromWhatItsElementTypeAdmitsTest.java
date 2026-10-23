@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.OfferedAtTheLines;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -72,7 +73,7 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
         assertNotNull(sigs, "the model did not compile");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain =
                 InputDomain.of(sigs.get("countThem"), context,
                         TypeCardinality.Counts.workedOutIn(context), Membership.none());
@@ -268,7 +269,8 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
         List<String> admitted(String type, int many) {
             Type named = new Type.Ref(TypeSymbols.declared(new TypeKey(module, type)));
             return Partitions.admittedStrings(named,
-                            RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), many)
+                            RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                                    TestDay.TODAY), many)
                     .stream().map(FixtureTemplate::text).toList();
         }
     }

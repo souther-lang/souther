@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
@@ -182,7 +183,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                 checked.analysisBodies().get("f"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), rules);
         RuleReadingContext ruleReading = RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain read = InputDomain.of(sigs.get("f"), ruleReading,
                 TypeCardinality.Counts.workedOutIn(ruleReading), Membership.none());
         Quantities reading = read.quantities(rules);

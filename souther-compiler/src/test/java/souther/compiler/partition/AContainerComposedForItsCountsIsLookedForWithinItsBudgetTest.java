@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -190,7 +191,8 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        RuleReadingContext reading = RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain input = InputDomain.of(sigs.get("counted"), reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         TermPath xs = input.positions().stream().map(Position::path)

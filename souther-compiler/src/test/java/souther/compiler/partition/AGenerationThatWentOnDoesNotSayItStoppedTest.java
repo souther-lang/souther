@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Lookup;
 import souther.compiler.carrier.Membership;
 import souther.compiler.diag.SourceLayouts;
@@ -79,7 +80,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get("submit"), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         return MeasuredInput.of("submit", domain.reading(rules),

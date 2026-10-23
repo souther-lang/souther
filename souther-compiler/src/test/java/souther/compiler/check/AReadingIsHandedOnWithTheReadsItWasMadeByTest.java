@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.regex.PatternPlan;
@@ -63,7 +64,8 @@ class AReadingIsHandedOnWithTheReadsItWasMadeByTest {
         Watched store = new Watched();
         LentReadings lender = new LentReadings(DeclarationReadings.NONE, () -> 1, store);
 
-        RuleReadingContext reading = RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender);
+        RuleReadingContext reading = RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender,
+                TestDay.TODAY);
         InvariantChecker.Seeded made = InvariantChecker.seedFields(amount, reading);
         assertEquals(1, store.watched, "the making is what the store watched");
         assertEquals(List.of(), store.handedOn, "and nothing was handed on to make it");

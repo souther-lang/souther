@@ -605,7 +605,8 @@ public final class Main {
             // this command answers from whatever was observed, and taking the compilation from an
             // entry point that raises the first error made every failure the report describes the
             // one thing that stopped it being written.
-            Compilation compilation = Compiler.analyzed(read, path, warnings, measure);
+            Compilation compilation = Compiler.analyzed(read, path, warnings, measure,
+                    environment.today());
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.
             List<Located> errors = compilation.errors();

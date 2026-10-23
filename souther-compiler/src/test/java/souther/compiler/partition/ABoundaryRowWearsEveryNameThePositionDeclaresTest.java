@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingContext;
@@ -98,7 +99,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                 reading,
                 guards.thresholds(),
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
 
         List<String> names = new ArrayList<>();

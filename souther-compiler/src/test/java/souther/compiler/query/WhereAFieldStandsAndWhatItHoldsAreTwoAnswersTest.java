@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.BindingId;
@@ -200,7 +201,8 @@ class WhereAFieldStandsAndWhatItHoldsAreTwoAnswersTest {
     }
 
     private static Compilation compiling(String... sources) {
-        Compilation c = Compilation.ofDocuments(workspace(sources), Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(workspace(sources), Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(),
                 "the workspace compiles to begin with: " + c.db().allReports());
@@ -208,7 +210,7 @@ class WhereAFieldStandsAndWhatItHoldsAreTwoAnswersTest {
     }
 
     private static void edit(Compilation c, String... sources) {
-        c.update(workspace(sources), Set.of());
+        c.update(workspace(sources), Set.of(), TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(),
                 "the edited workspace compiles: " + c.db().allReports());

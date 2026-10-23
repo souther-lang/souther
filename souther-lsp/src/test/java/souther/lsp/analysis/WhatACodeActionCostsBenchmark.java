@@ -9,6 +9,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.test.WrittenOn;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -85,7 +86,8 @@ class WhatACodeActionCostsBenchmark {
         Map<String, String> byId = workspace();
         System.out.printf("workspace: %d modules, %d lines%n", byId.size(), lines(byId));
 
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(WrittenOn.DAY);
         SourceId asked = new SourceId(ASKED);
         if (compilation.repairs(asked).isEmpty()) {
             throw new IllegalStateException("the corpus is meant to hold a misspelling to repair");
@@ -177,7 +179,7 @@ class WhatACodeActionCostsBenchmark {
         String touched = edit == Edit.THE_FILE_ASKED ? ASKED : "file:///m1.sou";
         Map<String, String> now = new LinkedHashMap<>(byId);
         now.put(touched, byId.get(touched) + added(round));
-        compilation.update(now, Set.of());
+        compilation.update(now, Set.of(), WrittenOn.DAY);
     }
 
     private static String added(int round) {
@@ -185,7 +187,7 @@ class WhatACodeActionCostsBenchmark {
     }
 
     private static Compilation fresh(Map<String, String> byId) {
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).writtenOn(WrittenOn.DAY);
     }
 
     /** What the offer used to do: a compile of the one document, from nothing, thrown away. */

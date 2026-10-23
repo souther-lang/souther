@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.TestDay;
 import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
@@ -59,7 +60,7 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
 
     private static Compilation compiled() {
         Compilation c = Compilation.ofDocuments(Map.of("shop.sou", SOURCE), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
@@ -243,7 +244,7 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
                 c.db().ask(new Shapes.EnumerationsListingIn(MODULE));
         Answer<Set<TypeSymbol>> before = c.db().ask(new Shapes.EnumerationsListing(key("Qualified")));
 
-        c.update(Map.of("shop.sou", WITH_ANOTHER_ENUMERATION), Set.of());
+        c.update(Map.of("shop.sou", WITH_ANOTHER_ENUMERATION), Set.of(), TestDay.DATE);
         Answer<Map<TypeKey, Set<TypeSymbol>>> moduleAfter =
                 c.db().ask(new Shapes.EnumerationsListingIn(MODULE));
         Answer<Set<TypeSymbol>> after = c.db().ask(new Shapes.EnumerationsListing(key("Qualified")));

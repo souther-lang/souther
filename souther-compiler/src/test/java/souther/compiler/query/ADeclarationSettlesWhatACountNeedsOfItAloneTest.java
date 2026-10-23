@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
@@ -58,7 +59,8 @@ class ADeclarationSettlesWhatACountNeedsOfItAloneTest {
     private static Compilation started() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, MODULE);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
@@ -86,7 +88,7 @@ class ADeclarationSettlesWhatACountNeedsOfItAloneTest {
         Answer<?> code = premiseOf(c, "Code");
         Answer<?> line = premiseOf(c, "Line");
 
-        c.update(Map.of(ID, withWeightUnder(98)), Set.of());
+        c.update(Map.of(ID, withWeightUnder(98)), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(weight, premiseOf(c, "Weight"),

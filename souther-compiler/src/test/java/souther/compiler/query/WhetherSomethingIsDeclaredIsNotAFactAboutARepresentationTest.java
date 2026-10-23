@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.Derived;
 import souther.compiler.check.Registry;
 import souther.compiler.meta.ModulePath;
@@ -78,7 +79,7 @@ class WhetherSomethingIsDeclaredIsNotAFactAboutARepresentationTest {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", MOVED);
         edited.put("cart.sou", IMPORTING);
-        c.update(edited, Set.of());
+        c.update(edited, Set.of(), TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the edited workspace compiles: "
                 + c.db().allReports());
@@ -138,7 +139,8 @@ class WhetherSomethingIsDeclaredIsNotAFactAboutARepresentationTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", DECLARING);
         byId.put("cart.sou", IMPORTING);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
