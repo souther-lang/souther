@@ -74,39 +74,66 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
     }
 
     /**
-     * A disjunction is denied by the cases of a condition only where the condition's denial holds
-     * on every row it fails: denied that way or part by part, it states the same on every
-     * assignment, whatever the condition is. A condition that may answer nothing fails where its
-     * denial fails too, and one read on two applications may hold on one and fail on the other, so
-     * neither is two cases, and each is denied part by part.
+     * What follows from a condition and what follows from its denial, joined, are the cases of the
+     * condition only where its denial holds on every row it fails: joined that way or kept as the
+     * two implications, they state the same on every assignment, whatever the condition and the
+     * rest are. A condition that may answer nothing fails where its denial fails too, and one read
+     * on two applications may hold on one and fail on the other, so neither is two cases, and the
+     * implications are kept as they were written.
      */
     @Test
-    void aDisjunctionIsDeniedByTheCasesOnlyOfAConditionItsDenialFailsBeside() {
+    void aConjunctionIsTheCasesOnlyOfAConditionItsDenialFailsBeside() {
         Proposition a = truth(0, true);
         Proposition b = truth(1, true);
-        List<Proposition> conditions = List.of(a, Proposition.all(List.of(a, b)),
-                Proposition.whereItAnswers(b, a), Proposition.onAnApplication(List.of(a, b)));
+        Proposition partial = Proposition.whereItAnswers(b, a);
+        Proposition onBoth = Proposition.onAnApplication(List.of(a, b));
+        List<Proposition> arms = new ArrayList<>(leaves());
+        arms.add(Proposition.whereItAnswers(truth(2, true), b));
         int checked = 0;
-        for (Proposition condition : conditions) {
-            for (Proposition one : leaves()) {
-                for (Proposition other : leaves()) {
-                    Proposition cases = Proposition.any(List.of(
-                            Proposition.all(List.of(condition, one)),
-                            Proposition.all(List.of(condition.denied(), other))));
-                    Proposition partByPart = cases instanceof Proposition.Any any
-                            ? Proposition.all(any.parts().stream().map(Proposition::denied)
-                            .toList())
-                            : cases.denied();
-                    Proposition denied = cases.denied();
+        for (Proposition condition : List.of(a, Proposition.all(List.of(a, b)), partial,
+                onBoth)) {
+            for (Proposition one : arms) {
+                for (Proposition other : arms) {
+                    List<Proposition> implications = List.of(
+                            Proposition.any(List.of(condition.denied(), one)),
+                            Proposition.any(List.of(condition, other)));
+                    Proposition joined = Proposition.all(implications);
                     for (Map<TermPath, Boolean> values : assignments()) {
-                        assertEquals(value(partByPart, values), value(denied, values),
-                                () -> "the denial of " + cases.key() + " under " + values);
+                        assertEquals(implications.stream().allMatch(each -> value(each, values)),
+                                value(joined, values),
+                                () -> "the conjunction of " + implications.stream()
+                                        .map(Proposition::key).toList() + " under " + values);
                         checked++;
+                    }
+                    // Two arms that are an atom and its denial are the cases of that atom, which
+                    // hold the condition in each, and so are arms over the condition's own atoms;
+                    // other arms are cases of nothing here.
+                    if ((condition == partial || condition == onBoth)
+                            && overTheThirdAtom(one) && overTheThirdAtom(other)
+                            && !one.equals(other.denied())) {
+                        assertFalse(casesOf(joined, condition), joined.key());
                     }
                 }
             }
         }
         assertTrue(checked > 0, "something was checked");
+        assertTrue(casesOf(Proposition.all(List.of(
+                        Proposition.any(List.of(a.denied(), b)),
+                        Proposition.any(List.of(a, truth(2, true))))), a),
+                "two implications of a condition and its denial are its cases");
+    }
+
+    /** Whether {@code stated} names no atom but the third, or none. */
+    private static boolean overTheThirdAtom(Proposition stated) {
+        return !stated.key().contains("a") && !stated.key().contains("b");
+    }
+
+    /** Whether {@code stated} is a disjunction each part of which holds {@code condition} or its
+     *  denial. */
+    private static boolean casesOf(Proposition stated, Proposition condition) {
+        return stated instanceof Proposition.Any any && any.parts().stream()
+                .allMatch(part -> conjunctsOf(part).contains(condition)
+                        || conjunctsOf(part).contains(condition.denied()));
     }
 
     /**
@@ -173,13 +200,14 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
                 Proposition.all(List.of(a.denied(), c.denied())),
                 Proposition.all(List.of(b, c.denied())), Proposition.all(List.of(b.denied(), c)));
         Proposition stated = Proposition.any(parts);
-        Proposition partByPart = Proposition.all(parts.stream().map(Proposition::denied).toList());
 
         for (Map<TermPath, Boolean> values : assignments()) {
-            assertEquals(value(partByPart, values), value(stated.denied(), values),
+            assertEquals(parts.stream().allMatch(each -> value(each.denied(), values)),
+                    value(stated.denied(), values),
                     () -> "the denial of " + stated.key() + " under " + values);
         }
-        assertEquals(16, waysOf(partByPart));
+        assertEquals(16, parts.stream().mapToLong(each -> waysOf(each.denied()))
+                .reduce(1, (one, other) -> one * other));
         assertEquals(4, waysOf(stated.denied()), stated.denied().key());
     }
 

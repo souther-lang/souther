@@ -509,85 +509,95 @@ public sealed interface Proposition {
             key = "any" + parts.stream().map(Proposition::key).toList();
         }
 
-        /**
-         * Every part failing — or, where some parts hold a condition and others its denial, the
-         * rest of them failing in each case of it: {@code (X ∧ A) ∨ (¬X ∧ B) ∨ R} fails exactly
-         * where {@code ((X ∧ ¬A) ∨ (¬X ∧ ¬B)) ∧ ¬R} holds. Kept as the cases of the condition, the
-         * denial of several such statements is chosen once per case of it, where each part
-         * failing apart would be a choice of its own, every combination of which is a way.
-         *
-         * <p>A disjunction of disjunctions is one disjunction ({@link #any}), so the cases of two
-         * statements joined by an "or" are parts of one and are found here all the same.
-         *
-         * <p>Only of a condition whose denial holds wherever it fails ({@link
-         * #deniedWhereverItFails}): the cases of one that may answer nothing, or hold on one
-         * application and fail on another, are not every row, and denied by them would say
-         * something of the rows outside them that the parts failing do not.
-         */
+        /** Every part failing — which {@link #all} keeps as the cases of a condition where the
+         *  parts are cases of one ({@link #byTheCases}). */
         @Override
         public Proposition denied() {
-            return SharedPropositions.denied(this, () -> {
-                Proposition byCases = deniedCaseByCase(parts);
-                return byCases != null ? byCases
-                        : all(parts.stream().map(Proposition::denied).toList());
-            });
+            return SharedPropositions.denied(this,
+                    () -> all(parts.stream().map(Proposition::denied).toList()));
         }
     }
 
     /**
-     * The denial of {@code parts} by the cases of the first condition some of them hold and others
-     * hold the denial of, or null where there is none.
+     * {@code conjuncts} as the cases of the first condition some of them say what follows from,
+     * or null where none does.
+     *
+     * <p>A conjunct one part of which is the denial of a condition {@code X} says what holds
+     * where {@code X} does — {@code ¬X ∨ A} is {@code X → A} — and one a part of which is {@code X}
+     * says what holds where it does not. Where both are among them, {@code (¬X ∨ A) ∧ (X ∨ B) ∧ R}
+     * holds exactly where {@code ((X ∧ A) ∨ (¬X ∧ B)) ∧ R} does: one statement, which an
+     * {@code if} on {@code X}, the denial of the cases of {@code X} and the two implications
+     * written out each state, and which comes to one proposition whichever of them wrote it. Kept
+     * as the cases of {@code X}, several such statements are chosen once per case of it, where
+     * each implication apart would be a choice of its own, every combination of which is a way.
+     *
+     * <p>Only of a condition whose denial holds wherever it fails ({@link
+     * #deniedWhereverItFails}): the cases of one that may answer nothing, or hold on one
+     * application and fail on another, are not every row. A conjunct with both {@code X} and its
+     * denial among its parts holds on every row, and is left out. Two conjuncts that are each no
+     * more than {@code X} and its denial are left as they stand: what is said of them is that the
+     * two are asked at once, which is a reader's to say and not something to be worked out here.
      */
-    private static Proposition deniedCaseByCase(List<Proposition> parts) {
-        List<Set<String>> conjunctsOfEach = new ArrayList<>(parts.size());
+    private static Proposition byTheCases(List<Proposition> conjuncts) {
+        List<Set<String>> partsOfEach = new ArrayList<>(conjuncts.size());
         Set<String> anywhere = new HashSet<>();
-        for (Proposition part : parts) {
+        for (Proposition conjunct : conjuncts) {
             Set<String> keys = new HashSet<>();
-            conjunctsOf(part).forEach(each -> keys.add(each.key()));
-            conjunctsOfEach.add(keys);
+            disjunctsOf(conjunct).forEach(each -> keys.add(each.key()));
+            partsOfEach.add(keys);
             anywhere.addAll(keys);
         }
-        for (Proposition part : parts) {
-            for (Proposition condition : conjunctsOf(part)) {
-                Proposition against = condition.denied();
-                if (!anywhere.contains(against.key()) || !deniedWhereverItFails(condition)) {
+        for (Proposition conjunct : conjuncts) {
+            for (Proposition against : disjunctsOf(conjunct)) {
+                Proposition condition = against.denied();
+                if (!anywhere.contains(condition.key()) || !deniedWhereverItFails(condition)) {
                     continue;
                 }
-                List<Proposition> holding = new ArrayList<>();
-                List<Proposition> failing = new ArrayList<>();
+                List<Proposition> whereItHolds = new ArrayList<>();
+                List<Proposition> whereItFails = new ArrayList<>();
                 List<Proposition> rest = new ArrayList<>();
-                for (int at = 0; at < parts.size(); at++) {
-                    Proposition each = parts.get(at);
-                    boolean holds = conjunctsOfEach.get(at).contains(condition.key());
-                    boolean fails = conjunctsOfEach.get(at).contains(against.key());
-                    if (holds && !fails) {
-                        holding.add(without(each, condition));
-                    } else if (fails && !holds) {
-                        failing.add(without(each, against));
+                boolean saysMore = false;
+                boolean everyRow = false;
+                for (int at = 0; at < conjuncts.size(); at++) {
+                    Proposition each = conjuncts.get(at);
+                    boolean holding = partsOfEach.get(at).contains(against.key());
+                    boolean failing = partsOfEach.get(at).contains(condition.key());
+                    if (holding && failing) {
+                        everyRow = true;
+                    } else if (holding) {
+                        whereItHolds.add(without(each, against));
+                        saysMore |= each instanceof Any;
+                    } else if (failing) {
+                        whereItFails.add(without(each, condition));
+                        saysMore |= each instanceof Any;
                     } else {
                         rest.add(each);
                     }
                 }
-                if (holding.isEmpty() || failing.isEmpty()) {
+                if (whereItHolds.isEmpty() || whereItFails.isEmpty() || !saysMore) {
+                    if (everyRow) {
+                        return all(conjuncts.stream().filter(each -> !(disjunctsOf(each)
+                                .contains(against) && disjunctsOf(each).contains(condition)))
+                                .toList());
+                    }
                     continue;
                 }
-                Proposition cases = any(List.of(
-                        all(List.of(condition, any(holding).denied())),
-                        all(List.of(against, any(failing).denied()))));
-                return rest.isEmpty() ? cases : all(List.of(cases, any(rest).denied()));
+                rest.add(any(List.of(all(List.of(condition, all(whereItHolds))),
+                        all(List.of(against, all(whereItFails))))));
+                return all(rest);
             }
         }
         return null;
     }
 
-    private static List<Proposition> conjunctsOf(Proposition stated) {
-        return stated instanceof All all ? all.parts() : List.of(stated);
+    private static List<Proposition> disjunctsOf(Proposition stated) {
+        return stated instanceof Any any ? any.parts() : List.of(stated);
     }
 
-    /** What {@code stated} holds beside {@code conjunct}, which holds where nothing else is. */
-    private static Proposition without(Proposition stated, Proposition conjunct) {
-        return all(conjunctsOf(stated).stream()
-                .filter(each -> !each.key().equals(conjunct.key())).toList());
+    /** What {@code stated} holds beside {@code part}, which fails where nothing else holds. */
+    private static Proposition without(Proposition stated, Proposition part) {
+        return any(disjunctsOf(stated).stream()
+                .filter(each -> !each.key().equals(part.key())).toList());
     }
 
     /**
@@ -1725,6 +1735,12 @@ public sealed interface Proposition {
                     continue;
                 }
                 kept.putIfAbsent(one.key(), one);
+            }
+        }
+        if (every && kept.size() > 1) {
+            Proposition byCases = byTheCases(List.copyOf(kept.values()));
+            if (byCases != null) {
+                return byCases;
             }
         }
         return switch (kept.size()) {
