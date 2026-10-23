@@ -159,6 +159,43 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
                 Proposition.all(List.of(onBoth, onBoth.denied()))));
     }
 
+    /**
+     * The cases of two conditions in one "or", as the reasons a list is empty of are: denied, it
+     * states what every part failing does, and is one choice of the cases of each condition — two
+     * by two, where every part failing apart is a choice of two for each part.
+     */
+    @Test
+    void theCasesOfTwoConditionsInOneDisjunctionAreTwoChoicesOfTwo() {
+        Proposition a = truth(0, true);
+        Proposition b = truth(1, true);
+        Proposition c = truth(2, true);
+        List<Proposition> parts = List.of(Proposition.all(List.of(a, c)),
+                Proposition.all(List.of(a.denied(), c.denied())),
+                Proposition.all(List.of(b, c.denied())), Proposition.all(List.of(b.denied(), c)));
+        Proposition stated = Proposition.any(parts);
+        Proposition partByPart = Proposition.all(parts.stream().map(Proposition::denied).toList());
+
+        for (Map<TermPath, Boolean> values : assignments()) {
+            assertEquals(value(partByPart, values), value(stated.denied(), values),
+                    () -> "the denial of " + stated.key() + " under " + values);
+        }
+        assertEquals(16, waysOf(partByPart));
+        assertEquals(4, waysOf(stated.denied()), stated.denied().key());
+    }
+
+    /** How many ways a row may take through {@code stated}: one of each disjunction's parts, and
+     *  every part of each conjunction. */
+    private static long waysOf(Proposition stated) {
+        return switch (stated) {
+            case Proposition.All all -> all.parts().stream()
+                    .mapToLong(NormalisingAPropositionKeepsWhatItStatesTest::waysOf)
+                    .reduce(1, (one, other) -> one * other);
+            case Proposition.Any any -> any.parts().stream()
+                    .mapToLong(NormalisingAPropositionKeepsWhatItStatesTest::waysOf).sum();
+            default -> 1;
+        };
+    }
+
     private static Proposition truth(int atom, boolean holds) {
         return new Proposition.Truth(new DecisionSubject.AnInput(ATOMS.get(atom)), holds);
     }
