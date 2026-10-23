@@ -823,11 +823,21 @@ final class DemandReading {
             return left.emptiness().isPresent() ? declarations : left;
         }
 
+        /**
+         * What the arithmetic of the comparison itself asks of a row, as far as the relation does
+         * not read it: the numbers it narrows one at a time, and no tie among the places it is
+         * over. Those places are the sides of the relation, which the reading of the relation
+         * ties to one another as it ties them, and not a run's working out something before it.
+         */
+        Answered ofTheRelationItself() {
+            return new Answered(narrowing.stream().filter(each -> each.terms().size() == 1)
+                    .toList(), List.of(), false);
+        }
+
         /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run. */
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators) {
             return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere() ? NOTHING
-                    : new Answered(List.of(), operators.unsaidAt().isEmpty() ? List.of()
-                            : List.of(operators.unsaidAt()), operators.unsaidElsewhere());
+                    : new Answered(List.of(), operators.unsaidAt(), operators.unsaidElsewhere());
         }
 
         /** This and {@code other}, both. */

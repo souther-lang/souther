@@ -350,14 +350,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * Nor is one an operation the run works out reads where nothing says when it answers:
      * {@code 1 / p} stops at nought, so past it {@code p} is one, and {@code a != p} takes
-     * {@code a} away from one. The same two places are not shown, where a free {@code p} would
-     * have left them related.
+     * {@code a} away from one. {@code b} is not shown to reach its true side at every value,
+     * where a free {@code p} would have left it related.
      */
     @Test
     void aNumberAnUnsaidOperationReadsIsNotFreeToMeetADisequality() {
         String body = "{\n    let unused = 1 / p.value\n"
                 + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN), left("p: Bit, a: Bit, b: Bit",
+        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN), left("p: Bit, a: Bit, b: Bit",
                 "data Bit = Int invariant value >= 0 && value <= 1", body, "8:18"));
     }
 
@@ -379,14 +379,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * A sum the run worked out ties its two numbers: {@code a + b} is an {@code Int} only where
-     * {@code b} is nought or one, for an {@code a} one below the greatest, so a {@code b} above
-     * it is no row of the comparison {@code a < b} and no line is drawn there. Two amounts the
-     * sum cannot stop on are tied by nothing, and the comparison divides each as it does without
-     * the sum.
+     * A sum the run worked out narrows both its numbers by the other: {@code a + b} is an
+     * {@code Int} only where {@code b} is nought or one, for an {@code a} one below the greatest,
+     * so a {@code b} above it is no row of the comparison {@code a < b} and no line is drawn
+     * there. Two amounts the sum cannot stop on narrow nothing, and the comparison reads each as
+     * it does without the sum.
      */
     @Test
-    void aSumTheRunWorkedOutTiesItsTwoNumbers() {
+    void aSumTheRunWorkedOutNarrowsItsTwoNumbersByEachOther() {
         String almost = "data AlmostMax = Int invariant value == 9223372036854775806\n"
                 + "data NonNegative = Int invariant value >= 0";
         String body = "{\n    let unused = a.value + b.value\n    a.value < b.value\n}";
@@ -399,44 +399,6 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * And a run that may stop on something no place names ties every place to every other: a join
-     * of a string the body wrote may end a run for its length, which no place of the input holds,
-     * so nothing is shown to take any pair of values. A closure handed to the library is read off
-     * what that call's other arguments hold, and does not.
-     */
-    @Test
-    void aRunThatMayStopOnWhatNoPlaceNamesLeavesNoPairIndependent() {
-        String small = "data Yen = Int invariant value >= 0 && value <= 1000000";
-        String plain = "{\n    let unused = 0\n    a.value + b.value >= 30\n}";
-        String applied = "{\n    let unused = List.map(x -> Int.floorMod(1, x), [1, 2])\n"
-                + "    a.value + b.value >= 30\n}";
-        String joined = "{\n    let s = \"ab\"\n    let unused = s ++ s\n"
-                + "    a.value + b.value >= 30\n}";
-        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED),
-                leftWithClasses("a: Yen, b: Yen", small, plain));
-        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED),
-                leftWithClasses("a: Yen, b: Yen", small, applied));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
-                leftWithClasses("a: Yen, b: Yen", small, joined));
-    }
-
-    private static Map<String, String> leftWithClasses(String inputs, String declarations,
-                                                       String body) {
-        List<String> lines = body.lines().toList();
-        int last = lines.size() - 2;
-        int col = lines.get(last).indexOf(">=") + 1;
-        Map<String, String> out = new LinkedHashMap<>(left(inputs, declarations, body,
-                (declarations.lines().count() + 3 + last) + ":" + col));
-        for (String place : List.of("a", "b")) {
-            List<String> classes = classesAt(inputs, declarations, body, place);
-            if (classes.size() == 2 && classes.get(0).equals(place + "/0 <= x < 30")) {
-                out.putIfAbsent(place, DIVIDED);
-            }
-        }
-        return out;
-    }
-
-    /**
      * A closure handed to an operation of the library is applied by it, so what its body may stop
      * on is what the run may stop on: {@code Int.floorMod(x, p)} applied to each of two numbers
      * stops at {@code p} nought, as it does written out.
@@ -446,7 +408,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String bits = "data Bit = Int invariant value >= 0 && value <= 1";
         String body = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value), [1, 2])\n"
                 + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
                 left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"));
     }
 
@@ -460,7 +422,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void whatMayStopARunIsAskedOfWhatEndsARunWhereverItIsWorkedOut() {
         String bits = "data Bit = Int invariant value >= 0 && value <= 1";
-        Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN);
+        Map<String, String> notShown = Map.of("a", RELATES, "b", NOT_SHOWN);
         for (String unused : List.of(
                 "Int.floorMod(1, p.value)",
                 "p.value == 0 && p.value + 9223372036854775807 + 1 > 0",
@@ -546,11 +508,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void aSumARowMayNotWorkOutKeepsTheSidesBack() {
         String yen = "data Yen = Int invariant value >= 0";
-        Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN);
-        assertEquals(notShown, pastAWayOffAValue("p: Yen, a: Yen, b: Yen, c: Yen", yen,
-                "a.value + c.value == p.value"));
-        assertEquals(notShown, pastAWayOffAValue("d: Date, a: Yen, b: Yen", yen,
-                "a.value + Date.day(d) == 0"));
+        assertEquals(Map.of("a", DIVIDED, "b", NOT_SHOWN),
+                pastAWayOffAValue("p: Yen, a: Yen, b: Yen, c: Yen", yen,
+                        "a.value + c.value == p.value"));
+        assertEquals(Map.of("a", DIVIDED, "b", NOT_SHOWN),
+                pastAWayOffAValue("d: Date, a: Yen, b: Yen", yen, "a.value + Date.day(d) == 0"));
     }
 
     /**
@@ -559,15 +521,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * above nought stops at the first sum: the way holds that as a statement of {@code a}, so the
      * comparison past it is not divided as it would be for all the {@code a}. And
      * {@code p + a + (M - 10) - (M - 10) != 0} stops wherever {@code p + a} is above ten, though
-     * the form fits for amounts up to a million: that ties {@code p} to {@code a} and leaves
-     * {@code p} no number free to meet the statement.
+     * the form fits for amounts up to a million: no row has {@code a} above ten, so it is not
+     * divided at thirty as it would be for all the {@code a}, and {@code b} is.
      */
     @Test
     void aStatementTheSourceMayNotWorkOutIsNotTakenOffTheWay() {
         String yen = "data Yen = Int invariant value >= 0 && value <= 1000000";
         assertEquals(Map.of("a", RELATES), pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
                 "a.value + 9223372036854775807 - 9223372036854775807 == p.value"));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+        assertEquals(Map.of("b", DIVIDED),
                 pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
                         "p.value + a.value + 9223372036854775797 - 9223372036854775797 == 0"));
     }
@@ -576,7 +538,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * Nor is a number something the way declined may name: what a dependency answered, held once
      * to the length of {@code s} and once to one, holds the length at one, though neither reading
      * names it. Past {@code x != String.length(s)}, {@code x} is then never one, and
-     * {@code x + y >= 2} is not shown to be reached on its true side.
+     * {@code x + y >= 2} is not shown to be reached on its true side: nothing is said of
+     * {@code x}, which only nought is left, and {@code y} is not shown to take every value.
      */
     @Test
     void aNumberWhatTheWayDeclinedMayNameIsNotFree() {
@@ -600,7 +563,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             line++;
         }
         String at = (line + 1) + ":" + (lines.get(line).indexOf(">= 2") + 1);
-        assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN), leftIn(source, at));
+        assertEquals(Map.of("y", NOT_SHOWN), leftIn(source, at));
     }
 
     /**
@@ -612,13 +575,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aWayKeepingASideOffANumberThatIsNotFreeKeepsTheSidesBack() {
         String yen = "data Yen = Int invariant value >= 0";
         Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN);
-        assertEquals(notShown, pastAWayOffAValue("p: Seven, a: Yen, b: Yen",
+        Map<String, String> aDividedOnly = Map.of("a", DIVIDED, "b", NOT_SHOWN);
+        assertEquals(Map.of("b", NOT_SHOWN), pastAWayOffAValue("p: Seven, a: Yen, b: Yen",
                 yen + "\ndata Seven = Int invariant value == 7", "a.value == p.value"));
         assertEquals(notShown, pastAWayOffAValue("a: Yen, b: Yen", yen, "a.value == b.value"));
-        assertEquals(notShown, pastAWayOffAValue("r: R, a: Yen, b: Yen",
+        assertEquals(aDividedOnly, pastAWayOffAValue("r: R, a: Yen, b: Yen",
                 yen + "\ndata R = { p: Yen, q: Yen } invariant p.value <= q.value",
                 "a.value == r.p.value"));
-        assertEquals(notShown, pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
+        assertEquals(aDividedOnly, pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
                 "a.value == p.value || p.value > 5"));
     }
 
@@ -2866,8 +2830,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * Weighed by two, an amount past half the greatest {@code Int} has no row at all, its double
      * past the type, and every amount before it has an insured amount at its double and one above:
-     * the revenue is related and the line is the arithmetic's. Beside an insured amount not shown
-     * to take every value between its ends, nothing is shown of the revenue.
+     * the revenue is related and the line is the arithmetic's. The greatest insured amount is
+     * above every double a row has, so it settles the comparison on its own, and is a class of
+     * its own beside the ones before it. Beside an insured amount not shown to take every value
+     * between its ends, nothing is shown of the revenue.
      */
     @Test
     void aWeightOnAWholeNumberLeavesTheValuesPastHalfTheTypeToTheArithmetic() {
@@ -2875,7 +2841,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String body = "r.value * 2 >= i.value";
         assertEquals(Map.of("r", RELATES),
                 left("r: Yen, i: Yen", yen, body, atThe(">=", yen, "r: Yen, i: Yen", body)));
-        assertEquals(List.of("i/0 <= x <= 0", "i/0 < x"),
+        assertEquals(List.of("i/0 <= x <= 0", "i/0 < x < 9223372036854775807",
+                        "i/9223372036854775807 <= x"),
                 classesAt("r: Yen, i: Yen", yen, body, "i"));
         String gap = yen + "\ndata Gap = Int invariant value <= 10 || value >= 20";
         assertEquals(NOT_SHOWN, left("r: Yen, i: Gap", gap, body,

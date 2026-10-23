@@ -7,7 +7,6 @@ import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -355,14 +354,6 @@ public sealed interface Reachability {
                     narrowedBy, gotPast, tied, unsaid);
         }
 
-        /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
-         *  denial; a condition of a shape that has none is not shown to be met. */
-        private static boolean heldAtEveryRow(TakenConstraint each, SearchRegion region) {
-            return each instanceof TakenConstraint.Affine(var form, var rel)
-                    && TakenConstraint.nothingMeetsAll(
-                            List.of(new TakenConstraint.Affine(form, rel.denied())), region);
-        }
-
         /** Whether taking {@code each} in moves where a number it names runs or what is held
          *  apart from it, going from {@code before} to {@code after}. */
         private static boolean movesAny(TakenConstraint each, SearchRegion before,
@@ -391,21 +382,10 @@ public sealed interface Reachability {
             List<Set<TermPath>> ties = new ArrayList<>(tied);
             ties.addAll(answered.tied());
             // Only what narrows: a bound the region already holds is nothing a reader of this
-            // way is to be told of. And a condition on more than one number ties them, unless the
-            // region holds it for every row: a sum two amounts held below a million cannot pass
-            // the greatest Int ties neither.
+            // way is to be told of.
             List<TakenConstraint> narrowing = new ArrayList<>();
             SearchRegion narrowed = region;
             for (TakenConstraint each : answered.narrowing()) {
-                boolean tying = each.terms().size() > 1;
-                if (tying && heldAtEveryRow(each, narrowed)) {
-                    continue;
-                }
-                if (tying) {
-                    Set<TermPath> places = new LinkedHashSet<>();
-                    each.terms().forEach(term -> places.add(term.subjectPath()));
-                    ties.add(places);
-                }
                 SearchRegion next = each.narrowing(narrowed);
                 if (movesAny(each, narrowed, next)) {
                     narrowing.add(each);

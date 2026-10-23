@@ -544,11 +544,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         for (Core part : WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison)) {
             Pullback.OperatorsAnswer operators =
                     in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
-            if (operators.answers().isPresent()) {
-                out = out.and(
-                        DemandReading.regionAnswered(operators.answers().get(), in.read()));
+            DemandReading.Answered ofIt = operators.answers().isPresent()
+                    ? DemandReading.regionAnswered(operators.answers().get(), in.read())
+                    : DemandReading.Answered.NOTHING;
+            ofIt = ofIt.and(DemandReading.Answered.leavingUnsaid(operators));
+            if (part == comparison) {
+                ofIt = ofIt.ofTheRelationItself();
             }
-            out = out.and(DemandReading.Answered.leavingUnsaid(operators));
+            out = out.and(ofIt);
         }
         return out;
     }

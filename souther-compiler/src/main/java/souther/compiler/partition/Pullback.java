@@ -1037,7 +1037,7 @@ final class Pullback {
         }
         return new OperatorsAnswer(
                 answered == null ? Optional.empty() : Optional.of(pulled(answered).proposition()),
-                told[0].unsaidAt, told[0].unsaidElsewhere);
+                told[0].unsaidGroups, told[0].unsaidElsewhere);
     }
 
     /** Every operator {@code e} works out on every run that works {@code e} out, told to
@@ -1085,8 +1085,14 @@ final class Pullback {
         Core e = Core.withoutStanding(standing);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
                 && !WhatARunMayEndFor.itself(e).endsNone()) {
+            operated.beginGroup();
             boolean[] hasOperands = {false};
+            // A quotient stops where its divisor is nought, and what it divides is no part of it.
             Core.forEachChild(e, operand -> {
+                if (e instanceof Core.Binary quotient && quotient.op() == BinOp.DIV
+                        && operand != quotient.right()) {
+                    return;
+                }
                 hasOperands[0] = true;
                 leaveUnsaidOverWhatItReads(operand, reads, bound);
             });
@@ -1115,7 +1121,8 @@ final class Pullback {
         Set<BindingId> names = new HashSet<>(outer == null ? Set.of() : outer.names());
         block.params().forEach(binder -> names.add(binder.binding()));
         Set<TermPath> standFor = null;
-        if (applied instanceof Core.Call || applied instanceof Core.PreservedCall) {
+        if (applied instanceof Core.Call || applied instanceof Core.PreservedCall
+                || applied instanceof Core.Apply) {
             Operators held = operated;
             Operators others = new Operators();
             operated = others;
@@ -1129,7 +1136,7 @@ final class Pullback {
                 operated = held;
             }
             if (!others.unsaidElsewhere && (outer == null || outer.standFor() != null)) {
-                standFor = new LinkedHashSet<>(others.unsaidAt);
+                standFor = others.everyPlaceUnsaid();
                 if (outer != null) {
                     standFor.addAll(outer.standFor());
                 }
@@ -1174,6 +1181,19 @@ final class Pullback {
             case PathResolution.At(TermPath path) -> operated.unsaidAt.add(path);
             case PathResolution.MayStandAt(List<TermPath> among) -> operated.unsaidAt.addAll(among);
             default -> {
+                // A value made from positions stands at none, and is as much theirs: it stops a
+                // run on what they hold.
+                PathResolution made = reads.cameFrom(operand, read.rules().newtypes());
+                if (made instanceof PathResolution.At(TermPath path)) {
+                    operated.unsaidAt.add(path);
+                    return;
+                } else if (made instanceof PathResolution.MayStandAt(List<TermPath> among)) {
+                    operated.unsaidAt.addAll(among);
+                    return;
+                } else if (made instanceof PathResolution.MadeOf places) {
+                    operated.unsaidAt.addAll(places.places());
+                    return;
+                }
                 boolean[] hasParts = {false};
                 Core.forEachChild(Core.withoutStanding(operand), part -> {
                     hasParts[0] = true;
@@ -5386,13 +5406,32 @@ final class Pullback {
     private static final class Operators {
         private final List<Operated> told = new ArrayList<>();
         private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
-        private final Set<TermPath> unsaidAt = new LinkedHashSet<>();
+        private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
+        private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;
+
+        Operators() {
+            unsaidGroups.add(unsaidAt);
+        }
 
         void tell(Core operation, LinearForm<Quantity> form) {
             if (nodes.add(operation)) {
                 told.add(new Operated(operation, form));
             }
+        }
+
+        /** What the next operator not said of may stop a run on is one group of places: it ties
+         *  them to one another, which what another operator stops a run on does not. */
+        void beginGroup() {
+            unsaidAt = new LinkedHashSet<>();
+            unsaidGroups.add(unsaidAt);
+        }
+
+        /** Every place any operator not said of may stop a run on. */
+        Set<TermPath> everyPlaceUnsaid() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            unsaidGroups.forEach(out::addAll);
+            return out;
         }
 
         /** An operator that may stop a run where nothing is said, over {@code reads}: the places
@@ -5430,16 +5469,16 @@ final class Pullback {
      * What the operators a run works out answer, and which of them answer nothing here.
      *
      * @param answers         where each of the operators said answers, or empty where none is
-     * @param unsaidAt        the places the numbers are of that the operators not said may stop a
-     *                        run on
+     * @param unsaidAt        the places the numbers are of that each operator not said may stop a
+     *                        run on, a group to an operator
      * @param unsaidElsewhere whether an operator not said may stop a run on something that is no
      *                        number of a place, or on operands no form says
      */
-    record OperatorsAnswer(Optional<Proposition> answers, Set<TermPath> unsaidAt,
+    record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
                            boolean unsaidElsewhere) {
 
         OperatorsAnswer {
-            unsaidAt = Set.copyOf(unsaidAt);
+            unsaidAt = unsaidAt.stream().filter(each -> !each.isEmpty()).map(Set::copyOf).toList();
         }
     }
 
@@ -5478,6 +5517,7 @@ final class Pullback {
                     || form.coefs().keySet().stream().anyMatch(quantity ->
                             quantity instanceof Quantity.HowManyMeet
                                     || quantity instanceof Quantity.HowManyDifferentMeet)) {
+                operated.beginGroup();
                 operated.leaveUnsaid(form.coefs().keySet(), null);
                 continue;
             }
@@ -5491,6 +5531,7 @@ final class Pullback {
                         aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, below, Rel.GE,
                                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)));
             } else {
+                operated.beginGroup();
                 operated.leaveUnsaid(form.coefs().keySet(), null);
             }
         }
