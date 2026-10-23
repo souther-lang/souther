@@ -82,6 +82,32 @@ class ElementsChosenForACountAreChosenInAListInsideAParameterTest {
             }
             """;
 
+    /** How many values two elements or more hold at one place: elements alike there are chosen
+     *  together, under one value at a time. */
+    private static final String ALIKE_INSIDE = """
+            module p
+            data Forecast = { currency: String, amount: Int }
+            data Book = { fs: List<Forecast> }
+            let filed (cs: List<String>): Map<String, Int> =
+                List.fold((acc, c) -> Map.updateOrInsert(c, 1, n -> n + 1, acc), Map.empty, cs)
+            behavior f : (b: Book) -> Int
+            let f (b) =
+                if Map.size(Map.filterEntries((_, n) -> n >= 2, filed(List.map(.currency, b.fs))))
+                    == 1 then 1 else 0
+            """;
+
+    /** The control: the same list as the parameter itself. */
+    private static final String ALIKE_THE_PARAMETER = """
+            module p
+            data Forecast = { currency: String, amount: Int }
+            let filed (cs: List<String>): Map<String, Int> =
+                List.fold((acc, c) -> Map.updateOrInsert(c, 1, n -> n + 1, acc), Map.empty, cs)
+            behavior f : (fs: List<Forecast>) -> Int
+            let f (fs) =
+                if Map.size(Map.filterEntries((_, n) -> n >= 2, filed(List.map(.currency, fs))))
+                    == 1 then 1 else 0
+            """;
+
     private static final Pattern QUANTITY = Pattern.compile("quantity = (-?\\d+)");
 
     private static Compilation measured(String source) {
@@ -99,7 +125,8 @@ class ElementsChosenForACountAreChosenInAListInsideAParameterTest {
     /** Every point is offered a row, inside the parameter as at it. */
     @Test
     void everyPointIsOfferedARowWhereverTheListStands() {
-        for (String model : List.of(INSIDE, THE_PARAMETER, PRICED_INSIDE, PRICED_THE_PARAMETER)) {
+        for (String model : List.of(INSIDE, THE_PARAMETER, PRICED_INSIDE, PRICED_THE_PARAMETER,
+                ALIKE_INSIDE, ALIKE_THE_PARAMETER)) {
             Compilation compilation = measured(model);
 
             assertEquals(List.of(), OfferedAtTheLines.of(compilation, "p", "f").unresolved(),

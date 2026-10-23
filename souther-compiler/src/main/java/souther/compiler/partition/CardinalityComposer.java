@@ -165,12 +165,8 @@ final class CardinalityComposer {
             stated.add(AStatementAtARow.of(each.stated(), each.behavior(), measuring));
         }
         if (!stated.isEmpty()) {
-            return container.steps().isEmpty()
-                    ? amongItsValues(asked, stated, standingAt, demands, container, size,
-                            sourceType, view, holding, keptApart, apartAt, measuring, within,
-                            reading)
-                    : notChosen("`" + container + "` is not a parameter its elements are written"
-                            + " at");
+            return amongItsValues(asked, stated, standingAt, demands, container, size, sourceType,
+                    view, holding, keptApart, apartAt, measuring, within, reading);
         }
         // What another container is made to hold for the elements chooses none of their values,
         // so none are chosen apart that way.
@@ -864,12 +860,8 @@ final class CardinalityComposer {
         // Alike at a place inside the element, the elements holding one value there are chosen
         // together, as many as asked, among the values each is read at whole.
         if (!place.equals(container.element())) {
-            return container.steps().isEmpty()
-                    ? alikeUnderOneValue(sourceType, view, holding, container, place, kept, wanted,
-                            size, keptApart, measuring, within, reading)
-                    : notChosen("an element of `" + container + "` is alike another at a place"
-                            + " inside it, and `" + container + "` is not a parameter its"
-                            + " elements are written at");
+            return alikeUnderOneValue(sourceType, view, holding, container, place, kept, wanted,
+                    size, keptApart, measuring, within, reading);
         }
         NumericTerm own = new NumericTerm.ValueOf(container.element());
         TermOrders orders = measuring.ordersOf(own);
