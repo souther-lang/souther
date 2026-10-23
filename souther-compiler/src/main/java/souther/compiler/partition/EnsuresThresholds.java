@@ -212,11 +212,12 @@ public final class EnsuresThresholds {
         // answers, so there is nothing on the way to it and what arrives is the declarations'
         // whole domain — which is what an arrival that restricts nothing reads as. And no
         // dependency: a clause is written against the declaration, and no row stands anything in
-        // for it, so it is read where none is ({@link InputReads#ofWhatIsDeclared}).
+        // for it, so it is read where none is ({@link InputReads#ofWhatIsDeclared}). Nor a
+        // witness of a count, which is found at a row getting to a comparison of a body.
         ComparisonAssessment whole = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
                 reads, ClosureApplications.OUTSIDE, rule.value(), answering, false,
-                WhatConditionsState.of(read), Optional.empty());
+                WhatConditionsState.of(read), Optional.empty(), CountWitnesses.Lookup.NONE);
         // A statement of several relations holds a line for each only where the statement turns
         // on it, and a clause has nowhere to hold that: no way leads to it for a condition to be
         // carried on. So its lines are said not to be drawn, rather than drawn and owed rows the

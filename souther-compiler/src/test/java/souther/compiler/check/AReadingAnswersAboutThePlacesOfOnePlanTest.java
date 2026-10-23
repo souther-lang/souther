@@ -8,6 +8,7 @@ import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.partition.CountWitnesses;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.ProducedCases;
 import souther.compiler.partition.RuleReachNumbering;
@@ -286,7 +287,8 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
             AnalysisBody analysis = checked.analysisBodies().get("pick");
             return GuardThresholds.of("pick", analysis, body, plan, inputs.reading(rules),
                     ElementBindings.of(analysis.core(), analysis.elements(), rules.newtypes()),
-                    against.arrivals(), new RuleReachNumbering(module, "pick"));
+                    against.arrivals(), new RuleReachNumbering(module, "pick"),
+                    CountWitnesses.AtComparisons.NONE);
         }
 
         /** What this behavior's body declares cannot arrive. */

@@ -9,6 +9,8 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -818,6 +820,18 @@ public sealed interface BorderQuantity
             this.against = against;
             this.on = Map.copyOf(on);
             this.most = most;
+        }
+
+        /** The count and the form beside it, held against {@code level} as {@code relation}:
+         *  how many meet the statement weighed by one, and each number of the form as it is. */
+        UndividedByARelation relationAt(ExactRatio level, Rel relation) {
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            coefs.put(new Quantity.HowManyMeet(new DecisionSubject.AnInput(container), meeting),
+                    ExactRatio.ONE);
+            against.coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
+                    by));
+            return UndividedByARelation.ofAForm(new LinearForm<>(level.negated(), coefs),
+                    relation);
         }
 
         /**
@@ -1715,7 +1729,11 @@ public sealed interface BorderQuantity
                     ? UndividedByARelation.ofARemainderOfAForm(remainder.dividend().form(),
                             remainder.divisor(), remainder.added(), level, relation)
                     : UndividedByARelation.SHOWING_NOTHING;
-            case HowMany _ -> UndividedByARelation.SHOWING_NOTHING;
+            // The count and the form beside it held against the level, the count a term of no
+            // position: what it takes beside how many its container holds is the relation's to
+            // ask ({@link UndividedByARelation}).
+            case HowMany count -> at instanceof Level.OfTheQuantity(ExactRatio level)
+                    ? count.relationAt(level, relation) : UndividedByARelation.SHOWING_NOTHING;
         };
     }
 

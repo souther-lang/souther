@@ -1,7 +1,11 @@
 package souther.compiler.query;
 
 import souther.compiler.check.CoverageObligation;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
+import souther.compiler.coverage.ComparisonEmissionIndex;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.partition.CountWitnesses;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ReadingPolicy;
@@ -107,6 +111,34 @@ final class Coverages {
                                souther.compiler.diag.Citation> conditionsMet,
                        Map<Integer, Citation> rulesReachedAt) {}
 
+    /** A row showing {@code count} takes every value beside how many its container holds, at a
+     *  run recorded at one of {@code reaching} ({@link Adequacy.WitnessOfACount}). */
+    interface WitnessesOfACount {
+        CountWitnesses.Sought of(Quantity.HowManyMeet count,
+                                            Set<ConditionOutcomeSite> reaching);
+    }
+
+    /**
+     * The witnesses of each comparison of {@code body}: those at a run recorded where the
+     * comparison is, by the places the module's emission numbered for it — none for a comparison
+     * nothing records a run at, which no run is shown to get to.
+     */
+    private static CountWitnesses.AtComparisons atTheComparisonsOf(Core body,
+                                                                    CoverageSites.Plan plan,
+                                                                    WitnessesOfACount found) {
+        ComparisonEmissionIndex[] index = {null};
+        return comparison -> {
+            if (index[0] == null) {
+                index[0] = ComparisonEmissionIndex.ofBody(body, plan);
+            }
+            Set<ConditionOutcomeSite> reaching = new LinkedHashSet<>();
+            ModelOccurrence.statedAt(comparison).map(index[0]::madeFor).orElse(List.of())
+                    .forEach(each -> each.site().ifPresent(reaching::add));
+            return reaching.isEmpty() ? CountWitnesses.Lookup.NONE
+                    : count -> found.of(count, reaching);
+        };
+    }
+
     /**
      * The positions one behavior is measured at, with what its own comparisons divide them into.
      *
@@ -119,6 +151,10 @@ final class Coverages {
      * both were read against come with it. Taken apart and handed over as a domain beside the names
      * to read it under, the measurement would be free to be made against one reading and the
      * behavior's rows walked by another.
+     *
+     * @param witnesses a row showing a count takes every value beside how many its container
+     *                  holds, at a run recorded at one of a comparison's places — asked where a row
+     *                  is run, and handed in
      */
     static Partitioned partitioningOf(Hir.SpecBehavior behavior,
                                       souther.compiler.inputs.InputReading read,
@@ -128,7 +164,8 @@ final class Coverages {
                                       souther.compiler.check.StatedContract stated,
                                       souther.compiler.values.Allowance<
                                               souther.compiler.inputs.NumericTerm.FromOnePosition>
-                                              distinctions) {
+                                              distinctions,
+                                      WitnessesOfACount witnesses) {
         // Which of the three this elaboration holds, settled before anything reads a body. A tree
         // and a `null` are two facts under one shape, and every reader below would tell them apart
         // again or stop telling them apart at all.
@@ -167,7 +204,7 @@ final class Coverages {
                 new RuleReachNumbering(read.symbols().module(), behavior.name());
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
                 : GuardThresholds.of(behavior.name(), analysis, body, plan, read, standing, arrives,
-                        reaches);
+                        reaches, atTheComparisonsOf(body, plan, witnesses));
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
