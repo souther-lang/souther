@@ -192,24 +192,25 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
     }
 
     /**
-     * Only what is read is said to be read: of the elements a filter kept, or of a value worked
-     * out of each, the number is no number of the container and the rule stays a rule nobody read.
+     * Only what is read is said to be read: of a value worked out of each element, the number is
+     * no number of the container and the rule stays a rule nobody read. Of the elements a filter
+     * kept, it is how many different values those hold, which is a line of its own
+     * ({@code partition.HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest}).
      */
     @Test
-    void aProjectionOfSomeElementsOrOfAValueWorkedOutOfEachIsStillARuleNobodyRead() {
+    void aProjectionOfAValueWorkedOutOfEachIsStillARuleNobodyRead() {
         String model = """
                 data Forecast = { currency: String, amount: Int }
 
                 behavior f : (fs: List<Forecast>) -> Int
                 let f (fs) = if %s then 1 else 0
                 """;
-        for (String condition : List.of(
-                "Set.size(Set.fromList(List.map(f -> f.amount + 1, fs))) == 1",
-                "Set.size(Set.fromList(List.map(.currency,"
-                        + " List.filter(f -> f.amount > 0, fs)))) == 1")) {
-            Said said = of(model.formatted(condition), "f");
-            assertEquals(List.of("rule_unread"), said.weakening(), condition);
-        }
+        Said worked = of(model.formatted(
+                "Set.size(Set.fromList(List.map(f -> f.amount + 1, fs))) == 1"), "f");
+        assertEquals(List.of("rule_unread"), worked.weakening());
+        Said kept = of(model.formatted("Set.size(Set.fromList(List.map(.currency,"
+                + " List.filter(f -> f.amount > 0, fs)))) == 1"), "f");
+        assertFalse(kept.weakening().contains("rule_unread"), kept.weakening().toString());
     }
 
     /**
@@ -260,13 +261,15 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
     }
 
     /**
-     * And only what is read is said to be read there too: a walk over the elements a filter kept
-     * gathers how many different values meet a statement, one over a value worked out of each
-     * gathers no place's values, and how many keys of a map a statement keeps is a count of those
-     * whose gathered value meets it, which is no statement about one element.
+     * And only what is read is said to be read there too: a walk over a value worked out of each
+     * element gathers no place's values, and one over the lists inside each element of an outer
+     * list gathers some of the occurrences of the place. A walk over the elements a filter kept
+     * gathers how many different values meet a statement, and how many keys of a map a statement
+     * keeps is how many keys have a gathered value meeting it: both are read, as lines of their
+     * own ({@code partition.HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest}).
      */
     @Test
-    void aWalkGatheringSomeElementsOrAValueWorkedOutOfEachIsStillARuleNobodyRead() {
+    void aWalkGatheringAValueWorkedOutOfEachIsStillARuleNobodyRead() {
         String model = """
                 data Forecast = { currency: String, amount: Int }
 
@@ -276,15 +279,17 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                 behavior f : (fs: List<Forecast>) -> Int
                 let f (fs) = if %s then 1 else 0
                 """;
+        Said worked = of(model.formatted(
+                "Set.size(List.fold((acc, f) -> Set.insert(f.amount + 1, acc), Set.empty, fs))"
+                        + " == 1"), "f");
+        assertEquals(List.of("rule_unread"), worked.weakening());
         for (String condition : List.of(
                 "Set.size(List.fold((acc, f) -> Set.insert(f.currency, acc), Set.empty,"
                         + " List.filter(f -> f.amount > 0, fs))) == 1",
                 "Map.size(filed(List.map(.currency, List.filter(f -> f.amount > 0, fs)))) == 1",
-                "Set.size(List.fold((acc, f) -> Set.insert(f.amount + 1, acc), Set.empty, fs))"
-                        + " == 1",
                 "Map.size(Map.filterEntries((_, n) -> n > 0, filed(List.map(.currency, fs)))) >= 2")) {
             Said said = of(model.formatted(condition), "f");
-            assertEquals(List.of("rule_unread"), said.weakening(), condition);
+            assertFalse(said.weakening().contains("rule_unread"), condition + " " + said);
         }
         // A walk over the lists inside one element of an outer list gathers some of the
         // occurrences of the place, and no number of them all.

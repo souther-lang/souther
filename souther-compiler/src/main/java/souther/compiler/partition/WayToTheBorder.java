@@ -483,15 +483,15 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             return new Step.Held<>(new HeldTogether(requirements, truths, counts, stated));
         }
 
-        /** These with the count {@code counted} asked to be in {@code region}, or why no row is
-         *  where that leaves it none. */
-        Step<HeldTogether, Reachability> counting(Quantity.HowManyMeet counted,
-                                                  LevelRegion region) {
+        /** These with the count {@code counted}, one {@link AStatementAtARow#countIn} answers,
+         *  asked to be in {@code region}, or why no row is where that leaves it none. */
+        Step<HeldTogether, Reachability> counting(Quantity counted, LevelRegion region) {
             LevelRegion left = counts.containsKey(counted.spelled())
                     ? counts.get(counted.spelled()).meet(region) : region;
             if (left.parts().isEmpty()) {
                 return new Step.Closed<>(new Reachability.NothingReaches(
-                        new Reachability.TwoAtOnce.Counts(counted.container().inputPosition())));
+                        new Reachability.TwoAtOnce.Counts(AStatementAtARow.elementsOf(counted)
+                                .container().inputPosition())));
             }
             Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
             out.put(counted.spelled(), left);
