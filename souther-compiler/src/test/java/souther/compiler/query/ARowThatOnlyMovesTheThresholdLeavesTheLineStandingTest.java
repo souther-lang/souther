@@ -215,10 +215,11 @@ class ARowThatOnlyMovesTheThresholdLeavesTheLineStandingTest {
     private static AnotherLineTheRowsAllow.Direction line(Border border,
                                                           List<Map<NumericTerm, Place>> rows,
                                                           String spelled) {
-        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, true,
-                () -> new StandingAtAPoint.RowsRead(rows, Set.of(),
-                        StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
+        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(List.of(
+                new AnotherLineTheRowsAllow.Reading(border,
+                        () -> new StandingAtAPoint.RowsRead(rows, Set.of(),
+                                StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
+                        List.of(), WayToTheBorder.UNTOUCHED, _ -> false)), true);
         for (AnotherLineTheRowsAllow.Direction each : assertInstanceOf(
                 AnotherLineTheRowsAllow.ByDirection.class, said).each()) {
             if (OrderedAffineBoundary.spelled(each.direction().direction()).equals(spelled)) {

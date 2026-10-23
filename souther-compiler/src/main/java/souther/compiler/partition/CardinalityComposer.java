@@ -165,12 +165,8 @@ final class CardinalityComposer {
             stated.add(AStatementAtARow.of(each.stated(), each.behavior(), measuring));
         }
         if (!stated.isEmpty()) {
-            return container.steps().isEmpty()
-                    ? amongItsValues(asked, stated, standingAt, demands, container, size,
-                            sourceType, view, holding, keptApart, apartAt, measuring, within,
-                            reading)
-                    : notChosen("`" + container + "` is not a parameter its elements are written"
-                            + " at");
+            return amongItsValues(asked, stated, standingAt, demands, container, size, sourceType,
+                    view, holding, keptApart, apartAt, measuring, within, reading);
         }
         // What another container is made to hold for the elements chooses none of their values,
         // so none are chosen apart that way.
@@ -188,17 +184,12 @@ final class CardinalityComposer {
         boolean inside = standingAt.stream()
                 .anyMatch(each -> !each.term().subjectPath().equals(container.element()));
         // An element that is more than one number is chosen among the values it is read at
-        // whole, where the container is the parameter a row is read from; and so is every
-        // element whose different values are counted, since what is shared out then is the
-        // elements holding one value together, however many there are of each.
+        // whole; and so is every element whose different values are counted, since what is
+        // shared out then is the elements holding one value together, however many there are of
+        // each.
         if (element == null || inside || apartAt != null) {
-            if (container.steps().isEmpty()) {
-                return amongItsValues(asked, List.of(), standingAt, demands, container, size,
-                        sourceType, view, holding, keptApart, apartAt, measuring, within,
-                        reading);
-            }
-            return notChosen("an element of `" + container + "` is not one number the statements"
-                    + " read, or its different values are counted");
+            return amongItsValues(asked, List.of(), standingAt, demands, container, size,
+                    sourceType, view, holding, keptApart, apartAt, measuring, within, reading);
         }
         for (RealizationTarget.OfANumber each : standingAt) {
             AskedAt at = demands.get(each);
@@ -455,7 +446,7 @@ final class CardinalityComposer {
      * @param together   statements the elements meet together, each about {@code container} alone
      * @param standingAt numbers inside an element, each asked to stand in a set: a value the row
      *                   places there, which some element of the container holds
-     * @param holding    what the container is, a list or a set written at a parameter
+     * @param holding    what the container is, a list or a set written where it stands
      */
     private static TermRealizations.Realization amongItsValues(List<Asked> counted,
                                                                List<AStatementAtARow> together,
@@ -869,12 +860,8 @@ final class CardinalityComposer {
         // Alike at a place inside the element, the elements holding one value there are chosen
         // together, as many as asked, among the values each is read at whole.
         if (!place.equals(container.element())) {
-            return container.steps().isEmpty()
-                    ? alikeUnderOneValue(sourceType, view, holding, container, place, kept, wanted,
-                            size, keptApart, measuring, within, reading)
-                    : notChosen("an element of `" + container + "` is alike another at a place"
-                            + " inside it, and `" + container + "` is not a parameter its"
-                            + " elements are written at");
+            return alikeUnderOneValue(sourceType, view, holding, container, place, kept, wanted,
+                    size, keptApart, measuring, within, reading);
         }
         NumericTerm own = new NumericTerm.ValueOf(container.element());
         TermOrders orders = measuring.ordersOf(own);

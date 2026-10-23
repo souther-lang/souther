@@ -78,19 +78,23 @@ final class ElementValues {
     /**
      * A row holding {@code values} as the container, and nothing else.
      *
-     * @param type the container's type, which is the parameter's: a row holds a parameter, so
-     *             only a container that is one is held this way
+     * <p>A container that is a parameter is the row's one parameter. One inside a parameter is
+     * read as a row of its own, as the element alone is: a path inside it is read in it, and every
+     * other could not be walked, which is what the row holding a parameter answers of the
+     * parameters beside it.
+     *
+     * @param type the container's type
      */
     BorderQuantity.Observation holding(Type type, List<ObservedValue> values) {
-        if (!container.steps().isEmpty()) {
-            throw new IllegalStateException("a row holding `" + container + "` alone holds the"
-                    + " parameter it is, and it is inside one");
-        }
-        return new StandingAtAPoint.DiscoveringRow(new StandingAtAPoint.RowWalk(
-                new BehaviorInputs(List.of(container.head()), List.of(type), reading.source(),
-                        reading.policy()),
-                new ObservedInputs(List.of(new ObservedValue.Sequence(values)),
-                        new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
+        boolean aParameter = container.steps().isEmpty();
+        BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
+                new StandingAtAPoint.RowWalk(new BehaviorInputs(
+                        List.of(aParameter ? container.head() : ALONE), List.of(type),
+                        reading.source(), reading.policy()),
+                        new ObservedInputs(List.of(new ObservedValue.Sequence(values)),
+                                new Generator.Watched.NotRun(),
+                                new AnswerObservation.NotAnswered())));
+        return aParameter ? row : new Alone(container, row);
     }
 
     /** The element alone, holding {@code value}. */
@@ -104,13 +108,13 @@ final class ElementValues {
     }
 
     /**
-     * A reading of one element, walked from the element: a path under it is read in the element,
+     * A reading of one part of the input, walked from that part: a path under it is read in it,
      * and every other path could not be walked.
      *
-     * @param element where the element stands in the input
-     * @param within  the element read as a row of its own, under {@link #ALONE}
+     * @param part   where the part stands in the input
+     * @param within the part read as a row of its own, under {@link #ALONE}
      */
-    private record Alone(TermPath element, BorderQuantity.Observation within)
+    private record Alone(TermPath part, BorderQuantity.Observation within)
             implements BorderQuantity.Observation {
 
         @Override
@@ -125,7 +129,7 @@ final class ElementValues {
             return inside == null ? WalkResult.couldNotWalk() : within.everyValueAt(inside);
         }
 
-        /** The elements of a container inside the element, each read the same way. */
+        /** The elements of a container inside the part, each read the same way. */
         @Override
         public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
             TermPath inside = inside(of);
@@ -137,17 +141,17 @@ final class ElementValues {
                         WalkResult.couldNotWalk();
                 case WalkResult.Reached(List<BorderQuantity.Observation> each) -> {
                     List<BorderQuantity.Observation> out = new ArrayList<>();
-                    each.forEach(one -> out.add(new Alone(element, one)));
+                    each.forEach(one -> out.add(new Alone(part, one)));
                     yield WalkResult.reached(out);
                 }
             };
         }
 
-        /** {@code path} as the element's own row names it, or null where it is not inside the
-         *  element. */
+        /** {@code path} as the part's own row names it, or null where it is not inside the
+         *  part. */
         private TermPath inside(TermPath path) {
-            return path.isAtOrUnder(element) ? new TermPath(ALONE,
-                    path.steps().subList(element.steps().size(), path.steps().size())) : null;
+            return path.isAtOrUnder(part) ? new TermPath(ALONE,
+                    path.steps().subList(part.steps().size(), path.steps().size())) : null;
         }
     }
 }

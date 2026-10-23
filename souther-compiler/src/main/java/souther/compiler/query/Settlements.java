@@ -1,9 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.check.Sig;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.Place;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ReadingSeat;
@@ -15,7 +12,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ObservedInputs;
-import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.observe.AnswerObservation;
@@ -603,7 +600,10 @@ public record Settlements(List<ObligationIdentity> requested,
             // answer nothing, and the line would be offered a second row it already has.
             //
             // One entry per line of the family the rows leave standing, which is what is owed: a
-            // row ruling one of them out need not rule out another.
+            // row ruling one of them out need not rule out another. And each entry is put to the
+            // line its search was made for, which is where every reading's rows leave it together,
+            // and read at the reading the search was made along: the row was composed along that
+            // reading's way and is read back at its positions.
             Map<ObligationIdentity.OfABorder, List<ALineBesideOne>> besides = new LinkedHashMap<>();
             if (filling != null) {
                 List<BorderAssessment> lines =
@@ -621,10 +621,10 @@ public record Settlements(List<ObligationIdentity> requested,
                             }
                             besides.computeIfAbsent(item, _ -> new ArrayList<>())
                                     .add(new ALineBesideOne(subject.at(one.reading()),
-                                            OrderedAffineBoundary.of(one.reading())
+                                            DrawnBoundary.of(one.reading())
                                                     .orFail("a line the rows allow beside one"
                                                             + " whose values were not worked out")
-                                                    .orElse(null), standing, one));
+                                                    .orElse(null), one.line(), one));
                         }
                     }
                 }
@@ -1131,44 +1131,14 @@ public record Settlements(List<ObligationIdentity> requested,
          * is over other positions.
          */
         private ToldApartAt tellsThemApartAt(RowAsRead asRead, ALineBesideOne one) {
-            StandingAtAPoint.RowsRead read = one.toRows().valuesOf(List.of(asRead.asInputs()));
-            if (read.each().isEmpty()) {
-                // The row holds no value on this line at all, whether because nothing watched its
-                // run or because its positions could not be read there. Which of those it is is
-                // the reading's own answer and is what a reader is told.
-                return new ToldApartAt(read.everyOne() ? new Settlement.DoesNotSettle()
-                        : new Settlement.Undetermined(read.unwatched()
-                                ? Settlement.Reason.NO_ACCOUNT_OF_THE_RUN
-                                : Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ), null);
-            }
-            boolean unheld = false;
-            for (Map<NumericTerm, Place> values : read.each()) {
-                // Whether it leaves no threshold on the line standing beside the rows already
-                // read, and not whether it answers the line at its current threshold differently.
-                // A row the model keeps between the two ends of the range does the second and not
-                // the first: the line moves to it, and the next run finds the same line standing.
-                // Where the arithmetic could not say, the row is one nothing here can tell about —
-                // neither settling the line nor shown to leave it.
-                ExactAnswer<Boolean> rules = one.beside().ruledOutBy(one.drawn(), values);
-                if (rules instanceof ExactAnswer.Unheld<Boolean>) {
-                    unheld = true;
-                    continue;
-                }
-                if (((ExactAnswer.Held<Boolean>) rules).value()) {
-                    // Where it rules the line out, kept beside the answer. What a person is shown
-                    // for this line is where the row they are handed stands, and that is this —
-                    // worked out again by whoever shows it, it would be a second reading of the
-                    // row, free to name a reading this one did not settle at.
-                    return new ToldApartAt(new Settlement.Settles(),
-                            new InputOfARowForALine(one.reading().border(), values));
-                }
-            }
-            // A row whose sum could not be held is a row read in part (a reading's own
-            // ReadingGap.CouldNotWorkOut), and a row read short of a value is what this answers
-            // in that word wherever else a row is put to a line.
-            return new ToldApartAt(unheld
-                    ? new Settlement.Undetermined(Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ)
-                    : new Settlement.DoesNotSettle(), null);
+            WhatARowRulesOut.Said said = WhatARowRulesOut.of(one.toRows(), one.drawn(),
+                    one.beside(), asRead.asInputs());
+            // Where it rules the line out, kept beside the answer. What a person is shown for this
+            // line is where the row they are handed stands, and that is this — worked out again by
+            // whoever shows it, it would be a second reading of the row, free to name a reading
+            // this one did not settle at.
+            return new ToldApartAt(said.said(), said.at() == null ? null
+                    : new InputOfARowForALine(one.reading().border(), said.at()));
         }
 
         /**
@@ -1280,12 +1250,12 @@ public record Settlements(List<ObligationIdentity> requested,
      * of the behavior and reading the inequality folds the quantity's own step, once per row for an
      * answer that was the same every time. And the line put to rows, for the same reason.
      */
-    private record ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+    private record ALineBesideOne(MeasuredInput.BorderReading reading, DrawnBoundary drawn,
                                   AnotherLineTheRowsAllow.Stands beside,
                                   ARowTellingTheLinesApart.AtOneReading toldApart,
                                   StandingAtAPoint.AtALine toRows) {
 
-        ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+        ALineBesideOne(MeasuredInput.BorderReading reading, DrawnBoundary drawn,
                        AnotherLineTheRowsAllow.Stands beside,
                        ARowTellingTheLinesApart.AtOneReading toldApart) {
             this(reading, drawn, beside, toldApart, StandingAtAPoint.putToRows(reading,
@@ -1294,12 +1264,12 @@ public record Settlements(List<ObligationIdentity> requested,
 
         ALineBesideOne {
             if (drawn == null) {
-                // A rule that names a value orders nothing, so no line beside it is ever named.
-                // Refused where the pair is put together rather than where a row is weighed against
-                // it: what it says is that the measurement and this account disagree about the
-                // line, which is true of the pair whether or not a row is ever offered.
-                throw new IllegalStateException("a line the rows allow beside a rule that orders"
-                        + " nothing: " + reading.border().obligation());
+                // A line beside one is named only where its rule reads as a line. Refused where the
+                // pair is put together rather than where a row is weighed against it: what it says
+                // is that the measurement and this account disagree about the line, which is true
+                // of the pair whether or not a row is ever offered.
+                throw new IllegalStateException("a line the rows allow beside a rule that reads as"
+                        + " no line: " + reading.border().obligation());
             }
         }
     }
