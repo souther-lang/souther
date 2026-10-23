@@ -215,20 +215,21 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
     /** A search of one reading that composed a row standing at {@code x, y}. */
     private static ARowTellingTheLinesApart composedAt(int x, int y) {
         return new ARowTellingTheLinesApart(List.of(new ARowTellingTheLinesApart.AtOneReading(
-                TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE.direction(), at(x, y),
+                TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE, at(x, y),
                 SearchOutcomes.of(ItemAssessment.Attempt.Built.certified(
                         new Generator.GeneratedRow(new Generator.Purpose.Unstated(), List.of()),
-                        WayToTheBorder.UNTOUCHED)))));
+                        WayToTheBorder.UNTOUCHED, InputsOfTheBody.aRowOfNoInputsReadBack())),
+                null)));
     }
 
     /** A search of one reading that ran and had nowhere to compose. */
     private static ARowTellingTheLinesApart lookedAndComposedNothing() {
         return new ARowTellingTheLinesApart(List.of(new ARowTellingTheLinesApart.AtOneReading(
-                TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE.direction(), null,
+                TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE, null,
                 SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
                         new Generator.UnresolvedCombination(List.of("-2 * x + y = 0"),
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
-                        WayToTheBorder.UNTOUCHED)))));
+                        WayToTheBorder.UNTOUCHED)), null)));
     }
 
     private static Map<NumericTerm, Place> at(int x, int y) {

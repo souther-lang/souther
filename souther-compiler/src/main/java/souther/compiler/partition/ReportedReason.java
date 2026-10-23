@@ -304,7 +304,11 @@ public final class ReportedReason {
             case BlockReason.SeveralLinesInOneRule _,
                  BlockReason.WhereALineDecidesNotWorkedOut _ ->
                     UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE;
-            case BlockReason.RelationNotShownToReachEveryValue _ ->
+            // One word whether or not a search stopped short of the row that would have shown
+            // more: which of the two it was is told apart by the sensitivity and the figure
+            // beside the word.
+            case BlockReason.RelationNotShownToReachEveryValue _,
+                 BlockReason.RelationNotShownWhereTheSearchStopped _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
             case BlockReason.ComparisonRelatingTwoValues _ ->
                     UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;

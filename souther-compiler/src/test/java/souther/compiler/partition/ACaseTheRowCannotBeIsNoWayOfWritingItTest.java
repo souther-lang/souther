@@ -21,6 +21,7 @@ import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -109,7 +110,7 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
                                 "m", new ConditionOccurrence(
                                         "b", ConditionOccurrence.Reading.DIVIDING, 0)),
                                 new RowDemand.Relational(ABOVE_TEN))), Reachability.Ways.ONE,
-                        List.of()),
+                        List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 

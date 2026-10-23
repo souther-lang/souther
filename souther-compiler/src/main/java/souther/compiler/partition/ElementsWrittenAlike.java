@@ -92,7 +92,7 @@ final class ElementsWrittenAlike {
                     };
                     out.add(new Alike(new Reachability.Reaching(reaching.region(),
                             reaching.requirements(), reaching.truths(), asked, reaching.ways(),
-                            reaching.declined()), leftBy));
+                            reaching.declined(), reaching.narrowedBy()), leftBy));
                 }
                 yield new Choices(out, stoppedBy);
             }

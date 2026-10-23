@@ -298,14 +298,13 @@ public sealed interface Weakening {
      *
      * <p>Beside the two above rather than among them. Those are readings of the rows that came to
      * nothing or were never made, and what they weaken is every question over those rows. This is
-     * the one question over them that was not put — either because nothing here holds a border of
-     * that shape against anything, or because the rows fall all on one side of the line and pin no
-     * threshold on any line beside it.
+     * the one question over them that was not put — because the rows fall all on one side of the
+     * line, because nothing watched a run, because no input that tells the lines apart could be
+     * shown to arrive, or because the family could not be worked out whole.
      *
      * <p><b>So it is not a fact about the model.</b> A line one step from this one exists whichever
-     * of the two it is, and a reader told the question does not arise would be told the opposite of
-     * what happened. Which of the two it was is the word a document writes, because what to do
-     * about them differs: one wants a row, and the other wants this compiler to grow a strategy.
+     * it is, and a reader told the question does not arise would be told the opposite of what
+     * happened. Which it was is the word a document writes, because what to do about them differs.
      *
      * <p>The border and not the line beside it. Which lines are beside it is the family's answer and
      * is the same at every run; that this one was not held against them is the fact, and it is one
@@ -317,8 +316,6 @@ public sealed interface Weakening {
 
         /** What stood in the way of holding it against them. */
         public enum Why {
-            /** Nothing here holds a border of this shape against a line beside it. */
-            NO_STRATEGY_FOR_THE_RULE,
             /** Every row the quantity has a value at falls on one side of the line, so the rows pin
              *  no threshold on any line beside it. */
             THE_ROWS_ARE_ALL_ON_ONE_SIDE,
@@ -341,15 +338,15 @@ public sealed interface Weakening {
         /**
          * Asked of what stood in the way, because they do not answer alike.
          *
-         * <p>A strategy nobody has written and rows that fall all on one side are not allowances:
-         * one wants code and the other wants a row, and every run of this compiler over this model
+         * <p>Rows that fall all on one side, a line no arriving input tells apart and a family the
+         * arithmetic could not hold are not allowances: every run of this compiler over this model
          * says the same. What a run watched is an allowance — the arms are instrumented because a
          * build asked for them — so a run allowing more need not leave the same rows out.
          */
         @Override
         public RunSensitivity runSensitivity() {
             return switch (why) {
-                case NO_STRATEGY_FOR_THE_RULE, THE_ROWS_ARE_ALL_ON_ONE_SIDE,
+                case THE_ROWS_ARE_ALL_ON_ONE_SIDE,
                      NO_REACHABLE_DISTINGUISHER, ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER ->
                         RunSensitivity.UNAFFECTED;
                 case NOTHING_WATCHED_THE_RUNS -> RunSensitivity.MAY_CHANGE;

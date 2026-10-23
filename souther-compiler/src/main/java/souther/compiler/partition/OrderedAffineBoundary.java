@@ -51,7 +51,7 @@ import java.util.Set;
  *                    boundary, since every row a line is weighed at is read along it
  */
 public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisfiedOn,
-                                    QuantityKey direction) {
+                                    QuantityKey direction) implements DrawnBoundary {
 
     public OrderedAffineBoundary {
         if (of == null || seam == null || satisfiedOn == null || direction == null) {
@@ -138,6 +138,7 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
      * {@code n <= 100} and {@code n > 100} part the values in one place and are satisfied on
      * opposite sides of it.
      */
+    @Override
     public ExactAnswer<Boolean> satisfies(Map<NumericTerm, Place> values) {
         // Three answers and not two. A row whose sum the exact arithmetic cannot hold is neither
         // kept nor refused as far as this can tell, and read as either it is evidence nobody

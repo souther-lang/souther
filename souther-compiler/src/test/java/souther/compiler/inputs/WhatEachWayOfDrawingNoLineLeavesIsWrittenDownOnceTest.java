@@ -179,6 +179,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // and a run allowed more of everything meets the same relation.
         table.put("RelationNotShownToReachEveryValue",
                 "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
+        // The same relation, where what would have shown the other side reaching every value is a
+        // row searched for and the search stopped at a figure: a run allowed more may find it.
+        table.put("RelationNotShownWhereTheSearchStopped",
+                "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/MAY_CHANGE");
         // What the rule states was taken apart, and the reason no line came of it is read off that
         // meaning. A part declined at how many readings are made, one way down or in all, at how
         // many parts a step states, or at how far a container is written out, is one a run
@@ -530,6 +534,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.SeveralLinesInOneRule(),
                 new BlockReason.WhereALineDecidesNotWorkedOut(AT_A_FIGURE),
                 new BlockReason.RelationNotShownToReachEveryValue(),
+                new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),

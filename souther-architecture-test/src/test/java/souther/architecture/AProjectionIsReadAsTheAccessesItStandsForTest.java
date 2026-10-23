@@ -297,6 +297,15 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ElementsApart", "bindingUnder",
                 "(" + core + ")L" + c + "types/BindingId;", Reading.STRUCTURE,
                 "asks which binding a run of fields is read off, which is the base");
+        row(out, c + "partition/WhatARunWorksOutBeforeACount", "offTheParameter",
+                "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
+                "asks whether a value is a parameter or a run of fields read off one, which the"
+                        + " base answers");
+        row(out, c + "partition/WhatARunWorksOutBeforeACount", "wayDownTo",
+                "(" + core + core + ")Ljava/util/List;", Reading.STRUCTURE,
+                "finds the way down to one node by identity, which a projection's base is on");
+        row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "letsThrough",
+                "(" + core + ")Z", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "check/FieldDomains", "readOffAsItStands", "(" + core + ")Z",
                 Reading.STRUCTURE, "asks whether a value is a name or a run of fields read off"
                         + " one, which the base answers");

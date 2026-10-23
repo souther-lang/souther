@@ -294,6 +294,7 @@ public sealed interface BlockReason {
                 };
                 case RelationNotShownToReachEveryValue _ -> 23;
                 case WhereALineDecidesNotWorkedOut _ -> 24;
+                case RelationNotShownWhereTheSearchStopped _ -> 25;
             };
         }
 
@@ -314,6 +315,9 @@ public sealed interface BlockReason {
                         stopped.compareTo(((OrderedExtentTooCostly) other).stopped());
                 case WhereALineDecidesNotWorkedOut(List<Figure> stoppedAt) -> Figure.compare(
                         stoppedAt, ((WhereALineDecidesNotWorkedOut) other).stoppedAt());
+                case RelationNotShownWhereTheSearchStopped(List<Figure> stoppedAt) ->
+                        Figure.compare(stoppedAt,
+                                ((RelationNotShownWhereTheSearchStopped) other).stoppedAt());
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -369,7 +373,8 @@ public sealed interface BlockReason {
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      CasePairingNotDetermined _,
                      SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
-                     RelationNotShownToReachEveryValue _ -> true;
+                     RelationNotShownToReachEveryValue _,
+                     RelationNotShownWhereTheSearchStopped _ -> true;
             };
         }
 
@@ -387,6 +392,9 @@ public sealed interface BlockReason {
                 // And the cases where one line of several decides, taken apart and asked one at a
                 // time as far as a figure lets them be.
                 case WhereALineDecidesNotWorkedOut _ -> RunSensitivity.MAY_CHANGE;
+                // And the search for a row showing the other value of a relation reaching every
+                // value, which tries as many values as a figure lets it.
+                case RelationNotShownWhereTheSearchStopped _ -> RunSensitivity.MAY_CHANGE;
                 // And the readings of what a statement means, which stop at a figure only where
                 // the part they declined stopped at one.
                 case WhatItStatesIsNoLine(var why) -> why.figure().isPresent()
@@ -427,6 +435,7 @@ public sealed interface BlockReason {
                 // the whole of what varies.
                 case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
                 case WhereALineDecidesNotWorkedOut it -> it.stoppedAt();
+                case RelationNotShownWhereTheSearchStopped it -> it.stoppedAt();
                 // The figure the part it declined stopped at, which that part's reason says.
                 case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -529,7 +538,8 @@ public sealed interface BlockReason {
      */
     sealed interface MetAtFigures extends BlockReason
             permits PatternTooCostly, ExactValuesTooCostly, BehaviorDistinctionsTooCostly,
-                    RulesNotHandedOnAsSets, WhereALineDecidesNotWorkedOut {
+                    RulesNotHandedOnAsSets, WhereALineDecidesNotWorkedOut,
+                    RelationNotShownWhereTheSearchStopped {
 
         /** Every figure it was met at, each once and in {@link Figure#inOrder}. */
         List<Figure> stoppedAt();
@@ -573,6 +583,8 @@ public sealed interface BlockReason {
                     it.alsoAtNoFigure() || ((RulesNotHandedOnAsSets) other).alsoAtNoFigure());
             case WhereALineDecidesNotWorkedOut it -> new WhereALineDecidesNotWorkedOut(
                     both(it, (MetAtFigures) other));
+            case RelationNotShownWhereTheSearchStopped it ->
+                    new RelationNotShownWhereTheSearchStopped(both(it, (MetAtFigures) other));
             default -> one;
         };
         return (R) out;
@@ -1227,6 +1239,25 @@ public sealed interface BlockReason {
      * not a rule whose meaning went unread, since what it states is known.
      */
     record RelationNotShownToReachEveryValue() implements RuleReadingStopped {}
+
+    /**
+     * The same, where what would have shown the other value reaching every value here is a row
+     * this compiler searched for, and the search stopped at a figure before it had tried all it
+     * would have.
+     *
+     * <p>Apart from {@link RelationNotShownToReachEveryValue} for what a reader can do about it. A
+     * search that tried everything it had and found nothing leaves the place where a run allowed
+     * more leaves it too; one that stopped at a figure may find the row in such a run.
+     *
+     * @param stoppedAt every figure the search stopped at, each once and in {@link Figure#inOrder}
+     */
+    record RelationNotShownWhereTheSearchStopped(List<Figure> stoppedAt)
+            implements RuleReadingStopped, MetAtFigures {
+
+        public RelationNotShownWhereTheSearchStopped {
+            stoppedAt = metAtSome(stoppedAt, "a search that stopped stopped at some figure");
+        }
+    }
 
     /**
      * A rule whose statement is no line on the input's numbers, for the reason {@code why} gives:

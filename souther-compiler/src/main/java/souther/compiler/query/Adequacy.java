@@ -8,6 +8,10 @@ import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.check.Prepared;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.partition.CountWitnesses;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
@@ -28,6 +32,7 @@ import souther.compiler.inputs.TermPath;
 
 
 import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ComparisonEmissionIndex;
@@ -132,6 +137,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.FixtureReferences;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
@@ -1104,6 +1110,94 @@ public final class Adequacy {
             return null;
         }
         return readingOf(db, domain, reading.value());
+    }
+
+    /**
+     * A row at which a statement {@code count} counts holds of one element and fails of another,
+     * beside one value of everything else, and at which {@code behavior} answers, a run of it
+     * going through one of {@code reaching} ({@link CountWitnesses}) — or nothing where none was
+     * found, which is no finding that none exists.
+     *
+     * <p>Asked below any division of the behavior: of what it takes, the values the model names,
+     * the classes the compile produced and a run on them, and of nothing a division reads. A
+     * behavior that depends on another is run only with the dependency stood in for, which this
+     * has no answer for, so nothing is found for one.
+     *
+     * @param reaching the places a run going through the comparison the witness is of is recorded
+     *                 at: one of them a run of the witness has to be recorded at
+     */
+    public record WitnessOfACount(String name, String behavior, Quantity.HowManyMeet count,
+                                  Set<ConditionOutcomeSite> reaching)
+            implements Key<CountWitnesses.Sought> {
+
+        public WitnessOfACount {
+            reaching = Set.copyOf(reaching);
+        }
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<CountWitnesses.Sought> compute(Db db) {
+            Prepared prepared = db.ask(new Shapes.Prepared(name)).value();
+            CheckSurface surface = db.ask(new Shapes.CheckSurface(name)).value();
+            Sig sig = db.ask(new Bodies.Signatures(name)).value() instanceof Map<String, Sig> all
+                    ? all.get(behavior) : null;
+            Hir.SpecBehavior spec = prepared == null ? null : prepared.behaviors().stream()
+                    .filter(each -> each.name().equals(behavior))
+                    .filter(Hir.SpecBehavior.class::isInstance).map(Hir.SpecBehavior.class::cast)
+                    .findFirst().orElse(null);
+            InputReading read = spec == null ? null : inputReadingOf(db, name, spec);
+            FixturesAtTheBoundary building = constructing(db, name);
+            RowTrials trials = trialling(db, name);
+            // The places a run is recorded at, under the numbering the check issued.
+            SiteNumbering numbering = numberingOf(db, name).orElse(null);
+            // What the behavior requires: nothing where the module did not build far enough to
+            // say, and a dependency stood in for is nothing this search has an answer for.
+            RequiredDependencies requires = RequiredDependencies.of(db, name, behavior);
+            if (surface == null || sig == null || read == null || building == null
+                    || trials == null || numbering == null || requires == null
+                    || !requires.none()) {
+                return Answer.of(CountWitnesses.Sought.NOTHING);
+            }
+            // What the model names at each parameter's type. The search is one run of rows
+            // composed, so the references it names are numbered within it.
+            FixtureReferences references = new FixtureReferences(name, behavior);
+            List<List<FixtureTemplate>> named = new ArrayList<>();
+            for (int at = 0; at < sig.ins().size(); at++) {
+                List<FixtureTemplate> here = new ArrayList<>();
+                surface.typedFixtureValues().getOrDefault(sig.ins().get(at).type(), List.of())
+                        .forEach(one -> here.add(FixtureTemplate.named(one, references.next())));
+                named.add(here);
+            }
+            // And what each row written for the behavior took, as its run held it: a value is
+            // written back from what was built, so what a row prints and what it builds are one.
+            Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
+            RowReading rows = byTarget == null ? null : byTarget.get(behavior);
+            List<List<ObservedValue>> taken = rows == null ? List.of()
+                    : rows.rowsSeen().stream().map(RowOutcome::inputs)
+                            .filter(inputs -> inputs.size() == sig.ins().size()).toList();
+            RowTrials.OfBehavior applying = trials.forBehavior(behavior, sig);
+            return Answer.of(CountWitnesses.of(count, behavior, read, named, taken,
+                    (at, fixture) -> building.build(sig.ins().get(at), fixture)
+                            instanceof BoundaryValues.Built.Value(ObservedValue value)
+                            ? Optional.of(value) : Optional.<ObservedValue>empty(),
+                    inputs -> applying.prepare(inputs.stream().map(FixtureTemplate::value)
+                                    .toList(), List.of())
+                            .flatMap(RowTrials.Prepared::run)
+                            .filter(ran -> ran.answer() instanceof AnswerObservation.Answered)
+                            .map(ran -> ran.recorded() instanceof RunRecord.Recorded(var seen)
+                                    && wentThrough(numbering.align(seen)))
+                            .orElse(false)));
+        }
+
+        /** Whether the run {@code seen} is had some place of {@link #reaching} come out either
+         *  way. */
+        private boolean wentThrough(AlignedObservation seen) {
+            return reaching.stream().anyMatch(at -> seen.saw(at, true) || seen.saw(at, false));
+        }
     }
 
     /**
@@ -2601,7 +2695,9 @@ public final class Adequacy {
                     // further in, a position would be allowed its machines once per caller and what
                     // the two came to would be bought by nobody.
                     db.ask(new Front.Adequacy()).value().measures()
-                            .allowanceForBehaviorDistinctions());
+                            .allowanceForBehaviorDistinctions(),
+                    (count, reaching) -> db.ask(new WitnessOfACount(name, behavior, count,
+                            reaching)).value());
             return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
                     read.rulesReachedAt()));
         }
@@ -4209,7 +4305,7 @@ public final class Adequacy {
             // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
             // while having no axis at all. Which lines there are of either kind is the reading of the
             // model's, and this is handed both rather than assembling one of them.
-            List<BorderAssessment> out = new ArrayList<>();
+            List<Coverages.ReadingOfALine> out = new ArrayList<>();
             // The rows read once for every line, and not once per line.
             Coverages.RowsPutToTheLines put = Coverages.RowsPutToTheLines.of(observed, numbering);
             for (Axis axis : partitioning.axes()) {
@@ -4224,7 +4320,7 @@ public final class Adequacy {
             }
             out.addAll(Coverages.assessBetween(subject, observed, put,
                     partitioning.reaching()));
-            return new LineReadings(out);
+            return Coverages.besideEachLine(out);
         }
 
     }
@@ -6363,8 +6459,10 @@ public final class Adequacy {
                                              List<BorderAssessment> edges,
                                              ReachingCuts reaching) {
             Map<ControlPlace, HeldOutcome.Bringing> found = new LinkedHashMap<>();
+            MeasuredInput.Lines drawn = subject.lines();
             return place -> found.computeIfAbsent(place, asked -> switch (asked) {
-                case ControlPlace.Outcome outcome -> holding(subject, edges, reaching, outcome);
+                case ControlPlace.Outcome outcome ->
+                        holding(subject, drawn, edges, reaching, outcome);
                 // An arm a run is seen taking where its fork's condition is a truth nothing else
                 // records: what that truth coming out the way the arm is taken on asks of a row.
                 case ControlPlace.Arm arm -> ModelOccurrence.statedAt(arm.arm().fork())
@@ -6384,6 +6482,7 @@ public final class Adequacy {
          * ({@link ReachingCuts#heldAt}).
          */
         private static HeldOutcome.Bringing holding(MeasuredInput subject,
+                                                    MeasuredInput.Lines drawn,
                                                     List<BorderAssessment> edges,
                                                     ReachingCuts reaching,
                                                     ControlPlace.Outcome outcome) {
@@ -6418,7 +6517,7 @@ public final class Adequacy {
                                 || !(point.getValue() instanceof ItemAssessment.Owed owed)) {
                             continue;
                         }
-                        BorderQuantity quantity = subject.at(edge.border()).quantity();
+                        BorderQuantity quantity = drawn.at(edge.border()).quantity();
                         if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {

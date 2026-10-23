@@ -9546,11 +9546,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // and this is the readings nobody made.
             case Weakening.BorderReadingsNotExhausted _ ->
                     WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED;
-            // Two words for one fact, because what to do about them differs: one wants a strategy
-            // nobody has written and the other wants a row. Which of the two it is is the fact's
-            // own answer, asked here rather than read off whichever list it arrived in.
+            // A word for each thing that stood in the way, because what to do about them differs.
+            // Which it is is the fact's own answer, asked here rather than read off whichever list
+            // it arrived in.
             case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it -> switch (it.why()) {
-                case NO_STRATEGY_FOR_THE_RULE -> WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED;
                 case THE_ROWS_ARE_ALL_ON_ONE_SIDE ->
                         WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE;
                 case NOTHING_WATCHED_THE_RUNS -> WeakeningWord.A_BORDERS_RUN_NOT_WATCHED;

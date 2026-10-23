@@ -38,25 +38,32 @@ public record WhereAClosureIsApplied(List<TermPath> containers, Proposition hold
      * handed none or one of them stands at no position of the input: a run may be inside the
      * closure by the operation over that one with every other empty, so saying one of the rest
      * holds something would be saying more than is known.
+     *
+     * <p>A container holding a position's elements only under a condition ({@link
+     * ElementsHeldFrom}) holds something where the condition holds and the position does.
      */
     public static Optional<WhereAClosureIsApplied> of(List<InputReads.AppliedOver> appliedOver,
                                                       InputReading read) {
         List<TermPath> containers = new ArrayList<>();
-        List<DecisionSubject> holding = new ArrayList<>();
-        List<DecisionSubject> present = new ArrayList<>();
+        List<Proposition> holding = new ArrayList<>();
         for (InputReads.AppliedOver each : appliedOver) {
-            Optional<TermPath> at = Pullback.positionHoldingWhatItHolds(each.container(), read);
+            Optional<ElementsHeldFrom> held = ElementsHeldFrom.of(each.container(), read);
+            Optional<TermPath> at = held.isPresent() ? held.map(ElementsHeldFrom::position)
+                    : Pullback.positionHoldingWhatItHolds(each.container(), read);
             if (at.isEmpty()) {
                 return Optional.empty();
             }
             containers.add(at.get());
-            (each.anOption() ? present : holding).add(new DecisionSubject.AnInput(at.get()));
+            List<DecisionSubject> it = List.of(new DecisionSubject.AnInput(at.get()));
+            holding.add(WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
+                    held.map(ElementsHeldFrom::where)
+                            .orElseGet(WhereAnApplicationIsMade::nothingAsked),
+                    each.anOption() ? List.of() : it, each.anOption() ? it : List.of()));
         }
         if (containers.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(new WhereAClosureIsApplied(containers,
-                WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
-                        WhereAnApplicationIsMade.nothingAsked(), holding, present)));
+                WhereAnApplicationIsMade.alongOneOf(holding)));
     }
 }

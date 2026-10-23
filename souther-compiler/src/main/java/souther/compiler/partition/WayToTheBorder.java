@@ -101,10 +101,22 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      */
     public SearchRegion narrowing(SearchRegion base) {
         SearchRegion region = base;
-        for (OnTheWay each : onTheWay) {
-            region = narrowedBy(region, each);
+        for (TakenConstraint each : takenIntoTheRegion()) {
+            region = each.narrowing(region);
         }
         return region;
+    }
+
+    /**
+     * What {@link #narrowing} takes into a region, in the order it takes it in: the region a way
+     * leaves is the base with each of these taken in, and nothing else.
+     */
+    public List<TakenConstraint> takenIntoTheRegion() {
+        List<TakenConstraint> out = new ArrayList<>();
+        for (OnTheWay each : onTheWay) {
+            out.addAll(takenInBy(each));
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -194,42 +206,48 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     /** {@code region} with what the one entry {@code each} says of a row taken in
      *  ({@link #narrowing}). */
     private static SearchRegion narrowedBy(SearchRegion region, OnTheWay each) {
+        for (TakenConstraint taken : takenInBy(each)) {
+            region = taken.narrowing(region);
+        }
+        return region;
+    }
+
+    /** What the one entry {@code each} takes into a region, in order ({@link #narrowing}). */
+    private static List<TakenConstraint> takenInBy(OnTheWay each) {
         // What a narrowing says on the position's own order, which a region can carry: the
         // cases it leaves out are values no row past it holds.
         if (each instanceof OnTheWay.Narrowed narrowed) {
-            for (TakenConstraint.AwayFrom hole : narrowed.onItsOrder()) {
-                region = hole.narrowing(region);
-            }
+            return List.copyOf(narrowed.onItsOrder());
         }
         if (each instanceof OnTheWay.TakenIn taken) {
-            region = switch (taken.demand()) {
+            return switch (taken.demand()) {
                 // Taken in, and the region is asked to take it in: an entry here is one the
                 // region said it could carry when the walk recorded it.
-                case RowDemand.Relational(var relation) -> relation.narrowing(region);
+                case RowDemand.Relational(var relation) -> List.of(relation);
                 // That some element meets these says nothing every row past it holds of each
                 // element, so the region is narrowed only by the container holding one. What
                 // the element meets is composed where the row is.
                 case RowDemand.Exists(var _, var _, var holdingOne, var _) ->
-                        holdingOne.constraint().narrowing(region);
+                        List.of(holdingOne.constraint());
                 // That every element meets these, which a container holding none does. A
                 // region reads a term inside the elements as the value of one that is there,
                 // so narrowed on, it would leave nothing where the rules leave the element
                 // nothing — and the way past an empty container would be proved closed. And
                 // the container is not held to holding none either, since elements meeting
                 // these are a way past it too.
-                case RowDemand.ForAll _ -> region;
+                case RowDemand.ForAll _ -> List.of();
                 // How many elements meet a statement, which is no number a region holds.
-                case RowDemand.SoMany _ -> region;
+                case RowDemand.SoMany _ -> List.of();
                 // A statement no composer writes toward, which a region holds nothing of.
-                case RowDemand.ForTheRun _ -> region;
+                case RowDemand.ForTheRun _ -> List.of();
                 // Which of two values stands at a position no region measures. The row is
                 // written with it where the row is composed, and the region says nothing of it.
-                case RowDemand.ATruth _ -> region;
+                case RowDemand.ATruth _ -> List.of();
                 // Two values being one on no order, which no region measures either.
-                case RowDemand.OneValueAtBoth _ -> region;
+                case RowDemand.OneValueAtBoth _ -> List.of();
             };
         }
-        return region;
+        return List.of();
     }
 
     /**

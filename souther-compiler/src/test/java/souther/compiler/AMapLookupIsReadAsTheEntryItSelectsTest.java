@@ -105,6 +105,20 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
                 && notRead(report).getFirst().endsWith("about `q`"), report);
     }
 
+    private static final Pattern NAMED_BESIDE =
+            Pattern.compile("a row at `m\\[\\*] = (-?\\d+), q = (-?\\d+)` would");
+
+    /** The entry's value and the threshold of each input {@code report} names for a line beside
+     *  one, in the order it names them. */
+    static List<long[]> namedBeside(String report) {
+        List<long[]> out = new ArrayList<>();
+        Matcher named = NAMED_BESIDE.matcher(report);
+        while (named.find()) {
+            out.add(new long[] {Long.parseLong(named.group(1)), Long.parseLong(named.group(2))});
+        }
+        return out;
+    }
+
     /** The lines {@code report} says were not read. */
     private static List<String> notRead(String report) {
         return report.lines().map(String::strip)
@@ -181,7 +195,10 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
 
     /**
      * The rows offered, answered by what the lookup is defined to answer and put back as examples,
-     * are all the model asks: they run, and each answers the line it was offered for.
+     * are all the model asks: they run, and each answers the line it was offered for. Offered in
+     * two rounds, because the lines beside the entry's line are asked about once its points are
+     * met: the rows at the points leave lines weighing the entry or the threshold once more, and
+     * each is named with an input the second round writes a row at.
      */
     @Test
     void theRowsOfferedAreAnsweredByTheDefinitionAndSatisfyTheModel() {
@@ -191,6 +208,12 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
             examples.append("    | \"").append(row.label()).append("\" : (")
                     .append(String.join(", ", row.inputTexts())).append(") -> ")
                     .append(answer(row.key(), row.entries(), row.q())).append('\n');
+        }
+        for (long[] at : namedBeside(report(measured(WITH_DEFAULT + examples)))) {
+            examples.append("    | \"beside at ").append(at[0]).append(", ").append(at[1])
+                    .append("\" : (\"a\", [(\"a\", ").append(at[0]).append(")], ")
+                    .append(at[1]).append(") -> ")
+                    .append(answer("a", Map.of("a", at[0]), at[1])).append('\n');
         }
         Compilation answered = measured(WITH_DEFAULT + examples);
 
