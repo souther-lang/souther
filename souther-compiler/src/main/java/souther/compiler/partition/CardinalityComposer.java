@@ -312,7 +312,9 @@ final class CardinalityComposer {
         if (!rest.nothing()) {
             return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
         }
-        return none("no container of `" + container + "` this composed meets every count asked");
+        String alone = chosenAlone(asked, container, null);
+        return alone != null ? notChosen(alone)
+                : none("no container of `" + container + "` this composed meets every count asked");
     }
 
     /**
@@ -623,7 +625,36 @@ final class CardinalityComposer {
         if (!rest.nothing()) {
             return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
         }
-        return none("no container of `" + container + "` this composed meets every count asked");
+        String alone = chosenAlone(asked, container, apartAt);
+        return alone != null ? notChosen(alone)
+                : none("no container of `" + container + "` this composed meets every count asked");
+    }
+
+    /**
+     * Why finding no container of {@code container} for {@code asked} shows none, or null where it
+     * does. The elements are chosen by what a row holding a group of them alone answers — the
+     * elements under one value at {@code under}, or one element where it is null — and that is
+     * what the group comes to in any container only where an element's answer turns on nothing
+     * beyond its group and not on the order its elements are handed in
+     * ({@link AStatementAtARow.TurnsOn}). Elsewhere a container chosen that way is still read
+     * whole before it is offered, so what is offered holds; what is not found is not shown absent.
+     */
+    private static String chosenAlone(List<Asked> asked, TermPath container, TermPath under) {
+        AStatementAtARow.TurnsOn turns = AStatementAtARow.TurnsOn.THE_ELEMENT;
+        for (Asked each : asked) {
+            turns = turns.orMore(each.turnsOnAmong(container, under));
+        }
+        return switch (turns) {
+            case THE_ELEMENT, THOSE_UNDER_ITS_VALUE -> null;
+            case THE_ORDER_OF_THOSE_UNDER_ITS_VALUE -> "what an element of `" + container
+                    + "` answers turns on which of the elements holding its value at `" + under
+                    + "` is handed last, and a group of them is chosen by which elements it holds";
+            case OTHER_ELEMENTS -> "what an element of `" + container + "` answers turns on"
+                    + (under == null ? " the elements beside it, and each is chosen by what it"
+                            + " answers alone" : " elements not holding its value at `" + under
+                            + "`, and the elements holding one value are chosen by what they"
+                            + " answer alone");
+        };
     }
 
     /**
@@ -870,7 +901,9 @@ final class CardinalityComposer {
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
-        OfTheType repeated = OfTheType.of(ofTheElement, reading);
+        // As many values as a container may hold different ones: a plain string order names
+        // only the empty string.
+        OfTheType repeated = OfTheType.manyOf(ofTheElement, reading);
         List<Place> candidates = valuesToCount(kept, own, container, place, carrier, run,
                 repeated, unheld, unnamed);
         if (candidates == null) {
@@ -984,45 +1017,26 @@ final class CardinalityComposer {
             if (!wanted.holds(Count.of(often), Carrier.WHOLE)) {
                 continue;
             }
-            // One group of as many elements, each kept where a statement keeps some; and the rest
-            // of the container groups of one element, under values of their own.
-            int asOften = -1;
-            for (int g = 0; g < groups.weights().size() && asOften < 0; g++) {
-                if (groups.weights().get(g) == often
-                        && (kept == null || groups.counts().get(g)[0] == often)) {
-                    asOften = g;
-                }
-            }
-            if (asOften < 0) {
-                continue;
-            }
             for (int total = often; total <= MOST_ELEMENTS && built.size() < MOST_OFFERED;
                     total++) {
                 if (size != null && !size.holds(Count.of(total), Carrier.WHOLE)) {
                     continue;
                 }
-                int[] share = new int[groups.weights().size()];
-                share[asOften] = 1;
-                int left = total - often;
-                for (int g = 0; g < share.length && left > 0; g++) {
-                    if (groups.weights().get(g) == 1) {
-                        int more = Math.min(left, under.capacity(g) - share[g]);
-                        share[g] += more;
-                        left -= more;
-                    }
+                // The groups are listed smallest first, and any of them may be the one under the
+                // value: one holding more elements than are kept is one a container of this size
+                // may take where one holding no more cannot.
+                FixtureTemplate one = null;
+                for (int asOften = 0; asOften < groups.weights().size() && one == null;
+                        asOften++) {
+                    one = asOftenUnderOneValue(groups, under, asOften, often, total,
+                            kept != null, sourceType, reading);
                 }
-                List<ObservedValue> values = left > 0 ? null : under.drawn(share);
-                if (values == null) {
-                    break;
-                }
-                if (ObservedFixtures.of(new ObservedValue.Sequence(values), sourceType, reading)
-                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                                FixtureTemplate one)) {
+                if (one != null) {
                     built.add(one);
                 }
                 // The smallest container that is that many alike is the one a row is written with,
                 // so a larger one is offered only where a size was asked for.
-                if (size == null) {
+                if (size == null && one != null) {
                     break;
                 }
             }
@@ -1044,8 +1058,44 @@ final class CardinalityComposer {
         if (!rest.nothing()) {
             return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
         }
-        return none("no container of `" + container + "` this composed holds a value at `" + place
-                + "` as often as asked");
+        String alone = chosenAlone(asked, container, place);
+        return alone != null ? notChosen(alone)
+                : none("no container of `" + container + "` this composed holds a value at `"
+                        + place + "` as often as asked");
+    }
+
+    /**
+     * A container of {@code total} elements whose {@code asOften}-th group comes to a value
+     * occurring {@code often} times, or null where that group does not or no container is that.
+     *
+     * <p>How often a value occurs is of the elements under it a statement keeps, where
+     * {@code kept}, and of every one of them otherwise: a group may hold elements the statement
+     * does not keep beside those it does, and is as many elements as it holds whichever. The rest
+     * of the container is groups of one element, each under a value of its own.
+     */
+    private static FixtureTemplate asOftenUnderOneValue(Groups<HeldUnder> groups,
+                                                        UnderEachValue under, int asOften,
+                                                        int often, int total, boolean kept,
+                                                        Type sourceType,
+                                                        RuleReadingContext reading) {
+        int holds = groups.weights().get(asOften);
+        if ((kept ? groups.counts().get(asOften)[0] : holds) != often || holds > total) {
+            return null;
+        }
+        int[] share = new int[groups.weights().size()];
+        share[asOften] = 1;
+        int left = total - holds;
+        for (int g = 0; g < share.length && left > 0; g++) {
+            if (groups.weights().get(g) == 1) {
+                int more = Math.min(left, under.capacity(g) - share[g]);
+                share[g] += more;
+                left -= more;
+            }
+        }
+        List<ObservedValue> values = left > 0 ? null : under.drawn(share);
+        return values != null && ObservedFixtures.of(new ObservedValue.Sequence(values),
+                sourceType, reading) instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                        FixtureTemplate one) ? one : null;
     }
 
     /**
@@ -1071,12 +1121,6 @@ final class CardinalityComposer {
         }
         NumericSet wanted = asked.walking();
         List<TermPath> chain = place.containersHoldingIt();
-        // The elements of one container, the statement keeping some of them: composed as the
-        // count of the elements alike is.
-        if (chain.size() == 1 && term.selection() != null) {
-            return composeAlike(sourceType, keptApart, alike, null, demands, measuring, within,
-                    reading);
-        }
         if (chain.size() < 2 || !place.equals(chain.getLast().element())) {
             return notChosen("a value at `" + place + "` is not an element of the container it"
                     + " stands inside, so the elements are chosen at a place inside them");
@@ -1554,9 +1598,14 @@ final class CardinalityComposer {
          */
         AStatementAtARow.HowManyAtARow among(TermPath container, BorderQuantity.Observation row);
 
-        /** Whether what an element answers of this may turn on which value stands at {@code at}
-         *  inside it ({@link AStatementAtARow#readsTheValueAt}). */
-        boolean readsTheValueAt(TermPath at);
+        /** Whether what an element of {@code container} answers of this may turn on which value
+         *  stands at {@code at} inside it ({@link AStatementAtARow#readsTheValueAt}). */
+        boolean readsTheValueAt(TermPath container, TermPath at);
+
+        /** What an element of {@code container} answers of this turns on, the elements held as
+         *  groups under one value at {@code under}, or each on its own where it is null
+         *  ({@link AStatementAtARow#turnsOnAmong}). */
+        AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under);
 
         /** How many elements meet {@code perElement}: one of the counts {@code wanted} holds. */
         record SoManyMeeting(AStatementAtARow perElement, LevelRegion wanted,
@@ -1587,8 +1636,13 @@ final class CardinalityComposer {
             }
 
             @Override
-            public boolean readsTheValueAt(TermPath at) {
-                return perElement.readsTheValueAt(at);
+            public boolean readsTheValueAt(TermPath container, TermPath at) {
+                return perElement.readsTheValueAt(container, at);
+            }
+
+            @Override
+            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+                return perElement.turnsOnAmong(container, under);
             }
 
             @Override
@@ -1685,8 +1739,14 @@ final class CardinalityComposer {
 
             /** Where the number this asks of is that place, inside it or holds it. */
             @Override
-            public boolean readsTheValueAt(TermPath place) {
+            public boolean readsTheValueAt(TermPath container, TermPath place) {
                 return at.isAtOrUnder(place) || place.isAtOrUnder(at);
+            }
+
+            /** A number at one place inside the element. */
+            @Override
+            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+                return AStatementAtARow.TurnsOn.THE_ELEMENT;
             }
 
             /** Where standing in the set turns over, which the set says
@@ -1737,8 +1797,14 @@ final class CardinalityComposer {
 
             /** The element is the number this asks of, whatever place is asked about. */
             @Override
-            public boolean readsTheValueAt(TermPath at) {
+            public boolean readsTheValueAt(TermPath container, TermPath at) {
                 return true;
+            }
+
+            /** The element itself. */
+            @Override
+            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+                return AStatementAtARow.TurnsOn.THE_ELEMENT;
             }
 
             /** Where standing in the set turns over, which the set says ({@link NumericSet#turnsAt}). */
@@ -1963,7 +2029,7 @@ final class CardinalityComposer {
                                  Function<List<ObservedValue>, BorderQuantity.Observation> holding,
                                  TermPath container, TermPath at, List<Asked> asked, boolean once,
                                  boolean oneEach, Set<CompositionBudget> refused) {
-            boolean alike = asked.stream().noneMatch(each -> each.readsTheValueAt(at));
+            boolean alike = asked.stream().noneMatch(each -> each.readsTheValueAt(container, at));
             UnderEachValue out = new UnderEachValue(values, listedUnder, alike);
             Groups<HeldUnder> every = Groups.none();
             int[] left = {CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.maximum()};

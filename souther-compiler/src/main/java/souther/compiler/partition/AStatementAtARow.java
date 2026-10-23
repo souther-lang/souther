@@ -3,10 +3,13 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -405,20 +408,69 @@ final class AStatementAtARow {
     }
 
     /**
-     * Whether what this answers may turn on which value stands at {@code at}, and not only on
-     * which elements hold one value there: some number it reads, or some position it asks of its
-     * own value, is that place, inside it or holds it. How often a value occurs there, and what the
-     * elements holding one value come to, read only which elements hold one value, and are no such
-     * number.
+     * What one element's answer to a statement turns on, among the elements of a container held
+     * as groups under one value at a place inside each — or each on its own where there is no such
+     * place. Each takes in the ones before it.
      */
-    boolean readsTheValueAt(TermPath at) {
+    enum TurnsOn {
+
+        /** The element's own values, and values outside the container. */
+        THE_ELEMENT,
+
+        /** Which elements hold its value at the place, and what they come to: how often the
+         *  value occurs, a total or an end gathered under it. */
+        THOSE_UNDER_ITS_VALUE,
+
+        /** Which of the elements holding its value was handed last, as a total from the last one
+         *  put does. */
+        THE_ORDER_OF_THOSE_UNDER_ITS_VALUE,
+
+        /** Elements under other values: something of the container as a whole, a value gathered
+         *  under one key whichever element is asked, or what elements are grouped by elsewhere. */
+        OTHER_ELEMENTS;
+
+        TurnsOn orMore(TurnsOn other) {
+            return compareTo(other) >= 0 ? this : other;
+        }
+    }
+
+    /**
+     * What an element of {@code container} answers of this turns on, where the elements are held
+     * as groups under one value at {@code under}, or each on its own where it is null: the most
+     * any number it reads turns on ({@link #turnsOn(NumericTerm, TermPath, TermPath)}), and other
+     * elements where it asks a position holding the container, or says something of the
+     * container's elements itself.
+     */
+    TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+        TurnsOn out = TurnsOn.THE_ELEMENT;
         for (NumericTerm each : numbers()) {
-            boolean grouping = each instanceof NumericTerm.Multiplicity
-                    || each instanceof NumericTerm.OccurrencesOfItsValue
-                    || each instanceof NumericTerm.OccurrencesOfAKey
-                    || each instanceof NumericTerm.GatheredUnderItsKey;
-            if (!grouping && (each.subjectPath().isAtOrUnder(at)
-                    || at.isAtOrUnder(each.subjectPath()))) {
+            out = out.orMore(turnsOn(each, container, under));
+        }
+        for (TermPath each : positions) {
+            if (container.isAtOrUnder(each)) {
+                out = TurnsOn.OTHER_ELEMENTS;
+            }
+        }
+        for (OverTheElements each : elements.values()) {
+            out = out.orMore(among(List.of(each.container()), container) ? TurnsOn.OTHER_ELEMENTS
+                    : each.ofTheElement().turnsOnAmong(container, under));
+        }
+        return out;
+    }
+
+    /**
+     * Whether what an element of {@code container} answers of this may turn on which value stands
+     * at {@code at}, and not only on which elements hold one value there: some number of the
+     * element alone it reads, or some position it asks of its own value, is that place, inside it
+     * or holds it — or it reads other elements, of which nothing is shown. How often a value
+     * occurs there, and what the elements holding one value come to, read only which elements
+     * hold one value.
+     */
+    boolean readsTheValueAt(TermPath container, TermPath at) {
+        for (NumericTerm each : numbers()) {
+            TurnsOn turns = turnsOn(each, container, at);
+            if (turns == TurnsOn.OTHER_ELEMENTS || (turns == TurnsOn.THE_ELEMENT
+                    && (each.subjectPath().isAtOrUnder(at) || at.isAtOrUnder(each.subjectPath())))) {
                 return true;
             }
         }
@@ -428,7 +480,82 @@ final class AStatementAtARow {
             }
         }
         return elements.values().stream()
-                .anyMatch(each -> each.ofTheElement().readsTheValueAt(at));
+                .anyMatch(each -> each.ofTheElement().readsTheValueAt(container, at));
+    }
+
+    /**
+     * What {@code term}, read of an element of {@code container}, turns on where the elements are
+     * held as groups under one value at {@code under}, or each on its own where it is null: by
+     * what each kind of number is read among. A number of one position is the element's; one read
+     * among the elements of a container is the element's where that container is inside it or
+     * elsewhere, and turns on other elements where it is this one or holds it — save how often
+     * the value at {@code under} occurs and what is gathered under it, which turn on those
+     * holding that value.
+     */
+    static TurnsOn turnsOn(NumericTerm term, TermPath container, TermPath under) {
+        return switch (term) {
+            case NumericTerm.FromOnePosition _ -> TurnsOn.THE_ELEMENT;
+            case NumericTerm.TakenOver taken -> overTheRun(taken.source(), container);
+            case NumericTerm.Multiplicity often -> underItsValue(often.container(), container,
+                    often.place().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE);
+            case NumericTerm.ExtremeOfItsKey end -> underItsValue(end.container(), container,
+                    end.key().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE);
+            case NumericTerm.OccurrencesOfItsValue often -> {
+                List<TermPath> ranged = often.run().subjectPath().containersHoldingIt();
+                yield ranged.size() == 1 ? underItsValue(ranged.getFirst(), container,
+                        often.subjectPath().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE)
+                        : overTheRun(often.run(), container);
+            }
+            case NumericTerm.OccurrencesOfAKey often -> overTheRun(often.run(), container);
+            case NumericTerm.GatheredUnderItsKey gathered -> {
+                List<TermPath> ranged = gathered.elements().containersHoldingIt();
+                if (ranged.size() != 1) {
+                    yield among(ranged, container) ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+                }
+                boolean underIt = gathered.key() instanceof ElementKey.At(ElementProjection way)
+                        && way.from(gathered.elements()).equals(under);
+                yield underItsValue(ranged.getFirst(), container, underIt,
+                        switch (gathered.gathering()) {
+                            case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
+                                 NumericTerm.GatheredUnderItsKey.Gathering.End _ ->
+                                    TurnsOn.THOSE_UNDER_ITS_VALUE;
+                            case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ ->
+                                    TurnsOn.THE_ORDER_OF_THOSE_UNDER_ITS_VALUE;
+                        });
+            }
+            case NumericTerm.GatheredUnderAKey gathered -> among(
+                    gathered.gathered().elements().containersHoldingIt(), container)
+                    ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+        };
+    }
+
+    /** What a number read among the elements of {@code counted} turns on: {@code grouped} where
+     *  that is {@code container} and the number is of the value the elements are grouped under. */
+    private static TurnsOn underItsValue(TermPath counted, TermPath container,
+                                         boolean ofTheValue, TurnsOn grouped) {
+        if (counted.equals(container)) {
+            return ofTheValue ? grouped : TurnsOn.OTHER_ELEMENTS;
+        }
+        return among(List.of(counted), container) ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+    }
+
+    /** What a number taken over every value of {@code run} turns on: other elements where the run
+     *  reaches across the elements of {@code container}, and the element's own otherwise. */
+    private static TurnsOn overTheRun(RunSource run, TermPath container) {
+        if (run instanceof RunSource.ReachableNodes nodes) {
+            return nodes.root().isAtOrUnder(container.element()) ? TurnsOn.THE_ELEMENT
+                    : container.isAtOrUnder(nodes.root()) ? TurnsOn.OTHER_ELEMENTS
+                    : TurnsOn.THE_ELEMENT;
+        }
+        return among(run.subjectPath().containersHoldingIt(), container)
+                ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+    }
+
+    /** Whether reading across the elements of any of {@code counted} reads across those of
+     *  {@code container}: one of them is it, or holds it inside its elements. */
+    private static boolean among(List<TermPath> counted, TermPath container) {
+        return counted.stream().anyMatch(each -> each.equals(container)
+                || container.isAtOrUnder(each.element()));
     }
 
     /**

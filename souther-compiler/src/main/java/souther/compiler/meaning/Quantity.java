@@ -744,8 +744,9 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         /**
          * Why these are no such number, or null where they are one: the value is one of each
-         * element, the statement keeps some elements and not others, is read through and answers
-         * on each, and asked of each value it answers alike for the elements holding one.
+         * element, the statement keeps some elements and not others, quantifies none of them
+         * again, is read through and answers on each, and asked of each value it answers alike for
+         * the elements holding one.
          */
         private static String whyNot(DecisionSubject container, DecisionSubject ofTheElement,
                                      Selection meeting) {
@@ -756,6 +757,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (!stated.mayTurnOnAnElementOf(container)) {
                 return "what keeps the elements of " + container + " is the same for each of"
                         + " them: " + stated;
+            }
+            if (Proposition.Some.quantifiesOver(container, stated)) {
+                return "what keeps an element of " + container + " quantifies them again, which"
+                        + " would read two elements as one: " + stated;
             }
             if (Proposition.mayAnswerNothing(stated)) {
                 return "the elements are kept by a statement answering on every one of them: "
@@ -1061,6 +1066,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (!ofTheElement.mayTurnOnAnElementOf(container)) {
                 throw new IllegalArgumentException("a count of " + ofTheElement
                         + " is the same for every element of " + container);
+            }
+            // Said of each element, as some element meeting it is ({@link #someMeets}).
+            if (Proposition.Some.quantifiesOver(container, ofTheElement)) {
+                throw new IllegalArgumentException("a count of the elements of " + container
+                        + " is of a statement quantifying them again, which would read two"
+                        + " elements as one: " + ofTheElement);
             }
             if (Proposition.mayAnswerNothing(ofTheElement)) {
                 throw new IllegalArgumentException("a count is of a statement answering on every"

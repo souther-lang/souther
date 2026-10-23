@@ -4978,6 +4978,9 @@ final class Pullback {
                         ? LinearForm.atom(new Quantity.HowManyDifferent(held, at))
                         : LinearForm.constant(ExactRatio.ZERO));
             }
+            if (Proposition.Some.quantifiesOver(held, stated)) {
+                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+            }
             Quantity.HowManyDifferentMeet different = Quantity.HowManyDifferentMeet.of(held, at,
                     ofEachValue ? new Quantity.HowManyDifferentMeet.Selection.OfEachValue(stated)
                             : new Quantity.HowManyDifferentMeet.Selection.OfEachElement(stated));

@@ -334,7 +334,7 @@ final class TermRealizations {
         if (!counts.isEmpty() || !together.isEmpty()) {
             return countsOf(targets, counts, together, numbers);
         }
-        if (numbers.stream().anyMatch(each -> each.term() instanceof NumericTerm.Multiplicity)) {
+        if (numbers.stream().anyMatch(each -> amongOneContainer(each.term()) != null)) {
             return amongTheElements(targets, numbers);
         }
         if (numbers.stream()
@@ -526,8 +526,9 @@ final class TermRealizations {
     }
 
     /**
-     * How often the value of an element occurs among the elements of one container, with how many
-     * the container holds where the group asks that too.
+     * How often the value of an element occurs among the elements of one container — every one,
+     * or those a statement keeps — with how many the container holds where the group asks that
+     * too.
      *
      * <p>One container and one number of it. How often is asked of one place inside the element, so
      * two places are two questions about which elements are alike, and counts of the same
@@ -539,28 +540,24 @@ final class TermRealizations {
         List<RealizationTarget.OfANumber> alike = new ArrayList<>();
         RealizationTarget.OfANumber many = null;
         for (RealizationTarget.OfANumber each : numbers) {
-            switch (each.term()) {
-                case NumericTerm.Multiplicity _ -> alike.add(each);
-                case NumericTerm.TakenOf taken
-                        when taken.takenAs() instanceof TakenAs.HowManyItHolds -> {
-                    if (many != null) {
-                        return nothingSolvesAGroup();
-                    }
-                    many = each;
-                }
-                default -> {
-                    return nothingSolvesAGroup();
-                }
+            if (amongOneContainer(each.term()) != null) {
+                alike.add(each);
+                continue;
             }
+            if (!(each.term() instanceof NumericTerm.TakenOf taken)
+                    || !(taken.takenAs() instanceof TakenAs.HowManyItHolds) || many != null) {
+                return nothingSolvesAGroup();
+            }
+            many = each;
         }
-        NumericTerm.Multiplicity first = (NumericTerm.Multiplicity) alike.getFirst().term();
+        NumericTerm first = alike.getFirst().term();
         for (RealizationTarget.OfANumber each : alike) {
             if (!each.term().equals(first)) {
                 return nothingSolvesAGroup();
             }
         }
         if (many != null && !((NumericTerm.TakenOf) many.term()).position()
-                .equals(first.container())) {
+                .equals(amongOneContainer(first))) {
             return nothingSolvesAGroup();
         }
         RealizationTarget.OfANumber holding = many;
@@ -568,6 +565,24 @@ final class TermRealizations {
                         holding == null ? Stream.<RealizationTarget.OfANumber>empty()
                                 : Stream.of(holding)).toList(),
                 () -> new JointBuilder.ElementsAlikeAsOftenAsAsked(alike.getFirst(), holding));
+    }
+
+    /**
+     * The container among whose elements {@code term} counts how often an element's value occurs,
+     * where it is one container — of every element, or of those a statement keeps — or null where
+     * it is no such number.
+     */
+    private static TermPath amongOneContainer(NumericTerm term) {
+        return switch (term) {
+            case NumericTerm.Multiplicity often -> often.container();
+            case NumericTerm.OccurrencesOfItsValue often -> {
+                List<TermPath> chain = often.subjectPath().containersHoldingIt();
+                yield chain.size() == 1 ? chain.getFirst() : null;
+            }
+            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
+                 NumericTerm.ExtremeOfItsKey _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
+        };
     }
 
     /**

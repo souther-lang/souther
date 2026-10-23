@@ -250,6 +250,43 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
     }
 
     /**
+     * Where the way to a line on how often a value occurs leaves the container one size, its rows
+     * hold that many: a value twice in three elements, and three values once each, though the
+     * smallest container a value occurs twice in is two.
+     */
+    @Test
+    void howOftenAValueOccursIsComposedAtTheSizeTheWayToItLeaves() {
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                behavior f : (cs: List<String>) -> Int
+                let f (cs) = if List.length(cs) == 3 then
+                    if Map.size(Map.filterEntries((_, n) -> n >= 2, filed(cs))) >= 1 then 1
+                    else 0
+                    else 2
+                """, "f/multiplicity(cs[*])");
+    }
+
+    /**
+     * How often a value occurs among the elements a statement keeps is of those it keeps, and the
+     * elements holding the value may be more: where every element is one currency and there are
+     * two of them, the currency kept once is held by one element above nought and one at or below
+     * it.
+     */
+    @Test
+    void aValueKeptOnceMayBeHeldByElementsTheStatementDoesNotKeep() {
+        String occurrences = "occurrences(fs[*].currency kept by fs meeting Affine[form="
+                + "LinearForm[constant=0, coefs={fs[*].amount=1}], proposition=GT])";
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if List.all(f -> f.currency == "USD", fs)
+                        && List.length(fs) == 2 then
+                    if Map.size(Map.filterEntries((_, n) -> n == 1,
+                        filed(List.map(.currency, List.filter(f -> f.amount > 0, fs))))) >= 1
+                    then 1 else 0
+                    else 2
+                """, "f/" + occurrences, "2 < " + occurrences);
+    }
+
+    /**
      * Elements meeting the statement may share a value: where every element is above nought and
      * one currency is counted, two elements are two of that currency. And a value some elements
      * must not hold is held by others where only they can hold it — two currencies kept and three
@@ -332,6 +369,23 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
     }
 
     /**
+     * What keeps an element, said of the elements of the container it keeps from, says nothing of
+     * one element: whether some value occurs twice among them is the same for each. The values it
+     * keeps are those of all of them or of none, which is no count a line is drawn on, and the
+     * reading says so rather than stopping.
+     */
+    @Test
+    void aStatementOfEveryElementKeepingOneIsNoCountOfTheValuesItKeeps() {
+        JsonNode report = reportOf(HEAD.formatted(
+                "Set.size(Set.fromList(List.map(.currency, List.filter(f ->"
+                        + " Map.size(Map.filterEntries((_, n) -> n >= 2,"
+                        + " filed(List.map(.currency, fs)))) >= 1, fs)))) == 1"));
+        assertEquals(List.of(), differentCounts(report));
+        assertTrue(behaviorOf(report).path("weakening").toString().contains("rule_unread"),
+                report::toString);
+    }
+
+    /**
      * The comparison the filter's closure writes is read where it is written, as its own line on
      * the element's number, and the count beside it leaves nothing of the input unread.
      */
@@ -364,7 +418,8 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
      * example stands in for.
      *
      * @param behavior   a behavior {@code f} answering one where {@code compared} holds and nought
-     *                   where it fails, under whatever conditions it is reached
+     *                   where it fails, under whatever conditions it is reached — of some element,
+     *                   where it is a number of each
      * @param outOfReach the points of the line no row reaches, by where each is, which are said to
      *                   have no row and never to have one composed
      */
@@ -415,11 +470,13 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
             if (!line.contains("<?>")) {
                 continue;
             }
+            // A number of each element puts one row at a point for each element: the row is above
+            // the line where some element is.
             String answer = null;
             for (String fills : said) {
                 if (fills.endsWith(" point of " + origin)) {
-                    answer = fills.contains("fills ON ") || fills.contains("fills IN ") ? "1"
-                            : "0";
+                    answer = fills.contains("fills ON ") || fills.contains("fills IN ")
+                            || "1".equals(answer) ? "1" : "0";
                 }
             }
             if (answer != null) {
