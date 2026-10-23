@@ -12,6 +12,7 @@ import souther.compiler.report.AdequacyReport;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -132,19 +133,60 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
                     | Stocktake { sku, counted } -> Map.insert(sku, counted, acc),
                 Map.empty, ms)""";
 
+    /** The same fold over the movements put the other way round. */
+    private static final String COUNTED_OVER_THE_REVERSED =
+            COUNTED.replace("Map.empty, ms)", "Map.empty, List.reverse(ms))");
+
+    /** The same fold, walking from the end of the list. */
+    private static final String COUNTED_FROM_THE_END = COUNTED
+            .replace("List.fold((acc, m)", "List.foldRight((m, acc)")
+            .replace("Map.empty, ms)", "nothing(), ms)");
+
+    /** And walking from the end of the movements put the other way round, which hands them in
+     *  the order they are written. */
+    private static final String COUNTED_FROM_THE_END_OF_THE_REVERSED = COUNTED_FROM_THE_END
+            .replace("nothing(), ms)", "nothing(), List.reverse(ms))");
+
+    /** The seed a walk from the end starts from, written where the fold's own type says it. */
+    private static final String NOTHING = """
+
+            let nothing : Map<String, Int> = Map.empty
+            """;
+
     /**
      * A stocktake puts what it counted in place of what was on hand, so what is on hand of a sku
-     * is the total of its movements from the last stocktake of it: the line is on that total,
-     * every point of it is owed, and the rows offered for it, run, meet it.
+     * is the total of its movements from the last stocktake of it the walk was handed: the line is
+     * on that total, every point of it is owed, and the rows offered for it, run, meet it — the
+     * rows' answers being what the fold computes, which the example checks.
      */
     @Test
     void theLineOnTheTotalFromTheLastStocktakeIsOwedOfferedAndThenMet() {
-        String examples = """
+        owedOfferedAndMet(Walked.AS_WRITTEN);
+    }
+
+    /**
+     * Which stocktake is the last is the order the walk hands the movements in, which a reversed
+     * list and a walk from the end each turn round: the line is on the total from the last one
+     * handed, and the rows offered for it meet it. Which rows those are is the reading's own, so
+     * what holds the reading to the fold's run is the rows written at the line below
+     * ({@link #aStocktakePutsWhatItCountedInPlaceOfEveryMovementHandedBeforeIt}).
+     */
+    @Test
+    void theLastStocktakeIsTheLastOneTheWalkIsHanded() {
+        owedOfferedAndMet(Walked.REVERSED);
+        owedOfferedAndMet(Walked.FROM_THE_END);
+        owedOfferedAndMet(Walked.FROM_THE_END_OF_THE_REVERSED);
+    }
+
+    private static void owedOfferedAndMet(Walked walked) {
+        String fold = walked.fold();
+        boolean fromTheEnd = walked.fromTheEnd();
+        String examples = walked.more() + """
 
                 example short
                     | "none" : ([], 0) -> []
                 """;
-        Compilation before = measured(counted(COUNTED, examples));
+        Compilation before = measured(counted(fold, examples));
         assertTrue(json(before).contains("total_from_the_last_put"), () -> report(before));
         assertTrue(axisOf(before).getFirst().contains("from the last @Stocktake"),
                 () -> report(before));
@@ -156,52 +198,150 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
         int named = 0;
         for (Row row : offered) {
             written.append("    | \"offered ").append(named++).append("\" : (")
-                    .append(row.written()).append(") -> ").append(entries(row.shortOf()))
-                    .append("\n");
+                    .append(row.written()).append(") -> ")
+                    .append(entries(row.shortOf(fromTheEnd))).append("\n");
         }
-        Compilation after = measured(counted(COUNTED, written.toString()));
+        Compilation after = measured(counted(fold, written.toString()));
         assertEquals(List.of(), unmetOf(after),
                 () -> "the rows that were offered meet the line: " + report(after));
     }
 
     /**
-     * What the movements before the last stocktake added is gone from what is on hand: five
-     * received, two counted and three issued is one short, which is on the line at nought, and
-     * neither the total of all three nor the last one alone is.
+     * What the movements handed before the last stocktake added is gone from what is on hand, and
+     * a stocktake of another sku takes nothing off it. Each row is written one below its limit,
+     * which is the line's point on it: five received, two counted and three issued is one short
+     * and on the line at nought, where neither the total of all three nor the last one alone is;
+     * a receipt handed after the count adds to it, and a second count puts its own.
      */
     @Test
-    void aStocktakePutsWhatItCountedInPlaceOfEveryMovementBeforeIt() {
-        Row row = new Row(List.of(new Movement("Receipt", "a", 5),
-                new Movement("Stocktake", "a", 2), new Movement("Issue", "a", 3)), 0);
-        assertEquals(Map.of("a", -1), row.shortOf());
-        Compilation compilation = measured(counted(COUNTED, """
+    void aStocktakePutsWhatItCountedInPlaceOfEveryMovementHandedBeforeIt() {
+        Movement receipt = new Movement("Receipt", "a", 5);
+        Movement count = new Movement("Stocktake", "a", 2);
+        List<List<Movement>> rows = List.of(
+                List.of(receipt, count, new Movement("Issue", "a", 3)),
+                List.of(receipt, count),
+                List.of(count, new Movement("Stocktake", "a", 8)),
+                List.of(receipt, new Movement("Stocktake", "b", 2),
+                        new Movement("Receipt", "a", 1)),
+                List.of(receipt, new Movement("Stocktake", "b", 2),
+                        new Movement("Stocktake", "a", 3)));
+        for (Walked walked : Walked.values()) {
+            for (List<Movement> movements : rows) {
+                Row any = new Row(movements, Integer.MAX_VALUE);
+                int on = any.shortOf(walked.fromTheEnd()).get("a");
+                Row row = new Row(movements, on + 1);
+                Compilation compilation = measured(counted(walked.fold(), walked.more() + """
 
-                example short
-                    | "counted between" : (%s) -> %s
-                """.formatted(row.written(), entries(row.shortOf()))));
-        assertFalse(unmetOf(compilation).contains("ON"),
-                () -> "one short is on the line: " + report(compilation));
+                        example short
+                            | "counted" : (%s) -> %s
+                        """.formatted(row.written(), entries(row.shortOf(walked.fromTheEnd())))));
+                assertFalse(unmetOf(compilation).contains("ON"), () -> movements + " walked "
+                        + walked + " is " + on + " on hand of a, on the line: "
+                        + report(compilation));
+            }
+        }
     }
 
-    /** The lines are written in a document the schema shipped beside this accepts. */
+    /** Each way the fold here is handed the movements: the fold, and what else the model needs
+     *  written for it. */
+    private enum Walked {
+        AS_WRITTEN(COUNTED, "", false),
+        REVERSED(COUNTED_OVER_THE_REVERSED, "", true),
+        FROM_THE_END(COUNTED_FROM_THE_END, NOTHING, true),
+        FROM_THE_END_OF_THE_REVERSED(COUNTED_FROM_THE_END_OF_THE_REVERSED, NOTHING, false);
+
+        private final String fold;
+        private final String more;
+        private final boolean fromTheEnd;
+
+        Walked(String fold, String more, boolean fromTheEnd) {
+            this.fold = fold;
+            this.more = more;
+            this.fromTheEnd = fromTheEnd;
+        }
+
+        String fold() {
+            return fold;
+        }
+
+        String more() {
+            return more;
+        }
+
+        /** Whether the walk is handed the movements from the last the row writes. */
+        boolean fromTheEnd() {
+            return fromTheEnd;
+        }
+    }
+
+    /** The lines are written in a document the schema shipped beside this accepts, the order a
+     *  total from the last stocktake was handed in among what it says. */
     @Test
     void theDocumentsNamingTheseTotalsAreOnesTheSchemaAccepts() {
         DocumentShape.assertShapedLikeTheSchema(JSON.readTree(json(measured(
                 model(THE_STEPS_OWN_CHOICE, "")))));
-        DocumentShape.assertShapedLikeTheSchema(JSON.readTree(json(measured(
-                counted(COUNTED, "")))));
+        for (String fold : List.of(COUNTED, COUNTED_OVER_THE_REVERSED)) {
+            JsonNode document = JSON.readTree(json(measured(counted(fold, ""))));
+            DocumentShape.assertShapedLikeTheSchema(document);
+            List<JsonNode> since = gatheredBy(document, "total_from_the_last_put");
+            assertFalse(since.isEmpty(), document::toString);
+            String handed = fold.equals(COUNTED) ? "as_written" : "from_the_far_end";
+            since.forEach(each -> assertEquals(handed,
+                    each.path("put_by").path("handed").asString(), each::toString));
+        }
     }
 
-    /** Which stocktake was the last is the order the walk hands the movements in, and a walk
-     *  from the end of the list hands the last of them first. */
+    /**
+     * And the schema holds a document to what a gathering says: a total from the last stocktake
+     * names the elements that put and the order they were handed in, and no other gathering names
+     * any.
+     */
     @Test
-    void aWalkFromTheEndReadsNoLastStocktake() {
-        Compilation compilation = measured(counted(COUNTED
-                .replace("List.fold((acc, m)", "List.foldRight((m, acc)")
-                .replace("Map.empty, ms)", "nothing(), ms)"), """
+    void aTotalFromTheLastStocktakeIsWrittenWithTheElementsThatPutAndNoOtherIs() {
+        JsonNode since = JSON.readTree(json(measured(counted(COUNTED, ""))));
+        ObjectNode withoutPuts = (ObjectNode) since.deepCopy();
+        gatheredBy(withoutPuts, "total_from_the_last_put")
+                .forEach(each -> ((ObjectNode) each).remove("put_by"));
+        assertFalse(DocumentShape.of(withoutPuts).wrong().isEmpty(),
+                "a total from the last put is not written without what puts");
+        ObjectNode withoutTheOrder = (ObjectNode) since.deepCopy();
+        gatheredBy(withoutTheOrder, "total_from_the_last_put")
+                .forEach(each -> ((ObjectNode) each.path("put_by")).remove("handed"));
+        assertFalse(DocumentShape.of(withoutTheOrder).wrong().isEmpty(),
+                "nor without the order the walk was handed the elements in");
+        ObjectNode total = (ObjectNode) JSON.readTree(json(measured(
+                model(THE_STEPS_OWN_CHOICE, ""))));
+        List<JsonNode> totals = gatheredBy(total, "total");
+        assertFalse(totals.isEmpty(), total::toString);
+        JsonNode puts = gatheredBy(since, "total_from_the_last_put").getFirst().path("put_by");
+        totals.forEach(each -> ((ObjectNode) each).set("put_by", puts));
+        assertFalse(DocumentShape.of(total).wrong().isEmpty(),
+                "a total of every element names nothing that puts");
+    }
 
-                let nothing : Map<String, Int> = Map.empty
-                """));
+    /** Every number gathered under a key that {@code document} writes with {@code gathering}. */
+    private static List<JsonNode> gatheredBy(JsonNode document, String gathering) {
+        List<JsonNode> out = new ArrayList<>();
+        gatheredBy(document, gathering, out);
+        return out;
+    }
+
+    private static void gatheredBy(JsonNode node, String gathering, List<JsonNode> out) {
+        if (node.isObject() && node.path("gathering").asString("").equals(gathering)) {
+            out.add(node);
+        }
+        node.forEach(child -> gatheredBy(child, gathering, out));
+    }
+
+    /**
+     * And a list whose order nothing shows is one whose last stocktake is no one movement: the
+     * movements sorted, or a set's elements listed, are handed in an order the walk does not read,
+     * so no total from the last stocktake is read of them.
+     */
+    @Test
+    void aListInAnOrderNothingShowsReadsNoLastStocktake() {
+        Compilation compilation = measured(counted(COUNTED.replace("Map.empty, ms)",
+                "Map.empty, List.sortBy(m -> 0, ms))"), ""));
         assertFalse(json(compilation).contains("total_from_the_last_put"),
                 () -> report(compilation));
         assertTrue(report(compilation).contains("not read"), () -> report(compilation));
@@ -219,11 +359,12 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
     /** One row offered for {@code short}: the movements, in order, and the limit. */
     private record Row(List<Movement> movements, int limit) {
 
-        /** What is on hand of each sku below the limit, in the order the skus first occur: a
-         *  receipt adds, an issue takes off, and a stocktake puts what it counted. */
-        Map<String, Integer> shortOf() {
+        /** What is on hand of each sku below the limit, in the order the skus are first handed:
+         *  a receipt adds, an issue takes off, and a stocktake puts what it counted — the
+         *  movements handed from the last where {@code fromTheEnd}. */
+        Map<String, Integer> shortOf(boolean fromTheEnd) {
             Map<String, Integer> onHand = new LinkedHashMap<>();
-            for (Movement each : movements) {
+            for (Movement each : fromTheEnd ? movements.reversed() : movements) {
                 switch (each.kind()) {
                     case "Receipt" -> onHand.merge(each.sku(), each.quantity(), Integer::sum);
                     case "Issue" -> onHand.merge(each.sku(), -each.quantity(), Integer::sum);
@@ -286,7 +427,7 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
         int named = 0;
         for (Row row : offered) {
             written.append("    | \"offered ").append(named++).append("\" : (")
-                    .append(row.written()).append(") -> ").append(entries(row.shortOf()))
+                    .append(row.written()).append(") -> ").append(entries(row.shortOf(false)))
                     .append("\n");
         }
         Compilation after = measured(model(THE_STEPS_OWN_CHOICE, written.toString()));

@@ -514,6 +514,107 @@ class SchemaEvolutionTest {
         }
     }
 
+    /** Two kinds of object, one with a discriminator held to an enum and one without it. */
+    private static final String BRANCHES = """
+            {
+              "required": ["kind"],
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "g"],
+                  "properties": { "kind": { "const": "p" }, "g": { "enum": ["t", "l"] } }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind"],
+                  "properties": { "kind": { "const": "q" } }
+                }
+              ]
+            }""";
+
+    /** {@link #BRANCHES} with the word {@code s} added, the key {@code x} beside it, and a
+     *  condition on {@code word} added to the owner, refusing {@code refused} otherwise. */
+    private static String branchesWith(String word, String refused) {
+        return """
+                {
+                  "required": ["kind"],
+                  "allOf": [
+                    {
+                      "if": { "properties": { "g": { "const": "%s" } }, "required": ["g"] },
+                      "then": { "required": ["x"] },
+                      "else": { "not": { "required": ["%s"] } }
+                    }
+                  ],
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["kind", "g"],
+                      "properties": {
+                        "kind": { "const": "p" },
+                        "g": { "enum": ["t", "l", "s"] },
+                        "x": { "type": "string" }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["kind"],
+                      "properties": { "kind": { "const": "q" } }
+                    }
+                  ]
+                }""".formatted(word, refused);
+    }
+
+    /**
+     * A condition added to an owner that had none, on a word no branch shipped with, asks a
+     * document that shipped only what its {@code else} asks — and refusing a key every branch
+     * refused already asks nothing.
+     */
+    @Test
+    void aConditionAddedOnAWordNoBranchShippedNarrowsNothing() {
+        assertEquals(List.of(), narrowings(BRANCHES, branchesWith("s", "x")));
+    }
+
+    /**
+     * A discriminator no branch shipped with is one every word of is new, where every branch
+     * refused an object holding it.
+     */
+    @Test
+    void aConditionAddedOnADiscriminatorNoBranchShippedNarrowsNothing() {
+        String without = BRANCHES.replace("\"required\": [\"kind\", \"g\"]", "\"required\": [\"kind\"]")
+                .replace(", \"g\": { \"enum\": [\"t\", \"l\"] }", "");
+        String current = branchesWith("s", "x")
+                .replace("\"required\": [\"kind\", \"g\"]", "\"required\": [\"kind\"]")
+                .replace("\"g\": { \"enum\": [\"t\", \"l\", \"s\"] }", "\"g\": { \"enum\": [\"s\"] }");
+        assertEquals(List.of(), narrowings(without, current));
+    }
+
+    /** Its {@code else} refusing a key some branch took refuses a document that shipped. */
+    @Test
+    void anAddedConditionRefusingAKeyThatShippedIsANarrowing() {
+        assertEquals(false, narrowings(BRANCHES, branchesWith("s", "kind")).isEmpty());
+    }
+
+    /** A word some branch shipped with sends documents that shipped to its {@code then}. */
+    @Test
+    void anAddedConditionOnAWordABranchShippedIsANarrowing() {
+        assertEquals(false, narrowings(BRANCHES, branchesWith("t", "x")).isEmpty());
+    }
+
+    /** Where some branch took the discriminator at any word, the new word shipped there too. */
+    @Test
+    void anAddedConditionOnAWordABranchTookFreelyIsANarrowing() {
+        String open = BRANCHES.replace("\"properties\": { \"kind\": { \"const\": \"q\" } }",
+                "\"properties\": { \"kind\": { \"const\": \"q\" }, \"g\": { \"type\": \"string\" } }");
+        String current = branchesWith("s", "x").replace(
+                "\"properties\": { \"kind\": { \"const\": \"q\" } }",
+                "\"properties\": { \"kind\": { \"const\": \"q\" }, \"g\": { \"type\": \"string\" } }");
+        assertEquals(false, narrowings(open, current).isEmpty());
+    }
+
     private static List<String> narrowings(String current) {
         return narrowings(SHIPPED, current);
     }

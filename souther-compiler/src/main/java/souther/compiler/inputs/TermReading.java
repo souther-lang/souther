@@ -751,10 +751,17 @@ final class TermReading {
             };
         }
 
-        /** What the elements of {@code key} come to, read in order until one stops them. */
+        /** What the elements of {@code key} come to, read in the order they were handed until one
+         *  stops them: the order the row writes them, or from the last of them where the walk was
+         *  handed them so and the gathering turns on it. */
         private Neighbouring<G> read(Place key) {
             List<ExactRatio> numbers = new ArrayList<>();
-            for (int at : ofEachKey.getOrDefault(key, List.of())) {
+            List<Integer> ofTheKey = ofEachKey.getOrDefault(key, List.of());
+            List<Integer> handed = term.gathering() instanceof NumericTerm.GatheredUnderItsKey
+                    .Gathering.SinceAPut(var _, var _, RunSource.TraversalOrder order)
+                    && order.direction() == TraversalDirection.REVERSE
+                    ? ofTheKey.reversed() : ofTheKey;
+            for (int at : handed) {
                 HeldFields<G> fields = new HeldFields<>(each.get(at));
                 OneElement element = new OneElement(on, fields, at);
                 ExactAnswer<ExactRatio> made = term.value().at(element);
@@ -768,7 +775,7 @@ final class TermReading {
                 // An element that puts its number in place of the ones before is where the
                 // numbers gathered start again.
                 if (term.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut(
-                        ElementProjection subject, List<CasesLeft> puts)) {
+                        ElementProjection subject, List<CasesLeft> puts, var _)) {
                     CaseOf<G> itsCase = caseOf(each.get(at), subject);
                     if (itsCase.stopped() != null) {
                         return itsCase.stopped();

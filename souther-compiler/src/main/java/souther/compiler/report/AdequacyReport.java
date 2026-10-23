@@ -6535,6 +6535,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         over.put("kind", "computed_occurrences");
                         over.put("elements", run.elements().discriminated());
                         elementComputation(over.putObject("computation"), run.computation());
+                        if (run.order() != null) {
+                            over.put("handed", handed(run.order()));
+                        }
                     }
                     case RunSource.ReachableNodes run -> {
                         over.put("kind", "reachable_nodes");
@@ -6565,13 +6568,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     };
         });
         if (gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut(
-                ElementProjection subject, List<CasesLeft> puts)) {
+                ElementProjection subject, List<CasesLeft> puts, RunSource.TraversalOrder order)) {
             ObjectNode put = into.putObject("put_by");
             put.put("subject", subject.from(elements).discriminated());
             ArrayNode taken = put.putArray("taken");
             puts.forEach(cases -> taken.add(subject.narrowedTo(cases).from(elements)
                     .discriminated()));
+            put.put("handed", handed(order));
         }
+    }
+
+    /** Which end of the elements a walk whose number turns on their order was handed first, in
+     *  the one word every such number is written with. */
+    private static String handed(RunSource.TraversalOrder order) {
+        return switch (order.direction()) {
+            case FORWARD -> "as_written";
+            case REVERSE -> "from_the_far_end";
+        };
     }
 
     /**

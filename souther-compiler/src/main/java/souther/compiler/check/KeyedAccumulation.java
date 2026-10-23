@@ -42,8 +42,12 @@ import java.util.function.Predicate;
  * @param element the step's parameter each element of {@code walked} arrives on
  * @param key     the key the step files an element under, a number of the element alone
  * @param filed   what the map holds under a key, out of the elements that have it
+ * @param inTheListsOrder whether the walk hands the step the elements of {@code walked} in the
+ *                order the list holds them, rather than from the last of them: which element of
+ *                a key was handed last turns on it ({@link Filed.SummedSinceAPut})
  */
-public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Filed filed) {
+public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Filed filed,
+                                boolean inTheListsOrder) {
 
     public KeyedAccumulation {
         Objects.requireNonNull(filed, "a map built so holds something under each of its keys");
@@ -211,13 +215,11 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         if (filing == null) {
             filing = step.byTheArmsOfAChoice(body);
         }
-        // Which element was put last is the order the walk hands them in.
-        if (filing == null || (filing.filed() instanceof Filed.SummedSinceAPut
-                && !walk.inTheContainersOrder())) {
+        if (filing == null) {
             return null;
         }
         return new KeyedAccumulation(walk.container(), walk.element(), filing.key(),
-                filing.filed());
+                filing.filed(), walk.inTheContainersOrder());
     }
 
     /**

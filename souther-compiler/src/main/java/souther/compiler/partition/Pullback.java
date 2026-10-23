@@ -2362,10 +2362,11 @@ final class Pullback {
                                         new DecisionSubject.AnInput(container), at)
                                 : null;
                 // Every occurrence of the place, which stands in the lists inside the elements of
-                // a container standing inside no other: the values inside those elements.
-                case InputReads.Occurrences.AcrossContainers _ ->
-                        new Quantity.HowManyDifferentAcross(
-                                new DecisionSubject.AnInput(place.outermostContainer()), at);
+                // the container they were put end to end from: the values inside those elements,
+                // where that container stands inside no other and so is one container of the row.
+                case InputReads.Occurrences.AcrossContainers(TermPath outer, var _, var _) ->
+                        outer.insideAContainer() ? null : new Quantity.HowManyDifferentAcross(
+                                new DecisionSubject.AnInput(outer), at);
             };
             // Every value of a container inside the element, which is as many values as it holds.
             case AddsWhatItDoesNotHold.TheElementsOf _ ->
@@ -5585,7 +5586,7 @@ final class Pullback {
                 ElementsGathered gathered = elementsGathered(whole, filed, since.value(),
                         List.of(since.added()));
                 NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut puts = gathered == null
-                        ? null : putsOf(whole, since, gathered);
+                        ? null : putsOf(whole, filed, since, gathered);
                 yield puts == null ? null : gathered(gathered, puts);
             }
         };
@@ -5785,17 +5786,18 @@ final class Pullback {
                     _ -> NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, at);
             case KeyedAccumulation.Filed.SummedSinceAPut since -> gatheredLookedUp(applied,
                     whole, filed, since.value(), List.of(since.added()),
-                    each -> putsOf(whole, since, each), at);
+                    each -> putsOf(whole, filed, since, each), at);
         };
     }
 
     /** Where the elements {@code gathered} reads put their number in place of the ones before,
-     *  as {@code since} says ({@link InputReads#putsOf}). */
+     *  as {@code since} says, in the order the fold {@code filed} hands them
+     *  ({@link InputReads#putsOf}). */
     private NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut putsOf(
-            Denotation whole, KeyedAccumulation.Filed.SummedSinceAPut since,
-            ElementsGathered gathered) {
-        return whole.at().putsOf(since.puts(), gathered.walked(), read.rules().symbols(),
-                read.rules().newtypes());
+            Denotation whole, KeyedAccumulation filed,
+            KeyedAccumulation.Filed.SummedSinceAPut since, ElementsGathered gathered) {
+        return whole.at().putsOf(since.puts(), gathered.walked(), filed.walked(),
+                filed.inTheListsOrder(), read.rules().symbols(), read.rules().newtypes());
     }
 
     /**
@@ -6049,7 +6051,7 @@ final class Pullback {
         // Every occurrence across the containers, since a count of a value asked for says nothing
         // about which of them a statement kept.
         return keysOf(whole, filed) instanceof InputReads.Occurrences.AcrossContainers(
-                        List<InputReads.Occurrences.Read> reads, List<Denotation> keptBy)
+                        var _, List<InputReads.Occurrences.Read> reads, List<Denotation> keptBy)
                 && keptBy.isEmpty()
                 && reads.getFirst() instanceof InputReads.Occurrences.Read.At(
                         TermPath place, var _)

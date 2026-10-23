@@ -974,19 +974,27 @@ public sealed interface NumericTerm
             }
 
             /**
-             * The numbers of the key added up from the last element, in the order of the run,
+             * The numbers of the key added up from the last element handed, in {@code order},
              * whose case at {@code subject} is one of {@code puts}, that element's number
              * included; every number of the key where none of them is.
+             *
+             * <p>Which element was handed last is the order and not the elements, so the order
+             * is part of what this is: the same elements handed from the other end come to
+             * another number. It holds what showed the order ({@link RunSource.TraversalOrder}),
+             * and is made only where something did.
              *
              * @param subject where in the element the case that says whether it puts stands
              * @param puts    the cases of it whose elements put their number in place of the
              *                ones before
+             * @param order   the direction the walk was handed the elements in
              */
-            record SinceAPut(ElementProjection subject, List<CasesLeft> puts)
-                    implements Gathering {
+            record SinceAPut(ElementProjection subject, List<CasesLeft> puts,
+                             RunSource.TraversalOrder order) implements Gathering {
 
                 public SinceAPut {
                     Objects.requireNonNull(subject, "a case is of some place of the element");
+                    Objects.requireNonNull(order, "which element was handed last turns on the"
+                            + " order they were handed in");
                     puts = List.copyOf(puts);
                     if (puts.isEmpty()) {
                         throw new IllegalArgumentException("some case puts, or it is a total");
@@ -1084,6 +1092,12 @@ public sealed interface NumericTerm
                     || !key.heldByEveryElementItTakes() || value.readsThePosition()) {
                 return null;
             }
+            // An order is shown of the elements where they stood, and says nothing of elements
+            // standing anywhere else.
+            if (gathering instanceof Gathering.SinceAPut(var _, var _, var order)
+                    && !order.elements().equals(elements)) {
+                return null;
+            }
             // What keeps some of them is a statement about these elements and no others: the
             // elements of the container it keeps some of, or those of them of the cases they are
             // narrowed to.
@@ -1147,7 +1161,7 @@ public sealed interface NumericTerm
         public List<ElementProjection> fieldsRead() {
             Set<ElementProjection> read = new LinkedHashSet<>(key.reads());
             read.addAll(value.reads());
-            if (gathering instanceof Gathering.SinceAPut(ElementProjection subject, var _)) {
+            if (gathering instanceof Gathering.SinceAPut(ElementProjection subject, var _, var _)) {
                 read.add(subject);
             }
             return List.copyOf(read);
@@ -1194,9 +1208,14 @@ public sealed interface NumericTerm
                     + (selection == null ? "" : " kept by " + selection.key());
             return switch (gathering) {
                 case Gathering.Total _ -> "total(" + of + " by " + key.spelled() + ")";
-                case Gathering.SinceAPut(ElementProjection subject, List<CasesLeft> puts) ->
+                // Handed in the order written, as a run read by where its elements stand is
+                // spelled; the other way round says so.
+                case Gathering.SinceAPut(ElementProjection subject, List<CasesLeft> puts,
+                                         RunSource.TraversalOrder order) ->
                         "total(" + of + " from the last " + String.join(" or ", puts.stream()
                                 .map(cases -> subject.narrowedTo(cases).spelled()).toList())
+                                + (order.direction() == TraversalDirection.REVERSE
+                                        ? " handed from the far end" : "")
                                 + " by " + key.spelled() + ")";
                 case Gathering.End(Extreme extreme) -> switch (extreme) {
                     case Extreme.Least _ -> "least";

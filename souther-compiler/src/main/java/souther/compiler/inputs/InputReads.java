@@ -2528,10 +2528,11 @@ public final class InputReads {
             // What a statement kept some by is about the elements of the lists the flattening put
             // end to end, so each is one of theirs and no value made of one.
             boolean kept = !keptBy.isEmpty();
-            List<Occurrences.Read> flattened = kept && madeNewBeneath ? null
+            Flattened flattened = kept && madeNewBeneath ? null
                     : flattenedKeysAt(standing, sought, kept, symbols, newtypes);
             return flattened == null ? null
-                    : new Occurrences.AcrossContainers(flattened, keptBy);
+                    : new Occurrences.AcrossContainers(flattened.outer(), flattened.reads(),
+                            keptBy);
         }
     }
 
@@ -2814,12 +2815,34 @@ public final class InputReads {
     /**
      * Where the elements of {@code walked} put their number in place of the ones before, where
      * {@code answer}, made of the element, says so on arms chosen by the case of one place of it,
-     * each answering {@code true} or {@code false}: that place and the cases of the arms answering
-     * {@code true} — or null where the element is made otherwise than one way, the arms are
-     * chosen otherwise, or an arm answers anything else.
+     * each answering {@code true} or {@code false}: that place, the cases of the arms answering
+     * {@code true}, and the direction the walk was handed the elements in — or null where the
+     * element is made otherwise than one way, the arms are chosen otherwise, an arm answers
+     * anything else, or nothing shows the order.
+     *
+     * <p>The order is what the list walked holds them in, read through the operations declared to
+     * turn a list round and no other ({@link #inTheOrderOf}), turned round once more where the
+     * walk hands the last of them first: what is shown is of the elements the list holds, and
+     * they are the elements {@code walked} stand at or no order is shown of them.
+     *
+     * @param list            the list the walk was handed
+     * @param inTheListsOrder whether the walk hands the elements in the order {@code list}
+     *                        holds them, rather than from the last of them
      */
     public NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut putsOf(
-            Core answer, WalkedElement walked, Symbols symbols, DeclarationNewtypes newtypes) {
+            Core answer, WalkedElement walked, Core list, boolean inTheListsOrder,
+            Symbols symbols, DeclarationNewtypes newtypes) {
+        RunSource.TraversalOrder order = null;
+        for (TraversalDirection direction : TraversalDirection.values()) {
+            if (inTheOrderOf(list, direction, newtypes) instanceof PathResolution.At(
+                    TermPath elements) && elements.equals(walked.elements())) {
+                order = new RunSource.TraversalOrder(elements,
+                        inTheListsOrder ? direction : direction.reversed());
+            }
+        }
+        if (order == null) {
+            return null;
+        }
         if (walked.subject() != null) {
             return null;
         }
@@ -2843,7 +2866,7 @@ public final class InputReads {
             }
         }
         return puts.isEmpty() ? null
-                : new NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut(subject, puts);
+                : new NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut(subject, puts, order);
     }
 
     /** Each of {@code reads}, made of what stands at {@code at} in an element rather than of the
@@ -2916,15 +2939,36 @@ public final class InputReads {
         }
 
         /**
-         * Every occurrence of a place inside more than one container: the lists of an outer list
-         * put end to end.
+         * Every occurrence of a place inside more than one container: the lists inside the
+         * elements of the container at {@code outer} put end to end.
+         *
+         * <p>Each read stands in an element of a list inside an element of {@code outer}, one
+         * container further in than those elements and no more, as a read off an element of
+         * {@link OfOneContainer} stands in that element.
          */
-        record AcrossContainers(List<Read> reads, List<Denotation> keptBy)
+        record AcrossContainers(TermPath outer, List<Read> reads, List<Denotation> keptBy)
                 implements Occurrences {
 
             public AcrossContainers {
+                Objects.requireNonNull(outer, "the lists put end to end are inside the elements"
+                        + " of a container");
                 reads = List.copyOf(reads);
+                for (Read each : reads) {
+                    if (each instanceof Read.At(TermPath place, var _)
+                            && !inAListInsideAnElementOf(outer, place)) {
+                        throw new IllegalArgumentException("a read off an element of the lists"
+                                + " inside the elements of " + outer + " stands in one of those,"
+                                + " and " + place + " does not");
+                    }
+                }
                 keptBy = List.copyOf(keptBy);
+            }
+
+            /** Whether {@code place} stands in an element of a list inside an element of the
+             *  container at {@code outer}, one container further in than those elements. */
+            static boolean inAListInsideAnElementOf(TermPath outer, TermPath place) {
+                return place.isAtOrUnder(outer.element()) && place.containersHoldingIt().size()
+                        == outer.containersHoldingIt().size() + 2;
             }
         }
     }
@@ -2936,10 +2980,10 @@ public final class InputReads {
      */
     public TermPath containerFlattenedInto(Core list, Symbols symbols,
                                            DeclarationNewtypes newtypes) {
-        List<Occurrences.Read> elements = flattenedKeysAt(standing(list, symbols, newtypes),
+        Flattened elements = flattenedKeysAt(standing(list, symbols, newtypes),
                 List.of(ReadOff.ITSELF), true, symbols, newtypes);
-        if (elements == null
-                || !(elements.getFirst() instanceof Occurrences.Read.At(TermPath keys, var _))) {
+        if (elements == null || !(elements.reads().getFirst() instanceof Occurrences.Read.At(
+                TermPath keys, var _))) {
             return null;
         }
         List<TermPath> holding = keys.containersHoldingIt();
@@ -3327,15 +3371,16 @@ public final class InputReads {
 
     /**
      * Where the keys of a list a flattening put end to end stand: inside the container whose
-     * elements the closure was handed, at the place the closure's answer is read down to.
+     * elements the closure was handed, at the place the closure's answer is read down to — or
+     * null where that is no list inside each of those elements, one container further in.
      *
      * @param ofTheListsThemselves whether the elements must be those of the lists the closure
      *                             answers, the answer being read down no steps that make a value
      *                             of one
      */
-    private List<Occurrences.Read> flattenedKeysAt(Denotation standing, List<ReadOff> reads,
-                                                   boolean ofTheListsThemselves, Symbols symbols,
-                                                   DeclarationNewtypes newtypes) {
+    private Flattened flattenedKeysAt(Denotation standing, List<ReadOff> reads,
+                                      boolean ofTheListsThemselves, Symbols symbols,
+                                      DeclarationNewtypes newtypes) {
         AFlattening flattening = aFlattening(standing, symbols, newtypes);
         if (flattening == null) {
             return null;
@@ -3377,8 +3422,18 @@ public final class InputReads {
             answer = step.from();
             listAt = ElementProjection.read(answer, element, where.heldByTheBody(), newtypes);
         }
-        return listAt == null ? null : placedIn(sought, listAt.from(outer).element());
+        TermPath elementsOfTheLists = listAt.from(outer).element();
+        List<TermPath> holdingTheElements = outer.containersHoldingIt();
+        TermPath container = holdingTheElements.isEmpty() ? null : holdingTheElements.getLast();
+        return container != null && container.element().equals(outer)
+                && Occurrences.AcrossContainers.inAListInsideAnElementOf(container,
+                        elementsOfTheLists)
+                ? new Flattened(container, placedIn(sought, elementsOfTheLists)) : null;
     }
+
+    /** What {@link #flattenedKeysAt} found: the container whose elements hold the lists, and
+     *  where each read stands in the lists' elements. */
+    private record Flattened(TermPath outer, List<Occurrences.Read> reads) {}
 
     /** Where each of {@code reads}, taken out of the value at {@code element}, stands. */
     private static List<Occurrences.Read> placedIn(List<ReadOff> reads, TermPath element) {
