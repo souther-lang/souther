@@ -116,6 +116,20 @@ public enum CompositionBudget {
      *  them, which narrows by none of them and is said to have been. */
     WAYS_A_WAY_IS_LOOKED_ALONG(16),
 
+    /**
+     * How many walks a way looked along whole past {@link #WAYS_A_WAY_IS_LOOKED_ALONG} is read
+     * again with, for one relation that reads it ({@link AWayReadForARelation}): each asks whether
+     * a value meets what the way asks apart from the relation, with the choices read as less so
+     * far, or whether no row takes a way of their alternatives.
+     *
+     * <p>Over the whole reading again and not a share per choice, because a choice is asked again
+     * each time another is kept as it stands, and a share per question would be a bound that grows
+     * with the choices on the way. Past it, the choices not yet shown to come to less are kept as
+     * they stand, which reads them exactly; where the way read again is still past the ways looked
+     * along, the relation is shown nothing of it and says this is one of the figures why.
+     */
+    WALKS_A_WAY_IS_READ_AGAIN_WITH(256),
+
     /** How many alternatives of those conditions are taken in, one beside another, to find the
      *  ways that are open. The walking beside the looking: an alternative that closes against what
      *  was taken before it is looked at and is no way to compose along, and costs a putting
@@ -648,6 +662,9 @@ public enum CompositionBudget {
             case CHOICES_ON_A_WAY_LOOKED_AT ->
                     "how many alternatives of conditions on the way are looked at to find the"
                             + " ways a row may take";
+            case WALKS_A_WAY_IS_READ_AGAIN_WITH ->
+                    "how many times a way of more ways than are looked along is walked again to"
+                            + " read it for one relation";
             case CHOICES_OF_INPUT_NUMBERS_LOOKED_AT ->
                     "how many choices of values for the input's numbers are looked at";
             case PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED ->
@@ -768,7 +785,7 @@ public enum CompositionBudget {
                  PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
-                 WAYS_A_WAY_IS_LOOKED_ALONG,
+                 WAYS_A_WAY_IS_LOOKED_ALONG, WALKS_A_WAY_IS_READ_AGAIN_WITH,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  COMBINATIONS_OF_TOTALS_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
