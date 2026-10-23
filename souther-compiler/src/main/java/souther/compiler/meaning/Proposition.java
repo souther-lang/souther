@@ -518,6 +518,11 @@ public sealed interface Proposition {
          *
          * <p>A disjunction of disjunctions is one disjunction ({@link #any}), so the cases of two
          * statements joined by an "or" are parts of one and are found here all the same.
+         *
+         * <p>Only of a condition whose denial holds wherever it fails ({@link
+         * #deniedWhereverItFails}): the cases of one that may answer nothing, or hold on one
+         * application and fail on another, are not every row, and denied by them would say
+         * something of the rows outside them that the parts failing do not.
          */
         @Override
         public Proposition denied() {
@@ -545,7 +550,7 @@ public sealed interface Proposition {
         for (Proposition part : parts) {
             for (Proposition condition : conjunctsOf(part)) {
                 Proposition against = condition.denied();
-                if (!anywhere.contains(against.key())) {
+                if (!anywhere.contains(against.key()) || !deniedWhereverItFails(condition)) {
                     continue;
                 }
                 List<Proposition> holding = new ArrayList<>();
@@ -1660,6 +1665,30 @@ public sealed interface Proposition {
                     stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
                  Carried _, Unread _ -> false;
+        };
+    }
+
+    /**
+     * Whether the denial of {@code stated} holds on every row it fails, and on no row it holds:
+     * whether the two are the two cases of one statement, as a condition and its denial are where
+     * {@code c || !c} holds and {@code c && !c} does not.
+     *
+     * <p>Not every statement and its denial are. What is read through an operation that answers
+     * only on some rows ({@link WhereItAnswers}) holds nowhere it answers nothing, and neither does
+     * its denial. What a condition states on the applications of a closure ({@link
+     * OnAnApplication}) holds where some application's statement does and is denied where some
+     * application's denial is, so on two applications that differ both hold. And of a part nothing
+     * read ({@link Unread}) nothing is known, that among the rest. A quantifier, a count and a
+     * search are of statements every row answers, which their constructors saw to, and say on
+     * each row how many elements or nodes meet them: a number, holding or failing.
+     */
+    static boolean deniedWhereverItFails(Proposition stated) {
+        return switch (stated) {
+            case WhereItAnswers _, OnAnApplication _, Unread _ -> false;
+            case All all -> all.parts().stream().allMatch(Proposition::deniedWhereverItFails);
+            case Any any -> any.parts().stream().allMatch(Proposition::deniedWhereverItFails);
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
+                 Carried _, Some _, SoManyHold _, SomeReachable _ -> true;
         };
     }
 

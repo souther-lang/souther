@@ -8,7 +8,9 @@ import java.util.Map;
  * disjunction comes out.
  *
  * <p>Each such part is taken as free of every other: two parts are one only where one is the
- * other's denial, which is what {@code c || !c} needs. So an answer of yes is an answer about the
+ * other's denial and holds wherever the other fails, which is what {@code c || !c} needs. A
+ * statement on the applications of a closure and its denial may both hold, and are two parts. So
+ * an answer of yes is an answer about the
  * proposition, and an answer of no says only that this did not find one — two comparisons of one
  * number that cannot both fail are two free parts here, and their disjunction is not found to hold.
  *
@@ -64,7 +66,7 @@ public final class TruthTable {
                  Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                  Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
                  Proposition.OnAnApplication _, Proposition.SoManyHold _ -> {
-                into.putIfAbsent(spelledFirst(stated), into.size());
+                into.putIfAbsent(spelledAs(stated), into.size());
                 yield true;
             }
         };
@@ -86,15 +88,23 @@ public final class TruthTable {
                  Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                  Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
                  Proposition.Unread _, Proposition.OnAnApplication _, Proposition.SoManyHold _ -> {
-                String spelled = spelledFirst(stated);
+                String spelled = spelledAs(stated);
                 boolean set = (assignment >> parts.get(spelled) & 1L) == 1L;
                 yield spelled.equals(stated.key()) == set;
             }
         };
     }
 
-    /** The spelling of whichever of {@code part} and its denial spells first. */
-    private static String spelledFirst(Proposition part) {
+    /**
+     * The free part {@code part} comes out as: the spelling of whichever of it and its denial
+     * spells first, where its denial holds wherever it fails ({@link
+     * Proposition#deniedWhereverItFails}), so the two are one part; and its own spelling where not,
+     * so it and its denial are two parts, free of each other.
+     */
+    private static String spelledAs(Proposition part) {
+        if (!Proposition.deniedWhereverItFails(part)) {
+            return part.key();
+        }
         String denied = part.denied().key();
         return part.key().compareTo(denied) <= 0 ? part.key() : denied;
     }
