@@ -1791,6 +1791,20 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A value given a number apart is one its type holds. {@code z + w} at the greatest
+     * {@code Int} with {@code w} at minus one puts {@code z} one past it, which no {@code Int} is,
+     * so no row takes that way and the choice is kept as it is, read as it is without the five.
+     */
+    @Test
+    void aValueGivenANumberApartIsOneItsTypeHolds() {
+        String inputs = "x: Int, y: Int, z: Int, w: Int";
+        String guard = "(z + w == 9223372036854775807 && w == -1 || x >= 5)";
+        Map<String, String> alone = leftPast(inputs, UNUSED, guard, "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast(inputs, UNUSED, guard, "x == y", true));
+    }
+
+    /**
      * Numbers a way apart fixes together are worked out from one another: {@code z + w == 2}
      * puts {@code z} at {@code 2 - w}, so {@code z - w == 0} puts {@code w} at one. A choice with
      * such a way apart comes to nothing for {@code x == y} past the five. Where no whole numbers

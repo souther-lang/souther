@@ -60,8 +60,10 @@ final class AWayReadForARelation {
         boolean nameNothingAt(TermPath at);
 
         /**
-         * The ends between which the declarations leave {@code term} every value and no other,
-         * where no rule of a value around it names it — or null where that is not shown.
+         * The ends between which a row may hold {@code term} at every value and at no other: what
+         * the declarations leave it, within where its type stops — or null where that is not
+         * shown. Shown only of the number at a place every row holds, on a count or a decimal,
+         * that no rule of a value around it names.
          */
         NumericDomain.Bounds leaveEveryValueBetween(NumericTerm term);
 
@@ -73,7 +75,7 @@ final class AWayReadForARelation {
      * What a way read again comes to.
      *
      * @param as        the way read again, or empty where no choice on it is shown to come to
-     *                  less than it is
+     *                  less than it is, or the walks ran out before it was read
      * @param stoppedAt the figures reached reading it again, past which a choice was kept as it
      *                  stands that might have been shown to come to less: none lose anything where
      *                  {@code as} is read, and each is a figure why where it is not
@@ -193,7 +195,7 @@ final class AWayReadForARelation {
                 one.standingFor().ifPresent(rest::add);
             }
         }
-        return Optional.of(whole.from().readAs(rest));
+        return Optional.ofNullable(walked(rest));
     }
 
     /**
@@ -288,17 +290,24 @@ final class AWayReadForARelation {
         private final Map<ChoiceRead, Map<Integer, List<OnTheWay>>> alternatives =
                 new IdentityHashMap<>();
 
+        /** The choices here in the order they came, which is the order their ways are asked in:
+         *  with the walks counted, which way is asked first decides where they run out. */
+        private final List<ChoiceRead> inOrder = new ArrayList<>();
+
         void asked(ChoiceRead choice, int alternative, OnTheWay condition) {
-            alternatives.computeIfAbsent(choice, _ -> new LinkedHashMap<>())
-                    .computeIfAbsent(alternative, _ -> new ArrayList<>()).add(condition);
+            alternatives.computeIfAbsent(choice, _ -> {
+                inOrder.add(choice);
+                return new LinkedHashMap<>();
+            }).computeIfAbsent(alternative, _ -> new ArrayList<>()).add(condition);
         }
 
         void take(Part other) {
             positions.addAll(other.positions);
             conditions.addAll(other.conditions);
-            other.alternatives.forEach((choice, byAlternative) ->
-                    byAlternative.forEach((alternative, those) ->
-                            those.forEach(one -> asked(choice, alternative, one))));
+            for (ChoiceRead choice : other.inOrder) {
+                other.alternatives.get(choice).forEach((alternative, those) ->
+                        those.forEach(one -> asked(choice, alternative, one)));
+            }
         }
 
         /**
@@ -310,7 +319,7 @@ final class AWayReadForARelation {
          * no {@code x} is at or below nought and at or above seven either.
          */
         boolean met(List<OnTheWay> stated) {
-            List<ChoiceRead> those = new ArrayList<>(alternatives.keySet());
+            List<ChoiceRead> those = List.copyOf(inOrder);
             long count = 1;
             for (ChoiceRead each : those) {
                 count *= each.apart().size();
@@ -357,7 +366,12 @@ final class AWayReadForARelation {
         List<Reachability.Reaching> open = switch (meeting.ways()) {
             case Reachability.Ways.One _ -> List.of(meeting);
             case Reachability.Ways.Each each -> each.along();
-            case Reachability.Ways.Whole each -> each.along();
+            case Reachability.Ways.Whole each -> {
+                // Only the ways looked along are asked, and the figure past which the rest were
+                // not is one of the reasons a choice may be kept as it stands.
+                stoppedAt.add(each.figure());
+                yield each.along();
+            }
         };
         // A way some of whose choices the figure left unchosen asks less than a row along it
         // meets, so only one every choice on which was chosen shows anything.
@@ -560,6 +574,9 @@ final class AWayReadForARelation {
                 case RowDemand.Relational _ -> {
                     return false;
                 }
+                // A way asking one Bool for both values is one no row takes, which the walk says
+                // ({@link Reachability.NothingReaches}), so the truths of a way taken are met
+                // together wherever no rule holds the Bool beside anything.
                 case RowDemand.ATruth truth -> {
                     for (TermPath at : truth.positions()) {
                         if (!declarations.nameNothingAt(at)) {

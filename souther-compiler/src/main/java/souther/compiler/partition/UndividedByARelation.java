@@ -701,16 +701,31 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
             @Override
             public NumericDomain.Bounds leaveEveryValueBetween(NumericTerm term) {
-                Source source = term instanceof NumericTerm.ValueOf value ? sourceOf(value, read)
-                        : null;
-                if (source == null || source.named()) {
+                // A value at a place inside an element, or under a key, is one only where the
+                // row holds such an element, and a statement of it is of some of them.
+                if (!(term instanceof NumericTerm.ValueOf value) || !value.position().steps()
+                        .stream().allMatch(step -> step instanceof TermPath.Step.Field
+                                || step instanceof TermPath.Step.Refine)) {
                     return null;
                 }
-                return switch (source.takes()) {
+                // A number is given a value only on an order that is a count or a decimal, whose
+                // every whole number between its ends is one of its values; a string's place on
+                // its order has no count under it to give.
+                TermOrders orders = read.quantities().ordersOf(value);
+                Carrier carrier = orders == null ? null : orders.answered();
+                Source source = sourceOf(value, read);
+                if (carrier == null || spacingOf(carrier) == null || source == null
+                        || source.named()) {
+                    return null;
+                }
+                NumericDomain.Bounds declared = switch (source.takes()) {
                     case Takes.Every _ -> NumericDomain.Bounds.OPEN;
                     case Takes.Some some -> !source.onlyItsEnds() ? null
                             : some.ends() == null ? NumericDomain.Bounds.OPEN : some.ends();
                 };
+                // Every value the declarations leave it is one its type holds only up to where the
+                // type stops: an Int past the greatest is no Int, whatever the rules leave.
+                return declared == null ? null : declared.meet(carrier.whereItStops());
             }
 
             @Override
