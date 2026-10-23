@@ -60,6 +60,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -514,9 +515,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     true, witnesses);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
+        Set<CompositionBudget> stopped = new LinkedHashSet<>();
         for (Reachability.Reaching each : ways) {
-            if (!branchesOf(each, branches, read)) {
-                return nothingShown;
+            if (!branchesOf(each, branches, read, stopped)) {
+                return new WhatItLeaves(nothingShown.undivided(), Map.of(), true,
+                        stopped.stream().map(CompositionBudget::figure)
+                                .collect(Collectors.toCollection(LinkedHashSet::new)));
             }
         }
         if (branches.isEmpty()) {
@@ -626,37 +630,47 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link #readAgainForThis}), and its branches are those of what that comes to; where
      * no choice is shown to come to less, nothing is shown of it. A way read again that no row
      * takes adds nothing to {@code into}, since no row takes the way it was read from either.
+     *
+     * <p>Where nothing is shown of a way past the figure, the figure is why — a run allowed more
+     * ways would have split it — and so is each figure the reading again reached, past which a
+     * choice was kept as it stands. Those are added to {@code stopped}, which is what the relation
+     * says it stopped at.
      */
     private boolean branchesOf(Reachability.Reaching way, List<Reachability.Reaching> into,
-                               InputReading read) {
+                               InputReading read, Set<CompositionBudget> stopped) {
         return switch (way.ways()) {
             case Reachability.Ways.One _ -> into.add(way);
             case Reachability.Ways.Each each -> {
                 for (Reachability.Reaching branch : each.along()) {
-                    if (!branchesOf(branch, into, read)) {
+                    if (!branchesOf(branch, into, read, stopped)) {
                         yield false;
                     }
                 }
                 yield true;
             }
             case Reachability.Ways.Whole whole -> {
-                Optional<Reachability> again = readAgainForThis(whole, read);
-                yield again.isPresent()
-                        && (!(again.get() instanceof Reachability.Reaching reaching)
-                                || branchesOf(reaching, into, read));
+                AWayReadForARelation.ReadAgain again = readAgainForThis(whole, read);
+                boolean shown = again.as().isPresent()
+                        && (!(again.as().get() instanceof Reachability.Reaching reaching)
+                                || branchesOf(reaching, into, read, stopped));
+                if (!shown) {
+                    stopped.add(whole.figure());
+                    stopped.addAll(again.stoppedAt());
+                }
+                yield shown;
             }
         };
     }
 
     /**
      * The way {@code whole} was read from, read again with each choice on it as it comes to for
-     * this relation ({@link AWayReadForARelation}) — or empty where no choice is shown to come to
-     * less than it is, or this relation reads places that cannot be named.
+     * this relation ({@link AWayReadForARelation}) — or nothing where this relation reads places
+     * that cannot be named.
      */
-    private Optional<Reachability> readAgainForThis(Reachability.Ways.Whole whole,
-                                                    InputReading read) {
+    private AWayReadForARelation.ReadAgain readAgainForThis(Reachability.Ways.Whole whole,
+                                                            InputReading read) {
         Set<TermPath> bearing = positionsRead();
-        return bearing == null ? Optional.empty()
+        return bearing == null ? new AWayReadForARelation.ReadAgain(Optional.empty(), Set.of())
                 : AWayReadForARelation.of(whole, bearing, declarationsOf(read));
     }
 

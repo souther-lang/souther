@@ -69,11 +69,32 @@ final class AWayReadForARelation {
         boolean leaveAValueOf(TypeSymbol leaf);
     }
 
+    /**
+     * What a way read again comes to.
+     *
+     * @param as        the way read again, or empty where no choice on it is shown to come to
+     *                  less than it is
+     * @param stoppedAt the figures reached reading it again, past which a choice was kept as it
+     *                  stands that might have been shown to come to less: none lose anything where
+     *                  {@code as} is read, and each is a figure why where it is not
+     */
+    record ReadAgain(Optional<Reachability> as, Set<CompositionBudget> stoppedAt) {
+
+        ReadAgain {
+            stoppedAt = Set.copyOf(stoppedAt);
+        }
+    }
+
     private final Reachability.Ways.Whole whole;
     private final Declarations declarations;
 
     /** The positions bearing on the relation, widened as the way is read. */
     private final Set<TermPath> bearing;
+
+    /** How many walks this has taken ({@link CompositionBudget#WALKS_A_WAY_IS_READ_AGAIN_WITH}). */
+    private int walks;
+
+    private final Set<CompositionBudget> stoppedAt = new LinkedHashSet<>();
 
     private AWayReadForARelation(Reachability.Ways.Whole whole, Set<TermPath> read,
                                  Declarations declarations) {
@@ -82,16 +103,28 @@ final class AWayReadForARelation {
         this.bearing = new LinkedHashSet<>(read);
     }
 
-    /**
-     * The way {@code whole} was read from, read again for a relation reading {@code read} — or
-     * empty where no choice on it is shown to come to less than it is.
-     */
-    static Optional<Reachability> of(Reachability.Ways.Whole whole, Set<TermPath> read,
-                                     Declarations declarations) {
+    /** The way {@code whole} was read from, read again for a relation reading {@code read}. */
+    static ReadAgain of(Reachability.Ways.Whole whole, Set<TermPath> read,
+                        Declarations declarations) {
         if (!whole.from().way().declined().isEmpty()) {
-            return Optional.empty();
+            return new ReadAgain(Optional.empty(), Set.of());
         }
-        return new AWayReadForARelation(whole, read, declarations).readAgain();
+        AWayReadForARelation reading = new AWayReadForARelation(whole, read, declarations);
+        Optional<Reachability> as = reading.readAgain();
+        return new ReadAgain(as, reading.stoppedAt);
+    }
+
+    /**
+     * The way {@code onTheWay} comes to, walked once more — or null where this has walked as often
+     * as it reads a way again with, which shows nothing.
+     */
+    private Reachability walked(List<OnTheWay> onTheWay) {
+        if (walks >= CompositionBudget.WALKS_A_WAY_IS_READ_AGAIN_WITH.maximum()) {
+            stoppedAt.add(CompositionBudget.WALKS_A_WAY_IS_READ_AGAIN_WITH);
+            return null;
+        }
+        walks++;
+        return whole.from().readAs(onTheWay);
     }
 
     private Optional<Reachability> readAgain() {
@@ -282,6 +315,7 @@ final class AWayReadForARelation {
             for (ChoiceRead each : those) {
                 count *= each.apart().size();
                 if (count > CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
+                    stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
                     return false;
                 }
             }
@@ -291,8 +325,11 @@ final class AWayReadForARelation {
         private boolean metAlongEach(List<ChoiceRead> those, int at, List<OnTheWay> apart,
                                      List<OnTheWay> bearingTaken) {
             if (at == those.size()) {
-                return aValueMeets(apart)
-                        || !(whole.from().readAs(bearingTaken) instanceof Reachability.Reaching);
+                if (aValueMeets(apart)) {
+                    return true;
+                }
+                Reachability taken = walked(bearingTaken);
+                return taken != null && !(taken instanceof Reachability.Reaching);
             }
             ChoiceRead choice = those.get(at);
             for (int alternative = 0; alternative < choice.apart().size(); alternative++) {
@@ -314,7 +351,7 @@ final class AWayReadForARelation {
      * ({@link #metBySomeValue}).
      */
     private boolean aValueMeets(List<OnTheWay> onTheWay) {
-        if (!(whole.from().readAs(onTheWay) instanceof Reachability.Reaching meeting)) {
+        if (!(walked(onTheWay) instanceof Reachability.Reaching meeting)) {
             return false;
         }
         List<Reachability.Reaching> open = switch (meeting.ways()) {

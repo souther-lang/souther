@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -13,7 +14,6 @@ import souther.compiler.numeric.Rel;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -59,7 +59,7 @@ final class WholeValuesMeeting {
                                            Function<NumericTerm, NumericDomain.Bounds> declared) {
         // A number's value turns on which numbers came before it, so they come in one order the
         // numbers themselves decide.
-        Comparator<NumericTerm> inOrder = Comparator.comparing(String::valueOf);
+        CanonicalOrder<NumericTerm> inOrder = NumericTerm.inOneOrder();
         List<TakenConstraint.Affine> left = new ArrayList<>(statements);
         List<Map.Entry<NumericTerm, LinearForm<NumericTerm>>> fixedBy = new ArrayList<>();
         for (TakenConstraint.Affine equality = aFixingOfSeveral(left); equality != null;
@@ -92,7 +92,7 @@ final class WholeValuesMeeting {
         left.forEach(each -> given.addAll(each.form().coefs().keySet()));
         fixedBy.forEach(each -> given.addAll(each.getValue().coefs().keySet()));
         fixedBy.forEach(each -> given.remove(each.getKey()));
-        Map<NumericTerm, ExactRatio> out = oneAtATime(given.stream().sorted(inOrder).toList(),
+        Map<NumericTerm, ExactRatio> out = oneAtATime(inOrder.walking(given, term -> term),
                 left, region, declared);
         if (out == null) {
             return null;
@@ -121,8 +121,8 @@ final class WholeValuesMeeting {
     }
 
     private static NumericTerm firstOf(LinearForm<NumericTerm> form,
-                                       Comparator<NumericTerm> inOrder) {
-        return form.coefs().keySet().stream().min(inOrder).orElseThrow();
+                                       CanonicalOrder<NumericTerm> inOrder) {
+        return inOrder.walking(form.coefs().keySet(), term -> term).getFirst();
     }
 
     /** What {@code term} stands at where {@code form} is nought, as a form of the others — or null
@@ -208,7 +208,7 @@ final class WholeValuesMeeting {
             return left;
         }
         ExactRatio constant = statement.form().constant();
-        for (Map.Entry<NumericTerm, ExactRatio> each : statement.form().coefs().entrySet()) {
+        for (Map.Entry<NumericTerm, ExactRatio> each : inOneOrder(statement.form())) {
             if (each.getKey().equals(term)) {
                 continue;
             }
@@ -232,7 +232,7 @@ final class WholeValuesMeeting {
     private static ExactRatio valueOf(LinearForm<NumericTerm> form,
                                       Map<NumericTerm, ExactRatio> values) {
         ExactRatio at = form.constant();
-        for (Map.Entry<NumericTerm, ExactRatio> term : form.coefs().entrySet()) {
+        for (Map.Entry<NumericTerm, ExactRatio> term : inOneOrder(form)) {
             ExactRatio value = values.get(term.getKey());
             if (value == null || !(term.getValue().times(value)
                     instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weighed))
@@ -242,6 +242,17 @@ final class WholeValuesMeeting {
             at = sum;
         }
         return at;
+    }
+
+    /**
+     * The weights of {@code form} in the one order its numbers decide. An exact sum can fail part
+     * of the way, a term too far apart in scale from the sum so far having no representation beside
+     * it, so whether it fails turns on which terms came first, and a map's own order would make that
+     * a matter of the map.
+     */
+    private static List<Map.Entry<NumericTerm, ExactRatio>> inOneOrder(
+            LinearForm<NumericTerm> form) {
+        return NumericTerm.inOneOrder().walking(form.coefs().entrySet(), Map.Entry::getKey);
     }
 
     /** Whether {@code statement} holds with each number it is of at {@code values} — false where

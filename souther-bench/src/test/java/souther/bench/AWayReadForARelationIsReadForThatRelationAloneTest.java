@@ -20,8 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a projection handed to the generator to spare it the walk — would lose a writing of a condition,
  * an obligation, or a place a report is sent to, and nothing it reads would say so.
  *
- * <p>So the one place that asks for it is the relation's own reading of the ways a row arrives
- * along. Both directions are asserted: the place is expected, so a check that read nothing fails.
+ * <p>So the places that ask for it are the relation's own reading of the ways a row arrives
+ * along: the reading again, and the splitting of the ways into branches that reads what it came
+ * to. Both directions are asserted: the places are expected, so a check that read nothing fails.
  */
 class AWayReadForARelationIsReadForThatRelationAloneTest {
 
@@ -35,9 +36,13 @@ class AWayReadForARelationIsReadForThatRelationAloneTest {
                 asking.add(site.at());
             }
         }
-        assertEquals(List.of("souther.compiler.partition.UndividedByARelation#readAgainForThis("
+        assertEquals(List.of("souther.compiler.partition.UndividedByARelation#branchesOf("
+                        + "Lsouther/compiler/partition/Reachability$Reaching;Ljava/util/List;"
+                        + "Lsouther/compiler/inputs/InputReading;Ljava/util/Set;)Z",
+                        "souther.compiler.partition.UndividedByARelation#readAgainForThis("
                         + "Lsouther/compiler/partition/Reachability$Ways$Whole;"
-                        + "Lsouther/compiler/inputs/InputReading;)Ljava/util/Optional;"),
+                        + "Lsouther/compiler/inputs/InputReading;)"
+                        + "Lsouther/compiler/partition/AWayReadForARelation$ReadAgain;"),
                 List.copyOf(asking),
                 "a way read again for a relation is asked for by something that is not the"
                         + " relation's reading of the ways a row arrives along");

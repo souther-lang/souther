@@ -1946,6 +1946,38 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * Where a relation is shown nothing of a way past the figure, the figure is why, and the
+     * relation says so: a run allowed more ways would split the way and read each. Five choices on
+     * what {@code x1 + x2 + x3 + x4 + x5 == y} reads are thirty-two ways, each of which bears on
+     * it. Where every way is looked along and a way leaves a value no row beside it reaches, no
+     * figure is why, and none is named.
+     */
+    @Test
+    void aRelationShownNothingOfAWayPastTheFigureSaysTheFigureStoppedIt() {
+        String figure = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.counts();
+        String inputs = "x1: Int, x2: Int, x3: Int, x4: Int, x5: Int, y: Int";
+        String body = "if (x1 >= 0 || x1 <= -5) && (x2 >= 0 || x2 <= -5) && (x3 >= 0 || x3 <= -5)"
+                + " && (x4 >= 0 || x4 <= -5) && (x5 >= 0 || x5 <= -5)"
+                + " then x1 + x2 + x3 + x4 + x5 == y else false";
+        List<String> past = linesAbout(measured(inputs, UNUSED, "Bool", body), "x1");
+        assertFalse(past.isEmpty());
+        assertTrue(past.stream().allMatch(line -> line.contains(figure)), past::toString);
+
+        String within = "if (x >= 0 && x <= 10 || x >= 20 && x <= 30) then x == y else false";
+        List<String> about = linesAbout(measured("x: Int, y: Int", UNUSED, "Bool", within), "y");
+        assertFalse(about.isEmpty());
+        assertTrue(about.stream().noneMatch(line -> line.contains("stopped at")), about::toString);
+    }
+
+    /** The lines of a report about {@code place} that say it was not read. */
+    private static List<String> linesAbout(Compilation compilation, String place) {
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(
+                        compilation.texts())).lines().map(String::strip)
+                .filter(line -> line.startsWith("· not read") && line.endsWith("about `" + place + "`"))
+                .toList();
+    }
+
+    /**
      * A run whose end the rules put at a third is handed over from a hair below it, which no
      * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
      * asked of it are all above a third, as anywhere. An end at a half is written as it is.

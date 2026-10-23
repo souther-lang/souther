@@ -9,6 +9,7 @@ import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
@@ -27,6 +28,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -65,6 +67,16 @@ public sealed interface NumericTerm
                 NumericTerm.OfAnElementsNeighbours, NumericTerm.OccurrencesOfItsValue,
                 NumericTerm.OccurrencesOfAKey, NumericTerm.GatheredUnderItsKey,
                 NumericTerm.GatheredUnderAKey {
+
+    /**
+     * One order over these, for a walk that has to take them in one: by what each is written as,
+     * which is as much as a reader outside the region can say of one. Two written alike and not
+     * one number are refused where they are walked ({@link CanonicalOrder#walking}), as
+     * {@link InputAtom#inOneOrder} refuses them.
+     */
+    static CanonicalOrder<NumericTerm> inOneOrder() {
+        return Comparator.<NumericTerm, String>comparing(String::valueOf)::compare;
+    }
 
     /**
      * A number of an element read off the elements beside it in its container: how often its value

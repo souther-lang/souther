@@ -813,6 +813,10 @@ public final class Generator {
                              // either way, and what was not looked along is carried with the row's
                              // account.
                              WAYS_A_WAY_IS_LOOKED_ALONG, CHOICES_ON_A_WAY_LOOKED_AT,
+                             // It stops a reading of a way for one relation, which composes
+                             // nothing, and what it stopped is carried as what the relation says
+                             // it stopped at.
+                             WALKS_A_WAY_IS_READ_AGAIN_WITH,
                              // What it stops is the looking for a way past a guard, beside a row
                              // already found, and what it stopped is carried beside that row.
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
