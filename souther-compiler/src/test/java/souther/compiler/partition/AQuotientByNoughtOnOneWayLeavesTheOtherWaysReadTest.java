@@ -291,27 +291,23 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
 
     /**
      * A mean over a list the body wrote out is read as the sum of it is: the way where the list
-     * holds nothing divides by nought and is no row, and what is left unsaid is said for the reason
-     * the sum beside a number leaves something unsaid, which is a fact of its own and not about the
-     * quotient. The sum leaves less: its halves weigh one each and stand at the bar's own value,
-     * and a mean's weigh a half.
+     * holds nothing divides by nought and is no row, and what is left unsaid is the relation's — a
+     * value it is not shown to reach — which is a fact of its own and not about the quotient. The
+     * sum leaves nothing unsaid: its halves weigh one each and stand at the bar's own value. A
+     * mean's weigh a half, so a bar past half the greatest {@code Int} is one neither half reaches
+     * alone, and the bar is what is left unsaid.
      */
     @Test
-    void aMeanOverAFilteredListIsUnreadForNoReasonItsSumIsNot() {
+    void aMeanOverAFilteredListIsUnreadOnlyWhereItsRelationIs() {
         String mean = human(LIST.formatted("List.sum(xs) / List.length(xs)"));
         String sum = human(LIST.formatted("List.sum(xs)"));
         assertFalse(mean.contains("quotient by nought"), mean);
-        assertFalse(notRead(sum).isEmpty(), sum);
-        assertEquals(withoutWhatTheyAreAbout(notRead(sum)),
-                withoutWhatTheyAreAbout(notRead(mean)));
-        assertTrue(notRead(mean).containsAll(notRead(sum)), mean);
+        assertEquals(Set.of(), notRead(sum), sum);
+        assertFalse(notRead(mean).isEmpty(), mean);
+        assertTrue(notRead(mean).stream()
+                .allMatch(line -> line.contains("not shown to reach every value here")
+                        && line.endsWith("about `k`")), mean);
         assertTrue(mean.contains("border      borders"), mean);
-    }
-
-    /** {@code lines}, each without the place it is about. */
-    private static Set<String> withoutWhatTheyAreAbout(Set<String> lines) {
-        return lines.stream().map(each -> each.substring(0, each.lastIndexOf(", about `")))
-                .collect(Collectors.toSet());
     }
 
     private static Set<String> notRead(String report) {

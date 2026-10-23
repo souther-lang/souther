@@ -148,6 +148,33 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 """);
     }
 
+    /**
+     * A length is an {@code Int} and stops where one does, so two lists further apart than the
+     * greatest {@code Int} are none: one beside a list of one would be longer than any list.
+     */
+    @Test
+    void listsOnlyLengthsPastWhereAnIntStopsHoldAreRefused() {
+        refuses("Apart", """
+                module demo
+
+                data Apart = { ys: List<Int>, zs: List<Int> }
+                    invariant List.length(zs) >= 1
+                        && List.length(ys) - List.length(zs) >= 9223372036854775807
+                """);
+    }
+
+    /** One less apart is a list of the greatest length beside a list of one. */
+    @Test
+    void listsALengthAsLongAsAnIntHoldsAreAdmitted() {
+        admits("""
+                module demo
+
+                data Apart = { ys: List<Int>, zs: List<Int> }
+                    invariant List.length(zs) >= 1
+                        && List.length(ys) - List.length(zs) >= 9223372036854775806
+                """);
+    }
+
     /** Rules that cannot all hold, which needs no walking anywhere. */
     @Test
     void aNumberBoundedBothWaysPastItselfIsRefused() {

@@ -1000,6 +1000,20 @@ sealed interface ComparisonAssessment {
                             drawnByAnInvariant, reading, witnesses).stream())
                     .toList());
         }
+        return arrivedAt(read, way, arrivals, drawnByAnInvariant, reading, witnesses, true);
+    }
+
+    /**
+     * {@link #narrowedByWhatArrives} of a reading that is no statement of several — with a line
+     * over a relation left as the declarations read it where {@code readsTheRelation} is false,
+     * for a caller that reads it along narrower ways and would otherwise read it twice.
+     */
+    private static ComparisonAssessment arrivedAt(ComparisonAssessment read, Reachability way,
+                                                  List<ComparisonArrival> arrivals,
+                                                  boolean drawnByAnInvariant,
+                                                  InputReading reading,
+                                                  CountWitnesses.Lookup witnesses,
+                                                  boolean readsTheRelation) {
         Cutting cutting = switch (read) {
             case AtAPosition at -> at.cutting();
             case AcrossPositions across -> across.cutting();
@@ -1040,7 +1054,8 @@ sealed interface ComparisonAssessment {
             return new NothingArrivesAtItsRelation(against.filedAt());
         }
         return arriving.isEmpty() ? read : switch (read) {
-            case AcrossPositions across -> across.whereRowsArrive(reading, arriving, witnesses);
+            case AcrossPositions across -> readsTheRelation
+                    ? across.whereRowsArrive(reading, arriving, witnesses) : across;
             case AgainstAnotherValue against -> against.whereRowsArrive(reading, arriving,
                     witnesses);
             default -> read;
@@ -1183,8 +1198,13 @@ sealed interface ComparisonAssessment {
                                                     boolean drawnByAnInvariant,
                                                     InputReading reading,
                                                     CountWitnesses.Lookup witnesses) {
-        ComparisonAssessment arrived = narrowedByWhatArrives(part.line(), way, wayToACase,
-                arrivals, drawnByAnInvariant, reading, witnesses);
+        // A line over a relation is read once, along the ways that decide where there are any and
+        // along the way otherwise: read along the way first, it would be read again in the cases.
+        ComparisonAssessment arrived = part.line() instanceof Several
+                ? narrowedByWhatArrives(part.line(), way, wayToACase, arrivals,
+                        drawnByAnInvariant, reading, witnesses)
+                : arrivedAt(part.line(), way, arrivals, drawnByAnInvariant, reading, witnesses,
+                        false);
         // A relation to another value has no line of its own, and the lines parting the values
         // that settle it are read where the statement turns on it, as a line is.
         if (arrived instanceof AgainstAnotherValue against) {
@@ -1207,8 +1227,10 @@ sealed interface ComparisonAssessment {
         // line nobody worked out, so which cases those were is not something a reader is told.
         List<Several.Part> out = new ArrayList<>();
         if (!reached.isEmpty()) {
+            List<Reachability.Reaching> along = deciding.isEmpty()
+                    ? waysArrivedBy(way, arrivals) : deciding;
             out.add(new Several.Part(part.id(), arrived instanceof AcrossPositions across
-                    && !deciding.isEmpty() ? across.whereRowsArrive(reading, deciding, witnesses)
+                    && !along.isEmpty() ? across.whereRowsArrive(reading, along, witnesses)
                     : arrived,
                     DecidingCase.saidInAsFewAsMay(reached)));
         }

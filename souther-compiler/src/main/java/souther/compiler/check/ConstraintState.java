@@ -375,6 +375,13 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
                 confinement.renamed(naming::apply), shown);
     }
 
+    /** This, with where the order each of {@code stops} is counted on stops recorded
+     *  ({@link NumericDomain#heldInsideTheirOrders}). Nothing it leaves moves. */
+    public ConstraintState<A> heldInsideTheirOrders(Map<A, NumericDomain.Bounds> stops) {
+        NumericDomain<A> held = numbers.heldInsideTheirOrders(stops);
+        return held == numbers ? this : new ConstraintState<>(held, facts, confinement, shown);
+    }
+
     /** This, with {@code f rel 0} taken as holding. */
     public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, Granularity> kinds) {
         return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, confinement, shown);
