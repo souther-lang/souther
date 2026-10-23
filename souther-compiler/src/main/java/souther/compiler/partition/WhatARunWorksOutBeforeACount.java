@@ -75,7 +75,7 @@ final class WhatARunWorksOutBeforeACount {
         List<Optional<List<Core>>> worked = new ArrayList<>(1);
         return count -> {
             if (worked.isEmpty()) {
-                worked.add(Optional.ofNullable(workedOutUpTo(root, comparison)));
+                worked.add(Optional.ofNullable(workedOutUpTo(root, comparison, false)));
             }
             boolean through = worked.getFirst().isPresent()
                     && getsThrough.computeIfAbsent(count, asked -> getsThrough(
@@ -221,9 +221,11 @@ final class WhatARunWorksOutBeforeACount {
      * <p>The value of every {@code let} whose body it is in, and every part of each node on the
      * way that runs before the part it is in: an operand before it, a condition deciding the
      * branch it is in. A part that runs only on some runs is counted as running, which asks more
-     * of the way and never less.
+     * of the way and never less — or left out, where {@code onlyWhatAlwaysRuns}, which says less
+     * of the way and never more.
      */
-    private static List<Core> workedOutUpTo(Core root, Core comparison) {
+    private static List<Core> workedOutUpTo(Core root, Core comparison,
+                                            boolean onlyWhatAlwaysRuns) {
         List<Core> way = wayDownTo(root, comparison);
         if (way == null) {
             return null;
@@ -247,13 +249,25 @@ final class WhatARunWorksOutBeforeACount {
                         if (step.expression() == child) {
                             break;
                         }
-                        out.add(step.expression());
+                        if (!onlyWhatAlwaysRuns || step instanceof Evaluated.Step.Always) {
+                            out.add(step.expression());
+                        }
                     }
                 }
             }
         }
         out.add(comparison);
         return out;
+    }
+
+    /**
+     * What every run that reaches {@code comparison}, a node of {@code root}'s tree, has worked out
+     * by then — the comparison included — or none where it is not in the tree, or stands in a
+     * closure.
+     */
+    static List<Core> alwaysWorkedOutUpTo(Core root, Core comparison) {
+        List<Core> worked = root == null ? null : workedOutUpTo(root, comparison, true);
+        return worked == null ? List.of() : worked;
     }
 
     /** The nodes from {@code e} down to {@code node}, both included, by identity — or null where

@@ -746,6 +746,46 @@ final class DemandReading {
         };
     }
 
+    /**
+     * What a run's working out every operator of a part asks of a row ({@code answers}, where
+     * {@link Pullback#whereItsOperatorsAnswer} says it), as far as one number of one place says
+     * it.
+     *
+     * <p>Not the way's entries and not a condition: an operator answering is a fact about the run
+     * and no statement of a row's values, so it is kept apart from what a condition coming out a
+     * way asks, and no reader of that — a count, a composer — is handed it. What a region can
+     * carry of it narrows the region and what it cannot is left out, which is wider and never
+     * narrower than the rows that get through.
+     */
+    static List<TakenConstraint> regionAnswered(Proposition answers, InputReading read) {
+        List<TakenConstraint> out = new ArrayList<>();
+        for (Read each : projected(answers, read)) {
+            if (each instanceof Read.Demands(RowDemand.Relational(TakenConstraint constraint))
+                    && constraint.terms().size() == 1
+                    && constraint.terms().iterator().next() instanceof NumericTerm.ValueOf value
+                    && !value.position().insideAContainer()
+                    && !endsOfTheInts(constraint)) {
+                out.add(constraint);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** Whether {@code constraint} holds one number at or below the greatest {@code Int}, or at or
+     *  above the least: what an operator over a number read as it stands answers, which every
+     *  {@code Int} meets and no row is narrowed by. */
+    private static boolean endsOfTheInts(TakenConstraint constraint) {
+        if (!(constraint instanceof TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
+                || form.coefs().size() != 1) {
+            return false;
+        }
+        ExactRatio weight = form.coefs().values().iterator().next();
+        return form.constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
+                && ((rel == Rel.LE && level.equals(ExactRatio.of(Long.MAX_VALUE)))
+                        || (rel == Rel.GE && level.equals(ExactRatio.of(Long.MIN_VALUE))));
+    }
+
     private static List<Stated> both(List<Stated> left, List<Stated> right) {
         List<Stated> out = new ArrayList<>(left);
         out.addAll(right);

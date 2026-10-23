@@ -5284,8 +5284,13 @@ final class Pullback {
                 default -> throw new IllegalStateException(
                         "the walk tells of an operator and nothing else: " + operation);
             };
+            // A count is read with how it was read, which an operator's form does not carry, so a
+            // form naming one says nothing of where the operator answers here.
             if (form.coefs().isEmpty() || !(where instanceof
-                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))) {
+                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
+                    || form.coefs().keySet().stream().anyMatch(quantity ->
+                            quantity instanceof Quantity.HowManyMeet
+                                    || quantity instanceof Quantity.HowManyDifferentMeet)) {
                 continue;
             }
             if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))

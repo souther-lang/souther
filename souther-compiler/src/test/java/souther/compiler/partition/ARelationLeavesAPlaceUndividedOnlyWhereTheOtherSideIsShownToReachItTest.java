@@ -289,6 +289,47 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A row whose run stops before the comparison is no row at it. Under {@code a + 1 == 0} the
+     * only row holding {@code b} at the greatest {@code Int} true is {@code a} there too, which
+     * stops at {@code a + 1}, so that {@code b} settles the comparison false.
+     */
+    @Test
+    void aRowThatStopsBeforeTheComparisonIsNoRowAtIt() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String body = "if a.value + 1 == 0 then false else a.value == b.value";
+        assertEquals(Map.of("a", RELATES), left("a: Yen, b: Yen", yen, body, "4:60"));
+        assertTrue(classesAt("a: Yen, b: Yen", yen, body, "b").stream()
+                        .anyMatch(each -> each.contains("9223372036854775807")),
+                "the greatest Int settles the comparison false");
+    }
+
+    /**
+     * The left operand of {@code &&} is worked out before the right one is reached, and the right
+     * operand of {@code ||} is worked out only where the left came out false: the comparison on
+     * the left of the second is reached by every row, so what stops in the operand beside it
+     * takes none out.
+     */
+    @Test
+    void aLeftOperandIsWorkedOutBeforeTheRightIsReachedAndNeverTheOtherWayAbout() {
+        String yen = "data Yen = Int invariant value >= 0";
+        assertEquals(Map.of("a", RELATES), left("a: Yen, b: Yen", yen,
+                "a.value + 1 >= 0 && a.value == b.value", "4:44"));
+        assertEquals(Map.of("a", RELATES, "b", RELATES), left("a: Yen, b: Yen", yen,
+                "a.value == b.value || a.value + 1 == 0", "4:24"));
+    }
+
+    /**
+     * What the comparison works out itself is worked out on a row at it: {@code a + M - M} is
+     * {@code a} as a form and stops at every {@code a} above nought as written.
+     */
+    @Test
+    void aRowThatStopsInTheComparisonsOwnArithmeticIsNoRowAtIt() {
+        String yen = "data Yen = Int invariant value >= 0 && value <= 1000000";
+        assertEquals(List.of(), classesAt("a: Yen, b: Yen", yen,
+                "a.value + 9223372036854775807 - 9223372036854775807 + b.value >= 30", "a"));
+    }
+
+    /**
      * Parts no date has leave the field no value, and the record with it: no row reaches the
      * comparison, and nothing is said of the amount or drawn on the gross.
      */

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -7,6 +8,7 @@ import souther.compiler.inputs.TermPath;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -87,6 +89,12 @@ public sealed interface Reachability {
                         : new Ways.Whole(way.severalWays(), stoppedBy, along));
             }
         };
+    }
+
+    /** {@code way} with what a run to the border got past working out
+     *  ({@link Reaching#gettingPast}) taken in, where it is a way a row reaches. */
+    static Reachability gettingPast(Reachability way, List<TakenConstraint> these) {
+        return way instanceof Reaching reaching ? reaching.gettingPast(these) : way;
     }
 
     /** {@code way}, one the walk found holds together, as a composer reads it. */
@@ -290,6 +298,55 @@ public sealed interface Reachability {
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
                     narrowedBy);
+        }
+
+        /** Whether taking {@code each} in moves where a number it names runs or what is held
+         *  apart from it, going from {@code before} to {@code after}. */
+        private static boolean movesAny(TakenConstraint each, SearchRegion before,
+                                        SearchRegion after) {
+            for (NumericTerm term : each.terms()) {
+                if (term instanceof NumericTerm.FromOnePosition one
+                        && (!Objects.equals(after.wholeRunOf(one), before.wholeRunOf(one))
+                                || !after.apartAt(one).equals(before.apartAt(one)))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * This with {@code these}, what the run to the border got past working out, taken into the
+         * region of it and of each way it is split into. A way they leave no input is kept as it
+         * is: that is a proof for the walk to make, not one made here.
+         */
+        Reaching gettingPast(List<TakenConstraint> these) {
+            // Only what narrows: a bound the region already holds is nothing a reader of this
+            // way is to be told of.
+            List<TakenConstraint> narrowing = new ArrayList<>();
+            SearchRegion narrowed = region;
+            for (TakenConstraint each : these) {
+                SearchRegion next = each.narrowing(narrowed);
+                if (movesAny(each, narrowed, next)) {
+                    narrowing.add(each);
+                    narrowed = next;
+                }
+            }
+            Optional<List<TakenConstraint>> by = narrowedBy.map(was -> {
+                List<TakenConstraint> both = new ArrayList<>(was);
+                both.addAll(narrowing);
+                return both;
+            });
+            Ways split = switch (ways) {
+                case Ways.One one -> one;
+                case Ways.Each each -> new Ways.Each(each.along().stream()
+                        .map(one -> one.gettingPast(these)).toList());
+                case Ways.Whole whole -> new Ways.Whole(whole.unsplit(), whole.figure(),
+                        whole.along().stream().map(one -> one.gettingPast(these)).toList());
+            };
+            return narrowed.emptiness().isPresent() ? new Reaching(region, requirements, truths,
+                    boundedOnTheWay, split, declined, narrowedBy)
+                    : new Reaching(narrowed, requirements, truths, boundedOnTheWay, split,
+                            declined, by);
         }
 
         /**

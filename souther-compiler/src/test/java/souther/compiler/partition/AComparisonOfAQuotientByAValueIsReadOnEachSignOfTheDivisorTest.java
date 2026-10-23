@@ -19,6 +19,7 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Which sign a run is on is the path's and the declarations', so where a guard or a type keeps the
  * divisor above nought, the comparison draws the line the comparison written out with the product
  * draws. The rows built at it are held against the run time's exact quotient.
+ *
+ * <p>Past the product the two are not one comparison: a row that stops in {@code k * d} is no row
+ * at the comparison written out, so the pay is parted once more at the greatest product a divisor
+ * gets past, and the quotient stops nowhere there.
  */
 class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
 
@@ -71,7 +76,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         String report = human(MODEL.formatted("guard b.days > 0 else No",
                 "a.pay / b.days >= 100"));
         assertFalse(report.contains("a quotient by a value that is not a constant"), report);
-        assertEquals(Set.copyOf(borders("guard b.days > 0 else No", "a.pay >= 100 * b.days")),
+        assertEquals(withoutWhereTheProductStops(
+                        borders("guard b.days > 0 else No", "a.pay >= 100 * b.days")),
                 Set.copyOf(borders("guard b.days > 0 else No", "a.pay / b.days >= 100")));
     }
 
@@ -92,7 +98,7 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         }
         Map<String, List<BorderAssessment>> each = linesOfEach(modelOf(bodies));
         for (int i = 0; i < bodies.size(); i += 2) {
-            assertEquals(Set.copyOf(described(each.get("f" + i))),
+            assertEquals(withoutWhereTheProductStops(described(each.get("f" + i))),
                     Set.copyOf(described(each.get("f" + (i + 1)))),
                     bodies.get(i + 1)[0] + " / " + bodies.get(i + 1)[1]);
         }
@@ -163,7 +169,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
                     Ok
                 }
                 """;
-        assertEquals(Set.copyOf(bordersOfModel(declared.formatted("a.pay >= 100 * b.days"))),
+        assertEquals(withoutWhereTheProductStops(
+                        bordersOfModel(declared.formatted("a.pay >= 100 * b.days"))),
                 Set.copyOf(bordersOfModel(declared.formatted("a.pay / b.days >= 100"))));
     }
 
@@ -653,6 +660,16 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
             }
         }
         return out;
+    }
+
+    /** {@code lines} but for the one a comparison written out with the product draws at the
+     *  end of the products a divisor gets past: the greatest {@code Int}, less what a hundred
+     *  does not divide. */
+    private static Set<String> withoutWhereTheProductStops(List<String> lines) {
+        return lines.stream()
+                .filter(line -> !(line.contains("term=a.pay")
+                        && line.matches(".*at=-?92233720368547758\\d\\d\\].*")))
+                .collect(Collectors.toSet());
     }
 
     private static List<String> borders(String guard, String condition) {
