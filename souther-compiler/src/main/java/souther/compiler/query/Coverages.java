@@ -31,12 +31,14 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.WorkFigure;
+import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.BodyInputReading;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ClassCoexistence;
 import souther.compiler.partition.Criterion;
@@ -1007,28 +1009,45 @@ final class Coverages {
             }
             // And who put on the way what the search went along, which is what says at which calls
             // of a helper a reader meets what the search went without.
-            out.add(new BorderAssessment(border.border(), items, border.beside(),
-                    tellingApart(border, search), border.readAt(),
-                    reaching.saidOnTheWayTo(border.border().origin())));
+            // What this reading's own search showed arriving is said of this reading, before its
+            // readings are put together: the place a line is left at and the row that rules it out
+            // are both this reading's, and put together first, the place could be one reading's and
+            // the row another's.
+            ARowTellingTheLinesApart toldApart = tellingApart(border, search);
+            out.add(new BorderAssessment(border.border(), items,
+                    shownArriving(border.beside(), toldApart, input), toldApart,
+                    border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
         }
         return new LineReadings(out);
     }
 
     /**
-     * {@code beside}, with each line nothing showed an input arriving at put where the rows leave
-     * it, where a row composed to rule it out was seen run to this rule: the input that row was
-     * composed at is one that arrives. The run is the evidence, so a row composed and not seen
-     * there, or not read back at all, leaves the line where it was.
+     * {@code beside}, one reading's, with each line nothing showed an input arriving at put where
+     * this reading's rows leave it, where this reading's search composed a row that was seen run to
+     * the rule and, read back, rules the line out ({@link WhatARowRulesOut}): an input that arrives
+     * and tells the two apart, which is the row as it was read back. A row composed and not seen
+     * there, or one that arrives and does not rule the line out, leaves the line where it was.
      */
-    private static AnotherLineTheRowsAllow shownArriving(AnotherLineTheRowsAllow beside,
-                                                         ARowTellingTheLinesApart toldApart) {
+    private static AnotherLineTheRowsAllow shownArriving(
+            AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
+            MeasuredInput input) {
         if (!(beside instanceof AnotherLineTheRowsAllow.ByDirection lines)) {
             return beside;
         }
         Map<QuantityKey, Map<NumericTerm, Place>> arriving = new LinkedHashMap<>();
         for (ARowTellingTheLinesApart.AtOneReading one : toldApart.each()) {
-            if (one.composedAt() != null && one.searches().ranThere()) {
-                arriving.putIfAbsent(one.direction(), one.composedAt());
+            Optional<ObservedInputs> seen = one.seenThere();
+            Optional<DrawnBoundary> drawn = DrawnBoundary.of(one.reading()).orNull();
+            if (seen.isEmpty() || drawn == null || drawn.isEmpty()
+                    || arriving.containsKey(one.direction())) {
+                continue;
+            }
+            WhatARowRulesOut.Said said = WhatARowRulesOut.of(
+                    StandingAtAPoint.putToRows(input.at(one.reading()),
+                            one.reading().origin().recordedAt()),
+                    drawn.get(), one.line(), seen.get());
+            if (said.said().settles()) {
+                arriving.put(one.direction(), said.at());
             }
         }
         return arriving.isEmpty() ? beside : lines.shownArriving(arriving);
@@ -1095,12 +1114,11 @@ final class Coverages {
             Criterion keptHere = kept == null && line.atOneValue()
                     ? atTheLine(border.border(), true) : kept;
             if (refusedHere != null) {
-                out.add(search.tellingApart(refusedHere, label, line.direction(),
-                        line::onTheRefusedSide));
+                out.add(search.tellingApart(refusedHere, label, line, line::onTheRefusedSide));
             }
             Optional<UnaryOperator<SearchRegion>> keptSide = line.onTheKeptSide();
             if (keptHere != null && keptSide.isPresent()) {
-                out.add(search.tellingApart(keptHere, label, line.direction(), keptSide.get()));
+                out.add(search.tellingApart(keptHere, label, line, keptSide.get()));
             }
         }
         return new ARowTellingTheLinesApart(out);
@@ -1215,7 +1233,7 @@ final class Coverages {
          * the same arithmetic that left the line standing.
          */
         ARowTellingTheLinesApart.AtOneReading tellingApart(Criterion criterion, String label,
-                                                           QuantityKey direction,
+                                                           AnotherLineTheRowsAllow.Stands line,
                                                            UnaryOperator<SearchRegion> narrowing);
     }
 
@@ -1487,13 +1505,7 @@ final class Coverages {
         }
         List<BorderAssessment> out = new ArrayList<>();
         for (List<BorderAssessment> ofOneLine : byLine.values()) {
-            // What a run showed arriving is said of the line, once its readings are one: a
-            // reading the rows rule a line out at settles it for both, and the line is only then
-            // known to be one nothing settled.
-            BorderAssessment line = asOneLine(ofOneLine);
-            out.add(new BorderAssessment(line.border(), line.items(),
-                    shownArriving(line.beside(), line.toldApart()), line.toldApart(),
-                    line.readAt(), line.saidOnTheWay()));
+            out.add(asOneLine(ofOneLine));
         }
         return List.copyOf(out);
     }
@@ -1554,10 +1566,10 @@ final class Coverages {
 
             @Override
             public ARowTellingTheLinesApart.AtOneReading tellingApart(
-                    Criterion criterion, String label, QuantityKey direction,
+                    Criterion criterion, String label, AnotherLineTheRowsAllow.Stands line,
                     UnaryOperator<SearchRegion> narrowing) {
                 Looked looked = looked(criterion, label, narrowing);
-                return ARowTellingTheLinesApart.of(border, direction, looked.composed(),
+                return ARowTellingTheLinesApart.of(border, line, looked.composed(),
                         looked.outcomes());
             }
 
@@ -1975,10 +1987,18 @@ final class Coverages {
     /**
      * What two readings of one line say about one line of its family.
      *
-     * <p>Not a sum of the two. Each reading folds the rows at its own positions, and the range of
-     * thresholds it leaves is that reading's: two readings that leave two ranges are this compiler
-     * saying two things about one measurement, and refused as that rather than merged into a range
-     * neither of them read.
+     * <p><b>Each reading's rows are the ones reaching it.</b> A helper called from two places is
+     * read at each, and the rows a reading folds are the rows that got to that call — so two readings
+     * can leave a line at two places, or one leave it and the other rule it out, and neither is
+     * this compiler saying two things about one measurement.
+     *
+     * <p>So the answer is over the readings, the way a row offered for the line is weighed: rows
+     * ruling the line out at any reading of it show which of the two lines the model draws there,
+     * and it is the one line wherever it is called, so the line is ruled out. Where no reading rules
+     * it out and some leave it standing, it is owed a row, once; the place said is a reading's own,
+     * and a reading that named an input is said before one that did not. What a row read back does
+     * to the line at a reading is asked of that reading's own place, which its search carries
+     * ({@link ARowTellingTheLinesApart.AtOneReading#line}), and never of the place said here.
      */
     static AnotherLineTheRowsAllow.Direction besides(AnotherLineTheRowsAllow.Direction a,
                                                      AnotherLineTheRowsAllow.Direction b) {
@@ -1990,15 +2010,15 @@ final class Coverages {
         if (b instanceof AnotherLineTheRowsAllow.Undecided || a.equals(b)) {
             return a;
         }
-        // The same range, and the input each names is its reading's own: the way to the border and
-        // the declarations a reading holds decide which input is one a row arrives at. A reading
-        // that named none has nothing to say against one that did.
-        if (a instanceof AnotherLineTheRowsAllow.Stands one
-                && b instanceof AnotherLineTheRowsAllow.Stands other && one.isTheLineOf(other)) {
-            return one.tellsApartAt() != null ? one : other;
+        if (a instanceof AnotherLineTheRowsAllow.RuledOut) {
+            return a;
         }
-        throw new IllegalStateException("two readings of one line disagreeing about where the rows"
-                + " leave a line beside it: " + a + " and " + b);
+        if (b instanceof AnotherLineTheRowsAllow.RuledOut) {
+            return b;
+        }
+        AnotherLineTheRowsAllow.Stands one = (AnotherLineTheRowsAllow.Stands) a;
+        AnotherLineTheRowsAllow.Stands other = (AnotherLineTheRowsAllow.Stands) b;
+        return one.tellsApartAt() != null || other.tellsApartAt() == null ? one : other;
     }
 
     /**
@@ -2061,28 +2081,49 @@ final class Coverages {
      * <p>An answer about this search and never about the model. A row composed here that does not
      * stand at the point says the way to the border was not composed against in full; the point is
      * owed the same row it was owed before, and nothing here says one cannot be written.
+     *
+     * <p>With the row as it was read back, which is what a reader asking what the row does to
+     * anything beside the point reads: the values it was composed for are what the search asked
+     * for, and the row need not hold them.
      */
-    private static StandingAtAPoint.Met standingThere(
+    private static ReadBack standingThere(
             Probe probe, StandingAtAPoint.AtALine line, Criterion criterion,
             souther.compiler.partition.Generator.BoundaryAttempt.Built built) {
         souther.compiler.partition.ObservedInputs read =
                 probe.read(built.row().toRun()).asInputs();
-        if (read == null) {
-            // Nothing came back to read the row off, which is not an observation of it and is not a
-            // position holding no value either. What did not happen here is the running: the values
-            // would not build a second time, or the model refused them, or the classes would not
-            // link — and every one of those is something this run did rather than a value a limit
-            // shortened or a place a row wrote nothing at. Named as the first, a linkage failure
-            // arrives at the account as an observation that was stopped and the report says a limit
-            // did something that never fired; named as the second, it says the row put nothing
-            // where nothing ever looked.
-            // And nothing was left untried by a limit: there was no row for readings of it to be
-            // made from, so what stopped this is the reason beside it and not the search.
-            return new StandingAtAPoint.Met.CouldNotTell(
-                    Set.of(souther.compiler.partition.ReadingGap.COULD_NOT_READ_ROW),
-                    StandingAtAPoint.ReadingsTried.EVERY_ONE);
+        return new ReadBack(read, read == null ? null : line.met(List.of(read), criterion));
+    }
+
+    /**
+     * A row read back, and what the reading at a point made of it.
+     *
+     * @param read the row as its run read it back, or null where nothing came back to read it off
+     * @param met  what the reading made of it, or null where there was nothing to read
+     */
+    private record ReadBack(souther.compiler.partition.ObservedInputs read,
+                            StandingAtAPoint.Met met) {
+
+        /** What the reading made of the row, and what nothing coming back to read is. */
+        StandingAtAPoint.Met standing() {
+            return met != null ? met : nothingCameBack();
         }
-        return line.met(List.of(read), criterion);
+    }
+
+    /**
+     * What a row nothing came back to read off comes to, which is not an observation of it and is
+     * not a position holding no value either. What did not happen is the running: the values would
+     * not build a second time, or the model refused them, or the classes would not link — and every
+     * one of those is something this run did rather than a value a limit shortened or a place a row
+     * wrote nothing at. Named as the first, a linkage failure arrives at the account as an
+     * observation that was stopped and the report says a limit did something that never fired;
+     * named as the second, it says the row put nothing where nothing ever looked. And nothing was
+     * left untried by a limit: there was no row for readings of it to be made from, so what stopped
+     * this is the reason beside it and not the search.
+     */
+    private static StandingAtAPoint.Met nothingCameBack() {
+        return new StandingAtAPoint.Met.CouldNotTell(
+                Set.of(souther.compiler.partition.ReadingGap.COULD_NOT_READ_ROW),
+                StandingAtAPoint.ReadingsTried.EVERY_ONE);
     }
 
     /** Whether an observation is among the reasons a reading came to nothing. */
@@ -2190,7 +2231,7 @@ final class Coverages {
     private static ItemAssessment.Attempt whatCameOfIt(
             souther.compiler.partition.Generator.BoundaryAttempt made, String subject,
             souther.compiler.partition.WayToTheBorder within,
-            Supplier<StandingAtAPoint.Met> standing) {
+            Supplier<ReadBack> standing) {
         return switch (made) {
             case null -> new ItemAssessment.Attempt.Unresolved(
                     new souther.compiler.partition.Generator.UnresolvedCombination(
@@ -2205,12 +2246,13 @@ final class Coverages {
             // And the row read back, which is where a composed value becomes a value at the point
             // or stops short of being one. The three answers of that reading are the three this
             // hands on, and this is the only place they are turned into what a search came to.
-            case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    switch (standing.get()) {
+            case souther.compiler.partition.Generator.BoundaryAttempt.Built built -> {
+                ReadBack back = standing.get();
+                yield switch (back.standing()) {
                         case StandingAtAPoint.Met.AtPoint at ->
                                 new ItemAssessment.Attempt.Certified(built.row(), within,
                                         built.unrepresented(),
-                                        at instanceof StandingAtAPoint.Met.Reached);
+                                        at instanceof StandingAtAPoint.Met.Reached, back.read());
                         // Composed and not seen where it was composed for. Which says the way to
                         // the border was not composed against in full and never that the point is
                         // unwritable, and it carries what the composer could not act on because
@@ -2242,7 +2284,8 @@ final class Coverages {
                                                                 .UnresolvedCombination.Reason
                                                                 .NO_CERTIFIED_WITNESS),
                                                 within, built.unrepresented());
-                    };
+                };
+            }
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
                     new ItemAssessment.Attempt.Unresolved(left.why(), within,
                             left.unrepresented());

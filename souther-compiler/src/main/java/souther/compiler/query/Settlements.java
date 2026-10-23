@@ -1,9 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.check.Sig;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.Place;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ReadingSeat;
@@ -603,7 +600,10 @@ public record Settlements(List<ObligationIdentity> requested,
             // answer nothing, and the line would be offered a second row it already has.
             //
             // One entry per line of the family the rows leave standing, which is what is owed: a
-            // row ruling one of them out need not rule out another.
+            // row ruling one of them out need not rule out another. And each entry is put to the
+            // place that reading's own rows leave the line at, which its search carries: the
+            // readings of one line are reached by different rows, and the place the line is said
+            // to stand at is one of them.
             Map<ObligationIdentity.OfABorder, List<ALineBesideOne>> besides = new LinkedHashMap<>();
             if (filling != null) {
                 List<BorderAssessment> lines =
@@ -624,7 +624,7 @@ public record Settlements(List<ObligationIdentity> requested,
                                             DrawnBoundary.of(one.reading())
                                                     .orFail("a line the rows allow beside one"
                                                             + " whose values were not worked out")
-                                                    .orElse(null), standing, one));
+                                                    .orElse(null), one.line(), one));
                         }
                     }
                 }
@@ -1131,44 +1131,14 @@ public record Settlements(List<ObligationIdentity> requested,
          * is over other positions.
          */
         private ToldApartAt tellsThemApartAt(RowAsRead asRead, ALineBesideOne one) {
-            StandingAtAPoint.RowsRead read = one.toRows().valuesOf(List.of(asRead.asInputs()));
-            if (read.each().isEmpty()) {
-                // The row holds no value on this line at all, whether because nothing watched its
-                // run or because its positions could not be read there. Which of those it is is
-                // the reading's own answer and is what a reader is told.
-                return new ToldApartAt(read.everyOne() ? new Settlement.DoesNotSettle()
-                        : new Settlement.Undetermined(read.unwatched()
-                                ? Settlement.Reason.NO_ACCOUNT_OF_THE_RUN
-                                : Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ), null);
-            }
-            boolean unheld = false;
-            for (Map<NumericTerm, Place> values : read.each()) {
-                // Whether it leaves no threshold on the line standing beside the rows already
-                // read, and not whether it answers the line at its current threshold differently.
-                // A row the model keeps between the two ends of the range does the second and not
-                // the first: the line moves to it, and the next run finds the same line standing.
-                // Where the arithmetic could not say, the row is one nothing here can tell about —
-                // neither settling the line nor shown to leave it.
-                ExactAnswer<Boolean> rules = one.beside().ruledOutBy(one.drawn(), values);
-                if (rules instanceof ExactAnswer.Unheld<Boolean>) {
-                    unheld = true;
-                    continue;
-                }
-                if (((ExactAnswer.Held<Boolean>) rules).value()) {
-                    // Where it rules the line out, kept beside the answer. What a person is shown
-                    // for this line is where the row they are handed stands, and that is this —
-                    // worked out again by whoever shows it, it would be a second reading of the
-                    // row, free to name a reading this one did not settle at.
-                    return new ToldApartAt(new Settlement.Settles(),
-                            new InputOfARowForALine(one.reading().border(), values));
-                }
-            }
-            // A row whose sum could not be held is a row read in part (a reading's own
-            // ReadingGap.CouldNotWorkOut), and a row read short of a value is what this answers
-            // in that word wherever else a row is put to a line.
-            return new ToldApartAt(unheld
-                    ? new Settlement.Undetermined(Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ)
-                    : new Settlement.DoesNotSettle(), null);
+            WhatARowRulesOut.Said said = WhatARowRulesOut.of(one.toRows(), one.drawn(),
+                    one.beside(), asRead.asInputs());
+            // Where it rules the line out, kept beside the answer. What a person is shown for this
+            // line is where the row they are handed stands, and that is this — worked out again by
+            // whoever shows it, it would be a second reading of the row, free to name a reading
+            // this one did not settle at.
+            return new ToldApartAt(said.said(), said.at() == null ? null
+                    : new InputOfARowForALine(one.reading().border(), said.at()));
         }
 
         /**

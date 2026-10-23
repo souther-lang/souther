@@ -7,6 +7,7 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.RealizationTarget;
@@ -68,23 +69,27 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      *
      * @param reading    the line as that reading met it, which is what says at which positions
      *                   {@code composedAt} is written and where a row is read back
-     * @param direction  the line of the family the row is for
+     * @param line       the line of the family the row is for, where this reading's rows leave
+     *                   it. This reading's and not the line's as every reading of it is put
+     *                   together: what a row read back here does to it is asked of the place the
+     *                   rows reaching this reading leave it, and another reading's rows leave it
+     *                   somewhere else
      * @param composedAt the input this search composed a row at, in the positions the line is drawn
      *                   on at this reading, or null where nothing was composed. What the realizer
      *                   asked for, which is what the row was built from — and so the one thing
      *                   there is to name for a row nothing read back
      * @param searches   what each search made at this reading came to
      */
-    public record AtOneReading(Border reading, QuantityKey direction,
+    public record AtOneReading(Border reading, AnotherLineTheRowsAllow.Stands line,
                                Map<NumericTerm, Place> composedAt, SearchOutcomes searches) {
 
         public AtOneReading {
             composedAt = composedAt == null ? null
                     : Collections.unmodifiableMap(new LinkedHashMap<>(composedAt));
-            if (reading == null || direction == null || searches == null) {
+            if (reading == null || line == null || searches == null) {
                 throw new IllegalArgumentException(
                         "a search is of a line against a line beside it, and says what it came to: "
-                                + reading + " " + direction);
+                                + reading + " " + line);
             }
             // Both ways round, so that neither can be read as the other's absence. An input with no
             // row built from it is a place nothing composed; a row with nowhere named is one a
@@ -95,9 +100,24 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
             }
         }
 
+        /** The line of the family the row is for. */
+        public QuantityKey direction() {
+            return line.direction();
+        }
+
         /** The search of this reading that composed a row, where one did. */
         Optional<ItemAssessment.Attempt.Built> composed() {
             return searches.rowToOffer();
+        }
+
+        /** The row a search of this reading composed and saw run to the rule, as its run read it
+         *  back, where one was. */
+        Optional<ObservedInputs> seenThere() {
+            return searches.each().stream()
+                    .filter(each -> each instanceof ItemAssessment.Attempt.Certified certified
+                            && certified.ranThere())
+                    .map(each -> ((ItemAssessment.Attempt.Certified) each).readBack())
+                    .findFirst();
         }
     }
 
@@ -118,10 +138,10 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * <p>The realization and the outcomes together, because they are one answer. Taken apart, a
      * caller could hand over the place one asking reached beside the row another one composed.
      */
-    static AtOneReading of(Border reading, QuantityKey direction, Realization.Found composed,
-                           SearchOutcomes searches) {
+    static AtOneReading of(Border reading, AnotherLineTheRowsAllow.Stands line,
+                           Realization.Found composed, SearchOutcomes searches) {
         if (composed == null || searches.rowToOffer().isEmpty()) {
-            return new AtOneReading(reading, direction, null, searches);
+            return new AtOneReading(reading, line, null, searches);
         }
         Map<NumericTerm, Place> byTerm = new HashMap<>();
         composed.fixing().forEach((target, place) -> {
@@ -139,7 +159,7 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
         for (Map.Entry<NumericTerm, Place> each : NumericTerms.entriesInOrder(byTerm)) {
             at.put(each.getKey(), each.getValue());
         }
-        return new AtOneReading(reading, direction, at, searches);
+        return new AtOneReading(reading, line, at, searches);
     }
 
     /**
