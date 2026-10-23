@@ -45,6 +45,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.IntFunction;
+import java.util.stream.Collectors;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -2635,7 +2636,8 @@ public final class FieldDomains {
      * call whose law holds of every container that size ({@link WhatALawSaysOfAFewElements}), and,
      * for one element, the element's declaration is shown to hold a value. Under
      * {@code List.length(value) >= 1 && List.allDistinctBy(.product, value)}, a list of one line is
-     * that value whatever the line is.
+     * that value whatever the line is. And a value no set read here holds whole is shown to be
+     * there where the rules say only where one number taken of it falls ({@link #answeredOfIt}).
      *
      * @param unheld the rules the bounds do not hold, which only a law can be taken in place of
      */
@@ -2644,8 +2646,9 @@ public final class FieldDomains {
                                   Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
         if (!handedOn.contains(at)) {
             AdmissibleSet left = admits(at);
-            return left.completeness() instanceof AdmissibleSet.Completeness.Complete
-                    && !left.approximation().isEmpty();
+            return (left.completeness() instanceof AdmissibleSet.Completeness.Complete
+                    && !left.approximation().isEmpty())
+                    || answeredOfIt(at);
         }
         Counted counted = countAt.get(at);
         NumericDomain.Bounds sizes = counted == null ? NumericDomain.Bounds.OPEN
@@ -2678,6 +2681,64 @@ public final class FieldDomains {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether every rule naming the place {@code at} says where one number an operation answers of
+     * it falls and nothing else, the operation answers every number it can give of some value, and
+     * the rules leave that number a value.
+     *
+     * <p>Then a value of the place answers a number the rules leave, and that is all they ask of
+     * it. Under {@code Date.day(value) == 1}, the first of any month is that value. One number and
+     * not several: each of {@code Date.day} and {@code Date.month} answers every number it can give,
+     * and a day and a month the rules leave one at a time may still be no date together.
+     *
+     * <p>Every part is a comparison of its own, whose forms are over that number alone and are the
+     * part as the bounds hold it, so what the run leaves is what the part admits.
+     */
+    private boolean answeredOfIt(RuleKey at) {
+        FactSubject place = atomAt.get(at);
+        if (place == null || classAt(at) instanceof HeldClass.NoValue) {
+            return false;
+        }
+        Set<FactSubject> numbers = constraints.numbers().atomsSpokenOf();
+        FactSubject answered = null;
+        for (InvariantChecker.PartReading read : naming.getOrDefault(at, Set.of())) {
+            InvariantChecker.Written written = writtenBy(read.reading());
+            Map<ClauseOccurrence, InvariantChecker.PartAsRead> parts =
+                    written == null ? null : written.constrained().get(read.part());
+            if (parts == null || parts.isEmpty()) {
+                return false;
+            }
+            for (InvariantChecker.PartAsRead each : parts.values()) {
+                InvariantChecker.PartRead said = each.said();
+                if (!(each.of() instanceof ClauseExpr.Leaf)
+                        || said.narrowable().size() != 1
+                        || said.stated().isEmpty()) {
+                    return false;
+                }
+                FactSubject atom = said.narrowable().iterator().next();
+                // The comparison is a subject as well, which a fact about it is keyed on: what
+                // it may not name is another number.
+                if (!said.constrained().stream().filter(numbers::contains)
+                                .collect(Collectors.toSet()).equals(Set.of(atom))
+                        || !said.stated().stream().allMatch(stated ->
+                                stated.form().coefs().keySet().equals(Set.of(atom)))
+                        || (answered != null && !answered.equals(atom))) {
+                    return false;
+                }
+                answered = atom;
+            }
+        }
+        if (answered == null || !takenOf(place).contains(answered)
+                || answered.identity().parts().size() != 1) {
+            return false;
+        }
+        ValueName operation = answered.identity().calledOperation();
+        NumericDomain.Bounds run = constraints.numbers().wholeRunOf(answered);
+        return operation != null
+                && DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(operation)
+                && run != null && run.holdsAValue();
     }
 
     /** The reading {@code opened}, or null where none of this value's readings is. */
